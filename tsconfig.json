@@ -16,7 +16,11 @@
     "erasableSyntaxOnly": true,
     "rewriteRelativeImportExtensions": true,
     "verbatimModuleSyntax": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "agent-device/plugins": ["./src/sdk/plugins.ts"],
+      "agent-device/plugins/webdriver": ["./src/sdk/plugin-webdriver.ts"]
+    }
   },
   "include": [
     "src",

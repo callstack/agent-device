@@ -8,6 +8,7 @@ import {
 import type {
   RawSnapshotNode,
   SnapshotBackend,
+  SnapshotKeyboardBandFact,
   SnapshotQualityVerdict,
   SnapshotViewportSize,
 } from '@agent-device/kernel/snapshot';
@@ -28,6 +29,8 @@ type AndroidSnapshotCaptureData = Readonly<{
   analysis: AndroidSnapshotAnalysis;
   androidSnapshot: AndroidSnapshotBackendMetadata;
   quality?: SnapshotQualityVerdict;
+  /** The input method window the helper captured, if any (see `androidSnapshotKeyboardFromTree`). */
+  keyboard?: SnapshotKeyboardBandFact;
   /**
    * The screen the captured bounds are measured in (#3182): the helper's own display read, so a
    * capture of an empty screen still reports it. Derived, never stored, so this carrier cannot drift

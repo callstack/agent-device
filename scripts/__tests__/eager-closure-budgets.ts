@@ -95,13 +95,14 @@ export function discoverFacadeEntryFiles(repoRoot: string): string[] {
 }
 
 /**
- * Designated hubs: entry points whose closure the whole suite or every CLI run pays for.
- * `src/platform-runtime.ts` is the ADR-0019 composition root, the one production module allowed
- * to value-import a concrete platform package; its no-growth rule is also the assertion that
- * composing the registry stays metadata-eager.
+ * Designated hubs: entry points whose closure the whole suite, every CLI run, or every daemon start
+ * pays for. `src/platform-runtime.ts` is the ADR-0019 composition root, the one production module
+ * allowed to value-import a concrete platform package; its no-growth rule is also the assertion
+ * that composing the registry stays metadata-eager.
  */
 export const HUB_ENTRY_FILES: readonly string[] = [
   'src/cli.ts',
+  'src/daemon.ts',
   'src/platform-runtime.ts',
   'src/core/interactors/register-builtins.ts',
   'src/daemon/session-teardown.ts',

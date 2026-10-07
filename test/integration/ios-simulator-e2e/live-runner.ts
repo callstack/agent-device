@@ -45,6 +45,7 @@ import {
 } from './snapshot-backend-conformance.ts';
 
 const C = PUBLIC_COMMANDS;
+const DEFAULT_RUNNER_PREPARE_TIMEOUT_MS = 420_000;
 
 type AgentDeviceSdk = typeof import('../../../src/sdk/index.ts');
 
@@ -85,12 +86,38 @@ export async function runIosSimulatorE2E(): Promise<void> {
   const context = createContext();
   let primaryError: unknown;
   try {
+    await prepareRunner(context);
     await executeLiveScenarios(context);
   } catch (error) {
     primaryError = error;
   }
   const cleanupError = await finalizeLiveRun(context);
   throwLiveRunErrors(primaryError, cleanupError);
+}
+
+/** A runner start must not spend the first runner-backed command's 90 s request timeout. */
+async function prepareRunner(context: LiveContext): Promise<void> {
+  const timeoutMs = Number(
+    process.env.AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS ?? DEFAULT_RUNNER_PREPARE_TIMEOUT_MS,
+  );
+  await runStep(
+    context,
+    'prepare iOS runner',
+    [
+      'prepare',
+      'ios-runner',
+      '--platform',
+      'ios',
+      '--udid',
+      context.udid,
+      '--state-dir',
+      context.stateDir,
+      '--timeout',
+      String(timeoutMs),
+      '--json',
+    ],
+    { commonFlags: false, timeoutMs: timeoutMs + 30_000 },
+  );
 }
 
 async function executeLiveScenarios(context: LiveContext): Promise<void> {
@@ -142,11 +169,28 @@ async function assertLiveAssertionCapture(context: LiveContext): Promise<void> {
 async function finalizeLiveRun(context: LiveContext): Promise<unknown> {
   let cleanupError = await finalizeSessionCleanup(context, sessionExists, cleanupSession);
   try {
+    await stopDaemon(context);
+  } catch (error) {
+    cleanupError = combineErrors(cleanupError, error, 'cleanup and daemon stop failed');
+  }
+  try {
     writeCoverageReport(context);
   } catch (error) {
     cleanupError = combineErrors(cleanupError, error, 'cleanup and coverage reporting failed');
   }
   return cleanupError;
+}
+
+/** The daemon holds this run's TMPDIR and claims directory, which the test wrapper deletes. */
+async function stopDaemon(context: LiveContext): Promise<void> {
+  await runStep(
+    context,
+    'stop daemon',
+    ['daemon', 'stop', '--state-dir', context.stateDir, '--json'],
+    {
+      commonFlags: false,
+    },
+  );
 }
 
 /**

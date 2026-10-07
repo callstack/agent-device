@@ -20,6 +20,7 @@ const REMOTE_PROVIDER_FLAG_KEYS = [
   'providerSessionId',
   'providerApp',
   'providerOsVersion',
+  'providerDeviceType',
   'providerProject',
   'providerBuild',
   'providerSessionName',

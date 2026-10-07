@@ -98,6 +98,8 @@ Supported public entry points for Node consumers:
   - `runtime.getDeviceSession(device)`
   - types: `LimrunRuntimeOptions`, `LimrunDeviceSession`, `LimrunAndroidDeviceSession`,
     `LimrunIosDeviceSession`, `LimrunIosCommandExecution`
+- `agent-device/plugins/webdriver`
+  - experimental `WebDriverPluginOptions` for providers using the shared engine.
 - `agent-device/plugins`
   - experimental factory context: `ProviderPluginHost`; see [provider plugins](./plugins.md).
 - `agent-device/ai-sdk`
@@ -120,7 +122,7 @@ stdout/stderr. The option mirrors `open --launch-console` and is not valid for U
 or contacts the daemon. Pass `{ stateDir }` to resolve an explicit override the same way the CLI resolves `--state-dir`.
 
 `client.sessions.artifacts({ provider, providerSessionId })` mirrors `artifacts --provider ... --provider-session ...` and returns provider-hosted `cloudArtifacts`.
-Use it for BrowserStack or AWS Device Farm session videos/logs after a cloud session has stopped, or omit `providerSessionId` when an embedding host has registered a provider runtime that can infer the active lease. Limrun does not currently expose provider artifacts through this command.
+Use it for BrowserStack, AWS Device Farm, or TestMu AI session videos/logs after a cloud session has stopped, or omit `providerSessionId` when an embedding host has registered a provider runtime that can infer the active lease. Limrun does not currently expose provider artifacts through this command.
 
 ```ts
 const result = await client.sessions.artifacts({
@@ -137,7 +139,7 @@ if ('cloudArtifacts' in result) {
 
 ## Device cloud sessions
 
-Limrun, BrowserStack, and AWS Device Farm can be driven through the normal typed client methods. Use the corresponding CLI `connect` flow when you want persisted local connection state. Use direct client config when a Node integration already owns credentials and provider selectors.
+Limrun, BrowserStack, AWS Device Farm, and TestMu AI can be driven through the normal typed client methods. Use the corresponding CLI `connect` flow when you want persisted local connection state. Use direct client config when a Node integration already owns credentials and provider selectors.
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';
@@ -161,7 +163,7 @@ from an explicit selector, an existing session, one local booted/bootable candid
 simulator with the app installed, or one provider-owned candidate. Ambiguous requests fail with
 structured retry selectors instead of silently retargeting.
 
-Use `client.sessions.artifacts({ provider, providerSessionId })` with `closed.provider?.providerSessionId` to fetch provider-hosted video and log URLs after close. See the [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), and [Limrun](/docs/limrun) guides for provider-specific setup.
+Use `client.sessions.artifacts({ provider, providerSessionId })` with `closed.provider?.providerSessionId` to fetch provider-hosted video and log URLs after close. See the [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), [TestMu AI](/docs/testmu), and [Limrun](/docs/limrun) guides for provider-specific setup.
 
 ## Web sessions
 
@@ -510,7 +512,7 @@ Use `agent-device/remote-config` for profile loading and path resolution, `agent
 
 ## Selector helpers
 
-Use `agent-device/selectors` when a remote daemon or bridge needs to parse and match selector expressions without deep-importing daemon internals. Matching is platform-aware because role normalization and editability checks differ by backend.
+Use `agent-device/selectors` when a remote daemon or bridge needs to parse and match selector expressions without deep-importing daemon internals. The `role=` term matches the platform-neutral `kind` vocabulary that `snapshot --json` publishes (see [Snapshots](./snapshots.md#structured-node-fields---json)): pass the nodes as captured, and a node whose `kind` is `text` always matches `role=text`. Separately, pre-reconciliation leaf spellings (`statictext`, `edittext`, `textview`, …) still match during a deprecation window, each on the nodes that actually carried that class. A legacy spelling matches beside such a node's `kind`, not in place of it — `role=webarea` resolves a macOS-helper `AXWebArea` node whose `kind` is `axwebarea`, for example. Matching stays platform-aware because editability checks differ by backend.
 
 `listSelectorChainMatches(nodes, chain, options)` returns every node the winning selector alternative matches, in snapshot order, plus that alternative and its index — the same first-match domain `findSelectorChainMatch` uses, without uniqueness refusal, so a runner applies its own strictness to the same nodes the CLI matched. `resolveSelectorChain` can name a LATER alternative: by default it refuses an ambiguous one and keeps walking, so the indices agree when it passes `requireUnique: false`, when the first matching alternative is unique, or when `disambiguateAmbiguous: true` resolves that alternative in place. It returns `null` when no alternative matches. `options` is `{ platform, requireRect? }`; the matched `SnapshotNode` objects are the ones passed in.
 

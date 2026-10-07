@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { LeaseRequestStatus } from '@agent-device/contracts/managed-device-allocation';
+import type { LeaseRequestStatus } from '../managed-device-allocation.ts';
 import { managedBindingFence } from '@agent-device/contracts/platform-runtime';
 import { AppError } from '@agent-device/kernel/errors';
 import {

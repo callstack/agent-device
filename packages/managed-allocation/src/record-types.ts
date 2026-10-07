@@ -4,7 +4,7 @@ import type {
   LeaseRefusal,
   ManagedLease,
   ManagedShapeRequest,
-} from '@agent-device/contracts/managed-device-allocation';
+} from './managed-device-allocation.ts';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 import type { ALLOCATION_OPERATION_SCHEMA_VERSION } from './schema.ts';
 

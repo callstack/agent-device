@@ -379,9 +379,9 @@ test('fails closed for a stale Android identity before exposing facts or binding
 });
 
 /**
- * back/orientation are admitted on both direct-session platforms; home/tv-remote differ by
+ * back/orientation/home are admitted on both direct-session platforms; tv-remote differs by
  * platform (the Android leg reuses the local family's interactor factory, the iOS leg refuses
- * both explicitly); keyboard status/dismiss/enter reuse that same Android-only interactor.
+ * it explicitly); keyboard status/dismiss/enter reuse that same Android-only interactor.
  */
 function expectLimrunNavigationAndKeyboardFacts(
   binding: DeviceBinding<PlatformRuntimeOperations>,
@@ -392,13 +392,8 @@ function expectLimrunNavigationAndKeyboardFacts(
   expect(binding.operations.back).toBeTypeOf('function');
   expect(binding.facts.operations.setOrientation).toEqual({ available: true });
   expect(binding.operations.setOrientation).toBeTypeOf('function');
-  expect(binding.facts.operations.home.available).toBe(isAndroid);
-  expect(binding.operations.home).toBeTypeOf(isAndroid ? 'function' : 'undefined');
-  if (!isAndroid) {
-    expect(binding.facts.operations.home).toMatchObject({
-      hint: 'Limrun iOS direct sessions do not expose home yet.',
-    });
-  }
+  expect(binding.facts.operations.home).toEqual({ available: true });
+  expect(binding.operations.home).toBeTypeOf('function');
   // tv-remote additionally requires a real TV target on the Android leg.
   expect(binding.facts.operations.tvRemote.available).toBe(false);
   expect(binding.operations.tvRemote).toBeUndefined();

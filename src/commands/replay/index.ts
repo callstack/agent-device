@@ -76,6 +76,9 @@ export const replayCommandMetadata = defineFieldCommandMetadata(
     // #1258: overwrite an existing --save-script target (arm-time preflight +
     // publish) instead of refusing. Alias: --overwrite.
     force: booleanField(),
+    testIme: booleanField(
+      'Activate the headless Android test IME for the sessions this replay opens (default on for emulators; opt-in on real devices).',
+    ),
   },
 );
 
@@ -98,6 +101,9 @@ export const testCommandMetadata = defineFieldCommandMetadata(
     artifactsDir: stringField(),
     shardAll: integerField(),
     shardSplit: integerField(),
+    testIme: booleanField(
+      'Activate the headless Android test IME for the sessions each suite attempt opens (default on for emulators; opt-in on real devices).',
+    ),
   },
 );
 
@@ -165,6 +171,7 @@ const replayCliSchema = {
     'out',
     'saveScript',
     'force',
+    'testIme',
   ],
   // ADR 0012 decision 6: on replay, --save-script arms a repair transaction from step 1 (not the
   // open/close authoring lifecycle the shared flag description documents) and the healed script
@@ -194,6 +201,7 @@ const testCliSchema = {
     'reportJunit',
     'shardAll',
     'shardSplit',
+    'testIme',
   ],
 } as const satisfies CommandSchemaOverride;
 
@@ -212,6 +220,7 @@ export const replayCliReader: CliReader = (positionals, flags) => ({
   timeoutMs: flags.timeoutMs,
   saveScript: flags.saveScript,
   force: flags.force,
+  testIme: flags.testIme,
 });
 
 export const testCliReader: CliReader = (positionals, flags) => ({
@@ -230,6 +239,7 @@ export const testCliReader: CliReader = (positionals, flags) => ({
   artifactsDir: flags.artifactsDir,
   shardAll: flags.shardAll,
   shardSplit: flags.shardSplit,
+  testIme: flags.testIme,
 });
 
 export const replayDaemonWriter: AsyncDaemonWriter = async (input) => {

@@ -47,10 +47,20 @@ export type AndroidUiHierarchy = {
   windowActive?: boolean;
   windowFocused?: boolean;
   windowRect?: Rect;
+  /**
+   * Whether this input method window's touchable region is one rect, so `windowRect` is exactly the
+   * area it takes touches in. Absent below API 33, on other window types, and on older helpers.
+   */
+  windowRegionRect?: boolean;
   children: AndroidUiHierarchy[];
 };
 
 export type AndroidNode = AndroidUiHierarchy;
+
+/** `AccessibilityWindowInfo.TYPE_APPLICATION`, as carried in `windowType`. */
+export const ANDROID_WINDOW_TYPE_APPLICATION = 1;
+/** `AccessibilityWindowInfo.TYPE_INPUT_METHOD`, as carried in `windowType`. */
+export const ANDROID_WINDOW_TYPE_INPUT_METHOD = 2;
 
 export type AndroidSiblingOrder = { parent: AndroidNode; order: number };
 

@@ -47,6 +47,9 @@ export const INHERITED_PARENT_FLAG_KEYS = [
   'serial',
   'verbose',
   'out',
+  // A session-open opt-in the parent flow request carries down to its dispatched opens
+  // (replay steps and batch steps alike); a step's own recorded flag wins.
+  'testIme',
 ] as const;
 
 /**

@@ -18,6 +18,7 @@ agent-device find id "com.example:id/login" click
 
 Tips:
 
+- `find role <value>` and the `role=` selector term match the platform-neutral `kind` vocabulary that `snapshot --json` publishes (`button`, `text`, `text-field`, `switch`, …). Older leaf spellings (`statictext`, `edittext`, `textview`) still match during a deprecation window, each on the nodes that actually carried that class.
 - Use `find ... wait <timeoutMs>` to wait for UI to appear.
 - Combine with scoped snapshots using `snapshot -s "<label>"` for speed.
 - [Android] If a matched node is not hittable, agent-device will click/focus the nearest hittable ancestor.

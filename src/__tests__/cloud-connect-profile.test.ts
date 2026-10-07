@@ -17,6 +17,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
 import { providerWebDriver } from '../provider-webdriver.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
 vi.mock('../cli/auth-session.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../cli/auth-session.ts')>()),
@@ -914,29 +915,6 @@ async function captureConnectStdout(task: () => Promise<void>): Promise<void> {
   const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
   try {
     await task();
-  } finally {
-    stdoutWrite.mockRestore();
-  }
-}
-
-async function connectWithGeneratedProviderProfile(options: {
-  stateDir: string;
-  positionals: string[];
-  flags: Partial<Parameters<typeof connectCommand>[0]['flags']>;
-}): Promise<void> {
-  const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-  try {
-    await connectCommand({
-      positionals: options.positionals,
-      flags: {
-        json: true,
-        help: false,
-        version: false,
-        stateDir: options.stateDir,
-        ...options.flags,
-      },
-      client: {} as AgentDeviceClient,
-    });
   } finally {
     stdoutWrite.mockRestore();
   }

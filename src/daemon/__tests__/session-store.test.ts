@@ -9,7 +9,10 @@ import { buildRequestFinishedEvent } from '@agent-device/session-journal/session
 import { HEAL_COMPLETE_SENTINEL } from '../session-script-writer.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import { repairPublication } from '../../__tests__/test-utils/session-factories.ts';
+import {
+  makeMacOsSession,
+  repairPublication,
+} from '../../__tests__/test-utils/session-factories.ts';
 
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
@@ -186,6 +189,36 @@ test('recordAction writes a paged session event log', async () => {
   assert.equal(secondPage.events[0]?.summary, 'Tapped @14');
   assert.equal(secondPage.nextCursor, undefined);
 });
+
+test.each(['app', 'frontmost-app', 'desktop', 'menubar', undefined] as const)(
+  'recordAction preserves an explicit macOS surface %s in events and saved open scripts',
+  async (surface) => {
+    const fixture = makeFixture('agent-device-session-macos-surface-');
+    fixture.session = makeMacOsSession('default');
+    recordOpen(fixture.store, fixture.session, {
+      platform: 'macos',
+      saveScript: true,
+      ...(surface === undefined ? {} : { surface }),
+    });
+    await fixture.store.flushEvents(fixture.session.name);
+
+    const event = fixture.store.readEvents(fixture.session.name).events[0];
+    assert.equal(event?.kind, 'action.recorded');
+    assert.deepEqual(event?.details?.flags, {
+      platform: 'macos',
+      ...(surface === undefined ? {} : { surface }),
+    });
+
+    recordClose(fixture.store, fixture.session);
+    const script = writeScript(fixture);
+    const open = parseReplayScriptDetailed(script).actions.find(
+      (action) => action.command === 'open',
+    );
+    assert.equal(open?.flags.surface, surface);
+    assert.deepEqual(open?.positionals, ['Settings']);
+    assert.equal(script.includes('--surface'), surface !== undefined);
+  },
+);
 
 test('recordAction event log redacts typed text and its length from display positionals', async () => {
   const { store, session } = makeFixture('agent-device-session-events-redaction-');

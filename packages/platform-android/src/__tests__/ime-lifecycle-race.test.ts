@@ -17,6 +17,7 @@ import {
 const HELPER_SERVICE = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
 const LATIN_IME = 'com.google.android.inputmethod.latin/.LatinIME';
 const PREVIOUS_IME_KEY = 'agent_device_ime_helper_previous_ime';
+const REBIND_DISPLACED_KEY = 'agent_device_ime_helper_rebind_displaced';
 const STATE_DIR = '/ime-race-state';
 const SERIAL = ANDROID_EMULATOR.id;
 
@@ -82,6 +83,9 @@ test('planted race: startup recovery cannot retire an activation marker before t
     }
     if (args.join(' ') === `shell settings get secure ${PREVIOUS_IME_KEY}`) {
       return { exitCode: 0, stdout: `${previousIme ?? 'null'}\n`, stderr: '' };
+    }
+    if (args.join(' ') === `shell settings get secure ${REBIND_DISPLACED_KEY}`) {
+      return { exitCode: 0, stdout: 'null\n', stderr: '' };
     }
     if (args.slice(0, 5).join(' ') === `shell settings put secure ${PREVIOUS_IME_KEY}`) {
       previousIme = args[5];

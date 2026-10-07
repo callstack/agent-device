@@ -79,7 +79,7 @@ export function createAndroidApplicationTools(): AndroidApplicationTools {
     restoreTestIme: async (device, input) => {
       const { restoreAndroidTestIme } = await loadAndroidMechanics();
       const result = await restoreAndroidTestIme(device, { stateDir: input.stateDir });
-      if (result.reason !== 'set-failed') return;
+      if (result.reason !== 'set-failed' && result.reason !== 'record-unreadable') return;
       throw new AppError(
         'COMMAND_FAILED',
         `Android test IME could not be restored on ${device.name ?? device.id}.`,

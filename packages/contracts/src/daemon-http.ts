@@ -1,7 +1,10 @@
+import path from 'node:path';
+
 // The daemon HTTP wire vocabulary shared by the daemon server, the remote
 // proxy, and every client that talks to them: the base path, the tenant and
-// network-access header names, the URL/auth/tenant header builders, and the
-// /health payload. Client and server must agree on all of it, so neither side
+// network-access header names, the URL/auth/tenant header builders, the
+// /health payload, and the temp artifact paths a remote client names on the
+// daemon host. Client and server must agree on all of it, so neither side
 // owns it (ADR 0006).
 export const DAEMON_HTTP_BASE_PATH = '/agent-device';
 export const DAEMON_HTTP_TENANT_HEADER = 'x-agent-device-tenant';
@@ -57,13 +60,20 @@ export type DaemonHealthPayload = {
   rpcProtocolVersion: number;
   instanceId?: string;
   hostArch?: string;
+  /** The lease backends this daemon admits; a host checks it before relying on one. */
+  leaseBackends?: readonly string[];
   upstream?: unknown;
 };
 
 export function buildDaemonHealthPayload(
   service: DaemonHealthPayload['service'],
   version: string,
-  options: { upstream?: unknown; instanceId?: string; hostArch?: string } = {},
+  options: {
+    upstream?: unknown;
+    instanceId?: string;
+    hostArch?: string;
+    leaseBackends?: readonly string[];
+  } = {},
 ): DaemonHealthPayload {
   return {
     ok: true,
@@ -72,6 +82,47 @@ export function buildDaemonHealthPayload(
     rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
     ...(options.instanceId !== undefined ? { instanceId: options.instanceId } : {}),
     ...(options.hostArch !== undefined ? { hostArch: options.hostArch } : {}),
+    ...(options.leaseBackends !== undefined ? { leaseBackends: options.leaseBackends } : {}),
     ...(options.upstream !== undefined ? { upstream: options.upstream } : {}),
   };
+}
+
+// A remote client names a daemon-host temp path for each artifact it downloads afterwards, and the
+// daemon accepts exactly that shape where it otherwise refuses host paths.
+const REMOTE_TEMP_DIR = '/tmp';
+
+/** The daemon-host temp path a remote client names for an artifact it downloads afterwards. */
+export function buildRemoteTempArtifactPath(prefix: string, extension: string): string {
+  return path.posix.join(
+    REMOTE_TEMP_DIR,
+    `${remoteTempArtifactStem(prefix)}${dottedExtension(extension)}`,
+  );
+}
+
+/** A directory temp path — unlike `buildRemoteTempArtifactPath`, no extension is ever appended. */
+export function buildRemoteTempArtifactDirPath(prefix: string): string {
+  return path.posix.join(REMOTE_TEMP_DIR, remoteTempArtifactStem(prefix));
+}
+
+/** Whether `value` has the shape `buildRemoteTempArtifactPath(prefix, extension)` returns. */
+export function isRemoteTempArtifactPath(
+  value: string,
+  prefix: string,
+  extension: string,
+): boolean {
+  const dotted = dottedExtension(extension);
+  const stem = path.posix.basename(value, dotted);
+  return (
+    value === path.posix.join(REMOTE_TEMP_DIR, `${stem}${dotted}`) &&
+    stem.startsWith(`agent-device-${prefix}-`) &&
+    /^\d+-[a-z0-9]+$/.test(stem.slice(`agent-device-${prefix}-`.length))
+  );
+}
+
+function dottedExtension(extension: string): string {
+  return extension.startsWith('.') ? extension : `.${extension}`;
+}
+
+function remoteTempArtifactStem(prefix: string): string {
+  return `agent-device-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }

@@ -19,6 +19,7 @@ import {
   rootExternalDependencyRanges,
   rootWorkspaceDependencyNames,
   specifierSites,
+  workspacePackagesFromManifests,
   type WorkspacePackage,
 } from './package-boundaries.ts';
 import { listTrackedTypeScriptFiles } from './tracked-sources.ts';
@@ -33,6 +34,7 @@ const kernel: WorkspacePackage = {
     ['@agent-device/kernel/device', 'packages/kernel/src/device.ts'],
   ]),
   workspaceDependencies: new Set(),
+  workspaceDependencyField: 'dependencies',
   externalDependencies: new Map(),
 };
 
@@ -43,6 +45,7 @@ const contracts: WorkspacePackage = {
     ['@agent-device/contracts/interaction', 'packages/contracts/src/interaction.ts'],
   ]),
   workspaceDependencies: new Set(['@agent-device/kernel']),
+  workspaceDependencyField: 'dependencies',
   externalDependencies: new Map(),
 };
 
@@ -146,6 +149,38 @@ test('readWorkspacePackages reads tracked manifests only', () => {
     !names.includes('@agent-device/scratch'),
     'an uncommitted package directory is not part of the committed state R11 describes',
   );
+});
+
+test('published ESM plugins declare bundled workspace build dependencies without runtime dependencies', () => {
+  const [plugin] = workspacePackagesFromManifests(
+    new Map([
+      [
+        'packages/provider-example/package.json',
+        JSON.stringify({
+          name: '@agent-device/example',
+          exports: { '.': { import: './dist/plugin.mjs' } },
+          devDependencies: { '@agent-device/kernel': 'workspace:*', tsdown: '^0.21.0' },
+        }),
+      ],
+    ]),
+  );
+  assert.ok(plugin);
+  assert.equal(
+    plugin.exportTargets.get('@agent-device/example'),
+    'packages/provider-example/dist/plugin.mjs',
+  );
+  assert.deepEqual([...plugin.workspaceDependencies], ['@agent-device/kernel']);
+  assert.equal(plugin.externalDependencies.size, 0);
+  const sites = specifierSites(
+    'packages/provider-example/src/plugin.ts',
+    "import { AppError } from '@agent-device/kernel/errors';",
+  );
+  assert.deepEqual(checkPackageInternalSites(plugin, sites, [plugin, kernel]), []);
+  const undeclared = { ...plugin, workspaceDependencies: new Set<string>() };
+  const violations = checkPackageInternalSites(undeclared, sites, [undeclared, kernel]);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]?.rule, 'R11 package-boundaries');
+  assert.match(violations[0]?.message ?? '', /without declaring/);
 });
 
 test('every workspace package façade names its exports explicitly (no bare `export *`)', () => {
@@ -366,6 +401,34 @@ test('root workspace specifiers need a root workspace:* entry and an exported su
 
   const unknown = specifierSites('src/cli.ts', "import { x } from '@agent-device/nope/thing';");
   assert.equal(checkRootSites(unknown, ALL, new Set([kernel.name])).length, 1);
+});
+
+test('a published package declares its bundled workspace siblings as devDependencies', () => {
+  const manifest = (name: string, isPrivate: boolean) =>
+    JSON.stringify({
+      name,
+      private: isPrivate,
+      exports: { '.': './src/index.ts' },
+      devDependencies: { '@agent-device/kernel': 'workspace:*' },
+    });
+  const packages = workspacePackagesFromManifests(
+    new Map([
+      ['packages/published/package.json', manifest('@agent-device/published', false)],
+      ['packages/internal/package.json', manifest('@agent-device/internal', true)],
+    ]),
+  );
+  const published = packages.find((pkg) => pkg.name === '@agent-device/published');
+  const internal = packages.find((pkg) => pkg.name === '@agent-device/internal');
+  assert.ok(published && internal);
+  assert.deepEqual([...published.workspaceDependencies], ['@agent-device/kernel']);
+  assert.deepEqual([...internal.workspaceDependencies], []);
+
+  const undeclared = specifierSites(
+    'packages/published/src/index.ts',
+    "import { g } from '@agent-device/contracts/interaction';",
+  );
+  const [violation] = checkPackageInternalSites(published, undeclared, [...ALL, published]);
+  assert.match(violation?.message ?? '', /packages\/published\/package\.json devDependencies\.$/);
 });
 
 test('the real tree parses, declares, and passes R11', () => {
@@ -757,6 +820,7 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.ok(providerWebDriverPackage, 'provider-webdriver package must exist');
   assert.deepEqual([...providerWebDriverPackage.exportTargets.keys()].sort(), [
     '@agent-device/provider-webdriver',
+    '@agent-device/provider-webdriver/plugin',
     '@agent-device/provider-webdriver/providers',
   ]);
   assert.deepEqual([...providerWebDriverPackage.workspaceDependencies].sort(), [

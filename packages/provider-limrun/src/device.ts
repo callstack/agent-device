@@ -14,6 +14,7 @@ export const LIMRUN_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
   fields: {
     providerApp: 'consumed',
     providerOsVersion: 'refused',
+    providerDeviceType: 'refused',
     providerProject: 'refused',
     providerBuild: 'refused',
     providerSessionName: 'refused',

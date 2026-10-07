@@ -4,31 +4,10 @@ import {
   parsePermissionAction,
   parsePermissionTarget,
   parseSettingState,
-  type SettingOptions,
+  type SimctlSettingRequest,
 } from '@agent-device/contracts/settings';
 import { AppError, sessionAppRequiredDetails } from '@agent-device/kernel/errors';
 import { requireLocationCoordinates } from '@agent-device/kernel/location-coordinates';
-
-/** The settings a simulator changes through `simctl` alone, whichever host runs that `simctl`. */
-type SimctlSetting = 'appearance' | 'permission' | 'location';
-
-/**
- * Runs one `simctl` argv on the simulator. It resolves with the output when `simctl` exits 0 and
- * rejects with a `COMMAND_FAILED` AppError whose `details.stderr` is the `simctl` stderr otherwise.
- */
-type SimctlSettingRunner = (
-  args: string[],
-) => Promise<{ readonly stdout: string; readonly stderr: string }>;
-
-export type SimctlSettingRequest = {
-  runSimctl: SimctlSettingRunner;
-  /** The simulator UDID `simctl` addresses, or `booted` where the runner reaches one simulator. */
-  udid: string;
-  setting: SimctlSetting;
-  state: string;
-  appBundleId?: string;
-  options?: SettingOptions;
-};
 
 /** Changes one simulator setting through `simctl`; the Apple package owns this plan for every runner. */
 export async function applySimctlSetting(
@@ -68,7 +47,7 @@ async function setAppearance({ runSimctl, udid, state }: SimctlSettingRequest): 
 }
 
 async function setPermission(request: SimctlSettingRequest): Promise<void> {
-  const { runSimctl, udid, state, options } = request;
+  const { runSimctl, udid, deviceId, state, options } = request;
   const appBundleId = requireAppBundleId(request);
   const permissionAction = parsePermissionAction(state);
   const action = permissionAction === 'deny' ? 'revoke' : permissionAction;
@@ -77,7 +56,7 @@ async function setPermission(request: SimctlSettingRequest): Promise<void> {
     await runSimctl(['privacy', udid, action, target, appBundleId]);
   } catch (error) {
     if (!isIosPrivacyServiceRefusal(error)) throw error;
-    throw iosPrivacyServiceRefusedError(action, target, appBundleId, udid, error);
+    throw iosPrivacyServiceRefusedError(action, target, appBundleId, deviceId, error);
   }
 }
 

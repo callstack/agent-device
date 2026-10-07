@@ -19,6 +19,10 @@
     "./providers": {
       "types": "./src/providers.ts",
       "default": "./src/providers.ts"
+    },
+    "./plugin": {
+      "types": "./src/plugin.ts",
+      "default": "./src/plugin.ts"
     }
   }
 }

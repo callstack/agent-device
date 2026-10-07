@@ -10,6 +10,8 @@ import {
   appFileUploadForm,
   createHubUploadApp,
   postHubAppUpload,
+  readFlag,
+  requireEnv,
   resolveHubAppReference,
   trimLeadingSlash,
   trimTrailingSlash,
@@ -204,6 +206,26 @@ test('the hub app resolver surfaces the grammar rejection of a malformed referen
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
+});
+
+test('a whitespace-only credential is missing', () => {
+  assert.equal(requireEnv({ USER: 'u' }, 'USER', 'Hub'), 'u');
+  for (const env of [{}, { USER: '' }, { USER: ' \t' }]) {
+    assert.throws(
+      () => requireEnv(env, 'USER', 'Hub'),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        error.message === 'Hub requires USER in the environment.',
+    );
+  }
+});
+
+test('only non-empty string flags are read', () => {
+  const req = { flags: { device: 'Pixel 8', empty: '', count: 3 } };
+  assert.equal(readFlag(req, 'device'), 'Pixel 8');
+  assert.equal(readFlag(req, 'empty'), undefined);
+  assert.equal(readFlag(req, 'count'), undefined);
 });
 
 test.skipIf(process.platform === 'win32')(

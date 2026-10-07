@@ -1,0 +1,63 @@
+{
+  "name": "@agent-device/testmu",
+  "version": "0.21.22",
+  "type": "module",
+  "description": "TestMu AI real and virtual mobile device plugin for agent-device.",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown --config tsdown.config.ts",
+    "prepack": "pnpm build"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./connection-verification": {
+      "types": "./src/testmu-connection-verification.ts",
+      "default": "./src/testmu-connection-verification.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "devDependencies": {
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/provider-webdriver": "workspace:*",
+    "agent-device": "workspace:*"
+  },
+  "agentDevicePlugin": {
+    "apiVersion": 1,
+    "provider": "testmu",
+    "entry": "./dist/plugin.mjs",
+    "connection": {
+      "leaseKind": "direct-device-provider",
+      "requiresAppAttachment": false,
+      "requiresRemoteDaemon": false,
+      "supportsArtifacts": true,
+      "supportsDeferredAppSelection": false,
+      "supportsDirectPortReverse": false,
+      "usesCloudWebDriverLease": true
+    },
+    "credentialVariables": [
+      "LT_USERNAME",
+      "LT_ACCESS_KEY"
+    ]
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "import": "./dist/plugin.mjs"
+      }
+    },
+    "access": "public"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/callstack/agent-device.git",
+    "directory": "packages/provider-testmu"
+  },
+  "homepage": "https://agent-device.dev/docs/testmu"
+}

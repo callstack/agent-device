@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { createDaemonProxyServer } from '../../remote/daemon-proxy.ts';
+import { createDaemonProxyServer } from '@agent-device/proxy';
 import { buildDaemonHttpBaseUrl } from '@agent-device/contracts/daemon-http';
 import {
   ensureDaemon,

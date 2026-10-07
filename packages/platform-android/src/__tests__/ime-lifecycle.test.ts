@@ -7,6 +7,7 @@ import { bindAndroidAdbTestHost } from './test-utils/android-host-test-setup.ts'
 
 const HELPER_SERVICE = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
 const SETTINGS_KEY = 'agent_device_ime_helper_previous_ime';
+const REBIND_DISPLACED_KEY = 'agent_device_ime_helper_rebind_displaced';
 const PENDING_DIR = 'android-test-ime-pending';
 
 // activateAndroidTestIme reads the bundled artifact for the service component; inject a fixture so
@@ -92,6 +93,7 @@ function ok(stdout = ''): FakeAdbResult {
 function fakeDeviceState(initialIme: string) {
   let defaultIme = initialIme;
   let previousImeRecord: string | undefined;
+  let rebindDisplacedRecord: string | undefined;
   let installed = false;
   let failPersist = false;
   let mismatchNextPersistReadback = false;
@@ -123,10 +125,12 @@ function fakeDeviceState(initialIme: string) {
       return ok('com.example.stale/.Ime');
     }
     if (key === SETTINGS_KEY) return ok(previousImeRecord ?? 'null');
+    if (key === REBIND_DISPLACED_KEY) return ok(rebindDisplacedRecord ?? 'null');
     throw new Error(`unexpected settings get key: ${String(key)}`);
   }
 
   function handleSettingsPut(args: readonly string[]): FakeAdbResult {
+    if (args[4] === REBIND_DISPLACED_KEY) rebindDisplacedRecord = args[5];
     if (args[4] === SETTINGS_KEY) {
       if (failPersist) return { exitCode: 1, stdout: '', stderr: 'rejected' };
       previousImeRecord = args[5];
@@ -140,6 +144,7 @@ function fakeDeviceState(initialIme: string) {
 
   function handleSettingsDelete(args: readonly string[]): FakeAdbResult {
     if (args[4] === SETTINGS_KEY) previousImeRecord = undefined;
+    if (args[4] === REBIND_DISPLACED_KEY) rebindDisplacedRecord = undefined;
     return ok();
   }
 

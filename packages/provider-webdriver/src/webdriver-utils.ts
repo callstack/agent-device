@@ -3,6 +3,7 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   DeviceLease,
+  LeaseLifecycleContext,
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
 } from '@agent-device/contracts/device';
@@ -203,7 +204,8 @@ export async function fetchProviderVerificationJson(
   endpoint: string | URL,
   options: {
     clientVersion: string;
-    auth: { username: string; accessKey: string };
+    /** Omitted for a public catalog endpoint. */
+    auth?: { username: string; accessKey: string };
     hints: ProviderJsonFailureHints;
   },
 ): Promise<unknown> {
@@ -213,7 +215,7 @@ export async function fetchProviderVerificationJson(
     const response = await fetch(endpoint, {
       headers: {
         ...agentDeviceRequestHeaders(options.clientVersion),
-        Authorization: basicAuthHeader(options.auth),
+        ...(options.auth ? { Authorization: basicAuthHeader(options.auth) } : {}),
       },
       signal: AbortSignal.timeout(PROVIDER_API_TIMEOUT_MS),
     });
@@ -321,4 +323,47 @@ export function requireProviderDeviceOrientation(
     flag: spec.flag,
     capability: spec.capability,
   });
+}
+
+/** Lease-flag and credential readers every hosted-WebDriver provider shares. */
+export function requireRequest(
+  req: LeaseLifecycleContext | undefined,
+  providerLabel: string,
+): LeaseLifecycleContext {
+  if (req) return req;
+  throw new AppError(
+    'INVALID_ARGS',
+    `${providerLabel} lease allocation requires provider profile flags on the request.`,
+  );
+}
+
+export function requireRequestPlatform(
+  req: LeaseLifecycleContext,
+  providerLabel: string,
+): 'android' | 'ios' {
+  const platform = req.flags?.platform;
+  if (platform === 'android' || platform === 'ios') return platform;
+  throw new AppError('INVALID_ARGS', `${providerLabel} requires --platform ios|android.`);
+}
+
+export function requireFlag(req: LeaseLifecycleContext, key: string, message: string): string {
+  const value = readFlag(req, key);
+  if (value) return value;
+  throw new AppError('INVALID_ARGS', message);
+}
+
+export function readFlag(req: LeaseLifecycleContext, key: string): string | undefined {
+  const value = req.flags?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+/** A whitespace-only credential is missing, not one the provider should reject later. */
+export function requireEnv<Key extends string>(
+  env: Readonly<Partial<Record<Key, string>>>,
+  key: Key,
+  providerLabel: string,
+): string {
+  const value = env[key];
+  if (value?.trim()) return value;
+  throw new AppError('INVALID_ARGS', `${providerLabel} requires ${key} in the environment.`);
 }

@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
+import type { SimctlSettingRequest } from '@agent-device/contracts/settings';
 import type { LimrunIosSession } from './ios.ts';
-import type { LimrunIosSimctlSettingRequest } from './runtime-dependencies.ts';
 import { setLimrunIosSetting } from './ios-settings.ts';
 
 function sessionWithClient(results: Array<{ code: number; stdout: string; stderr: string }> = []) {
@@ -12,7 +12,7 @@ function sessionWithClient(results: Array<{ code: number; stdout: string; stderr
     softReset: vi.fn(async (_bundleId: string, _options?: unknown) => ({})),
     terminateApp: vi.fn(async (_bundleId: string) => {}),
   };
-  const applySimctlSetting = vi.fn(async (request: LimrunIosSimctlSettingRequest) => {
+  const applySimctlSetting = vi.fn(async (request: SimctlSettingRequest) => {
     const output = await request.runSimctl(['ui', request.udid, 'appearance']);
     return { output };
   });
@@ -27,7 +27,7 @@ function sessionWithClient(results: Array<{ code: number; stdout: string; stderr
   return { session, client, applySimctlSetting };
 }
 
-test('simctl settings run the Apple plan on the booted simulator with the resolved app', async () => {
+test('simctl settings run the Apple plan on the booted simulator, reporting the session device', async () => {
   const { session, client, applySimctlSetting } = sessionWithClient([
     { code: 0, stdout: 'dark\n', stderr: '' },
   ]);
@@ -38,6 +38,7 @@ test('simctl settings run the Apple plan on the booted simulator with the resolv
   expect(applySimctlSetting).toHaveBeenCalledWith({
     runSimctl: expect.any(Function),
     udid: 'booted',
+    deviceId: 'limrun:ios:settings',
     setting: 'permission',
     state: 'grant',
     appBundleId: 'resolved.camera-app',

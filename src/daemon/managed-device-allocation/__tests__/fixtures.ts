@@ -4,7 +4,7 @@ import type {
   ManagedIdentityRef,
   ManagedLease,
   ManagedShapeRequest,
-} from '@agent-device/contracts/managed-device-allocation';
+} from '@agent-device/managed-allocation/managed-device-allocation';
 
 /**
  * The grant shapes the daemon-side managed admission is written against, stated in contract terms

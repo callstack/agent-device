@@ -1,4 +1,8 @@
-import { PROVIDER_DEVICE_ORIENTATIONS } from '@agent-device/contracts/remote';
+import { LEASE_BACKENDS } from '@agent-device/kernel/contracts';
+import {
+  PROVIDER_DEVICE_ORIENTATIONS,
+  PROVIDER_DEVICE_TYPES,
+} from '@agent-device/contracts/remote';
 import type { FlagDefinition } from './flag-types.ts';
 
 export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
@@ -131,8 +135,8 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     key: 'leaseBackend',
     names: ['--lease-backend'],
     type: 'enum',
-    enumValues: ['ios-simulator', 'ios-instance', 'android-instance', 'harmonyos-instance'],
-    usageLabel: '--lease-backend ios-simulator|ios-instance|android-instance|harmonyos-instance',
+    enumValues: LEASE_BACKENDS,
+    usageLabel: `--lease-backend ${LEASE_BACKENDS.join('|')}`,
     usageDescription: 'Lease backend for remote tenant connection admission',
     projectConfig: false,
     recorded: false,
@@ -171,6 +175,17 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-os-version <version>',
     usageDescription: 'Hosted cloud provider OS version, for example 17 or 14.0',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
+    key: 'providerDeviceType',
+    names: ['--provider-device-type'],
+    type: 'enum',
+    enumValues: PROVIDER_DEVICE_TYPES,
+    usageLabel: '--provider-device-type real|virtual',
+    usageDescription:
+      'TestMu AI device pool: real devices or virtual devices (emulators and simulators). Defaults to virtual',
     projectConfig: false,
     recorded: false,
   },
@@ -236,7 +251,7 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-appium-version <version>',
     usageDescription:
-      'Hosted cloud provider Appium server version, for example 3.2.0. Without it BrowserStack falls back to its default (Appium 1.x)',
+      'Hosted cloud provider Appium server version, for example 3.2.0. Without it each provider starts its own default (Appium 1.x on BrowserStack)',
     projectConfig: false,
     recorded: false,
   },

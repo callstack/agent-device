@@ -1,4 +1,4 @@
-import type { JsonObject } from './json.ts';
+import type { JsonObject } from '@agent-device/contracts/client';
 
 /**
  * agent-device's own interface to a managed-device allocator (ADR 0021 §3): lease request,

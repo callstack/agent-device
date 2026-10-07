@@ -1,4 +1,5 @@
-import type { SessionAction } from '@agent-device/contracts/session';
+import { AppError } from '@agent-device/kernel/errors';
+import type { SessionAction, SessionSurface } from '@agent-device/contracts/session';
 import {
   appendRuntimeHintFlags,
   formatScriptArg,
@@ -46,6 +47,9 @@ export function appendOpenActionScriptArgs(
   if (action.flags?.relaunch) {
     parts.push('--relaunch');
   }
+  if (action.flags?.surface !== undefined) {
+    parts.push('--surface', action.flags.surface);
+  }
   if (action.flags?.testIme === true) {
     parts.push('--test-ime');
   } else if (action.flags?.testIme === false) {
@@ -61,7 +65,13 @@ export function parseReplayOpenFlags(args: string[]): {
 } {
   const argsWithoutRelaunch: string[] = [];
   const flags: SessionAction['flags'] = {};
-  for (const token of args) {
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index]!;
+    if (token === '--surface') {
+      flags.surface = parseReplaySurface(args[index + 1]);
+      index += 1;
+      continue;
+    }
     if (token === '--relaunch') {
       flags.relaunch = true;
       continue;
@@ -82,6 +92,26 @@ export function parseReplayOpenFlags(args: string[]): {
     flags,
     runtime: hasReplayOpenRuntimeHints(parsedRuntime.flags) ? parsedRuntime.flags : undefined,
   };
+}
+
+const REPLAY_SURFACES: Record<SessionSurface, true> = {
+  app: true,
+  'frontmost-app': true,
+  desktop: true,
+  menubar: true,
+};
+
+function isReplaySurface(value: string): value is SessionSurface {
+  return Object.hasOwn(REPLAY_SURFACES, value);
+}
+
+function parseReplaySurface(value: string | undefined): SessionSurface {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized !== undefined && isReplaySurface(normalized)) return normalized;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Invalid surface: ${value}. Use ${Object.keys(REPLAY_SURFACES).join('|')}.`,
+  );
 }
 
 function hasReplayOpenRuntimeHints(

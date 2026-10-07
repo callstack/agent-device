@@ -113,7 +113,7 @@ test('a directory that is not the expected key is not trimmed', async () => {
 test('a symlinked key resolving outside the expected key is not trimmed', async () => {
   const managedRoot = path.join(base, 'managed');
   const target = path.join(base, 'target');
-  fs.mkdirSync(managedRoot);
+  fs.mkdirSync(path.join(managedRoot, 'other-key'), { recursive: true });
   const protectedPaths = seedBuiltKey(target);
   const link = path.join(managedRoot, KEY);
   fs.symlinkSync(target, link);
@@ -129,6 +129,27 @@ test('a symlinked key resolving outside the expected key is not trimmed', async 
   );
 
   assert.deepEqual(tree(target), before);
+});
+
+test('a default key that is itself a symlink to an outside directory is not trimmed', async () => {
+  const managedRoot = path.join(base, 'managed');
+  const outside = path.join(base, 'outside');
+  fs.mkdirSync(managedRoot);
+  const protectedPaths = seedBuiltKey(outside);
+  const link = path.join(managedRoot, KEY);
+  fs.symlinkSync(outside, link);
+  const before = tree(outside);
+
+  assert.deepEqual(
+    await trimRunnerBuildScratch(
+      link,
+      protectedPaths.map((product) => path.join(link, path.relative(outside, product))),
+      link,
+    ),
+    [],
+  );
+
+  assert.deepEqual(tree(outside), before);
 });
 
 test('a product that is a symlink keeps the unit it points into', async () => {

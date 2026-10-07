@@ -413,7 +413,10 @@ test('test returns invalid args when no replay scripts match the platform filter
     invoke: noopInvoke,
   });
 
-  assertInvalidArgsMessage(response, 'No replay tests matched for --platform android.');
+  assertInvalidArgsMessage(
+    response,
+    'No replay tests matched for --platform android: 1 declaring another platform. Run a source that declares android, or drop --platform.',
+  );
 });
 
 test('test rejects duplicate replay test metadata in the context header', async () => {

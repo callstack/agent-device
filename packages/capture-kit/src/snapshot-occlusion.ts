@@ -1,8 +1,12 @@
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { centerOfRect } from '@agent-device/kernel/snapshot';
 import { areRectsApproximatelyEqual, normalizeRect } from '@agent-device/kernel/rect-center';
-import { containsPoint } from '@agent-device/kernel/rect';
-import { normalizeType, isViewportRootNode } from '@agent-device/contracts/snapshot';
+import { containsPoint, rectContains } from '@agent-device/kernel/rect';
+import {
+  isScrollableNodeLike,
+  normalizeType,
+  isViewportRootNode,
+} from '@agent-device/contracts/snapshot';
 
 const COVERED_PRESENTATION_HINT = 'covered';
 const OVERLAY_KIND_FRAGMENTS = [
@@ -18,6 +22,8 @@ const OVERLAY_KIND_FRAGMENTS = [
   'menu',
 ];
 const VIEWPORT_CHROME_KIND_FRAGMENTS = ['tabbar', 'toolbar', 'navigationbar'];
+const TOOLBAR_HOST_KIND_FRAGMENTS = ['toolbar'];
+const SCROLL_INDICATOR_KIND_FRAGMENTS = ['scrollbar', 'scrollindicator'];
 const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
   'button',
   'link',
@@ -275,6 +281,7 @@ function isOverlayLikeNode(
   if (isViewportRootNode(node)) return false;
   if (isFullViewportChromeContainer(node, neighbourhood.byIndex)) return false;
   if (isSiblingSizedChromeContainer(node, neighbourhood)) return false;
+  if (isOwnPresentationToolbarHost(node, neighbourhood)) return false;
   // This is a presentation-order heuristic: only known floating UI chrome should cover
   // later targets. Generic hittable containers can appear later without being visually on top.
   return (
@@ -298,6 +305,12 @@ function isOverlayLikeNode(
  * pass-through host from an opaque bar of the same frame, and chrome siblings that share one frame
  * excuse each other. Both captures show the match only where content was being refused, and the kind
  * gate keeps a `dialog`/`sheet`/`alert` sized to the content around it covering.
+ *
+ * Accepted limit for stacked presentations: the interactive projection lists them as siblings of one
+ * root. iOS drops what sits beneath a sheet from the capture, but keeps what sits beneath a
+ * full-screen cover, and the cover's toolbar host is viewport-sized, so the full-viewport exemption
+ * lets it through. Beneath a cover, only the cover's own bars and a lower presentation's
+ * non-exempt toolbar host still cover.
  */
 // Mutation-lane note: the `typeof parentIndex` and `!rect` guards below are provably
 // redundant — with no parent index the sibling lookup finds nothing and answers "not
@@ -316,6 +329,48 @@ function isSiblingSizedChromeContainer(
   return siblings.some(
     (sibling) => sibling.index !== node.index && areRectsApproximatelyEqual(rect, sibling.rect),
   );
+}
+
+/**
+ * SwiftUI toolbar hosts draw their descendants, not their enclosing frame. Exempt a host only
+ * when it encloses bars or scroll containers from its own presentation: the siblings after the
+ * previous toolbar and before this host. Enclosing another presentation's regions keeps it covering.
+ */
+function isOwnPresentationToolbarHost(
+  node: RawSnapshotNode,
+  neighbourhood: NeighbourhoodIndex,
+): boolean {
+  if (!nodeKindIncludesAny(node, TOOLBAR_HOST_KIND_FRAGMENTS)) return false;
+  if (typeof node.parentIndex !== 'number') return false;
+  const rect = positiveRect(node.rect);
+  if (!rect) return false;
+  const siblings = neighbourhood.childrenByParent.get(node.parentIndex)!;
+  const position = siblings.findIndex((sibling) => sibling.index === node.index);
+  const ownStart = ownPresentationStart(siblings, position);
+
+  let hasHostedRegion = false;
+  for (const [siblingPosition, sibling] of siblings.entries()) {
+    if (siblingPosition === position || !isEnclosedHostedRegion(rect, sibling)) continue;
+    if (siblingPosition < ownStart || siblingPosition > position) return false;
+    hasHostedRegion = true;
+  }
+  return hasHostedRegion;
+}
+
+function ownPresentationStart(siblings: readonly RawSnapshotNode[], position: number): number {
+  for (let previous = position - 1; previous >= 0; previous--) {
+    if (nodeKindIncludesAny(siblings[previous]!, TOOLBAR_HOST_KIND_FRAGMENTS)) return previous + 1;
+  }
+  return 0;
+}
+
+/** A bar or a scroll container inside `rect`; a scroll indicator is not a container. */
+function isEnclosedHostedRegion(rect: Rect, node: RawSnapshotNode): boolean {
+  const isHostedRegion =
+    nodeKindIncludesAny(node, VIEWPORT_CHROME_KIND_FRAGMENTS) ||
+    (isScrollableNodeLike(node) && !nodeKindIncludesAny(node, SCROLL_INDICATOR_KIND_FRAGMENTS));
+  const nodeRect = positiveRect(node.rect);
+  return Boolean(isHostedRegion && nodeRect && rectContains(rect, nodeRect));
 }
 
 function isFullViewportChromeContainer(

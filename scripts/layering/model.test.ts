@@ -285,12 +285,11 @@ test('ranked and unranked zones are disjoint and both non-empty', () => {
 test('classifyZone separates the ranked spine from intentionally-unranked zones', () => {
   assert.equal(classifyZone('contracts'), 'ranked');
   assert.equal(classifyZone('daemon-server'), 'ranked');
-  assert.equal(classifyZone('(root)'), 'unranked');
-  assert.equal(classifyZone('platform-runtime'), 'unranked');
   assert.equal(classifyZone('platforms'), 'unclassified');
   assert.equal(classifyZone('utils'), 'unclassified');
-  // Every satellite zone joined the spine; only the composition root stays out, because R2
-  // forbids daemon/ from importing commands/ so the files that wire them cannot be ranked.
+  // Every src/ zone is on the spine, `(root)` and the zones root modules declare included.
+  assert.equal(classifyZone('(root)'), 'ranked');
+  assert.equal(classifyZone('platform-runtime'), 'ranked');
   assert.equal(classifyZone('mcp'), 'ranked');
   assert.equal(classifyZone('screenshot-diff'), 'ranked');
   // A zone that is neither ranked nor listed peripheral must be flagged, never
@@ -302,7 +301,7 @@ test('every production zone is deliberately classified as ranked or unranked', (
   // Drift guard: a new src/<folder>/ (or a daemon-client/server split) forces a
   // deliberate ranked-vs-peripheral decision here instead of silently escaping
   // spine back-edge detection. If this fails, add the new zone to TARGET_DAG_RANK
-  // (ranked spine) or UNRANKED_ZONES (root/peripheral) in model.ts.
+  // (ranked spine) or UNRANKED_ZONES (peripheral) in model.ts.
   const productionFiles = listSourceFiles();
   assert.deepEqual(unclassifiedZones(productionFiles), []);
 

@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'vitest';
 import { handleLeaseCommands } from '../lease.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
@@ -15,6 +17,7 @@ import {
   providerCredentialFingerprint,
   readDaemonProviderCredentials,
 } from '../../../provider-credential-fingerprint.ts';
+import { pluginHome, selectPluginManifest } from '../../../plugins/plugin.fixtures.ts';
 import {
   HUMAN_CONTROL_LEASE_REQUEST,
   HUMAN_CONTROL_SCOPE,
@@ -94,6 +97,48 @@ test('lease_release still releases a retainOnClose lease through the provider', 
     [lease.leaseId],
   );
   assert.equal(registry.listActiveLeases().length, 0);
+});
+
+test('lease_release refuses a host-allocated macos-app lease and keeps it', async () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.putHostLease('a1b2c3d4e5f60718293a4b5c6d7e8f90', {
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    clientId: 'client-a',
+    leaseBackend: 'macos-app' as const,
+    deviceKey: 'com.example.app@4242',
+  });
+  const released: DeviceLease[] = [];
+  const meta = {
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseId: lease.leaseId,
+    clientId: 'client-a',
+    leaseBackend: 'macos-app' as const,
+    deviceKey: 'com.example.app@4242',
+  };
+  const run = (command: 'lease_release' | 'lease_heartbeat') =>
+    handleLeaseCommands({
+      req: { token: 'test-token', session: 'default', command, positionals: [], meta },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-macos-app-release-'),
+      leaseRegistry: registry,
+      leaseLifecycleProvider: {
+        release: async (active) => {
+          released.push(active);
+          return {};
+        },
+      },
+    });
+
+  await assert.rejects(run('lease_release'), (error: AppError) => {
+    assert.equal(error.code, 'UNAUTHORIZED');
+    assert.equal(error.details?.reason, 'MACOS_APP_LEASE_HOST_OWNED');
+    return true;
+  });
+  assert.deepEqual(released, []);
+  assert.equal(registry.listActiveLeases().length, 1);
+  assert.equal((await run('lease_heartbeat'))?.ok, true);
 });
 
 test('lease_allocate stores retainOnClose from the request meta', async () => {
@@ -481,4 +526,91 @@ test('a daemon started without BrowserStack credentials refuses a shell that has
   assert.equal(outcome.allocations, 0);
   assert.equal(outcome.error?.details?.reason, 'provider-credentials-changed');
   assert.match(String(outcome.error?.message), /started without the browserstack credentials/);
+});
+
+function testMuPluginEnv(): Record<string, string> {
+  const manifest = path.resolve(
+    import.meta.dirname,
+    '../../../../packages/provider-testmu/package.json',
+  );
+  const { home, env } = pluginHome();
+  selectPluginManifest(home, JSON.parse(fs.readFileSync(manifest, 'utf8')));
+  return env;
+}
+
+test('a daemon holding other TestMu AI credentials refuses before allocation', async () => {
+  const home = testMuPluginEnv();
+  const daemonEnv = { ...home, LT_USERNAME: 'user', LT_ACCESS_KEY: 'key-1' };
+  const outcome = await allocateWithDaemonEnv(
+    providerAllocateRequest(
+      'testmu',
+      providerCredentialFingerprint('testmu', { ...daemonEnv, LT_ACCESS_KEY: 'key-2' }),
+    ),
+    daemonEnv,
+  );
+
+  assert.equal(outcome.allocations, 0);
+  assert.equal(outcome.error?.code, 'INVALID_ARGS');
+  assert.equal(outcome.error?.details?.reason, 'provider-credentials-changed');
+  assert.equal(outcome.error?.details?.provider, 'testmu');
+});
+
+test('a daemon holding the TestMu AI credentials of the shell allocates', async () => {
+  const env = { ...testMuPluginEnv(), LT_USERNAME: 'user', LT_ACCESS_KEY: 'key-1' };
+  const outcome = await allocateWithDaemonEnv(
+    providerAllocateRequest('testmu', providerCredentialFingerprint('testmu', env)),
+    env,
+  );
+
+  assert.equal(outcome.error, undefined);
+  assert.equal(outcome.allocations, 1);
+});
+
+test('a daemon started without TestMu AI credentials refuses a shell that has them', async () => {
+  const home = testMuPluginEnv();
+  const outcome = await allocateWithDaemonEnv(
+    providerAllocateRequest(
+      'testmu',
+      providerCredentialFingerprint('testmu', {
+        ...home,
+        LT_USERNAME: 'user',
+        LT_ACCESS_KEY: 'key-1',
+      }),
+    ),
+    home,
+  );
+
+  assert.equal(outcome.allocations, 0);
+  assert.equal(outcome.error?.details?.reason, 'provider-credentials-changed');
+  assert.match(String(outcome.error?.message), /started without the testmu credentials/);
+});
+
+test('a tenant cannot allocate a macos-app lease', async () => {
+  const registry = new LeaseRegistry();
+  const request: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'lease_allocate',
+    positionals: [],
+    flags: {},
+    meta: {
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseBackend: 'macos-app',
+      leaseProvider: 'proxy',
+      clientId: 'client-1',
+      deviceKey: 'com.apple.finder',
+    },
+  };
+  await assert.rejects(
+    handleLeaseCommands({
+      req: request,
+      sessionName: request.session,
+      sessionStore: makeSessionStore('agent-device-macos-app-allocate-'),
+      leaseRegistry: registry,
+    }),
+    (error: AppError) =>
+      error.code === 'UNAUTHORIZED' && error.details?.reason === 'MACOS_APP_LEASE_HOST_ALLOCATED',
+  );
+  assert.deepEqual(registry.listActiveLeases(), []);
 });

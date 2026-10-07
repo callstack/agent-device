@@ -97,9 +97,19 @@ async function neverAnsweredResponse(signal: AbortSignal | undefined): Promise<R
 
 async function requestBody(request: Request): Promise<{ body?: unknown }> {
   if (!request.body) return {};
+  const multipart = request.headers.get('content-type')?.startsWith('multipart/form-data')
+    ? await request.clone().formData()
+    : undefined;
   const buffer = Buffer.from(await request.arrayBuffer());
   if (request.headers.get('content-type')?.startsWith('multipart/form-data')) {
-    return { body: { multipartBytes: buffer.length } };
+    return {
+      body: {
+        multipartBytes: buffer.length,
+        filenames: [...multipart!.values()]
+          .filter((value): value is File => value instanceof File)
+          .map((value) => value.name),
+      },
+    };
   }
   const text = buffer.toString('utf8');
   return text ? { body: JSON.parse(text) as unknown } : {};

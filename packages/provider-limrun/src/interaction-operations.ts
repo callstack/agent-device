@@ -99,11 +99,6 @@ function limrunGestureFacts(
     viewport: available,
   });
 }
-const homeUnavailableIos = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun iOS direct sessions do not expose home yet.',
-} as const);
 const tvRemoteUnavailableIos = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -126,11 +121,6 @@ const keyboardUnavailableIos = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'Limrun iOS direct sessions do not expose keyboard actions.',
 } as const);
-const clipboardUnavailableIos = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun iOS direct sessions do not expose clipboard access yet.',
-} as const);
 const settingsReadUnavailableIos = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -141,7 +131,7 @@ const appSwitcherUnavailableIos = Object.freeze({
   reason: 'unsupported-provider-mode',
   hint: 'Limrun iOS direct sessions do not expose app switcher yet.',
 } as const);
-/** No Limrun session exposes a hardware button; only the springboard buttons split by leg. */
+/** No Limrun session exposes the action button; only `appSwitcher` still splits by leg. */
 const systemButtonUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-provider-mode',
@@ -260,28 +250,17 @@ export function limrunNavigationOperationFacts(
 }
 
 /**
- * `keyboard` (status/dismiss/enter) shares one cell per session: the Android leg rides the same
- * interactor factory `limrunNavigationOperationFacts` above describes; the iOS leg has no tested
- * provider keyboard behavior, so it stays unavailable.
- */
-/**
- * `clipboard` shares the split its siblings have: the Android leg rides
- * `session.dependencies.android.createInteractor` — the SAME factory the local Android family
- * binds, so `cmd clipboard get/set text` reaches the device exactly as it does locally — while
- * the iOS direct session has no pasteboard transport, so both cells stay unavailable there.
+ * The Android leg rides `session.dependencies.android.createInteractor`, the factory the local
+ * Android family binds, so `cmd clipboard get/set text` reaches the device as it does locally.
+ * The iOS direct session reads and writes the pasteboard through Limrun's `simctl pbpaste` and
+ * `pbcopy`.
  */
 export function limrunClipboardOperationFacts(
-  device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
   if (liveSessionUnavailable) {
     return Object.freeze({
       ...clipboardRuntimeOperationFacts({ unsupported: liveSessionUnavailable }),
-    });
-  }
-  if (device.platform !== 'android') {
-    return Object.freeze({
-      ...clipboardRuntimeOperationFacts({ unsupported: clipboardUnavailableIos }),
     });
   }
   return Object.freeze({
@@ -316,9 +295,9 @@ export function limrunAlertOperationFacts(
 }
 
 /**
- * The system buttons split the way the navigation leaves do: the Android leg rides the local
- * family's own interactor factory for `home` and `appSwitcher`, the iOS direct session refuses
- * both, and no Limrun session exposes a hardware button on either leg.
+ * The Android leg rides the local family's own interactor factory for `home` and `appSwitcher`.
+ * The iOS direct session presses `home` through Limrun's button actions and refuses
+ * `appSwitcher`. No Limrun session exposes the action button.
  */
 export function limrunSystemButtonOperationFacts(
   device: DeviceInfo,
@@ -336,7 +315,7 @@ export function limrunSystemButtonOperationFacts(
   }
   return systemButtonRuntimeOperationFacts({
     unsupported: systemButtonUnavailable,
-    home: homeUnavailableIos,
+    home: available,
     appSwitcher: appSwitcherUnavailableIos,
   });
 }
@@ -388,6 +367,11 @@ export function limrunSettingsOperationFacts(
   });
 }
 
+/**
+ * `keyboard` (status/dismiss/enter) shares one cell per session: the Android leg rides the same
+ * interactor factory `limrunNavigationOperationFacts` above describes; the iOS leg has no tested
+ * provider keyboard behavior, so it stays unavailable.
+ */
 export function limrunKeyboardOperationFacts(
   device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,

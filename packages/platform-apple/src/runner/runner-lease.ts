@@ -444,28 +444,74 @@ function listRunnerLeasesForOwner(owner: {
   pid: number;
   startTime?: string | null;
 }): RunnerLease[] {
-  let entries: fs.Dirent[];
+  return readAllRunnerLeases({ strict: false }).filter(
+    (lease) =>
+      lease.ownerPid === owner.pid &&
+      (owner.startTime === undefined || lease.ownerStartTime === owner.startTime),
+  );
+}
+
+/**
+ * Reads every lease file. Strict reads throw unless the directory and every file could be read, with
+ * only ENOENT meaning absent; non-strict reads skip each unreadable file on its own.
+ */
+function readAllRunnerLeases(options: { strict: boolean }): RunnerLease[] {
+  const read = options.strict ? readOptionalSync : readSkippingErrors;
   const root = resolveRunnerLeaseRoot();
-  try {
-    entries = fs.readdirSync(root, { withFileTypes: true });
-  } catch {
-    return [];
-  }
+  const entries = read(() => fs.readdirSync(root, { withFileTypes: true })) ?? [];
   const leases: RunnerLease[] = [];
   for (const entry of entries) {
     if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-    const lease = readRunnerLeaseFile(path.join(root, entry.name));
-    if (!lease) continue;
-    if (lease.ownerPid !== owner.pid) continue;
-    if (owner.startTime !== undefined && lease.ownerStartTime !== owner.startTime) continue;
-    leases.push(lease);
+    const contents = read(() => fs.readFileSync(path.join(root, entry.name), 'utf8'));
+    const lease = contents === null ? null : parseRunnerLease(contents);
+    if (lease) leases.push(lease);
   }
   return leases;
 }
 
-function readRunnerLeaseFile(filePath: string): RunnerLease | null {
+function readSkippingErrors<T>(read: () => T): T | null {
   try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<RunnerLease>;
+    return read();
+  } catch {
+    return null;
+  }
+}
+
+function readOptionalSync<T>(read: () => T): T | null {
+  try {
+    return read();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+/**
+ * The `.xctestrun` path and cache key of every lease that is not proven dead, for cache eviction.
+ * A lease is proven dead only when its owner process is gone (dead or recycled) and its leased runner
+ * is absent, gone or recycled. An owner whose state directory is gone is still a live process, and a
+ * runner whose start time cannot be read is treated as live. Throws when the leases cannot be listed,
+ * so a caller never mistakes an unreadable lease directory for an empty one.
+ */
+export function listActiveRunnerLeaseArtifacts(): { xctestrunPath: string; cacheKey?: string }[] {
+  return readAllRunnerLeases({ strict: true })
+    .filter((lease) => !isLeaseProvenDead(lease))
+    .map(({ xctestrunPath, cacheKey }) => ({ xctestrunPath, cacheKey }));
+}
+
+function isLeaseProvenDead(lease: RunnerLease): boolean {
+  const state = classifyRunnerLease(lease);
+  if (state.type !== 'stale' || state.staleReason === 'owner-state-dir-gone') return false;
+  if (lease.runnerPid === null) return true;
+  const runner = classifyOwnerLiveness({
+    owner: { pid: lease.runnerPid, startTime: lease.runnerStartTime ?? null },
+  });
+  return runner === 'owner-process-dead' || runner === 'owner-process-reused';
+}
+
+function parseRunnerLease(contents: string): RunnerLease | null {
+  try {
+    const parsed = JSON.parse(contents) as Partial<RunnerLease>;
     const deviceId = readNonEmptyString(parsed.deviceId);
     return deviceId ? normalizeRunnerLease(parsed, deviceId) : null;
   } catch {

@@ -486,6 +486,7 @@ function snapshot(
     recordOnlySession: input.recordOnlySession,
     ...(input.activeSessionApp === undefined ? {} : { activeSessionApp: input.activeSessionApp }),
     ...(input.exportQuality === undefined ? {} : { exportQuality: input.exportQuality }),
+    ...(input.fps === undefined ? {} : { fps: input.fps }),
     gestureEvents: [],
     ...(clockAnchor === undefined
       ? {}

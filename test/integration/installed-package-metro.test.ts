@@ -228,6 +228,10 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
 
     const pluginTypes = fs.readFileSync(path.join(installedPackageRoot, 'dist/src/plugins.d.ts'));
     assert.ok(pluginTypes.length < 1024);
+    const webDriverPluginTypes = fs.readFileSync(
+      path.join(installedPackageRoot, 'dist/src/plugins/webdriver.d.ts'),
+    );
+    assert.ok(webDriverPluginTypes.length < 5120);
     assert.match(pluginTypes.toString(), /export \{ ProviderPluginHost \}/);
     metroPort = await listenOnLoopback(metroServer);
     t.after(async () => {
@@ -327,6 +331,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
           },
           './metro': (mod) => mod.buildBundleUrl('https://public.example.test', 'ios'),
           './plugins': (mod) => Object.keys(mod).length === 0,
+          './plugins/webdriver': (mod) => Object.keys(mod).length === 0,
           './remote-config': (mod) => typeof mod,
           './selectors': (mod) =>
             mod.isSelectorToken('||') &&
@@ -404,6 +409,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       './io': 'function',
       './limrun': 'limrun',
       './plugins': true,
+      './plugins/webdriver': true,
       // Type-only subpath: resolving the module from the packed exports map is
       // the entire runtime check.
       './remote-config': 'object',

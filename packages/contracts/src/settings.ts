@@ -151,6 +151,30 @@ export type SettingOptions = {
   longitude?: number;
 };
 
+/** The settings a simulator changes through `simctl` alone, whichever host runs that `simctl`. */
+type SimctlSetting = 'appearance' | 'permission' | 'location';
+
+/**
+ * Runs one `simctl` argv on the simulator. It resolves with the output when `simctl` exits 0 and
+ * rejects with a `COMMAND_FAILED` AppError whose `details.stderr` is the `simctl` stderr otherwise.
+ */
+type SimctlSettingRunner = (
+  args: string[],
+) => Promise<{ readonly stdout: string; readonly stderr: string }>;
+
+/** One simulator setting the Apple `simctl` plan changes, whichever host runs that `simctl`. */
+export type SimctlSettingRequest = {
+  runSimctl: SimctlSettingRunner;
+  /** The simulator UDID `simctl` addresses, or `booted` where the runner reaches one simulator. */
+  udid: string;
+  /** The device id a refusal reports to the caller, which `udid` is not on every runner. */
+  deviceId: string;
+  setting: SimctlSetting;
+  state: string;
+  appBundleId?: string;
+  options?: SettingOptions;
+};
+
 /**
  * Whether naming an app for one mutation can mean anything on one target.
  *

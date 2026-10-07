@@ -70,6 +70,7 @@ export type AgentDeviceRequestOverrides = Pick<
   | 'clientId'
   | 'providerApp'
   | 'providerOsVersion'
+  | 'providerDeviceType'
   | 'providerProject'
   | 'providerBuild'
   | 'providerSessionName'

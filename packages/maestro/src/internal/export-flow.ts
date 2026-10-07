@@ -341,8 +341,19 @@ function convertScreenshotAction(action: SessionAction): ConvertedAction {
 
 function convertScrollAction(action: SessionAction): ConvertedAction {
   const [direction] = action.positionals;
-  if (!direction || direction === 'down') return { kind: 'commands', commands: ['scroll'] };
-  return { kind: 'unsupported', message: `scroll ${direction} is not exported yet` };
+  if (direction && direction !== 'down') {
+    return { kind: 'unsupported', message: `scroll ${direction} is not exported yet` };
+  }
+  // #3197: `--until` is now part of a scroll action, so the export says when it
+  // cannot carry the stop condition rather than exporting a bare page scroll and
+  // letting the flow lose the step that made it land on the target.
+  const until = typeof action.flags?.until === 'string' ? action.flags.until : undefined;
+  return {
+    kind: 'commands',
+    commands: ['scroll'],
+    warnings:
+      until === undefined ? [] : [`scroll --until ${until} is not represented by Maestro scroll`],
+  };
 }
 
 function convertSwipeAction(action: SessionAction): ConvertedAction {

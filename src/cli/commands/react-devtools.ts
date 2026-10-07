@@ -169,7 +169,7 @@ function shouldConfigureDirectReverse(
   const { flags } = options;
   if (!flags) return false;
   return (
-    connectionProviderCapabilities(flags.leaseProvider).supportsDirectPortReverse &&
+    connectionProviderCapabilities(flags.leaseProvider, options.env).supportsDirectPortReverse &&
     flags.leaseBackend === 'android-instance' &&
     flags.metroProxyBaseUrl === undefined &&
     options.configureDirectPortReverse !== undefined

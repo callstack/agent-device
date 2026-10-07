@@ -436,7 +436,23 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /AGENT_DEVICE_HTTP_AUTH_HOOK configured treats HTTP requests as remote/);
   assert.match(help, /host-path install sources are rejected/);
   assert.match(help, /uploaded artifacts remain supported/);
-  assert.match(help, /Limrun, BrowserStack, and AWS Device Farm through local provider profiles/);
+  assert.match(
+    help,
+    /Limrun, BrowserStack, AWS Device Farm, and TestMu AI through local provider profiles/,
+  );
+  assert.match(help, /plugins add @agent-device\/testmu/);
+  assert.match(help, /TestMu AI uses LT_USERNAME and LT_ACCESS_KEY/);
+  const testMuFlow = help.slice(
+    help.indexOf('TestMu AI virtual-device flow'),
+    help.indexOf('BrowserStack hosted-device flow'),
+  );
+  assert.match(testMuFlow, /--device "iPhone 16" --provider-os-version 18\.0/);
+  assert.match(
+    testMuFlow,
+    /connect testmu --provider-device-type real .*--provider-os-version 18 --provider-app \.\/MyApp\.ipa/,
+  );
+  assert.match(testMuFlow, /major OS version \(18, not 18\.0\)/);
+  assert.match(testMuFlow, /agent-device disconnect/);
   assert.match(help, /Limrun uses LIMRUN_API_KEY/);
   assert.match(help, /BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY/);
   assert.match(help, /Generated connection profiles store app\/device selectors and ARNs/);

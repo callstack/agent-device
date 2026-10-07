@@ -78,6 +78,7 @@ export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'device',
   'providerApp',
   'providerOsVersion',
+  'providerDeviceType',
   'providerProject',
   'providerBuild',
   'providerSessionName',

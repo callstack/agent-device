@@ -763,3 +763,28 @@ function inFlightClaimKeys(registry: LeaseRegistry): string[] {
   ).inFlightWork;
   return [...work.entriesByLeaseId.keys()];
 }
+
+test('a tenant heartbeat cannot stretch a host-allocated lease past the window the host chose', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now, maxLeaseTtlMs: 3_600_000 });
+  const leaseId = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+  const scope = {
+    tenantId: 'stim',
+    runId: 'run-1',
+    leaseBackend: 'macos-app' as const,
+    deviceKey: 'com.example.app',
+  };
+  registry.putHostLease(leaseId, { ...scope, ttlMs: 60_000 });
+
+  now = 2_000;
+  const stretched = registry.heartbeatLease({ ...scope, leaseId, ttlMs: 600_000 });
+  assert.equal(stretched.expiresAt, 62_000);
+
+  now = 3_000;
+  const shorter = registry.heartbeatLease({ ...scope, leaseId, ttlMs: 30_000 });
+  assert.equal(shorter.expiresAt, 33_000);
+
+  registry.putHostLease(leaseId, { ...scope, ttlMs: 120_000 });
+  now = 4_000;
+  assert.equal(registry.heartbeatLease({ ...scope, leaseId, ttlMs: 600_000 }).expiresAt, 124_000);
+});

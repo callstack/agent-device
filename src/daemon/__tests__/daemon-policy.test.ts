@@ -37,7 +37,11 @@ function policy(raw: Record<string, unknown>) {
 
 function makeHandler(
   daemonPolicy: ReturnType<typeof policy>,
-  options: { inventory?: readonly DeviceInfo[]; providerInventory?: readonly DeviceInfo[] } = {},
+  options: {
+    inventory?: readonly DeviceInfo[];
+    providerInventory?: readonly DeviceInfo[];
+    leaseRegistry?: LeaseRegistry;
+  } = {},
 ) {
   const sessionStore = makeSessionStore('agent-device-daemon-policy-');
   sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
@@ -47,7 +51,7 @@ function makeHandler(
     logPath: path.join(mkdtempForTestSync('daemon-policy'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
-    leaseRegistry: new LeaseRegistry(),
+    leaseRegistry: options.leaseRegistry ?? new LeaseRegistry(),
     deviceRuntimeGateway: { ...lifecycleDeviceRuntimeGateway, bind, inspectFacts },
     deviceInventoryGateways: createTestDeviceInventoryGateways({
       local: async () => options.inventory ?? [],
@@ -113,6 +117,50 @@ test('a batch naming a denied step is refused before any step runs', async () =>
 
   expectPolicyDenied(response, 'command');
   expect(systemRuntimeSpies.appSwitcher).not.toHaveBeenCalled();
+});
+
+test('batch steps re-enter lease admission, so a step before open under a macos-app lease is refused', async () => {
+  vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', 'native');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.putHostLease('a1b2c3d4e5f60718293a4b5c6d7e8f90', {
+    tenantId: 'stim',
+    runId: 'run-1',
+    leaseBackend: 'macos-app',
+    deviceKey: 'com.example.app',
+  });
+  const { handler, bind } = makeHandler(policy({ leases: { require: 'macos-app' } }), {
+    leaseRegistry,
+  });
+
+  const response = await handler(
+    request('batch', {
+      session: 'leased',
+      flags: {
+        platform: 'macos',
+        batchSteps: [
+          { command: 'snapshot' },
+          { command: 'open', positionals: ['com.example.app'] },
+        ],
+      },
+      meta: {
+        tenantId: 'stim',
+        runId: 'run-1',
+        leaseId: lease.leaseId,
+        leaseBackend: 'macos-app',
+        deviceKey: 'com.example.app',
+      },
+    }),
+  );
+  vi.unstubAllEnvs();
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'UNAUTHORIZED',
+      details: { reason: 'MACOS_APP_LEASE_DENIED', rule: 'session', step: 1, executed: 0 },
+    },
+  });
+  expect(bind).not.toHaveBeenCalled();
 });
 
 test('replay actions re-enter policy admission', async () => {

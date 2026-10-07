@@ -7,7 +7,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type {
   ManagedLease,
   ManagedLeasePlatform,
-} from '@agent-device/contracts/managed-device-allocation';
+} from '@agent-device/managed-allocation/managed-device-allocation';
 import { createManagedLeaseReachability } from '../../../src/managed-device-reachability.ts';
 import { createManagedLeaseAdmission } from '../../../src/daemon/managed-device-allocation/lease-admission.ts';
 import { createScriptedManagedDeviceAllocator } from '../../../src/__tests__/test-utils/managed-device-allocator.fixtures.ts';

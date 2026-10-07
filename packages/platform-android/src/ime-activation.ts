@@ -10,10 +10,12 @@ import {
   selectAndroidImeHelperArtifact,
 } from './ime-helper.ts';
 import {
+  clearPersistedRebindDisplacement,
   readAndroidDefaultInputMethod,
-  readPersistedPreviousIme,
+  readAndroidTestImeDeviceRecord,
   restorePriorPersistedIme,
   writePersistedPreviousIme,
+  type AndroidTestImeDeviceRecord,
 } from './ime-settings-record.ts';
 import { activeTestImeDevices, withAndroidTestImeRecoveryLock } from './ime-state.ts';
 
@@ -92,35 +94,32 @@ async function activateAndroidTestImeAfterStartupRecovery(
 
   const currentIme = await readAndroidDefaultInputMethod(adb);
   if (currentIme === manifest.serviceComponent) {
-    // Already active (idempotent call, or a previous crashed daemon left it active); keep the
-    // existing persisted previous-IME record rather than overwriting it, but make sure this
-    // process's crash is covered by a recovery marker.
-    const markerPersisted = await markers.write(options.stateDir, device.id);
-    const previousIme = await readPersistedPreviousIme(adb);
-    if (markerPersisted) activeTestImeDevices.add(deviceKey);
+    return await claimAlreadyActiveTestIme(device, manifest, options.stateDir);
+  }
+
+  const record = await readAndroidTestImeDeviceRecord(adb);
+  if (record.kind === 'unreadable') {
+    emitAndroidAdbDiagnostic({
+      level: 'warn',
+      phase: 'android_test_ime_record_unreadable',
+      data: { device: device.id },
+    });
     return {
       outcome: 'settled',
       activated: false,
-      alreadyActive: true,
-      ...(markerPersisted ? {} : { persistFailed: true }),
-      previousIme,
+      alreadyActive: false,
+      persistFailed: true,
       helperServiceComponent: manifest.serviceComponent,
       helperPackageName: manifest.packageName,
     };
   }
-
-  // Durably record the restore target BEFORE the switch: confirm the settings write succeeded and
-  // reads back. If it cannot be persisted, do NOT switch and report a failed activation to the
-  // caller, so a rejected `settings put` can never strand the user on the helper with no restore
-  // target.
-  const priorPersistedIme = await readPersistedPreviousIme(adb);
-  const persisted = await writePersistedPreviousIme(adb, currentIme);
-  if (!persisted) {
+  const { previousIme, priorPersistedIme } = activationRestoreTarget(record, currentIme);
+  if (!(await writePersistedPreviousIme(adb, previousIme))) {
     await restorePriorPersistedIme(adb, priorPersistedIme, device.id);
     emitAndroidAdbDiagnostic({
       level: 'warn',
       phase: 'android_test_ime_persist_failed',
-      data: { device: device.id, previousIme: currentIme },
+      data: { device: device.id, previousIme },
     });
     return {
       outcome: 'settled',
@@ -141,7 +140,7 @@ async function activateAndroidTestImeAfterStartupRecovery(
     emitAndroidAdbDiagnostic({
       level: 'warn',
       phase: 'android_test_ime_marker_persist_failed',
-      data: { device: device.id, previousIme: currentIme },
+      data: { device: device.id, previousIme },
     });
     return {
       outcome: 'settled',
@@ -187,18 +186,67 @@ async function activateAndroidTestImeAfterStartupRecovery(
   }
 
   // The recovery lock spans both durable records and the switch, so this process only claims
-  // active ownership after the helper is confirmed active on the device.
-  activeTestImeDevices.add(deviceKey);
+  // active ownership after the helper is confirmed active on the device. Ownership is published
+  // before settling an earlier rebind's record, so a settle that rejects still leaves an owner for
+  // close-time restore.
+  const ownership = { stateDir: options.stateDir, rebindUnconfirmed: record.rebindDisplaced };
+  activeTestImeDevices.set(deviceKey, ownership);
+  if (record.rebindDisplaced) {
+    ownership.rebindUnconfirmed = !(await clearPersistedRebindDisplacement(adb));
+  }
   emitAndroidAdbDiagnostic({
     phase: 'android_test_ime_activated',
-    data: { device: device.id, previousIme: currentIme },
+    data: { device: device.id, previousIme },
   });
   return {
     outcome: 'settled',
     activated: true,
     alreadyActive: false,
-    previousIme: currentIme,
+    previousIme,
     helperServiceComponent: manifest.serviceComponent,
     helperPackageName: manifest.packageName,
+  };
+}
+
+async function claimAlreadyActiveTestIme(
+  device: DeviceInfo,
+  manifest: Awaited<ReturnType<typeof selectAndroidImeHelperArtifact>>['manifest'],
+  stateDir: string,
+): Promise<AndroidTestImeActivationResult> {
+  const adb = resolveAndroidAdbExecutor(device);
+  const deviceKey = getAndroidImeHelperDeviceKey(device);
+  // Already active (idempotent call, or a previous crashed daemon left it active); keep the
+  // existing persisted previous-IME record rather than overwriting it, but make sure this
+  // process's crash is covered by a recovery marker.
+  const markerPersisted = await requireAndroidAdbHost().imeRecoveryMarkers.write(
+    stateDir,
+    device.id,
+  );
+  const record = await readAndroidTestImeDeviceRecord(adb);
+  if (markerPersisted) {
+    // A rebind the device record marks, or may mark, still needs a confirmed one before text entry.
+    const rebindUnconfirmed = record.kind === 'unreadable' || record.rebindDisplaced;
+    activeTestImeDevices.set(deviceKey, { stateDir, rebindUnconfirmed });
+  }
+  const previousIme = record.kind === 'owned' ? record.previousIme : undefined;
+  return {
+    outcome: 'settled',
+    activated: false,
+    alreadyActive: true,
+    ...(markerPersisted ? {} : { persistFailed: true }),
+    previousIme,
+    helperServiceComponent: manifest.serviceComponent,
+    helperPackageName: manifest.packageName,
+  };
+}
+
+function activationRestoreTarget(
+  record: Exclude<AndroidTestImeDeviceRecord, { kind: 'unreadable' }>,
+  currentIme: string,
+): { previousIme: string; priorPersistedIme: string | undefined } {
+  if (record.kind === 'absent') return { previousIme: currentIme, priorPersistedIme: undefined };
+  return {
+    previousIme: record.rebindDisplaced ? record.previousIme : currentIme,
+    priorPersistedIme: record.previousIme,
   };
 }

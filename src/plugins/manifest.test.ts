@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { readPluginManifest } from './manifest.ts';
+import { readPluginManifest, RESERVED_PLUGIN_PROVIDERS } from './manifest.ts';
+import { DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS } from '../provider-device-runtimes.ts';
 import { pluginHome, writePlugin } from './plugin.fixtures.ts';
 
 test('manifest compatibility is checked without evaluating plugin code', () => {
@@ -32,4 +33,60 @@ test('manifest refuses traversal and symlink entries outside the installed packa
   manifest.agentDevicePlugin.entry = '../../../outside.js';
   fs.writeFileSync(path.join(directory, 'package.json'), JSON.stringify(manifest));
   assert.throws(() => readPluginManifest(directory), { code: 'INVALID_ARGS' });
+});
+
+test('connection metadata admits local providers and rejects malformed or remote policies', () => {
+  const { home } = pluginHome();
+  const directory = writePlugin(home);
+  const file = path.join(directory, 'package.json');
+  const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const connection = {
+    leaseKind: 'direct-device-provider',
+    requiresAppAttachment: true,
+    requiresRemoteDaemon: false,
+    supportsArtifacts: true,
+    supportsDeferredAppSelection: false,
+    supportsDirectPortReverse: false,
+    usesCloudWebDriverLease: true,
+  };
+  const read = (policy: unknown) => {
+    manifest.agentDevicePlugin.connection = policy;
+    fs.writeFileSync(file, JSON.stringify(manifest));
+    return readPluginManifest(directory);
+  };
+  assert.deepEqual(read(connection).agentDevicePlugin.connection, connection);
+  for (const invalid of [
+    null,
+    {},
+    { ...connection, leaseKind: 'remote-daemon' },
+    { ...connection, requiresRemoteDaemon: true },
+    { ...connection, supportsArtifacts: 'true' },
+    { ...connection, supportsDeferredAppSelection: undefined },
+  ]) {
+    assert.throws(() => read(invalid), { code: 'INVALID_ARGS' });
+  }
+});
+
+test('credential variables are optional environment variable names', () => {
+  const { home } = pluginHome();
+  const directory = writePlugin(home);
+  const file = path.join(directory, 'package.json');
+  const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const read = (credentialVariables: unknown) => {
+    manifest.agentDevicePlugin.credentialVariables = credentialVariables;
+    fs.writeFileSync(file, JSON.stringify(manifest));
+    return readPluginManifest(directory);
+  };
+  assert.equal(read(undefined).agentDevicePlugin.credentialVariables, undefined);
+  assert.deepEqual(read(['EXAMPLE_USER', '_KEY_2']).agentDevicePlugin.credentialVariables, [
+    'EXAMPLE_USER',
+    '_KEY_2',
+  ]);
+  for (const invalid of [null, 'EXAMPLE_USER', {}, [''], ['example_user'], ['2KEY'], ['A-B'], [1]])
+    assert.throws(() => read(invalid), { code: 'INVALID_ARGS' }, JSON.stringify(invalid));
+});
+
+test('every bundled provider runtime is reserved from plugins', () => {
+  for (const provider of DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS)
+    assert.ok((RESERVED_PLUGIN_PROVIDERS as readonly string[]).includes(provider), provider);
 });

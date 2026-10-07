@@ -1,7 +1,4 @@
-import type {
-  LeaseRequestRef,
-  ManagedLease,
-} from '@agent-device/contracts/managed-device-allocation';
+import type { LeaseRequestRef, ManagedLease } from './managed-device-allocation.ts';
 import type { AllocationOperationRecord, AllocationOperationRef } from './record.ts';
 import { bindingFenceFor } from './record-fence.ts';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';

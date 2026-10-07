@@ -5,6 +5,7 @@
  * `fill-verification.ts`.
  */
 import type { FillUnconfirmedVerification } from '@agent-device/contracts/fill-evidence';
+import { ANDROID_SHELL_TEXT_UNSUPPORTED_REASON } from '@agent-device/contracts/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -20,6 +21,7 @@ import { getAndroidKeyboardState, type AndroidKeyboardState } from './device-inp
 import {
   buildAndroidFillUnconfirmedVerification,
   completeAndroidFillVerification,
+  isAndroidFillCommitDropped,
   readAndroidFillTargetBeforeMutation,
   verifyAndroidFilledText,
   type AndroidFillVerification,
@@ -30,7 +32,7 @@ import {
   selectAndroidImeHelperArtifact,
   sendAndroidImeHelperText,
 } from './ime-helper.ts';
-import { isAndroidTestImeActive } from './ime-lifecycle.ts';
+import { getAndroidTestImeOwnership } from './ime-state.ts';
 import { discloseAdbInputDispatch } from './adb-failure.ts';
 import { focusAndroid } from './input-actions.ts';
 import type { AndroidHelperSessionOptions } from './snapshot-helper-types.ts';
@@ -207,7 +209,9 @@ async function admitAndroidTextChannel(
   action: AndroidTextInputAction,
   text: string,
 ): Promise<{ backend: 'test-ime'; packageName: string } | { backend: 'adb-shell' }> {
-  if (isAndroidTestImeActive(device)) {
+  const ownership = getAndroidTestImeOwnership(device);
+  if (ownership) {
+    if (ownership.rebindUnconfirmed) await confirmAndroidTestImeRebound(device);
     const artifact = await selectAndroidImeHelperArtifact(resolveAndroidAdbProvider(device));
     return { backend: 'test-ime', packageName: artifact.manifest.packageName };
   }
@@ -219,6 +223,26 @@ async function admitAndroidTextChannel(
   assertAndroidShellTextSupported(text);
   assertAndroidShellInputIsAppOwned(inputState, action);
   return { backend: 'adb-shell' };
+}
+
+/**
+ * Rebinds the test IME so the focused field gets a fresh input session, or throws: a helper whose
+ * rebind went unconfirmed may hold no session, so no text may reach it.
+ */
+async function confirmAndroidTestImeRebound(device: DeviceInfo): Promise<void> {
+  const { rebindAndroidTestIme } = await import('./ime-rebind.ts');
+  const outcome = await rebindAndroidTestIme(device);
+  if (outcome.kind === 'confirmed') return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Could not confirm the Android test IME rebind on ${device.name ?? device.id}.`,
+    {
+      reason: 'android_test_ime_rebind_unconfirmed',
+      rebindCause: outcome.kind === 'not-owned' ? 'not-owned' : outcome.cause,
+      deviceId: device.id,
+      hint: 'Close and reopen the session to restore the keyboard and reactivate the test IME.',
+    },
+  );
 }
 
 async function typeAndroidImeHelper(
@@ -249,32 +273,37 @@ async function fillAndroidImeHelper(
   helper: AndroidHelperSessionOptions,
 ): Promise<AndroidFillVerification> {
   const adb = resolveAndroidAdbExecutor(device);
-  let lastVerification: AndroidFillVerification | null = null;
   let dispatchedSteps = 0;
-  // The caller focused the target while resolving the channel; the retry re-focuses because it
-  // covers the rare not-yet-bound InputConnection right after focus.
-  try {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      if (attempt > 0) {
-        await focusAndroid(device, x, y);
-        dispatchedSteps += 1;
-      }
-      await clearAndroidImeHelperText(adb, packageName);
+  const attemptFill = async (): Promise<AndroidFillVerification> => {
+    await clearAndroidImeHelperText(adb, packageName);
+    dispatchedSteps += 1;
+    if (text) {
+      await sendAndroidImeHelperText(adb, packageName, text);
       dispatchedSteps += 1;
-      if (text) {
-        await sendAndroidImeHelperText(adb, packageName, text);
-        dispatchedSteps += 1;
-      }
-      const verification = await verifyAndroidFilledText(device, x, y, text, helper);
-      lastVerification = verification;
-      if (verification.ok) break;
-      if (buildAndroidFillUnconfirmedVerification(text, beforeTarget, verification)) break;
     }
+    return await verifyAndroidFilledText(device, x, y, text, helper);
+  };
+  const attemptFillWithRetry = async (): Promise<AndroidFillVerification> => {
+    const first = await attemptFill();
+    if (first.ok || buildAndroidFillUnconfirmedVerification(text, beforeTarget, first)) {
+      return first;
+    }
+    // The caller focused the target while resolving the channel; the retry re-focuses because it
+    // covers the rare not-yet-bound InputConnection right after focus. A commit none of which
+    // reached the field may also have gone to a stale input session, which only a rebind replaces.
+    if (isAndroidFillCommitDropped(first, beforeTarget)) await confirmAndroidTestImeRebound(device);
+    await focusAndroid(device, x, y);
+    dispatchedSteps += 1;
+    return await attemptFill();
+  };
+  let verification: AndroidFillVerification;
+  try {
+    verification = await attemptFillWithRetry();
   } catch (error) {
     throw discloseDispatchAfterSteps(error, dispatchedSteps);
   }
   emitAndroidTextDiagnostic('fill', 'test-ime', text);
-  return lastVerification as AndroidFillVerification;
+  return verification;
 }
 
 async function typeAndroidShell(
@@ -463,14 +492,27 @@ function isAndroidInputTextUnsupported(error: unknown): boolean {
   return false;
 }
 
+/**
+ * The direct-interaction route's recovery (`open`, then a failing `fill`/`press`). The replay
+ * failure boundary replaces it for flow runs off the typed reason below, so a flow caller is
+ * never sent to a flag only `open` accepts.
+ */
+export const ANDROID_TEST_IME_OPEN_HINT =
+  'On emulators the test IME activates automatically; on real devices pass `open --test-ime` to enable it (see `agent-device doctor` for the current IME state).';
+
 function unsupportedAndroidShellTextError(text: string, cause?: unknown): AppError {
   return new AppError(
     'COMMAND_FAILED',
-    'Android text input requires provider-native text injection or the bundled test IME helper for non-ASCII/control characters; the adb-shell fallback supports ASCII text only. On emulators the test IME activates automatically; on real devices pass `open --test-ime` to enable it (see `agent-device doctor` for the current IME state).',
+    'Android text input requires provider-native text injection or the bundled test IME helper for non-ASCII/control characters; the adb-shell fallback supports ASCII text only.',
     {
       backend: 'adb-shell',
+      reason: ANDROID_SHELL_TEXT_UNSUPPORTED_REASON,
       textLength: Array.from(text).length,
       textPreview: text.slice(0, 32),
+      // The direct-interaction route's recovery. The replay failure boundary rewrites it
+      // off the typed reason (`ANDROID_TEST_IME_FLOW_HINT`), so a flow caller is never
+      // sent to a flag only `open` accepts.
+      hint: ANDROID_TEST_IME_OPEN_HINT,
     },
     cause instanceof Error ? cause : undefined,
   );

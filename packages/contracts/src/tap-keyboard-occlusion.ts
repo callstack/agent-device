@@ -21,11 +21,12 @@ import { normalizeType } from './snapshot-text.ts';
  * A capture whose producer measured the band directly publishes a {@link SnapshotKeyboardBandFact}
  * beside its tree, and the guard measures the tap point against that band — a point-in-rect check
  * with no geometry to believe. The Apple runner does this from `app.keyboards.firstMatch`, which
- * answers in the app's own orientation space (#2660).
+ * answers in the app's own orientation space (#2660); the Android helper does it from the input
+ * method window's screen bounds.
  *
  * Otherwise the band is derived from the captured tree every acting path already holds, so the guard
- * costs no round trip. This is the path for Android's input method nodes and for the producers that
- * never see the app's windows (`appium-source`, `limrun-ios-tree`, the runner's own query-sweep tier).
+ * costs no round trip. This is the path for Android captures that could not list every window and for
+ * the producers that never see the app's windows (`appium-source`, `limrun-ios-tree`, the runner's own query-sweep tier).
  * Derivation, the rules that decide whether reported geometry may be measured at all, and the verdict
  * on a point are proven against `contracts/fixtures/tap-keyboard-occlusion-policy.json`; change a rule
  * only through that table.

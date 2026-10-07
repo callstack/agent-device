@@ -12,6 +12,7 @@ const DECLARATION: ProviderProfileFieldDeclaration = {
   fields: {
     providerApp: 'consumed',
     providerOsVersion: 'refused',
+    providerDeviceType: 'consumed',
     providerProject: 'consumed',
     providerBuild: 'consumed',
     providerSessionName: 'consumed',

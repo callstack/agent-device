@@ -74,6 +74,9 @@ importers:
       '@agent-device/provision-kit':
         specifier: workspace:*
         version: link:packages/provision-kit
+      '@agent-device/proxy':
+        specifier: workspace:*
+        version: link:packages/proxy
       '@agent-device/replay-port':
         specifier: workspace:*
         version: link:packages/replay-port
@@ -86,6 +89,9 @@ importers:
       '@agent-device/session-journal':
         specifier: workspace:*
         version: link:packages/session-journal
+      '@agent-device/testmu':
+        specifier: workspace:*
+        version: link:packages/provider-testmu
       '@agent-device/xml':
         specifier: workspace:*
         version: link:packages/xml
@@ -96,14 +102,17 @@ importers:
         specifier: ^0.0.4
         version: 0.0.4
       '@limrun/api':
-        specifier: ^0.49.3
-        version: 0.49.3(supports-color@7.2.0)
+        specifier: ^0.59.0
+        version: 0.59.0(supports-color@7.2.0)
       '@nkzw/eslint-plugin':
         specifier: ^2.0.0
         version: 2.0.0(eslint@10.9.1(supports-color@7.2.0))
       '@nkzw/oxlint-config':
         specifier: ^1.3.0
         version: 1.3.0(eslint@10.9.1(supports-color@7.2.0))(oxlint@1.79.0)(supports-color@7.2.0)(typescript@7.0.2)
+      '@statelyai/graph':
+        specifier: 2.4.0
+        version: 2.4.0(zod@4.4.3)
       '@stryker-mutator/core':
         specifier: 10.0.0
         version: 10.0.0(@types/node@22.20.1)
@@ -467,8 +476,23 @@ importers:
         version: link:../platform-android
     devDependencies:
       '@limrun/api':
-        specifier: ^0.49.3
-        version: 0.49.3(supports-color@7.2.0)
+        specifier: ^0.59.0
+        version: 0.59.0(supports-color@7.2.0)
+
+  packages/provider-testmu:
+    devDependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/provider-webdriver':
+        specifier: workspace:*
+        version: link:../provider-webdriver
+      agent-device:
+        specifier: workspace:*
+        version: link:../..
 
   packages/provider-webdriver:
     dependencies:
@@ -506,6 +530,18 @@ importers:
       undici:
         specifier: 7.29.0
         version: 7.29.0
+
+  packages/proxy:
+    devDependencies:
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
 
   packages/replay-port:
     dependencies:
@@ -1105,8 +1141,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@limrun/api@0.49.3':
-    resolution: {integrity: sha512-gkVhAutGRFnX5TAebXMvWlTHalODe5/KO3AI0pOb5c/xjO41c2GPjpt/pbMTknBxswo7KSI3KzOeK9ZDEuejGQ==}
+  '@limrun/api@0.59.0':
+    resolution: {integrity: sha512-CipjJnvfLq8cTYP58vUneFyJlGvPmr+PspBuuGST1/krYi0QoVOpdNXGqOexio1N6ltnAG5GoQcU40ViDEUTbQ==}
 
   '@limrun/xdelta3-wasm@0.2.0':
     resolution: {integrity: sha512-mEohO7CYj4Gdc0v1Gr/AjlBhfbXQnIz6+2wmMhRfwz8hXZrsIC/yqYQhfoDhu1ysqQwBnU5lDDLPUGdUu+8hPQ==}
@@ -1771,6 +1807,47 @@ packages:
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
+  '@statelyai/graph@2.4.0':
+    resolution: {integrity: sha512-bJfR7s7q2s/0fyM17qJl3QBVBnYj38OzmWYkpXstkD8DVTuFNvwfpGXtkOAbHWqDmdLerRGmcRRS+mUsJYC7gQ==}
+    peerDependencies:
+      '@dagrejs/dagre': ^3.0.0 || ^4.0.0
+      '@hpcc-js/wasm-graphviz': ^1.0.0
+      cytoscape: ^3.0.0
+      d3-force: ^3.0.0
+      d3-hierarchy: ^3.0.0
+      dotparser: ^1.0.0
+      elkjs: ^0.9.0 || ^0.10.0 || ^0.11.0
+      fast-xml-parser: ^5.0.0
+      graphology: ^0.26.0
+      graphology-layout-forceatlas2: ^0.10.0
+      webcola: ^3.4.0
+      zod: ^4.0.0
+    peerDependenciesMeta:
+      '@dagrejs/dagre':
+        optional: true
+      '@hpcc-js/wasm-graphviz':
+        optional: true
+      cytoscape:
+        optional: true
+      d3-force:
+        optional: true
+      d3-hierarchy:
+        optional: true
+      dotparser:
+        optional: true
+      elkjs:
+        optional: true
+      fast-xml-parser:
+        optional: true
+      graphology:
+        optional: true
+      graphology-layout-forceatlas2:
+        optional: true
+      webcola:
+        optional: true
+      zod:
+        optional: true
 
   '@stryker-mutator/api@10.0.0':
     resolution: {integrity: sha512-ZtAJ0ZT3MVRCWJTBE2h90XB/6E+4lifHYtcTyNG6nU2nLekPgTo4gD5esjX6Okxo1b/JB4jJzyxYB54fwKAoJw==}
@@ -4697,7 +4774,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@limrun/api@0.49.3(supports-color@7.2.0)':
+  '@limrun/api@0.59.0(supports-color@7.2.0)':
     dependencies:
       '@limrun/xdelta3-wasm': 0.2.0
       '@types/har-format': 1.2.16
@@ -5199,6 +5276,10 @@ snapshots:
   '@sindresorhus/merge-streams@4.0.0': {}
 
   '@standard-schema/spec@1.1.0': {}
+
+  '@statelyai/graph@2.4.0(zod@4.4.3)':
+    optionalDependencies:
+      zod: 4.4.3
 
   '@stryker-mutator/api@10.0.0':
     dependencies:

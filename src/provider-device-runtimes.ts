@@ -49,8 +49,11 @@ export async function createDaemonProviderRuntimeComposition(
 ): Promise<DefaultProviderRuntimeComposition> {
   const bundled = await createDefaultProviderRuntimeComposition(env);
   try {
-    const { loadProviderPlugins } = await import('./plugins/load.ts');
-    const plugins = await loadProviderPlugins(env, DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS);
+    const [{ loadProviderPlugins }, { RESERVED_PLUGIN_PROVIDERS }] = await Promise.all([
+      import('./plugins/load.ts'),
+      import('./plugins/manifest.ts'),
+    ]);
+    const plugins = await loadProviderPlugins(env, RESERVED_PLUGIN_PROVIDERS);
     return Object.freeze({
       ...bundled,
       runtimes: Object.freeze([...bundled.runtimes, ...plugins.map(({ runtime }) => runtime)]),

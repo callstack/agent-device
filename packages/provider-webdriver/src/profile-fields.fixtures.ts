@@ -8,6 +8,7 @@ export function consumeAllProfileFields(provider: string): ProviderProfileFieldD
     fields: {
       providerApp: 'consumed',
       providerOsVersion: 'consumed',
+      providerDeviceType: 'consumed',
       providerProject: 'consumed',
       providerBuild: 'consumed',
       providerSessionName: 'consumed',

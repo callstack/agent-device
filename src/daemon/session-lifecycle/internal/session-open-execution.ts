@@ -373,6 +373,14 @@ async function prepareOpenDispatchSession(params: {
 }
 
 /**
+ * A session admitted under a `macos-app` lease holds one app, not the host Mac (ADR 0007): other
+ * app-leased sessions on the same Mac do not stand in its way.
+ */
+function isMacOsAppLeaseOpen(req: DaemonRequest): boolean {
+  return req.internal?.admittedLease?.backend === 'macos-app';
+}
+
+/**
  * The refusal an open gets when another session already holds the device. The wait an expired
  * `--wait` budget spent is carried into the recovery text, because a caller that waited is not
  * helped by being told to wait.
@@ -383,7 +391,14 @@ function findNewSessionDeviceConflict(params: {
   sessionStore: SessionStore;
 }): DaemonFailureResponse | undefined {
   const { req, device, sessionStore } = params;
-  const inUse = sessionStore.findByDevice(device.id);
+  const inUse = isMacOsAppLeaseOpen(req)
+    ? sessionStore
+        .listRefs()
+        .find(
+          (ref) =>
+            ref.session.device.id === device.id && ref.session.lease?.leaseBackend !== 'macos-app',
+        )
+    : sessionStore.findByDevice(device.id);
   if (!inUse) return undefined;
   // The wait the caller paid for belongs to `open` alone: an interaction that hits the same busy
   // device cannot wait for it, and would be sent off with a flag its own command rejects.
@@ -407,7 +422,7 @@ async function acquireDeviceClaimForOwner(params: {
   | { status: 'refused'; response: DaemonResponse }
 > {
   const { req, device, owner, sessionName, sessionStore, reconcileOrphanedDeviceClaim } = params;
-  switch (deviceClaimRuleForOwner(owner)) {
+  switch (deviceClaimRuleForOwner(owner, req.internal?.admittedLease)) {
     case 'none':
       return { status: 'not-required' };
     case 'allocator-held': {

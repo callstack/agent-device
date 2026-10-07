@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
-import type { ManagedLease } from '@agent-device/contracts/managed-device-allocation';
+import type { ManagedLease } from '@agent-device/managed-allocation/managed-device-allocation';
 import { ensureBoundDeviceReady } from '../../../src/daemon/request-runtime-binding.ts';
 import { withManagedAdbFixture } from './managed-runtime-automation.fixtures.ts';
 import {

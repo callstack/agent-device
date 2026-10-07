@@ -67,6 +67,9 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSUInteger replacementAlertActions;
 @property(nonatomic, strong) UILabel *textEntryWriteBackStatus;
 @property(nonatomic, strong) UILabel *textEntryDigitSlots;
+// Filled from the fixture field's own delegate callbacks so a test can tell that a gesture really
+// took focus from an input that has stopped answering the accessibility query that found it.
+@property(nonatomic, strong) UILabel *textEntryFocusWitness;
 @property(nonatomic, assign) NSUInteger textEntryWriteBacks;
 @property(nonatomic, copy, nullable) NSString *textEntryRenderedValue;
 @property(nonatomic, assign) NSTimeInterval textEntryLastEditTime;
@@ -340,6 +343,20 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
   }
 }
 
+// Stops answering the element-type query that found it, the moment it takes focus, under
+// `--agent-device-text-entry-unqueryable-on-focus`. #3060's Flutter password field reaches this shape
+// because its two accessibility channels disagree once focused — `TextField` through the legacy
+// attributes, `Other` through the modern ones — and what either channel leaves behind is the same:
+// the tap's element answers the query that resolved it up to the gesture and refuses it after, so a
+// read of it after dispatching records an XCTest failure instead of describing the tap that already
+// landed. The field keeps first-responder, so a test still needs a witness that is not the
+// accessibility tree to tell the gesture landed: `agent-device-text-entry-focus` is a label this
+// method fills in from the field's own delegate callback.
+- (void)agentDeviceTextEntryBecomesUnqueryable:(UITextField *)textField {
+  self.textEntryFocusWitness.text = @"focus";
+  textField.hidden = YES;
+}
+
 // Moves the field up by its own height plus the gap below it when it gains focus, the way keyboard
 // avoidance or a bottom sheet extending above the keyboard does, so the neighbouring field slides
 // into the point the focus tap hit.
@@ -417,6 +434,19 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       [textField.widthAnchor constraintEqualToConstant:240],
       [textField.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
     ]];
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-unqueryable-on-focus"]) {
+      self.textEntryFocusWitness = [[UILabel alloc] init];
+      self.textEntryFocusWitness.accessibilityIdentifier = @"agent-device-text-entry-focus";
+      self.textEntryFocusWitness.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:self.textEntryFocusWitness];
+      [NSLayoutConstraint activateConstraints:@[
+        [self.textEntryFocusWitness.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.textEntryFocusWitness.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:24],
+      ]];
+      [textField addTarget:self
+                    action:@selector(agentDeviceTextEntryBecomesUnqueryable:)
+          forControlEvents:UIControlEventEditingDidBegin];
+    }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-moves-on-focus"]) {
       textField.text = @"stale";
       [textField addTarget:self

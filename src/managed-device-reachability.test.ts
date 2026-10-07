@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
-import type { ManagedLease } from '@agent-device/contracts/managed-device-allocation';
+import type { ManagedLease } from '@agent-device/managed-allocation/managed-device-allocation';
 import type {
   DeviceInventoryHostFor,
   PlatformRequestScope,

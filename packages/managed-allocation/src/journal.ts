@@ -2,7 +2,7 @@ import type {
   LeaseRequestInput,
   ManagedDeviceAllocatorPort,
   SupersedeLeaseRequestInput,
-} from '@agent-device/contracts/managed-device-allocation';
+} from './managed-device-allocation.ts';
 import type { AllocationAction, AllocationDecisionMode } from './decision.ts';
 import { decideAllocationAction } from './decision.ts';
 import type { AllocationOperationRecord, AllocationOperationRef } from './record.ts';

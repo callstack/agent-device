@@ -146,6 +146,7 @@ export async function setIosSetting(
       return await applySimctlSetting({
         runSimctl: (args) => runSimctlForDevice(device, args),
         udid: device.id,
+        deviceId: device.id,
         setting: normalized,
         state,
         appBundleId,

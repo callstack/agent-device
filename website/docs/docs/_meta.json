@@ -120,6 +120,11 @@
       },
       {
         "type": "custom-link",
+        "label": "TestMu AI",
+        "link": "/docs/testmu"
+      },
+      {
+        "type": "custom-link",
         "label": "Limrun",
         "link": "/docs/limrun"
       }

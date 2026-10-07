@@ -1,4 +1,4 @@
-import type { LeaseRequestStatus } from '@agent-device/contracts/managed-device-allocation';
+import type { LeaseRequestStatus } from './managed-device-allocation.ts';
 import { isRequestGeneration, isVerbatimId } from './record-validation.ts';
 import type { AllocationOperationRecord, AllocationTransition } from './record.ts';
 

@@ -2,7 +2,7 @@ import type {
   LeaseRequestInput,
   LeaseRequestStatus,
   ManagedIdentityRef,
-} from '@agent-device/contracts/managed-device-allocation';
+} from '@agent-device/managed-allocation/managed-device-allocation';
 import { describe, expect, test } from 'vitest';
 import { createScriptedManagedDeviceAllocator } from './test-utils/managed-device-allocator.fixtures.ts';
 

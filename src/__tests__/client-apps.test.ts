@@ -60,6 +60,36 @@ test('apps.open resolves session device identifiers from open response', async (
   ]);
 });
 
+test('apps.open resolves an open response that names no host device or paths', async () => {
+  const setup = createTransport(async (req) => {
+    if (req.command === 'open') {
+      return {
+        ok: true,
+        data: {
+          session: 'tenant-a:default',
+          surface: 'app',
+          sessionReused: false,
+          appName: 'Leased',
+          appBundleId: 'com.example.app',
+          platform: 'macos',
+          target: 'desktop',
+          message: 'Opened: Leased',
+        },
+      };
+    }
+    throw new Error(`Unexpected command: ${req.command}`);
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.apps.open({ app: 'com.example.app', platform: 'macos' });
+
+  assert.equal(result.appBundleId, 'com.example.app');
+  assert.equal(result.identifiers.appId, 'com.example.app');
+  assert.equal(result.device, undefined);
+  assert.equal(result.sessionStateDir, undefined);
+  assert.equal(result.requestLogPath, undefined);
+});
+
 test('apps.open reports an answered launch confirmation only when the daemon answered one', async () => {
   let launchConfirmation: unknown = 'accepted';
   const setup = createTransport(async (req) => {

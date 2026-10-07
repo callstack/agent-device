@@ -9,9 +9,10 @@ Use a device cloud or farm when an agent needs to automate a hosted mobile devic
 
 - [BrowserStack](/docs/browserstack): Android and iOS App Automate sessions over WebDriver.
 - [AWS Device Farm](/docs/aws-device-farm): Android and iOS remote-access sessions through AWS.
+- [TestMu AI](/docs/testmu): Android emulator, iOS simulator, and real-device sessions over WebDriver.
 - [Limrun](/docs/limrun): direct iOS simulator and Android emulator instances.
 
-All three integrations run through the local `agent-device` daemon. `connect` checks the credentials and configuration, then saves non-secret connection state. It does not allocate a device. BrowserStack and AWS Device Farm allocate a hosted session on `open`. Limrun allocates an instance on the first device command, such as `install` or `open`.
+All four integrations run through the local `agent-device` daemon. `connect` checks the credentials and configuration, then saves non-secret connection state. It does not allocate a device. BrowserStack, AWS Device Farm, and TestMu AI allocate a hosted session on `open`. Limrun allocates an instance on the first device command, such as `install` or `open`.
 
 For each provider, the standard lifecycle is:
 
@@ -22,4 +23,4 @@ For each provider, the standard lifecycle is:
 
 Each provider reads only its own provider flags (`--provider-*` and `--aws-*`). A flag the provider does not use fails with `INVALID_ARGS` naming the flag, whether it arrives through `connect`, `client.leases.allocate()`, or a remote-config profile, so a setting is never silently dropped.
 
-Each provider guide covers its connection selectors, client configuration, MCP setup, artifacts, and troubleshooting. Generated remote profiles are safe to store as non-secret configuration. They may include app IDs, ARNs, device names, OS versions, and labels, but never provider API keys or AWS secret keys.
+Each provider guide covers its connection selectors, client configuration, MCP setup, artifacts, and troubleshooting. Generated remote profiles are safe to store as non-secret configuration. They may include app IDs, ARNs, device names, OS versions, and labels, but never provider API keys, access keys, or AWS secret keys.

@@ -22,6 +22,7 @@ describe('snapshot', () => {
         ...recordingInput(),
         clientOutputPath: '/client/capture.mp4',
         exportQuality: 'high',
+        fps: 15,
         activeSessionApp: { bundleId: 'com.example.app' },
       },
       1,
@@ -30,6 +31,7 @@ describe('snapshot', () => {
     expect(started).toMatchObject({
       clientOutPath: '/client/capture.mp4',
       exportQuality: 'high',
+      fps: 15,
       activeSessionApp: { bundleId: 'com.example.app' },
     });
     expect(snapshot({ ...recordingInput(), showTouches: false }, 1).showTouches).toBe(false);

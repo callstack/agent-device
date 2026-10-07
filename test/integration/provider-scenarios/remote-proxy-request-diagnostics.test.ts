@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
-import { createDaemonProxyServer } from '../../../src/remote/daemon-proxy.ts';
+import { createDaemonProxyServer } from '@agent-device/proxy';
 import { localizeRemoteDaemonError } from '../../../src/remote/remote-request-diagnostics.ts';
 import { resolveSessionRequestLogPath } from '../../../src/daemon/session-artifact-paths.ts';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';

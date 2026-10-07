@@ -14,6 +14,7 @@ import type {
   LeaseLifecycleContext,
   ProviderDeviceRuntime,
 } from '@agent-device/contracts/device';
+import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { CloudArtifactsResult } from '@agent-device/contracts/observability';
 import { withProviderScenarioResource, withProviderScenarioTempDir } from './harness.ts';
 import {
@@ -23,6 +24,10 @@ import {
   startCloudWebDriverTestServer,
   type StartedCloudWebDriverTestServer,
 } from './cloud-webdriver-test-server.ts';
+
+import testMuPlugin from '@agent-device/testmu';
+import { createPluginHost } from '../../../src/plugins/host.ts';
+import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/plugin';
 
 const CLIENT_VERSION = '0.20.3-test';
 
@@ -185,6 +190,135 @@ test('AWS Device Farm facade rejects device features it does not read at session
     } finally {
       await runtime.shutdown();
     }
+  });
+}, 15_000);
+
+test('TestMu facade routes a real-device session to the real pool and its upload API', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    const registration = testMuPlugin(
+      createPluginHost(
+        {
+          LT_USERNAME: 'user',
+          LT_ACCESS_KEY: 'key',
+          TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+          TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
+          TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/realDevice`,
+        },
+        undefined,
+      ),
+    );
+    const runtime = await createCloudWebDriverRuntime({
+      ...registration.webDriver,
+      clientVersion: CLIENT_VERSION,
+    });
+    const lease = makeLease('testmu');
+    try {
+      await runtime.leaseLifecycle.allocate?.(lease, {
+        flags: {
+          platform: 'android',
+          device: 'Pixel 6',
+          providerOsVersion: '14',
+          providerDeviceType: 'real',
+          providerApp: 'https://builds.example/app.apk',
+        },
+      });
+    } finally {
+      await runtime.shutdown();
+    }
+
+    assert.deepEqual(
+      server.calls.filter((call) => call.path.startsWith('/lt/upload/')).map((call) => call.path),
+      ['/lt/upload/realDevice'],
+    );
+    const session = server.calls.find((call) => call.path === '/wd/hub/session');
+    const alwaysMatch = (
+      session?.body as { capabilities?: { alwaysMatch?: Record<string, unknown> } } | undefined
+    )?.capabilities?.alwaysMatch;
+    const ltOptions = alwaysMatch?.['lt:options'] as Record<string, unknown> | undefined;
+    assert.equal(ltOptions?.isRealMobile, true);
+    assert.equal(ltOptions?.app, 'lt://REAL1');
+    assert.equal(ltOptions?.platformVersion, '14');
+  });
+}, 15_000);
+
+test('TestMu uploads the materializer-selected simulator archive through the plugin runtime', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    await withProviderScenarioTempDir('agent-device-testmu-materialized-', async (tempDir) => {
+      const archivePath = path.join(tempDir, 'App.app.zip');
+      const installablePath = path.join(tempDir, 'extracted', 'App.app');
+      fs.writeFileSync(archivePath, 'zip bytes');
+      fs.mkdirSync(installablePath, { recursive: true });
+      const registration = testMuPlugin(
+        createPluginHost(
+          {
+            LT_USERNAME: 'user',
+            LT_ACCESS_KEY: 'key',
+            TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+            TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
+          },
+          undefined,
+        ),
+      );
+      const runtime = await createCloudWebDriverRuntime({
+        ...registration.webDriver,
+        clientVersion: CLIENT_VERSION,
+      });
+      const lease = makeLease('testmu');
+      try {
+        await runtime.leaseLifecycle.allocate?.(lease, {
+          flags: {
+            platform: 'ios',
+            device: 'iPhone 16',
+            providerOsVersion: '18.0',
+            providerApp: 'lt://APP1',
+          },
+        });
+        const [device] =
+          (await runtime.deviceInventoryProvider({
+            leaseProvider: 'testmu',
+            leaseId: lease.leaseId,
+            platform: 'ios',
+          })) ?? [];
+        assert.ok(device);
+        const owner = await runtime.platformRuntimeModule.loadRuntime({
+          snapshot: {
+            presentIosAcquisition: async () => {
+              throw new Error('Unexpected snapshot');
+            },
+          },
+        } as unknown as PlatformRuntimeHost);
+        const binding = await owner.bind({
+          device,
+          intent: { kind: 'ordinary' },
+          scope: {
+            signal: new AbortController().signal,
+            diagnostics: { emit: () => {} },
+            progress: { report: () => {} },
+          },
+        });
+        try {
+          assert.ok(binding.operations.deployMaterializedApp);
+          await binding.operations.deployMaterializedApp({
+            artifact: {
+              archivePath,
+              installablePath,
+              uploadPath: archivePath,
+              cleanup: async () => {},
+            },
+          });
+        } finally {
+          await binding[Symbol.asyncDispose]();
+        }
+        const upload = server.calls.find((call) => call.path === '/lt/upload/virtualDevice');
+        assert.deepEqual((upload?.body as { filenames?: string[] })?.filenames, ['App.app.zip']);
+        const install = server.calls.find((call) =>
+          call.path.endsWith('/appium/device/install_app'),
+        );
+        assert.deepEqual(install?.body, { appPath: 'lt://VIRTUAL1' });
+      } finally {
+        await runtime.shutdown();
+      }
+    });
   });
 }, 15_000);
 
@@ -563,6 +697,10 @@ class FakeCloudProviderServer extends CloudWebDriverTestServer {
         });
       case 'POST /app-automate/upload':
         return cloudWebDriverTestJson({ app_url: 'bs://uploaded-app' });
+      case 'POST /lt/upload/realDevice':
+        return cloudWebDriverTestJson({ app_url: 'lt://REAL1' });
+      case 'POST /lt/upload/virtualDevice':
+        return cloudWebDriverTestJson({ app_url: 'lt://VIRTUAL1' });
       case 'GET /app-automate/sessions/wd-1.json':
         return cloudWebDriverTestJson({
           automation_session: {

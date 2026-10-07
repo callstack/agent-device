@@ -16,11 +16,7 @@ export const pluginsCommand: ClientCommandHandler = async ({ positionals, flags 
     );
   }
   if (action !== 'list' && name) {
-    const reserved =
-      action === 'remove'
-        ? []
-        : (await import('../../provider-device-runtimes.ts')).DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS;
-    await changePlugin(action as 'add' | 'update' | 'remove', name, process.env, reserved);
+    await changePlugin(action as 'add' | 'update' | 'remove', name, process.env);
   }
   const plugins = listPlugins(process.env);
   await writeCommandOutput(flags, { plugins, restartRequired: action !== 'list' }, () =>

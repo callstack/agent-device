@@ -106,6 +106,9 @@ The XML node attributes intentionally mirror acquisition facts decoded by the ho
 metadata on window roots. The helper emits `drawing-order` on Android API 24+ and omits it on API
 23, where the platform API is unavailable. The host keeps that fact as private capture evidence;
 the daemon uses it to annotate covered actions without adding it to normalized snapshot nodes.
+On API 33+ an input method window root also carries `window-region-rect`, whether its touchable
+region is a single rectangle (`window-bounds` is that region's bounding box). It is omitted on other
+window types, on API 32 and lower, and when the region reads empty.
 
 Each XML chunk is sent with:
 

@@ -1,5 +1,5 @@
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
-import { rectContains } from '@agent-device/kernel/rect';
+import { rectContains, unionRects } from '@agent-device/kernel/rect';
 import { extractNodeText, normalizeType } from '@agent-device/contracts/snapshot';
 import { collectChildrenByParent, mergeReplacement, type SnapshotTreeRuleContext } from './tree.ts';
 import { collectIosReplacedActionShelves } from './action-shelf.ts';
@@ -115,12 +115,4 @@ function formsNavigationTitleAffordance(image: Rect, field: Rect, title: Rect, b
 
 function verticallyOverlaps(left: Rect, right: Rect): boolean {
   return Math.max(left.y, right.y) <= Math.min(left.y + left.height, right.y + right.height);
-}
-
-function unionRects(rects: Rect[]): Rect {
-  const x = Math.min(...rects.map((rect) => rect.x));
-  const y = Math.min(...rects.map((rect) => rect.y));
-  const right = Math.max(...rects.map((rect) => rect.x + rect.width));
-  const bottom = Math.max(...rects.map((rect) => rect.y + rect.height));
-  return { x, y, width: right - x, height: bottom - y };
 }

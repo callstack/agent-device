@@ -30,9 +30,14 @@ import {
 } from './providers.ts';
 import { readAwsDeviceFarmRegionFromArn } from './connection-verification.ts';
 import {
+  readFlag,
+  requireFlag,
+  requireRequest,
+  requireRequestPlatform,
+} from './webdriver-utils.ts';
+import {
   buildCloudWebDriverBaseCapabilities,
   createCloudWebDriverRuntime,
-  type CloudWebDriverPlatform,
   type CloudWebDriverRuntime,
 } from './runtime.ts';
 
@@ -61,6 +66,7 @@ const BROWSERSTACK_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
   fields: {
     providerApp: 'consumed',
     providerOsVersion: 'consumed',
+    providerDeviceType: 'refused',
     providerProject: 'consumed',
     providerBuild: 'consumed',
     providerSessionName: 'consumed',
@@ -87,6 +93,7 @@ const AWS_DEVICE_FARM_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
   fields: {
     providerApp: 'refused',
     providerOsVersion: 'refused',
+    providerDeviceType: 'refused',
     providerProject: 'refused',
     providerBuild: 'refused',
     providerSessionName: 'consumed',
@@ -306,37 +313,6 @@ export function createCloudWebDriverProviderDefinitions(
       },
     },
   ];
-}
-
-function requireRequest(
-  req: LeaseLifecycleContext | undefined,
-  providerLabel: string,
-): LeaseLifecycleContext {
-  if (req) return req;
-  throw new AppError(
-    'INVALID_ARGS',
-    `${providerLabel} lease allocation requires provider profile flags on the request.`,
-  );
-}
-
-function requireRequestPlatform(
-  req: LeaseLifecycleContext,
-  providerLabel: string,
-): CloudWebDriverPlatform {
-  const platform = req.flags?.platform;
-  if (platform === 'android' || platform === 'ios') return platform;
-  throw new AppError('INVALID_ARGS', `${providerLabel} requires --platform ios|android.`);
-}
-
-function requireFlag(req: LeaseLifecycleContext, key: string, message: string): string {
-  const value = readFlag(req, key);
-  if (value) return value;
-  throw new AppError('INVALID_ARGS', message);
-}
-
-function readFlag(req: LeaseLifecycleContext, key: string): string | undefined {
-  const value = req.flags?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function requireAwsValue(

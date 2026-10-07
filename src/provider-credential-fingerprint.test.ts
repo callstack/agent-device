@@ -3,6 +3,7 @@ import {
   providerCredentialFingerprint,
   readDaemonProviderCredentials,
 } from './provider-credential-fingerprint.ts';
+import { pluginHome, selectPluginManifest } from './plugins/plugin.fixtures.ts';
 
 const BROWSERSTACK_ENV = { BROWSERSTACK_USERNAME: 'user', BROWSERSTACK_ACCESS_KEY: 'key-1' };
 
@@ -58,7 +59,8 @@ test('a fingerprint hashes the exact values each provider reads', () => {
 });
 
 test('a provider name that only matches an inherited object key has no fingerprint', () => {
-  expect(providerCredentialFingerprint('constructor', BROWSERSTACK_ENV)).toBe(undefined);
+  const env = { ...pluginHome().env, ...BROWSERSTACK_ENV };
+  expect(providerCredentialFingerprint('constructor', env)).toBe(undefined);
 });
 
 test('AWS Device Farm has no environment fingerprint', () => {
@@ -108,4 +110,45 @@ test('a Limrun lease fingerprint covers only the leased platform and the account
   expect(
     readDaemonProviderCredentials(before, '/state').fingerprint('limrun', 'ios-instance'),
   ).toBe(ios(rotatedAndroid));
+});
+
+function pluginWithCredentialVariables(credentialVariables?: string[], provider = 'example') {
+  const { home, env } = pluginHome();
+  selectPluginManifest(home, {
+    name: '@example/provider',
+    version: '1.2.3',
+    agentDevicePlugin: { apiVersion: 1, provider, entry: './plugin.js', credentialVariables },
+  });
+  return env;
+}
+
+test('a plugin provider fingerprint hashes the variables its manifest declares', () => {
+  const home = pluginWithCredentialVariables(['EXAMPLE_USER', 'EXAMPLE_KEY']);
+  const env = { ...home, EXAMPLE_USER: 'user', EXAMPLE_KEY: 'key-1' };
+  const fingerprint = providerCredentialFingerprint('example', env);
+
+  expect(fingerprint).toMatch(/^v1:[0-9a-f]{16}$/);
+  expect(providerCredentialFingerprint('example', { ...env, UNRELATED: 'x' })).toBe(fingerprint);
+  expect(providerCredentialFingerprint('example', { ...env, EXAMPLE_KEY: 'key-2' })).not.toBe(
+    fingerprint,
+  );
+  expect(providerCredentialFingerprint('example', { ...env, EXAMPLE_KEY: 'key-1 ' })).not.toBe(
+    fingerprint,
+  );
+  expect(providerCredentialFingerprint('example', { ...home, EXAMPLE_USER: ' ' })).toBe(undefined);
+  expect(readDaemonProviderCredentials(env, '/state').fingerprint('example')).toBe(fingerprint);
+});
+
+test('a plugin provider without declared credential variables has no fingerprint', () => {
+  const env = { ...pluginWithCredentialVariables(), EXAMPLE_USER: 'user' };
+  expect(providerCredentialFingerprint('example', env)).toBe(undefined);
+  expect(providerCredentialFingerprint('other', env)).toBe(undefined);
+});
+
+test('a plugin declaration never adds a fingerprint to a bundled provider', () => {
+  const env = {
+    ...pluginWithCredentialVariables(['AWS_ACCESS_KEY_ID'], 'aws-device-farm'),
+    AWS_ACCESS_KEY_ID: 'id',
+  };
+  expect(providerCredentialFingerprint('aws-device-farm', env)).toBe(undefined);
 });

@@ -33,14 +33,16 @@ export function readBrowserStackCredentials(
 const BROWSERSTACK_APP_SCHEME = 'bs://';
 
 /**
- * URI schemes are case-insensitive, but BrowserStack only matches the lower-case spelling, so
- * `BS://id` is returned as `bs://id`. Anything without the scheme returns undefined.
+ * URI schemes are case-insensitive, but hosted hubs only match the lower-case spelling, so
+ * `BS://id` is returned as `bs://id`. Anything without the lower-case `scheme` returns undefined.
  */
+export function canonicalSchemeReference(app: string, scheme: string): string | undefined {
+  if (app.slice(0, scheme.length).toLowerCase() !== scheme) return undefined;
+  return `${scheme}${app.slice(scheme.length)}`;
+}
+
 export function canonicalBrowserStackAppReference(app: string): string | undefined {
-  if (app.slice(0, BROWSERSTACK_APP_SCHEME.length).toLowerCase() !== BROWSERSTACK_APP_SCHEME) {
-    return undefined;
-  }
-  return `${BROWSERSTACK_APP_SCHEME}${app.slice(BROWSERSTACK_APP_SCHEME.length)}`;
+  return canonicalSchemeReference(app, BROWSERSTACK_APP_SCHEME);
 }
 
 /** An id outside this grammar would pass every local check and fail only at session creation. */

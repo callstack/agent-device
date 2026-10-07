@@ -12,6 +12,7 @@ import {
   buildGraph,
   collapseEdges,
   collectCycles,
+  computeLevels,
   markTransitivelyReachableEdges,
   typeInversionsByPair,
 } from './model.ts';
@@ -243,6 +244,73 @@ test('flags only value edges whose target is already reachable at distance >= 2'
   assert.deepEqual(flagged, ['src/core/a.ts -> src/core/c.ts']);
 });
 
+function valueCycleFixture(): Map<string, string> {
+  return sources({
+    'src/core/a.ts': "import { b } from './b.ts';\nexport const a = b;",
+    'src/core/b.ts': "import { a } from './a.ts';\nexport const b = a;",
+  });
+}
+
+test('transitive marking is undefined on a value cycle', () => {
+  const edges = collapseEdges(resolveImportEdges(valueCycleFixture()));
+
+  assert.throws(() => markTransitivelyReachableEdges(edges), /cycle/);
+});
+
+test('buildGraph still reports a value cycle and leaves edges unmarked', () => {
+  const files = valueCycleFixture();
+  const graph = buildGraph(files, resolveImportEdges(files));
+
+  assert.deepEqual(
+    graph.cycles.map((cycle) => cycle.kind),
+    ['value'],
+  );
+  assert.deepEqual(
+    graph.edges.filter((edge) => edge.transitivelyReachable),
+    [],
+  );
+});
+
+test('computeLevels takes the longest value path to a sink and ignores type edges', () => {
+  const files = sources({
+    'src/core/a.ts': [
+      "import { b } from './b.ts';",
+      "import { c } from './c.ts';",
+      "import { d } from './d.ts';",
+      "import type { E } from './e.ts';",
+      'export const a = [b, c, d];',
+    ].join('\n'),
+    'src/core/b.ts': "import { d } from './d.ts';\nexport const b = d;",
+    'src/core/c.ts': "import { d } from './d.ts';\nexport const c = d;",
+    'src/core/d.ts': 'export const d = 1;',
+    'src/core/e.ts': "import type { A } from './a.ts';\nexport type E = A;",
+    'src/core/lone.ts': 'export const lone = 1;',
+  });
+  const graph = buildGraph(files, resolveImportEdges(files));
+
+  assert.deepEqual(Object.fromEntries(computeLevels(graph.nodes, graph.edges)), {
+    'src/core/a.ts': 2,
+    'src/core/b.ts': 1,
+    'src/core/c.ts': 1,
+    'src/core/d.ts': 0,
+    'src/core/e.ts': 0,
+    'src/core/lone.ts': 0,
+  });
+});
+
+test('computeLevels stays finite on a value cycle, where the closing edge adds no height', () => {
+  const files = sources({
+    ...Object.fromEntries(valueCycleFixture()),
+    'src/core/z.ts': "import { a } from './a.ts';\nexport const z = a;",
+  });
+  const graph = buildGraph(files, resolveImportEdges(files));
+
+  const levels = computeLevels(graph.nodes, graph.edges);
+
+  assert.deepEqual([levels.get('src/core/a.ts'), levels.get('src/core/b.ts')].sort(), [0, 1]);
+  assert.equal(levels.get('src/core/z.ts'), 2);
+});
+
 test('a type-only shortcut is never flagged against a value path', () => {
   const edges = collapseEdges(
     resolveImportEdges(
@@ -408,6 +476,12 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
     edgeAuthorities: string[][];
     authorityCounts: Record<string, number>;
     typeInversions: Record<string, number>;
+    dominatorSummary: { entry: string; reachableFiles: number; totalFiles: number };
+    zoneSccSummary: { zones: number; components: { zones: string[]; size: number }[] };
+    cohesionSummary: {
+      modularity: { declaredZones: number; detectedCommunities: number };
+      zoneCohesion: { zone: string; cohesionShare: number }[];
+    };
   };
 
   // Wire shape: the fields a consumer queries. A rename here is a breaking change for any script
@@ -420,6 +494,9 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
     'edges',
     'cycles',
     'typeInversions',
+    'dominatorSummary',
+    'zoneSccSummary',
+    'cohesionSummary',
   ]) {
     assert.ok(field in payload, `legacy payload field ${field} disappeared`);
   }
@@ -434,6 +511,25 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
   assert.ok(payload.zones.length > 0);
   assert.ok(Object.keys(payload.typeInversions).length > 0);
 
+  // Report-only fields (#3283): no gate reads these, so this pins only the wire shape.
+  assert.equal(payload.dominatorSummary.entry, 'src/daemon.ts');
+  assert.ok(payload.dominatorSummary.reachableFiles > 0);
+  assert.ok(payload.dominatorSummary.reachableFiles <= payload.dominatorSummary.totalFiles);
+  assert.ok(payload.zoneSccSummary.zones > 0);
+  assert.ok(
+    payload.zoneSccSummary.components.every(
+      (component) => component.zones.length === component.size,
+    ),
+  );
+  assert.ok(payload.cohesionSummary.modularity.declaredZones <= 1);
+  assert.ok(payload.cohesionSummary.modularity.detectedCommunities <= 1);
+  for (const { cohesionShare } of payload.cohesionSummary.zoneCohesion) {
+    assert.ok(
+      cohesionShare > 0 && cohesionShare <= 1,
+      `cohesionShare out of range: ${cohesionShare}`,
+    );
+  }
+
   // The printed summary must agree with the payload it was derived from.
   const inversions = Object.values(payload.typeInversions).reduce((sum, n) => sum + n, 0);
   assert.match(
@@ -443,6 +539,44 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
   assert.match(stdout, new RegExp(`type-only spine inversions \\(R6\\): ${inversions}`));
   const reachable = payload.edges.filter(([, , , flags]) => (flags & 2) !== 0).length;
   assert.match(stdout, new RegExp(`reachable at distance >= 2: ${reachable}`));
+  assert.match(
+    stdout,
+    new RegExp(
+      `dominator summary for src/daemon\\.ts: ${payload.dominatorSummary.reachableFiles} of ${payload.dominatorSummary.totalFiles} files loaded eagerly`,
+    ),
+  );
+  // Tied to the exact payload numbers (not a shape-only `\d+` regex) so a CLI summary that
+  // drifts from the JSON it was derived from — wrong count, wrong rounding — fails this test.
+  assert.ok(
+    stdout.includes(
+      `zone-level SCCs: ${payload.zoneSccSummary.components.length} cyclic group(s) across ` +
+        `${payload.zoneSccSummary.zones} zones`,
+    ),
+    stdout,
+  );
+  assert.ok(
+    stdout.includes(
+      `modularity: declared zones ${payload.cohesionSummary.modularity.declaredZones.toFixed(3)}, ` +
+        `detected communities ${payload.cohesionSummary.modularity.detectedCommunities.toFixed(3)}`,
+    ),
+    stdout,
+  );
+});
+
+test('build.ts honours --dominator-entry', () => {
+  const { status, stdout } = runBuild(['--dominator-entry', 'src/cli/entry.ts']);
+  assert.equal(status, 0, stdout);
+  const payload = JSON.parse(readFileSync('.tmp/depgraph/graph.json', 'utf8')) as {
+    dominatorSummary: { entry: string };
+  };
+  assert.equal(payload.dominatorSummary.entry, 'src/cli/entry.ts');
+  assert.match(stdout, /dominator summary for src\/cli\/entry\.ts:/);
+});
+
+test('build.ts reports a typed error for a dominator entry outside the graph', () => {
+  const { status, stderr } = runBuild(['--dominator-entry', 'src/does-not-exist.ts']);
+  assert.notEqual(status, 0);
+  assert.match(stderr, /src\/does-not-exist\.ts is not a production source file/);
 });
 
 test('build.ts honours --out and reports the path it wrote', () => {
@@ -460,4 +594,19 @@ test('build.ts falls back to the default path when --out has no value', () => {
   const { status, stdout } = runBuild(['--out']);
   assert.equal(status, 0, stdout);
   assert.ok(stdout.includes('.tmp/depgraph/graph.json'), stdout);
+});
+
+test('build.ts falls back to the default path when --out is given an empty string', () => {
+  // `--out ""` must fall back the same way a missing value does. `flagValue` returning `''`
+  // instead of `undefined` here would skip the `??` default and resolve to the current
+  // directory, crashing the write with EISDIR instead of writing the default report.
+  const { status, stdout } = runBuild(['--out', '']);
+  assert.equal(status, 0, stdout);
+  assert.ok(stdout.includes('.tmp/depgraph/graph.json'), stdout);
+});
+
+test('build.ts falls back to the default dominator entry when --dominator-entry is given an empty string', () => {
+  const { status, stdout } = runBuild(['--dominator-entry', '']);
+  assert.equal(status, 0, stdout);
+  assert.ok(stdout.includes('dominator summary for src/daemon.ts:'), stdout);
 });

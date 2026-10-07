@@ -111,7 +111,7 @@ export function createCloudWebDriverRuntime(
   return new CloudWebDriverRuntimeImplementation(options);
 }
 
-export { buildCloudWebDriverBaseCapabilities } from './runtime-session.ts';
+export { buildCloudWebDriverBaseCapabilities } from './capabilities.ts';
 
 /** Public façade: provider wiring stays small while session/deployment mechanics stay focused. */
 class CloudWebDriverRuntimeImplementation implements CloudWebDriverRuntime {

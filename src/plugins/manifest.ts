@@ -1,19 +1,39 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
+
+import {
+  CLOUD_WEBDRIVER_PROVIDERS,
+  type CloudWebDriverKnownProviderName,
+} from '@agent-device/provider-webdriver/providers';
+
+/** The one list of provider ids plugins cannot claim: connect routes and bundled runtimes. */
+export const RESERVED_PLUGIN_PROVIDERS: readonly (
+  | 'cloud'
+  | 'proxy'
+  | 'limrun'
+  | CloudWebDriverKnownProviderName
+)[] = ['cloud', 'proxy', ...Object.values(CLOUD_WEBDRIVER_PROVIDERS), 'limrun'];
 
 const PROVIDER_PLUGIN_API_VERSION = 1;
 type PluginManifest = {
   name: string;
   version: string;
-  agentDevicePlugin: { apiVersion: number; provider: string; entry: string };
+  agentDevicePlugin: {
+    apiVersion: number;
+    provider: string;
+    entry: string;
+    connection?: ConnectionProviderCapabilities;
+    credentialVariables?: string[];
+  };
 };
 
 export function assertUniquePluginProviders(
   plugins: readonly PluginManifest[],
   reserved: readonly string[],
 ): void {
-  const providers = new Set(reserved);
+  const providers = new Set<string>(reserved);
   for (const plugin of plugins) {
     const provider = plugin.agentDevicePlugin.provider;
     if (providers.has(provider))
@@ -53,7 +73,45 @@ export function readPluginManifest(directory: string): PluginManifest {
     });
   }
   resolvePluginEntry(directory, declaration.entry);
+  assertLocalConnectionPolicy(declaration.connection);
+  assertCredentialVariables(declaration.credentialVariables);
   return manifest as PluginManifest;
+}
+
+function assertLocalConnectionPolicy(policy: ConnectionProviderCapabilities | undefined): void {
+  if (policy === undefined) return;
+  if (
+    !policy ||
+    typeof policy !== 'object' ||
+    policy.leaseKind !== 'direct-device-provider' ||
+    [
+      'requiresAppAttachment',
+      'requiresRemoteDaemon',
+      'supportsArtifacts',
+      'supportsDeferredAppSelection',
+      'supportsDirectPortReverse',
+      'usesCloudWebDriverLease',
+    ].some((key) => typeof policy[key as keyof ConnectionProviderCapabilities] !== 'boolean') ||
+    policy.requiresRemoteDaemon
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'Plugin connection must declare local provider capabilities',
+    );
+  }
+}
+
+function assertCredentialVariables(variables: unknown): void {
+  if (
+    variables !== undefined &&
+    (!Array.isArray(variables) ||
+      !variables.every((name) => typeof name === 'string' && /^[A-Z_][A-Z0-9_]*$/.test(name)))
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'Plugin credentialVariables must list environment variable names',
+    );
+  }
 }
 
 export function resolvePluginEntry(directory: string, entry: string): string {

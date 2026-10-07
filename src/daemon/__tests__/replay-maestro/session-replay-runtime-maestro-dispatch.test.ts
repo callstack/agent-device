@@ -300,3 +300,43 @@ test('every nested Maestro request keeps the replay envelope and the resolved de
   assert.equal(nested[0]?.command, 'open');
   assert.equal(nested[0]?.flags?.relaunch, true);
 });
+
+// #2997: the flow command's --test-ime/--no-test-ime must reach the session open the
+// Maestro runtime dispatches, or a real-device flow cannot opt in to the test IME that
+// eraseText/backspace needs. Omitting the flag keeps it absent on the dispatch so the
+// session-open defaults (emulator on, device off) still decide.
+test('a Maestro replay carries its --test-ime opt-in onto the open it dispatches', async () => {
+  for (const testIme of [true, false] as const) {
+    const nested: DaemonRequest[] = [];
+    const { response } = await runReplayFixture({
+      label: `maestro-nested-test-ime-${testIme}`,
+      script: ['appId: demo.app', '---', '- launchApp', ''].join('\n'),
+      flags: { replayBackend: 'maestro', platform: 'android', testIme },
+      invoke: async (req) => {
+        nested.push(req);
+        return { ok: true, data: {} };
+      },
+    });
+
+    assert.equal(response.ok, true);
+    const open = nested.find((req) => req.command === 'open');
+    assert.ok(open);
+    assert.equal(open.flags?.testIme, testIme);
+  }
+
+  const nested: DaemonRequest[] = [];
+  const { response } = await runReplayFixture({
+    label: 'maestro-nested-test-ime-absent',
+    script: ['appId: demo.app', '---', '- launchApp', ''].join('\n'),
+    flags: { replayBackend: 'maestro', platform: 'android' },
+    invoke: async (req) => {
+      nested.push(req);
+      return { ok: true, data: {} };
+    },
+  });
+
+  assert.equal(response.ok, true);
+  const open = nested.find((req) => req.command === 'open');
+  assert.ok(open);
+  assert.equal(open.flags?.testIme, undefined);
+});

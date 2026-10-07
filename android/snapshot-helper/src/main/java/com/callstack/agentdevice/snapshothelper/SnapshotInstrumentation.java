@@ -4,6 +4,7 @@ import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.content.res.Resources;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.util.Base64;
 import android.util.DisplayMetrics;
 import java.io.BufferedReader;
@@ -125,6 +126,8 @@ public final class SnapshotInstrumentation extends Instrumentation {
     result.putString("rootPresent", Boolean.toString(capture.rootPresent));
     result.putString("captureMode", capture.captureMode);
     result.putString("windowCount", Integer.toString(capture.windowCount));
+    result.putString(
+        "missingRootWindowTypes", TextUtils.join(",", capture.missingRootWindowTypes));
     result.putString("nodeCount", Integer.toString(capture.nodeCount));
     result.putString("truncated", Boolean.toString(capture.truncated));
     result.putString("elapsedMs", Long.toString(elapsedMs));

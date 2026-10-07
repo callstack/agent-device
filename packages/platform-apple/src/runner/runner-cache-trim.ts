@@ -10,10 +10,10 @@ import { RUNNER_CACHE_METADATA_FILE } from './runner-cache-metadata.ts';
  * scratch, so the scratch is never read again; a runner source or Xcode change mints a new key
  * instead of building into this one.
  *
- * Returns the removed entries relative to `derived`. Nothing is removed when `derived` does not
- * resolve, by real path, to `expectedKeyPath` (the key this build gets with no path override), or
- * when a product lies outside `derived`. A symlinked `derived` therefore trims only when its target
- * is that key.
+ * Returns the removed entries relative to `derived`. Nothing is removed unless `derived` resolves,
+ * by real path, to a real directory named like `expectedKeyPath` that is a direct child of the real
+ * parent of `expectedKeyPath` (the key this build gets with no path override), or when a product
+ * lies outside `derived`. A key entry that is itself a symlink is never trimmed.
  */
 export async function trimRunnerBuildScratch(
   derived: string,
@@ -28,7 +28,11 @@ export async function trimRunnerBuildScratch(
 
 function isExpectedKey(derived: string, expectedKeyPath: string): boolean {
   try {
-    return fs.realpathSync(derived) === fs.realpathSync(expectedKeyPath);
+    const canonicalKey = path.join(
+      fs.realpathSync(path.dirname(expectedKeyPath)),
+      path.basename(expectedKeyPath),
+    );
+    return fs.realpathSync(derived) === canonicalKey;
   } catch {
     return false;
   }

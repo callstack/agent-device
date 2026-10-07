@@ -7,6 +7,8 @@ import {
 import type { LIMRUN_PROVIDER } from '@agent-device/provider-limrun';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { readLimrunCredentialValues } from './provider-limrun-credentials.ts';
+import { RESERVED_PLUGIN_PROVIDERS } from './plugins/manifest.ts';
+import { installedPlugins } from './plugins/store.ts';
 
 type CredentialValues = Readonly<Record<string, string | undefined>>;
 
@@ -40,7 +42,23 @@ export function providerCredentialFingerprint(
   leaseBackend?: string,
 ): string | undefined {
   const read = PROVIDER_CREDENTIAL_READERS.get(provider);
-  return read ? digest(read(env, leaseBackend)) : undefined;
+  if (read) return digest(read(env, leaseBackend));
+  // Whitespace-only counts as unset and other values are kept as is, as the plugin's requireEnv does.
+  const variables = pluginCredentialVariables(provider, env);
+  return variables
+    ? digest(
+        Object.fromEntries(
+          variables.map((name) => [name, env[name]?.trim() ? env[name] : undefined]),
+        ),
+      )
+    : undefined;
+}
+
+// Read from the manifest, so neither the client nor the daemon evaluates plugin code.
+function pluginCredentialVariables(provider: string, env: EnvMap): readonly string[] | undefined {
+  if ((RESERVED_PLUGIN_PROVIDERS as readonly string[]).includes(provider)) return undefined;
+  return installedPlugins(env).find((plugin) => plugin.agentDevicePlugin.provider === provider)
+    ?.agentDevicePlugin.credentialVariables;
 }
 
 /** The provider credentials a daemon started with, and the state dir that names that daemon. */

@@ -16,7 +16,7 @@ import type {
   JsonRpcRequestEnvelope,
   LeaseBackend,
 } from '@agent-device/kernel/contracts';
-import { commandRpcParamsSchema } from '@agent-device/kernel/contracts';
+import { commandRpcParamsSchema, LEASE_BACKENDS } from '@agent-device/kernel/contracts';
 import type { DaemonInvokeFn, DaemonRequest } from '../daemon-request.ts';
 import { normalizeTenantId } from '../config.ts';
 import {
@@ -50,8 +50,9 @@ import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-htt
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 import type { TenantSessionNamespace } from '../session-tenant-scope.ts';
-import { tryHandleHumanControlHttpRoute } from '../human-control-http.ts';
+import { tryHandleHostAdminHttpRoute } from '../host-lease-http.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
+import { assertMacOsAppLeaseTenantMayReadDiagnostics } from '../macos-app-lease.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -590,6 +591,9 @@ export async function createDaemonHttpServer(options: {
 }): Promise<http.Server> {
   const instanceId = randomUUID();
   const hostArch = await readHostCpuArch();
+  const leaseBackends = LEASE_BACKENDS.filter(
+    (backend) => backend !== 'macos-app' || process.platform === 'darwin',
+  );
   const environment = options.env ?? process.env;
   const authHook = await loadHttpAuthHook(environment);
   const { handleRequest, token, retainArtifacts = false, resolveRequestDiagnosticsPath } = options;
@@ -602,6 +606,7 @@ export async function createDaemonHttpServer(options: {
           buildDaemonHealthPayload('agent-device-daemon', readVersion(), {
             instanceId,
             hostArch,
+            leaseBackends,
           }),
         ),
       );
@@ -611,7 +616,7 @@ export async function createDaemonHttpServer(options: {
     if (
       token &&
       options.leaseRegistry &&
-      tryHandleHumanControlHttpRoute({
+      tryHandleHostAdminHttpRoute({
         req,
         res,
         expectedToken: token,
@@ -664,12 +669,11 @@ export async function createDaemonHttpServer(options: {
         res,
         resolveRecordPath: resolveRequestDiagnosticsPath,
         authorize: async (request) =>
-          await authorizeAuxiliaryHttpRequest({
-            req: request.req,
-            res: request.res,
+          await authorizeDiagnosticsHttpRequest({
+            ...request,
             authHook,
             expectedToken: token,
-            daemonRequest: request.daemonRequest,
+            leaseRegistry: options.leaseRegistry,
           }),
       })
     ) {
@@ -976,6 +980,21 @@ async function authorizeAuxiliaryHttpRequest(params: {
       ? { sessionNamespace: { tenant: trustedTenant, partitioned: tenantTrust.attested } }
       : {}),
   };
+}
+
+async function authorizeDiagnosticsHttpRequest(
+  params: Parameters<typeof authorizeAuxiliaryHttpRequest>[0] & { leaseRegistry?: LeaseRegistry },
+): ReturnType<typeof authorizeAuxiliaryHttpRequest> {
+  const { leaseRegistry, ...gate } = params;
+  const auth = await authorizeAuxiliaryHttpRequest(gate);
+  if (!auth || !leaseRegistry) return auth;
+  try {
+    assertMacOsAppLeaseTenantMayReadDiagnostics(leaseRegistry, auth.tenantId);
+  } catch (error) {
+    sendRestJsonError(gate.res, normalizeError(error));
+    return null;
+  }
+  return auth;
 }
 
 /**

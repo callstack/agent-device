@@ -1,4 +1,4 @@
-import type { ManagedDeviceAllocatorPort } from '@agent-device/contracts/managed-device-allocation';
+import type { ManagedDeviceAllocatorPort } from '../../managed-device-allocation.ts';
 
 export type ScriptedAllocatorMethod = keyof Omit<ManagedDeviceAllocatorPort, 'instanceId'>;
 

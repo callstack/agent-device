@@ -69,7 +69,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--surface app|frontmost-app|desktop|menubar',
     usageDescription: 'macOS session surface for open (defaults to app)',
     projectConfig: true,
-    recorded: false,
+    recorded: true,
   },
   {
     key: 'headless',
@@ -315,7 +315,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--test-ime',
     usageDescription:
-      'open: activate the headless Android test IME for deterministic Unicode text entry (default on for emulators; opt-in on real devices)',
+      'open/test/replay: activate the headless Android test IME for deterministic Unicode text entry (default on for emulators; opt-in on real devices; on test/replay it applies to the sessions the flow opens)',
     projectConfig: true,
     recorded: false,
   },
@@ -326,7 +326,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     setValue: false,
     usageLabel: '--no-test-ime',
     usageDescription:
-      'open: keep the real Android keyboard even on emulators (opt out of the headless test IME)',
+      'open/test/replay: keep the real Android keyboard even on emulators (opt out of the headless test IME; on test/replay it applies to the sessions the flow opens)',
     projectConfig: true,
     recorded: false,
   },

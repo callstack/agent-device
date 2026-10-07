@@ -282,11 +282,14 @@ test('captures through only the active exact WebDriver interactor', async () => 
     'writeClipboard',
     'appSwitcher',
     'triggerAppEvent',
+    'keyboardEnter',
+    'keyboardDismiss',
+    'keyboardStatus',
   ] as const) {
     expect(binding.facts.operations[operation]).toEqual({ available: true });
     expect(binding.operations[operation]).toBeTypeOf('function');
   }
-  // tv-remote, settings, and every keyboard action always throw unsupported in this interactor
+  // tv-remote, settings, and the alert legs always throw unsupported in this interactor
   // regardless of reachability: no capability ever declared them.
   for (const operation of [
     'tvRemote',
@@ -295,9 +298,6 @@ test('captures through only the active exact WebDriver interactor', async () => 
     'awaitAlert',
     'acceptAlert',
     'dismissAlert',
-    'keyboardStatus',
-    'keyboardDismiss',
-    'keyboardEnter',
   ] as const) {
     expect(binding.facts.operations[operation]).toMatchObject({
       available: false,
@@ -346,9 +346,12 @@ test.each([
   expect(facts.operations.focusPoint.available).toBe(state.isSessionActive());
   expect(facts.operations.typeText.available).toBe(state.isSessionActive());
   expect(facts.operations.readTextAtPoint.available).toBe(false);
-  // back/home/orientation share focus/type's reachability gate; tv-remote and every keyboard
-  // action stay unavailable even for an active session with no reachable interactor.
+  // back/home/orientation and the keyboard legs share focus/type's reachability gate; tv-remote
+  // stays unavailable even for an active session with no reachable interactor.
   expect(facts.operations.back.available).toBe(state.isSessionActive());
+  for (const operation of ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'] as const) {
+    expect(facts.operations[operation].available).toBe(state.isSessionActive());
+  }
   expect(facts.operations.home.available).toBe(state.isSessionActive());
   expect(facts.operations.setOrientation.available).toBe(state.isSessionActive());
   expect(facts.operations.readClipboard.available).toBe(state.isSessionActive());
@@ -362,19 +365,14 @@ test.each([
     'awaitAlert',
     'acceptAlert',
     'dismissAlert',
-    'keyboardStatus',
-    'keyboardDismiss',
-    'keyboardEnter',
   ] as const) {
     expect(facts.operations[operation].available).toBe(false);
   }
-  // `keyboard` is one family cell, so the reason says which gap closed it: the dead session
-  // refuses with the session gap, a live session with no reachable interactor with this
-  // provider's own keyboard refusal.
-  for (const operation of ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'] as const) {
-    expect(facts.operations[operation]).toMatchObject({
-      reason: state.isSessionActive() ? 'unsupported-provider-mode' : 'owner-capability-missing',
-    });
+  // A dead session closes the keyboard family with the session gap, not the provider's own refusal.
+  if (!state.isSessionActive()) {
+    for (const operation of ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'] as const) {
+      expect(facts.operations[operation]).toMatchObject({ reason: 'owner-capability-missing' });
+    }
   }
   if (state.isSessionActive()) {
     const binding = await owner.bind({
@@ -661,4 +659,46 @@ test('an Apple WebDriver dump bounded to one entry reports unnamed traffic witho
   expect(result.backend).toBe('ios-device');
   expect(result.dump.unnamedRequests).toBe(5);
   expect(result.dump).not.toHaveProperty('unnamedRequestIds');
+});
+
+test('an iOS WebDriver device serves keyboard dismiss, and neither the unproven enter nor the Android IME probe', async () => {
+  const iosDevice: DeviceInfo = {
+    ...device,
+    platform: 'apple',
+    appleOs: 'ios',
+    id: 'browserstack:lease-ios',
+    name: 'Remote iPhone',
+  };
+  const owner = createWebDriverPlatformRuntimeOwner({
+    host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+    owner: providerRuntimeOwner('browserstack', 'ios'),
+    ownsDevice: () => true,
+    capabilities: capabilities('ios'),
+    getInteractor: vi.fn(() => ({}) as unknown as Interactor),
+  });
+  const facts = await owner.inspectFacts(iosDevice);
+  expect(facts.operations.keyboardDismiss).toEqual({ available: true });
+  for (const operation of ['keyboardEnter', 'keyboardStatus'] as const) {
+    expect(facts.operations[operation]).toMatchObject({
+      available: false,
+      reason: 'unsupported-provider-mode',
+    });
+  }
+});
+
+test('a provider that declares no keyboard capability closes the keyboard family', async () => {
+  const owner = createWebDriverPlatformRuntimeOwner({
+    host: host(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+    owner: providerRuntimeOwner('browserstack', 'android'),
+    ownsDevice: () => true,
+    capabilities: capabilities('android', { keyboard: 'unsupported' }),
+    getInteractor: vi.fn(() => ({}) as unknown as Interactor),
+  });
+  const facts = await owner.inspectFacts(device);
+  for (const operation of ['keyboardStatus', 'keyboardDismiss', 'keyboardEnter'] as const) {
+    expect(facts.operations[operation]).toMatchObject({
+      available: false,
+      reason: 'owner-capability-missing',
+    });
+  }
 });

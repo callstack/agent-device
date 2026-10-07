@@ -73,6 +73,12 @@ export type AndroidSnapshotBackendMetadata = {
   captureMode?: string;
   systemSurfaceOnly?: boolean;
   windowCount?: number;
+  /**
+   * `AccessibilityWindowInfo` types of the listed windows the helper could not serialize because
+   * reading their root returned null or threw (`2` is an input method window); `windowCount` counts
+   * only the roots it serialized. Empty when every listed window was read. Absent on an older helper.
+   */
+  missingRootWindowTypes?: number[];
   nodeCount?: number;
   helperTruncated?: boolean;
   elapsedMs?: number;

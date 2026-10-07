@@ -7,11 +7,14 @@ import type { AndroidAdbExecutor } from './adb-transport.ts';
 // not in a host-side file — so any daemon/state-dir can recover it.
 
 const SETTINGS_KEY_PREVIOUS_IME = 'agent_device_ime_helper_previous_ime';
+// While displaced, Android's fallback must not replace the user's restore target.
+const SETTINGS_KEY_REBIND_DISPLACED = 'agent_device_ime_helper_rebind_displaced';
 const SETTINGS_NAMESPACE = 'secure';
 const DEFAULT_INPUT_METHOD_KEY = 'default_input_method';
 
 export const ANDROID_TEST_IME_SETTINGS_KEYS = {
   previousIme: SETTINGS_KEY_PREVIOUS_IME,
+  rebindDisplaced: SETTINGS_KEY_REBIND_DISPLACED,
   defaultInputMethod: DEFAULT_INPUT_METHOD_KEY,
 };
 
@@ -27,13 +30,7 @@ export async function readAndroidDefaultInputMethod(adb: AndroidAdbExecutor): Pr
 export async function readPersistedPreviousIme(
   adb: AndroidAdbExecutor,
 ): Promise<string | undefined> {
-  const result = await runAdbShell(
-    adb,
-    ['settings', 'get', SETTINGS_NAMESPACE, SETTINGS_KEY_PREVIOUS_IME],
-    { allowFailure: true, timeoutMs: 5_000 },
-  );
-  const value = normalizeSettingsValue(result.exitCode === 0 ? result.stdout : '');
-  return value ? value : undefined;
+  return (await readSecureSetting(adb, SETTINGS_KEY_PREVIOUS_IME)) || undefined;
 }
 
 // Returns true only when the write succeeded AND reads back as the requested value — callers must
@@ -56,6 +53,45 @@ export async function clearPersistedPreviousIme(adb: AndroidAdbExecutor): Promis
     allowFailure: true,
     timeoutMs: 5_000,
   });
+}
+
+export type AndroidTestImeDeviceRecord =
+  | Readonly<{ kind: 'unreadable' }>
+  | Readonly<{ kind: 'absent'; rebindDisplaced: boolean }>
+  | Readonly<{ kind: 'owned'; previousIme: string; rebindDisplaced: boolean }>;
+
+export async function readAndroidTestImeDeviceRecord(
+  adb: AndroidAdbExecutor,
+): Promise<AndroidTestImeDeviceRecord> {
+  const previousIme = await readSecureSetting(adb, SETTINGS_KEY_PREVIOUS_IME);
+  const displaced = await readSecureSetting(adb, SETTINGS_KEY_REBIND_DISPLACED);
+  if (previousIme === undefined || displaced === undefined) return { kind: 'unreadable' };
+  const rebindDisplaced = displaced === '1';
+  return previousIme
+    ? { kind: 'owned', previousIme, rebindDisplaced }
+    : { kind: 'absent', rebindDisplaced };
+}
+
+export async function writePersistedRebindDisplacement(adb: AndroidAdbExecutor): Promise<boolean> {
+  const result = await runAdbShell(
+    adb,
+    ['settings', 'put', SETTINGS_NAMESPACE, SETTINGS_KEY_REBIND_DISPLACED, '1'],
+    { allowFailure: true, timeoutMs: 5_000 },
+  );
+  if (result.exitCode !== 0) return false;
+  return (await readSecureSetting(adb, SETTINGS_KEY_REBIND_DISPLACED)) === '1';
+}
+
+export async function clearPersistedRebindDisplacement(adb: AndroidAdbExecutor): Promise<boolean> {
+  await runAdbShell(
+    adb,
+    ['settings', 'delete', SETTINGS_NAMESPACE, SETTINGS_KEY_REBIND_DISPLACED],
+    {
+      allowFailure: true,
+      timeoutMs: 5_000,
+    },
+  );
+  return (await readSecureSetting(adb, SETTINGS_KEY_REBIND_DISPLACED)) === '';
 }
 
 /** Restores the device record changed by a failed pre-switch transaction; never touches markers. */
@@ -91,6 +127,18 @@ export async function restorePriorPersistedIme(
 async function clearAndConfirmPersistedPreviousIme(adb: AndroidAdbExecutor): Promise<boolean> {
   await clearPersistedPreviousIme(adb);
   return (await readPersistedPreviousIme(adb)) === undefined;
+}
+
+/** The setting's value, `''` when unset, or `undefined` when it cannot be read. */
+async function readSecureSetting(
+  adb: AndroidAdbExecutor,
+  key: string,
+): Promise<string | undefined> {
+  const result = await runAdbShell(adb, ['settings', 'get', SETTINGS_NAMESPACE, key], {
+    allowFailure: true,
+    timeoutMs: 5_000,
+  });
+  return result.exitCode === 0 ? normalizeSettingsValue(result.stdout) : undefined;
 }
 
 function normalizeSettingsValue(raw: string): string {

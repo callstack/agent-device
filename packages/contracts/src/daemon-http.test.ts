@@ -6,7 +6,10 @@ import {
   buildDaemonHttpBaseUrl,
   buildDaemonHttpTenantHeaders,
   buildDaemonHttpUrl,
+  buildRemoteTempArtifactDirPath,
+  buildRemoteTempArtifactPath,
   DAEMON_RPC_PROTOCOL_VERSION,
+  isRemoteTempArtifactPath,
 } from './daemon-http.ts';
 
 test('buildDaemonHttpBaseUrl appends the public agent-device base path', () => {
@@ -62,5 +65,35 @@ test('buildDaemonHealthPayload takes the version from its caller and keeps the p
       rpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
       upstream: { ok: true },
     },
+  );
+});
+
+test('the daemon recognizes every temp path a remote client names, however the extension is spelled', () => {
+  for (const built of ['png', '.png']) {
+    for (const checked of ['png', '.png']) {
+      assert.equal(
+        isRemoteTempArtifactPath(
+          buildRemoteTempArtifactPath('screenshot', built),
+          'screenshot',
+          checked,
+        ),
+        true,
+        `built with '${built}', checked with '${checked}'`,
+      );
+    }
+  }
+});
+
+test('a temp path of another prefix, a directory, or an escape is not a remote temp artifact', () => {
+  const screenshot = buildRemoteTempArtifactPath('screenshot', '.png');
+  assert.equal(isRemoteTempArtifactPath(screenshot, 'recording', '.png'), false);
+  assert.equal(
+    isRemoteTempArtifactPath(buildRemoteTempArtifactDirPath('screenshot'), 'screenshot', '.png'),
+    false,
+  );
+  assert.equal(isRemoteTempArtifactPath(`${screenshot}/../x.png`, 'screenshot', '.png'), false);
+  assert.equal(
+    isRemoteTempArtifactPath('/Users/me/agent-device-screenshot-1-a.png', 'screenshot', '.png'),
+    false,
   );
 });

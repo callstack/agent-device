@@ -17,18 +17,20 @@ export type CloudWebDriverConnectionVerification =
       project: { name?: string; reference: string };
     });
 
+/** Credentials plus the exact device, OS, and app a hosted Appium hub session is created with. */
+type HubSelectionVerificationOptions = {
+  username: string;
+  accessKey: string;
+  platform: 'android' | 'ios';
+  deviceName: string;
+  osVersion: string;
+  app: string;
+  devicesEndpoint?: string | URL;
+  appsEndpoint?: string | URL;
+};
+
 export type CloudWebDriverConnectionVerificationOptions =
-  | {
-      provider: 'browserstack';
-      username: string;
-      accessKey: string;
-      platform: 'android' | 'ios';
-      deviceName: string;
-      osVersion: string;
-      app: string;
-      devicesEndpoint?: string | URL;
-      appsEndpoint?: string | URL;
-    }
+  | (HubSelectionVerificationOptions & { provider: 'browserstack' })
   | {
       provider: 'aws-device-farm';
       platform: 'android' | 'ios';
@@ -42,7 +44,10 @@ export async function verifyCloudWebDriverConnection(
   options: CloudWebDriverConnectionVerificationOptions,
   dependencies: ProviderWebDriverDependencies,
 ): Promise<CloudWebDriverConnectionVerification> {
-  return options.provider === 'browserstack'
-    ? await verifyBrowserStackConnection(options, dependencies.clientVersion)
-    : await verifyAwsDeviceFarmConnection(options, dependencies.runHostCommand);
+  switch (options.provider) {
+    case 'browserstack':
+      return await verifyBrowserStackConnection(options, dependencies.clientVersion);
+    case 'aws-device-farm':
+      return await verifyAwsDeviceFarmConnection(options, dependencies.runHostCommand);
+  }
 }

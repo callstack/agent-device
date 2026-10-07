@@ -1,24 +1,26 @@
+import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 import {
   CLOUD_WEBDRIVER_PROVIDERS,
   isCloudWebDriverProviderName,
   type CloudWebDriverKnownProviderName,
 } from '@agent-device/provider-webdriver/providers';
+import { pluginConnectionCapabilities, pluginConnectionNames } from '../../plugins/connection.ts';
 
 export type DirectDeviceConnectProvider = CloudWebDriverKnownProviderName | 'limrun';
-export type ConnectProvider = 'cloud' | 'proxy' | DirectDeviceConnectProvider;
+import { RESERVED_PLUGIN_PROVIDERS as BUILTIN_CONNECT_PROVIDERS } from '../../plugins/manifest.ts';
+export type BuiltinConnectProvider = (typeof BUILTIN_CONNECT_PROVIDERS)[number];
+export type ConnectProvider = BuiltinConnectProvider | (string & {});
 
-export type ConnectionProviderCapabilities = {
-  leaseKind: 'proxy' | 'direct-device-provider' | 'remote-provider';
-  requiresAppAttachment: boolean;
-  requiresRemoteDaemon: boolean;
-  supportsArtifacts: boolean;
-  supportsDeferredAppSelection: boolean;
-  supportsDirectPortReverse: boolean;
-  usesCloudWebDriverLease: boolean;
-};
-
-export function isConnectProviderName(value: string | undefined): value is ConnectProvider {
-  return value === 'cloud' || value === 'proxy' || isDirectDeviceConnectProvider(value);
+export function isConnectProviderName(
+  value: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): value is ConnectProvider {
+  return (
+    value === 'cloud' ||
+    value === 'proxy' ||
+    isDirectDeviceConnectProvider(value) ||
+    pluginConnectionCapabilities(value, env) !== undefined
+  );
 }
 
 function isDirectDeviceConnectProvider(
@@ -28,20 +30,19 @@ function isDirectDeviceConnectProvider(
 }
 
 export function connectProviderNamesForError(): string {
-  return [
-    'cloud',
-    'proxy',
-    CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-    CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-    'limrun',
-  ].join(', ');
+  return [...BUILTIN_CONNECT_PROVIDERS, ...pluginConnectionNames()].join(', ');
 }
 
 export function connectionProviderCapabilities(
   provider: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
 ): ConnectionProviderCapabilities {
   const directDeviceProvider = isDirectDeviceConnectProvider(provider);
   const cloudWebDriver = isCloudWebDriverProviderName(provider);
+  if (!directDeviceProvider && provider !== 'cloud' && provider !== 'proxy') {
+    const plugin = pluginConnectionCapabilities(provider, env);
+    if (plugin) return plugin;
+  }
   return {
     leaseKind:
       provider === 'proxy'

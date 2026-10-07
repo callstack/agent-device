@@ -4,6 +4,7 @@ import type {
   DeviceInventoryGateway,
   ProviderAwareDeviceInventoryGateway,
 } from '@agent-device/contracts/platform-module';
+import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
@@ -73,6 +74,21 @@ export function assertDaemonPolicyAllowsCapability(
   });
 }
 
+/**
+ * `leases.require`: a request must be admitted under a lease of the required backend. A request
+ * that names no lease is refused rather than admitted unleased.
+ */
+export function assertDaemonPolicyAdmitsLease(
+  policy: DaemonPolicy,
+  lease: Pick<DeviceLease, 'backend'> | undefined,
+): void {
+  const required = policy.requiredLeaseBackend;
+  if (!required || lease?.backend === required) return;
+  throw policyDenied(policy, 'lease', `This daemon's policy requires a ${required} lease.`, {
+    leaseBackend: required,
+  });
+}
+
 /** Device inventory, and therefore device selection, sees only the devices the policy allows. */
 export function restrictDeviceInventoryToDaemonPolicy(
   gateways: ComposedDeviceInventoryGateways,
@@ -115,7 +131,7 @@ function assertCommandAdmitted(policy: DaemonPolicy, command: string): void {
 
 function policyDenied(
   policy: DaemonPolicy,
-  rule: 'command' | 'device' | 'capability',
+  rule: 'command' | 'device' | 'capability' | 'lease',
   message: string,
   details: Record<string, unknown>,
 ): AppError {

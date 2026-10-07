@@ -221,6 +221,7 @@ const LEASE_ALLOCATE_PROVIDER_FLAG_KEYS = [
   // The Cloud provider profile fields; pinned exhaustive against that vocabulary below.
   'providerApp',
   'providerOsVersion',
+  'providerDeviceType',
   'providerProject',
   'providerBuild',
   'providerSessionName',

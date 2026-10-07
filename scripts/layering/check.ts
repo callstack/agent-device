@@ -3,10 +3,12 @@
 //
 // Ranked target spine, as rank groups lowest to highest. `A ◄ B` means B may not
 // be outranked by A (the back-edge order the gate rejects), NOT that every displayed import exists:
-//   { contracts, request, selectors } ◄ core ◄ commands
-//         ◄ { client, daemon-server } ◄ daemon-client ◄ cli
-// (authoritative ranks: `TARGET_DAG_RANK` in model.ts. The former rank-0 kernel
-// zone lives in packages/kernel since #1490 W0; R11 owns its boundary.)
+//   { contracts, selectors, ... } ◄ { core, daemon-contracts } ◄ { commands, command-runtime }
+//         ◄ { client, daemon-server, platform-runtime, ... } ◄ daemon-client ◄ { sdk, ai-sdk }
+//         ◄ cli ◄ platform-runtime-host ◄ (root)
+// (authoritative ranks: `TARGET_DAG_RANK` in model.ts; root modules declare their zone in
+// root-module-zones.ts. The former rank-0 kernel zone lives in packages/kernel since #1490 W0;
+// R11 owns its boundary.)
 // `commands/schema/` renders the rest of commands/'s facets and reads them; commands never
 // imports it back (#2543). It shares the commands zone (#2679 folded the standalone
 // cli-schema zone into it), so the ranked spine and the R2 zone-policy table cannot see the
@@ -22,6 +24,8 @@
 //   - Over the RANKED SPINE only: rejection of every spine back-edge (R5), i.e.
 //     an import whose source zone outranks its target zone, plus a ratchet on the
 //     same inversion measured over TYPE-ONLY edges (R6).
+//   - Over the ZONE GRAPH: static value imports between zones form no cycle (R80), which R5
+//     cannot see between two zones of the same rank.
 //   - Over the DAEMON and its capture-admission adapters: SessionState field ownership (R7), because the session
 //     record is store-owned mutable state that any daemon module can write; and the terminal
 //     concrete-platform boundary (R65), which rejects every import form into the retired
@@ -52,9 +56,9 @@
 // R6, R9, and the R10 R7 counts are ratchets with no written-down reference: each is the same
 // measurement taken over the merge-base with origin/main (`ratchet-reference.ts`), so growth
 // fails, a shrink needs no edit, and no change can bank headroom.
-// `(root)` holds entrypoints and composition roots. The retired `src/utils` zone is deliberately
-// outside the spine and is rejected separately by R14; extracted workspace package zones are
-// classified separately and held behind R11 instead of the src folder spine.
+// `(root)` holds the executables and ranks above the spine. The retired `src/utils` zone is
+// deliberately outside the spine and is rejected separately by R14; extracted workspace package
+// zones are classified separately and held behind R11 instead of the src folder spine.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -79,6 +83,7 @@ import {
   type ResolvedImportEdge,
 } from './model.ts';
 import { checkTypeInversions } from './type-inversion-ratchet.ts';
+import { checkZoneValueDag } from './zone-value-dag.ts';
 import {
   measureRatchets,
   mergeBaseRatchets,
@@ -237,6 +242,15 @@ function checkRecordRuntimeOwnership(sources: ReadonlyMap<string, string>): Laye
  *   import direction no longer matters. Splitting zones into packages would not replace it: the
  *   A4 spike found an undeclared workspace package still resolves through root node_modules and
  *   a relative tunnel into another package's src still compiles.
+ * Scope: static value imports. Dynamic imports are out of scope for R5 and R80 by decision
+ *   (#3280). An `import()` target never joins the importer's eager closure, so a lazy edge cannot
+ *   cost what a value back-edge costs, and the code places lazy seams exactly where a module
+ *   defers one ranked above it or one that depends back on it: `cli/process-entry.ts` loads
+ *   `cli.ts`, the MCP tools load the typed client, the daemon's provider registry loads the
+ *   Limrun runtime from `src/sdk/`, and the platform runtime loads its operation host
+ *   (`loadHost`), which reads daemon session artifacts. Ranking them would reject that pattern
+ *   rather than a mistake; what a lazy edge may load is owned by R13's laziness policy and the
+ *   eager-closure budgets.
  */
 function checkBackEdges(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
   const seen = new Set<string>();
@@ -398,7 +412,8 @@ function report(
     process.stdout.write(
       `Layering guard: OK — ${files.length} source files satisfy R2 and contain no ` +
         `value-import cycles (both checked globally); the ranked target spine contains no ` +
-        `back-edges; the ranked spine's type-only inversions hold at or under the merge-base ` +
+        `back-edges and the zone graph no value-import cycle (R80); the ranked spine's ` +
+        `type-only inversions hold at or under the merge-base ` +
         `${reference.ref.slice(0, 10)} per zone pair (R6, ${inversions} remaining); ` +
         `${RETIRED_PATH_RULES.R14.rule} permits no tracked paths under retired src/utils; ` +
         `all ${sessionStateFieldCount()} SessionState fields are classified and every write is ` +
@@ -473,6 +488,7 @@ export const LAYERING_RULE_IDS = [
   'substrate-domain-shape',
   'selector-pipeline-ownership',
   'back-edges',
+  'zone-value-dag',
   'type-spine-inversions',
   'session-state-ownership',
   'daemon-modularity-ratchets',
@@ -514,6 +530,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
   'selector-pipeline-ownership': (context) =>
     selectorPipelineOwnershipViolations(context.edges, workspaceSpecifierTargets(repoRoot)),
   'back-edges': (context) => checkBackEdges(context.edges),
+  'zone-value-dag': (context) => checkZoneValueDag(context.edges),
   'type-spine-inversions': (context) =>
     checkTypeInversions(context.edges, context.reference.typeInversions),
   'session-state-ownership': (context) => checkSessionStateOwnership(context.sources),

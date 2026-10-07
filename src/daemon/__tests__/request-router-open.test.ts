@@ -882,3 +882,79 @@ test('an open that booted the device keeps the device against a foreign open', a
     fs.rmSync(claimsDir, { recursive: true, force: true });
   }
 });
+
+const LEASED_MACOS_BUNDLE = 'com.example.leased';
+const LEASED_MACOS_HOST: DeviceInfo = {
+  platform: 'apple',
+  appleOs: 'macos',
+  id: 'host-macos-local',
+  name: 'leased-host-mac',
+  kind: 'device',
+  target: 'desktop',
+  booted: true,
+};
+
+function leasedMacOsMeta(leaseId: string, requestId: string) {
+  return {
+    requestId,
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseId,
+    sessionIsolation: 'tenant',
+    leaseProvider: 'proxy',
+    clientId: 'client-a',
+    deviceKey: LEASED_MACOS_BUNDLE,
+    leaseBackend: 'macos-app',
+  };
+}
+
+test('open under a macos-app lease names no host path or device, and an unleased open still does', async () => {
+  mockResolveTargetDevice.mockResolvedValue(LEASED_MACOS_HOST);
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.putHostLease('a1b2c3d4e5f60718293a4b5c6d7e8f90', {
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    clientId: 'client-a',
+    leaseBackend: 'macos-app',
+    deviceKey: LEASED_MACOS_BUNDLE,
+  });
+  const sessionStore = makeSessionStore('agent-device-router-open-macos-lease-');
+
+  vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', 'native');
+  const opened = await createOpenHandler(
+    sessionStore,
+    leaseRegistry,
+  )(
+    openRequest(
+      'default',
+      { platform: 'macos' },
+      'req-open-macos-lease',
+      leasedMacOsMeta(lease.leaseId, 'req-open-macos-lease'),
+      [LEASED_MACOS_BUNDLE],
+    ),
+  );
+  vi.unstubAllEnvs();
+
+  expect(opened).toMatchObject({
+    ok: true,
+    data: { appBundleId: LEASED_MACOS_BUNDLE, platform: 'macos', target: 'desktop' },
+  });
+  const wire = JSON.stringify(opened);
+  for (const hostFact of [
+    sessionStore.resolveDaemonStateDir(),
+    LEASED_MACOS_HOST.name,
+    LEASED_MACOS_HOST.id,
+  ]) {
+    expect(wire).not.toContain(hostFact);
+  }
+
+  const unleased = await createOpenHandler(makeSessionStore('agent-device-router-open-macos-'))(
+    openRequest('plain', { platform: 'macos' }, 'req-open-macos-plain', {}, [LEASED_MACOS_BUNDLE]),
+  );
+  expect(unleased).toMatchObject({
+    ok: true,
+    data: { device: LEASED_MACOS_HOST.name, id: LEASED_MACOS_HOST.id },
+  });
+  expect(unleased.ok && unleased.data?.sessionStateDir).toEqual(expect.any(String));
+});

@@ -61,6 +61,7 @@ export type AndroidUiNodeMetadata = {
   windowActive?: boolean;
   windowFocused?: boolean;
   windowRect?: Rect;
+  windowRegionRect?: boolean;
 } & AndroidSystemChromeProvenance;
 
 /**
@@ -188,6 +189,7 @@ function readNodeAttributes(node: string): Omit<AndroidUiNodeMetadata, 'rect'> {
     ...optionalBoolAttr('windowActive', 'window-active'),
     ...optionalBoolAttr('windowFocused', 'window-focused'),
     ...optionalRectAttr('windowRect', 'window-bounds'),
+    ...optionalBoolAttr('windowRegionRect', 'window-region-rect'),
   };
 }
 
@@ -356,6 +358,7 @@ function normalizeAndroidUiHierarchyNode(
       windowActive: attrs.windowActive,
       windowFocused: attrs.windowFocused,
       windowRect: attrs.windowRect,
+      windowRegionRect: attrs.windowRegionRect,
       depth,
       parentIndex: undefined,
       children: [],

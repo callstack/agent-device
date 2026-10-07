@@ -6,6 +6,7 @@ import {
 } from './snapshot-capture-failure-reason.ts';
 import {
   readInstrumentationResultBoolean,
+  readInstrumentationResultIntegerList,
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
 import {
@@ -300,6 +301,7 @@ function readSessionMetadata(headers: Record<string, string>): AndroidSnapshotHe
         ? headers.captureMode
         : undefined,
     windowCount: readInstrumentationResultNumber(headers.windowCount),
+    missingRootWindowTypes: readInstrumentationResultIntegerList(headers.missingRootWindowTypes),
     nodeCount: readInstrumentationResultNumber(headers.nodeCount),
     truncated: readInstrumentationResultBoolean(headers.truncated),
     elapsedMs: readInstrumentationResultNumber(headers.elapsedMs),

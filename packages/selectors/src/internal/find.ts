@@ -1,5 +1,6 @@
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { AppError } from '@agent-device/kernel/errors';
+import { roleSpellingsOfNode } from './node.ts';
 import { tryParseSelectorChain } from './parse.ts';
 
 export const FIND_LOCATORS = ['any', 'text', 'label', 'value', 'role', 'id'] as const;
@@ -95,7 +96,7 @@ export function findBestMatchesByLocator(
 function matchNode(node: SnapshotNode, locator: FindLocator, query: string): number {
   switch (locator) {
     case 'role':
-      return matchRole(node.type, query);
+      return matchRole(node, query);
     case 'label':
       return matchText(node.label, query);
     case 'value':
@@ -121,24 +122,44 @@ function matchText(value: string | undefined, query: string): number {
   return 0;
 }
 
-function matchRole(value: string | undefined, query: string): number {
-  const normalized = normalizeRole(value ?? '');
-  if (!normalized) return 0;
-  if (normalized === query) return 2;
-  if (normalized.includes(query)) return 1;
+function matchRole(node: SnapshotNode, query: string): number {
+  // The package's one role-spelling reader (#3021, `node.ts`): the node's
+  // canonical `kind` first, then its windowed legacy spelling. Exact scoring
+  // is against the whole spellings; substring scoring stays on the leaf
+  // segment because the retired locator substring-matched a last-`.`-segment
+  // leaf, and an unrecognized dotted class keeps its package path in its
+  // `kind` — substringing the full kind would let `find role=fenix` score
+  // `org.mozilla.fenix.ReaderView` where the released query refused it.
+  const spellings = roleSpellingsOfNode(node);
+  // The query arrives `normalizeText`-ed, so the exact compare normalizes the
+  // spellings the same way the selector term's `textEquals` does — that is the
+  // locator/term agreement #3021 demands for whitespace-bearing class names.
+  // Substring scoring stays on the raw spelling (the retired locator's leaf).
+  if (spellings.some((spelling) => normalizeText(spelling) === query)) return 2;
+  if (spellings.some((spelling) => roleLeafSegment(spelling).includes(query))) return 1;
   return 0;
+}
+
+/**
+ * The substring-scoring view of one role spelling: its last `.`-separated
+ * segment. This is deliberately the RETIRED LOCATOR's leaf (`split('.').pop()`
+ * only), not the retired term spelling (`normalizeType`) — the term also
+ * reduced a trailing `/` segment, and mirroring that here would drop substring
+ * hits the released locator kept (query `y/z` still scores 1 against kind
+ * `x.y/z` today). The term's `/`-reduced spelling rides as the windowed exact
+ * alias instead, so term/locator agreement comes from the exact side, and each
+ * surface's historical substring meaning is preserved. An AX-stripped query
+ * (`link` against an `AXLink` node) likewise reaches the exact score through
+ * the windowed alias, not through substring — the retired term already matched
+ * that spelling exactly, so promoting it here is the parity #3021 requires.
+ */
+function roleLeafSegment(spelling: string): string {
+  const lastDot = spelling.lastIndexOf('.');
+  return lastDot === -1 ? spelling : spelling.slice(lastDot + 1);
 }
 
 export function normalizeText(value: string): string {
   return value.trim().toLowerCase().replaceAll(/\s+/g, ' ');
-}
-
-function normalizeRole(value: string): string {
-  let normalized = value.trim();
-  if (!normalized) return '';
-  const lastSegment = normalized.split('.').pop() ?? normalized;
-  normalized = lastSegment.replaceAll(/XCUIElementType/gi, '').toLowerCase();
-  return normalized;
 }
 
 export type ParsedFindArgs = {

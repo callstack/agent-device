@@ -37,15 +37,8 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
 }));
 
 vi.mock('@agent-device/platform-apple/simctl-settings', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/platform-apple/simctl-settings')>();
-  return {
-    ...actual,
-    applySimctlSetting: vi.fn(async (request: Parameters<typeof actual.applySimctlSetting>[0]) => {
-      moduleLoads.appleSimctlSettings += 1;
-      return await actual.applySimctlSetting(request);
-    }),
-  };
+  moduleLoads.appleSimctlSettings += 1;
+  return await importOriginal<typeof import('@agent-device/platform-apple/simctl-settings')>();
 });
 
 vi.mock('@agent-device/platform-apple/install-artifact', async (importOriginal) => ({
@@ -254,22 +247,28 @@ test('the adb invocation adapters address through the platform builders', async 
   assert.deepEqual(serializeAndroidAdbInvocation(host), ['disconnect', '127.0.0.1:62001']);
 });
 
-test('Limrun iOS settings run the Apple simctl plan, loaded on the first setting', async () => {
+test('Limrun iOS settings evaluate the Apple simctl plan module on the first setting', async () => {
   const { createLimrunRuntimeDependencies } = await import('./limrun-runtime-dependencies.ts');
   const dependencies = createLimrunRuntimeDependencies();
   const runSimctl = vi.fn(async (_args: string[]) => ({ stdout: '', stderr: '' }));
-
-  await dependencies.ios.applySimctlSetting({
+  const grantPhotos = {
     runSimctl,
     udid: 'booted',
+    deviceId: 'limrun:ios:lease-a',
     setting: 'permission',
     state: 'grant',
     appBundleId: 'com.example.app',
     options: { permissionTarget: 'photos', permissionMode: 'limited' },
-  });
+  } as const;
+
+  assert.equal(moduleLoads.appleSimctlSettings, 0);
+
+  await dependencies.ios.applySimctlSetting(grantPhotos);
+  await dependencies.ios.applySimctlSetting(grantPhotos);
 
   assert.equal(moduleLoads.appleSimctlSettings, 1);
   assert.deepEqual(runSimctl.mock.calls, [
+    [['privacy', 'booted', 'grant', 'photos-add', 'com.example.app']],
     [['privacy', 'booted', 'grant', 'photos-add', 'com.example.app']],
   ]);
 });
