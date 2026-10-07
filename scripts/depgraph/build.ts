@@ -18,7 +18,7 @@ import { pathToFileURL } from 'node:url';
 import { zoneRank } from '../layering/model.ts';
 import { runAffected } from './affected-run.ts';
 import { loadGraph } from './load.ts';
-import { computeLevels, type GraphData } from './model.ts';
+import { computeLevels, markTransitivelyReachableEdges, type GraphData } from './model.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -79,8 +79,14 @@ function edgeFlags(edge: GraphData['edges'][number]): number {
   );
 }
 
+/** Transitive reachability is undefined on a value cycle; the report then lists the cycle instead. */
+function hasValueCycle(graph: Pick<GraphData, 'cycles'>): boolean {
+  return graph.cycles.some((cycle) => cycle.kind === 'value');
+}
+
 function buildPayload(): Payload {
   const graph = loadGraph(repoRoot);
+  if (!hasValueCycle(graph)) markTransitivelyReachableEdges(graph.edges);
   const levels = computeLevels(graph.nodes, graph.edges);
 
   const zoneIndex = new Map(graph.zones.map((zone, index) => [zone.id, index]));
@@ -115,6 +121,33 @@ function buildPayload(): Payload {
   };
 }
 
+/** The text summary printed after the JSON is written; every count is read back from `payload`. */
+function formatSummary(payload: Payload, jsonPath: string): string {
+  const valueCycles = payload.cycles.filter((cycle) => cycle.kind === 'value').length;
+  const otherCycles = payload.cycles.length - valueCycles;
+  const backEdges = payload.edges.filter(([, , , flags]) => flags & 1).length;
+  const transitivelyReachable =
+    valueCycles > 0
+      ? 'not computed while a value-import cycle exists'
+      : payload.edges.filter(([, , , flags]) => flags & 2).length;
+  const typeInversions = Object.values(payload.typeInversions).reduce((sum, n) => sum + n, 0);
+  const authorityCounts = Object.entries(payload.authorityCounts)
+    .map(([label, count]) => `${label}=${count}`)
+    .join(', ');
+  return (
+    `Dependency graph: ${payload.generated.files} files, ${payload.generated.edges} edges, ` +
+    `${payload.zones.length} zones\n` +
+    `  value-import cycles (R4): ${valueCycles}\n` +
+    `  type-only/dynamic cycles (not gate-rejected): ${otherCycles}\n` +
+    `  spine back-edges (R5): ${backEdges}\n` +
+    `  type-only spine inversions (R6): ${typeInversions}\n` +
+    `  value edges whose target is also reachable at distance >= 2: ${transitivelyReachable}\n` +
+    `  declared-authority labels: ${authorityCounts}\n` +
+    `    (reachability only — not a removability claim, see scripts/depgraph/README.md)\n` +
+    `  wrote ${path.relative(repoRoot, jsonPath)}\n`
+  );
+}
+
 async function main(argv: readonly string[]): Promise<number> {
   // `affected` is the query subcommand (scripts/depgraph/affected-run.ts); with no subcommand
   // this stays the whole-graph report.
@@ -130,26 +163,7 @@ async function main(argv: readonly string[]): Promise<number> {
   fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
   fs.writeFileSync(jsonPath, `${JSON.stringify(payload, null, 2)}\n`);
 
-  const valueCycles = payload.cycles.filter((cycle) => cycle.kind === 'value').length;
-  const otherCycles = payload.cycles.length - valueCycles;
-  const backEdges = payload.edges.filter(([, , , flags]) => flags & 1).length;
-  const transitivelyReachable = payload.edges.filter(([, , , flags]) => flags & 2).length;
-  const typeInversions = Object.values(payload.typeInversions).reduce((sum, n) => sum + n, 0);
-  const authorityCounts = Object.entries(payload.authorityCounts)
-    .map(([label, count]) => `${label}=${count}`)
-    .join(', ');
-  process.stdout.write(
-    `Dependency graph: ${payload.generated.files} files, ${payload.generated.edges} edges, ` +
-      `${payload.zones.length} zones\n` +
-      `  value-import cycles (R4): ${valueCycles}\n` +
-      `  type-only/dynamic cycles (not gate-rejected): ${otherCycles}\n` +
-      `  spine back-edges (R5): ${backEdges}\n` +
-      `  type-only spine inversions (R6): ${typeInversions}\n` +
-      `  value edges whose target is also reachable at distance >= 2: ${transitivelyReachable}\n` +
-      `  declared-authority labels: ${authorityCounts}\n` +
-      `    (reachability only — not a removability claim, see scripts/depgraph/README.md)\n` +
-      `  wrote ${path.relative(repoRoot, jsonPath)}\n`,
-  );
+  process.stdout.write(formatSummary(payload, jsonPath));
   return 0;
 }
 

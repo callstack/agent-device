@@ -15,7 +15,7 @@ import {
   type ResolvedImportEdge,
 } from '../layering/model.ts';
 import { ARCHITECTURE_OWNERSHIP, matchesDeclaredRoot } from '../layering/architecture-ownership.ts';
-import { genPostorder, getSuccessors, getTransitiveReduction, isAcyclic } from '@statelyai/graph';
+import { genPostorder, getSuccessors, getTransitiveReduction } from '@statelyai/graph';
 import { importEdgeId, importGraph, VALUE_EDGES } from './import-graph.ts';
 
 export type EdgeKind = 'value' | 'type' | 'dynamic';
@@ -226,16 +226,11 @@ export function collapseEdges(edges: readonly ResolvedImportEdge[]): GraphEdge[]
  * whether any given edge can go needs symbol-level analysis this does not attempt.
  *
  * On a DAG, the edges with a longer alternative path are exactly the ones the transitive
- * reduction drops. R4 keeps the value subgraph acyclic; a value cycle makes the reduction
- * undefined, and the report says so rather than inventing a partial answer.
+ * reduction drops. The reduction is undefined on a cycle, so callers mark only when the graph has
+ * no `value` cycle (R4); the library throws otherwise.
  */
 export function markTransitivelyReachableEdges(edges: GraphEdge[]): void {
   const valueGraph = importGraph(edges, VALUE_EDGES);
-  if (!isAcyclic(valueGraph)) {
-    throw new Error(
-      'value-import cycle present; transitive reachability needs the DAG R4 guarantees — run pnpm check:layering',
-    );
-  }
   const kept = new Set(getTransitiveReduction(valueGraph).edges.map((edge) => edge.id));
   for (const edge of edges) {
     if (edge.kind !== 'value') continue;
@@ -390,7 +385,7 @@ export function typeInversionsByPair(edges: readonly ResolvedImportEdge[]): Reco
   for (const edge of edges) {
     const pair = typeInversionPair(edge);
     if (!pair) continue;
-    const identity = `${edge.file} -> ${edge.target}`;
+    const identity = importEdgeId(edge.file, edge.target);
     if (seen.has(identity)) continue;
     seen.add(identity);
     byPair.set(pair, (byPair.get(pair) ?? 0) + 1);
@@ -403,7 +398,6 @@ export function buildGraph(
   edges: readonly ResolvedImportEdge[],
 ): GraphData {
   const collapsed = collapseEdges(edges);
-  markTransitivelyReachableEdges(collapsed);
   const edgeAuthorities = collapsed.map(({ authorities }) =>
     authorityLabelsForDeclared(authorities),
   );
@@ -423,11 +417,8 @@ export function buildGraph(
 }
 
 /**
- * Longest distance from each node to a sink over value edges. The layering gate rejects
- * production value-import cycles (R4), so that subgraph is a DAG and the height is
- * well-defined. Postorder visits every successor before its importer; a back-edge in a future
- * cycle reaches a node with no height yet and contributes nothing, so the walk degrades rather
- * than looping.
+ * Longest distance from each node to a sink over value edges. R4 keeps that subgraph a DAG; on a
+ * value cycle the edge that closes the loop adds no height, so levels stay finite.
  */
 export function computeLevels(
   nodes: readonly GraphNode[],
