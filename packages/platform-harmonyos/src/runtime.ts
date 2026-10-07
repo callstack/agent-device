@@ -65,7 +65,7 @@ import {
   harmonyScreenRecordingFacts,
 } from './recording/runtime.ts';
 import { readHarmonyAppState } from './app-state.ts';
-import { bindHarmonyApplicationLifecycle } from './lifecycle.ts';
+import { bindLocalDirectApplicationLifecycle } from '@agent-device/contracts/application-lifecycle-interaction';
 import {
   createHarmonyAppDeploymentOperations,
   harmonyAppDeploymentFacts,
@@ -411,7 +411,9 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
             ).map((app) => ({ id: app.package, name: app.name }));
           },
           ...availableApplicationLifecycleOperations(
-            bindHarmonyApplicationLifecycle({
+            bindLocalDirectApplicationLifecycle({
+              owner: 'HarmonyOS',
+              openTargetIdentity: 'bundle-id',
               host: host.localInteractors,
               device: request.device,
               signal: request.scope.signal,

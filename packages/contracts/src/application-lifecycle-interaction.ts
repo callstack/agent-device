@@ -380,3 +380,27 @@ export async function invokeApplicationClose(
   }
   await interactor.close(app);
 }
+
+/**
+ * The lifecycle binding of an owner whose interactor drives open and close directly: resolve the
+ * local interactor for the device, then dispatch through {@link bindDirectApplicationLifecycle}.
+ */
+export function bindLocalDirectApplicationLifecycle(
+  params: Readonly<{
+    owner: string;
+    openTargetIdentity: DirectOpenTargetIdentity;
+    host: Readonly<{ resolve: LocalApplicationLifecycleInteractorResolver }>;
+    device: DeviceInfo;
+    signal: AbortSignal;
+  }>,
+): ApplicationLifecycleRuntimeOperations {
+  return bindDirectApplicationLifecycle({
+    owner: params.owner,
+    openTargetIdentity: params.openTargetIdentity,
+    binding: bindLocalApplicationLifecycleInteractor({
+      device: params.device,
+      signal: params.signal,
+      resolveInteractor: params.host.resolve,
+    }),
+  });
+}

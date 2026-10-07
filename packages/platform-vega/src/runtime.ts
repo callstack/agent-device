@@ -22,7 +22,7 @@ import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-ru
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { bindVegaApplicationLifecycle } from './lifecycle.ts';
+import { bindLocalDirectApplicationLifecycle } from '@agent-device/contracts/application-lifecycle-interaction';
 
 const vegaOwner = localRuntimeOwner('vega');
 const lifecycleAvailable = Object.freeze({ available: true } as const);
@@ -63,7 +63,9 @@ export function createVegaPlatformRuntime(host: PlatformRuntimeHost): PlatformRu
         throw new AppError('UNSUPPORTED_PLATFORM', 'Vega runtime cannot bind this device');
       }
       const facts = vegaFacts(request.device);
-      const lifecycle = bindVegaApplicationLifecycle({
+      const lifecycle = bindLocalDirectApplicationLifecycle({
+        owner: 'Vega',
+        openTargetIdentity: 'app-name',
         host: host.localInteractors,
         device: request.device,
         signal: request.scope.signal,

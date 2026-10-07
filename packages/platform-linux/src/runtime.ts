@@ -38,7 +38,7 @@ import { typeTextRuntimeOperationFacts } from '@agent-device/contracts/type-text
 import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { bindLinuxApplicationLifecycle } from './lifecycle.ts';
+import { bindLocalDirectApplicationLifecycle } from '@agent-device/contracts/application-lifecycle-interaction';
 
 const supported = Object.freeze({ available: true } as const);
 const linuxOwner = localRuntimeOwner('linux');
@@ -140,7 +140,9 @@ export function createLinuxPlatformRuntime(host: PlatformRuntimeHost): PlatformR
         throw new AppError('UNSUPPORTED_PLATFORM', 'Linux runtime cannot bind this device');
       }
       const facts = linuxFacts(request.device);
-      const lifecycle = bindLinuxApplicationLifecycle({
+      const lifecycle = bindLocalDirectApplicationLifecycle({
+        owner: 'Linux',
+        openTargetIdentity: 'app-name',
         host: host.localInteractors,
         device: request.device,
         signal: request.scope.signal,

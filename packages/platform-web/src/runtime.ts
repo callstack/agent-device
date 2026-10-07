@@ -63,7 +63,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { bindWebScreenRecordingRuntime } from './recording/runtime.ts';
-import { bindWebApplicationLifecycle } from './lifecycle.ts';
+import { bindLocalDirectApplicationLifecycle } from '@agent-device/contracts/application-lifecycle-interaction';
 
 const owner = localRuntimeOwner('web');
 const available = Object.freeze({ available: true } as const);
@@ -308,7 +308,13 @@ function bindWebRuntime(
       },
     })),
     ...availableApplicationLifecycleOperations(
-      bindWebApplicationLifecycle({ host: host.localInteractors, device, signal }),
+      bindLocalDirectApplicationLifecycle({
+        owner: 'web',
+        openTargetIdentity: 'app-name',
+        host: host.localInteractors,
+        device,
+        signal,
+      }),
       facts.operations,
     ),
   };
