@@ -81,6 +81,14 @@ const requestScopeFinalizers = new WeakMap<
   (response: DaemonResponse) => DaemonResponse
 >();
 
+const gatewayMissing = async (): Promise<never> => {
+  throw new AppError(
+    'COMMAND_FAILED',
+    'Device runtime gateway is not configured for this request scope',
+    { reason: 'runtime-gateway-missing' },
+  );
+};
+
 export type RequestExecutionScope = AsyncDisposable & {
   req: DaemonRequest;
   command: string;
@@ -234,33 +242,9 @@ export async function createRequestExecutionScope(params: {
       startedAtMs,
       retainDeviceExecutionLock: async (deviceId) =>
         await requestExecutionLocks.retainDevice(deviceId),
-      bindDevice:
-        runtimeBindings?.bindDevice ??
-        (async () => {
-          throw new AppError(
-            'COMMAND_FAILED',
-            'Device runtime gateway is not configured for this request scope',
-            { reason: 'runtime-gateway-missing' },
-          );
-        }),
-      inspectFacts:
-        runtimeBindings?.inspectFacts ??
-        (async () => {
-          throw new AppError(
-            'COMMAND_FAILED',
-            'Device runtime gateway is not configured for this request scope',
-            { reason: 'runtime-gateway-missing' },
-          );
-        }),
-      bindExactDevice:
-        runtimeBindings?.bindExactDevice ??
-        (async () => {
-          throw new AppError(
-            'COMMAND_FAILED',
-            'Device runtime gateway is not configured for this request scope',
-            { reason: 'runtime-gateway-missing' },
-          );
-        }),
+      bindDevice: runtimeBindings?.bindDevice ?? gatewayMissing,
+      inspectFacts: runtimeBindings?.inspectFacts ?? gatewayMissing,
+      bindExactDevice: runtimeBindings?.bindExactDevice ?? gatewayMissing,
       dispatchLedger,
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
       runAdmitted: async (task) => {

@@ -4,7 +4,8 @@ import {
 } from '@agent-device/command-registry/registry';
 import { listDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
-import { AppError, asAppError } from '@agent-device/kernel/errors';
+import { asAppError } from '@agent-device/kernel/errors';
+import { requireRuntimeBinding, requireRuntimeFacts } from '../../session-runtime-admission.ts';
 import {
   isApplePlatform,
   isIosFamily,
@@ -408,12 +409,7 @@ async function resolveAppsRuntime(params: {
   inspectFacts: InspectDeviceRuntimeFacts | undefined;
   bindDevice: BindDeviceRuntime | undefined;
 }): Promise<{ response: DaemonResponse } | { runtime: BoundDeviceRuntime<typeof appsRuntimeUse> }> {
-  if (!params.inspectFacts) {
-    throw new AppError('COMMAND_FAILED', 'Device runtime facts inspection is unavailable.', {
-      reason: 'runtime-gateway-missing',
-    });
-  }
-  const facts = await params.inspectFacts(params.device);
+  const facts = await requireRuntimeFacts(params.inspectFacts)(params.device);
   const unavailable = [facts.operations.ensureReady, facts.operations.listApps].find(
     (fact) => !fact.available,
   );
@@ -429,12 +425,7 @@ async function resolveAppsRuntime(params: {
       },
     };
   }
-  if (!params.bindDevice) {
-    throw new AppError('COMMAND_FAILED', 'Device runtime binding is unavailable.', {
-      reason: 'runtime-gateway-missing',
-    });
-  }
-  return { runtime: await params.bindDevice(params.device, appsRuntimeUse) };
+  return { runtime: await requireRuntimeBinding(params.bindDevice)(params.device, appsRuntimeUse) };
 }
 
 function appsInventoryResponse(apps: readonly { id: string; name: string }[]): DaemonResponse {

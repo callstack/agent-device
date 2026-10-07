@@ -493,56 +493,39 @@ async function runHttpAuthHook(
   if (!authHook) return { ok: true };
   const result = await authHook(context);
   if (result === undefined || result === true) return { ok: true };
-  if (result === false) {
-    const normalized = normalizeError(
-      new AppError('UNAUTHORIZED', 'Request rejected by auth hook'),
-    );
+  const reject = (statusCode: number, rpcCode: number, error: AppError): HttpAuthDecision => {
+    const normalized = normalizeError(error);
     return {
       ok: false,
-      statusCode: 401,
+      statusCode,
       response: createRpcError(
         context.rpcRequest.id ?? null,
-        -32001,
+        rpcCode,
         normalized.message,
         normalized,
       ),
     };
-  }
-  if (result.ok === false) {
-    const normalized = normalizeError(
+  };
+  if (result === false || result.ok === false) {
+    const rejected = result === false ? {} : result;
+    return reject(
+      401,
+      -32001,
       new AppError(
-        toAppErrorCode(result.code, 'UNAUTHORIZED'),
-        result.message ?? 'Request rejected by auth hook',
-        result.details,
+        toAppErrorCode(rejected.code, 'UNAUTHORIZED'),
+        rejected.message ?? 'Request rejected by auth hook',
+        rejected.details,
       ),
     );
-    return {
-      ok: false,
-      statusCode: 401,
-      response: createRpcError(
-        context.rpcRequest.id ?? null,
-        -32001,
-        normalized.message,
-        normalized,
-      ),
-    };
   }
   if (typeof result.tenantId === 'string' && result.tenantId.length > 0) {
     const tenantId = normalizeTenantId(result.tenantId);
     if (!tenantId) {
-      const normalized = normalizeError(
+      return reject(
+        500,
+        -32000,
         new AppError('INVALID_ARGS', 'Auth hook returned invalid tenantId'),
       );
-      return {
-        ok: false,
-        statusCode: 500,
-        response: createRpcError(
-          context.rpcRequest.id ?? null,
-          -32000,
-          normalized.message,
-          normalized,
-        ),
-      };
     }
     return { ok: true, tenantId };
   }

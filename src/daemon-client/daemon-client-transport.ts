@@ -248,10 +248,14 @@ export async function readRemoteDaemonHealth(
 }
 
 function daemonHealthEndpoint(info: DaemonInfo): string | null {
+  return daemonHttpEndpoint(info, 'health');
+}
+
+function daemonHttpEndpoint(info: DaemonInfo, route: 'health' | 'rpc'): string | null {
   return info.baseUrl
-    ? buildDaemonHttpUrl(info.baseUrl, 'health')
+    ? buildDaemonHttpUrl(info.baseUrl, route)
     : info.httpPort
-      ? `http://127.0.0.1:${info.httpPort}/health`
+      ? `http://127.0.0.1:${info.httpPort}/${route}`
       : null;
 }
 
@@ -720,12 +724,9 @@ async function sendHttpRequest(
   timeoutMs: number | undefined,
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
-  const rpcUrl = info.baseUrl
-    ? new URL(buildDaemonHttpUrl(info.baseUrl, 'rpc'))
-    : info.httpPort
-      ? new URL(`http://127.0.0.1:${info.httpPort}/rpc`)
-      : null;
-  if (!rpcUrl) throw daemonEndpointUnavailableError('http');
+  const rpcEndpoint = daemonHttpEndpoint(info, 'rpc');
+  if (!rpcEndpoint) throw daemonEndpointUnavailableError('http');
+  const rpcUrl = new URL(rpcEndpoint);
   const rpcPayload = JSON.stringify(buildHttpRpcPayload(req, { includeTokenParam: !info.baseUrl }));
   const headers: Record<string, string | number> = {
     'content-type': 'application/json',
@@ -757,6 +758,15 @@ async function sendHttpRequest(
       detachCallerAbort();
       reject(error);
     };
+    const handleBody = (body: string): void => {
+      handleDaemonHttpResponseBody(body, {
+        info,
+        req,
+        stateDir: statePaths.baseDir,
+        resolve: resolveOnce,
+        reject: rejectOnce,
+      });
+    };
     const request = transport.request(
       {
         protocol: rpcUrl.protocol,
@@ -786,15 +796,7 @@ async function sendHttpRequest(
             clearTimeout: () => {
               if (timeoutHandle) clearTimeout(timeoutHandle);
             },
-            handleResponseBody: (body) => {
-              handleDaemonHttpResponseBody(body, {
-                info,
-                req,
-                stateDir: statePaths.baseDir,
-                resolve: resolveOnce,
-                reject: rejectOnce,
-              });
-            },
+            handleResponseBody: handleBody,
           });
           return;
         }
@@ -809,13 +811,7 @@ async function sendHttpRequest(
         void responseBody
           .then((body) => {
             if (timeoutHandle) clearTimeout(timeoutHandle);
-            handleDaemonHttpResponseBody(body, {
-              info,
-              req,
-              stateDir: statePaths.baseDir,
-              resolve: resolveOnce,
-              reject: rejectOnce,
-            });
+            handleBody(body);
           })
           .catch((error: unknown) => {
             if (timeoutHandle) clearTimeout(timeoutHandle);

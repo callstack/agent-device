@@ -1,4 +1,4 @@
-import { AppError, asAppError, isRequestCanceledError } from '@agent-device/kernel/errors';
+import { asAppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import {
@@ -31,7 +31,11 @@ import {
   admitRuntimeUse,
   type UnavailableRuntimeResponse,
 } from '../runtime-admission.ts';
-import type { RuntimeCommandHandlerParams } from '../session-runtime-admission.ts';
+import {
+  requireRuntimeBinding,
+  requireRuntimeFacts,
+  type RuntimeCommandHandlerParams,
+} from '../session-runtime-admission.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 const IOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
@@ -50,22 +54,6 @@ function bootUnavailableResponse(headless: boolean): UnavailableRuntimeResponse 
       undefined,
       unavailable.hint ? { hint: unavailable.hint } : undefined,
     );
-}
-
-function requireInspectFacts(
-  inspectFacts: InspectDeviceRuntimeFacts | undefined,
-): InspectDeviceRuntimeFacts {
-  if (inspectFacts) return inspectFacts;
-  throw new AppError('COMMAND_FAILED', 'Device runtime facts inspection is unavailable.', {
-    reason: 'runtime-gateway-missing',
-  });
-}
-
-function requireBindDevice(bindDevice: BindDeviceRuntime | undefined): BindDeviceRuntime {
-  if (bindDevice) return bindDevice;
-  throw new AppError('COMMAND_FAILED', 'Device runtime binding is unavailable.', {
-    reason: 'runtime-gateway-missing',
-  });
 }
 
 function shutdownUnavailableResponse(fact: RuntimeOperationFact) {
@@ -342,7 +330,7 @@ export async function handleSessionStateCommands(params: {
       session: activeSession,
       androidAvdSelection: 'include-stopped',
     });
-    const inspectFacts = requireInspectFacts(params.inspectFacts);
+    const inspectFacts = requireRuntimeFacts(params.inspectFacts);
     const facts = await inspectFacts(device);
     const unsupported = shutdownUnavailableResponse(facts.operations.shutdownTarget);
     if (unsupported) return unsupported;
@@ -367,7 +355,7 @@ export async function handleSessionStateCommands(params: {
       );
     }
 
-    const bindDevice = requireBindDevice(params.bindDevice);
+    const bindDevice = requireRuntimeBinding(params.bindDevice);
     const shutdown = await (
       await bindDevice(device, shutdownTargetUse)
     ).operations.shutdownTarget();

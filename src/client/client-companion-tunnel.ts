@@ -89,8 +89,8 @@ function hashString(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
-function normalizeOptionalString(input: string | undefined): string | undefined {
-  return input?.trim() ? input.trim() : undefined;
+function normalizeOptionalString(input: unknown): string | undefined {
+  return typeof input === 'string' && input.trim() ? input.trim() : undefined;
 }
 
 function readCompanionScope(input: unknown): CompanionTunnelScope | undefined {
@@ -154,19 +154,11 @@ function readCompanionState(statePath: string): CompanionTunnelState | null {
       command: typeof parsed.command === 'string' ? parsed.command : undefined,
       serverBaseUrl: parsed.serverBaseUrl,
       localBaseUrl: parsed.localBaseUrl,
-      launchUrl: normalizeOptionalString(
-        typeof parsed.launchUrl === 'string' ? parsed.launchUrl : undefined,
-      ),
-      registerPath: normalizeOptionalString(
-        typeof parsed.registerPath === 'string' ? parsed.registerPath : undefined,
-      ),
-      unregisterPath: normalizeOptionalString(
-        typeof parsed.unregisterPath === 'string' ? parsed.unregisterPath : undefined,
-      ),
+      launchUrl: normalizeOptionalString(parsed.launchUrl),
+      registerPath: normalizeOptionalString(parsed.registerPath),
+      unregisterPath: normalizeOptionalString(parsed.unregisterPath),
       devicePort: Number.isInteger(parsed.devicePort) ? Number(parsed.devicePort) : undefined,
-      session: normalizeOptionalString(
-        typeof parsed.session === 'string' ? parsed.session : undefined,
-      ),
+      session: normalizeOptionalString(parsed.session),
       bridgeScope: readCompanionScope(parsed.bridgeScope),
       tokenHash: parsed.tokenHash,
       consumers,
@@ -186,17 +178,9 @@ function touchCompanionState(statePath: string): void {
   fs.closeSync(fs.openSync(statePath, 'a'));
 }
 
-function clearCompanionState(statePath: string): void {
+function unlinkQuietly(filePath: string): void {
   try {
-    fs.unlinkSync(statePath);
-  } catch {
-    // best effort cleanup
-  }
-}
-
-function clearCompanionLog(logPath: string): void {
-  try {
-    fs.unlinkSync(logPath);
+    fs.unlinkSync(filePath);
   } catch {
     // best effort cleanup
   }
@@ -219,8 +203,8 @@ function clearCompanionArtifacts(
 ): void {
   const stateDir = path.dirname(paths.statePath);
   const logDir = path.dirname(paths.logPath);
-  clearCompanionState(paths.statePath);
-  clearCompanionLog(paths.logPath);
+  unlinkQuietly(paths.statePath);
+  unlinkQuietly(paths.logPath);
   removeDirectoryIfEmpty(stateDir);
   if (logDir !== stateDir) {
     removeDirectoryIfEmpty(logDir);
@@ -321,6 +305,11 @@ async function stopCompanionProcess(
   await waitForProcessExit(state.pid, COMPANION_TUNNEL_KILL_TIMEOUT_MS);
 }
 
+function setOrDelete(env: NodeJS.ProcessEnv, key: string, value: string | undefined): void {
+  if (value === undefined) delete env[key];
+  else env[key] = value;
+}
+
 function buildCompanionEnv(
   options: EnsureCompanionTunnelOptions,
   env: NodeJS.ProcessEnv,
@@ -338,31 +327,23 @@ function buildCompanionEnv(
   nextEnv[ENV_COMPANION_TUNNEL_SCOPE_TENANT_ID] = options.bridgeScope.tenantId;
   nextEnv[ENV_COMPANION_TUNNEL_SCOPE_RUN_ID] = options.bridgeScope.runId;
   nextEnv[ENV_COMPANION_TUNNEL_SCOPE_LEASE_ID] = options.bridgeScope.leaseId;
-  if (options.launchUrl?.trim()) {
-    nextEnv[ENV_COMPANION_TUNNEL_LAUNCH_URL] = options.launchUrl.trim();
-  } else {
-    delete nextEnv[ENV_COMPANION_TUNNEL_LAUNCH_URL];
-  }
-  if (options.registerPath?.trim()) {
-    nextEnv[ENV_COMPANION_TUNNEL_REGISTER_PATH] = options.registerPath.trim();
-  } else {
-    delete nextEnv[ENV_COMPANION_TUNNEL_REGISTER_PATH];
-  }
-  if (options.unregisterPath?.trim()) {
-    nextEnv[ENV_COMPANION_TUNNEL_UNREGISTER_PATH] = options.unregisterPath.trim();
-  } else {
-    delete nextEnv[ENV_COMPANION_TUNNEL_UNREGISTER_PATH];
-  }
-  if (options.devicePort !== undefined) {
-    nextEnv[ENV_COMPANION_TUNNEL_DEVICE_PORT] = String(options.devicePort);
-  } else {
-    delete nextEnv[ENV_COMPANION_TUNNEL_DEVICE_PORT];
-  }
-  if (options.session?.trim()) {
-    nextEnv[ENV_COMPANION_TUNNEL_SESSION] = options.session.trim();
-  } else {
-    delete nextEnv[ENV_COMPANION_TUNNEL_SESSION];
-  }
+  setOrDelete(nextEnv, ENV_COMPANION_TUNNEL_LAUNCH_URL, normalizeOptionalString(options.launchUrl));
+  setOrDelete(
+    nextEnv,
+    ENV_COMPANION_TUNNEL_REGISTER_PATH,
+    normalizeOptionalString(options.registerPath),
+  );
+  setOrDelete(
+    nextEnv,
+    ENV_COMPANION_TUNNEL_UNREGISTER_PATH,
+    normalizeOptionalString(options.unregisterPath),
+  );
+  setOrDelete(
+    nextEnv,
+    ENV_COMPANION_TUNNEL_DEVICE_PORT,
+    options.devicePort === undefined ? undefined : String(options.devicePort),
+  );
+  setOrDelete(nextEnv, ENV_COMPANION_TUNNEL_SESSION, normalizeOptionalString(options.session));
   return nextEnv;
 }
 

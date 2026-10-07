@@ -34,7 +34,9 @@ export function requireRuntimeFacts(
   inspectFacts: InspectDeviceRuntimeFacts | undefined,
 ): InspectDeviceRuntimeFacts {
   if (inspectFacts) return inspectFacts;
-  throw new AppError('COMMAND_FAILED', 'Device runtime facts inspection is unavailable.');
+  throw new AppError('COMMAND_FAILED', 'Device runtime facts inspection is unavailable.', {
+    reason: 'runtime-gateway-missing',
+  });
 }
 
 /** Any command plan: the runtime use it binds, plus whatever discriminator the command needs. */
@@ -147,5 +149,7 @@ export function requireRuntimeBinding(
   bindDevice: BindDeviceRuntime | undefined,
 ): BindDeviceRuntime {
   if (bindDevice) return bindDevice;
-  throw new AppError('COMMAND_FAILED', 'Device runtime binding is unavailable.');
+  throw new AppError('COMMAND_FAILED', 'Device runtime binding is unavailable.', {
+    reason: 'runtime-gateway-missing',
+  });
 }
