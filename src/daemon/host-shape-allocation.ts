@@ -42,7 +42,11 @@ export function readHostShapeRequest(flags: DaemonRequest['flags']): ManagedShap
   if (flags?.udid !== undefined || flags?.serial !== undefined) {
     throw hostShapeInvalid('A Host lease is requested by device type, not by UDID or serial.');
   }
-  const osVersion = flags?.providerOsVersion?.trim();
+  const rawOsVersion = flags?.providerOsVersion;
+  if (rawOsVersion !== undefined && typeof rawOsVersion !== 'string') {
+    throw hostShapeInvalid('--os-version must be a version string.');
+  }
+  const osVersion = rawOsVersion?.trim();
   return { platform, deviceType, ...(osVersion ? { osVersion } : {}) };
 }
 

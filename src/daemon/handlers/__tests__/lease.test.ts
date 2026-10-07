@@ -693,3 +693,64 @@ test('an allocation whose Host lease cannot be published is given back', async (
   );
   assert.deepEqual(released, ['ios:mobile:SIM-UDID-1']);
 });
+
+test('a Host allocation whose requester left is given back, not published', async () => {
+  const port = createScriptedManagedDeviceAllocator({
+    script: { requestLease: [grantedSimulator('SIM-UDID-1')] },
+  });
+  const { allocator, released } = hostAllocatorOverScriptedPort(port);
+  const registry = new LeaseRegistry();
+  const req = hostAllocateRequest({ platform: 'ios', device: 'iPhone 16' });
+  req.meta = { ...req.meta, requestId: 'host-gone' };
+  registerRequestAbort('host-gone');
+  markRequestCanceled('host-gone');
+  try {
+    await assert.rejects(
+      handleLeaseCommands({
+        req,
+        sessionName: 'default',
+        sessionStore: makeSessionStore('agent-device-host-shape-'),
+        leaseRegistry: registry,
+        hostShapeAllocator: allocator,
+      }),
+    );
+  } finally {
+    clearRequestCanceled('host-gone');
+  }
+  assert.deepEqual(released, ['ios:mobile:SIM-UDID-1']);
+  assert.equal(registry.listActiveLeases().length, 0);
+});
+
+test('a failed give-back keeps the original refusal and says the device may be held', async () => {
+  const port = createScriptedManagedDeviceAllocator({
+    script: { requestLease: [grantedSimulator('SIM-UDID-1')] },
+  });
+  const { allocator } = hostAllocatorOverScriptedPort(port);
+  const failingRelease: HostShapeAllocator = {
+    allocate: allocator.allocate,
+    release: async () => {
+      throw new Error('allocator unreachable');
+    },
+  };
+  const registry = new LeaseRegistry();
+  registry.allocateLease({
+    tenantId: 'someone-else',
+    runId: 'other-run',
+    leaseBackend: 'ios-simulator',
+    deviceKey: 'ios:mobile:SIM-UDID-1',
+  });
+
+  await assert.rejects(
+    handleLeaseCommands({
+      req: hostAllocateRequest({ platform: 'ios', device: 'iPhone 16' }),
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-host-shape-'),
+      leaseRegistry: registry,
+      hostShapeAllocator: failingRelease,
+    }),
+    (error) =>
+      error instanceof AppError &&
+      error.code === 'DEVICE_IN_USE' &&
+      error.details?.hostAllocationReleaseFailed === 'allocator unreachable',
+  );
+});

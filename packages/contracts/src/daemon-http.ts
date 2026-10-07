@@ -57,7 +57,7 @@ export function buildDaemonInstanceMismatchRpcResponse<Id>(
 
 export type DaemonHealthPayload = {
   ok: true;
-  service: 'agent-device-daemon' | 'agent-device-proxy' | 'agent-device-host';
+  service: 'agent-device-daemon' | 'agent-device-proxy' | typeof DAEMON_HOST_SERVICE;
   version: string;
   rpcProtocolVersion: number;
   instanceId?: string;
@@ -74,6 +74,8 @@ export type DaemonHealthPayload = {
  * local inventory identity (ADR 0021 §5). A client sends a shape only to a peer advertising it.
  */
 export const DAEMON_HOST_DEVICE_SHAPE_FEATURE = 'device-shape';
+/** The `service` a Host front-end reports, which a client reads to treat `--device` as a type. */
+export const DAEMON_HOST_SERVICE = 'agent-device-host';
 export type DaemonHealthFeature = typeof DAEMON_HOST_DEVICE_SHAPE_FEATURE;
 
 export function buildDaemonHealthPayload(

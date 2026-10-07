@@ -38,7 +38,7 @@ import {
   buildDaemonHealthPayload,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
-  type DaemonHealthFeature,
+  DAEMON_HOST_DEVICE_SHAPE_FEATURE,
   DAEMON_HTTP_TENANT_HEADER,
 } from '@agent-device/contracts/daemon-http';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -54,6 +54,7 @@ import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 import type { TenantSessionNamespace } from '../session-tenant-scope.ts';
 import { tryHandleHostAdminHttpRoute } from '../host-lease-http.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
+import type { HostShapeAllocator } from '../host-shape-allocation.ts';
 import { assertMacOsAppLeaseTenantMayReadDiagnostics } from '../macos-app-lease.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
@@ -590,8 +591,8 @@ export async function createDaemonHttpServer(options: {
    * rather than handed a daemon-host path.
    */
   resolveRequestDiagnosticsPath?: (ref: DiagnosticsRecordRef) => string;
-  /** Capabilities `/health` advertises; the Host lease side adds device-shape with its allocator. */
-  features?: readonly DaemonHealthFeature[];
+  /** The Host lease side's allocator; `/health` advertises device-shape exactly when it is set. */
+  hostShapeAllocator?: HostShapeAllocator;
 }): Promise<http.Server> {
   const instanceId = randomUUID();
   const hostArch = await readHostCpuArch();
@@ -611,7 +612,7 @@ export async function createDaemonHttpServer(options: {
             instanceId,
             hostArch,
             leaseBackends,
-            ...(options.features?.length ? { features: options.features } : {}),
+            ...(options.hostShapeAllocator ? { features: [DAEMON_HOST_DEVICE_SHAPE_FEATURE] } : {}),
           }),
         ),
       );

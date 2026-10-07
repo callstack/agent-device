@@ -12,6 +12,7 @@ import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import {
   leaseReleaseRequestFor,
+  normalizeAllocateLeaseRequest,
   normalizeLeaseBackend,
   type ReleaseLeaseRequest,
 } from '../lease-registry-scope.ts';
@@ -27,7 +28,13 @@ import {
   leaseScopeToReleaseRequest,
   type LeaseScope,
 } from '@agent-device/contracts/lease-scope';
-import { AppError, createRequestCanceledError, errorMessage } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  errorMessage,
+  normalizeError,
+  toAppErrorCode,
+} from '@agent-device/kernel/errors';
 import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { listDownloadableArtifacts } from '../artifact-tracking.ts';
@@ -184,8 +191,9 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
 }
 
 /**
- * A Host lease is always a fresh managed device (ADR 0021 §5): the allocator provisions it from
- * the shape first, and only then is the Host lease published with the device it bound.
+ * A Host lease is always a fresh managed device (ADR 0021 §5): the scope is validated first, the
+ * allocator provisions the device, and only then is the Host lease published with the device it
+ * bound. An allocation the lease cannot be published for is given back.
  */
 async function allocateHostShapeLease(
   args: LeaseHandlerArgs,
@@ -195,7 +203,7 @@ async function allocateHostShapeLease(
   const shape = readHostShapeRequest(args.req.flags);
   const allocator = args.hostShapeAllocator;
   if (!allocator) throw hostShapeAllocationUnavailable();
-  const runId = leaseScope.runId ?? '';
+  const { runId } = normalizeAllocateLeaseRequest(leaseScopeToAllocateRequest(leaseScope));
   const requestId = args.req.meta?.requestId;
   const { deviceKey } = await allocator.allocate({
     principal,
@@ -206,14 +214,32 @@ async function allocateHostShapeLease(
     signal: getRequestSignal(requestId) ?? new AbortController().signal,
     deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
   });
+  const giveBack = async (cause: unknown): Promise<never> => {
+    const released = await allocator.release({ principal, runId, deviceKey }).then(
+      () => undefined,
+      (releaseError: unknown) => releaseError,
+    );
+    if (released === undefined) throw cause;
+    const normalized = normalizeError(cause);
+    throw new AppError(
+      toAppErrorCode(normalized.code),
+      normalized.message,
+      {
+        ...normalized.details,
+        hostAllocationReleaseFailed: errorMessage(released),
+        hint: 'The provisioned device may stay held until its allocator lease expires.',
+      },
+      cause,
+    );
+  };
+  if (isRequestCanceled(requestId)) return await giveBack(createRequestCanceledError());
   try {
     const lease = args.leaseRegistry.allocateLease(
       leaseScopeToAllocateRequest({ ...leaseScope, deviceKey }),
     );
     return { ok: true, data: { lease } };
   } catch (error) {
-    await allocator.release({ principal, runId, deviceKey });
-    throw error;
+    return await giveBack(error);
   }
 }
 

@@ -1,4 +1,5 @@
 import {
+  DAEMON_HOST_SERVICE as HOST_SERVICE,
   DAEMON_HTTP_BASE_PATH,
   DAEMON_HTTP_PRINCIPAL_HEADER,
   DAEMON_HTTP_TENANT_HEADER,
@@ -15,7 +16,6 @@ import {
 } from './request-policy.ts';
 import type { HostServiceCredential } from './service-credential.ts';
 
-const HOST_SERVICE = 'agent-device-host';
 const HEALTH_PATHS: ReadonlySet<string> = new Set(['/health', `${DAEMON_HTTP_BASE_PATH}/health`]);
 
 /**

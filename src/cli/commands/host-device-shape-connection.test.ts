@@ -102,27 +102,58 @@ test('on a Host, --device sends the device type without resolving inventory', as
   expect(worker.allocations[0]).toMatchObject({ platform: 'ios', device: 'iPhone 16' });
   expect(worker.allocations[0]?.udid).toBeUndefined();
   expect(materialized.connection).toMatchObject({ deviceKey: 'ios:mobile:SIM-UDID-1' });
+  expect(materialized.flags).toMatchObject({ udid: 'SIM-UDID-1' });
+  expect(materialized.flags.device).toBeUndefined();
 });
 
-test('a Host that cannot allocate by shape is refused before any lease request', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
-  const daemonBaseUrl = await serveHealth(t, {
-    service: 'agent-device-host',
-    instanceId: 'host-2',
-    upstream: { service: 'agent-device-daemon', instanceId: 'daemon-2' },
-  });
-  const worker = recordingClient();
+const SHAPE_HOST = {
+  service: 'agent-device-host',
+  instanceId: 'host-2',
+  features: ['device-shape'],
+  upstream: { service: 'agent-device-daemon', instanceId: 'daemon-2' },
+};
 
-  await expect(
+test('a Host refuses what it cannot allocate before any lease request', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const shapeHost = await serveHealth(t, SHAPE_HOST);
+  const cases: Array<[string, string, Record<string, unknown>]> = [
+    ['host-shape-unsupported', await serveHealth(t, { ...SHAPE_HOST, features: [] }), {}],
+    ['host-unauthenticated', await serveHealth(t, { service: 'agent-device-host' }), {}],
+    ['host-shape-invalid', shapeHost, { udid: 'SIM-X' }],
+    ['host-shape-invalid', shapeHost, { device: undefined }],
+    ['host-shape-platform-required', shapeHost, { platform: undefined }],
+  ];
+  for (const [reason, daemonBaseUrl, override] of cases) {
+    const worker = recordingClient();
+    await expect(
+      materializeRemoteConnectionForCommand({
+        command: 'open',
+        positionals: ['com.example.app'],
+        flags: { ...workerFlags(daemonBaseUrl), ...override },
+        client: worker.client,
+      }),
+    ).rejects.toMatchObject({ details: { reason } });
+    expect(worker.allocations, reason).toHaveLength(0);
+    expect(worker.inventoryReads(), reason).toBe(0);
+  }
+});
+
+test('a session holding one Host device type refuses another', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const flags = workerFlags(await serveHealth(t, SHAPE_HOST));
+  const worker = recordingClient();
+  const open = (device: string) =>
     materializeRemoteConnectionForCommand({
       command: 'open',
       positionals: ['com.example.app'],
-      flags: workerFlags(daemonBaseUrl),
+      flags: { ...flags, device },
       client: worker.client,
-    }),
-  ).rejects.toMatchObject({ details: { reason: 'host-shape-unsupported' } });
-  expect(worker.allocations).toHaveLength(0);
-  expect(worker.inventoryReads()).toBe(0);
+    });
+
+  await open('iPhone 16');
+  await expect(open('iPad Pro')).rejects.toMatchObject({
+    details: { reason: 'host-shape-mismatch' },
+  });
 });
 
 test('plain proxy keeps resolving --device against remote inventory', async (t) => {
