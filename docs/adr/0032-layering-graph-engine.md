@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted (2026-10-07). Spike for #3278 (umbrella #3276), measured by the harness at `d9959f510`
-(production tree of `7dda0c2bf`). No rule moves; the harness is temporary ([Deletion](#deletion)).
+Accepted (2026-10-07). Spike for #3278 (umbrella #3276). Every measurement is pinned to `d9959f510`,
+whose production tree is `7dda0c2bf`'s; the harness lives only at that commit
+([Deletion](#deletion)). No rule moves.
 
 ## Rules at a glance
 
@@ -17,10 +18,13 @@ Accepted (2026-10-07). Spike for #3278 (umbrella #3276), measured by the harness
 
 ## Measured
 
-`scripts/layering/boundary-engine-spike.ts` produces the edge-set, parity, clean-tree and runtime
-numbers; the deletion table counts lines of the named code. The harness builds both engine configs
-from `TARGET_DAG_RANK` and the rule tables, runs only on exactly the tracked production tree (1,837
-files, 41 zones), and gives recorded R6 and R78 edges to each engine's known-violations baseline.
+The edge-set, parity, clean-tree and runtime numbers are the output of the spike harness run at
+`d9959f510`. Retrieve it with `git show d9959f510:scripts/layering/boundary-engine-spike.ts`, after
+`git fetch origin pull/3286/head` if the commit is not local; usage is in its header. It builds both
+engine configs from `TARGET_DAG_RANK` and the rule tables, runs only on exactly the tracked
+production tree (1,837 files, 41 zones), and gives recorded R6 and R78 edges to each engine's
+known-violations baseline. The deletion table and the `.fallowrc.json` field count are counts of
+files at the same commit.
 
 ### Edge-set diff against `resolveImportEdges`
 
@@ -30,17 +34,17 @@ files, 41 zones), and gives recorded R6 and R78 edges to each engine's known-vio
 | custom pairs missing | — | 0 | 0 |
 | extra pairs | — | 9 | the same 9 |
 | kind disagreement | — | 46 pairs | 0 on value vs type |
-| dynamic kind | 280 pairs | 234 pairs | not represented |
+| dynamic kind | yes | yes, 46 pairs mislabelled | not represented |
 
 The 9 extra pairs are `import('./x').T` type positions custom misses; both engines are right.
 
-The 3.1.1 cross-check missed 88 dynamic and type-only edges; 18.5 misses none but mislabels 46 pairs
-(33 dynamic → type, 8 dynamic+type → type, 5 dynamic+value → value, with tsc or swc): its
+The umbrella's 3.1.1 cross-check missed 88 dynamic and type-only edges; 18.5 misses none but
+mislabels 46 pairs (33 dynamic → type, 8 dynamic+type → type, 5 dynamic+value → value): its
 hardcoded `getDependencyUniqueKey` dedupes on `(specifier, moduleSystem, type-only flag)`, so
 `typeof import('./x').f` and `await import('./x')` keep whichever comes first.
 
-fallow's value-versus-type split matches custom exactly (6,136 runtime pairs each), with no dynamic
-kind. Its boundary check follows `export type *` barrels to the declaring module, so
+fallow's value-versus-type split matches custom on every pair, with no dynamic kind. Its boundary
+check follows `export type *` barrels to the declaring module: the import
 `src/commands/cli-runner.ts → src/agent-device-client.ts` counts as `commands → client`, one more R6
 finding. Clean tree: custom 0, depcruise 10 (3 R6 survivors, 7 recorded R78 edges), fallow 11.
 
@@ -107,8 +111,9 @@ Rule plus test lines a full migration would delete. The resolver and the R4/R5/R
 | shared | registry, imports, success line in `check.ts` | ≈25 | | |
 
 About 1,224 lines, half of them tests; a migration adds a generator like the harness's
-`depcruiseConfig` and helpers (122 lines). An exact-edge R6 baseline also changes policy: it rejects
-swapping one inversion for another within a pair, which the per-pair count ratchet admits.
+`depcruiseConfig` and helpers (122 lines at `d9959f510`). An exact-edge R6 baseline also changes
+policy: it rejects swapping one inversion for another within a pair, which the per-pair count
+ratchet admits.
 
 ## Decision
 
@@ -120,10 +125,10 @@ the custom graph:
   fail on stale entries, and needs `typescript@<7` or `@swc/core` beside TypeScript 7 (+1.6 s).
   Adopting it for four rules would delete about 430 lines and put two disagreeing import graphs
   behind one gate.
-- **fallow** is already a dependency, adds no measurable time (±0.3 s between runs), and has the
-  best stale gate. With no dynamic kind, R5's and R77's lazy-seam exemption becomes violations or
-  misses. Its boundary findings carry no rule id or hint, its rule packs skip files no entry point
-  reaches, and 3.x rejects the 73 `comment` fields in `.fallowrc.json`.
+- **fallow** is already a dependency, adds no measurable time, and has the best stale gate. With no
+  dynamic kind, R5's and R77's lazy-seam exemption becomes violations or misses. Its boundary
+  findings carry no rule id or hint, its rule packs skip files no entry point reaches, and 3.x
+  rejects the 73 `comment` fields in `.fallowrc.json`.
 
 ## Revisit triggers
 
@@ -134,6 +139,9 @@ the custom graph:
 
 ## Deletion
 
-`scripts/layering/boundary-engine-spike.ts` is not a gate, and nothing keeps it compiling. The
-change that evaluates a revisit trigger re-runs it, updates the tables here, and deletes it together
-with any migrated rule's code from the deletion table.
+The harness is not in the tree. It imports internal symbols from six layering modules (`check.ts`,
+`model.ts`, `package-boundaries.ts`, `ratchet-reference.ts`, `apple-runner-host-port-policy.ts`,
+`tracked-sources.ts`), and no gate would keep it compiling: `tsconfig.json` does not include
+`scripts/layering/`, and fallow ignores it. The change that evaluates a revisit trigger retrieves
+the harness from `d9959f510`, ports it to the internals of its own tree, re-runs it, updates the
+tables here, and deletes any migrated rule's code listed in the deletion table.
