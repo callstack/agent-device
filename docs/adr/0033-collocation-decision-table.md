@@ -121,8 +121,9 @@ already owns the operations behind the vocabulary.
 `platform-runtime` rank 4, …) while leaving the files physically in place. Per the maintainer
 design decision, that reclassification is **not** completed collocation: the physical moves under
 #3294 (child of #3276) replace each file's row with folder-derived ownership.
-`daemon-diagnostics-scope.ts` has moved into `src/daemon-contracts/`; `runtime-command-surface.ts`
-and `runtime-factory.ts` remain outstanding. The other rows below are keeps: the
+`daemon-diagnostics-scope.ts` has moved into `src/daemon-contracts/`; the runtime assembly pair
+`runtime-command-surface.ts` / `runtime-factory.ts` has moved into `src/command-runtime/`.
+The other rows below are keeps: the
 daemon ⇄ client shared files (`daemon-policy-file.ts`, `provider-credential-fingerprint.ts`,
 `request-progress-protocol.ts`) trace to #2559, which relocated the shared contracts **to the
 process root** so the client stops importing `src/daemon/` at all; R78 keeps any client→daemon
@@ -143,8 +144,8 @@ constrain a relocation, they are not independent proof the placement is optimal.
 | `src/provider-credential-fingerprint.ts` | keep | Daemon ⇄ client shared contract from the same #2559 decision as `daemon-policy-file.ts`; #3288 declares its zone beside the provider composition that reads the credentials it fingerprints. |
 | `src/provider-limrun-runtime.ts` | keep | Proposed → provider-limrun, but there is no seam: the class's constructor self-builds the root dependency factory (`src/sdk/limrun-runtime-dependencies.ts`), which is the ADR 0019 composition seam — it loads the root's adb-host binder, core Android interactor, and platform-runtime app-state helpers that the package must not import. Moving the class means moving that composition, which is design, not a move. |
 | `src/request-progress-protocol.ts` | keep | Daemon ⇄ client shared contract from the same #2559 decision — the client reads it statically (`daemon-client-progress.ts`) and the server through `src/daemon/server/`, so only #2559's shared-placement boundary and the wire-compat ledgers pin it; declared `daemon-contracts` by #3288. Contracts was considered and R18 keeps contracts free of envelope validation mechanics. |
-| `src/runtime-command-surface.ts` | move (outstanding, #3294) | Confirmed as an outstanding physical move, not reconsidered. Importers: `src/runtime.ts` (static) and daemon runtime modules; #3288's `command-runtime` assignment classifies it only — #3294 owns the physical move and the `ROOT_MODULE_ZONES` row deletion. |
-| `src/runtime-factory.ts` | move (outstanding, #3294) | Same: statically imported by `src/runtime.ts` and two daemon modules; outstanding physical move tracked by #3294. |
+| `src/runtime-command-surface.ts` | moved → `src/command-runtime/runtime-command-surface.ts` ([#3299](https://github.com/callstack/agent-device/pull/3299)) | Physical move landed with `runtime-factory.ts` as one assembly group: the command-surface binding sits beside the factory it composes, under the folder that derives its `command-runtime` zone, so `topFolder` replaces the per-file `ROOT_MODULE_ZONES` row. |
+| `src/runtime-factory.ts` | moved → `src/command-runtime/runtime-factory.ts` ([#3299](https://github.com/callstack/agent-device/pull/3299)) | Physical move landed: the runtime assembly now lives under the folder that derives its `command-runtime` zone, with the same row deletion through folder-derived ownership. |
 
 ### sdk
 
@@ -167,10 +168,11 @@ files have no seam (published facade, public-type collision, root dependency fac
 
 - Physical root-pass moves under [#3294](https://github.com/callstack/agent-device/issues/3294)
   (child of #3276): `daemon-diagnostics-scope.ts` has moved into `src/daemon-contracts/`
-  ([#3297](https://github.com/callstack/agent-device/pull/3297)); `runtime-command-surface.ts` and
-  `runtime-factory.ts` remain **outstanding** under #3294. The folder derives its zone, replacing
-  the moved file's `ROOT_MODULE_ZONES` row; #3288's zone assignment alone was classification, and
-  this move completes that file's collocation.
+  ([#3297](https://github.com/callstack/agent-device/pull/3297)); the runtime assembly pair
+  `runtime-command-surface.ts` / `runtime-factory.ts` is collocated in `src/command-runtime/`
+  ([#3299](https://github.com/callstack/agent-device/pull/3299)). Each folder derives its zone,
+  replacing the moved files' `ROOT_MODULE_ZONES` rows; #3288's zone assignments alone were
+  classification, and each landed move completes its own file's collocation.
 
 ## Refuted alternatives
 
