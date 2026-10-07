@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest';
+import { test, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveInstallSource } from '../install-source-resolution.ts';
@@ -17,13 +17,13 @@ function makeRequest(meta?: DaemonRequest['meta']): DaemonRequest {
   };
 }
 
-test('resolveInstallSource uses uploaded artifact path for uploaded path sources', () => {
+test('resolveInstallSource uses uploaded artifact path for uploaded path sources', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-install-source-upload-');
   const artifactPath = path.join(tempRoot, 'Sample.apk');
   fs.writeFileSync(artifactPath, 'apk-binary');
   const uploadedArtifactId = trackUploadedArtifact({ artifactPath, tempDir: tempRoot });
 
-  const resolved = resolveInstallSource(
+  const resolved = await resolveInstallSource(
     makeRequest({
       uploadedArtifactId,
       installSource: {
@@ -42,8 +42,8 @@ test('resolveInstallSource uses uploaded artifact path for uploaded path sources
   expect(fs.existsSync(tempRoot)).toBe(false);
 });
 
-test('resolveInstallSource leaves URL sources unchanged even when upload metadata exists', () => {
-  const resolved = resolveInstallSource(
+test('resolveInstallSource leaves URL sources unchanged even when upload metadata exists', async () => {
+  const resolved = await resolveInstallSource(
     makeRequest({
       uploadedArtifactId: 'upload-123',
       installSource: {
@@ -62,28 +62,33 @@ test('resolveInstallSource leaves URL sources unchanged even when upload metadat
   resolved.cleanup();
 });
 
-test('resolveInstallSource rejects GitHub Actions artifact sources on the local daemon', () => {
-  expect(() =>
-    resolveInstallSource(
-      makeRequest({
-        installSource: {
-          kind: 'github-actions-artifact',
-          owner: 'acme',
-          repo: 'mobile',
-          artifactId: 1234567890,
-        },
-      }),
-    ),
-  ).toThrow(/compatible remote daemon/i);
+test('a GitHub Actions artifact needs the daemon host token, never one from the request', async () => {
+  vi.stubEnv('AGENT_DEVICE_GITHUB_TOKEN', '');
+  try {
+    await expect(
+      resolveInstallSource(
+        makeRequest({
+          installSource: {
+            kind: 'github-actions-artifact',
+            owner: 'acme',
+            repo: 'mobile',
+            artifactId: 1234567890,
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'github-token-missing' } });
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
-test('resolveInstallSource refuses an unknown upload id rather than reading the wire path', () => {
-  expect(() =>
+test('resolveInstallSource refuses an unknown upload id rather than reading the wire path', async () => {
+  await expect(
     resolveInstallSource(
       makeRequest({
         uploadedArtifactId: 'not-a-real-upload',
         installSource: { kind: 'path', path: '/etc/passwd' },
       }),
     ),
-  ).toThrow();
+  ).rejects.toThrow();
 });

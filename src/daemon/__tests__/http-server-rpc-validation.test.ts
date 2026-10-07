@@ -265,7 +265,7 @@ test('remote HTTP accepts an uploaded path artifact without resolving the client
     env: remoteHttpEnvironment(hookPath),
     handleRequest: async (request): Promise<DaemonResponse> => {
       received.push(request);
-      const resolved = resolveInstallSource(request);
+      const resolved = await resolveInstallSource(request);
       try {
         assert.equal(resolved.source.kind, 'path');
         assert.equal(resolved.source.path, artifactPath);

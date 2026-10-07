@@ -452,7 +452,7 @@ If the daemon cannot determine installed app identity, the request fails instead
 - URL sources from any public host may point directly to an installable, including a bare iOS `.ipa`, or to a `.zip`, `.tar`, `.tar.gz`, or `.tgz` archive containing exactly one.
 - For existing reachable artifact URLs, use `source: { kind: 'url', url: ... }`.
 - For local artifacts, use `source: { kind: 'path', path: ... }` or the CLI `install`/`reinstall` commands.
-- For compatible remote daemons that resolve CI artifacts server-side, pass a GitHub Actions artifact source:
+- To install a CI build the daemon resolves server-side with its `AGENT_DEVICE_GITHUB_TOKEN`, pass a GitHub Actions artifact source:
 
 ```ts
 await client.apps.installFromSource({
@@ -466,7 +466,7 @@ await client.apps.installFromSource({
 });
 ```
 
-Remote daemons may also support `{ kind: 'github-actions-artifact', owner, repo, artifactName }` or `{ kind: 'github-actions-artifact', owner, repo, runId, artifactName }`. The local client preserves these payloads and does not perform GitHub authentication or artifact download.
+The daemon also accepts `{ kind: 'github-actions-artifact', owner, repo, artifactName }` (the newest artifact with that name) or `{ kind: 'github-actions-artifact', owner, repo, runId, artifactName }`. The client preserves these payloads and never performs GitHub authentication or artifact download; a daemon without `AGENT_DEVICE_GITHUB_TOKEN` refuses them with `github-token-missing`.
 
 Android `.apk` and `.aab` URL sources resolve package identity from the downloaded install artifact. Archive URLs may contain one installable `.apk`, `.aab`, `.ipa`, or iOS `.app`, including inside nested archives.
 

@@ -53,11 +53,11 @@ export async function handleInstallFromSourceDeploymentCommand(params: {
   const { req, sessionName, sessionStore } = params;
   const ref = sessionStore.lookup(sessionName);
   const session = ref?.session;
-  let resolvedSource: ReturnType<typeof resolveInstallSource> | undefined;
+  let resolvedSource: Awaited<ReturnType<typeof resolveInstallSource>> | undefined;
   let materialized: MaterializedAppSource | undefined;
   let retained: RetainedMaterializedPaths | undefined;
   try {
-    resolvedSource = resolveInstallSource(req);
+    resolvedSource = await resolveInstallSource(req);
     const retention = resolveRetention(req);
     const device = await resolveInstallDevice(session, req.flags);
     const facts = await requireRuntimeFacts(params.inspectFacts)(device);

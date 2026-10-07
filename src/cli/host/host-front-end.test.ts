@@ -256,3 +256,26 @@ test('anonymous health is minimal and authenticated health names the Host', asyn
   assert.equal(authenticated.service, 'agent-device-host');
   assert.equal(authenticated.upstream?.service, 'agent-device-daemon');
 });
+
+test('URL and GitHub Actions artifact install sources reach the daemon through Host', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const host = await startHostOverDaemon(t);
+
+  const sources = [
+    { kind: 'url', url: 'https://ci.example.test/app.zip' },
+    { kind: 'github-actions-artifact', owner: 'acme', repo: 'mobile', artifactName: 'ios-sim' },
+  ];
+  for (const source of sources) {
+    const response = await host.rpc('agent_device.install_from_source', {
+      platform: 'ios',
+      source,
+    });
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+  }
+
+  assert.deepEqual(
+    host.admitted.map((request) => request.meta?.installSource?.kind),
+    ['url', 'github-actions-artifact'],
+  );
+  assert.ok(host.admitted.every((request) => request.internal?.publicNetworkOnly === true));
+});

@@ -42,6 +42,15 @@ Requesting a device:
   A Host whose daemon has no device allocator refuses this with host-shape-unsupported before
   any lease is requested.
 
+Installing a verification build:
+  agent-device install-from-source https://ci.example.com/app.zip --platform ios
+  agent-device install-from-source --github-actions-artifact acme/mobile:ios-sim --platform ios
+  The daemon resolves GitHub Actions artifacts, private ones included, with
+  AGENT_DEVICE_GITHUB_TOKEN from its own environment: export it for the Host process, which
+  passes it to the daemon it starts and refuses a running daemon that holds another token.
+  AGENT_DEVICE_GITHUB_REPOSITORIES=owner/repo,... limits which repositories it reads.
+  Workers never send a GitHub token or a Host path.
+
 Worker:
   agent-device connect proxy --daemon-base-url https://host.example:8443/agent-device --daemon-auth-token <token>
 

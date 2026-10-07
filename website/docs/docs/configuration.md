@@ -99,7 +99,7 @@ user- or explicit-config only:
 
 Project config can use project-safe command defaults such as `snapshotDepth`, `snapshotScope`, `screenshotScale`, `activity`, `relaunch`, `shutdown`, `fps`, and `quality`. Local path and executable-module selectors such as `stepsFile` and `reporter` are user- or explicit-config only.
 
-`install-from-source` can read a structured GitHub Actions artifact source from user or explicit config when a compatible remote daemon resolves CI artifacts server-side. Repository config rejects this operator-controlled source:
+`install-from-source` can read a structured GitHub Actions artifact source from user or explicit config for the daemon to resolve server-side with its `AGENT_DEVICE_GITHUB_TOKEN`. Repository config rejects this operator-controlled source:
 
 ```json
 {

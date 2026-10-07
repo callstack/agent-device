@@ -1,5 +1,8 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonInstallSource, LocalInstallSource } from '@agent-device/kernel/contracts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
+import { readHostEnvironmentVariable } from '@agent-device/host-kit/process';
+import { resolveGitHubActionsArtifactSource } from '@agent-device/provision-kit/github-actions-artifact-source';
 import { cleanupUploadedArtifact, prepareUploadedArtifact } from './artifact-tracking.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 
@@ -10,7 +13,10 @@ function assertUnsupportedInstallSource(source: never): never {
   );
 }
 
-function requireInstallSource(req: DaemonRequest): LocalInstallSource {
+/** Read from the daemon's own environment only; a request never carries a GitHub credential. */
+const GITHUB_TOKEN_ENV = 'AGENT_DEVICE_GITHUB_TOKEN';
+
+async function requireInstallSource(req: DaemonRequest): Promise<LocalInstallSource> {
   const source = req.meta?.installSource;
   if (!source) {
     throw new AppError('INVALID_ARGS', 'install_from_source requires a source payload');
@@ -33,20 +39,20 @@ function requireInstallSource(req: DaemonRequest): LocalInstallSource {
       }
       return source;
     case 'github-actions-artifact':
-      throw new AppError(
-        'UNSUPPORTED_OPERATION',
-        'install_from_source github-actions-artifact sources require a compatible remote daemon',
-      );
+      return await resolveGitHubActionsArtifactSource(source, {
+        token: readHostEnvironmentVariable(GITHUB_TOKEN_ENV),
+        signal: getRequestSignal(req.meta?.requestId) ?? new AbortController().signal,
+      });
     default:
       assertUnsupportedInstallSource(source);
   }
 }
 
-export function resolveInstallSource(req: DaemonRequest): {
+export async function resolveInstallSource(req: DaemonRequest): Promise<{
   source: LocalInstallSource;
   cleanup: () => void;
-} {
-  const source = requireInstallSource(req);
+}> {
+  const source = await requireInstallSource(req);
   const uploadedArtifactId = req.meta?.uploadedArtifactId;
   if (!uploadedArtifactId || source.kind !== 'path') {
     return { source, cleanup: () => {} };

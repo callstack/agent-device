@@ -694,12 +694,12 @@ agent-device install-from-source --github-actions-artifact thymikee/RNCLI83:6635
 ```
 
 - `install-from-source <url>` installs from a URL source through the normal daemon artifact flow.
-- `install-from-source --github-actions-artifact <owner/repo:artifact>` passes a typed GitHub Actions artifact source through to a compatible remote daemon. Numeric artifacts are sent as `artifactId`; non-numeric artifacts are sent as `artifactName`.
+- `install-from-source --github-actions-artifact <owner/repo:artifact>` passes a typed GitHub Actions artifact source to the daemon, which resolves it with `AGENT_DEVICE_GITHUB_TOKEN` from its own environment. Numeric artifacts are sent as `artifactId`; non-numeric artifacts are sent as `artifactName` and resolve to the newest artifact with that name. The client never sends a GitHub token.
 - Repeat `--header <name:value>` for authenticated or signed artifact requests.
 - Supports the same device coverage as `install`: Android devices/emulators, iOS simulators, and CoreDevice-backed iOS physical devices.
 - Use `install` or `reinstall` for local `.apk`, `.aab`, `.app`, and `.ipa` paths; use `install-from-source` when the artifact already exists at a URL reachable by the daemon.
 - Direct Android URL sources may be `.apk` or `.aab`.
-- URLs from any public host may resolve to archives containing one installable `.apk`, `.aab`, `.ipa`, or iOS `.app`. Prefer `--github-actions-artifact` for GitHub Actions artifacts that a compatible remote daemon can resolve with its own credentials.
+- URLs from any public host may resolve to archives containing one installable `.apk`, `.aab`, `.ipa`, or iOS `.app`. Prefer `--github-actions-artifact` for GitHub Actions artifacts, which the daemon resolves with its own credentials.
 - Downloads resolve and approve every redirect destination, pin each connection to the approved address, reject HTTPS downgrades, and follow at most five redirects. Sensitive caller headers are not forwarded across origins.
 - Downloaded artifacts are limited to 2 GiB compressed. Archive materialization is limited to 4 GiB expanded data, 100,000 entries, and three nested archive layers; links and special archive entries are rejected.
 - Standard `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` configuration is honored without delegating destination DNS resolution to the proxy.
