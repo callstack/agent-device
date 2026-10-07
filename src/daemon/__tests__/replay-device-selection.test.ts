@@ -2,6 +2,7 @@ import { test, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseReplayInput } from '@agent-device/ad-script';
+import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import { buildReplayTargetDeviceResolution } from '../replay-device-selection.ts';
 import {
   appTargetResolutionOptions,
@@ -63,6 +64,36 @@ test('native replay uses its authored Android runtime setting without an iOS app
   // the authored platform, and no iOS app-probe options.
   expect(resolution?.flags.platform).toBe('android');
   expect(resolution?.options).toBeUndefined();
+});
+
+test('a replay whose wire bundle has a malformed entry stays advisory', async () => {
+  // The HTTP boundary validates `flags` only as an object, so a remote caller
+  // can deliver a bundle without a string `entry`. #1802 keeps lock binding
+  // advisory: the probe must fall back to normal device resolution, and the
+  // replay handler stays the one to reject the request.
+  const malformedBundles = [
+    // A missing entry fails the bundle read itself.
+    { entry: undefined, files: {} },
+    // A non-string entry survives the read — `files` is keyed by the coerced
+    // string — and reaches format resolution, where `path.extname` rejects it.
+    { entry: 42, files: { '42': 'open demo://checkout\n' } },
+  ] as unknown as ReplayScriptSourceBundle[];
+
+  for (const bundle of malformedBundles) {
+    await expect(
+      buildReplayTargetDeviceResolution({
+        token: 'test-token',
+        session: 'default',
+        command: 'replay',
+        positionals: [],
+        flags: {
+          replayBackend: 'maestro',
+          replayScriptSource: bundle,
+        },
+        meta: { cwd: mkdtempForTestSync('agent-device-replay-device-selection-') },
+      }),
+    ).resolves.toBeUndefined();
+  }
 });
 
 test('a Maestro flow pre-binds an iOS replay to its static appId', async () => {

@@ -34,11 +34,12 @@ export async function buildReplayTargetDeviceResolution(
   const bundle = req.flags?.replayScriptSource;
   if (!bundle) return undefined;
 
-  const resolved = bundle.entry;
-  if (resolveReplayFormat(resolved, req.flags?.replayBackend) === 'maestro') {
-    const { inspectMaestroFlow } = await import('@agent-device/maestro');
-    return readAdvisoryResolution(() => {
-      const flow = inspectMaestroFlow(readReplayScriptSourceFile(bundle, resolved), resolved);
+  return readAdvisoryResolution(async () => {
+    const resolved = bundle.entry;
+    const source = readReplayScriptSourceFile(bundle, resolved);
+    if (resolveReplayFormat(resolved, req.flags?.replayBackend) === 'maestro') {
+      const { inspectMaestroFlow } = await import('@agent-device/maestro');
+      const flow = inspectMaestroFlow(source, resolved);
       return {
         flags: req.flags ?? {},
         options: buildMaestroReplayTargetDeviceResolutionOptions(
@@ -46,10 +47,8 @@ export async function buildReplayTargetDeviceResolution(
           req.flags?.platform,
         ),
       };
-    });
-  }
-  return readAdvisoryResolution(() => {
-    const parsed = parseReplayInput(readReplayScriptSourceFile(bundle, resolved), req.flags);
+    }
+    const parsed = parseReplayInput(source, req.flags);
     const selection = readScriptReplaySelection(parsed.actions);
     if (!selection.appTarget) return undefined;
     const scriptFlags = buildReplayScriptPlatformFlags(req.flags, parsed.actions);
@@ -62,14 +61,16 @@ export async function buildReplayTargetDeviceResolution(
   });
 }
 
-function readAdvisoryResolution(
-  read: () => ReplayTargetDeviceResolution | undefined,
-): ReplayTargetDeviceResolution | undefined {
+async function readAdvisoryResolution(
+  read: () => Promise<ReplayTargetDeviceResolution | undefined>,
+): Promise<ReplayTargetDeviceResolution | undefined> {
   try {
-    return read();
+    return await read();
   } catch {
     // Parsing and validation stay in the replay handler. Lock binding is only
-    // advisory, so an unreadable/invalid plan must not mask its real error.
+    // advisory, so an unreadable/invalid plan must not mask its real error. The
+    // whole probe sits behind this guard, including the wire bundle's entry and
+    // format, which the request boundary only checks as an object.
     return undefined;
   }
 }
