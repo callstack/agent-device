@@ -61,7 +61,7 @@ Use [AI Agent Setup](/docs/agent-setup) for Cursor, Codex, Claude Code, Windsurf
 
 It complements scripted test frameworks such as Appium, Maestro, Detox, XCTest, and Espresso. Keep those for stable human-authored coverage. Use `agent-device` when an agent needs to explore, reproduce, debug, profile, collect evidence, or record a replay from live app behavior.
 
-The `agent-device mcp` server exposes installed `agent-device` commands as structured MCP tools, so MCP clients can drive devices without a terminal. MCP tools run through the same daemon as the CLI.
+The `agent-device mcp` server exposes installed `agent-device` commands as structured MCP tools, so MCP clients can drive devices directly. MCP tools use the same daemon client as the CLI.
 
 ## Next steps
 

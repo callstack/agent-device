@@ -63,7 +63,7 @@ Set `AGENT_DEVICE_NO_UPDATE_NOTIFIER=1` to disable the notice.
 
 ## Agent clients and MCP
 
-The `agent-device mcp` server exposes installed `agent-device` commands as structured MCP tools. MCP tools run through the same daemon as the CLI.
+The `agent-device mcp` server exposes installed `agent-device` commands as structured MCP tools. MCP tools use the same daemon client as the CLI.
 
 ```bash
 agent-device mcp

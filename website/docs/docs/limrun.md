@@ -67,7 +67,7 @@ agent-device close
 agent-device disconnect
 ```
 
-On Android, agent-device connects to Limrun over an ADB tunnel. Snapshots, installs, and port reverse work as on a local emulator, including the usual reverse setup for a local Metro server.
+On Android, agent-device connects to Limrun over an ADB tunnel. Helper-backed snapshots, installs, and port reverse are available, including the usual reverse setup for a local Metro server.
 
 On iOS, agent-device supports app lifecycle commands, snapshots, screenshots, taps, text input, scrolling, the home button, clipboard read and write, and app installation. `open --launch-args` relaunches the app with those arguments through simctl. iOS cannot reverse a remote device port to a local host port, so for Metro or React DevTools use a publicly reachable HTTPS endpoint or bridge URL instead of a local-only address.
 

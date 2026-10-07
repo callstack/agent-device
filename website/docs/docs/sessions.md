@@ -34,7 +34,7 @@ Each session artifact directory contains:
 - `runner.log` - Apple runner and `xcodebuild` build/start output for this session.
 - `app.log` - app/device logs when `logs start` or `logs clear --restart` is active.
 
-`events.ndjson` leaves out private content. It keeps command names, status,
+`events.ndjson` leaves out user-entered content. It keeps command names, status,
 durations, bounded device/app inventory previews, lifecycle outcomes, artifact basenames, and
 structural action details such as scroll distance/direction, safe refs, and coordinates.
 User-entered text, clipboard contents, push/event payloads, selector values, free-form

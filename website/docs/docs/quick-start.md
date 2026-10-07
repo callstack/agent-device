@@ -65,7 +65,7 @@ agent-device press @e3
 agent-device type " more" --delay-ms 80  # Append into the already focused field
 agent-device get text @e1                # Get text content
 agent-device screenshot page.png         # Save to a specific path
-agent-device install com.example.app ./build/app.apk     # Install over the existing app
+agent-device install com.example.app ./build/app.apk     # Install the app, keeping app data where supported
 agent-device install-from-source https://example.com/builds/app.apk --platform android
 agent-device reinstall com.example.app ./build/app.apk   # Uninstall, then install with fresh state
 agent-device shutdown --platform android --device Pixel_9_Pro_XL
@@ -80,7 +80,7 @@ agent-device close
 - `.aab` requires `bundletool` in `PATH`, or `AGENT_DEVICE_BUNDLETOOL_JAR=<absolute-path-to-bundletool-all.jar>` with `java` in `PATH`.
 - `.aab` installs use bundletool `build-apks --mode universal`.
 - `.ipa` installs extract `Payload/*.app`. If the archive contains several app bundles, `<app>` selects one by bundle ID or bundle name.
-- Use `install-from-source` to install from a URL: a direct Android `.apk`/`.aab` or iOS `.ipa` link, or an archive containing one installable artifact. For a GitHub Actions artifact, use `install-from-source --github-actions-artifact <owner/repo:artifact>`.
+- Use `install-from-source` to install from a URL: a direct Android `.apk`/`.aab` or iOS `.ipa` link, or an archive containing one installable artifact. For a GitHub Actions artifact that a remote daemon resolves, use `install-from-source --github-actions-artifact <owner/repo:artifact>`.
 
 If `open` fails because no simulator, emulator, or device is booted, run `boot --platform ios|android` and retry.
 If `open` fails because the app ID is wrong or missing, run `apps` and retry with the package name or bundle ID it lists.

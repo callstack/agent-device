@@ -7,7 +7,7 @@ description: Configure Cursor, Codex, Claude Code, Windsurf, Cline, Goose, iOS S
 
 Set up Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent to drive mobile, TV, desktop, and web apps with `agent-device`, through skills, project rules, or MCP.
 
-In short: install the CLI, let the agent start with the requested app, and have it read the installed CLI help only for specialized work or when a command is unclear. MCP tools run through the same daemon as the CLI.
+In short: install the CLI, let the agent start with the requested app, and have it read the installed CLI help only for specialized work or when a command is unclear. MCP tools use the same daemon client as the CLI.
 
 ## Install the CLI
 

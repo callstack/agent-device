@@ -42,7 +42,7 @@ If a stale input session drops a `fill` commit, `agent-device` rebinds the helpe
 
 If the helper cannot be installed (locked-down managed devices, some cloud providers), text entry falls back to ASCII-only `adb shell input text`, and non-ASCII `fill` and `type` report that they cannot enter the text.
 
-## Android: first snapshot times out waiting on an OEM install dialog
+## Android: first helper install can wait on an OEM install dialog
 
 Some OEM builds make the first install of a package go through the system package installer, and `adb install` waits until someone confirms it on the device screen. This applies to both `agent-device` helper APKs (the snapshot helper and the test IME), once per package. On ColorOS (reported on an OPPO Find N6), the first install needs two taps: confirm the install, then dismiss the completion screen. Later installs of the same package are silent.
 
