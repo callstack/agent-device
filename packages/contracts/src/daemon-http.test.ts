@@ -68,19 +68,20 @@ test('buildDaemonHealthPayload takes the version from its caller and keeps the p
   );
 });
 
-test('the daemon recognizes every temp path a remote client names', () => {
-  assert.equal(
-    isRemoteTempArtifactPath(
-      buildRemoteTempArtifactPath('screenshot', 'png'),
-      'screenshot',
-      '.png',
-    ),
-    true,
-  );
-  assert.equal(
-    isRemoteTempArtifactPath(buildRemoteTempArtifactPath('recording', '.mp4'), 'recording', '.mp4'),
-    true,
-  );
+test('the daemon recognizes every temp path a remote client names, however the extension is spelled', () => {
+  for (const built of ['png', '.png']) {
+    for (const checked of ['png', '.png']) {
+      assert.equal(
+        isRemoteTempArtifactPath(
+          buildRemoteTempArtifactPath('screenshot', built),
+          'screenshot',
+          checked,
+        ),
+        true,
+        `built with '${built}', checked with '${checked}'`,
+      );
+    }
+  }
 });
 
 test('a temp path of another prefix, a directory, or an escape is not a remote temp artifact', () => {

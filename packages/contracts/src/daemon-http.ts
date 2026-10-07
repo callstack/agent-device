@@ -93,8 +93,10 @@ const REMOTE_TEMP_DIR = '/tmp';
 
 /** The daemon-host temp path a remote client names for an artifact it downloads afterwards. */
 export function buildRemoteTempArtifactPath(prefix: string, extension: string): string {
-  const safeExtension = extension.startsWith('.') ? extension : `.${extension}`;
-  return path.posix.join(REMOTE_TEMP_DIR, `${remoteTempArtifactStem(prefix)}${safeExtension}`);
+  return path.posix.join(
+    REMOTE_TEMP_DIR,
+    `${remoteTempArtifactStem(prefix)}${dottedExtension(extension)}`,
+  );
 }
 
 /** A directory temp path — unlike `buildRemoteTempArtifactPath`, no extension is ever appended. */
@@ -108,12 +110,17 @@ export function isRemoteTempArtifactPath(
   prefix: string,
   extension: string,
 ): boolean {
-  const stem = path.posix.basename(value, extension);
+  const dotted = dottedExtension(extension);
+  const stem = path.posix.basename(value, dotted);
   return (
-    value === path.posix.join(REMOTE_TEMP_DIR, `${stem}${extension}`) &&
+    value === path.posix.join(REMOTE_TEMP_DIR, `${stem}${dotted}`) &&
     stem.startsWith(`agent-device-${prefix}-`) &&
     /^\d+-[a-z0-9]+$/.test(stem.slice(`agent-device-${prefix}-`.length))
   );
+}
+
+function dottedExtension(extension: string): string {
+  return extension.startsWith('.') ? extension : `.${extension}`;
 }
 
 function remoteTempArtifactStem(prefix: string): string {
