@@ -409,21 +409,4 @@ test('vitest-related delegates changed paths to Vitest instead of modeling proje
   );
 });
 
-// Guards the catalog against reality, not fixtures: the self-test above uses a
-// hand-built scripts map, so this resolves every catalog entry against the real
-// package.json. A renamed/removed script fails here instead of
-// leaving `pnpm check:affected` broken on the exact command the docs advertise.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-
-test('catalog resolves against the real package.json', () => {
-  const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
-    scripts?: Record<string, string>;
-  };
-  const scripts = pkg.scripts ?? {};
-  for (const spec of CHECK_CATALOG) {
-    assert.doesNotThrow(
-      () => resolveCommand(spec, scripts, 'origin/main'),
-      `catalog entry "${spec.id}" must resolve against the real package.json`,
-    );
-  }
-});

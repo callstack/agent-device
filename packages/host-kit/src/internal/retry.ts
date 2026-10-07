@@ -224,7 +224,7 @@ function computeDelay(base: number, max: number, jitter: number, attempt: number
   return Math.max(0, exp + (Math.random() * 2 - 1) * jitterAmount);
 }
 
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal?.aborted) {
       resolve();

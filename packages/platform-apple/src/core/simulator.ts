@@ -56,10 +56,6 @@ export function markSimulatorBooted(device: DeviceInfo): void {
   simulatorBootedMemo.set(simulatorBootedMemoKey(device), true);
 }
 
-function clearSimulatorBootedMemo(device: DeviceInfo): void {
-  simulatorBootedMemo.delete(simulatorBootedMemoKey(device));
-}
-
 export function requireSimulatorDevice(device: DeviceInfo, command: string): void {
   if (device.kind !== 'simulator') {
     throw new AppError('UNSUPPORTED_OPERATION', `${command} is only supported on iOS simulators`);
@@ -207,26 +203,6 @@ export async function ensureBootedSimulator(
 
   markSimulatorBooted(device);
   await openIosSimulatorApp({ signal: options.signal });
-}
-
-export async function shutdownSimulator(
-  device: DeviceInfo,
-  signal?: AbortSignal,
-): Promise<{
-  success: boolean;
-  exitCode: number;
-  stdout: string;
-  stderr: string;
-}> {
-  clearSimulatorBootedMemo(device);
-  const args = buildSimctlArgsForDevice(device, ['shutdown', device.id]);
-  const result = await runXcrun(args, { allowFailure: true, timeoutMs: 15_000, signal });
-  return {
-    success: result.exitCode === 0,
-    exitCode: result.exitCode,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
 }
 
 async function getSimulatorState(device: DeviceInfo, signal?: AbortSignal): Promise<string | null> {

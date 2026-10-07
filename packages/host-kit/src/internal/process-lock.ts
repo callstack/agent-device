@@ -10,7 +10,7 @@ import {
   ownerIdentityMatches,
   type OwnerLiveness,
 } from './owner-identity.ts';
-import { sleep } from './timeouts.ts';
+import { sleep } from './retry.ts';
 
 const OWNER_FILE_NAME = 'owner.json';
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000;

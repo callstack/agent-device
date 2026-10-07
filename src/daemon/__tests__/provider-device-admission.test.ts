@@ -1,22 +1,15 @@
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, expect, test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   installProviderDeviceAdmission,
   isActiveProviderDevice,
-  providerDeviceAdmission,
 } from '../provider-device-admission.ts';
 
 const providerDevice = { id: 'provider-1', name: 'Cloud iPhone' } as unknown as DeviceInfo;
 const localDevice = { id: 'local-1', name: 'iPhone 16' } as unknown as DeviceInfo;
 
-let previous = providerDeviceAdmission();
-
-beforeEach(() => {
-  previous = providerDeviceAdmission();
-});
-
 afterEach(() => {
-  installProviderDeviceAdmission(previous);
+  installProviderDeviceAdmission({ isActive: () => false });
 });
 
 test('an un-composed process treats every device as local', () => {

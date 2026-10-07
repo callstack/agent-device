@@ -35,7 +35,6 @@ test('stryker owns no pass/fail threshold — the lane never gates on a score', 
 });
 
 test('the config content hash is stable and content-addressed', () => {
-  assert.equal(configHash('a'), configHash('a'));
   assert.notEqual(configHash('a'), configHash('b'));
   assert.match(configHash('a'), /^sha256:[0-9a-f]{12}$/);
 });

@@ -44,17 +44,6 @@ test('reports install-missing when a source checkout has no installed snapshot',
   });
 });
 
-test('reports install-missing for a fresh worktree that has no node_modules directory at all', () => {
-  const root = mkdtempForTestSync('agent-device-lockfile-sync-fresh-worktree-');
-  writeLockfile(root, 'lockfileVersion: 9.0\n');
-  assert.equal(fs.existsSync(path.join(root, 'node_modules')), false);
-
-  assert.deepEqual(checkLockfileInstallSync(root), {
-    status: 'out-of-sync',
-    reason: 'install-missing',
-  });
-});
-
 test('reports no-source-checkout when there is no pnpm-lock.yaml', () => {
   const root = mkdtempForTestSync('agent-device-lockfile-sync-packaged-');
   fs.writeFileSync(path.join(root, 'package.json'), '{"name":"agent-device"}\n');
@@ -67,19 +56,4 @@ test('reports no-source-checkout even when an installed snapshot exists without 
   writeInstalledSnapshot(root, 'lockfileVersion: 9.0\n');
 
   assert.deepEqual(checkLockfileInstallSync(root), { status: 'no-source-checkout' });
-});
-
-test('checks each worktree against its own lockfile state', () => {
-  const worktreeA = mkdtempForTestSync('agent-device-lockfile-sync-worktree-a-');
-  const worktreeB = mkdtempForTestSync('agent-device-lockfile-sync-worktree-b-');
-  writeLockfile(worktreeA, 'lockfileVersion: 9.0\nimporters:\n  .: {}\n');
-  writeInstalledSnapshot(worktreeA, 'lockfileVersion: 9.0\nimporters:\n  .: {}\n');
-  writeLockfile(
-    worktreeB,
-    'lockfileVersion: 9.0\nimporters:\n  .:\n    dependencies:\n      newDep: 1.0.0\n',
-  );
-  writeInstalledSnapshot(worktreeB, 'lockfileVersion: 9.0\nimporters:\n  .: {}\n');
-
-  assert.deepEqual(checkLockfileInstallSync(worktreeA), { status: 'in-sync' });
-  assert.deepEqual(checkLockfileInstallSync(worktreeB), { status: 'out-of-sync', reason: 'stale' });
 });

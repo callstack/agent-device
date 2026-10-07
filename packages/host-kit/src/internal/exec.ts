@@ -313,28 +313,28 @@ export async function resolveExecutableOverridePath(
   rawPath: string | undefined,
   envName: string,
 ): Promise<string | undefined> {
-  const candidate = normalizeOverridePath(rawPath, envName, 'executable');
-  if (!candidate) return undefined;
-  if (!(await isExecutablePath(candidate))) {
-    throw new AppError(
-      'TOOL_MISSING',
-      `${envName} points to a missing or non-executable file: ${candidate}`,
-      { envName, path: candidate },
-    );
-  }
-  return candidate;
+  return await resolveOverridePath(rawPath, envName, 'executable', isExecutablePath);
 }
 
 export async function resolveFileOverridePath(
   rawPath: string | undefined,
   envName: string,
 ): Promise<string | undefined> {
-  const candidate = normalizeOverridePath(rawPath, envName, 'file');
+  return await resolveOverridePath(rawPath, envName, 'file', isFilePath);
+}
+
+async function resolveOverridePath(
+  rawPath: string | undefined,
+  envName: string,
+  kind: 'executable' | 'file',
+  isUsable: (candidate: string) => Promise<boolean>,
+): Promise<string | undefined> {
+  const candidate = normalizeOverridePath(rawPath, envName, kind);
   if (!candidate) return undefined;
-  if (!(await isFilePath(candidate))) {
+  if (!(await isUsable(candidate))) {
     throw new AppError(
       'TOOL_MISSING',
-      `${envName} points to a missing or non-file path: ${candidate}`,
+      `${envName} points to a missing or non-${kind} ${kind === 'file' ? 'path' : 'file'}: ${candidate}`,
       { envName, path: candidate },
     );
   }
@@ -647,14 +647,6 @@ function createStdinError(
   );
 }
 
-function createCommandCanceledError(
-  executable: string,
-  cmd: string,
-  args: readonly string[],
-): AppError {
-  return createRequestCanceledError({ cmd, args, executable });
-}
-
 function createTimeoutError(
   executable: string,
   cmd: string,
@@ -768,7 +760,7 @@ function spawnRejectionError(
   err: Error,
 ): AppError {
   return abort.didAbort
-    ? createCommandCanceledError(executable, cmd, args)
+    ? createRequestCanceledError({ cmd, args, executable })
     : createSpawnError(executable, cmd, args, err);
 }
 
@@ -782,7 +774,7 @@ function commandCloseFailure(
   stdout: string,
   stderr: string,
 ): AppError | null {
-  if (abort.didAbort) return createCommandCanceledError(executable, cmd, args);
+  if (abort.didAbort) return createRequestCanceledError({ cmd, args, executable });
   if (exitCode !== 0 && !allowFailure) {
     return createExitError(executable, cmd, args, exitCode, stdout, stderr);
   }

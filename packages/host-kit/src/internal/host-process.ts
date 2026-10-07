@@ -1,6 +1,6 @@
 import type { ExecOptions, ExecResult } from './exec.ts';
 import { runCmd, runCmdSync } from './exec.ts';
-import { sleep } from './timeouts.ts';
+import { sleep } from './retry.ts';
 
 const PS_TIMEOUT_MS = 1_000;
 const HOST_PS_COMMAND = process.platform === 'win32' ? 'ps' : '/bin/ps';

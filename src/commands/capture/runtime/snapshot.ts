@@ -27,6 +27,7 @@ import {
   renderSnapshotQualityWarnings,
   truncatedCaptureWarning,
 } from '@agent-device/capture-kit/quality-warnings';
+import { isLikelyStaleSnapshotDrop } from '@agent-device/capture-kit/snapshot-freshness';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
@@ -461,9 +462,4 @@ function formatFreshnessWarnings(
     ];
   }
   return freshness.reason === 'sharp-drop' ? [STALE_SNAPSHOT_DROP_WARNING] : [];
-}
-
-function isLikelyStaleSnapshotDrop(previousCount: number, currentCount: number): boolean {
-  if (previousCount < 12) return false;
-  return currentCount <= Math.floor(previousCount * 0.2);
 }

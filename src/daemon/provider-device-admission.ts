@@ -29,10 +29,6 @@ export function installProviderDeviceAdmission(admission: ProviderDeviceAdmissio
   installedProviderDeviceAdmission = admission;
 }
 
-export function providerDeviceAdmission(): ProviderDeviceAdmission {
-  return installedProviderDeviceAdmission;
-}
-
 export function isActiveProviderDevice(device: DeviceInfo): boolean {
   return installedProviderDeviceAdmission.isActive(device);
 }

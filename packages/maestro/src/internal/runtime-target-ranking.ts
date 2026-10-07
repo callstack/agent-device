@@ -66,15 +66,6 @@ export function matchMaestroCandidatesWithResolver(
   return { matches, parentMatched };
 }
 
-export function selectMaestroSnapshotMatches(
-  snapshot: SnapshotState,
-  selector: MaestroSelector,
-  platform?: MaestroPlatform,
-): SnapshotNode[] {
-  const clickability = platform ? resolveMaestroClickability(snapshot, platform) : undefined;
-  return createMaestroResolver(snapshot, clickability).resolve(selector).indexed;
-}
-
 export function selectMaestroPositionMatches(
   snapshot: SnapshotState,
   relation: MaestroPositionRelation,

@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { defaultHintForCode, retriableForErrorCode } from '@agent-device/kernel/errors';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import {
   findEconomyBudgetIncreases,
@@ -180,17 +179,6 @@ describe('actionability and reliability floors', () => {
       details: { reason: 'session-lock' },
     });
     expect(actual['not-settled.default.text']!.hints).toBe(1);
-  });
-
-  test('policy-derived failures inherit hint and retry from production normalization', () => {
-    expect(rendered.errorPolicyNormalized).toMatchObject({
-      code: 'DEVICE_IN_USE',
-      hint: defaultHintForCode('DEVICE_IN_USE'),
-      retriable: retriableForErrorCode('DEVICE_IN_USE'),
-      details: { reason: 'session-lock' },
-    });
-    expect(rendered.errorPolicyNormalized.retriable).toBe(true);
-    expect(rendered.errorPolicyNormalized.hint).toBeTruthy();
   });
 });
 

@@ -1,5 +1,4 @@
 import type {
-  AndroidBlockingDialogFocus,
   AndroidBlockingDialogObservation,
   AndroidObservationAdapter,
   AndroidObservationHost,
@@ -8,14 +7,12 @@ import type { AppStateRuntimeResult } from '@agent-device/contracts/app-state-ru
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
+import {
+  ANDROID_FOCUS_MARKERS,
+  ANDROID_FOCUSED_WINDOW_MARKER,
+  readAndroidBlockingDialogFocus,
+} from './app-parsers.ts';
 
-const FOCUSED_WINDOW_MARKER = 'mCurrentFocus=Window{';
-const FOCUS_MARKERS = [
-  FOCUSED_WINDOW_MARKER,
-  'mFocusedApp=AppWindowToken{',
-  'mResumedActivity:',
-  'ResumedActivity:',
-] as const;
 const WINDOW_DUMPS: readonly (readonly string[])[] = [
   ['dumpsys', 'window', 'windows'],
   ['dumpsys', 'window'],
@@ -24,9 +21,10 @@ const ACTIVITY_DUMPS: readonly (readonly string[])[] = [
   ['dumpsys', 'activity', 'activities'],
   ['dumpsys', 'activity'],
 ];
-const FOCUS_LINE = new RegExp(`(?:${FOCUS_MARKERS.map(escapeRegExp).join('|')})(.*)$`, 'gm');
-const ANR_TITLE = /\bApplication Not Responding:\s*([A-Za-z0-9_.]+)/i;
-const PACKAGE_NAME = /\b([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\b/;
+const FOCUS_LINE = new RegExp(
+  `(?:${ANDROID_FOCUS_MARKERS.map(escapeRegExp).join('|')})(.*)$`,
+  'gm',
+);
 const PERMISSION_PACKAGES = new Set([
   'com.android.permissioncontroller',
   'com.google.android.permissioncontroller',
@@ -113,7 +111,7 @@ async function readBlockingDialog(
   read: DumpReader = createDumpReader(host, device),
 ): Promise<AndroidBlockingDialogObservation> {
   for (const args of orderedDumps(device, 'blockingDialog')) {
-    const parsed = parseBlockingDialog(await read(args));
+    const parsed = readAndroidBlockingDialogFocus(await read(args));
     if (parsed.focus) return { status: 'dialog', focus: parsed.focus };
     if (parsed.focusObserved) return { status: 'clear' };
   }
@@ -137,11 +135,11 @@ function orderedDumps(device: DeviceInfo, question: Question): readonly (readonl
 function recordSections(device: DeviceInfo, key: string, text: string): void {
   if (!text) return;
   const memo = everAnswered.get(device.id) ?? new Map<string, boolean>();
-  preservePositiveMemo(memo, `foreground ${key}`, markerPattern(FOCUS_MARKERS).test(text));
+  preservePositiveMemo(memo, `foreground ${key}`, markerPattern(ANDROID_FOCUS_MARKERS).test(text));
   preservePositiveMemo(
     memo,
     `blockingDialog ${key}`,
-    markerPattern([FOCUSED_WINDOW_MARKER]).test(text),
+    markerPattern([ANDROID_FOCUSED_WINDOW_MARKER]).test(text),
   );
   everAnswered.set(device.id, memo);
 }
@@ -158,55 +156,6 @@ function parseForeground(text: string): AppStateRuntimeResult | null {
     if (component?.[1] && component[2]) return { package: component[1], activity: component[2] };
   }
   return null;
-}
-
-function parseBlockingDialog(text: string): {
-  focusObserved: boolean;
-  focus: AndroidBlockingDialogFocus | null;
-} {
-  let focusObserved = false;
-  const lines = text.split('\n');
-  for (const marker of FOCUS_MARKERS) {
-    for (const line of lines) {
-      const index = line.indexOf(marker);
-      if (index === -1) continue;
-      if (marker === FOCUSED_WINDOW_MARKER) focusObserved = true;
-      const raw = line.trim();
-      const segment =
-        line
-          .slice(index + marker.length)
-          .split('}')[0]
-          ?.trim() ?? '';
-      const focus = parseDialogFocus(segment, raw);
-      if (focus) return { focusObserved, focus };
-    }
-  }
-  return { focusObserved, focus: null };
-}
-
-function parseDialogFocus(segment: string, raw: string): AndroidBlockingDialogFocus | null {
-  const anrPackage = ANR_TITLE.exec(segment)?.[1];
-  if (anrPackage) {
-    return {
-      package: anrPackage,
-      focusedWindow: `Application Not Responding: ${anrPackage}`,
-      raw,
-    };
-  }
-  const normalizedSegment = segment.toLowerCase();
-  if (
-    !normalizedSegment.includes("isn't responding") &&
-    !normalizedSegment.includes('is not responding')
-  ) {
-    return null;
-  }
-  const responding = segment.trim().replaceAll(/\s+/g, ' ');
-  const packageName = PACKAGE_NAME.exec(responding)?.[1];
-  return {
-    ...(packageName ? { package: packageName } : {}),
-    focusedWindow: responding,
-    raw,
-  };
 }
 
 function markerPattern(markers: readonly string[]): RegExp {

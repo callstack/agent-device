@@ -3,7 +3,6 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   ensureBootedSimulator,
   markSimulatorBooted,
-  shutdownSimulator,
   SIMULATOR_BOOTED_MEMO_TTL_MS,
   wasSimulatorRecentlyObservedBooted,
 } from '../simulator.ts';
@@ -60,27 +59,6 @@ test('ensureBootedSimulator skips the state listing within the booted memo TTL',
   vi.advanceTimersByTime(SIMULATOR_BOOTED_MEMO_TTL_MS + 1);
   await ensureBootedSimulator(simulator);
   expect(countSimctlListCalls()).toBe(2);
-});
-
-test('shutdownSimulator invalidates the booted memo', async () => {
-  await ensureBootedSimulator(simulator);
-  expect(countSimctlListCalls()).toBe(1);
-
-  await shutdownSimulator(simulator);
-
-  await ensureBootedSimulator(simulator);
-  expect(countSimctlListCalls()).toBe(2);
-});
-
-test('shutdownSimulator forwards cancellation to the native simctl command', async () => {
-  const controller = new AbortController();
-
-  await shutdownSimulator(simulator, controller.signal);
-
-  expect(mockRunXcrun).toHaveBeenCalledWith(
-    ['simctl', 'shutdown', simulator.id],
-    expect.objectContaining({ signal: controller.signal }),
-  );
 });
 
 test('markSimulatorBooted seeds the memo so the first boot check skips the listing', async () => {

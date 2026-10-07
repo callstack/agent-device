@@ -85,8 +85,6 @@ export type GesturePayload =
   | TransformGesturePayload
   | DragGesturePayload;
 
-export type CoordinateGesturePayload = Exclude<GesturePayload, DragGesturePayload>;
-
 export function readGesturePayload(input: unknown): GesturePayload {
   const record = readRecord(input);
   const kind = readEnum(record, 'kind', GESTURE_KINDS);

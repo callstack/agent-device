@@ -27,7 +27,6 @@ export type MaterializeInstallableOptions = {
   ) => boolean;
   installableLabel: string;
   signal?: AbortSignal;
-  downloadTimeoutMs?: number;
 };
 
 export type MaterializedInstallable = {
@@ -51,10 +50,7 @@ export async function materializeInstallablePath(
 ): Promise<MaterializedInstallable> {
   const cleanupTasks: Array<() => Promise<void>> = [];
   try {
-    const localSource = await materializeLocalSource(options.source, {
-      signal: options.signal,
-      downloadTimeoutMs: options.downloadTimeoutMs,
-    });
+    const localSource = await materializeLocalSource(options.source, { signal: options.signal });
     cleanupTasks.push(localSource.cleanup);
     const resolved = await resolveInstallableCandidate(localSource.localPath, {
       archivePath: undefined,
@@ -89,7 +85,7 @@ function expandSourcePath(inputPath: string): string {
 
 async function materializeLocalSource(
   source: LocalInstallSource,
-  options?: { signal?: AbortSignal; downloadTimeoutMs?: number },
+  options?: { signal?: AbortSignal },
 ): Promise<MaterializeLocalSourceResult> {
   if (source.kind === 'path') {
     return {
@@ -117,19 +113,23 @@ async function downloadToTempFile(
   tempDir: string,
   url: string,
   headers?: Record<string, string>,
-  options?: { signal?: AbortSignal; downloadTimeoutMs?: number },
+  options?: { signal?: AbortSignal },
 ): Promise<string> {
   const requestSignal = options?.signal;
   if (requestSignal?.aborted) {
     throw createRequestCanceledError();
   }
-  const timeoutMs = options?.downloadTimeoutMs ?? DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS;
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const timeoutSignal = AbortSignal.timeout(DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS);
   const signal = requestSignal ? AbortSignal.any([requestSignal, timeoutSignal]) : timeoutSignal;
   try {
     return await downloadInstallSource({ tempDir, url, headers, signal });
   } catch (error) {
-    throw classifyDownloadError(error, requestSignal, timeoutSignal, timeoutMs);
+    throw classifyDownloadError(
+      error,
+      requestSignal,
+      timeoutSignal,
+      DEFAULT_SOURCE_DOWNLOAD_TIMEOUT_MS,
+    );
   }
 }
 

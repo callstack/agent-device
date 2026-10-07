@@ -5,6 +5,7 @@ export {
   ANDROID_FRESHNESS_WINDOW_MS,
   androidFreshnessReason,
   buildSnapshotSignatures,
+  isLikelyStaleSnapshotDrop,
   isNavigationSensitiveAction,
 } from './android.ts';
 export {

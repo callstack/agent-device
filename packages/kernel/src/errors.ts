@@ -222,27 +222,7 @@ function readDeviceList(value: unknown): Array<{ id: string; name: string }> {
  * error representation because clients immediately rehydrate this wire shape
  * into `AppError` before rendering or handling it.
  */
-export type DaemonError = {
-  code: string;
-  message: string;
-  cause?: ErrorCause;
-  hint?: string;
-  diagnosticId?: string;
-  /** Path on the DAEMON host. Meaningful to a local caller only (#1801). */
-  logPath?: string;
-  /** Why no readable path is named; set by the client, never by the daemon. */
-  logPathUnavailable?: string;
-  /**
-   * Additive locator (#1801) for the request diagnostics record `logPath`
-   * names, so a remote caller can fetch it over the daemon API instead of
-   * being handed a path on a filesystem it cannot read.
-   */
-  diagnosticsRecord?: DiagnosticsRecordRef;
-  details?: ErrorWireDetails;
-  /** Additive retry and platform-support signals; absent when not derivable. */
-  retriable?: boolean;
-  supportedOn?: string;
-};
+export type DaemonError = NormalizedError;
 
 /** Rehydrate a daemon transport error into the error type used by local callers. */
 export function throwDaemonError(error: DaemonError): never {
