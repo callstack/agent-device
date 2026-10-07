@@ -3,14 +3,13 @@ import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
 
 /**
  * The device-claim rule: what a runtime owner's kind selects at a claim gate.
- * `ordinary` acquires a host-local device claim, `allocator-held` executes only
- * under an existing allocator-held claim and never acquires or clears one, and
- * `none` leaves the claim store alone because the provider lease already
- * excludes peers. The rule follows the admitted runtime owner and lease, never
+ * `ordinary` acquires a host-local device claim for a local or managed local
+ * owner (ADR 0021 §3), and `none` leaves the claim store alone because the
+ * provider lease already excludes peers. The rule follows the admitted runtime owner and lease, never
  * request metadata: a `macos-app` lease holds one app, not the host Mac
  * (ADR 0007), so the lease is all the exclusion it needs.
  */
-export type DeviceClaimRule = 'ordinary' | 'allocator-held' | 'none';
+export type DeviceClaimRule = 'ordinary' | 'none';
 
 export function deviceClaimRuleForOwner(
   owner: RuntimeOwnerRef,
@@ -19,9 +18,8 @@ export function deviceClaimRuleForOwner(
   if (admittedLease?.backend === 'macos-app') return 'none';
   switch (owner.kind) {
     case 'local-family':
-      return 'ordinary';
     case 'managed-local':
-      return 'allocator-held';
+      return 'ordinary';
     case 'provider-runtime':
       return 'none';
   }

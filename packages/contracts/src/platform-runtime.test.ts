@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  decodeManagedBindingFence,
   localRuntimeOwner,
   managedBindingFence,
   managedLocalRuntimeOwner,
@@ -166,11 +164,7 @@ test('managed binding fence separates requesters that share one identity incarna
     identityIncarnationId: 'incarnation-1',
   });
   assert.notDeepEqual(requesterA, padded);
-  assert.deepEqual(decodeManagedBindingFence(padded), {
-    requesterId: ' requester-a ',
-    requestGeneration: 1,
-    identityIncarnationId: 'incarnation-1',
-  });
+  assert.equal(padded.token, JSON.stringify([' requester-a ', 'incarnation-1']));
   // Canonical JSON, not a separator: requester and incarnation can never re-split.
   assert.notEqual(
     managedBindingFence({ requesterId: 'a:b', requestGeneration: 1, identityIncarnationId: 'c' })
@@ -187,33 +181,6 @@ test('managed binding fence separates requesters that share one identity incarna
     () =>
       managedBindingFence({ requesterId: 'a', requestGeneration: 1.5, identityIncarnationId: 'x' }),
     TypeError,
-  );
-});
-
-test('managed binding fence decodes only what managedBindingFence encoded', () => {
-  const identity = {
-    requesterId: 'requester-a',
-    requestGeneration: 3,
-    identityIncarnationId: 'incarnation-1',
-  };
-  const decoded = decodeManagedBindingFence(managedBindingFence(identity));
-  assert.deepEqual(decoded, identity);
-  assert.ok(decoded && Object.isFrozen(decoded));
-  // A durable-capture fence token is an opaque UUID, never a managed binding.
-  assert.equal(decodeManagedBindingFence({ token: crypto.randomUUID(), generation: 1 }), null);
-  for (const token of [
-    JSON.stringify(['a', 'b', 'c']),
-    JSON.stringify(['a', 7]),
-    JSON.stringify(['', 'b']),
-    JSON.stringify([' ', 'b']),
-    // Non-canonical encoding of a well-formed pair: it re-encodes to a different token.
-    '["a", "b"]',
-  ]) {
-    assert.equal(decodeManagedBindingFence({ token, generation: 1 }), null, token);
-  }
-  assert.equal(
-    decodeManagedBindingFence({ token: JSON.stringify(['a', 'b']), generation: -1 }),
-    null,
   );
 });
 

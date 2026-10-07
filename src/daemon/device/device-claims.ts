@@ -29,7 +29,6 @@ import {
 import {
   DEVICE_CLAIM_SCHEMA_VERSION,
   ownershipFromClaim,
-  type AllocatorClaimIdentity,
   type DeviceClaim,
   type DeviceClaimSessionOwnership,
 } from './device-claim-record.ts';
@@ -224,8 +223,6 @@ export type DeviceClaimStaleReleaseOutcome = {
   session?: string;
   workspace?: string;
   stateDir?: string;
-  /** Present only for an allocator-held claim, which this command always refuses. */
-  allocator?: AllocatorClaimIdentity;
 };
 
 /**
@@ -260,13 +257,6 @@ async function releaseInspectedStaleClaim(
           session: claim.session,
           workspace: claim.workspace,
           stateDir: claim.stateDir,
-        }
-      : {}),
-    ...(entry.allocatorClaim
-      ? {
-          device: entry.allocatorClaim.device,
-          stateDir: entry.allocatorClaim.stateDir,
-          allocator: entry.allocatorClaim.allocator,
         }
       : {}),
   };
@@ -316,8 +306,6 @@ const STALE_RELEASE_REFUSAL_REASONS: Readonly<Record<DeviceClaimClassification, 
     'owner-state-dir-gone': 'owner-process-still-running',
     unknown: 'owner-liveness-unknown',
     inconsistent: 'claim-record-inconsistent',
-    'allocator-inconsistent': 'allocator-claim-record-inconsistent',
-    'allocator-held': 'allocator-held-owner',
     'owner-process-dead': 'claim-record-unreadable',
     'owner-daemon-superseded': 'claim-record-unreadable',
   });
@@ -336,8 +324,7 @@ function staleReleaseRefusalReason(classification: DeviceClaimClassification): s
  *  - `ownership-changed`— a decodable claim remains and it is not the one we
  *                         acquired, so a successor owns the device now.
  *  - `unattributable`   — a record remains that yields no attributable claim:
- *                         unreadable, undecodable, or held by an allocator
- *                         principal. This says nothing about who owns the
+ *                         unreadable or undecodable. This says nothing about who owns the
  *                         device and is NOT evidence we released anything, so a
  *                         caller that is about to forget this claim must hold it
  *                         back and try again rather than read it as superseded.

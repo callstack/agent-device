@@ -98,8 +98,7 @@ function orphanedClaimWarnings(orphaned: DaemonStopResult['claimsOrphaned']): st
  * what is known, points at the view that lists these records — the default one, because `--stale`
  * filters records without a decodable owner out — and does not promise a release that would clear
  * them. `device release --stale` refuses every record that names no owner, and the next `open` refuses
- * to overwrite one. The one principal that can clear an allocator-held record is the allocator that
- * issued it, which is named on the refusal rather than guessed at here.
+ * to overwrite one.
  */
 function unattributableClaimWarnings(
   unattributable: DaemonStopResult['claimsUnattributable'],

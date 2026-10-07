@@ -121,11 +121,7 @@ export function createRequestRuntimeBindings(params: {
   scope: PlatformRequestScope;
   dispatchLedger: RequestDispatchLedger;
   resolveManagedLease?: ResolveManagedRequestLease;
-  admitDeviceClaim: (
-    device: DeviceInfo,
-    owner: RuntimeOwnerRef,
-    intent: DeviceBindingIntent,
-  ) => Promise<void>;
+  admitDeviceClaim: (device: DeviceInfo, owner: RuntimeOwnerRef) => Promise<void>;
   /** ADR 0029 daemon-policy device scope, checked before the gateway inspects or binds a device. */
   admitDevice?: (device: DeviceInfo) => void;
 }): RequestRuntimeBindings {
@@ -135,9 +131,8 @@ export function createRequestRuntimeBindings(params: {
 
   const admitBinding = async (
     binding: DeviceBinding<PlatformRuntimeOperations>,
-    intent: DeviceBindingIntent,
   ): Promise<DeviceBinding<PlatformRuntimeOperations>> => {
-    await params.admitDeviceClaim(binding.device, binding.owner, intent);
+    await params.admitDeviceClaim(binding.device, binding.owner);
     return binding;
   };
 
@@ -150,7 +145,7 @@ export function createRequestRuntimeBindings(params: {
       bindingPromise = params.gateway
         .bind({ device, intent, scope: params.scope })
         .then((binding) => cleanups.use(binding))
-        .then((binding) => admitBinding(binding, intent));
+        .then(admitBinding);
       bindings.set(key, bindingPromise);
       void bindingPromise.catch(() => {
         if (bindings.get(key) === bindingPromise) bindings.delete(key);
@@ -177,12 +172,12 @@ export function createRequestRuntimeBindings(params: {
         resolve: params.resolveManagedLease,
       });
     }
-    if (managed) await params.admitDeviceClaim(device, owner, intent);
+    if (managed) await params.admitDeviceClaim(device, owner);
     const published = managed
       ? await managed.bind(() => params.gateway.bind({ device, intent, scope: managed.scope }))
       : await params.gateway.bind({ device, intent, scope });
     const adopted = await adoptExactBinding(cleanups, published, scope);
-    const binding = managed ? adopted : await admitBinding(adopted, intent);
+    const binding = managed ? adopted : await admitBinding(adopted);
     const bound = recordBoundMutations(narrowDeviceBinding(binding, use), params.dispatchLedger);
     managed?.activate();
     if (managed) managedReadiness.set(bound, managed.ensureReady);

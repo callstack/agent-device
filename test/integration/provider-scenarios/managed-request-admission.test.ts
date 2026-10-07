@@ -56,7 +56,6 @@ test.skipIf(process.platform === 'win32')(
 );
 
 test.each([
-  [{ missingClaim: true }, 'allocator-claim-missing'],
   [{ missingAdmission: true }, 'managed-lease-admission-unavailable'],
   [{ readinessDuringBind: true }, 'managed-request-not-admitted'],
 ] as const)(

@@ -197,42 +197,12 @@ export function managedBindingFence(identity: ManagedBindingIdentity): ResourceO
   });
 }
 
-/**
- * Reads back only what {@link managedBindingFence} encoded: the decoded identity must re-encode
- * to the very same token, so a capture-style opaque token, a non-canonical JSON encoding, or any
- * other tuple shape yields null.
- */
-export function decodeManagedBindingFence(
-  fence: ResourceOwnershipFence,
-): ManagedBindingIdentity | null {
-  const tuple = parseJsonTuple(fence.token);
-  if (!tuple || tuple.length !== 2) return null;
-  const [requesterId, identityIncarnationId] = tuple;
-  if (!isNonBlankString(requesterId) || !isNonBlankString(identityIncarnationId)) return null;
-  if (!isRequestGeneration(fence.generation)) return null;
-  const identity = Object.freeze({
-    requesterId,
-    requestGeneration: fence.generation,
-    identityIncarnationId,
-  });
-  return managedBindingFence(identity).token === fence.token ? identity : null;
-}
-
 function isRequestGeneration(value: number): boolean {
   return Number.isInteger(value) && value >= 0;
 }
 
 function isNonBlankString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
-}
-
-function parseJsonTuple(token: string): unknown[] | null {
-  try {
-    const parsed: unknown = JSON.parse(token);
-    return Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
 }
 
 export type DeviceBindingIntent =

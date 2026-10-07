@@ -14,7 +14,6 @@ import {
   retainOrphanedDeviceClaims,
 } from '../../../src/__tests__/test-utils/device-claim-store.ts';
 import { createDeviceClaimAdmission } from '../../../src/daemon/device/device-claim-admission.ts';
-import { acquireAllocatorHeldDeviceClaim } from '../../../src/daemon/device/device-claim-allocator.ts';
 import { createRequestRuntimeBindings } from '../../../src/daemon/request-runtime-binding.ts';
 import { createRequestDispatchLedger } from '../../../src/daemon/request-dispatch-ledger.ts';
 import { managedCommandHorizon } from '../../../src/daemon/managed-device-allocation/command-horizon.ts';
@@ -60,7 +59,6 @@ export const mismatchedRequestAuthorities = {
 
 export async function setupRequest(
   options: Parameters<typeof setupAdmission>[0] & {
-    missingClaim?: boolean;
     missingAdmission?: boolean;
     readinessDuringBind?: boolean;
     beforePublication?: Promise<void>;
@@ -145,15 +143,6 @@ export async function setupRequest(
     stateDir,
     reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
   });
-  if (!options.missingClaim)
-    await acquireAllocatorHeldDeviceClaim({
-      device: reachability.device,
-      principal: {
-        stateDir,
-        instanceId: setup.allocator.instanceId,
-        identityIncarnationId: setup.grant.identityIncarnationId!,
-      },
-    });
   const horizon = managedCommandHorizon(
     { command: 'clipboard', session: 'managed', positionals: ['read'] },
     NOW,

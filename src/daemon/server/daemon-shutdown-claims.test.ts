@@ -6,7 +6,6 @@ import {
 } from '../../__tests__/test-utils/device-claim-store.ts';
 import fs from 'node:fs';
 import { acquireDeviceClaim } from '../device/device-claims.ts';
-import { acquireAllocatorHeldDeviceClaim } from '../device/device-claim-allocator.ts';
 import { resolveDeviceClaimPath } from '../device/device-claim-paths.ts';
 import { inspectDeviceClaims } from '../device/device-claim-inspection.ts';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
@@ -123,37 +122,6 @@ test('an undecodable record is reported unattributable, never orphaned or supers
     superseded: [],
     unattributable: [claimRecord(session, 'unreadable')],
   });
-});
-
-test('an allocator-held record is reported unattributable, not released', async () => {
-  const session = await claimedSession('allocator');
-  const deviceKey = session.deviceClaim?.deviceKey ?? '';
-  // A record owned by an allocator principal is attributable to that installation, but not to any
-  // process this daemon's teardown can prove dead, and only the allocator's own removal proof clears
-  // it. So this daemon released nothing and cannot reconcile the record either.
-  fs.rmSync(resolveDeviceClaimPath(deviceKey));
-  const held = await acquireAllocatorHeldDeviceClaim({
-    device: ANDROID_EMULATOR,
-    principal: {
-      stateDir: '/installations/allocator',
-      instanceId: 'allocator-1',
-      identityIncarnationId: 'incarnation-1',
-    },
-  });
-  expect(held.status).toBe('acquired');
-
-  const ledger = createDaemonShutdownClaimLedger();
-  await ledger.releaseClaim(session);
-  ledger.finalize(session);
-
-  expect(ledger.claims).toEqual({
-    released: [],
-    orphaned: [],
-    superseded: [],
-    unattributable: [claimRecord(session, 'allocator')],
-  });
-  // The allocator's grant survives a daemon that cannot settle it.
-  expect(inspectDeviceClaims({}).map((entry) => entry.classification)).toEqual(['allocator-held']);
 });
 
 test('a claim clear that throws is reported orphaned, the one bucket with a working remedy', async () => {
