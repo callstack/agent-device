@@ -179,11 +179,15 @@ export function insideCompiledSources(file: string): boolean {
  * the redirect to kernel's `dist-types` keeps every emitted file under host-kit's `rootDir`,
  * so neither TS6059 nor TS6307 fires (the root-escape tunnel DOES fail: TS2307, since `../..
  * /../kernel/...` lands outside every include and no package owns `kernel` at that depth).
- * What the sibling tunnel breaks is runtime identity — Node loads kernel once by path and
- * once by specifier, so two AppError classes coexist and `instanceof` silently fails. That
- * is invisible to any compiler. The remaining resolution failures (unknown package,
- * subpath the exports map does not name) are owned by NodeNext for compiled files with
- * TS2307; uncompiled files never reach either check, so for them R11 holds every branch.
+ * What the sibling tunnel risks is runtime identity: Node's ESM loader does not realpath
+ * specifiers, so when the same module is ALSO loaded through its package specifier — the
+ * normal route for every other consumer — the two keys instantiate it twice in one process
+ * (duplicate AppError, broken `instanceof`). Type-only tunnels carry no runtime cost, but
+ * the branch cannot condition on that from syntax alone and the layering claim fails either
+ * way. Any duplicate-instance risk invisible to the compiler is R11's to hold; the
+ * remaining resolution failures (unknown package, subpath the exports map does not name)
+ * are owned by NodeNext for compiled files with TS2307; uncompiled files never reach either
+ * check, so for them R11 holds every branch.
  */
 export function checkPackageInternalSites(
   pkg: WorkspacePackage,
@@ -204,8 +208,9 @@ export function checkPackageInternalSites(
           line: site.line,
           message:
             `'${site.specifier}' escapes ${pkg.dir}/ — a workspace package may not reach ` +
-            `outside its own directory. Import a sibling through its specifier (Node would ` +
-            `load the tunnelled module twice), or move the shared code below ${pkg.dir}.`,
+            `outside its own directory. Import a sibling through its specifier (mixing the ` +
+            `two routes instantiates the module twice), or move the shared code below ` +
+            `${pkg.dir}.`,
         });
       }
       continue;

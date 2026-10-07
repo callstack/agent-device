@@ -72,13 +72,24 @@ test('the compiled-set predicate is licensed by the tsconfig include/exclude sha
     'scripts/help-conformance-command-validator.ts',
     'packages/command-registry/src/global.d.ts',
   ]);
+  // `src` everywhere, plus the one shared ambient-declaration entry replay-port and
+  // session-journal include. Exact include ARRAYS, not a `global.d.ts` suffix class: a
+  // new include of any name must extend this allow-list deliberately, or the drift fails
+  // the test (#3289 cubic review P2 — a suffix filter would silently accept unrelated
+  // `*.global.d.ts` additions, which is the drift this pin exists to catch).
+  const knownIncludeShapes = [
+    JSON.stringify(['src']),
+    JSON.stringify(['src', '../command-registry/src/global.d.ts']),
+  ];
   for (const pkg of readWorkspacePackages(repoRoot)) {
     const config = readTsconfig(`${pkg.dir}/tsconfig.json`);
     assert.equal(config.exclude, undefined, `${pkg.dir}/tsconfig.json must not declare exclude`);
-    assert.deepEqual(
-      (config.include ?? ['**/*']).filter((entry) => !entry.endsWith('global.d.ts')),
-      ['src'],
-      `${pkg.dir}/tsconfig.json must keep including exactly src/`,
+    const include = JSON.stringify(config.include ?? ['**/*']);
+    assert.ok(
+      knownIncludeShapes.includes(include),
+      `${pkg.dir}/tsconfig.json includes ${include}; the compiled-set predicate assumes ` +
+        `the known shapes ${knownIncludeShapes.join(' / ')} — extend the allow-list here ` +
+        'only after widening insideCompiledSources to match',
     );
   }
 });
