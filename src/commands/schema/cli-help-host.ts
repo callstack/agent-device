@@ -24,6 +24,15 @@ Serving:
   GET /health is public. Every other route needs the service token (401 without it);
   unserved routes get 404.
 
+Public route policy:
+  Host drops any identity a client claims (tenant headers and body fields) and forwards the
+  credential's principal to the daemon, which isolates sessions under it.
+  Refused with 403 and a typed details.reason:
+    host-admin-refused               /admin/* routes and macos-app lease allocation
+    host-path-refused                inputs naming a path on the Host machine
+    host-component-download-refused  allowDownload
+  Anonymous /health shows only ok, service and rpcProtocolVersion.
+
 Worker:
   agent-device connect proxy --daemon-base-url https://host.example:8443/agent-device --daemon-auth-token <token>
 

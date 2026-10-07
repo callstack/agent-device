@@ -34,6 +34,11 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
   openDeviceWait?: { waitedMs: number };
   publicNetworkOnly?: true;
   /**
+   * The principal the Host front-end authenticated and sent over the daemon-token loopback channel
+   * (ADR 0021 §6). Read from a header only after the daemon token matched, never from the body.
+   */
+  hostPrincipal?: string;
+  /**
    * The steps a batch still has ahead of this one. The open seam derives platform readiness
    * policy (runner demand) from it; the transport strips `internal`, so it never arrives from a
    * client.

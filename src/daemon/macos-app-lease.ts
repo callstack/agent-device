@@ -7,6 +7,7 @@ import { isProcessAlive, readHostEnvironmentVariable } from '@agent-device/host-
 import { isMacOs } from '@agent-device/kernel/device';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import { isAppLeaseAllowed } from './daemon-command-registry.ts';
+import { HOST_PATH_INPUT_KEYS } from './host-path-inputs.ts';
 import { isRemoteTempArtifactPath } from '../remote/daemon-artifacts.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from './daemon-request.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
@@ -64,24 +65,11 @@ type MacOsAppLeaseRule =
  * remote daemon cannot see the host's disk, so none of these has a use under the lease.
  */
 const HOST_INPUT_KEYS = [
-  'out',
-  'saveScript',
-  'sessionSaveScript',
-  'baseline',
+  ...HOST_PATH_INPUT_KEYS,
   'launchConsole',
   'launchArgs',
   'launchUrl',
   'bundleUrl',
-  'artifactsDir',
-  'stepsFile',
-  'searchPath',
-  'retainPaths',
-  'installSource',
-  'metroProjectRoot',
-  'metroRuntimeFile',
-  'iosXctestrunFile',
-  'iosXctestDerivedDataPath',
-  'iosXctestEnvDir',
 ] as const;
 
 /** Flags that pick a device other than the leased app's own; a lease never takes a device selector. */

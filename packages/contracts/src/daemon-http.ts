@@ -7,6 +7,11 @@ export const DAEMON_HTTP_BASE_PATH = '/agent-device';
 export const DAEMON_HTTP_TENANT_HEADER = 'x-agent-device-tenant';
 export const DAEMON_HTTP_NETWORK_ACCESS_HEADER = 'x-agent-device-network-access';
 export const DAEMON_HTTP_PUBLIC_NETWORK_ACCESS = 'public-only';
+/**
+ * The principal the Host front-end authenticated (ADR 0021 §6). The daemon trusts it only on a
+ * request that already carries the daemon token, and the proxy never forwards it from a client.
+ */
+export const DAEMON_HTTP_PRINCIPAL_HEADER = 'x-agent-device-principal';
 
 export function buildDaemonHttpBaseUrl(baseUrl: string): string {
   return buildDaemonHttpUrl(baseUrl, DAEMON_HTTP_BASE_PATH);
@@ -52,7 +57,7 @@ export function buildDaemonInstanceMismatchRpcResponse<Id>(
 
 export type DaemonHealthPayload = {
   ok: true;
-  service: 'agent-device-daemon' | 'agent-device-proxy';
+  service: 'agent-device-daemon' | 'agent-device-proxy' | 'agent-device-host';
   version: string;
   rpcProtocolVersion: number;
   instanceId?: string;

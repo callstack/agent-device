@@ -62,6 +62,26 @@ test('rpc reaches the daemon through the supplied upstream transport with the da
   expect(payload.echo.params.token).toBe('daemon-secret');
 });
 
+test('a client-sent principal header never reaches the daemon', async () => {
+  const upstream = recordingUpstream(() => Response.json({ jsonrpc: '2.0', id: 1, result: {} }));
+  const proxy = proxyWith(upstream.fetch);
+
+  await proxy.handle(
+    rpcRequest(
+      { jsonrpc: '2.0', id: 1, method: 'agent-device.command', params: {} },
+      {
+        headers: {
+          authorization: 'Bearer client-secret',
+          'content-type': 'application/json',
+          'x-agent-device-principal': 'host-svc-attacker',
+        },
+      },
+    ),
+  );
+
+  expect(upstream.requests[0]?.headers.has('x-agent-device-principal')).toBe(false);
+});
+
 test('a request without the client token never reaches the upstream transport', async () => {
   const upstream = recordingUpstream(() => Response.json({}));
   const proxy = proxyWith(upstream.fetch);

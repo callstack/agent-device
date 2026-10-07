@@ -61,7 +61,7 @@ test('host answers unserved routes with 404', async (t) => {
   });
   const authorization = `Bearer ${host.token}`;
 
-  for (const route of ['/agent-device/nope', '/admin/leases', '/']) {
+  for (const route of ['/agent-device/nope', '/agent-device/sessions', '/']) {
     const response = await fetch(`${host.baseUrl}${route}`, { headers: { authorization } });
     assert.equal(response.status, 404, route);
   }

@@ -241,6 +241,7 @@ agent-device host --host 0.0.0.0 --port 8443 --tls-cert ./cert.pem --tls-key ./k
 - On first start, once it is serving, Host creates `<state dir>/host/service-credential.json` with mode 0600 and prints the token that one time. Later starts reuse the credential, so workers keep working when a process manager restarts Host.
 - The `<state dir>/host` directory must be mode 0700 and the credential file mode 0600, both owned by the Host user. Host refuses to start when either is open to group or others, or when the file is malformed. To rotate the token, delete the file and restart Host.
 - Pass `--tls-cert` and `--tls-key` together to serve HTTPS. The key must match the certificate. Without TLS, Host serves plain HTTP and only on a loopback address (`127.0.0.1` by default), for use behind a TLS tunnel. A wildcard bind such as `0.0.0.0` advertises the machine's hostname. Host checks all of this before it starts a daemon.
+- Host drops any identity a client claims and forwards the credential's principal to the daemon, which isolates sessions under it. Administration routes, inputs naming a path on the Host machine and component downloads are refused with HTTP 403 and a typed `details.reason` (`host-admin-refused`, `host-path-refused`, `host-component-download-refused`). Anonymous `/health` shows only `ok`, `service` and `rpcProtocolVersion`.
 - Workers connect exactly as they do to a proxy: `agent-device connect proxy --daemon-base-url <Host URL>/agent-device --daemon-auth-token <token>`.
 
 ## Embedding the Proxy in Your Own Gateway
