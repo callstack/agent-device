@@ -134,6 +134,16 @@ export type RuntimeOperationUnavailability = Readonly<{
 
 export type RuntimeOperationFact = Readonly<{ available: true }> | RuntimeOperationUnavailability;
 
+/** One frozen unavailable cell; owners list their refusals as calls instead of literals. */
+export function unavailableFact(
+  reason: RuntimeOperationUnavailability['reason'],
+  hint?: string,
+): RuntimeOperationUnavailability {
+  return Object.freeze(
+    hint === undefined ? { available: false, reason } : { available: false, reason, hint },
+  );
+}
+
 /**
  * An operation is present on a binding only when the owner's own facts admitted it. One helper so
  * every owner's `bind` reads as a list of admitted operations rather than a chain of branches —

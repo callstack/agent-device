@@ -2,6 +2,7 @@ import {
   type DeviceBinding,
   type RuntimeOperationFact,
   localRuntimeOwner,
+  unavailableFact,
   whenAdmitted,
 } from '@agent-device/contracts/platform-runtime';
 import { bindSimulatorReadiness } from './runtime-simulator-readiness.ts';
@@ -78,40 +79,32 @@ import { createAppleSnapshotRoute } from './snapshot-route.ts';
 
 const owner = localRuntimeOwner('apple');
 const available = Object.freeze({ available: true } as const);
-const unavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-} as const);
-const viewportUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.',
-} as const);
-const audioQueryUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'the stateless audio page probe is a web-session operation; Apple targets use the host capture.',
-} as const);
-const perfUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-backend',
-  hint: 'perf requires an Apple simulator, macOS device, or CoreDevice-backed physical Apple device.',
-} as const);
+const unavailable = unavailableFact('unsupported-platform-leaf');
+const viewportUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.',
+);
+const audioQueryUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'the stateless audio page probe is a web-session operation; Apple targets use the host capture.',
+);
+const perfUnavailable = unavailableFact(
+  'unsupported-device-backend',
+  'perf requires an Apple simulator, macOS device, or CoreDevice-backed physical Apple device.',
+);
 /**
  * Focus drives touch through the Apple interactor, which exists for the simulator and physical
  * device kinds only. Parity with the retired `focus` capability bucket
  * (`{ simulator: true, device: true }`), stated as one fact instead of an admission table.
  */
-const focusKindUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'focus is supported on Apple simulators and physical devices.',
-} as const);
-const appStateUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: "Apple appstate is unavailable here: the runner reads the session app's XCUIApplication state on iOS-family simulators and physical devices only, and the Apple target answers no sessionless foreground probe. The per-command answer is the targetActivation disclosure, which a capture carries when its command had to re-activate the session app (#2682).",
-} as const);
+const focusKindUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'focus is supported on Apple simulators and physical devices.',
+);
+const appStateUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  "Apple appstate is unavailable here: the runner reads the session app's XCUIApplication state on iOS-family simulators and physical devices only, and the Apple target answers no sessionless foreground probe. The per-command answer is the targetActivation disclosure, which a capture carries when its command had to re-activate the session app (#2682).",
+);
 
 /**
  * A live runner reads the session app's `XCUIApplication.state` on the kinds it drives; the read
@@ -123,40 +116,31 @@ function appleAppStateFact(device: DeviceInfo): RuntimeOperationFact {
   if (!isIosFamily(device) || device.appleOs === 'watchos') return appStateUnavailable;
   return device.kind === 'simulator' || device.kind === 'device' ? available : appStateUnavailable;
 }
-const headlessUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Headless boot is supported only for local Android emulators.',
-} as const);
-const elementTextLeafUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'watchOS has no XCUITest-driveable UI, so element text comes from the captured tree only.',
-} as const);
-const elementTextKindUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-} as const);
-const watchOpenTargetUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'watchOS open is not supported because XCUITest cannot drive watchOS UI.',
-} as const);
-const watchPrepareUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'watchOS runner preparation is not supported because XCUITest cannot drive watchOS UI.',
-} as const);
-const watchCloseTargetUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'watchOS close is not supported because XCUITest cannot drive watchOS UI.',
-} as const);
-const runtimeHintsUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'Runtime hints are supported only for local iOS-family simulators and Android devices.',
-} as const);
+const headlessUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'Headless boot is supported only for local Android emulators.',
+);
+const elementTextLeafUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'watchOS has no XCUITest-driveable UI, so element text comes from the captured tree only.',
+);
+const elementTextKindUnavailable = unavailableFact('unsupported-device-kind');
+const watchOpenTargetUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'watchOS open is not supported because XCUITest cannot drive watchOS UI.',
+);
+const watchPrepareUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'watchOS runner preparation is not supported because XCUITest cannot drive watchOS UI.',
+);
+const watchCloseTargetUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'watchOS close is not supported because XCUITest cannot drive watchOS UI.',
+);
+const runtimeHintsUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'Runtime hints are supported only for local iOS-family simulators and Android devices.',
+);
 
 const appleOpenTargetKindUnavailable = unsupportedAppleDeviceKind(
   'open is supported only for Apple simulators and devices.',
@@ -167,39 +151,34 @@ const applePrepareKindUnavailable = unsupportedAppleDeviceKind(
 const appleCloseTargetKindUnavailable = unsupportedAppleDeviceKind(
   'close is supported only for Apple simulators and devices.',
 );
-const portReverseUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Port reverse is supported only by an owning provider runtime.',
-} as const);
-const shutdownKindUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'shutdown is supported only for Apple simulators and Android emulators.',
-} as const);
+const portReverseUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'Port reverse is supported only by an owning provider runtime.',
+);
+const shutdownKindUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'shutdown is supported only for Apple simulators and Android emulators.',
+);
 const snapshotKindUnavailable = unsupportedAppleDeviceKind(
   'snapshot is supported only for Apple simulators and devices.',
 );
-const snapshotCustomActionsUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'Re-run without --actions, or target an iOS simulator.',
-} as const);
-const screenshotWatchOsUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'screenshot is not supported on watchOS because XCUITest cannot drive watchOS UI.',
-} as const);
+const snapshotCustomActionsUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'Re-run without --actions, or target an iOS simulator.',
+);
+const screenshotWatchOsUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'screenshot is not supported on watchOS because XCUITest cannot drive watchOS UI.',
+);
 const screenshotKindUnavailable = unsupportedAppleDeviceKind(
   'screenshot is supported only for Apple simulators and devices.',
 );
-const snapshotActiveAppRequired = Object.freeze({
-  available: false,
-  reason: 'owner-capability-missing',
-  hint: 'Open the app under test before capturing its snapshot.',
-} as const);
+const snapshotActiveAppRequired = unavailableFact(
+  'owner-capability-missing',
+  'Open the app under test before capturing its snapshot.',
+);
 function unsupportedAppleDeviceKind(hint: string) {
-  return Object.freeze({ available: false, reason: 'unsupported-device-kind', hint } as const);
+  return unavailableFact('unsupported-device-kind', hint);
 }
 
 function shutdownFact(device: DeviceInfo) {
@@ -256,18 +235,13 @@ function appleRuntimeHintsFact(device: DeviceInfo) {
 
 function appInventoryFacts(device: DeviceInfo) {
   if (device.appleOs === 'watchos') {
-    return Object.freeze({
-      available: false,
-      reason: 'unsupported-platform-leaf' as const,
-      hint: 'watchOS app inventory is not supported.',
-    });
+    return unavailableFact('unsupported-platform-leaf', 'watchOS app inventory is not supported.');
   }
   if (device.kind === 'device' && device.iosPhysicalDeviceBackend === 'xctest') {
-    return Object.freeze({
-      available: false,
-      reason: 'unsupported-device-backend' as const,
-      hint: 'App inventory is available only on CoreDevice-backed physical iOS devices.',
-    });
+    return unavailableFact(
+      'unsupported-device-backend',
+      'App inventory is available only on CoreDevice-backed physical iOS devices.',
+    );
   }
   return available;
 }
@@ -293,11 +267,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
       : undefined;
     const recordingFacts =
       leafRecordingFacts.available && hostAvailability?.available === false
-        ? Object.freeze({
-            available: false,
-            reason: 'unsupported-provider-mode' as const,
-            hint: hostAvailability.hint,
-          })
+        ? unavailableFact('unsupported-provider-mode', hostAvailability.hint)
         : leafRecordingFacts;
     const readiness = device.appleOs === 'watchos' ? unavailable : available;
     const boot = isMacOs(device) || device.appleOs === 'watchos' ? unavailable : available;

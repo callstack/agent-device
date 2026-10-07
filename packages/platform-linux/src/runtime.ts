@@ -22,7 +22,11 @@ import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runt
 import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-interactor-operation-set';
-import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import {
+  localRuntimeOwner,
+  sameRuntimeOwner,
+  unavailableFact,
+} from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import {
@@ -38,21 +42,21 @@ import { bindLinuxApplicationLifecycle } from './lifecycle.ts';
 
 const supported = Object.freeze({ available: true } as const);
 const linuxOwner = localRuntimeOwner('linux');
-const unsupportedPlatformLeaf = unavailableLinuxRuntimeFact('unsupported-platform-leaf');
-const elementTextKindUnavailable = unavailableLinuxRuntimeFact('unsupported-device-kind');
-const focusKindUnavailable = unavailableLinuxRuntimeFact(
+const unsupportedPlatformLeaf = unavailableFact('unsupported-platform-leaf');
+const elementTextKindUnavailable = unavailableFact('unsupported-device-kind');
+const focusKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'focus is supported only for the Linux desktop device.',
 );
-const typeKindUnavailable = unavailableLinuxRuntimeFact(
+const typeKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'type is supported only for the Linux desktop device.',
 );
-const gestureKindUnavailable = unavailableLinuxRuntimeFact(
+const gestureKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'Gestures are supported only for the Linux desktop device.',
 );
-const scrollKindUnavailable = unavailableLinuxRuntimeFact(
+const scrollKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'scroll is supported only for the Linux desktop device.',
 );
@@ -61,62 +65,62 @@ const scrollKindUnavailable = unavailableLinuxRuntimeFact(
  * fling's speed semantics, which is the one gesture the retired admission refused BY PLATFORM
  * rather than by leaf or kind.
  */
-const directionalFlingUnavailable = unavailableLinuxRuntimeFact('unsupported-platform-leaf');
-const multiTouchUnavailable = unavailableLinuxRuntimeFact('unsupported-platform-leaf');
-const targetAuthoredDragUnavailable = unavailableLinuxRuntimeFact(
+const directionalFlingUnavailable = unavailableFact('unsupported-platform-leaf');
+const multiTouchUnavailable = unavailableFact('unsupported-platform-leaf');
+const targetAuthoredDragUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
 );
 /** No frame read of its own: a Linux gesture derives its viewport from a capture, as it does today. */
-const gestureViewportUnavailable = unavailableLinuxRuntimeFact('unsupported-platform-leaf');
-const runtimeHintsUnavailable = unavailableLinuxRuntimeFact(
+const gestureViewportUnavailable = unavailableFact('unsupported-platform-leaf');
+const runtimeHintsUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'Runtime hints are supported only for local iOS-family simulators and Android devices.',
 );
-const appleRunnerUnavailable = unavailableLinuxRuntimeFact(
+const appleRunnerUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'Apple runner preparation is supported only for Apple targets.',
 );
-const providerPortReverseUnavailable = unavailableLinuxRuntimeFact(
+const providerPortReverseUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Port reverse is supported only by an owning provider runtime.',
 );
-const openTargetKindUnavailable = unavailableLinuxRuntimeFact(
+const openTargetKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'open is supported only for the Linux desktop device.',
 );
-const closeTargetKindUnavailable = unavailableLinuxRuntimeFact(
+const closeTargetKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'close is supported only for the Linux desktop device.',
 );
-const snapshotKindUnavailable = unavailableLinuxRuntimeFact(
+const snapshotKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'snapshot is supported only for the Linux desktop device.',
 );
-const screenshotKindUnavailable = unavailableLinuxRuntimeFact(
+const screenshotKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'screenshot is supported only for the Linux desktop device.',
 );
-const snapshotCustomActionsUnavailable = unavailableLinuxRuntimeFact(
+const snapshotCustomActionsUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'Re-run without --actions, or target an iOS simulator.',
 );
-const backKindUnavailable = unavailableLinuxRuntimeFact(
+const backKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'back is supported only for the Linux desktop device.',
 );
-const homeKindUnavailable = unavailableLinuxRuntimeFact(
+const homeKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'home is supported only for the Linux desktop device.',
 );
-const clipboardKindUnavailable = unavailableLinuxRuntimeFact(
+const clipboardKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'clipboard is supported only for the Linux desktop device.',
 );
 // `orientation`, `tv-remote`, and every keyboard action never carried a Linux capability bucket
 // at all (the retired descriptors declared `linux: {}`), so they are unavailable unconditionally.
 const linuxPlatformLeafUnavailable = unsupportedPlatformLeaf;
-const linuxAudioProbeUnavailable = unavailableLinuxRuntimeFact(
+const linuxAudioProbeUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'audio is supported for web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts',
 );
@@ -312,13 +316,4 @@ function linuxSnapshotOperations(
     captureSnapshotWithCustomActions: captureSnapshot,
     captureSnapshotWithoutActiveApp: captureSnapshot,
   });
-}
-
-function unavailableLinuxRuntimeFact(
-  reason: RuntimeOperationUnavailability['reason'],
-  hint?: string,
-): RuntimeOperationUnavailability {
-  return Object.freeze(
-    hint === undefined ? { available: false, reason } : { available: false, reason, hint },
-  );
 }

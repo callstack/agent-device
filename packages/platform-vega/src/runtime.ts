@@ -1,8 +1,4 @@
-import type {
-  DeviceBinding,
-  RuntimeFacts,
-  RuntimeOperationUnavailability,
-} from '@agent-device/contracts/platform-runtime';
+import type { DeviceBinding, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
@@ -15,7 +11,11 @@ import {
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
-import { localRuntimeOwner, sameRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import {
+  localRuntimeOwner,
+  sameRuntimeOwner,
+  unavailableFact,
+} from '@agent-device/contracts/platform-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
@@ -26,24 +26,24 @@ import { bindVegaApplicationLifecycle } from './lifecycle.ts';
 
 const vegaOwner = localRuntimeOwner('vega');
 const lifecycleAvailable = Object.freeze({ available: true } as const);
-const unsupportedPlatformLeaf = vegaUnavailable('unsupported-platform-leaf');
-const runtimeHintsUnavailable = vegaUnavailable(
+const unsupportedPlatformLeaf = unavailableFact('unsupported-platform-leaf');
+const runtimeHintsUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'Runtime hints are supported only for local iOS-family simulators and Android devices.',
 );
-const appleRunnerUnavailable = vegaUnavailable(
+const appleRunnerUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'Apple runner preparation is supported only for Apple targets.',
 );
-const providerPortReverseUnavailable = vegaUnavailable(
+const providerPortReverseUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Port reverse is supported only by an owning provider runtime.',
 );
-const openTargetUnavailable = vegaUnavailable(
+const openTargetUnavailable = unavailableFact(
   'unsupported-device-kind',
   'open currently supports only Vega Virtual Devices.',
 );
-const closeTargetUnavailable = vegaUnavailable(
+const closeTargetUnavailable = unavailableFact(
   'unsupported-device-kind',
   'close currently supports only Vega Virtual Devices.',
 );
@@ -88,25 +88,25 @@ export function createVegaPlatformRuntime(host: PlatformRuntimeHost): PlatformRu
   });
 }
 
-const screenshotUnavailable = vegaUnavailable(
+const screenshotUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'screenshot is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
 );
 
-const focusUnavailable = vegaUnavailable(
+const focusUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'focus is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
 );
-const typeUnavailable = vegaUnavailable(
+const typeUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'type is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
 );
 
-const gestureUnavailable = vegaUnavailable(
+const gestureUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'Gestures are not supported on Vega OS: the Vega runtime exposes remote navigation only.',
 );
-const scrollUnavailable = vegaUnavailable(
+const scrollUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'scroll is not supported on Vega OS: the Vega runtime exposes remote navigation only.',
 );
@@ -115,59 +115,59 @@ const scrollUnavailable = vegaUnavailable(
  * own wording: two-contact synthesis with no hint at all, and target-authored drag by naming the
  * phases an adapter has to preserve.
  */
-const multiTouchUnavailable = vegaUnavailable('unsupported-platform-leaf');
-const targetAuthoredDragUnavailable = vegaUnavailable(
+const multiTouchUnavailable = unavailableFact('unsupported-platform-leaf');
+const targetAuthoredDragUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
 );
 // `orientation` and every keyboard action never carried a Vega capability bucket at all; `back`,
 // `home`, and `tv-remote` did (the retired `vegaPlugin` closure), gated by the same VVD cell
 // their lifecycle open/close already require.
-const orientationUnavailable = vegaUnavailable(
+const orientationUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'orientation is not supported on Vega OS.',
 );
-const keyboardUnavailable = vegaUnavailable(
+const keyboardUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'keyboard is not supported on Vega OS.',
 );
-const alertUnavailable = vegaUnavailable(
+const alertUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'alert is not supported on Vega OS.',
 );
-const settingsUnavailable = vegaUnavailable(
+const settingsUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'settings is not supported on Vega OS.',
 );
-const appEventUnavailable = vegaUnavailable(
+const appEventUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'trigger-app-event is not supported on Vega OS.',
 );
-const systemButtonUnavailable = vegaUnavailable(
+const systemButtonUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'System buttons other than home are not supported on Vega OS.',
 );
-const foldUnavailable = vegaUnavailable(
+const foldUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'fold is not supported on Vega OS.',
 );
-const clipboardUnavailable = vegaUnavailable(
+const clipboardUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'clipboard is not supported on Vega OS.',
 );
-const backUnavailable = vegaUnavailable(
+const backUnavailable = unavailableFact(
   'unsupported-device-kind',
   'back currently supports only Vega Virtual Devices.',
 );
-const homeUnavailable = vegaUnavailable(
+const homeUnavailable = unavailableFact(
   'unsupported-device-kind',
   'home currently supports only Vega Virtual Devices.',
 );
-const tvRemoteUnavailable = vegaUnavailable(
+const tvRemoteUnavailable = unavailableFact(
   'unsupported-device-kind',
   'tv-remote currently supports only Vega Virtual Devices.',
 );
-const audioProbeUnavailable = vegaUnavailable(
+const audioProbeUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'audio is supported for web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts',
 );
@@ -244,16 +244,4 @@ function vegaFacts(device: DeviceInfo): RuntimeFacts<PlatformRuntimeOperations> 
       }),
     },
   });
-}
-
-function vegaUnavailable(
-  reason: RuntimeOperationUnavailability['reason'],
-  hint?: string,
-): RuntimeOperationUnavailability {
-  const fact: RuntimeOperationUnavailability = {
-    available: false,
-    reason,
-    ...(hint === undefined ? {} : { hint }),
-  };
-  return Object.freeze(fact);
 }

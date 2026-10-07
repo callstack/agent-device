@@ -22,7 +22,11 @@ import {
 } from '@agent-device/contracts/gesture-admission';
 import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
 import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
-import { localRuntimeOwner, whenAdmitted } from '@agent-device/contracts/platform-runtime';
+import {
+  localRuntimeOwner,
+  unavailableFact,
+  whenAdmitted,
+} from '@agent-device/contracts/platform-runtime';
 import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
 import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
 import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
@@ -63,114 +67,91 @@ import {
 
 const owner = localRuntimeOwner('android');
 const available = Object.freeze({ available: true } as const);
-const elementTextKindUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-} as const);
+const elementTextKindUnavailable = unavailableFact('unsupported-device-kind');
 /**
  * Parity with the retired `focus` capability bucket (`{ emulator, device, unknown }`): every
  * Android kind drives touch through adb except the synthetic `simulator` row, which has no device.
  */
-const focusKindUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'focus is supported on Android emulators and physical devices.',
-} as const);
+const focusKindUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'focus is supported on Android emulators and physical devices.',
+);
 /** adb drives keyboard actions on the same two kinds it drives everything else. */
-const keyboardKindUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'keyboard actions are supported on Android emulators and physical devices.',
-} as const);
-const hoverUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-} as const);
+const keyboardKindUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'keyboard actions are supported on Android emulators and physical devices.',
+);
+const hoverUnavailable = unavailableFact('unsupported-platform-leaf');
 /**
  * `home` and `app-switcher` are the system buttons `input keyevent` can press. Any other (the
  * iPhone Action Button today) is hardware with no Android key event behind it, so there is no adb
  * path to admit even on the kinds every other Android cell admits.
  */
-const systemButtonUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'Android has no key event for this system button.',
-} as const);
+const systemButtonUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'Android has no key event for this system button.',
+);
 /**
  * Foldable Android emulators do carry a posture control (the emulator console's `fold` and
  * `posture` commands), but nothing in this project drives it yet, so the cell refuses on every
  * kind rather than advertising a pose it cannot set.
  */
-const foldUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'fold drives the hinge of a foldable iPhone simulator; the Android emulator posture control is not driven by agent-device yet.',
-} as const);
-const headlessUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'Headless boot is supported only for Android emulators.',
-} as const);
-const appStateUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'Android appstate is supported only for Android emulators and devices.',
-} as const);
-const prepareUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'Apple runner preparation is supported only for Apple targets.',
-} as const);
-const openTargetUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'open is supported only for Android emulators and devices.',
-} as const);
-const closeTargetUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'close is supported only for Android emulators and devices.',
-} as const);
-const runtimeHintsUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'Runtime hints are supported only for Android emulators and devices.',
-} as const);
-const portReverseUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Port reverse is supported only by an owning provider runtime.',
-} as const);
-const shutdownKindUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'shutdown is supported only for Apple simulators and Android emulators.',
-} as const);
-const screenshotKindUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'screenshot is supported only for Android emulators and devices.',
-} as const);
-const snapshotKindUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'snapshot is supported only for Android emulators and devices.',
-} as const);
-const snapshotCustomActionsUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'Re-run without --actions, or target an iOS simulator.',
-} as const);
-const viewportUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'viewport resizes web targets only (--platform web).',
-} as const);
-const audioQueryUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: 'the stateless audio page probe is a web-session operation; Android targets use the host capture.',
-} as const);
+const foldUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'fold drives the hinge of a foldable iPhone simulator; the Android emulator posture control is not driven by agent-device yet.',
+);
+const headlessUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'Headless boot is supported only for Android emulators.',
+);
+const appStateUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'Android appstate is supported only for Android emulators and devices.',
+);
+const prepareUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'Apple runner preparation is supported only for Apple targets.',
+);
+const openTargetUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'open is supported only for Android emulators and devices.',
+);
+const closeTargetUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'close is supported only for Android emulators and devices.',
+);
+const runtimeHintsUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'Runtime hints are supported only for Android emulators and devices.',
+);
+const portReverseUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'Port reverse is supported only by an owning provider runtime.',
+);
+const shutdownKindUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'shutdown is supported only for Apple simulators and Android emulators.',
+);
+const screenshotKindUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'screenshot is supported only for Android emulators and devices.',
+);
+const snapshotKindUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'snapshot is supported only for Android emulators and devices.',
+);
+const snapshotCustomActionsUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'Re-run without --actions, or target an iOS simulator.',
+);
+const viewportUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'viewport resizes web targets only (--platform web).',
+);
+const audioQueryUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'the stateless audio page probe is a web-session operation; Android targets use the host capture.',
+);
 
 function androidLifecycleFacts(device: DeviceInfo) {
   const openTarget = androidOpenTargetFact(device);
@@ -205,21 +186,18 @@ function androidRuntimeHintsFact(device: DeviceInfo) {
     : runtimeHintsUnavailable;
 }
 
-const gestureKindUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'Gestures are supported on Android emulators and physical devices.',
-} as const);
-const androidTvMultiTouchUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT,
-} as const);
-const androidTvDragUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
-} as const);
+const gestureKindUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'Gestures are supported on Android emulators and physical devices.',
+);
+const androidTvMultiTouchUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT,
+);
+const androidTvDragUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
+);
 
 /**
  * A TV target has no touch input at all, which is the one Android gate the retired admission
@@ -240,11 +218,10 @@ function androidTouchFact(device: DeviceInfo) {
   return device.kind === 'simulator' ? focusKindUnavailable : available;
 }
 
-const clipboardShellUnavailable = Object.freeze({
-  available: false,
-  reason: 'owner-capability-missing',
-  hint: ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT,
-} as const);
+const clipboardShellUnavailable = unavailableFact(
+  'owner-capability-missing',
+  ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT,
+);
 
 /**
  * The probe could not reach the device, so this owner does not know whether the build supports a
@@ -253,11 +230,10 @@ const clipboardShellUnavailable = Object.freeze({
  * exact failure fact-based admission exists to prevent. Deliberately not cached — the next
  * inspection asks again.
  */
-const clipboardShellUnknown = Object.freeze({
-  available: false,
-  reason: 'owner-capability-missing',
-  hint: 'Could not determine whether this Android build supports a shell clipboard: the adb probe did not complete. Retry once the device is reachable.',
-} as const);
+const clipboardShellUnknown = unavailableFact(
+  'owner-capability-missing',
+  'Could not determine whether this Android build supports a shell clipboard: the adb probe did not complete. Retry once the device is reachable.',
+);
 
 /**
  * `probe-failed` covers both ways this owner can end up without an answer: the probe ran and could
@@ -273,11 +249,10 @@ async function probeClipboardShellSupport(
   return await probe.call(host.androidTools, device);
 }
 
-const tvRemoteUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'tv-remote is supported only on Android TV targets.',
-} as const);
+const tvRemoteUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  'tv-remote is supported only on Android TV targets.',
+);
 /**
  * Parity with the retired `androidPlugin` closure: the TV-target gate, whose hint fired
  * regardless of device kind (the closure never distinguished the synthetic `simulator` row from
