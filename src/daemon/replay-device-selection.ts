@@ -38,27 +38,39 @@ export async function buildReplayTargetDeviceResolution(
     const resolved = bundle.entry;
     const source = readReplayScriptSourceFile(bundle, resolved);
     if (resolveReplayFormat(resolved, req.flags?.replayBackend) === 'maestro') {
-      const { inspectMaestroFlow } = await import('@agent-device/maestro');
-      const flow = inspectMaestroFlow(source, resolved);
-      return {
-        flags: req.flags ?? {},
-        options: buildMaestroReplayTargetDeviceResolutionOptions(
-          flow.appTarget,
-          req.flags?.platform,
-        ),
-      };
+      return await readMaestroReplayResolution(source, resolved, req.flags);
     }
-    const parsed = parseReplayInput(source, req.flags);
-    const selection = readScriptReplaySelection(parsed.actions);
-    if (!selection.appTarget) return undefined;
-    const scriptFlags = buildReplayScriptPlatformFlags(req.flags, parsed.actions);
-    const platform = scriptFlags.platform ?? parsed.metadata.platform;
-    return {
-      flags:
-        platform && scriptFlags.platform === undefined ? { ...scriptFlags, platform } : scriptFlags,
-      options: platform === 'ios' ? appTargetResolutionOptions(selection.appTarget) : undefined,
-    };
+    return readAdScriptResolution(source, req.flags);
   });
+}
+
+async function readMaestroReplayResolution(
+  source: string,
+  resolvedPath: string,
+  flags: DaemonRequest['flags'],
+): Promise<ReplayTargetDeviceResolution> {
+  const { inspectMaestroFlow } = await import('@agent-device/maestro');
+  const flow = inspectMaestroFlow(source, resolvedPath);
+  return {
+    flags: flags ?? {},
+    options: buildMaestroReplayTargetDeviceResolutionOptions(flow.appTarget, flags?.platform),
+  };
+}
+
+function readAdScriptResolution(
+  source: string,
+  flags: DaemonRequest['flags'],
+): ReplayTargetDeviceResolution | undefined {
+  const parsed = parseReplayInput(source, flags);
+  const selection = readScriptReplaySelection(parsed.actions);
+  if (!selection.appTarget) return undefined;
+  const scriptFlags = buildReplayScriptPlatformFlags(flags, parsed.actions);
+  const platform = scriptFlags.platform ?? parsed.metadata.platform;
+  return {
+    flags:
+      platform && scriptFlags.platform === undefined ? { ...scriptFlags, platform } : scriptFlags,
+    options: platform === 'ios' ? appTargetResolutionOptions(selection.appTarget) : undefined,
+  };
 }
 
 async function readAdvisoryResolution(
