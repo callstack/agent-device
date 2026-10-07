@@ -15,6 +15,7 @@ import {
   facadeEntryFiles,
   checkPackageInternalSites,
   checkRootSites,
+  insideCompiledSources,
   readWorkspacePackages,
   rootExternalDependencyRanges,
   rootWorkspaceDependencyNames,
@@ -107,6 +108,21 @@ test('specifier sites carry 1-based lines for static and dynamic imports', () =>
     sites.map(({ specifier, line }) => `${line}:${specifier}`),
     ['1:./b.ts', '3:../c.ts'],
   );
+});
+
+test('the compiled set names exactly the file set the tsc -b graph parses', () => {
+  // The compiler-owned/compiler-exempt split above is keyed on this predicate (#3279), so the
+  // mutation it must fail on is a file joining or leaving `tsc -b`'s programs without the
+  // predicate following: `scripts/` and the package harness dirs are run by Node's type
+  // stripper and vitest, never by a tsconfig program, while package `src/`, root `src/` and
+  // root `test/` all compile.
+  assert.equal(insideCompiledSources('packages/kernel/src/errors.ts'), true);
+  assert.equal(insideCompiledSources('packages/maestro/src/index.ts'), true);
+  assert.equal(insideCompiledSources('src/cli.ts'), true);
+  assert.equal(insideCompiledSources('test/integration/smoke-web-platform.test.ts'), true);
+  assert.equal(insideCompiledSources('scripts/layering/check.ts'), false);
+  assert.equal(insideCompiledSources('packages/maestro/test/conformance/harness.ts'), false);
+  assert.equal(insideCompiledSources('packages/proxy/tsdown.config.ts'), false);
 });
 
 test('readWorkspacePackages reads tracked manifests only', () => {
@@ -279,34 +295,40 @@ test('double-quoted and re-export routes into packages are not invisible to R11'
     'src/utils/exec.ts',
     'import { AppError } from "../../packages/kernel/src/errors.ts";',
   );
-  assert.equal(checkRootSites(doubleQuoted, ALL, new Set([kernel.name])).length, 1);
+  assert.equal(checkRootSites(doubleQuoted, ALL, new Set([kernel.name]), true).length, 1);
 
   const reExport = specifierSites(
     'src/utils/exec.ts',
     'export { AppError } from "../../packages/kernel/src/errors.ts";',
   );
-  assert.equal(checkRootSites(reExport, ALL, new Set([kernel.name])).length, 1);
+  assert.equal(checkRootSites(reExport, ALL, new Set([kernel.name]), true).length, 1);
 
   const dynamic = specifierSites(
     'src/utils/exec.ts',
     'void import("../../packages/kernel/src/errors.ts");',
   );
-  assert.equal(checkRootSites(dynamic, ALL, new Set([kernel.name])).length, 1);
+  assert.equal(checkRootSites(dynamic, ALL, new Set([kernel.name]), true).length, 1);
 
   const packageEscape = specifierSites(
     'packages/kernel/src/errors.ts',
     'export * from "../../../src/utils/exec.ts";',
   );
-  assert.equal(checkPackageInternalSites(kernel, packageEscape, ALL).length, 1);
+  // The escape is compiler-owned for compiled sources; scripts/ and package harness files that
+  // sit outside the type graph keep the R11 branch (#3279).
+  assert.equal(checkPackageInternalSites(kernel, packageEscape, ALL, true).length, 0);
+  assert.equal(checkPackageInternalSites(kernel, packageEscape, ALL, false).length, 1);
 });
 
 // This `src/utils` path is another in-memory arbitrary parser fixture, not a live repository path.
-test('a package file importing root src is a violation', () => {
+test('a package file importing root src is compiler-owned once tsc -b sees it', () => {
+  // #3279: composite `rootDir` rejects a package->root relative escape with TS6059 + TS6307
+  // (planted proof in the PR). R11 keeps the branch only for package files the graph omits.
   const sites = specifierSites(
     'packages/kernel/src/errors.ts',
     "import { helper } from '../../../src/utils/exec.ts';",
   );
-  assert.deepEqual(rules(checkPackageInternalSites(kernel, sites, ALL)), [
+  assert.deepEqual(checkPackageInternalSites(kernel, sites, ALL, true), []);
+  assert.deepEqual(rules(checkPackageInternalSites(kernel, sites, ALL, false)), [
     'R11 package-boundaries',
   ]);
 });
@@ -316,50 +338,60 @@ test('intra-package relative imports hold', () => {
     'packages/kernel/src/daemon-error.ts',
     "import { AppError } from './errors.ts';",
   );
-  assert.deepEqual(checkPackageInternalSites(kernel, sites, ALL), []);
+  assert.deepEqual(checkPackageInternalSites(kernel, sites, ALL, true), []);
 });
 
-test('an exported package self-reference holds while a deep self-import fails', () => {
+test('an exported package self-reference holds while a deep self-import is compiler-owned', () => {
   const exported = specifierSites(
     'packages/kernel/src/errors.test.ts',
     "import { AppError } from '@agent-device/kernel/errors';",
   );
-  assert.deepEqual(checkPackageInternalSites(kernel, exported, ALL), []);
+  assert.deepEqual(checkPackageInternalSites(kernel, exported, ALL, true), []);
 
+  // #3279: NodeNext resolution rejects the un-exported self subpath with TS2307 (planted proof);
+  // R11 keeps the branch only where the compiler cannot see the site.
   const deep = specifierSites(
     'packages/kernel/src/errors.test.ts',
     "import { AppError } from '@agent-device/kernel/src/errors.ts';",
   );
-  assert.equal(checkPackageInternalSites(kernel, deep, ALL).length, 1);
+  assert.equal(checkPackageInternalSites(kernel, deep, ALL, true).length, 0);
+  assert.equal(checkPackageInternalSites(kernel, deep, ALL, false).length, 1);
 });
 
-test('a cross-package import needs a workspace:* declaration and an exported subpath', () => {
+test('a cross-package import needs a workspace:* declaration; the exports map is compiler-owned', () => {
   const declared = specifierSites(
     'packages/contracts/src/gesture.ts',
     "import { AppError } from '@agent-device/kernel/errors';",
   );
-  assert.deepEqual(checkPackageInternalSites(contracts, declared, ALL), []);
+  assert.deepEqual(checkPackageInternalSites(contracts, declared, ALL, true), []);
 
+  // The undeclared-dep branch stays R11's own for compiled files: pnpm's root link farm makes
+  // the import resolve and typecheck anyway, and the declaration is what the published bundle
+  // externalizes against — no compiler check can express it (recorded in #3279).
   const undeclared = specifierSites(
     'packages/kernel/src/errors.ts',
     "import { g } from '@agent-device/contracts/interaction';",
   );
-  assert.equal(checkPackageInternalSites(kernel, undeclared, ALL).length, 1);
+  assert.equal(checkPackageInternalSites(kernel, undeclared, ALL, true).length, 1);
 
+  // The un-exported subpath is TS2307 for compiled files (planted proof in #3279).
   const deep = specifierSites(
     'packages/contracts/src/gesture.ts',
     "import { internal } from '@agent-device/kernel/internal/secret';",
   );
-  assert.equal(checkPackageInternalSites(contracts, deep, ALL).length, 1);
+  assert.equal(checkPackageInternalSites(contracts, deep, ALL, true).length, 0);
 });
 
 test('a root src file tunnelling into packages/*/src relatively is a violation', () => {
   // This `src/utils` path is an in-memory arbitrary parser fixture, not a live repository path.
+  // It stays R11's own for every root file, compiled or not: #3279 planted the tunnel inside the
+  // compiled tree and tsc accepted it — the failure this rule prevents is the runtime one where
+  // Node's ESM loader instantiates the module twice.
   const sites = specifierSites(
     'src/utils/exec.ts',
     "import { AppError } from '../../packages/kernel/src/errors.ts';",
   );
-  const violations = checkRootSites(sites, ALL, new Set([kernel.name]));
+  const violations = checkRootSites(sites, ALL, new Set([kernel.name]), true);
   assert.deepEqual(rules(violations), ['R11 package-boundaries']);
   assert.match(violations[0]!.message, /instantiate the module twice/);
 });
@@ -373,34 +405,41 @@ test('a scripts/ file gets no relative route into a package either', () => {
     'scripts/some-tool/run.ts',
     "import { AppError } from '../../packages/kernel/src/errors.ts';",
   );
-  assert.equal(checkRootSites(exportsNamed, ALL, new Set([kernel.name])).length, 1);
+  assert.equal(checkRootSites(exportsNamed, ALL, new Set([kernel.name]), false).length, 1);
 
   const nonExported = specifierSites(
     'scripts/some-tool/run.ts',
     "import { hidden } from '../../packages/kernel/src/internal.ts';",
   );
-  assert.equal(checkRootSites(nonExported, ALL, new Set([kernel.name])).length, 1);
+  assert.equal(checkRootSites(nonExported, ALL, new Set([kernel.name]), false).length, 1);
 });
 
-test('root workspace specifiers need a root workspace:* entry and an exported subpath', () => {
+test('root workspace specifiers need a root workspace:* entry; resolution is compiler-owned', () => {
   const fine = specifierSites(
     'src/cli.ts',
     "import { AppError } from '@agent-device/kernel/errors';",
   );
-  assert.deepEqual(checkRootSites(fine, ALL, new Set([kernel.name])), []);
+  assert.deepEqual(checkRootSites(fine, ALL, new Set([kernel.name]), true), []);
 
-  const undeclared = checkRootSites(fine, ALL, new Set());
+  // The root-declaration branch stays R11's own (#3279): the root link farm resolves an
+  // undeclared specifier anyway, and the published bundle externalizes against this entry.
+  const undeclared = checkRootSites(fine, ALL, new Set(), true);
   assert.equal(undeclared.length, 1);
   assert.match(undeclared[0]!.message, /workspace:\*/);
 
+  // #3279 planted both below inside the compiled tree and `tsc -b` failed them with TS2307
+  // (unknown package and non-exported subpath), so R11 stands down there; uncompiled sites,
+  // which the compiler never parses, keep both branches.
   const deep = specifierSites(
     'src/cli.ts',
     "import { x } from '@agent-device/kernel/src/errors.ts';",
   );
-  assert.equal(checkRootSites(deep, ALL, new Set([kernel.name])).length, 1);
+  assert.equal(checkRootSites(deep, ALL, new Set([kernel.name]), true).length, 0);
+  assert.equal(checkRootSites(deep, ALL, new Set([kernel.name]), false).length, 1);
 
   const unknown = specifierSites('src/cli.ts', "import { x } from '@agent-device/nope/thing';");
-  assert.equal(checkRootSites(unknown, ALL, new Set([kernel.name])).length, 1);
+  assert.equal(checkRootSites(unknown, ALL, new Set([kernel.name]), true).length, 0);
+  assert.equal(checkRootSites(unknown, ALL, new Set([kernel.name]), false).length, 1);
 });
 
 test('a published package declares its bundled workspace siblings as devDependencies', () => {
@@ -427,7 +466,7 @@ test('a published package declares its bundled workspace siblings as devDependen
     'packages/published/src/index.ts',
     "import { g } from '@agent-device/contracts/interaction';",
   );
-  const [violation] = checkPackageInternalSites(published, undeclared, [...ALL, published]);
+  const [violation] = checkPackageInternalSites(published, undeclared, [...ALL, published], true);
   assert.match(violation?.message ?? '', /packages\/published\/package\.json devDependencies\.$/);
 });
 

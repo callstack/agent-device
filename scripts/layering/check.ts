@@ -32,8 +32,10 @@
 //   - Across the DAEMON MODULARITY MIGRATION: R7 ownership pressure and external
 //     daemon request/session-state importers only shrink, R9 zone membership cannot grow or absorb
 //     engine files, and planned logical modules start with zero forbidden/internal imports (R10).
-//   - Over the WORKSPACE PACKAGES: no root back-imports, no relative tunnelling past
-//     an exports map, and every workspace specifier declared + exports-named (R11).
+//   - Over the WORKSPACE PACKAGES: every workspace specifier declared, no relative tunnelling
+//     into a package's src, and the full specifier sweep for the scripts/ files the type graph
+//     omits — resolution itself (unknown package, un-exported subpath) is TS2307 under tsc -b
+//     for compiled sources (#3279) (R11).
 //   - Over PLATFORM PACKAGE COMPOSITION: six private metadata façades meet at the exact root
 //     composition file; premature implementation loading and forbidden cross-boundary edges fail (R13).
 //   - Over THE APPLE RUNNER SUBTREE: `runner/**` may not value-import `@agent-device/host-kit/*`
