@@ -24,7 +24,6 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
   // On-disk and wire contracts a daemon process shares with its clients (#2559): the client
   // reaches the daemon over the network, so both sides read these from below.
   'daemon-contracts': [
-    'src/daemon-diagnostics-scope.ts',
     'src/daemon-owner-cleanup.ts',
     'src/daemon-policy-file.ts',
     'src/daemon-process.ts',

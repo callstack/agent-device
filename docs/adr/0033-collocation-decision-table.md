@@ -119,9 +119,10 @@ already owns the operations behind the vocabulary.
 `#3288` assigns every process-root module a logical zone in
 `scripts/layering/root-module-zones.ts` (`daemon-contracts` rank 2, `command-runtime` rank 3,
 `platform-runtime` rank 4, …) while leaving the files physically in place. Per the maintainer
-design decision, that reclassification is **not** completed collocation: the physical moves for
-`daemon-diagnostics-scope.ts`, `runtime-command-surface.ts`, and `runtime-factory.ts` remain
-outstanding and are tracked as #3294 (child of #3276). The other rows below are keeps: the
+design decision, that reclassification is **not** completed collocation: the physical moves under
+#3294 (child of #3276) replace each file's row with folder-derived ownership.
+`daemon-diagnostics-scope.ts` has moved into `src/daemon-contracts/`; `runtime-command-surface.ts`
+and `runtime-factory.ts` remain outstanding. The other rows below are keeps: the
 daemon ⇄ client shared files (`daemon-policy-file.ts`, `provider-credential-fingerprint.ts`,
 `request-progress-protocol.ts`) trace to #2559, which relocated the shared contracts **to the
 process root** so the client stops importing `src/daemon/` at all; R78 keeps any client→daemon
@@ -132,7 +133,7 @@ constrain a relocation, they are not independent proof the placement is optimal.
 
 | File | Decision | Reason |
 | --- | --- | --- |
-| `src/daemon-diagnostics-scope.ts` | move (outstanding, #3294) | Confirmed as an outstanding physical move, not reconsidered. Importers: `daemon/server/daemon-runtime.ts` and `daemon-registration-owner.ts` (static, line 25). #3288's `daemon-contracts` assignment classifies it only; #3294 owns the physical move and the row deletion from `ROOT_MODULE_ZONES`. |
+| `src/daemon-diagnostics-scope.ts` | moved → `src/daemon-contracts/daemon-diagnostics-scope.ts` | Physical move landed: the helper now lives under the folder that derives its `daemon-contracts` zone, so `topFolder` replaces the per-file `ROOT_MODULE_ZONES` row and an internal rename needs no ownership-table edit. |
 | `src/daemon-policy-file.ts` | keep | Daemon ⇄ client shared contract from #2559, declared `daemon-contracts` by #3288 — the shared-below-both ownership the spine needs, since daemon-client (rank 5) dynamically imports it. |
 | `src/daemon.ts` | keep | Entry point (`internal/daemon` bundle entry); composition roots stay in root by umbrella §4. |
 | `src/platform-runtime-apple-runner-owner.ts` | retain for this batch | `platform-runtime-*` composition seam: R13's exact-importer rule and the ADR 0022 R76 inventory key on its path, so relocation requires coordinated ownership changes to both declarations — the rules constrain the move, they do not independently prove the placement. |
