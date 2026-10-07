@@ -84,14 +84,15 @@ function resolveFreshSessionBindingRequest(req: DaemonRequest): DaemonRequest {
   }
 }
 
-function resolveFreshSessionDeviceLock(req: DaemonRequest):
+async function resolveFreshSessionDeviceLock(req: DaemonRequest): Promise<
   | {
       flags: NonNullable<DaemonRequest['flags']>;
       options: ReturnType<typeof buildOpenTargetDeviceResolutionOptions> | undefined;
     }
-  | undefined {
+  | undefined
+> {
   if (req.command === 'open') return resolveOpenDeviceLock(req);
-  if (req.command === 'replay') return resolveReplayDeviceLock(req);
+  if (req.command === 'replay') return await resolveReplayDeviceLock(req);
   return resolveExplicitDeviceLock(req);
 }
 
@@ -101,7 +102,7 @@ function resolveFreshSessionDeviceLock(req: DaemonRequest):
  * happens after: the locked request resolves and binds its device on its own.
  */
 async function resolveFreshSessionDevice(req: DaemonRequest): Promise<DeviceInfo | undefined> {
-  const resolution = resolveFreshSessionDeviceLock(resolveFreshSessionBindingRequest(req));
+  const resolution = await resolveFreshSessionDeviceLock(resolveFreshSessionBindingRequest(req));
   if (!resolution) return undefined;
   try {
     return await resolveTargetDevice(resolution.flags, resolution.options);
@@ -116,8 +117,8 @@ function resolveOpenDeviceLock(req: DaemonRequest) {
   return options ? { flags: req.flags ?? {}, options } : undefined;
 }
 
-function resolveReplayDeviceLock(req: DaemonRequest) {
-  return buildReplayTargetDeviceResolution(req) ?? resolveExplicitDeviceLock(req);
+async function resolveReplayDeviceLock(req: DaemonRequest) {
+  return (await buildReplayTargetDeviceResolution(req)) ?? resolveExplicitDeviceLock(req);
 }
 
 function resolveExplicitDeviceLock(req: DaemonRequest) {
