@@ -11,25 +11,24 @@ import { RUNNER_CACHE_METADATA_FILE } from './runner-cache-metadata.ts';
  * instead of building into this one.
  *
  * Returns the removed entries relative to `derived`. Nothing is removed when `derived` does not
- * resolve, by real path, to a direct child of `managedRoot`, or when a product lies outside
- * `derived`. A symlinked `derived` therefore trims only when its target is a key in `managedRoot`.
+ * resolve, by real path, to `expectedKeyPath` (the key this build gets with no path override), or
+ * when a product lies outside `derived`. A symlinked `derived` therefore trims only when its target
+ * is that key.
  */
 export async function trimRunnerBuildScratch(
   derived: string,
   protectedPaths: readonly string[],
-  managedRoot: string,
+  expectedKeyPath: string,
 ): Promise<string[]> {
-  if (!isManagedKey(derived, managedRoot)) return [];
+  if (!isExpectedKey(derived, expectedKeyPath)) return [];
   const kept = resolveKeptPaths(derived, protectedPaths);
   if (!kept) return [];
   return await trimDirectory(derived, derived, kept);
 }
 
-function isManagedKey(derived: string, managedRoot: string): boolean {
+function isExpectedKey(derived: string, expectedKeyPath: string): boolean {
   try {
-    const realRoot = fs.realpathSync(managedRoot);
-    const realDerived = fs.realpathSync(derived);
-    return isPathInsideDirectory(realDerived, realRoot) && path.dirname(realDerived) === realRoot;
+    return fs.realpathSync(derived) === fs.realpathSync(expectedKeyPath);
   } catch {
     return false;
   }

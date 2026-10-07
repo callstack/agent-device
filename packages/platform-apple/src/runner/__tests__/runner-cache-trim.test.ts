@@ -63,7 +63,7 @@ test('trimming keeps the products and the metadata file and removes the rest', a
   const derived = path.join(base, KEY);
   const protectedPaths = seedBuiltKey(derived);
 
-  const removed = await trimRunnerBuildScratch(derived, protectedPaths, base);
+  const removed = await trimRunnerBuildScratch(derived, protectedPaths, derived);
 
   assert.deepEqual(removed.sort(), [
     'Build/Intermediates.noindex',
@@ -93,24 +93,24 @@ test('a product outside the cache root leaves the tree untouched', async () => {
   fs.mkdirSync(outside);
   const before = tree(derived);
 
-  assert.deepEqual(await trimRunnerBuildScratch(derived, [outside], base), []);
+  assert.deepEqual(await trimRunnerBuildScratch(derived, [outside], derived), []);
 
   assert.deepEqual(tree(derived), before);
 });
 
-test('a directory that is not a key of the managed root is not trimmed', async () => {
-  const managedRoot = path.join(base, 'managed');
+test('a directory that is not the expected key is not trimmed', async () => {
+  const expected = path.join(base, 'managed', KEY);
   const fixed = path.join(base, 'fixed', KEY);
-  fs.mkdirSync(managedRoot);
+  fs.mkdirSync(expected, { recursive: true });
   const protectedPaths = seedBuiltKey(fixed);
   const before = tree(fixed);
 
-  assert.deepEqual(await trimRunnerBuildScratch(fixed, protectedPaths, managedRoot), []);
+  assert.deepEqual(await trimRunnerBuildScratch(fixed, protectedPaths, expected), []);
 
   assert.deepEqual(tree(fixed), before);
 });
 
-test('a symlinked key resolving outside the managed root is not trimmed', async () => {
+test('a symlinked key resolving outside the expected key is not trimmed', async () => {
   const managedRoot = path.join(base, 'managed');
   const target = path.join(base, 'target');
   fs.mkdirSync(managedRoot);
@@ -123,7 +123,7 @@ test('a symlinked key resolving outside the managed root is not trimmed', async 
     await trimRunnerBuildScratch(
       link,
       protectedPaths.map((product) => path.join(link, path.relative(target, product))),
-      managedRoot,
+      path.join(managedRoot, 'other-key'),
     ),
     [],
   );
@@ -138,7 +138,7 @@ test('a product that is a symlink keeps the unit it points into', async () => {
   const link = path.join(derived, 'Build', 'Products', 'Linked.app');
   fs.symlinkSync(target, link);
 
-  const removed = await trimRunnerBuildScratch(derived, [xctestrun!, link], base);
+  const removed = await trimRunnerBuildScratch(derived, [xctestrun!, link], derived);
 
   assert.deepEqual(removed.sort(), [
     'Logs',
@@ -212,6 +212,22 @@ test('a derived path override named like a cache key keeps its build scratch', a
     base,
     'fixed',
     path.basename(managed.derived),
+  );
+
+  const built = await ensureXctestrunArtifact(IOS_SIMULATOR, {});
+
+  assert.equal(built.artifact, 'rebuilt');
+  assert.equal(built.derived, process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH);
+  assert.equal(fs.existsSync(path.join(built.derived, 'Build', 'Intermediates.noindex')), true);
+  assert.equal(fs.existsSync(path.join(built.derived, 'Logs')), true);
+});
+
+test('a derived path override inside the managed root keeps its build scratch', async () => {
+  mockRunnerBuild();
+  const managed = await ensureXctestrunArtifact(IOS_SIMULATOR, {});
+  process.env.AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH = path.join(
+    path.dirname(managed.derived),
+    'development',
   );
 
   const built = await ensureXctestrunArtifact(IOS_SIMULATOR, {});
