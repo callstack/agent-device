@@ -38,7 +38,6 @@ export const captureSnapshotForSession: CaptureSnapshotForSession = async (
         device: session.device,
         session,
         flags: effectiveFlags,
-        outPath: effectiveFlags.out,
         logPath: context.logPath ?? '',
         includeRects: captureOptions.includeRects,
         androidFreshnessMode: captureOptions.androidFreshnessMode,

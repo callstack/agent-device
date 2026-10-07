@@ -4,6 +4,7 @@ import {
   type DeviceIdentity,
 } from '@agent-device/kernel/device';
 import { decodeDeviceIdentity } from '@agent-device/capture-kit';
+import { isRecord } from '@agent-device/kernel/record';
 import {
   managedLocalRuntimeOwner,
   type RuntimeOwnerRef,
@@ -105,7 +106,7 @@ export function allocatorHeldClaimOwner(
 }
 
 export function decodeStoredDeviceClaim(value: unknown): StoredDeviceClaim | null {
-  if (!isClaimObject(value)) return null;
+  if (!isRecord(value)) return null;
   if (value.schemaVersion === ALLOCATOR_HELD_CLAIM_SCHEMA_VERSION) {
     return decodeAllocatorHeldClaim(value);
   }
@@ -121,7 +122,7 @@ export function decodeStoredDeviceClaim(value: unknown): StoredDeviceClaim | nul
  * reader that must fail closed on an allocator-held claim cannot treat it as absent.
  */
 export function looksLikeAllocatorHeldClaim(value: unknown): boolean {
-  return isClaimObject(value) && value.schemaVersion === ALLOCATOR_HELD_CLAIM_SCHEMA_VERSION;
+  return isRecord(value) && value.schemaVersion === ALLOCATOR_HELD_CLAIM_SCHEMA_VERSION;
 }
 
 /** Fields that would make an allocator-held record answer a process principal. */
@@ -149,7 +150,7 @@ function carriesProcessPrincipal(raw: Record<string, unknown>): boolean {
 function decodeAllocatorHeldBody(
   raw: Record<string, unknown>,
 ): Omit<AllocatorHeldDeviceClaim, 'schemaVersion' | 'kind'> | null {
-  if (!isClaimObject(raw.device) || !isNonEmptyString(raw.device.name)) return null;
+  if (!isRecord(raw.device) || !isNonEmptyString(raw.device.name)) return null;
   const name = raw.device.name;
   const identity = decodeDeviceIdentity(raw.device);
   const deviceKey = readNonEmptyString(raw.deviceKey);
@@ -169,7 +170,7 @@ function decodeAllocatorHeldBody(
 }
 
 function decodeAllocatorIdentity(value: unknown): AllocatorClaimIdentity | null {
-  if (!isClaimObject(value)) return null;
+  if (!isRecord(value)) return null;
   const instanceId = readAllocatorId(value.instanceId);
   const identityIncarnationId = readAllocatorId(value.identityIncarnationId);
   return instanceId && identityIncarnationId ? { instanceId, identityIncarnationId } : null;
@@ -183,19 +184,15 @@ function readAllocatorId(value: unknown): string | null {
   return isNonEmptyString(value) && value === value.trim() ? value : null;
 }
 
-function isClaimObject(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
 function decodeCurrentClaim(raw: Record<string, unknown>): DeviceClaim | null {
-  if (!isClaimObject(raw.device) || !isNonEmptyString(raw.device.name)) return null;
+  if (!isRecord(raw.device) || !isNonEmptyString(raw.device.name)) return null;
   const identity = decodeDeviceIdentity(raw.device);
   return identity ? buildDecodedClaim(raw, identity, raw.device.name) : null;
 }
 
 /** Released schema-v1 advisory claims are normalized into the canonical v2 model on read. */
 function migrateLegacyClaim(raw: Record<string, unknown>): DeviceClaim | null {
-  if (!isClaimObject(raw.device)) return null;
+  if (!isRecord(raw.device)) return null;
   const legacy = raw.device;
   const name = legacy.name;
   if (!isNonEmptyString(name)) return null;

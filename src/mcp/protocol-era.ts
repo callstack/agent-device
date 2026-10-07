@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { isRecord } from '@agent-device/kernel/record';
 import { readVersion } from '@agent-device/host-kit/version';
 
 /**
@@ -193,10 +194,6 @@ export function finalizeResult(result: unknown, era: ProtocolEra): unknown {
 /** Cache hints belong to the modern `CacheableResult` shape only. */
 export function cacheFields(era: ProtocolEra, ttlMs: number): CacheableResultFields | undefined {
   return era === 'modern' ? { ttlMs, cacheScope: 'public' } : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**

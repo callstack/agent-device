@@ -1,7 +1,7 @@
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
 import type { LiveResourceHandle } from '@agent-device/contracts/durable-resource';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import {
   acquireDurableCaptureRecoveryAuthorityBeforeDeadline,
   type DurableCaptureRecoveryControl,
@@ -134,8 +134,4 @@ function noRecoverableResource(
       ? definition.messages.noActive
       : `${capitalizeDurableCaptureLabel(definition.displayName)} recovery record is not open`,
   );
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

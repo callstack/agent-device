@@ -1,5 +1,5 @@
 import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import {
   type BoundDeviceRuntime,
@@ -225,8 +225,4 @@ async function adoptExactBinding(
     }
     throw primaryError;
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

@@ -20,7 +20,7 @@ import {
   buildIosSnapshotPresentationKey,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { AppError } from '@agent-device/kernel/errors';
-import { readSnapshotKeyboardBandFact } from '@agent-device/kernel/record';
+import { isRecord, readSnapshotKeyboardBandFact } from '@agent-device/kernel/record';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import type {
   RawSnapshotNode,
@@ -246,10 +246,6 @@ function runnerViewportEvidence(
 
 function rootNodes(nodes: readonly RawSnapshotNode[] | undefined): readonly RawSnapshotNode[] {
   return nodes?.filter((node) => node.parentIndex === undefined) ?? [];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function throwSnapshotEngineError(

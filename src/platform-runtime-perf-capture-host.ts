@@ -18,6 +18,7 @@ import {
 } from '@agent-device/capture-kit';
 import { deviceIdentity, isPublicPlatform, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
+import { isRecord } from '@agent-device/kernel/record';
 import type {
   AndroidNativePerfSession,
   AndroidNativePerfStartResult,
@@ -415,10 +416,6 @@ function isStringArray(value: unknown): value is string[] {
 
 function isNumberArray(value: unknown): value is number[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'number');
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isManagedProcessIdentity(value: unknown): value is ManagedProcessIdentity {

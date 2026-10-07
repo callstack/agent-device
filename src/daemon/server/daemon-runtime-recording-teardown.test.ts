@@ -74,7 +74,6 @@ test('daemon shutdown resolves durable recording resources through the effective
   await teardownDaemonSessionForShutdown({
     ref: sessionStore.lookup(effectiveSessionName)!,
     sessionStore,
-    stateDir: root,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
   });
 

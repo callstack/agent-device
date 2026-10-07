@@ -119,7 +119,6 @@ export function reportSessionCleanupFailures(params: {
 type SessionResourceTeardownRequest = {
   ref: SessionRef;
   sessionStore: SessionStore;
-  stateDir?: string;
   appLog: 'run' | 'already-settled';
   platformCleanup?: PlatformResourceCleanup;
 };

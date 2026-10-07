@@ -71,7 +71,7 @@ import {
   writeMetroSessionHints,
   type MetroSessionHints,
 } from './metro/metro-session-hints.ts';
-import { isRecord, readSnapshotKeyboardBandFact } from '@agent-device/kernel/record';
+import { asOptionalRecord, readSnapshotKeyboardBandFact } from '@agent-device/kernel/record';
 import { readSnapshotViewportSize } from '@agent-device/kernel/rect';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { createLeaseClient } from './client/lease-client.ts';
@@ -215,7 +215,7 @@ export function createAgentDeviceClient(
           return {
             session,
             shutdown: normalizeTargetShutdownResult(data.shutdown),
-            provider: readObject(data.provider),
+            provider: asOptionalRecord(data.provider),
             savedScript: readOptionalString(data, 'savedScript'),
             identifiers: { session },
           };
@@ -414,9 +414,10 @@ export function createAgentDeviceClient(
       type: async (options) => await executeCommand('type', options),
       fill: async (options) => await executeCommand('fill', options),
       scroll: async (options) => await executeCommand('scroll', options),
-      pinch: async (options) => await executeCommand('gesture', pinchGestureInput(options)),
+      pinch: async (options) =>
+        await executeCommand('gesture', centeredGestureInput('pinch', options)),
       rotateGesture: async (options) =>
-        await executeCommand('gesture', rotateGestureInput(options)),
+        await executeCommand('gesture', centeredGestureInput('rotate', options)),
       transformGesture: async (options) =>
         await executeCommand('gesture', transformGestureInput(options)),
       get: async (options) => await executeCommand('get', options),
@@ -476,26 +477,15 @@ function swipePresetGestureInput(
   return { ...options, kind: 'swipe' };
 }
 
-function pinchGestureInput(
-  options: PinchOptions,
+function centeredGestureInput(
+  kind: 'pinch' | 'rotate',
+  options: PinchOptions | RotateGestureOptions,
 ): InternalRequestOptions & Record<string, unknown> {
   const { x, y, ...common } = options;
-  assertCompleteGestureCenter(x, y, 'pinch');
+  assertCompleteGestureCenter(x, y, kind);
   return {
     ...common,
-    kind: 'pinch',
-    ...(x === undefined && y === undefined ? {} : { origin: { x, y } }),
-  };
-}
-
-function rotateGestureInput(
-  options: RotateGestureOptions,
-): InternalRequestOptions & Record<string, unknown> {
-  const { x, y, ...common } = options;
-  assertCompleteGestureCenter(x, y, 'rotate');
-  return {
-    ...common,
-    kind: 'rotate',
+    kind,
     ...(x === undefined && y === undefined ? {} : { origin: { x, y } }),
   };
 }
@@ -553,8 +543,8 @@ function optionalSnapshotResponseFields(
     | 'refsGeneration'
   >
 > {
-  const visibility = readObject(data.visibility);
-  const unchanged = readObject(data.unchanged);
+  const visibility = asOptionalRecord(data.visibility);
+  const unchanged = asOptionalRecord(data.unchanged);
   const keyboard = readSnapshotKeyboardBandFact(data.keyboard);
   const viewport = readSnapshotViewportSize(data.viewport);
   const snapshotDiagnostics = readSnapshotDiagnosticsSummary(data.snapshotDiagnostics);
@@ -572,10 +562,6 @@ function optionalSnapshotResponseFields(
     // so callers can pin refs (`@e12~s<refsGeneration>`) before a mutation.
     ...(typeof data.refsGeneration === 'number' ? { refsGeneration: data.refsGeneration } : {}),
   };
-}
-
-function readObject(value: unknown): Record<string, unknown> | undefined {
-  return isRecord(value) ? value : undefined;
 }
 
 function mergeClientOptions(

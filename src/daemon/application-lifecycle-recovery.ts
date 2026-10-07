@@ -15,7 +15,7 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import type { SessionState } from './session-state.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 
@@ -151,8 +151,4 @@ function requiresRuntimeHintCleanup(
   runtimeHints: RuntimeHintValues,
 ): boolean {
   return session.appBundleId !== undefined && hasRuntimeTransportHintValues(runtimeHints);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

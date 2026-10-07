@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { commandDescriptors } from '@agent-device/command-registry/registry';
 import type { CommandDescriptor } from '@agent-device/command-registry/types';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 
 /**
  * ADR 0029: the operator-owned rules one daemon enforces for every request it admits. This module
@@ -212,8 +212,4 @@ function invalidPolicy(sourcePath: string, problem: string): AppError {
     policyPath: sourcePath,
     hint: `Fix the file named by ${DAEMON_POLICY_ENV}, then start the daemon again.`,
   });
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

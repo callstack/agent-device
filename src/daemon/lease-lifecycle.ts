@@ -8,10 +8,7 @@ import type {
   ProviderAppCatalog,
 } from '@agent-device/contracts/device';
 import { buildSessionLeaseFromRequest, type SessionLease } from './lease-context.ts';
-import {
-  assertRequestLeaseAdmission,
-  assertRequestLeaseAdmissionPreflight,
-} from './request-admission.ts';
+import { assertRequestLeaseAdmission } from './request-admission.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
@@ -51,10 +48,6 @@ export async function releaseExpiredProviderLease(
     });
     return false;
   }
-}
-
-export function assertLockedLeaseAdmissionPreflight(req: DaemonRequest): void {
-  assertRequestLeaseAdmissionPreflight(req);
 }
 
 export async function cleanupExpiredLeasedSession(params: {

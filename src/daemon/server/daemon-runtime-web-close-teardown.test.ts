@@ -51,7 +51,6 @@ test('daemon shutdown awaits a slow web close inside its extended budget', async
   const teardown = teardownDaemonSessionForShutdown({
     ref: sessionStore.lookup(session.name)!,
     sessionStore,
-    stateDir: root,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
   });
   await vi.dynamicImportSettled();
@@ -85,7 +84,6 @@ test('daemon shutdown closes an open web session immediately, without waiting fo
   await teardownDaemonSessionForShutdown({
     ref: sessionStore.lookup(session.name)!,
     sessionStore,
-    stateDir: root,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
   });
 
@@ -118,7 +116,6 @@ test('daemon shutdown reports a web close failure on stderr instead of losing it
   await teardownDaemonSessionForShutdown({
     ref: sessionStore.lookup(session.name)!,
     sessionStore,
-    stateDir: root,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
   });
 

@@ -133,7 +133,6 @@ async function settleDaemonTeardownStep(params: {
 export async function teardownDaemonSessionForShutdown(params: {
   ref: SessionRef;
   sessionStore: SessionStore;
-  stateDir?: string;
   stderr: WritableOutput;
   finalizeApplicationLifecycle?: (
     session: SessionState,
@@ -141,14 +140,8 @@ export async function teardownDaemonSessionForShutdown(params: {
   ) => Promise<void>;
   afterSuccessfulTeardown?: (session: SessionState) => Promise<void>;
 }): Promise<void> {
-  const {
-    ref,
-    sessionStore,
-    stateDir,
-    stderr,
-    finalizeApplicationLifecycle,
-    afterSuccessfulTeardown,
-  } = params;
+  const { ref, sessionStore, stderr, finalizeApplicationLifecycle, afterSuccessfulTeardown } =
+    params;
   const current = sessionStore.resolveCurrent(ref);
   const session = current ?? ref.session;
   const runtimeHints = runtimeHintValues(
@@ -176,7 +169,6 @@ export async function teardownDaemonSessionForShutdown(params: {
           appLog: 'already-settled',
           ref,
           sessionStore,
-          stateDir,
           platformCleanup: platformResourceCleanup,
         }),
     });
@@ -506,7 +498,6 @@ export async function startDaemonRuntime(
       appLog: 'run',
       ref,
       sessionStore,
-      stateDir: baseDir,
       platformCleanup: platformResourceCleanup,
     });
     await finalizeDaemonSessionApplicationLifecycle({

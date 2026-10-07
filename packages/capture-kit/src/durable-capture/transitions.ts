@@ -6,7 +6,7 @@ import {
   isConfirmedCleanup,
 } from '@agent-device/contracts/durable-resource';
 import type { JsonObject } from '@agent-device/contracts/client';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { withDurableCaptureResourceFence, type DurableCaptureResourceFenceLease } from './fence.ts';
 import type {
@@ -180,10 +180,6 @@ function emitFailedFinishCleanupDiagnostic<K extends string, C>(
       ...(transitionError === undefined ? {} : { transitionError: errorMessage(transitionError) }),
     },
   });
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export async function forceCleanupLiveDurableCapture<

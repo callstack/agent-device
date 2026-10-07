@@ -206,7 +206,6 @@ async function runCapture(
     device: params.device,
     session,
     flags,
-    outPath: request.outPath ?? params.req.flags?.out,
     logPath: params.logPath ?? '',
     snapshotScope,
     includeRects: request.includeRects,

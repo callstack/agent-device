@@ -5,9 +5,8 @@ import {
   getProviderDeviceInteractor,
   setActiveProviderDeviceRuntimes,
 } from '../provider-device-runtime.ts';
-import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
+import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
-import type { SimulatorLease } from '../daemon/lease-registry.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AppleRunnerScreenRecordingTransport } from '../platform-runtime-screen-recording-apple-runner-transport.ts';
 
@@ -125,7 +124,7 @@ test('provider inventory composition forwards cancellation into the legacy provi
 });
 
 function makeProviderRuntimeWorld() {
-  const lease: SimulatorLease = {
+  const lease: DeviceLease = {
     leaseId: 'lease-a',
     tenantId: 'team-a',
     runId: 'run-a',
@@ -143,7 +142,7 @@ function makeProviderRuntimeWorld() {
     booted: true,
   };
   const interactor = { open: async () => undefined } as unknown as Interactor;
-  const recoveredLeases: SimulatorLease[] = [];
+  const recoveredLeases: DeviceLease[] = [];
   const missRuntime = makeMissingRuntime();
   const hitRuntime = makeRuntime({
     provider: 'hit',

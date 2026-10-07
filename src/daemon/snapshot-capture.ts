@@ -34,7 +34,6 @@ type CaptureSnapshotParams = {
   session: SessionState | undefined;
   flags: CommandFlags | undefined;
   includeRects?: boolean;
-  outPath?: string;
   logPath: string;
   snapshotScope?: string;
   androidFreshnessMode?: SnapshotFreshnessMode;

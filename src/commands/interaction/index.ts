@@ -666,16 +666,7 @@ function metadata<TName extends InteractionCommandName>(
 }
 
 function toClickOptions(input: ClickInput): ClickOptions {
-  return {
-    ...commonToClientOptions(input),
-    ...toClientInteractionTarget(input.target),
-    ...toSelectorSnapshotOptions(input),
-    ...toRepeatedOptions(input),
-    button: input.button,
-    verify: input.verify,
-    readinessTimeoutMs: input.readinessTimeoutMs,
-    ...toSettleOptions(input),
-  };
+  return { ...toPressOptions(input), button: input.button };
 }
 
 function toPressOptions(input: PressInput): PressOptions {

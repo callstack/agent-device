@@ -25,6 +25,7 @@ import {
 } from '@agent-device/contracts/observability';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { isRecord } from '@agent-device/kernel/record';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
@@ -109,7 +110,7 @@ function recordSuccessfulPerfResponse(
     params.ref,
     params.req,
     'perf',
-    isDataRecord(response.data) ? { ...response.data } : {},
+    isRecord(response.data) ? { ...response.data } : {},
   );
   return response;
 }
@@ -323,7 +324,7 @@ function buildFramesResponse(session: SessionState, result: PerfData): PerfData 
 }
 
 function enrichFrameMetricWithSessionContext(metric: unknown, session: SessionState): unknown {
-  if (!isDataRecord(metric) || metric.available !== true) return metric;
+  if (!isRecord(metric) || metric.available !== true) return metric;
   const relatedActions = buildRelatedPerfActions(session.actions, metric);
   return relatedActions.length === 0 ? metric : { ...metric, relatedActions };
 }
@@ -358,10 +359,6 @@ function readActionTarget(action: SessionAction): string | undefined {
     if (typeof value === 'string' && value.length > 0) return value;
   }
   return undefined;
-}
-
-function isDataRecord(value: unknown): value is PerfData {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function buildMemorySampleResponse(session: SessionState, result: PerfData): PerfData {

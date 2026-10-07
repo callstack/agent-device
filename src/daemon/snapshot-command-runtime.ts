@@ -238,12 +238,11 @@ function createDaemonSnapshotBackend(params: {
   const { req, logPath, session, device, snapshotScope } = params;
   return {
     platform: publicPlatformString(device),
-    captureSnapshot: async (context, options): Promise<BackendSnapshotResult> => {
+    captureSnapshot: async (context): Promise<BackendSnapshotResult> => {
       const capture = await captureSnapshot({
         device,
         session,
         flags: req.flags,
-        outPath: options?.outPath ?? req.flags?.out,
         logPath,
         snapshotScope,
         signal: context.signal,

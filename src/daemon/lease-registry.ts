@@ -42,8 +42,6 @@ import {
   humanControlActiveError,
 } from './human-control-contract.ts';
 
-export type SimulatorLease = DeviceLease;
-
 type OwnedHumanControlHold = { hold: HumanControlHold; ownerLeaseId?: string };
 
 export class LeaseRegistry {
