@@ -2,7 +2,7 @@ import { beforeEach, afterEach, expect, test, vi } from 'vitest';
 import type {
   LeaseRequestStatus,
   ManagedLease,
-} from '@agent-device/contracts/managed-device-allocation';
+} from '@agent-device/managed-allocation/managed-device-allocation';
 import {
   NOW,
   controller,

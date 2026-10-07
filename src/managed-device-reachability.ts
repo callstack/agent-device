@@ -4,7 +4,7 @@ import type {
   ManagedLeaseEnvironment,
   ManagedLeaseEnvironmentKey,
   ManagedLeasePlatform,
-} from '@agent-device/contracts/managed-device-allocation';
+} from '@agent-device/managed-allocation/managed-device-allocation';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 

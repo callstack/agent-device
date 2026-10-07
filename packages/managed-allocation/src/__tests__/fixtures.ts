@@ -4,7 +4,7 @@ import type {
   ManagedIdentityRef,
   ManagedLease,
   ManagedShapeRequest,
-} from '@agent-device/contracts/managed-device-allocation';
+} from '../managed-device-allocation.ts';
 
 const ALLOCATION_SHAPE: ManagedShapeRequest = {
   platform: 'ios',

@@ -2,7 +2,7 @@ import type {
   LeaseRequestStatus,
   ManagedLease,
   ManagedLeasePlatform,
-} from '@agent-device/contracts/managed-device-allocation';
+} from '@agent-device/managed-allocation/managed-device-allocation';
 import { Deadline } from '@agent-device/host-kit/retry';
 import { createManagedLeaseReachability } from '../../../managed-device-reachability.ts';
 import { createScriptedManagedDeviceAllocator } from '../../../__tests__/test-utils/managed-device-allocator.fixtures.ts';

@@ -6,7 +6,7 @@ import type {
   LeaseRequestInput,
   ManagedDeviceAllocatorPort,
   SupersedeLeaseRequestInput,
-} from '@agent-device/contracts/managed-device-allocation';
+} from '../managed-device-allocation.ts';
 import type { ScriptedAllocatorMethod } from './test-utils/managed-device-allocator.fixtures.ts';
 import { createScriptedManagedDeviceAllocator } from './test-utils/managed-device-allocator.fixtures.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';

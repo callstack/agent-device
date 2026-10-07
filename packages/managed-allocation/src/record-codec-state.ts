@@ -2,7 +2,7 @@ import type {
   LeaseRefusal,
   ManagedLease,
   ManagedShapeRequest,
-} from '@agent-device/contracts/managed-device-allocation';
+} from './managed-device-allocation.ts';
 import type { AllocationOperationPhase, AllocationOperationRecord } from './record-types.ts';
 import {
   isFiniteNumber,

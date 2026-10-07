@@ -3,7 +3,7 @@ import type {
   LeaseRequestStatus,
   ManagedDeviceAllocatorPort,
   ManagedLease,
-} from '@agent-device/contracts/managed-device-allocation';
+} from '@agent-device/managed-allocation/managed-device-allocation';
 import {
   managedBindingFence,
   managedLocalRuntimeOwner,

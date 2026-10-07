@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import type { ManagedLease } from '@agent-device/contracts/managed-device-allocation';
+import type { ManagedLease } from '@agent-device/managed-allocation/managed-device-allocation';
 import {
   managedLocalRuntimeOwner,
   type DeviceBindingRequest,

@@ -1,4 +1,4 @@
-import type { LeaseRequestStatus } from '@agent-device/contracts/managed-device-allocation';
+import type { LeaseRequestStatus } from './managed-device-allocation.ts';
 import type { AllocationDecisionMode } from './decision.ts';
 import type { AllocationOperationRecord } from './record.ts';
 import type {
