@@ -230,22 +230,48 @@ test('double-quoted and re-export routes into packages are not invisible to R11'
     'packages/kernel/src/errors.ts',
     'export * from "../../../src/utils/exec.ts";',
   );
-  // The escape is compiler-owned for compiled sources; scripts/ and package harness files that
-  // sit outside the type graph keep the R11 branch (#3279).
-  assert.equal(checkPackageInternalSites(kernel, packageEscape, ALL, true).length, 0);
+  // The escape is R11's own for EVERY package source, compiled or not (#3289 maintainer
+  // review): the compiled-only skip was retired with a planted proof, below.
+  assert.equal(checkPackageInternalSites(kernel, packageEscape, ALL, true).length, 1);
   assert.equal(checkPackageInternalSites(kernel, packageEscape, ALL, false).length, 1);
 });
 
 // This `src/utils` path is another in-memory arbitrary parser fixture, not a live repository path.
-test('a package file importing root src is compiler-owned once tsc -b sees it', () => {
-  // #3279: composite `rootDir` rejects a package->root relative escape with TS6059 + TS6307
-  // (planted proof in the PR). R11 keeps the branch only for package files the graph omits.
-  const sites = specifierSites(
+test('a package relative escape is R11-owned, compiled or not', () => {
+  // #3289 maintainer review restored this branch after a planted `tsc -b` run showed the
+  // compiler covers NEITHER package escape for a REFERENCED sibling:
+  //   packages/host-kit/src/r11-planted-sibling-tunnel.ts
+  //     import { AppError } from '../../kernel/src/errors.ts';
+  //   pnpm exec tsc -b packages/host-kit --force  ->  exit 0, no diagnostics
+  // The reference redirects kernel's sources to their dist-types .d.ts, so nothing outside
+  // host-kit's rootDir is emitted and TS6059/TS6307 never fire; the earlier PR-#3279 proof
+  // (TS6059+TS6307) only held for the ROOT escape, where no project redirects. What both
+  // tunnels break instead is runtime identity: Node instantiates the tunnelled module once
+  // by path and once by specifier, so two AppError classes coexist and instanceof fails —
+  // invisible to any compiler, so R11 holds it for compiled files too.
+  const rootEscape = specifierSites(
     'packages/kernel/src/errors.ts',
     "import { helper } from '../../../src/utils/exec.ts';",
   );
-  assert.deepEqual(checkPackageInternalSites(kernel, sites, ALL, true), []);
-  assert.deepEqual(rules(checkPackageInternalSites(kernel, sites, ALL, false)), [
+  assert.deepEqual(rules(checkPackageInternalSites(kernel, rootEscape, ALL, true)), [
+    'R11 package-boundaries',
+  ]);
+  assert.match(
+    checkPackageInternalSites(kernel, rootEscape, ALL, true)[0]!.message,
+    /escapes packages\/kernel/,
+  );
+
+  // The exact reviewer case: compiled=true with a sibling-relative specifier.
+  const siblingTunnel = specifierSites(
+    'packages/kernel/src/errors.ts',
+    "import { thing } from '../../xml/src/index.ts';",
+  );
+  assert.deepEqual(rules(checkPackageInternalSites(kernel, siblingTunnel, ALL, true)), [
+    'R11 package-boundaries',
+  ]);
+
+  // Uncompiled package files keep the same branch (they never reach the compiler at all).
+  assert.deepEqual(rules(checkPackageInternalSites(kernel, rootEscape, ALL, false)), [
     'R11 package-boundaries',
   ]);
 });

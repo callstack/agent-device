@@ -32,8 +32,9 @@
 //   - Across the DAEMON MODULARITY MIGRATION: R7 ownership pressure and external
 //     daemon request/session-state importers only shrink, R9 zone membership cannot grow or absorb
 //     engine files, and planned logical modules start with zero forbidden/internal imports (R10).
-//   - Over the WORKSPACE PACKAGES: every workspace specifier declared, no relative tunnelling
-//     into a package's src, and the full specifier sweep for the scripts/ files the type graph
+//   - Over the WORKSPACE PACKAGES: every workspace specifier declared, no relative path
+//     leaving its package dir (compiled or not — a planted sibling tunnel tsc -b accepted,
+//     #3289 review), and the full specifier sweep for the scripts/ files the type graph
 //     omits — resolution itself (unknown package, un-exported subpath) is TS2307 under tsc -b
 //     for compiled sources (#3279) (R11).
 //   - Over PLATFORM PACKAGE COMPOSITION: six private metadata façades meet at the exact root

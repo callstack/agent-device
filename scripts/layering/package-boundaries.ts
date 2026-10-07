@@ -152,14 +152,18 @@ function specifierPackageName(specifier: string): string | undefined {
  * `--experimental-strip-types`, not a tsconfig program), the `packages/maestro/test/`
  * conformance harness, and package build configs — reaches packages through import sites the
  * compiler never parses, so R11 stays the only owner of every boundary claim about those
- * routes (#3279).
+ * routes (#3279). Only the RESOLUTION branches (unknown package, un-exported subpath) are
+ * split this way; the relative-escape branch fires regardless — a planted sibling tunnel
+ * `tsc -b` accepted, see `checkPackageInternalSites`.
  *
  * One documented divergence: the root program also includes
  * `scripts/help-conformance-command-validator.ts`, which this predicate classifies as
  * uncompiled. That is fail-closed — R11 keeps its full branch set (unknown package,
- * exports-map) for the file on top of what tsc enforces — never fail-open. The divergence is
- * pinned in `project-references.test.ts`, so a second scripts entry joining the root program
- * must be recorded there rather than silently widening the exception.
+ * exports-map) for the file on top of what tsc enforces — never fail-open. The divergence
+ * and the exact root include list are pinned in `project-references.test.ts`, and the
+ * per-package `include: ["src"]` / no-`exclude` shape this predicate's regexes assume is
+ * pinned there too, so widening any project's file set must be recorded there rather than
+ * silently diverging from this predicate.
  */
 export function insideCompiledSources(file: string): boolean {
   return /^packages\/[^/]+\/src\//.test(file) || /^src\//.test(file) || /^test\//.test(file);
@@ -169,11 +173,17 @@ export function insideCompiledSources(file: string): boolean {
  * Rules for files INSIDE a package. An undeclared sibling import is R11's alone: pnpm links
  * every workspace package under the root `node_modules`, so the import resolves, compiles, and
  * runs in this repo even when the manifest never declares it — and a published bundle
- * externalizes against that declaration. The relative escape past the package dir and every
- * resolution failure (unknown package, subpath the exports map does not name) are owned by the
- * compiler for compiled files: composite `rootDir` fails the escape with TS6059 + TS6307 and
- * NodeNext resolution fails the specifier with TS2307. Both are proven in #3279; uncompiled
- * files never reach either check, so for them R11 holds every branch.
+ * externalizes against that declaration. The relative escape past the package dir is R11's
+ * too, compiled or not: a planted `pnpm exec tsc -b packages/host-kit --force` with
+ * `import { AppError } from '../../kernel/src/errors.ts'` in `host-kit/src/` **exits 0** —
+ * the redirect to kernel's `dist-types` keeps every emitted file under host-kit's `rootDir`,
+ * so neither TS6059 nor TS6307 fires (the root-escape tunnel DOES fail: TS2307, since `../..
+ * /../kernel/...` lands outside every include and no package owns `kernel` at that depth).
+ * What the sibling tunnel breaks is runtime identity — Node loads kernel once by path and
+ * once by specifier, so two AppError classes coexist and `instanceof` silently fails. That
+ * is invisible to any compiler. The remaining resolution failures (unknown package,
+ * subpath the exports map does not name) are owned by NodeNext for compiled files with
+ * TS2307; uncompiled files never reach either check, so for them R11 holds every branch.
  */
 export function checkPackageInternalSites(
   pkg: WorkspacePackage,
@@ -184,7 +194,6 @@ export function checkPackageInternalSites(
   const violations: PackageBoundaryViolation[] = [];
   for (const site of sites) {
     if (site.specifier.startsWith('.')) {
-      if (compiled) continue;
       const resolved = path.posix.normalize(
         path.posix.join(path.posix.dirname(site.file), site.specifier),
       );
@@ -194,8 +203,9 @@ export function checkPackageInternalSites(
           file: site.file,
           line: site.line,
           message:
-            `'${site.specifier}' escapes ${pkg.dir}/ — a workspace package may not reach root ` +
-            `code. Depend on another package's specifier, or move the shared code below this package.`,
+            `'${site.specifier}' escapes ${pkg.dir}/ — a workspace package may not reach ` +
+            `outside its own directory. Import a sibling through its specifier (Node would ` +
+            `load the tunnelled module twice), or move the shared code below ${pkg.dir}.`,
         });
       }
       continue;

@@ -18,6 +18,8 @@ const repoRoot = path.resolve(import.meta.dirname, '../..');
 function readTsconfig(relativePath: string): {
   references?: { path: string }[];
   extends?: string;
+  include?: string[];
+  exclude?: string[];
   compilerOptions?: Record<string, unknown>;
 } {
   const source = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
@@ -53,6 +55,43 @@ test('root and examples/sdk reference exactly the workspace package set', () => 
 
   assert.deepEqual(referencedPackageDirs('tsconfig.json', '.'), expected);
   assert.deepEqual(referencedPackageDirs('examples/sdk/tsconfig.json', 'examples/sdk'), expected);
+});
+
+test('the compiled-set predicate is licensed by the tsconfig include/exclude shape it mirrors', () => {
+  // `insideCompiledSources` (package-boundaries.ts) hard-codes the three include shapes the
+  // tsc -b graph compiles: `packages/*/src`, root `src`, root `test`. That regex is honest
+  // only while no project widens its file set behind it, so the shape is pinned here (the
+  // file that already reads the tsconfigs), and the R11 side keeps its pin in
+  // package-boundaries.test.ts (the #3279 walk-region test). A package tsconfig that gains
+  // an `exclude`, or an include beyond `src` (plus replay-port's shared `global.d.ts`
+  // sibling), or a root file added to the root include beyond src/test, must update the
+  // predicate or fail here — the same "views cannot drift" rule as the reference lists.
+  assert.deepEqual(readTsconfig('tsconfig.json').include, [
+    'src',
+    'test',
+    'scripts/help-conformance-command-validator.ts',
+    'packages/command-registry/src/global.d.ts',
+  ]);
+  for (const pkg of readWorkspacePackages(repoRoot)) {
+    const config = readTsconfig(`${pkg.dir}/tsconfig.json`);
+    assert.equal(config.exclude, undefined, `${pkg.dir}/tsconfig.json must not declare exclude`);
+    assert.deepEqual(
+      (config.include ?? ['**/*']).filter((entry) => !entry.endsWith('global.d.ts')),
+      ['src'],
+      `${pkg.dir}/tsconfig.json must keep including exactly src/`,
+    );
+  }
+});
+
+test('the one scripts file in the root program is the divergence insideCompiledSources records', () => {
+  // The predicate classifies scripts/help-conformance-command-validator.ts as UNCOMPILED
+  // (fail-closed: R11 keeps its full branch set there) even though the root include names
+  // it. This is the assertion the predicate's doc block points at: the divergence is
+  // recorded here, and a second scripts file joining the root program must be recorded
+  // next to this one rather than silently widening the exception.
+  const rootInclude = readTsconfig('tsconfig.json').include ?? [];
+  const scriptsEntries = rootInclude.filter((entry) => entry.startsWith('scripts/'));
+  assert.deepEqual(scriptsEntries, ['scripts/help-conformance-command-validator.ts']);
 });
 
 test('the root manifest declares every workspace package as a workspace dependency', () => {
