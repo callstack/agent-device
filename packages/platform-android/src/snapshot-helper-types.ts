@@ -77,7 +77,6 @@ export type AndroidSnapshotHelperCaptureOptions = {
   commandTimeoutMs?: number;
   maxDepth?: number;
   maxNodes?: number;
-  outputPath?: string;
   emitChunks?: boolean;
 };
 

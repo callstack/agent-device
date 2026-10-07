@@ -283,7 +283,7 @@ async function startAndroidSnapshotHelperSession(params: {
     signal: params.options.signal,
   });
   const sessionArgs = buildAndroidSnapshotHelperArgs(
-    { ...params.resolved, outputPath: undefined, emitChunks: false },
+    { ...params.resolved, emitChunks: false },
     { sessionPort: port },
   );
   const childProcess = params.options.adbProvider!.spawn!(sessionArgs, {

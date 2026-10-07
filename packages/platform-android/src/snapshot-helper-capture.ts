@@ -29,7 +29,7 @@ import type {
   AndroidSnapshotHelperMetadata,
   AndroidSnapshotHelperOutput,
 } from './snapshot-helper-types.ts';
-import { runAdbShell, type AndroidAdbProvider } from './adb-executor.ts';
+import type { AndroidAdbProvider } from './adb-executor.ts';
 import {
   recoverAndroidSnapshotHelperRetirement,
   retireCanceledAndroidSnapshotHelperCapture,
@@ -50,13 +50,7 @@ export type AndroidSnapshotHelperResolvedCaptureOptions = {
   maxNodes: number;
   packageName: string;
   runner: string;
-  outputPath?: string;
   emitChunks?: boolean;
-};
-
-type AndroidSnapshotHelperReadResult = {
-  output: AndroidSnapshotHelperOutput;
-  cleanupDone: boolean;
 };
 
 export async function captureAndroidSnapshotWithHelper(
@@ -96,10 +90,7 @@ export async function captureAndroidSnapshotWithHelper(
     });
     options.signal.throwIfAborted();
   }
-  const { output, cleanupDone } = await readAndroidSnapshotHelperOutput(options, resolved, result);
-  if (resolved.outputPath && !cleanupDone) {
-    await removeHelperOutputFile(options.adb, resolved.outputPath);
-  }
+  const output = readAndroidSnapshotHelperOutput(result);
   if (result.exitCode !== 0) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -166,7 +157,6 @@ export function resolveAndroidSnapshotHelperCaptureOptions(
     maxNodes: withDefault(options.maxNodes, 5_000),
     packageName,
     runner: withDefault(options.instrumentationRunner, `${packageName}/.SnapshotInstrumentation`),
-    ...(options.outputPath ? { outputPath: options.outputPath } : {}),
     ...(options.emitChunks !== undefined ? { emitChunks: options.emitChunks } : {}),
   };
 }
@@ -198,146 +188,40 @@ export function buildAndroidSnapshotHelperArgs(
     '-e',
     'maxNodes',
     String(options.maxNodes),
-    // Default production snapshots use instrumentation status chunks. File output remains a
-    // fallback/testing transport for devices where status output cannot carry the payload.
-    ...(options.outputPath ? ['-e', 'outputPath', options.outputPath] : []),
     ...(options.emitChunks !== undefined ? ['-e', 'emitChunks', String(options.emitChunks)] : []),
     ...(session.sessionPort === undefined ? [] : ['-e', 'sessionPort', session.sessionPort]),
     options.runner,
   ]);
 }
 
-async function readAndroidSnapshotHelperOutput(
-  options: AndroidSnapshotHelperCaptureOptions,
-  resolved: AndroidSnapshotHelperResolvedCaptureOptions,
+function readAndroidSnapshotHelperOutput(
   result: Awaited<ReturnType<AndroidSnapshotHelperCaptureOptions['adb']>>,
-): Promise<AndroidSnapshotHelperReadResult> {
+): AndroidSnapshotHelperOutput {
   try {
     // The helper can report structured ok=false details even when am exits non-zero.
-    return {
-      output: parseAndroidSnapshotHelperOutput(`${result.stdout}\n${result.stderr}`),
-      cleanupDone: false,
-    };
+    return parseAndroidSnapshotHelperOutput(`${result.stdout}\n${result.stderr}`);
   } catch (error) {
-    return await readFallbackHelperOutputOrThrow(options, resolved, result, error);
-  }
-}
-
-async function readFallbackHelperOutputOrThrow(
-  options: AndroidSnapshotHelperCaptureOptions,
-  resolved: AndroidSnapshotHelperResolvedCaptureOptions,
-  result: Awaited<ReturnType<AndroidSnapshotHelperCaptureOptions['adb']>>,
-  error: unknown,
-): Promise<AndroidSnapshotHelperReadResult> {
-  const helperFailure = error instanceof AppError && error.details?.helper ? error : undefined;
-  if (helperFailure && result.exitCode !== 0) throw helperFailure;
-  const fileOutput = await readFallbackHelperOutputFile(options, resolved, result);
-  if (fileOutput) return { output: fileOutput, cleanupDone: true };
-  // `am instrument` exits 0 after a helper that reported its own failure, so that report is the
-  // answer whenever no output file stands in for it.
-  if (helperFailure) throw helperFailure;
-  // exec-guard-allow: reachable at exit 0 (helper output unparseable); the
-  // message already branches on the exit code.
-  throw new AppError(
-    'COMMAND_FAILED',
-    result.exitCode === 0
-      ? 'Android snapshot helper output could not be parsed'
-      : 'Android snapshot helper failed before returning parseable output',
-    {
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-      ...androidCaptureFailureReasonDetail(
-        androidCaptureFailureReasonFromExitCode(result.exitCode),
-      ),
-    },
-    error,
-  );
-}
-
-async function readFallbackHelperOutputFile(
-  options: AndroidSnapshotHelperCaptureOptions,
-  resolved: AndroidSnapshotHelperResolvedCaptureOptions,
-  result: Awaited<ReturnType<AndroidSnapshotHelperCaptureOptions['adb']>>,
-): Promise<AndroidSnapshotHelperOutput | undefined> {
-  if (result.exitCode !== 0 || !resolved.outputPath) return undefined;
-  return await readHelperOutputFile(
-    options.adb,
-    resolved.outputPath,
-    readHelperMetadataFromInstrumentationOutput(`${result.stdout}\n${result.stderr}`) ??
-      fallbackAndroidSnapshotHelperMetadata(resolved),
-  );
-}
-
-function fallbackAndroidSnapshotHelperMetadata(
-  resolved: AndroidSnapshotHelperResolvedCaptureOptions,
-): AndroidSnapshotHelperMetadata {
-  return {
-    outputFormat: ANDROID_SNAPSHOT_HELPER_OUTPUT_FORMAT,
-    waitForIdleTimeoutMs: resolved.waitForIdleTimeoutMs,
-    waitForIdleQuietMs: resolved.waitForIdleQuietMs,
-    timeoutMs: resolved.timeoutMs,
-    maxDepth: resolved.maxDepth,
-    maxNodes: resolved.maxNodes,
-    transport: 'instrumentation',
-  };
-}
-
-async function readHelperOutputFile(
-  adb: AndroidSnapshotHelperCaptureOptions['adb'],
-  outputPath: string,
-  metadata: AndroidSnapshotHelperMetadata,
-): Promise<AndroidSnapshotHelperOutput | undefined> {
-  let result: Awaited<ReturnType<AndroidSnapshotHelperCaptureOptions['adb']>>;
-  try {
-    result = await runAdbShell(adb, buildReadAndRemoveHelperOutputArgs(outputPath), {
-      allowFailure: true,
-      timeoutMs: 5_000,
-    });
-  } catch {
-    return undefined;
-  }
-  if (result.exitCode !== 0) return undefined;
-  const xml = result.stdout.trim();
-  if (!xml.includes('<hierarchy') || !xml.includes('</hierarchy>')) return undefined;
-  return {
-    xml,
-    metadata,
-  };
-}
-
-function buildReadAndRemoveHelperOutputArgs(outputPath: string): string[] {
-  return [
-    'sh',
-    '-c',
-    'cat "$1"; status=$?; rm -f "$1"; exit "$status"',
-    'agent-device-snapshot-helper-output',
-    outputPath,
-  ];
-}
-
-function readHelperMetadataFromInstrumentationOutput(
-  output: string,
-): AndroidSnapshotHelperMetadata | null {
-  try {
-    const records = parseInstrumentationRecords(output);
-    return readHelperMetadata(readFinalHelperResult(records.results));
-  } catch {
-    return null;
-  }
-}
-
-async function removeHelperOutputFile(
-  adb: AndroidSnapshotHelperCaptureOptions['adb'],
-  outputPath: string,
-): Promise<void> {
-  try {
-    await runAdbShell(adb, ['rm', '-f', outputPath], {
-      allowFailure: true,
-      timeoutMs: 5_000,
-    });
-  } catch {
-    // Cleanup is best-effort; snapshot capture should not fail because a stale temp file survived.
+    const helperFailure = error instanceof AppError && error.details?.helper ? error : undefined;
+    // `am instrument` exits 0 after a helper that reported its own failure, so that report is the
+    // answer.
+    if (helperFailure) throw helperFailure;
+    // exec-guard-allow: reachable at exit 0 (helper output unparseable); the
+    // message already branches on the exit code.
+    throw new AppError(
+      'COMMAND_FAILED',
+      result.exitCode === 0
+        ? 'Android snapshot helper output could not be parsed'
+        : 'Android snapshot helper failed before returning parseable output',
+      {
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode,
+        ...androidCaptureFailureReasonDetail(
+          androidCaptureFailureReasonFromExitCode(result.exitCode),
+        ),
+      },
+      error,
+    );
   }
 }
 
