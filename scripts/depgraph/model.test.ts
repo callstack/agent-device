@@ -12,6 +12,7 @@ import {
   buildGraph,
   collapseEdges,
   collectCycles,
+  computeLevels,
   markTransitivelyReachableEdges,
   typeInversionsByPair,
 } from './model.ts';
@@ -268,6 +269,47 @@ test('buildGraph still reports a value cycle and leaves edges unmarked', () => {
     graph.edges.filter((edge) => edge.transitivelyReachable),
     [],
   );
+});
+
+test('computeLevels takes the longest value path to a sink and ignores type edges', () => {
+  const files = sources({
+    'src/core/a.ts': [
+      "import { b } from './b.ts';",
+      "import { c } from './c.ts';",
+      "import { d } from './d.ts';",
+      "import type { E } from './e.ts';",
+      'export const a = [b, c, d];',
+    ].join('\n'),
+    'src/core/b.ts': "import { d } from './d.ts';\nexport const b = d;",
+    'src/core/c.ts': "import { d } from './d.ts';\nexport const c = d;",
+    'src/core/d.ts': 'export const d = 1;',
+    'src/core/e.ts': "import type { A } from './a.ts';\nexport type E = A;",
+    'src/core/lone.ts': 'export const lone = 1;',
+  });
+  const graph = buildGraph(files, resolveImportEdges(files));
+
+  assert.deepEqual(Object.fromEntries(computeLevels(graph.nodes, graph.edges)), {
+    'src/core/a.ts': 2,
+    'src/core/b.ts': 1,
+    'src/core/c.ts': 1,
+    'src/core/d.ts': 0,
+    'src/core/e.ts': 0,
+    'src/core/lone.ts': 0,
+  });
+});
+
+test('computeLevels stays finite on a value cycle, where the closing edge adds no height', () => {
+  const files = sources({
+    ...Object.fromEntries(valueCycleFixture()),
+    'src/core/z.ts': "import { a } from './a.ts';\nexport const z = a;",
+  });
+  const graph = buildGraph(files, resolveImportEdges(files));
+
+  assert.deepEqual(Object.fromEntries(computeLevels(graph.nodes, graph.edges)), {
+    'src/core/a.ts': 1,
+    'src/core/b.ts': 0,
+    'src/core/z.ts': 2,
+  });
 });
 
 test('a type-only shortcut is never flagged against a value path', () => {
