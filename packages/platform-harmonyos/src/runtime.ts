@@ -10,20 +10,11 @@ import {
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
-import {
-  bindLocalFocusInteractor,
-  focusRuntimeOperationFacts,
-} from '@agent-device/contracts/focus-runtime';
+import { focusRuntimeOperationFacts } from '@agent-device/contracts/focus-runtime';
 import { TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT } from '@agent-device/contracts/gesture-admission';
-import {
-  bindLocalGestureInteractor,
-  gestureRuntimeOperationFacts,
-} from '@agent-device/contracts/gesture-runtime';
-import {
-  bindLocalScrollInteractor,
-  scrollRuntimeOperationFacts,
-} from '@agent-device/contracts/scroll-runtime';
-import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
+import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
+import { bindLocalInteractorOperationSet } from '@agent-device/contracts/local-interactor-operation-set';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
@@ -38,24 +29,15 @@ import {
   unavailableFact,
   whenAdmitted,
 } from '@agent-device/contracts/platform-runtime';
-import {
-  bindLocalScreenshotInteractor,
-  screenshotRuntimeOperationFacts,
-} from '@agent-device/contracts/screenshot-runtime';
+import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
 import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
 import {
   bindLocalSnapshotInteractor,
   snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/snapshot-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
-import {
-  bindLocalTypeTextInteractor,
-  typeTextRuntimeOperationFacts,
-} from '@agent-device/contracts/type-text-runtime';
-import {
-  bindLocalTouchInteractor,
-  touchRuntimeOperationFacts,
-} from '@agent-device/contracts/touch-runtime';
+import { typeTextRuntimeOperationFacts } from '@agent-device/contracts/type-text-runtime';
+import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHarmonyAppLogRuntime } from './logs/runtime.ts';
@@ -347,60 +329,18 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
                 resolveInteractor: host.localInteractors.resolve,
               })
             : {}),
-          ...(facts.operations.captureScreenshot.available
-            ? bindLocalScreenshotInteractor({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
-          ...(facts.operations.focusPoint.available
-            ? bindLocalFocusInteractor({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
-          ...(facts.operations.typeText.available
-            ? bindLocalTypeTextInteractor({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
-          ...bindLocalGestureInteractor({
-            device: request.device,
-            signal: request.scope.signal,
-            facts: facts.operations,
-            resolveInteractor: host.localInteractors.resolve,
-          }),
-          ...(facts.operations.scrollDirection.available
-            ? bindLocalScrollInteractor({
-                device: request.device,
-                signal: request.scope.signal,
-                resolveInteractor: host.localInteractors.resolve,
-              })
-            : {}),
-          ...bindAdmittedLocalInteractorOperations({
+          ...bindLocalInteractorOperationSet({
             device: request.device,
             signal: request.scope.signal,
             resolveInteractor: host.localInteractors.resolve,
             facts: facts.operations,
+            pause: async (milliseconds) =>
+              await host.clock.sleep(milliseconds, request.scope.signal),
           }),
           ...whenAdmitted(facts.operations.perfFrames, () =>
             createHarmonyPerfOperations({
               resolveHost: () => host.perf.harmony,
               device: request.device,
-            }),
-          ),
-          ...whenAdmitted(facts.operations.tapPoint, () =>
-            bindLocalTouchInteractor({
-              device: request.device,
-              signal: request.scope.signal,
-              resolveInteractor: host.localInteractors.resolve,
-              facts: facts.operations,
-              pause: async (milliseconds) =>
-                await host.clock.sleep(milliseconds, request.scope.signal),
             }),
           ),
           listApps: async (input: { device: DeviceInfo; filter: 'all' | 'user-installed' }) => {
