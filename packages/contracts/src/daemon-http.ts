@@ -7,6 +7,11 @@ export const DAEMON_HTTP_BASE_PATH = '/agent-device';
 export const DAEMON_HTTP_TENANT_HEADER = 'x-agent-device-tenant';
 export const DAEMON_HTTP_NETWORK_ACCESS_HEADER = 'x-agent-device-network-access';
 export const DAEMON_HTTP_PUBLIC_NETWORK_ACCESS = 'public-only';
+/**
+ * The principal the Host front-end authenticated (ADR 0021 §6). The daemon trusts it only on a
+ * request that already carries the daemon token, and the proxy never forwards it from a client.
+ */
+export const DAEMON_HTTP_PRINCIPAL_HEADER = 'x-agent-device-principal';
 
 export function buildDaemonHttpBaseUrl(baseUrl: string): string {
   return buildDaemonHttpUrl(baseUrl, DAEMON_HTTP_BASE_PATH);
@@ -52,15 +57,26 @@ export function buildDaemonInstanceMismatchRpcResponse<Id>(
 
 export type DaemonHealthPayload = {
   ok: true;
-  service: 'agent-device-daemon' | 'agent-device-proxy';
+  service: 'agent-device-daemon' | 'agent-device-proxy' | typeof DAEMON_HOST_SERVICE;
   version: string;
   rpcProtocolVersion: number;
   instanceId?: string;
   hostArch?: string;
   /** The lease backends this daemon admits; a host checks it before relying on one. */
   leaseBackends?: readonly string[];
+  /** Optional capabilities a client checks before sending a request that relies on one. */
+  features?: readonly DaemonHealthFeature[];
   upstream?: unknown;
 };
+
+/**
+ * Host allocates a fresh device per lease from a shape (`--device "iPhone 16"`) instead of a
+ * local inventory identity (ADR 0021 §5). A client sends a shape only to a peer advertising it.
+ */
+export const DAEMON_HOST_DEVICE_SHAPE_FEATURE = 'device-shape';
+/** The `service` a Host front-end reports, which a client reads to treat `--device` as a type. */
+export const DAEMON_HOST_SERVICE = 'agent-device-host';
+export type DaemonHealthFeature = typeof DAEMON_HOST_DEVICE_SHAPE_FEATURE;
 
 export function buildDaemonHealthPayload(
   service: DaemonHealthPayload['service'],
@@ -70,6 +86,7 @@ export function buildDaemonHealthPayload(
     instanceId?: string;
     hostArch?: string;
     leaseBackends?: readonly string[];
+    features?: readonly DaemonHealthFeature[];
   } = {},
 ): DaemonHealthPayload {
   return {
@@ -80,6 +97,7 @@ export function buildDaemonHealthPayload(
     ...(options.instanceId !== undefined ? { instanceId: options.instanceId } : {}),
     ...(options.hostArch !== undefined ? { hostArch: options.hostArch } : {}),
     ...(options.leaseBackends !== undefined ? { leaseBackends: options.leaseBackends } : {}),
+    ...(options.features !== undefined ? { features: options.features } : {}),
     ...(options.upstream !== undefined ? { upstream: options.upstream } : {}),
   };
 }

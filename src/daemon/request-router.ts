@@ -86,6 +86,7 @@ import { recordNestedRequests } from './request-dispatch-ledger.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import type { DaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
+import type { HostShapeAllocator } from './host-shape-allocation.ts';
 import { restrictDeviceInventoryToDaemonPolicy } from './daemon-policy.ts';
 import type { DaemonPolicy } from '../daemon-policy-file.ts';
 
@@ -111,6 +112,8 @@ export type RequestRouterDeps = {
   providerCredentials: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  /** The Host lease side's allocator (ADR 0021 §4); absent on every daemon that is not a Host. */
+  hostShapeAllocator?: HostShapeAllocator;
   providerAppCatalog?: ProviderAppCatalog;
   androidObservation?: AndroidObservationAdapter;
   platformResourceCleanup?: PlatformResourceCleanup;
@@ -169,6 +172,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
+    hostShapeAllocator,
     providerAppCatalog,
     androidObservation = unavailableAndroidObservation,
     platformResourceCleanup = unavailablePlatformResourceCleanup,
@@ -347,6 +351,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       providerRuntimeRequiredIds,
       providerCredentials,
       cloudArtifactProvider,
+      hostShapeAllocator,
       providerAppCatalog,
       invoke: recordNestedRequests(handleRequest, dispatchLedger),
       invokeReplayAction: allowReplayActions

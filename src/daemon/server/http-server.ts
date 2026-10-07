@@ -38,6 +38,7 @@ import {
   buildDaemonHealthPayload,
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
+  DAEMON_HOST_DEVICE_SHAPE_FEATURE,
   DAEMON_HTTP_TENANT_HEADER,
 } from '@agent-device/contracts/daemon-http';
 import { readVersion } from '@agent-device/host-kit/version';
@@ -48,10 +49,13 @@ import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 import { tryHandleDownloadableArtifactHttpRoute } from '../downloadable-artifact-http.ts';
 import { tryHandleRequestDiagnosticsHttpRoute } from '../request-diagnostics-http.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
+import { hostPrincipalInvalidError, readHostPrincipal } from './host-principal.ts';
+import { parseGitHubActionsArtifactSource } from './github-actions-artifact-params.ts';
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 import type { TenantSessionNamespace } from '../session-tenant-scope.ts';
 import { tryHandleHostAdminHttpRoute } from '../host-lease-http.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
+import type { HostShapeAllocator } from '../host-shape-allocation.ts';
 import { assertMacOsAppLeaseTenantMayReadDiagnostics } from '../macos-app-lease.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
@@ -249,75 +253,6 @@ function readIntParam(params: Record<string, unknown>, key: string): number | un
 function readBooleanParam(params: Record<string, unknown>, key: string): boolean | undefined {
   const value = params[key];
   return typeof value === 'boolean' ? value : undefined;
-}
-
-function readRequiredGitHubArtifactText(
-  record: Record<string, unknown>,
-  key: 'owner' | 'repo' | 'artifactName',
-): string {
-  const value = typeof record[key] === 'string' ? record[key].trim() : '';
-  if (!value) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Invalid params: source.${key} is required for github-actions-artifact sources`,
-    );
-  }
-  return value;
-}
-
-function readGitHubArtifactInteger(record: Record<string, unknown>, key: 'artifactId' | 'runId') {
-  const value = record[key];
-  const parsed =
-    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
-  if (!Number.isInteger(parsed)) {
-    throw new AppError('INVALID_ARGS', `Invalid params: source.${key} must be an integer`);
-  }
-  return parsed;
-}
-
-function parseGitHubActionsArtifactSource(record: Record<string, unknown>): HttpInstallSource {
-  const owner = readRequiredGitHubArtifactText(record, 'owner');
-  const repo = readRequiredGitHubArtifactText(record, 'repo');
-  const hasArtifactId = record.artifactId !== undefined;
-  const hasRunId = record.runId !== undefined;
-  const hasArtifactName = record.artifactName !== undefined;
-  if (hasArtifactId && (hasRunId || hasArtifactName)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Invalid params: source must specify either artifactId or artifactName, not both',
-    );
-  }
-  if (!hasArtifactId && hasRunId && !hasArtifactName) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Invalid params: source.artifactName is required when source.runId is specified',
-    );
-  }
-  if (!hasArtifactId && !hasArtifactName) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Invalid params: source must specify artifactId or artifactName',
-    );
-  }
-  if (hasArtifactId) {
-    return {
-      kind: 'github-actions-artifact',
-      owner,
-      repo,
-      artifactId: readGitHubArtifactInteger(record, 'artifactId'),
-    };
-  }
-  let runId: number | undefined;
-  if (hasRunId) {
-    runId = readGitHubArtifactInteger(record, 'runId');
-  }
-  return {
-    kind: 'github-actions-artifact',
-    owner,
-    repo,
-    ...(hasRunId ? { runId } : {}),
-    artifactName: readRequiredGitHubArtifactText(record, 'artifactName'),
-  };
 }
 
 function toLeaseDaemonRequest(
@@ -588,6 +523,8 @@ export async function createDaemonHttpServer(options: {
    * rather than handed a daemon-host path.
    */
   resolveRequestDiagnosticsPath?: (ref: DiagnosticsRecordRef) => string;
+  /** The Host lease side's allocator; `/health` advertises device-shape exactly when it is set. */
+  hostShapeAllocator?: HostShapeAllocator;
 }): Promise<http.Server> {
   const instanceId = randomUUID();
   const hostArch = await readHostCpuArch();
@@ -607,6 +544,7 @@ export async function createDaemonHttpServer(options: {
             instanceId,
             hostArch,
             leaseBackends,
+            ...(options.hostShapeAllocator ? { features: [DAEMON_HOST_DEVICE_SHAPE_FEATURE] } : {}),
           }),
         ),
       );
@@ -755,6 +693,10 @@ export async function createDaemonHttpServer(options: {
         };
         requestAbortRegistration = registerRequestAbort(requestIdForCleanup);
         const clientDeclaredTenant = daemonRequest.meta?.tenantId ?? daemonRequest.flags?.tenant;
+        // The principal counts only on a request that already holds the daemon token.
+        const hostPrincipal = enforceDaemonToken(daemonRequest.token, token)
+          ? undefined
+          : readHostPrincipal(req.headers);
 
         const authResult = await runHttpAuthHook(authHook, {
           headers: req.headers,
@@ -769,9 +711,10 @@ export async function createDaemonHttpServer(options: {
           hookConfigured: authHook !== null,
           hookAttestedTenant: authResult.tenantId,
           clientDeclaredTenant,
+          hostPrincipal: hostPrincipal ?? undefined,
         });
         if (!tenantTrust.trusted) {
-          const normalized = tenantTrustRejectionError();
+          const normalized = tenantTrustRejectionError(tenantTrust);
           sendJson(
             res,
             createRpcError(rpcRequest.id ?? null, -32001, normalized.message, normalized),
@@ -785,6 +728,15 @@ export async function createDaemonHttpServer(options: {
             res,
             createRpcError(rpcRequest.id ?? null, -32000, tokenError.message, tokenError),
             401,
+          );
+          return;
+        }
+        if (hostPrincipal === null) {
+          const normalized = normalizeError(hostPrincipalInvalidError());
+          sendJson(
+            res,
+            createRpcError(rpcRequest.id ?? null, -32602, normalized.message, normalized),
+            400,
           );
           return;
         }
@@ -810,6 +762,9 @@ export async function createDaemonHttpServer(options: {
         // must not see the isolation the meta just overrode.
         if (tenantTrust.attested && daemonRequest.flags?.sessionIsolation !== undefined) {
           daemonRequest.flags = { ...daemonRequest.flags, sessionIsolation: 'tenant' };
+        }
+        if (hostPrincipal) {
+          daemonRequest.internal = { ...daemonRequest.internal, hostPrincipal };
         }
         daemonRequest = restrictRemoteHttpRequest(
           daemonRequest,
@@ -941,6 +896,11 @@ async function authorizeAuxiliaryHttpRequest(params: {
     sendRestJsonError(res, tokenError);
     return null;
   }
+  const hostPrincipal = readHostPrincipal(req.headers);
+  if (hostPrincipal === null) {
+    sendRestJsonError(res, normalizeError(hostPrincipalInvalidError()));
+    return null;
+  }
 
   const syntheticRpc: JsonRpcRequest = {
     jsonrpc: '2.0',
@@ -967,9 +927,10 @@ async function authorizeAuxiliaryHttpRequest(params: {
     hookConfigured: authHook !== null,
     hookAttestedTenant: authResult.tenantId,
     clientDeclaredTenant: tenantId,
+    hostPrincipal,
   });
   if (!tenantTrust.trusted) {
-    sendRestJsonError(res, tenantTrustRejectionError());
+    sendRestJsonError(res, tenantTrustRejectionError(tenantTrust));
     return null;
   }
 

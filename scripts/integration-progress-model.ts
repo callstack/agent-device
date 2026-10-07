@@ -334,6 +334,11 @@ function summarizeProviderScenarioFlagExclusions() {
       ],
     },
     {
+      name: 'Host front-end TLS options',
+      owner: 'Host server tests (src/cli/host/host-server.test.ts)',
+      keys: ['hostTlsCert', 'hostTlsKey'],
+    },
+    {
       name: 'daemon lifecycle control',
       owner: 'daemon CLI lifecycle tests',
       keys: ['clean'],

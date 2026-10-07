@@ -542,6 +542,7 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.deepEqual([...provisionKitPackage.exportTargets.keys()].sort(), [
     '@agent-device/provision-kit/app-resolution-cache',
     '@agent-device/provision-kit/boot-diagnostics',
+    '@agent-device/provision-kit/github-actions-artifact-source',
     '@agent-device/provision-kit/install-artifact-archive-context',
     '@agent-device/provision-kit/install-source',
     '@agent-device/provision-kit/install-source-config',

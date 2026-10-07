@@ -1,7 +1,7 @@
-import { test, expect } from 'vitest';
+import { test, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveInstallSource } from '../install-source-resolution.ts';
+import { resolveInstallSource, toDownloadableSource } from '../install-source-resolution.ts';
 import { trackUploadedArtifact } from '../artifact-tracking.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
@@ -62,19 +62,26 @@ test('resolveInstallSource leaves URL sources unchanged even when upload metadat
   resolved.cleanup();
 });
 
-test('resolveInstallSource rejects GitHub Actions artifact sources on the local daemon', () => {
-  expect(() =>
-    resolveInstallSource(
-      makeRequest({
-        installSource: {
-          kind: 'github-actions-artifact',
-          owner: 'acme',
-          repo: 'mobile',
-          artifactId: 1234567890,
-        },
-      }),
-    ),
-  ).toThrow(/compatible remote daemon/i);
+test('a GitHub Actions artifact is resolved with the daemon host token, never one from the request', async () => {
+  vi.stubEnv('AGENT_DEVICE_GITHUB_TOKEN', '');
+  try {
+    const req = makeRequest({
+      installSource: {
+        kind: 'github-actions-artifact',
+        owner: 'acme',
+        repo: 'mobile',
+        artifactId: 1234567890,
+        headers: { authorization: 'Bearer client-token' },
+      } as never,
+    });
+    const { source } = resolveInstallSource(req);
+    expect(source.kind).toBe('github-actions-artifact');
+    await expect(toDownloadableSource(source, req)).rejects.toMatchObject({
+      details: { reason: 'github-token-missing' },
+    });
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 test('resolveInstallSource refuses an unknown upload id rather than reading the wire path', () => {

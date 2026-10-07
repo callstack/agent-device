@@ -84,6 +84,8 @@ function parseRepositorySlug(value: string, sourceLabel: string): { owner: strin
   if (!result.owner || !result.repo) {
     throw new AppError('INVALID_ARGS', `${sourceLabel} must use owner/repo.`);
   }
+  assertGitHubRepositoryNamePart(result.owner);
+  assertGitHubRepositoryNamePart(result.repo);
   return result;
 }
 
@@ -108,4 +110,14 @@ function readInteger(value: unknown, field: string): number {
 
 function isIntegerString(value: unknown): value is string {
   return typeof value === 'string' && /^\d+$/.test(value.trim());
+}
+
+const GITHUB_NAME_PART = /^[A-Za-z0-9_.-]+$/;
+
+/** An owner or repository name as GitHub allows it, so it can never step outside `/repos/`. */
+export function assertGitHubRepositoryNamePart(part: string): string {
+  if (!GITHUB_NAME_PART.test(part) || part === '.' || part === '..') {
+    throw new AppError('INVALID_ARGS', `Invalid GitHub repository name: ${part}`);
+  }
+  return part;
 }

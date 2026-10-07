@@ -16,7 +16,7 @@ import {
   type RetainedMaterializedPaths,
 } from '../materialized-path-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import { resolveInstallSource } from '../install-source-resolution.ts';
+import { resolveInstallSource, toDownloadableSource } from '../install-source-resolution.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
@@ -72,13 +72,14 @@ export async function handleInstallFromSourceDeploymentCommand(params: {
         facts.operations.deployMaterializedApp,
       );
     if (unsupported) return unsupported;
+    const source = await toDownloadableSource(resolvedSource.source, req);
 
     const runtime = await requireRuntimeBinding(params.bindDevice)(
       device,
       readyMaterializeAndDeployAppUse,
     );
     await runtime.operations.ensureReady({});
-    materialized = await runtime.operations.materializeAppSource({ source: resolvedSource.source });
+    materialized = await runtime.operations.materializeAppSource({ source });
     retained = await retainIfRequested({
       artifact: materialized,
       retention,

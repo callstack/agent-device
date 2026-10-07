@@ -44,7 +44,7 @@ const reinstallCommandMetadata = defineFieldCommandMetadata(
 
 const installFromSourceCommandMetadata = defineFieldCommandMetadata(
   'install-from-source',
-  'Install app builds from URLs, remote source specs, or CI artifacts resolved by a remote daemon.',
+  'Install app builds from URLs, remote source specs, or CI artifacts the daemon resolves.',
   {
     source: requiredField(
       jsonSchemaField<DaemonInstallSource>(looseObjectSchema('Install source object.')),

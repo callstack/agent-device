@@ -89,6 +89,7 @@ import { openWebSessionNames } from '../web-session-names.ts';
 import { recoverAppLogResourcesAfterDaemonLock } from '../app-log-resource-recovery.ts';
 import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
+import { daemonGitHubTokenFingerprint } from '../../daemon-github-token.ts';
 
 const DAEMON_LEASE_RELEASE_TIMEOUT_MS = 1_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
@@ -634,6 +635,7 @@ export async function startDaemonRuntime(
       codeOrigin: daemonCodeOrigin,
       codeSignature: daemonCodeSignature,
       policyDigest: daemonPolicy?.digest,
+      githubTokenFingerprint: daemonGitHubTokenFingerprint(process.env),
     });
     if (socketPort) stdout.write(`AGENT_DEVICE_DAEMON_PORT=${socketPort}\n`);
     if (httpPort) stdout.write(`AGENT_DEVICE_DAEMON_HTTP_PORT=${httpPort}\n`);

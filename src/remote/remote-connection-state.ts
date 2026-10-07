@@ -44,6 +44,8 @@ export type RemoteConnectionState = {
   leaseProvider?: string;
   deviceKey?: string;
   clientId?: string;
+  /** The device type a Host lease was allocated for (ADR 0021 §5); absent off Host. */
+  hostDeviceType?: string;
   platform?: CliFlags['platform'];
   target?: CliFlags['target'];
   runtime?: SessionRuntimeHints;
@@ -475,6 +477,7 @@ function isRemoteConnectionState(value: unknown): value is RemoteConnectionState
       'leaseProvider',
       'deviceKey',
       'clientId',
+      'hostDeviceType',
     ]) &&
     isOptionalRemoteConnectionDaemonState(record.daemon)
   );

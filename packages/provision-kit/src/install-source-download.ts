@@ -37,7 +37,7 @@ export async function downloadInstallSource(params: {
   let currentUrl = parseSourceUrl(params.url);
   let headers = withDefaultUserAgent(sanitizeHeaders(params.headers));
   for (let redirectCount = 0; ; redirectCount += 1) {
-    const response = await requestHop(currentUrl, headers, params.signal);
+    const response = await requestApprovedSource(currentUrl, headers, params.signal);
     try {
       const redirected = readRedirect(response, currentUrl, redirectCount);
       if (redirected) {
@@ -53,7 +53,11 @@ export async function downloadInstallSource(params: {
   }
 }
 
-async function requestHop(
+/**
+ * One approved request: the destination is re-approved for this hop, and a transport failure
+ * reaches the caller as its network error code only, never its address or proxy details.
+ */
+export async function requestApprovedSource(
   url: URL,
   headers: Record<string, string>,
   signal: AbortSignal,

@@ -181,8 +181,8 @@ test('proxy command help describes tunnel usage', async () => {
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Usage:\s+agent-device proxy/);
   assert.match(help, /cloudflared tunnel --url http:\/\/127\.0\.0\.1:4310/);
-  assert.match(help, /--host <host>\s+Proxy: host interface to bind/);
-  assert.match(help, /--port <port>\s+Proxy: TCP port to bind/);
+  assert.match(help, /--host <host>\s+Proxy and host: interface to bind/);
+  assert.match(help, /--port <port>\s+Proxy and host: TCP port to bind/);
   assert.match(help, /--daemon-auth-token <token>\s+Remote HTTP daemon or proxy auth token/);
   assert.match(help, /--state-dir <path>\s+Daemon state directory/);
   assert.match(help, /\/agent-device\/\*/);
