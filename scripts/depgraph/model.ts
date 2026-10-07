@@ -15,6 +15,8 @@ import {
   type ResolvedImportEdge,
 } from '../layering/model.ts';
 import { ARCHITECTURE_OWNERSHIP, matchesDeclaredRoot } from '../layering/architecture-ownership.ts';
+import { genPostorder, getSuccessors, getTransitiveReduction, isAcyclic } from '@statelyai/graph';
+import { importEdgeId, importGraph, VALUE_EDGES } from './import-graph.ts';
 
 export type EdgeKind = 'value' | 'type' | 'dynamic';
 
@@ -72,7 +74,6 @@ export type GraphEdge = {
   backEdge: string | null;
   /** Set when this edge is a type-only spine inversion (`R6`), as `from-zone -> to-zone`. */
   typeInversion: string | null;
-  /** True when the same pair is also reachable through a longer path of the same weight class. */
   /** Target also reachable at distance >= 2. Reachability only — see the marker function. */
   transitivelyReachable: boolean;
   /** Declared labels accumulated from every raw import in this collapsed pair. */
@@ -211,22 +212,6 @@ export function collapseEdges(edges: readonly ResolvedImportEdge[]): GraphEdge[]
 }
 
 /**
- * Value-edge adjacency. Both the redundancy pass and the level computation walk the same
- * subgraph — the one R4 guarantees is a DAG — so they share its construction rather than each
- * rebuilding it.
- */
-function valueSuccessors(edges: readonly GraphEdge[]): Map<string, string[]> {
-  const successors = new Map<string, string[]>();
-  for (const edge of edges) {
-    if (edge.kind !== 'value') continue;
-    const list = successors.get(edge.from) ?? [];
-    list.push(edge.to);
-    successors.set(edge.from, list);
-  }
-  return successors;
-}
-
-/**
  * Flag value edges whose target is ALSO reachable from the source at distance >= 2.
  *
  * This is static module reachability and nothing more. It is emphatically NOT a removability
@@ -241,39 +226,25 @@ function valueSuccessors(edges: readonly GraphEdge[]): Map<string, string[]> {
  * - It says nothing about re-export chains being intentional. A direct import is frequently
  *   clearer than reaching through a barrel.
  *
- * So the output is a place to look, not a work list — and at ~1300 edges, a large one. Deciding
+ * So the output is a place to look, not a work list — and at ~2300 edges, a large one. Deciding
  * whether any given edge can go needs symbol-level analysis this does not attempt.
+ *
+ * On a DAG, the edges with a longer alternative path are exactly the ones the transitive
+ * reduction drops. R4 keeps the value subgraph acyclic; a value cycle makes the reduction
+ * undefined, and the report says so rather than inventing a partial answer.
  */
 export function markTransitivelyReachableEdges(edges: GraphEdge[]): void {
-  const successors = valueSuccessors(edges);
+  const valueGraph = importGraph(edges, VALUE_EDGES);
+  if (!isAcyclic(valueGraph)) {
+    throw new Error(
+      'value-import cycle present; transitive reachability needs the DAG R4 guarantees — run pnpm check:layering',
+    );
+  }
+  const kept = new Set(getTransitiveReduction(valueGraph).edges.map((edge) => edge.id));
   for (const edge of edges) {
     if (edge.kind !== 'value') continue;
-    edge.transitivelyReachable = reachableBeyondDirectEdge(edge, successors);
+    edge.transitivelyReachable = !kept.has(importEdgeId(edge.from, edge.to));
   }
-}
-
-/**
- * Whether `edge.to` is reachable from `edge.from` WITHOUT using the direct edge, i.e. at
- * distance >= 2. The frontier is seeded with the one-hop neighbours other than `to`, which is
- * what excludes the direct hop without having to track path lengths.
- */
-function reachableBeyondDirectEdge(
-  edge: GraphEdge,
-  successors: ReadonlyMap<string, string[]>,
-): boolean {
-  const seen = new Set<string>([edge.from]);
-  const queue = (successors.get(edge.from) ?? []).filter((next) => next !== edge.to);
-  for (const next of queue) seen.add(next);
-
-  for (let index = 0; index < queue.length; index++) {
-    for (const next of successors.get(queue[index]!) ?? []) {
-      if (next === edge.to) return true;
-      if (seen.has(next)) continue;
-      seen.add(next);
-      queue.push(next);
-    }
-  }
-  return false;
 }
 
 /**
@@ -458,32 +429,24 @@ export function buildGraph(
 /**
  * Longest distance from each node to a sink over value edges. The layering gate rejects
  * production value-import cycles (R4), so that subgraph is a DAG and the height is
- * well-defined; the `visiting` guard only exists so a future cycle degrades instead of
- * overflowing the stack.
+ * well-defined. Postorder visits every successor before its importer; a back-edge in a future
+ * cycle reaches a node with no height yet and contributes nothing, so the walk degrades rather
+ * than looping.
  */
 export function computeLevels(
   nodes: readonly GraphNode[],
   edges: readonly GraphEdge[],
 ): Map<string, number> {
-  const successors = valueSuccessors(edges);
-
+  const ids = nodes.map((node) => node.id);
+  const valueGraph = importGraph(edges, VALUE_EDGES, ids);
   const levels = new Map<string, number>();
-  const visiting = new Set<string>();
-
-  const height = (id: string): number => {
-    const cached = levels.get(id);
-    if (cached !== undefined) return cached;
-    if (visiting.has(id)) return 0;
-    visiting.add(id);
+  for (const node of genPostorder(valueGraph, { from: ids })) {
     let best = 0;
-    for (const next of successors.get(id) ?? []) {
-      best = Math.max(best, height(next) + 1);
+    for (const next of getSuccessors(valueGraph, node.id)) {
+      const height = levels.get(next.id);
+      if (height !== undefined) best = Math.max(best, height + 1);
     }
-    visiting.delete(id);
-    levels.set(id, best);
-    return best;
-  };
-
-  for (const node of nodes) height(node.id);
+    levels.set(node.id, best);
+  }
   return levels;
 }

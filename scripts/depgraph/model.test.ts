@@ -243,6 +243,19 @@ test('flags only value edges whose target is already reachable at distance >= 2'
   assert.deepEqual(flagged, ['src/core/a.ts -> src/core/c.ts']);
 });
 
+test('transitive marking refuses a value cycle instead of guessing', () => {
+  const edges = collapseEdges(
+    resolveImportEdges(
+      sources({
+        'src/core/a.ts': "import { b } from './b.ts';\nexport const a = b;",
+        'src/core/b.ts': "import { a } from './a.ts';\nexport const b = a;",
+      }),
+    ),
+  );
+
+  assert.throws(() => markTransitivelyReachableEdges(edges), /value-import cycle present/);
+});
+
 test('a type-only shortcut is never flagged against a value path', () => {
   const edges = collapseEdges(
     resolveImportEdges(

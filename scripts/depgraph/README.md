@@ -45,7 +45,9 @@ gate rejects value-import cycles (R4) and spine back-edges (R5); the graph addit
   `{ c as b }`, the path exists and deleting `a -> c` still breaks `a`), it does not preserve when
   a module's side effects run, and a direct import is often deliberately clearer than reaching
   through a barrel. Deciding whether any given edge can go needs symbol-level analysis this does
-  not attempt. ~1300 of them: a place to look, never a work list.
+  not attempt. ~2300 of them: a place to look, never a work list. They are exactly the value
+  edges the transitive reduction drops, so the report refuses to run when a value-import cycle
+  (an R4 failure) makes the reduction undefined; fix the cycle first.
 - **type-only and dynamic cycles** — 8 of them, all outside R4 by design (a type-only import is
   free at runtime, a dynamic one is a deliberate cold-start seam). Worth reading when a module
   feels hard to reason about.
@@ -98,6 +100,15 @@ The graph is extracted with `scripts/layering/model.ts`, the same module
 the gate enforces — a separate extractor with its own resolution behaviour would draw a
 graph nobody is enforcing. Cross-checked once against `dependency-cruiser` 3.1.1 (at the commit it was written): same
 modules and edges, plus 88 dynamic/type-only edges dependency-cruiser fails to resolve.
+
+## Graph algorithms
+
+Extraction stays with the layering gate; traversal does not. `import-graph.ts` turns the collapsed
+edges into a [`@statelyai/graph`](https://stately.ai/docs/packages/graph) graph filtered to the
+edge kinds a question needs (value for evaluation order, value + dynamic for what a handler can
+run), and the report and `affected` query use its BFS, postorder, and transitive reduction rather
+than hand-rolled walks. The library also carries centrality, community, dominator, and layout
+algorithms; reach for them in a throwaway probe before writing a new traversal here.
 
 ## What the JSON carries
 

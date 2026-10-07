@@ -7,48 +7,18 @@
 // The graph itself comes from `scripts/depgraph/model.ts`, which is extracted with the layering
 // gate's own model — the dependents reported here are exactly the edges CI enforces.
 
+import { genBFS, getPredecessors, type Graph, type TraversalDirection } from '@statelyai/graph';
+import { EXECUTABLE_EDGES, importGraph, VALUE_EDGES } from './import-graph.ts';
 import type { GraphEdge, GraphNode } from './model.ts';
 
-/** Reverse adjacency over value edges — the subgraph R4 keeps acyclic. */
-function valuePredecessors(edges: readonly GraphEdge[]): Map<string, string[]> {
-  const predecessors = new Map<string, string[]>();
-  for (const edge of edges) {
-    if (edge.kind !== 'value') continue;
-    const list = predecessors.get(edge.to) ?? [];
-    list.push(edge.from);
-    predecessors.set(edge.to, list);
-  }
-  return predecessors;
-}
-
-/**
- * Forward adjacency over the edges a module actually executes: value imports plus dynamic
- * ones. Dynamic edges matter here because the daemon loads every command handler through
- * `import()` (`src/daemon/request-handler-chain.ts`) — dropping them would report that no
- * command's handler chain reaches anything.
- */
-function executableSuccessors(edges: readonly GraphEdge[]): Map<string, string[]> {
-  const successors = new Map<string, string[]>();
-  for (const edge of edges) {
-    if (edge.kind === 'type') continue;
-    const list = successors.get(edge.from) ?? [];
-    list.push(edge.to);
-    successors.set(edge.from, list);
-  }
-  return successors;
-}
-
-/** Breadth-first closure from `start`, excluding `start` itself. */
-function reachable(start: string, adjacency: ReadonlyMap<string, string[]>): Set<string> {
-  const seen = new Set<string>([start]);
-  const queue = [start];
-  for (let index = 0; index < queue.length; index++) {
-    for (const next of adjacency.get(queue[index]!) ?? []) {
-      if (seen.has(next)) continue;
-      seen.add(next);
-      queue.push(next);
-    }
-  }
+/** Every node a breadth-first walk reaches from `start`, excluding `start` itself. */
+function reachable(
+  graph: Graph,
+  start: string,
+  direction: TraversalDirection = 'outgoing',
+): Set<string> {
+  const seen = new Set<string>();
+  for (const node of genBFS(graph, { from: start, direction })) seen.add(node.id);
   seen.delete(start);
   return seen;
 }
@@ -69,9 +39,11 @@ export type DependentSet = {
  * make the count unactionable.
  */
 export function collectDependents(file: string, edges: readonly GraphEdge[]): DependentSet {
-  const predecessors = valuePredecessors(edges);
-  const direct = [...new Set(predecessors.get(file) ?? [])].sort();
-  const all = [...reachable(file, predecessors)].sort();
+  const valueGraph = importGraph(edges, VALUE_EDGES, [file]);
+  const direct = getPredecessors(valueGraph, file)
+    .map((node) => node.id)
+    .sort();
+  const all = [...reachable(valueGraph, file, 'incoming')].sort();
   const directSet = new Set(direct);
   return { direct, all, transitiveOnly: all.filter((entry) => !directSet.has(entry)) };
 }
@@ -140,12 +112,16 @@ export function commandsReaching(
   chains: readonly CommandChain[],
   edges: readonly GraphEdge[],
 ): CommandChain[] {
-  const successors = executableSuccessors(edges);
+  const executableGraph = importGraph(
+    edges,
+    EXECUTABLE_EDGES,
+    chains.map((chain) => chain.entry),
+  );
   const closures = new Map<string, Set<string>>();
   const closureFor = (entry: string): Set<string> => {
     let closure = closures.get(entry);
     if (!closure) {
-      closure = reachable(entry, successors);
+      closure = reachable(executableGraph, entry);
       closure.add(entry);
       closures.set(entry, closure);
     }
