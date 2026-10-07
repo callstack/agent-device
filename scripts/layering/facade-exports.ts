@@ -120,3 +120,47 @@ export function readReExportSources(source: string): Map<string, string> {
   }
   return sources;
 }
+
+/**
+ * Re-export edges grouped by the module they come FROM: each `export { … } from
+ * './m.ts'` entry contributes one `{ imported, exported }` pair to `./m.ts`'s
+ * list — `imported` is the name in the source module (the alias target),
+ * `exported` the name the façade publishes — and `export * as ns from './m.ts'`
+ * contributes the binding `namespace:<ns>`, which carries the module's whole
+ * surface. Bare `export *` throws exactly as in `readNamedExports`.
+ *
+ * This is the per-source shape the exhaustiveness gate needs. Keying by export
+ * NAME — `readReExportSources`, or a flat name set — cannot answer "does the
+ * façade still carry everything THIS module exports?" when two sources export
+ * the same name: the survivor's entry hides the dropped one, so narrowing a
+ * single source passes (#3289 cubic review P2). Edges keep their module, so a
+ * pair is satisfied only by the module that declares the name.
+ */
+export function readFacadeReExportEdgesByModule(
+  source: string,
+): Map<string, { imported: string; exported: string }[]> {
+  const parsed = parseSync('facade-reexport-edge-scan.ts', source);
+  const edges = new Map<string, { imported: string; exported: string }[]>();
+  for (const staticExport of parsed.module.staticExports) {
+    for (const entry of staticExport.entries) {
+      if (entry.exportName.kind === 'None') {
+        throw new Error(
+          "readFacadeReExportEdgesByModule cannot enumerate 'export * from …' — it re-exports " +
+            'an unknown set of names. Name the re-exported symbols explicitly instead.',
+        );
+      }
+      if (entry.exportName.kind !== 'Name' || !entry.exportName.name) continue;
+      if (!entry.moduleRequest) continue;
+      const moduleRequest = entry.moduleRequest.value;
+      const exported = entry.exportName.name;
+      const pair =
+        entry.importName.kind === 'All'
+          ? { imported: `namespace:${exported}`, exported }
+          : { imported: entry.importName.name ?? exported, exported };
+      const list = edges.get(moduleRequest);
+      if (list) list.push(pair);
+      else edges.set(moduleRequest, [pair]);
+    }
+  }
+  return edges;
+}

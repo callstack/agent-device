@@ -10,7 +10,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
-import { readDirectNamedExports, readNamedExports } from './facade-exports.ts';
+import {
+  readDirectNamedExports,
+  readFacadeReExportEdgesByModule,
+  readNamedExports,
+} from './facade-exports.ts';
 import { facadeEntryFiles } from './package-boundaries.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
@@ -59,6 +63,13 @@ test('every façade re-exports its sources exhaustively (no silent narrowing)', 
   // gesture vocabulary, `MultiTargetAnnotationV1`). The rebase silently dropped all
   // 13 and only a human diff caught it. Exhaustiveness is what makes that mechanical.
   //
+  // The comparison is PER SOURCE MODULE, not over one collapsed name set: when two
+  // re-exported modules export the same name, a flat set lets the survivor's edge
+  // hide the dropped one, so narrowing a single source passes (#3289 cubic review
+  // P2). Each edge is matched against the module it comes from, by the name the
+  // source declares it under — so `export { a as b } from './m.ts'` satisfies `a`,
+  // not `b` — and a `namespace:<ns>` binding carries that module's whole surface.
+  //
   // Scoped to `packages/*/src/facades/` — the barrels this PR converted, which were
   // exhaustive by construction because `export *` cannot narrow. A hand-curated
   // package `index.ts` is a different thing: `@agent-device/ad-replay` deliberately
@@ -68,23 +79,20 @@ test('every façade re-exports its sources exhaustively (no silent narrowing)', 
   assert.ok(facadeFiles.length > 0, 'expected at least one converted façade to check');
   for (const file of [...facadeFiles].sort()) {
     const absolute = path.join(repoRoot, file);
-    const exported = new Set(readNamedExports(fs.readFileSync(absolute, 'utf8')));
-    for (const specifier of reExportSources(fs.readFileSync(absolute, 'utf8'))) {
-      const sourcePath = path.resolve(path.dirname(absolute), specifier);
-      if (!fs.existsSync(sourcePath)) continue;
-      // A source may itself carry a bare `export *` (contracts' `gesture-plan.ts`
-      // stars `gesture-plan-types.ts`). Read its DIRECT exports rather than skipping
-      // the file: skipping would also drop `buildDragGesturePlan` and friends from
-      // this check, so removing one from a façade would narrow the surface silently
-      // (#1614 review P2). The starred names are covered because the façade
-      // re-exports the starred module directly too, and that path is checked here on
-      // its own turn.
-      const sourceNames = readDirectNamedExports(fs.readFileSync(sourcePath, 'utf8'));
-      const dropped = sourceNames.filter((name) => name !== 'default' && !exported.has(name));
+    const facadeSource = fs.readFileSync(absolute, 'utf8');
+    const dropped = droppedFacadeExports(
+      facadeSource,
+      (sourcePath) =>
+        fs.existsSync(sourcePath)
+          ? readDirectNamedExports(fs.readFileSync(sourcePath, 'utf8'))
+          : undefined,
+      path.dirname(absolute),
+    );
+    for (const { specifier, names } of dropped) {
       assert.deepEqual(
-        dropped,
+        names,
         [],
-        `${file} re-exports from ${specifier} but omits ${dropped.join(', ')} — an explicit ` +
+        `${file} re-exports from ${specifier} but omits ${names.join(', ')} — an explicit ` +
           'façade list must stay exhaustive over its sources, or a symbol added upstream ' +
           'silently never becomes public. Add the names, or move them out of that module.',
       );
@@ -92,12 +100,62 @@ test('every façade re-exports its sources exhaustively (no silent narrowing)', 
   }
 });
 
-/** The relative specifiers a façade re-exports from, in source order. */
-function reExportSources(source: string): string[] {
-  const found = new Set<string>();
-  for (const match of source.matchAll(/\bfrom\s+'(\.[^']*)'/g)) {
-    const specifier = match[1];
-    if (specifier) found.add(specifier);
+/**
+ * Per-source exhaustiveness: for each module the façade re-exports from, the
+ * names that module declares but no edge from THAT module carries. Factored
+ * from the real-tree loop so the narrowed-source case can be planted against a
+ * name duplicated in a sibling module (#3289 cubic review P2). `sourceNamesOf`
+ * reads one resolved source file (undefined = the specifier resolves to nothing
+ * on disk); a `namespace:<ns>` binding exempts its module (whole-surface).
+ */
+function droppedFacadeExports(
+  facadeSource: string,
+  sourceNamesOf: (resolvedSourcePath: string) => string[] | undefined,
+  facadeDirectory: string,
+): { specifier: string; names: string[] }[] {
+  const findings: { specifier: string; names: string[] }[] = [];
+  const edgesByModule = readFacadeReExportEdgesByModule(facadeSource);
+  for (const [specifier, edges] of edgesByModule) {
+    if (!specifier.startsWith('.')) continue;
+    if (edges.some((edge) => edge.imported.startsWith('namespace:'))) continue;
+    const sourceNames = sourceNamesOf(path.resolve(facadeDirectory, specifier));
+    if (sourceNames === undefined) continue;
+    const imported = new Set(edges.map((edge) => edge.imported));
+    const names = sourceNames.filter((name) => name !== 'default' && !imported.has(name));
+    if (names.length > 0) findings.push({ specifier, names });
   }
-  return [...found];
+  return findings;
 }
+
+test('a narrowed source fails even when a sibling module exports the same name', () => {
+  // The planted #3289 cubic review P2. `./widgets.ts` lost `Dropped` from the
+  // façade while `./other.ts` still publishes the same name. The old check
+  // collapsed every module's re-exports into one export-NAME set, so
+  // `Dropped`-from-`other` satisfied the missing `Dropped`-from-`widgets` and
+  // the narrowing passed. Per-module edges cannot be fooled: the only edges
+  // whose module is `./widgets.ts` carry Thing and alpha, so its `Dropped` is
+  // reported — and it is reported for THAT module only.
+  const facadeSource = [
+    "export { Thing, alpha } from './widgets.ts';",
+    "export { Dropped } from './other.ts';",
+  ].join('\n');
+  const sourceNames = new Map<string, string[]>([
+    ['/virtual/facades/widgets.ts', ['Thing', 'alpha', 'Dropped']],
+    ['/virtual/facades/other.ts', ['Dropped']],
+  ]);
+  assert.deepEqual(
+    droppedFacadeExports(facadeSource, (resolved) => sourceNames.get(resolved), '/virtual/facades'),
+    [{ specifier: './widgets.ts', names: ['Dropped'] }],
+  );
+  // The matching direction for aliases is the SOURCE name: `alpha as aliasAlpha`
+  // covers widgets' `alpha`. Were the façade-side name compared instead,
+  // `alpha` would surface as a second drop.
+  const aliasSource = [
+    "export { Thing, alpha as aliasAlpha } from './widgets.ts';",
+    "export { Dropped } from './other.ts';",
+  ].join('\n');
+  assert.deepEqual(
+    droppedFacadeExports(aliasSource, (resolved) => sourceNames.get(resolved), '/virtual/facades'),
+    [{ specifier: './widgets.ts', names: ['Dropped'] }],
+  );
+});
