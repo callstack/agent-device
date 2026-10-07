@@ -1,7 +1,6 @@
 import type {
   LeaseRequestInput,
   ManagedDeviceAllocatorPort,
-  SupersedeLeaseRequestInput,
 } from '@agent-device/contracts/managed-device-allocation';
 import type { AllocationAction, AllocationDecisionMode } from './decision.ts';
 import { decideAllocationAction } from './decision.ts';
@@ -39,7 +38,6 @@ export type AllocationOperationJournal = Readonly<{
   recover(ref: AllocationOperationRef): Promise<AllocationJournalResult>;
   cancel(ref: AllocationOperationRef): Promise<AllocationJournalResult>;
   release(ref: AllocationOperationRef): Promise<AllocationJournalResult>;
-  supersede(input: SupersedeLeaseRequestInput): Promise<AllocationJournalResult>;
   read(ref: AllocationOperationRef): AllocationOperationRead;
   list(): AllocationOperationRead[];
 }>;
@@ -108,7 +106,6 @@ function createJournalServices(services: JournalServices): AllocationOperationJo
     recover: (ref) => referenceOperation(services, ref, 'recover'),
     cancel: (ref) => referenceOperation(services, ref, 'cancel'),
     release: (ref) => referenceOperation(services, ref, 'release'),
-    supersede: (input) => supersedeOperation(services, input),
     read: (ref) => services.store.read(ref),
     list: () => services.store.list(),
   });
@@ -140,55 +137,6 @@ function referenceOperation(
   });
 }
 
-function supersedeOperation(
-  services: JournalServices,
-  input: SupersedeLeaseRequestInput,
-): Promise<AllocationJournalResult> {
-  const invalid = validateSupersessionInput(input);
-  if (invalid) return Promise.resolve(invalid);
-  return services.lane.withLock(input.requesterId, async () => {
-    const prior = services.lane.expectedPrior(input);
-    if ('status' in prior) return prior;
-    const allocatorCheck = checkAllocatorInstance(services.allocator, prior.record);
-    if (allocatorCheck) return allocatorCheck;
-    const liveBinding = liveBindingSupersession(prior.record, input);
-    if (liveBinding) return liveBinding;
-    const opened = services.lane.open(input.replacement, prior.record);
-    if ('status' in opened) return opened;
-    return services.execute(opened.record, 'supersede', {
-      signal: input.replacement.signal,
-      supersedeInput: input,
-    });
-  });
-}
-
-function validateSupersessionInput(
-  input: SupersedeLeaseRequestInput,
-): AllocationJournalResult | undefined {
-  if (input.replacement.requesterId !== input.requesterId) {
-    return blocked('payload-mismatch', 'supersession requester does not match its replacement');
-  }
-  return input.replacement.requestGeneration > input.expectedRequestGeneration &&
-    Number.isInteger(input.replacement.requestGeneration)
-    ? undefined
-    : blocked('payload-mismatch', 'supersession replacement generation is not newer');
-}
-
-function liveBindingSupersession(
-  prior: AllocationOperationRecord,
-  input: SupersedeLeaseRequestInput,
-): AllocationJournalResult | undefined {
-  if (prior.attemptKey === input.replacement.attemptKey) {
-    return blocked('payload-mismatch', 'supersession must use a new attempt key', prior);
-  }
-  if (prior.phase.status !== 'granted') return undefined;
-  return blocked(
-    prior.release === 'released' ? 'invalid-transition' : 'already-granted',
-    'supersession cannot revoke a live managed binding in this slice',
-    prior,
-  );
-}
-
 function executeOperation(
   services: JournalServices,
   record: AllocationOperationRecord,
@@ -208,10 +156,7 @@ function executeOperation(
   );
 }
 
-type AllocatorAction = Extract<
-  AllocationAction,
-  { kind: 'request' | 'supersede' | 'lookup' | 'cancel' }
->;
+type AllocatorAction = Extract<AllocationAction, { kind: 'request' | 'lookup' | 'cancel' }>;
 type BindingAction = Extract<AllocationAction, { kind: 'publish' | 'cleanup' | 'release' }>;
 
 function executeAction(
@@ -240,8 +185,6 @@ function executeAllocatorAction(
   switch (action.kind) {
     case 'request':
       return actions.request(record, context);
-    case 'supersede':
-      return actions.supersede(record, context);
     case 'lookup':
       return actions.lookup(record, mode, context.signal);
     case 'cancel':
@@ -266,12 +209,7 @@ function executeBindingAction(
 }
 
 function isAllocatorAction(action: AllocationAction): action is AllocatorAction {
-  return (
-    action.kind === 'request' ||
-    action.kind === 'supersede' ||
-    action.kind === 'lookup' ||
-    action.kind === 'cancel'
-  );
+  return action.kind === 'request' || action.kind === 'lookup' || action.kind === 'cancel';
 }
 
 function isBindingAction(action: AllocationAction): action is BindingAction {

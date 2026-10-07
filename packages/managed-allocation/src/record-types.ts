@@ -30,7 +30,6 @@ export type AllocationOperationPhase =
   | Readonly<{ status: 'ambiguous'; message: string }>
   | Readonly<{ status: 'granted'; lease: ManagedLease }>
   | Readonly<{ status: 'refused'; refusal: LeaseRefusal }>
-  | Readonly<{ status: 'superseded' }>
   | Readonly<{ status: 'cancelled' }>;
 
 export type AllocationOperationRecord = Readonly<{
@@ -42,7 +41,6 @@ export type AllocationOperationRecord = Readonly<{
   deadlineAtMs: number;
   requestGeneration: number;
   admission: 'fail-fast';
-  activation: 'direct' | 'external-fence';
   attribution?: JsonObject;
   identityIncarnationId?: string;
   createdAtMs: number;
@@ -70,7 +68,6 @@ export type AllocationAllocatorOutcome =
       identityIncarnationId: string;
     }>
   | Readonly<{ status: 'refused'; refusal: LeaseRefusal; identityIncarnationId?: string }>
-  | Readonly<{ status: 'superseded' }>
   | Readonly<{ status: 'cancelled' }>;
 
 export type AllocationTransition =

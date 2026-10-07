@@ -17,7 +17,6 @@ import {
   decodePhase,
   decodeRelease,
   decodeShape,
-  isActivation,
 } from './record-codec-state.ts';
 
 export type AllocationOperationDecoding =
@@ -47,7 +46,6 @@ type DecodedBaseFields = Readonly<{
   shape: ManagedShapeRequest;
   deadlineAtMs: number;
   requestGeneration: number;
-  activation: 'direct' | 'external-fence';
   createdAtMs: number;
   updatedAtMs: number;
   attribution?: JsonObject;
@@ -114,19 +112,19 @@ function decodeIdentifiers(
 
 function decodeRequestFields(
   value: RawAllocationRecord,
-): DecodeResult<Pick<DecodedBaseFields, 'shape' | 'requestGeneration' | 'activation'>> {
+): DecodeResult<Pick<DecodedBaseFields, 'shape' | 'requestGeneration'>> {
   const shape = decodeShape(value.shape);
   const requestGeneration = isRequestGeneration(value.requestGeneration)
     ? value.requestGeneration
     : undefined;
   if (!shape) return unreadable('corrupt', 'allocation record shape is invalid');
-  if (value.admission !== 'fail-fast' || !isActivation(value.activation)) {
+  if (value.admission !== 'fail-fast') {
     return unreadable('corrupt', 'allocation record request policy is invalid');
   }
   if (requestGeneration === undefined) {
     return unreadable('corrupt', 'allocation record request generation is invalid');
   }
-  return { shape, requestGeneration, activation: value.activation };
+  return { shape, requestGeneration };
 }
 
 function decodeTimes(

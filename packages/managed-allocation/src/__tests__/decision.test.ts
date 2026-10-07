@@ -83,8 +83,7 @@ test('grants publish first, and release cleans the binding before calling the al
   });
 });
 
-test('cancel and explicit supersession are allocator actions, not local terminal guesses', () => {
+test('cancel is an allocator action, not a local terminal guess', () => {
   assert.equal(decideAllocationAction(requested(), 'cancel').kind, 'cancel');
-  assert.equal(decideAllocationAction(requested(), 'supersede').kind, 'supersede');
   assert.equal(decideAllocationAction(granted(), 'cancel').kind, 'blocked');
 });

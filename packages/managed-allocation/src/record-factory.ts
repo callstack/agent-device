@@ -23,7 +23,6 @@ export function newAllocationOperation(
     deadlineAtMs: fields.deadlineAtMs,
     requestGeneration: fields.requestGeneration,
     admission: fields.admission,
-    activation: fields.activation,
     ...(fields.attribution === undefined
       ? {}
       : { attribution: freezeJsonObject(fields.attribution) }),

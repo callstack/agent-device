@@ -15,7 +15,6 @@ export function isAllocationRequest(fields: NewAllocationOperationInput): boolea
     isFiniteNumber(fields.deadlineAtMs) &&
     isFiniteNumber(fields.nowMs) &&
     fields.admission === 'fail-fast' &&
-    (fields.activation === 'direct' || fields.activation === 'external-fence') &&
     isValidShape(fields.shape) &&
     (fields.attribution === undefined || isBoundedJsonObject(fields.attribution))
   );

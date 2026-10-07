@@ -19,7 +19,7 @@ import {
 } from '@agent-device/managed-allocation/record';
 
 export type ManagedCommandHorizon = Readonly<{ deadline: Deadline; teardownTimeoutMs: number }>;
-type FenceReason = 'released' | 'replaced' | 'superseded' | 'fenced' | 'authority-unconfirmed';
+type FenceReason = 'released' | 'replaced' | 'fenced' | 'authority-unconfirmed';
 export type ManagedLeaseAdmissionFailure =
   | Readonly<{ status: 'abandoned' | 'deadline-exceeded' }>
   | Readonly<{ status: 'teardown-required'; reason: FenceReason; error?: NormalizedError }>;
@@ -39,7 +39,7 @@ export type ManagedLeaseAdmission = Readonly<{
   fenceBinding(reason: FenceReason, error?: NormalizedError): void;
 }>;
 
-/** One binding incarnation; its coordinator fences it before release, replacement or supersession. */
+/** One binding incarnation; its coordinator fences it before release or replacement. */
 export function createManagedLeaseAdmission(params: {
   allocator: ManagedDeviceAllocatorPort;
   grant: LeaseRequestStatus;

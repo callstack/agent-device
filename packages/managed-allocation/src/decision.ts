@@ -6,13 +6,7 @@ import type { AllocationOperationRecord, AllocationOperationRef } from './record
 import { bindingFenceFor } from './record-fence.ts';
 import type { ResourceOwnershipFence } from '@agent-device/contracts/platform-runtime';
 
-export type AllocationDecisionMode =
-  | 'new'
-  | 'recover'
-  | 'continue'
-  | 'cancel'
-  | 'release'
-  | 'supersede';
+export type AllocationDecisionMode = 'new' | 'recover' | 'continue' | 'cancel' | 'release';
 
 export type AllocationBinding = Readonly<{
   operation: AllocationOperationRef;
@@ -23,7 +17,6 @@ export type AllocationBinding = Readonly<{
 
 export type AllocationAction =
   | Readonly<{ kind: 'request'; ref: LeaseRequestRef }>
-  | Readonly<{ kind: 'supersede'; ref: LeaseRequestRef }>
   | Readonly<{ kind: 'lookup'; ref: LeaseRequestRef }>
   | Readonly<{ kind: 'cancel'; ref: LeaseRequestRef }>
   | Readonly<{ kind: 'publish'; binding: AllocationBinding }>
@@ -49,17 +42,11 @@ export function decideAllocationAction(
   if (record.phase.status === 'granted') {
     return decideGrantedAction(record, mode);
   }
-  if (
-    record.phase.status === 'refused' ||
-    record.phase.status === 'superseded' ||
-    record.phase.status === 'cancelled'
-  ) {
+  if (record.phase.status === 'refused' || record.phase.status === 'cancelled') {
     return { kind: 'terminal' };
   }
   if (mode === 'cancel') return { kind: 'cancel', ref };
   if (mode === 'new' && record.phase.status === 'unresolved') return { kind: 'request', ref };
-  if (mode === 'supersede' && record.phase.status === 'unresolved')
-    return { kind: 'supersede', ref };
   if (record.phase.status === 'unknown') return { kind: 'lookup', ref };
   if (record.phase.status === 'pending') {
     return mode === 'continue' ? { kind: 'pending' } : { kind: 'lookup', ref };

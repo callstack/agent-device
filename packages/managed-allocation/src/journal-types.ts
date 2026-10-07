@@ -1,7 +1,4 @@
-import type {
-  LeaseRequestInput,
-  SupersedeLeaseRequestInput,
-} from '@agent-device/contracts/managed-device-allocation';
+import type { LeaseRequestInput } from '@agent-device/contracts/managed-device-allocation';
 import type { AllocationAction, AllocationBinding, AllocationDecisionMode } from './decision.ts';
 import type { AllocationOperationRecord } from './record.ts';
 import type { AllocationOperationUnreadable } from './store.ts';
@@ -36,7 +33,6 @@ export type AllocationJournalResult =
         | 'uncertain'
         | 'granted'
         | 'refused'
-        | 'superseded'
         | 'cancelled'
         | 'cleanup-pending'
         | 'released';
@@ -61,7 +57,6 @@ export type AllocationJournalResult =
 export type JournalContext = Readonly<{
   signal?: AbortSignal;
   requestInput?: LeaseRequestInput;
-  supersedeInput?: SupersedeLeaseRequestInput;
 }>;
 
 export type PersistedTransition =
@@ -70,10 +65,6 @@ export type PersistedTransition =
 
 export type AllocationJournalActionRunner = Readonly<{
   request(
-    record: AllocationOperationRecord,
-    context: JournalContext,
-  ): Promise<AllocationJournalResult>;
-  supersede(
     record: AllocationOperationRecord,
     context: JournalContext,
   ): Promise<AllocationJournalResult>;

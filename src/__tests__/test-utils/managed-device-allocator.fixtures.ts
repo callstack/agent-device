@@ -42,13 +42,8 @@ export function createScriptedManagedDeviceAllocator(
     calls,
     requestLease: async (input) => await next('requestLease', input),
     getLeaseRequestStatus: async (request) => await next('getLeaseRequestStatus', request),
-    supersedeLeaseRequest: async (input) => await next('supersedeLeaseRequest', input),
     cancelLeaseRequest: async (request) => await next('cancelLeaseRequest', request),
     renewLease: async (input) => await next('renewLease', input),
     releaseLease: async (input) => await next('releaseLease', input),
-    confirmLeaseActivation: async (proof) => await next('confirmLeaseActivation', proof),
-    getManagedIdentityStatus: async (identity) => await next('getManagedIdentityStatus', identity),
-    acknowledgeManagedIdentityRemoval: async (identity) =>
-      await next('acknowledgeManagedIdentityRemoval', identity),
   });
 }

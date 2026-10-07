@@ -55,7 +55,7 @@ export function transitionInvalid(transition: string, state: unknown): never {
 }
 
 export function isTransitionTerminal(phase: AllocationOperationPhase): boolean {
-  return ['granted', 'refused', 'superseded', 'cancelled', 'ambiguous'].includes(phase.status);
+  return ['granted', 'refused', 'cancelled', 'ambiguous'].includes(phase.status);
 }
 
 function allocationError(reason: string, message: string): AppError {

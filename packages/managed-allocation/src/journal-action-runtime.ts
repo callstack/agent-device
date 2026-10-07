@@ -18,7 +18,6 @@ export function createAllocationJournalActionRunner(
 ): AllocationJournalActionRunner {
   return Object.freeze({
     request: (record, context) => requestAllocation(options, record, context),
-    supersede: (record, context) => supersedeAllocation(options, record, context),
     lookup: (record, mode, signal) => lookupAllocation(options, record, mode, signal),
     cancel: (record) => cancelAllocation(options, record),
     publish: (record, action, signal) => publishBinding(options, record, action, signal),
@@ -38,19 +37,6 @@ function requestAllocation(
     : Promise.resolve(
         blocked('invalid-transition', 'allocation request input is unavailable', record),
       );
-}
-
-function supersedeAllocation(
-  options: ActionRunnerOptions,
-  record: AllocationOperationRecord,
-  context: JournalContext,
-): Promise<AllocationJournalResult> {
-  const input = context.supersedeInput;
-  return input
-    ? dispatchRequest(options, record, context.signal, () =>
-        options.allocator.supersedeLeaseRequest(input),
-      )
-    : Promise.resolve(blocked('invalid-transition', 'supersession input is unavailable', record));
 }
 
 function lookupAllocation(

@@ -123,7 +123,6 @@ test('a lost renewal response is reconciled through the exact durable attempt', 
 test.each([
   unknownStatus,
   granted({ state: 'cancelled' }),
-  granted({ state: 'superseded' }),
   granted({ state: 'pending' }),
   granted({ state: 'refused' }),
   granted({ requesterId: 'other' }),
@@ -173,7 +172,7 @@ test('caller deadline ends the wait while a late renewal can still confirm autho
   expect(allocator.calls).toHaveLength(1);
 });
 
-test.each(['released', 'replaced', 'superseded', 'fenced'] as const)(
+test.each(['released', 'replaced', 'fenced'] as const)(
   '%s binding cannot be revived by a late renewal or lookup',
   async (reason) => {
     for (const recovering of [false, true]) {

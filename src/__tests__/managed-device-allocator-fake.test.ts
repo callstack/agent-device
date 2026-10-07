@@ -1,7 +1,6 @@
 import type {
   LeaseRequestInput,
   LeaseRequestStatus,
-  ManagedIdentityRef,
 } from '@agent-device/contracts/managed-device-allocation';
 import { describe, expect, test } from 'vitest';
 import { createScriptedManagedDeviceAllocator } from './test-utils/managed-device-allocator.fixtures.ts';
@@ -13,12 +12,6 @@ const request: LeaseRequestInput = {
   shape: { platform: 'ios', deviceType: 'iPhone 16' },
   deadlineAtMs: 1_000,
   admission: 'fail-fast',
-  activation: 'direct',
-};
-
-const identity: ManagedIdentityRef = {
-  deviceId: 'device-a',
-  identityIncarnationId: 'incarnation-a',
 };
 
 const pending: LeaseRequestStatus = {
@@ -30,7 +23,7 @@ const pending: LeaseRequestStatus = {
 
 const granted: LeaseRequestStatus = {
   ...pending,
-  identityIncarnationId: identity.identityIncarnationId,
+  identityIncarnationId: 'incarnation-a',
   state: 'granted',
   lease: {
     id: 'lease-1',
@@ -47,7 +40,7 @@ describe('scripted managed device allocator', () => {
       script: {
         requestLease: [pending, granted],
         getLeaseRequestStatus: [granted],
-        getManagedIdentityStatus: [new Error('allocator unreachable')],
+        renewLease: [new Error('allocator unreachable')],
       },
     });
 
@@ -61,16 +54,12 @@ describe('scripted managed device allocator', () => {
     await expect(allocator.requestLease(request)).rejects.toThrow(
       'Unscripted allocator call: requestLease',
     );
-    await expect(allocator.getManagedIdentityStatus(identity)).rejects.toThrow(
+    await expect(allocator.renewLease({ leaseId: 'lease-1', ttlDeadline: 3_000 })).rejects.toThrow(
       'allocator unreachable',
     );
     await expect(
-      allocator.confirmLeaseActivation({
-        requesterId: 'requester-a',
-        requestGeneration: 1,
-        identityIncarnationId: 'incarnation-a',
-      }),
-    ).rejects.toThrow('Unscripted allocator call: confirmLeaseActivation');
+      allocator.cancelLeaseRequest({ requesterId: 'requester-a', attemptKey: 'attempt-1' }),
+    ).rejects.toThrow('Unscripted allocator call: cancelLeaseRequest');
   });
 
   test('records every call with the input it received', async () => {

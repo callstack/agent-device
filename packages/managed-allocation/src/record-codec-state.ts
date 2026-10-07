@@ -25,7 +25,6 @@ export function decodePhase(value: unknown): AllocationOperationPhase | null {
 function decodeSimplePhase(value: unknown): AllocationOperationPhase | null {
   if (value === 'unresolved') return { status: 'unresolved' };
   if (value === 'pending') return { status: 'pending' };
-  if (value === 'superseded') return { status: 'superseded' };
   if (value === 'cancelled') return { status: 'cancelled' };
   return null;
 }
@@ -87,8 +86,8 @@ function checkNonGrantedConsistency(fields: ConsistencyFields): string | undefin
 
 function terminalPhase(
   status: AllocationOperationPhase['status'],
-): status is 'refused' | 'superseded' | 'cancelled' {
-  return status === 'refused' || status === 'superseded' || status === 'cancelled';
+): status is 'refused' | 'cancelled' {
+  return status === 'refused' || status === 'cancelled';
 }
 
 export function decodeShape(value: unknown): ManagedShapeRequest | null {
@@ -151,8 +150,4 @@ export function decodeBinding(value: unknown): AllocationOperationRecord['bindin
 
 export function decodeRelease(value: unknown): AllocationOperationRecord['release'] | null {
   return value === 'not-requested' || value === 'pending' || value === 'released' ? value : null;
-}
-
-export function isActivation(value: unknown): value is 'direct' | 'external-fence' {
-  return value === 'direct' || value === 'external-fence';
 }

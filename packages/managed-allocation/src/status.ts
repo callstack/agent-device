@@ -2,9 +2,6 @@ import type { LeaseRequestStatus } from '@agent-device/contracts/managed-device-
 import { isRequestGeneration, isVerbatimId } from './record-validation.ts';
 import type { AllocationOperationRecord, AllocationTransition } from './record.ts';
 
-type TerminalLeaseRequestStatus = LeaseRequestStatus &
-  Readonly<{ state: 'superseded' | 'cancelled' }>;
-
 export function transitionFromAllocatorStatus(
   record: AllocationOperationRecord,
   status: LeaseRequestStatus,
@@ -45,9 +42,8 @@ function transitionForKnownStatus(status: LeaseRequestStatus): AllocationTransit
       return transitionForGranted(status);
     case 'refused':
       return transitionForRefused(status);
-    case 'superseded':
     case 'cancelled':
-      return transitionForTerminal(status as TerminalLeaseRequestStatus);
+      return transitionForCancelled(status);
     default:
       return { kind: 'allocator-ambiguous', message: 'allocator status has an unknown state' };
   }
@@ -117,10 +113,10 @@ function transitionForRefused(status: LeaseRequestStatus): AllocationTransition 
   };
 }
 
-function transitionForTerminal(status: TerminalLeaseRequestStatus): AllocationTransition {
+function transitionForCancelled(status: LeaseRequestStatus): AllocationTransition {
   return hasTerminalData(status)
     ? { kind: 'allocator-ambiguous', message: 'allocator terminal status carried conflicting data' }
-    : { kind: 'allocator-outcome', outcome: { status: status.state } };
+    : { kind: 'allocator-outcome', outcome: { status: 'cancelled' } };
 }
 
 function hasTerminalData(status: LeaseRequestStatus): boolean {

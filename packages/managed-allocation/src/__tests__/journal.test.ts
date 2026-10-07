@@ -5,7 +5,6 @@ import { test, vi } from 'vitest';
 import type {
   LeaseRequestInput,
   ManagedDeviceAllocatorPort,
-  SupersedeLeaseRequestInput,
 } from '@agent-device/contracts/managed-device-allocation';
 import type { ScriptedAllocatorMethod } from './test-utils/managed-device-allocator.fixtures.ts';
 import { createScriptedManagedDeviceAllocator } from './test-utils/managed-device-allocator.fixtures.ts';
@@ -50,11 +49,8 @@ function statusFor(overrides: Partial<typeof ALLOCATION_GRANTED_STATUS> = {}) {
   return { ...ALLOCATION_GRANTED_STATUS, ...overrides };
 }
 
-function foundRecord(
-  journal: ReturnType<typeof createAllocationOperationJournal>,
-  request: LeaseRequestInput = ALLOCATION_REQUEST,
-) {
-  const read = journal.read(request);
+function foundRecord(journal: ReturnType<typeof createAllocationOperationJournal>) {
+  const read = journal.read(ALLOCATION_REQUEST);
   assert.equal(read.status, 'found');
   return read.record;
 }
@@ -298,7 +294,7 @@ test('same-key replay is stable, while a new lane goes to an allocator decision'
   );
 });
 
-test('a new key cannot replace nonterminal allocator work without explicit supersession', async () => {
+test('a new key cannot start while earlier work on the lane may still mutate the allocator', async () => {
   const first = setup({ requestLease: [new Error('response lost')] });
   assert.equal((await first.journal.allocate(ALLOCATION_REQUEST)).status, 'uncertain');
   const blocked = await first.journal.allocate(
@@ -328,49 +324,6 @@ test('a new key cannot reuse a stale requester generation after terminal work', 
   assert.equal(stale.status === 'blocked' ? stale.reason : undefined, 'payload-mismatch');
   assert.deepEqual(
     setupResult.allocator.calls.map((call) => call.method),
-    ['requestLease'],
-  );
-});
-
-test('explicit supersession uses the allocator and leaves both attempts durable for reconciliation', async () => {
-  const replacementStatus = statusFor({ attemptKey: 'attempt-2', requestGeneration: 2 });
-  const first = setup(
-    {
-      requestLease: [new Error('response lost')],
-      supersedeLeaseRequest: [replacementStatus],
-    },
-    bindingHooks(),
-  );
-  assert.equal((await first.journal.allocate(ALLOCATION_REQUEST)).status, 'uncertain');
-  const replacement: LeaseRequestInput = input({ attemptKey: 'attempt-3', requestGeneration: 3 });
-  const supersede: SupersedeLeaseRequestInput = {
-    requesterId: 'requester-a',
-    expectedRequestGeneration: 1,
-    replacement: { ...replacement, attemptKey: 'attempt-2', requestGeneration: 2 },
-  };
-  const third = await first.journal.supersede(supersede);
-  assert.equal(third.status, 'granted');
-  assert.equal(foundRecord(first.journal).phase.status, 'unknown');
-  assert.equal(foundRecord(first.journal, supersede.replacement).phase.status, 'granted');
-  assert.deepEqual(
-    first.allocator.calls.map((call) => call.method),
-    ['requestLease', 'supersedeLeaseRequest'],
-  );
-});
-
-test('supersession refuses a live binding before asking the allocator to revoke it', async () => {
-  const first = setup({ requestLease: [ALLOCATION_GRANTED_STATUS] }, bindingHooks());
-  assert.equal((await first.journal.allocate(ALLOCATION_REQUEST)).status, 'granted');
-  const replacement = input({ attemptKey: 'attempt-2', requestGeneration: 2 });
-  const result = await first.journal.supersede({
-    requesterId: ALLOCATION_REQUEST.requesterId,
-    expectedRequestGeneration: ALLOCATION_REQUEST.requestGeneration,
-    replacement,
-  });
-  assert.equal(result.status, 'blocked');
-  assert.equal(result.status === 'blocked' ? result.reason : undefined, 'already-granted');
-  assert.deepEqual(
-    first.allocator.calls.map((call) => call.method),
     ['requestLease'],
   );
 });
@@ -440,7 +393,6 @@ test('corrupt state is retained as unreadable evidence and never implies an allo
     deadlineAtMs: ALLOCATION_REQUEST.deadlineAtMs,
     requestGeneration: ALLOCATION_REQUEST.requestGeneration,
     admission: ALLOCATION_REQUEST.admission,
-    activation: ALLOCATION_REQUEST.activation,
     createdAtMs: NOW,
     updatedAtMs: NOW,
     fence: { token: JSON.stringify(['requester-a', 'attempt-1']), generation: 0 },

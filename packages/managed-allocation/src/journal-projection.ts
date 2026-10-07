@@ -28,8 +28,6 @@ function projectTerminalRecord(record: AllocationOperationRecord): AllocationJou
   switch (record.phase.status) {
     case 'refused':
       return { status: 'refused', record };
-    case 'superseded':
-      return { status: 'superseded', record };
     case 'cancelled':
       return { status: 'cancelled', record };
     default:

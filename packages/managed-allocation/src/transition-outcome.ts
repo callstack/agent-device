@@ -124,8 +124,6 @@ function applyKnownAllocatorOutcome(
         },
         nowMs,
       );
-    case 'superseded':
-      return applied(record, { phase: { status: 'superseded' }, binding: 'not-applicable' }, nowMs);
     case 'cancelled':
       return applied(record, { phase: { status: 'cancelled' }, binding: 'not-applicable' }, nowMs);
     default:
