@@ -1,5 +1,6 @@
 import os from 'node:os';
 import { normalizeBatchCommandName } from '@agent-device/command-registry/batch-policy';
+import { isRemoteTempArtifactPath } from '@agent-device/contracts/daemon-http';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { readMacOsAppBackend } from '@agent-device/contracts/session';
 import { runCmd } from '@agent-device/host-kit/command';
@@ -7,7 +8,6 @@ import { isProcessAlive, readHostEnvironmentVariable } from '@agent-device/host-
 import { isMacOs } from '@agent-device/kernel/device';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import { isAppLeaseAllowed } from './daemon-command-registry.ts';
-import { isRemoteTempArtifactPath } from '../remote/daemon-artifacts.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from './daemon-request.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
 import type { SessionState } from './session-state.ts';
