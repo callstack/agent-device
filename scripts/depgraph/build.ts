@@ -187,10 +187,16 @@ function formatSummary(payload: Payload, jsonPath: string): string {
   );
 }
 
-/** A flag's value, or `undefined` when the flag is absent or trailing with nothing after it. */
+/**
+ * A flag's value, or `undefined` when the flag is absent, trailing with nothing after it, or
+ * given an empty string — the last case matters because `?? <default>` only catches nullish
+ * values, and an empty `--out ""` must fall back the same way a missing one does, not resolve to
+ * the current directory and crash the subsequent write with EISDIR.
+ */
 function flagValue(argv: readonly string[], flag: string): string | undefined {
   const index = argv.indexOf(flag);
-  return index >= 0 ? argv[index + 1] : undefined;
+  const value = index >= 0 ? argv[index + 1] : undefined;
+  return value ? value : undefined;
 }
 
 async function main(argv: readonly string[]): Promise<number> {

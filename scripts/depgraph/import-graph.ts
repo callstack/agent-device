@@ -16,10 +16,11 @@ export const VALUE_EDGES: ReadonlySet<EdgeKind> = new Set(['value']);
 export const EXECUTABLE_EDGES: ReadonlySet<EdgeKind> = new Set(['value', 'dynamic']);
 
 /**
- * Every collapsed edge kind, for the structural questions ("does anything reference this file
- * at all") that community detection and zone-level cycle reporting ask. Community algorithms
- * treat the graph as undirected regardless of kind, so mixing kinds in is the right input, not
- * a loosening of a rule — there is no gate riding on this set.
+ * Every collapsed edge kind, for the structural question ("does anything reference this file at
+ * all") community detection asks (`computeCohesionSummary`). Community algorithms treat the graph
+ * as undirected regardless of kind, so mixing kinds in is the right input, not a loosening of a
+ * rule — there is no gate riding on this set. Zone-level cycle reporting (`computeZoneSccSummary`)
+ * does not use this set: it builds its own zone graph from VALUE zone pairs only, to mirror R4.
  */
 export const ALL_EDGES: ReadonlySet<EdgeKind> = new Set(['value', 'type', 'dynamic']);
 

@@ -504,10 +504,21 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
       `dominator summary for src/daemon\\.ts: ${payload.dominatorSummary.reachableFiles} of ${payload.dominatorSummary.totalFiles} files loaded eagerly`,
     ),
   );
-  assert.match(stdout, /zone-level SCCs: \d+ cyclic group\(s\) across \d+ zones/);
-  assert.match(
+  // Tied to the exact payload numbers (not a shape-only `\d+` regex) so a CLI summary that
+  // drifts from the JSON it was derived from — wrong count, wrong rounding — fails this test.
+  assert.ok(
+    stdout.includes(
+      `zone-level SCCs: ${payload.zoneSccSummary.components.length} cyclic group(s) across ` +
+        `${payload.zoneSccSummary.zones} zones`,
+    ),
     stdout,
-    /modularity: declared zones -?\d+\.\d{3}, detected communities -?\d+\.\d{3}/,
+  );
+  assert.ok(
+    stdout.includes(
+      `modularity: declared zones ${payload.cohesionSummary.modularity.declaredZones.toFixed(3)}, ` +
+        `detected communities ${payload.cohesionSummary.modularity.detectedCommunities.toFixed(3)}`,
+    ),
+    stdout,
   );
 });
 
@@ -542,4 +553,19 @@ test('build.ts falls back to the default path when --out has no value', () => {
   const { status, stdout } = runBuild(['--out']);
   assert.equal(status, 0, stdout);
   assert.ok(stdout.includes('.tmp/depgraph/graph.json'), stdout);
+});
+
+test('build.ts falls back to the default path when --out is given an empty string', () => {
+  // `--out ""` must fall back the same way a missing value does. `flagValue` returning `''`
+  // instead of `undefined` here would skip the `??` default and resolve to the current
+  // directory, crashing the write with EISDIR instead of writing the default report.
+  const { status, stdout } = runBuild(['--out', '']);
+  assert.equal(status, 0, stdout);
+  assert.ok(stdout.includes('.tmp/depgraph/graph.json'), stdout);
+});
+
+test('build.ts falls back to the default dominator entry when --dominator-entry is given an empty string', () => {
+  const { status, stdout } = runBuild(['--dominator-entry', '']);
+  assert.equal(status, 0, stdout);
+  assert.ok(stdout.includes('dominator summary for src/daemon.ts:'), stdout);
 });

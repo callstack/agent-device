@@ -134,9 +134,10 @@ permanent home in the tooling, not a gate.
 
 - **`dominatorSummary`** — the dominator tree of one entry's eager-load closure over VALUE edges
   only (dynamic imports are a deliberate cold-start seam, so they never join the closure).
-  `reachableFiles` is the eager closure size; `bottlenecks` ranks every reachable file by how many
-  files become unreachable if it disappeared — the size of the branch moving it behind `import()`
-  would cut. Defaults to `src/daemon.ts`; override with `pnpm depgraph --dominator-entry <path>`.
+  `reachableFiles` is the eager closure size; `bottlenecks` ranks every reachable non-entry file
+  by how many files become unreachable if it disappeared — the size of the branch moving it
+  behind `import()` would cut. Defaults to `src/daemon.ts`; override with
+  `pnpm depgraph --dominator-entry <path>`.
 - **`zoneSccSummary`** — strongly connected components of the zone graph, built from VALUE zone
   pairs only (`zoneEdges` entries with `valueCount > 0`), the same edge kind R4 keeps acyclic at
   file level. R4 is file-level; nothing stops a loop from closing once files collapse into zones —
