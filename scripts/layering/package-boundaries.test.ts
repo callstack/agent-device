@@ -110,12 +110,11 @@ test('specifier sites carry 1-based lines for static and dynamic imports', () =>
   );
 });
 
-test('the compiled set names exactly the file set the tsc -b graph parses', () => {
+test('the compiled set classifies every file region the R11 walk visits', () => {
   // The compiler-owned/compiler-exempt split above is keyed on this predicate (#3279), so the
-  // mutation it must fail on is a file joining or leaving `tsc -b`'s programs without the
-  // predicate following: `scripts/` and the package harness dirs are run by Node's type
-  // stripper and vitest, never by a tsconfig program, while package `src/`, root `src/` and
-  // root `test/` all compile.
+  // mutation it must fail on is a file region joining or leaving `tsc -b`'s programs without
+  // the predicate following: package `src/`, root `src/` and root `test/` compile; `scripts/`
+  // and the package harness dirs are the fail-closed side.
   assert.equal(insideCompiledSources('packages/kernel/src/errors.ts'), true);
   assert.equal(insideCompiledSources('packages/maestro/src/index.ts'), true);
   assert.equal(insideCompiledSources('src/cli.ts'), true);
@@ -123,6 +122,12 @@ test('the compiled set names exactly the file set the tsc -b graph parses', () =
   assert.equal(insideCompiledSources('scripts/layering/check.ts'), false);
   assert.equal(insideCompiledSources('packages/maestro/test/conformance/harness.ts'), false);
   assert.equal(insideCompiledSources('packages/proxy/tsdown.config.ts'), false);
+
+  // The one scripts file the root program DOES compile is classified as uncompiled: R11
+  // keeps its full branch set there (redundant with tsc, never narrower). The exact root
+  // include list and the reference sets are pinned against the graph itself in
+  // project-references.test.ts, where the divergence is recorded rather than assumed absent.
+  assert.equal(insideCompiledSources('scripts/help-conformance-command-validator.ts'), false);
 });
 
 test('readWorkspacePackages reads tracked manifests only', () => {

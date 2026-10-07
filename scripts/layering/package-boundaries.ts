@@ -146,12 +146,20 @@ function specifierPackageName(specifier: string): string | undefined {
 }
 
 /**
- * The file set the `tsc -b` graph compiles: each package project includes its own `src/`, and
- * the root project includes `src/` and `test/`. Everything else the R11 walk visits — `scripts/`
- * (whose gate and tooling modules the gate runs through `--experimental-strip-types`, never
- * through a `tsconfig`), the `packages/maestro/test/` conformance harness, and package build
- * configs — reaches packages through import sites the compiler never parses, so R11 stays the
- * only owner of every boundary claim about those routes (#3279).
+ * The file set R11 treats as parsed by the `tsc -b` graph: each package project includes its
+ * own `src/`, and the root project includes `src/` and `test/`. Everything else the R11 walk
+ * visits — the rest of `scripts/` (gate and tooling modules run through
+ * `--experimental-strip-types`, not a tsconfig program), the `packages/maestro/test/`
+ * conformance harness, and package build configs — reaches packages through import sites the
+ * compiler never parses, so R11 stays the only owner of every boundary claim about those
+ * routes (#3279).
+ *
+ * One documented divergence: the root program also includes
+ * `scripts/help-conformance-command-validator.ts`, which this predicate classifies as
+ * uncompiled. That is fail-closed — R11 keeps its full branch set (unknown package,
+ * exports-map) for the file on top of what tsc enforces — never fail-open. The divergence is
+ * pinned in `project-references.test.ts`, so a second scripts entry joining the root program
+ * must be recorded there rather than silently widening the exception.
  */
 export function insideCompiledSources(file: string): boolean {
   return /^packages\/[^/]+\/src\//.test(file) || /^src\//.test(file) || /^test\//.test(file);
