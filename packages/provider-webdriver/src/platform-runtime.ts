@@ -38,6 +38,7 @@ import {
   type RuntimeOperationUnavailability,
   type RuntimeOwnerRef,
   sameRuntimeOwner,
+  unavailableFact,
   whenAdmitted,
 } from '@agent-device/contracts/platform-runtime';
 import type {
@@ -82,60 +83,47 @@ type WebDriverPlatformDeploymentRuntime = Pick<
 >;
 
 const available = Object.freeze({ available: true } as const);
-const appLogUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-} as const);
-const recordingUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'WebDriver provider runtimes do not expose screen recording.',
-} as const);
-const headlessUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Headless boot is unavailable for provider-owned devices.',
-} as const);
-const appsUnavailable = Object.freeze({
-  available: false,
-  reason: 'owner-capability-missing' as const,
-  hint: 'WebDriver provider runtimes do not expose app inventory.',
-});
-const deploymentUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose app deployment.',
-} as const);
-const pushUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Push notifications are unavailable for WebDriver provider-owned devices.',
-} as const);
-const inactiveSession = Object.freeze({
-  available: false,
-  reason: 'owner-capability-missing',
-  hint: 'The WebDriver provider session is no longer active for this device.',
-} as const);
-const snapshotUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose snapshot capture for this device.',
-} as const);
-const screenshotUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose screenshot capture for this device.',
-} as const);
-const snapshotCustomActionsUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'WebDriver provider runtimes do not expose iOS simulator custom snapshot actions.',
-} as const);
-const viewportUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'WebDriver provider runtimes do not expose viewport resizing.',
-} as const);
+const appLogUnavailable = unavailableFact('unsupported-provider-mode');
+const recordingUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'WebDriver provider runtimes do not expose screen recording.',
+);
+const headlessUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'Headless boot is unavailable for provider-owned devices.',
+);
+const appsUnavailable = unavailableFact(
+  'owner-capability-missing',
+  'WebDriver provider runtimes do not expose app inventory.',
+);
+const deploymentUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose app deployment.',
+);
+const pushUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'Push notifications are unavailable for WebDriver provider-owned devices.',
+);
+const inactiveSession = unavailableFact(
+  'owner-capability-missing',
+  'The WebDriver provider session is no longer active for this device.',
+);
+const snapshotUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose snapshot capture for this device.',
+);
+const screenshotUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose screenshot capture for this device.',
+);
+const snapshotCustomActionsUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'WebDriver provider runtimes do not expose iOS simulator custom snapshot actions.',
+);
+const viewportUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'WebDriver provider runtimes do not expose viewport resizing.',
+);
 
 /**
  * A point read is a local-tool operation (adb uiautomator, the XCUITest runner, the macOS
@@ -143,69 +131,58 @@ const viewportUnavailable = Object.freeze({
  * read and `get` answers from the captured tree; provider ownership never borrows the local
  * family read.
  */
-const focusUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose focus for this device.',
-} as const);
-const typeUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose text entry for this device.',
-} as const);
-const gestureUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose gestures for this device.',
-} as const);
-const scrollUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose scrolling for this device.',
-} as const);
-const physicalIosMultiTouchUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT,
-} as const);
-const elementTextUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'WebDriver provider runtimes read element text from the captured tree only.',
-} as const);
-const backUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose back for this device.',
-} as const);
-const homeUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose home for this device.',
-} as const);
-const orientationUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose orientation for this device.',
-} as const);
+const focusUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose focus for this device.',
+);
+const typeUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose text entry for this device.',
+);
+const gestureUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose gestures for this device.',
+);
+const scrollUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose scrolling for this device.',
+);
+const physicalIosMultiTouchUnavailable = unavailableFact(
+  'unsupported-device-kind',
+  PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT,
+);
+const elementTextUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'WebDriver provider runtimes read element text from the captured tree only.',
+);
+const backUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose back for this device.',
+);
+const homeUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose home for this device.',
+);
+const orientationUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose orientation for this device.',
+);
 /** The WebDriver interactor's own `tvRemote` always throws unsupported (no capability declares
  * it), so this cell is unavailable unconditionally rather than gated by interactor reachability. */
-const tvRemoteUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'WebDriver provider runtimes do not expose tv-remote.',
-} as const);
+const tvRemoteUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'WebDriver provider runtimes do not expose tv-remote.',
+);
 /**
  * `keyboardEnter`/`keyboardDismiss` call `requireSupport('keyboard')` inside the interactor, so a
  * provider whose declared capability map refuses them still refuses at call time; this cell states
  * whether the runtime has a reachable interactor to ask at all. `keyboardStatus` is iOS's gap:
  * the probe's result shape is Android's.
  */
-const keyboardUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose this keyboard action for this device.',
-} as const);
+const keyboardUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose this keyboard action for this device.',
+);
 
 /**
  * The interactor's own `readClipboard`/`writeClipboard` call `requireSupport('clipboard.read')` /
@@ -213,22 +190,20 @@ const keyboardUnavailable = Object.freeze({
  * refuses at call time. This cell states the seam the same way `back`/`home` do: what the fact
  * answers is whether this runtime has a reachable interactor to ask at all.
  */
-const clipboardUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose clipboard access for this device.',
-} as const);
+const clipboardUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose clipboard access for this device.',
+);
 
 /**
  * `appSwitcher` calls `requireSupport('appSwitcher')` inside the interactor, so a provider whose
  * declared capability map refuses the button still refuses at call time. This cell states the
  * seam the same way `back`/`home` do: whether this runtime has a reachable interactor to ask.
  */
-const appSwitcherUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose the app switcher for this device.',
-} as const);
+const appSwitcherUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose the app switcher for this device.',
+);
 
 /**
  * Unlike `home` and `appSwitcher` this is never a per-session capability question: no WebDriver
@@ -236,18 +211,16 @@ const appSwitcherUnavailable = Object.freeze({
  * unconditionally. There is deliberately no capability key for it, which would advertise a button
  * this provider can never press.
  */
-const systemButtonUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'No WebDriver backend presses this system button.',
-} as const);
+const systemButtonUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'No WebDriver backend presses this system button.',
+);
 
 /** No WebDriver `mobile:` script poses a foldable hinge; the refusal is unconditional like the Action Button's. */
-const foldUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'fold runs a HID helper through simctl spawn inside a foldable iPhone simulator on the daemon host; a WebDriver backend has no such simulator.',
-} as const);
+const foldUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'fold runs a HID helper through simctl spawn inside a foldable iPhone simulator on the daemon host; a WebDriver backend has no such simulator.',
+);
 
 /**
  * The WebDriver interactor supplies no alert members at all: ADR 0019 keeps a stub that throws
@@ -255,64 +228,54 @@ const foldUnavailable = Object.freeze({
  * `alert: unsupported`, so this cell is unavailable unconditionally rather than gated by
  * interactor reachability.
  */
-const alertUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'WebDriver provider runtimes do not expose native alert handling.',
-} as const);
+const alertUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'WebDriver provider runtimes do not expose native alert handling.',
+);
 
 /**
  * The WebDriver interactor's own `setSetting` always throws unsupported (its capability map
  * declares `settings: unsupported`), so this cell is unavailable unconditionally rather than
  * gated by interactor reachability — the same shape `tvRemote` takes.
  */
-const settingsUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'WebDriver provider runtimes do not expose device settings.',
-} as const);
+const settingsUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'WebDriver provider runtimes do not expose device settings.',
+);
 
-const appEventUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose app-event delivery for this device.',
-} as const);
+const appEventUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose app-event delivery for this device.',
+);
 
-const appStateUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'WebDriver provider runtimes do not expose a foreground app-state operation.',
-} as const);
-const audioProbeUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'This WebDriver provider runtime does not expose the audio probe.',
-} as const);
-const prepareUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Apple runner preparation is unavailable for WebDriver-owned devices.',
-} as const);
-const openTargetUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'WebDriver open is supported only for its owned iOS or Android mobile-device sessions.',
-} as const);
-const closeTargetUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'WebDriver close is supported only for its owned iOS or Android mobile-device sessions.',
-} as const);
-const runtimeHintsUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Runtime hints are not applied to provider-owned devices.',
-} as const);
-const portReverseUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'WebDriver provider runtimes do not expose port reverse.',
-} as const);
+const appStateUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'WebDriver provider runtimes do not expose a foreground app-state operation.',
+);
+const audioProbeUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'This WebDriver provider runtime does not expose the audio probe.',
+);
+const prepareUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'Apple runner preparation is unavailable for WebDriver-owned devices.',
+);
+const openTargetUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'WebDriver open is supported only for its owned iOS or Android mobile-device sessions.',
+);
+const closeTargetUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'WebDriver close is supported only for its owned iOS or Android mobile-device sessions.',
+);
+const runtimeHintsUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'Runtime hints are not applied to provider-owned devices.',
+);
+const portReverseUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'WebDriver provider runtimes do not expose port reverse.',
+);
 
 function webDriverLifecycleFacts(device: DeviceInfo) {
   const selectedMobileDevice =
@@ -509,11 +472,10 @@ function declaredCapabilityCell(
 ): RuntimeOperationFact {
   if (!params.reachable) return params.whenUnreachable;
   if (capabilitySupported(params.capabilities, params.operation)) return available;
-  return Object.freeze({
-    available: false,
-    reason: 'owner-capability-missing',
-    hint: unsupportedCapabilityMessage(params.capabilities, params.operation),
-  } as const);
+  return unavailableFact(
+    'owner-capability-missing',
+    unsupportedCapabilityMessage(params.capabilities, params.operation),
+  );
 }
 
 function webDriverFacts(
@@ -720,11 +682,10 @@ function webDriverFacts(
       bootTarget: available,
       bootTargetHeadless: headlessUnavailable,
       listApps: appsUnavailable,
-      shutdownTarget: {
-        available: false,
-        reason: 'unsupported-provider-mode',
-        hint: 'WebDriver owns the target lifecycle for provider-owned devices.',
-      },
+      shutdownTarget: unavailableFact(
+        'unsupported-provider-mode',
+        'WebDriver owns the target lifecycle for provider-owned devices.',
+      ),
     },
   });
 }

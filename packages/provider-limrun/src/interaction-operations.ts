@@ -38,7 +38,10 @@ import {
   touchRuntimeOperationFacts,
 } from '@agent-device/contracts/touch-runtime';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import type { RuntimeOperationUnavailability } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOperationUnavailability,
+  unavailableFact,
+} from '@agent-device/contracts/platform-runtime';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 
@@ -48,31 +51,22 @@ const available = Object.freeze({ available: true } as const);
  * Stating it as a fact refuses at admission instead of mid-execution (ADR 0019 §6), and it is
  * the only refusal the caller sees: the leg's interactor carries no gesture member at all.
  */
-const iosGestureUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun iOS direct sessions do not expose portable gesture execution yet.',
-} as const);
+const iosGestureUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'Limrun iOS direct sessions do not expose portable gesture execution yet.',
+);
 /** What an unnamed gesture tier reports on a live Limrun session. */
-const gestureUnsupportedProviderMode = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-} as const);
+const gestureUnsupportedProviderMode = unavailableFact('unsupported-provider-mode');
 /** What an unnamed clipboard half reports on a live Limrun session. */
-const clipboardUnsupportedProviderMode = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-} as const);
-const androidTvMultiTouchUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT,
-} as const);
-const androidTvDragUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-platform-leaf',
-  hint: TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
-} as const);
+const clipboardUnsupportedProviderMode = unavailableFact('unsupported-provider-mode');
+const androidTvMultiTouchUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  ANDROID_TV_MULTI_TOUCH_UNSUPPORTED_HINT,
+);
+const androidTvDragUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  TARGET_AUTHORED_DRAG_UNSUPPORTED_HINT,
+);
 
 /**
  * Gesture cells split by the interactor behind the session: an Android emulator session runs the
@@ -99,16 +93,14 @@ function limrunGestureFacts(
     viewport: available,
   });
 }
-const tvRemoteUnavailableIos = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun iOS direct sessions do not expose tv remote control.',
-} as const);
-const tvRemoteUnavailableAndroid = Object.freeze({
-  available: false,
-  reason: 'unsupported-device-kind',
-  hint: 'tv-remote is supported only on Android TV targets.',
-} as const);
+const tvRemoteUnavailableIos = unavailableFact(
+  'unsupported-provider-mode',
+  'Limrun iOS direct sessions do not expose tv remote control.',
+);
+const tvRemoteUnavailableAndroid = unavailableFact(
+  'unsupported-device-kind',
+  'tv-remote is supported only on Android TV targets.',
+);
 /**
  * The retired leaf never routed `keyboard` through provider resolution at all — it dispatched
  * directly by device platform, bypassing the interactor/provider seam entirely. The Android leg
@@ -116,27 +108,23 @@ const tvRemoteUnavailableAndroid = Object.freeze({
  * iOS leg has no such reuse, so it stays honestly unavailable rather than guessing at untested
  * provider behavior.
  */
-const keyboardUnavailableIos = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun iOS direct sessions do not expose keyboard actions.',
-} as const);
-const settingsReadUnavailableIos = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun iOS direct sessions cannot read settings back.',
-} as const);
-const appSwitcherUnavailableIos = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun iOS direct sessions do not expose app switcher yet.',
-} as const);
+const keyboardUnavailableIos = unavailableFact(
+  'unsupported-provider-mode',
+  'Limrun iOS direct sessions do not expose keyboard actions.',
+);
+const settingsReadUnavailableIos = unavailableFact(
+  'unsupported-provider-mode',
+  'Limrun iOS direct sessions cannot read settings back.',
+);
+const appSwitcherUnavailableIos = unavailableFact(
+  'unsupported-provider-mode',
+  'Limrun iOS direct sessions do not expose app switcher yet.',
+);
 /** No Limrun session exposes the action button; only `appSwitcher` still splits by leg. */
-const systemButtonUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'No Limrun session exposes this system button.',
-} as const);
+const systemButtonUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'No Limrun session exposes this system button.',
+);
 
 /**
  * The interactor-backed interaction cells a live Limrun session serves: everything here rides
@@ -149,10 +137,7 @@ export function limrunInteractionOperationFacts(
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
   const cell = liveSessionUnavailable ?? available;
-  const unsupportedTouch = Object.freeze({
-    available: false,
-    reason: 'unsupported-provider-mode',
-  } as const);
+  const unsupportedTouch = unavailableFact('unsupported-provider-mode');
   return Object.freeze({
     ...focusRuntimeOperationFacts({ focus: cell }),
     ...typeTextRuntimeOperationFacts({ type: cell }),
@@ -272,11 +257,10 @@ export function limrunClipboardOperationFacts(
   });
 }
 
-const alertUnavailableIos = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Limrun iOS direct sessions do not expose alert inspection yet.',
-} as const);
+const alertUnavailableIos = unavailableFact(
+  'unsupported-provider-mode',
+  'Limrun iOS direct sessions do not expose alert inspection yet.',
+);
 
 /**
  * `alert` splits like every other interaction leaf: the Android leg rides the local family's own
@@ -324,11 +308,10 @@ export function limrunSystemButtonOperationFacts(
  * `fold` sends a HID hinge event through a helper the daemon host spawns inside one of its own iOS
  * simulators with `simctl spawn`; a Limrun session's device is not a host simulator.
  */
-export const LIMRUN_FOLD_UNAVAILABLE = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'fold runs a HID helper through simctl spawn inside a foldable iPhone simulator on the daemon host; a Limrun session has no such simulator.',
-} as const);
+export const LIMRUN_FOLD_UNAVAILABLE = unavailableFact(
+  'unsupported-provider-mode',
+  'fold runs a HID helper through simctl spawn inside a foldable iPhone simulator on the daemon host; a Limrun session has no such simulator.',
+);
 
 /** The fold refusal both Limrun legs share. */
 export function limrunFoldOperationFacts() {
