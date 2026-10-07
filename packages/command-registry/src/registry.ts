@@ -1761,6 +1761,17 @@ export const RAW_COMMAND_DESCRIPTORS = [
     platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
+    name: 'host',
+    deviceClaimPolicy: 'none',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/host.ts'] as const } : {}),
+    catalog: { group: 'local-cli' },
+    recordsSessionAction: false,
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    mcpExposed: false,
+    platformExecution: NO_PLATFORM_EXECUTION,
+  },
+  {
     name: 'proxy',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/cli/commands/proxy.ts'] as const } : {}),

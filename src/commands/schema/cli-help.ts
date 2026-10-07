@@ -694,6 +694,33 @@ Rules:
   For remote Android and iOS bridge React DevTools, run agent-device react-devtools normally. The CLI opens the needed local service tunnel for the DevTools daemon and keeps it alive until agent-device react-devtools stop or disconnect.
   Use --debug when remote connection or transport errors need diagnostic ids and remote log hints.`,
   },
+  host: {
+    summary: 'Host front-end for remote verification workers',
+    body: `agent-device help host
+
+The host command runs the Host front-end on the Mac that owns the devices. It is a separate process
+from the daemon: it starts or reuses the local HTTP daemon and forwards remote requests to it over
+loopback with the local daemon token.
+
+Service credential:
+  Created on first start at <state dir>/host/service-credential.json (mode 0600, directory 0700).
+  The token is printed once, when the credential is created; read it from the file afterwards.
+  Every later start reuses the same credential, so workers survive Host restarts.
+  Host refuses to start when the file is malformed or readable by group or others.
+  Rotate by deleting the file and restarting Host; workers then need the new token.
+
+Serving:
+  --host <host> --port <port>      Bind address (default 127.0.0.1, free port)
+  --tls-cert <path> --tls-key <path>  Serve HTTPS; both are required together
+  Routes match proxy: /health, /rpc, uploads, /artifacts, request diagnostics, also under /agent-device/*.
+  GET /health is public. Every other route needs the service token (401 without it);
+  unserved routes get 404.
+
+Worker:
+  agent-device connect proxy --daemon-base-url https://host.example:8443/agent-device --daemon-auth-token <token>
+
+See also: help remote (plain proxy and remote profiles).`,
+  },
   macos: {
     summary: 'macOS desktop, frontmost-app, and menu bar surfaces',
     body: `agent-device help macos

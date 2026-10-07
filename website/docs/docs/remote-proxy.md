@@ -230,6 +230,19 @@ The proxy validates the client token and rewrites authorized upstream requests t
 The proxy deliberately does not forward `/admin/*`, including human-control holds. A caller inside
 the device-host VM must use the daemon's loopback port and local daemon token.
 
+## Host
+
+`agent-device host` is the long-running front-end for remote verification workers ([ADR 0021](https://github.com/callstack/agent-device/blob/main/docs/adr/0021-host-simlock-managed-device-allocation.md)). It serves the same routes as `proxy` and forwards them to the local daemon the same way. Its token is one persistent service credential instead of a token generated on every start.
+
+```sh
+agent-device host --host 0.0.0.0 --port 8443 --tls-cert ./cert.pem --tls-key ./key.pem
+```
+
+- On first start, Host creates `<state dir>/host/service-credential.json` with mode 0600 and prints the token once. Later starts reuse the credential, so workers keep working when a process manager restarts Host.
+- The `<state dir>/host` directory must be mode 0700 and the credential file mode 0600, both owned by the Host user. Host refuses to start when either is open to group or others, or when the file is malformed. To rotate the token, delete the file and restart Host.
+- Pass `--tls-cert` and `--tls-key` together to serve HTTPS. Without them, Host serves plain HTTP, bound to `127.0.0.1` by default.
+- Workers connect exactly as they do to a proxy: `agent-device connect proxy --daemon-base-url <Host URL>/agent-device --daemon-auth-token <token>`.
+
 ## Embedding the Proxy in Your Own Gateway
 
 `agent-device proxy` is also available as a library, `@agent-device/proxy`, for gateways that front

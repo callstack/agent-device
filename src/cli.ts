@@ -103,6 +103,7 @@ const REMOTE_MATERIALIZATION_DEFERRED_COMMANDS = new Set([
   'plugins',
   'device',
   'disconnect',
+  'host',
   'metro',
   'proxy',
   'session',
@@ -726,6 +727,7 @@ function resolveActiveConnectionDefaults(options: {
     options.command === 'connection' ||
     options.command === 'daemon' ||
     options.command === 'plugins' ||
+    options.command === 'host' ||
     options.command === 'proxy'
   ) {
     return null;
@@ -755,6 +757,7 @@ function shouldResolveRemoteAuth(command: string): boolean {
     command !== 'daemon' &&
     command !== 'plugins' &&
     command !== 'device' &&
+    command !== 'host' &&
     command !== 'proxy'
   );
 }
