@@ -4,7 +4,7 @@ import type {
   BackendSnapshotResult,
 } from '../backend.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
-import { createCommandSurfaceAgentDevice } from '../runtime-command-surface.ts';
+import { createCommandSurfaceAgentDevice } from '../command-runtime/runtime-command-surface.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';

@@ -4,7 +4,7 @@ import type {
   CommandPolicy,
   CommandSessionRecord,
   CommandSessionStore,
-} from './runtime-contract.ts';
+} from '../runtime-contract.ts';
 
 /**
  * Assembles an in-process runtime from its backend, artifact adapter, session store, policy and

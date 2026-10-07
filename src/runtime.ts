@@ -1,5 +1,5 @@
 import { bindCommands, type BoundAgentDeviceCommands } from './commands/index.ts';
-import { createAgentDeviceRuntime } from './runtime-factory.ts';
+import { createAgentDeviceRuntime } from './command-runtime/runtime-factory.ts';
 import type { AgentDeviceRuntime, AgentDeviceRuntimeConfig } from './runtime-contract.ts';
 
 export type {
@@ -13,7 +13,7 @@ export {
   createMemorySessionStore,
   localCommandPolicy,
   restrictedCommandPolicy,
-} from './runtime-factory.ts';
+} from './command-runtime/runtime-factory.ts';
 
 export type AgentDevice = AgentDeviceRuntime & BoundAgentDeviceCommands;
 

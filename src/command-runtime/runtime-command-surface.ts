@@ -3,13 +3,13 @@ import {
   bindSelectorCommands,
   type BoundInteractionCommands,
   type BoundSelectorCommands,
-} from './commands/interaction/runtime/index.ts';
+} from '../commands/interaction/runtime/index.ts';
 import {
   bindCaptureCommands,
   type BoundCaptureCommands,
-} from './commands/capture/runtime/index.ts';
+} from '../commands/capture/runtime/index.ts';
 import { createAgentDeviceRuntime } from './runtime-factory.ts';
-import type { AgentDeviceRuntime, AgentDeviceRuntimeConfig } from './runtime-contract.ts';
+import type { AgentDeviceRuntime, AgentDeviceRuntimeConfig } from '../runtime-contract.ts';
 
 /**
  * The command surface an in-process executor dispatches through: capture, selector reads and

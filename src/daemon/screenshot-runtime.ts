@@ -15,8 +15,8 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AgentDeviceBackend } from '../backend.ts';
 import type { ArtifactAdapter } from '../io.ts';
-import { localCommandPolicy } from '../runtime-factory.ts';
-import { createCommandSurfaceAgentDevice } from '../runtime-command-surface.ts';
+import { localCommandPolicy } from '../command-runtime/runtime-factory.ts';
+import { createCommandSurfaceAgentDevice } from '../command-runtime/runtime-command-surface.ts';
 import {
   assertSupportedScreenshotPixelDensity,
   readScreenshotResultMetadata,

@@ -6,7 +6,7 @@ import type {
   BackendActionResult,
   BackendSnapshotResult,
 } from '../../../backend.ts';
-import { createCommandSurfaceAgentDevice } from '../../../runtime-command-surface.ts';
+import { createCommandSurfaceAgentDevice } from '../../../command-runtime/runtime-command-surface.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type { DaemonCommandContext } from '../../context.ts';
