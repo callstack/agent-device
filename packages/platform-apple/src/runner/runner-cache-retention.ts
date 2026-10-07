@@ -55,7 +55,7 @@ export async function evictStaleRunnerCaches(
   return evicted;
 }
 
-export function emitEvictionFailure(derived: string, error: unknown): void {
+function emitEvictionFailure(derived: string, error: unknown): void {
   emitDiagnostic({
     level: 'warn',
     phase: 'runner_xctestrun_cache_eviction_failed',

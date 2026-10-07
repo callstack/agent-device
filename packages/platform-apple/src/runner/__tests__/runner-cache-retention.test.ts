@@ -148,19 +148,35 @@ test('keeps a key whose build lock is held', async () => {
   }
 });
 
-test('keeps a key a live lease points at, by path or cache key, and evicts one only a dead lease points at', async () => {
+test('keeps a key a lease not proven dead points at, by path or cache key, and evicts one only a dead lease points at', async () => {
   process.env.AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP = '1';
   const current = seedKey(key(1), 0);
   const live = seedKey(key(2), 30);
   const dead = seedKey(key(3), 30);
   const handedOff = seedKey(key(4), 30);
   const envDirLease = seedKey(key(5), 30);
+  const recycled = seedKey(key(6), 30);
+  const stateDirGone = seedKey(key(7), 30);
   appleRunnerTestHost.update({
-    classifyOwnerLiveness: ({ owner }) => (owner.pid === 4242 ? 'live' : 'owner-process-dead'),
-    isProcessAlive: (pid) => pid === 9001,
-    readProcessStartTime: () => 'runner-start',
+    classifyOwnerLiveness: ({ owner }) => {
+      if (owner.pid === 4242) return 'live';
+      if (owner.pid === 4245) return 'owner-state-dir-gone';
+      if (owner.pid === 9001)
+        return owner.startTime === 'runner-start' ? 'live' : 'owner-process-reused';
+      if (owner.pid === 9002) return 'owner-process-reused';
+      return 'owner-process-dead';
+    },
   });
   writeRunnerLease(leaseFor(live, { deviceId: 'SIM-LIVE', ownerPid: 4242 }));
+  writeRunnerLease(leaseFor(stateDirGone, { deviceId: 'SIM-DIR-GONE', ownerPid: 4245 }));
+  writeRunnerLease(
+    leaseFor(recycled, {
+      deviceId: 'SIM-RECYCLED',
+      ownerPid: 4246,
+      runnerPid: 9002,
+      runnerStartTime: 'old-start',
+    }),
+  );
   writeRunnerLease(leaseFor(dead, { deviceId: 'SIM-DEAD', ownerPid: 4243 }));
   writeRunnerLease(
     leaseFor(handedOff, {
@@ -182,7 +198,19 @@ test('keeps a key a live lease points at, by path or cache key, and evicts one o
 
   await evictStaleRunnerCaches(current, process.env, NOW_MS);
 
-  assert.deepEqual(remaining(), [key(1), key(2), key(4), key(5)]);
+  assert.deepEqual(remaining(), [key(1), key(2), key(4), key(5), key(7)]);
+});
+
+test('evicts nothing when the lease directory cannot be listed', async () => {
+  process.env.AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP = '1';
+  const current = seedKey(key(1), 0);
+  seedKey(key(2), 30);
+  const leaseRoot = path.join(base, 'leases-is-a-file');
+  fs.writeFileSync(leaseRoot, 'not a directory');
+  process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR = leaseRoot;
+
+  assert.deepEqual(await evictStaleRunnerCaches(current, process.env, NOW_MS), []);
+  assert.deepEqual(remaining(), [key(1), key(2), 'leases-is-a-file'].sort());
 });
 
 test('a keep count of 0 turns eviction off', async () => {

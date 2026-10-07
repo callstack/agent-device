@@ -214,7 +214,7 @@ async function evictStaleRunnerCachesBestEffort(derived: string): Promise<void> 
   } catch (error) {
     emitDiagnostic({
       level: 'warn',
-      phase: 'runner_xctestrun_cache_eviction_failed',
+      phase: 'runner_xctestrun_cache_eviction_unavailable',
       data: { derived, error: error instanceof Error ? error.message : String(error) },
     });
   }
