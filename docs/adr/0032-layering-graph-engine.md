@@ -1,4 +1,4 @@
-# ADR 0032: Layering Graph Engine — Keep the Custom Edge Model
+# ADR 0032: Layering Graph Engine — Retain the Current Engine
 
 ## Status
 
@@ -8,12 +8,19 @@ whose production tree is `7dda0c2bf`'s; the harness lives only at that commit
 
 ## Rules at a glance
 
-- R2, R4, R5, R6, R77, R78, R14 and R71 stay on the `resolveImportEdges` edge model. Neither
-  dependency-cruiser 18.5 nor fallow 3.32 replaces them.
-- Every layering rule reads one edge model. Do not enforce a subset from a second import graph: both
-  engines disagree with it (tables below), and about 20 AST and ownership rules keep it alive.
-- Fix the custom gap at the shared parser: `parseImports` misses TypeScript `import('x').T` type
-  positions (9 file pairs). The fix may move the R9 type-cycle ratchet.
+- R2, R4, R5, R6, R77, R78, R14 and R71 stay on the current engine. Neither dependency-cruiser 18.5
+  nor fallow 3.32 replaces them.
+- Graph-based checks share one normalized import model, today built by `parseImports` and
+  `resolveImportEdges`. Do not enforce a subset of them from a second, disagreeing import graph.
+- The model's implementation remains replaceable. Besides these eight rules, it must supply
+  resolved edges with value, type-only and dynamic kinds to R9/R10, R19, R73–R76 and
+  `scripts/depgraph/`; named symbols and the binding residue of dynamic imports to R76; and raw
+  specifier sites to R11 and R13. Eleven other registry entries read source ASTs or text only, and
+  one reads paths only.
+- Fix the demonstrated parser gap in #3293: `parseImports` misses TypeScript `import('x').T` type
+  positions (9 file pairs). It already parses an OXC AST for dynamic imports but scans static
+  imports with regexes; read both from that AST, `TSImportType` included, keeping symbol and
+  edge-kind semantics, rather than adding a second extractor.
 - Do not upgrade fallow to 3.x for `boundaries`; revisit on a [trigger](#revisit-triggers).
 
 ## Measured
@@ -118,25 +125,41 @@ ratchet admits.
 
 ## Decision
 
-Keep custom. Each engine measured worse than the custom rules on these rules, and neither removes
-the custom graph:
+Retain the current engine because the evaluated replacements do not provide sufficient semantic
+parity and net simplification. Graph-based checks share one normalized import model; its
+implementation remains replaceable. Continue replacing generic algorithms and compiler-enforceable
+rules with maintained tools. Fix the demonstrated parser gap.
 
-- **dependency-cruiser** matches custom on R2, R4, R5 and R71. It mislabels 46 pairs, lets a lazy
-  `import()` hide behind a type position (the R77 miss), cannot see non-TS paths, needs a wrapper to
-  fail on stale entries, and needs `typescript@<7` or `@swc/core` beside TypeScript 7 (+1.6 s).
-  Adopting it for four rules would delete about 430 lines and put two disagreeing import graphs
-  behind one gate.
-- **fallow** is already a dependency, adds no measurable time, and has the best stale gate. With no
-  dynamic kind, R5's and R77's lazy-seam exemption becomes violations or misses. Its boundary
-  findings carry no rule id or hint, its rule packs skip files no entry point reaches, and 3.x
-  rejects the 73 `comment` fields in `.fallowrc.json`.
+The semantic blockers are the correctness gaps in the parity table:
+
+- **dependency-cruiser** deduplicates a file's dependencies on a key that omits the dynamic and
+  `import()`-type kinds. That mislabels 46 pairs and lets a lazy `import()` hide behind an
+  `import()` type of the same target, the R77 miss.
+- **fallow** has no dynamic-import kind, so it flags the lazy seams R5 admits and misses R77's
+  `import()`. Its rule packs skip files no entry point reaches, so it also misses an orphan runner
+  module.
+
+Simplification is limited. dependency-cruiser matches custom on R2, R4, R5 and R71, where migration
+would delete about 430 lines. The shared model stays for its other consumers, so the gate would read
+two import graphs that disagree.
+
+The rest are migration costs, which would not decide the question on their own:
+
+- dependency-cruiser needs `typescript@<7` or `@swc/core` beside TypeScript 7 (+1.6 s), and a
+  wrapper that fails on `summary.baselineStale`. Its diagnostics carry no line.
+- fallow 3.x rejects the 73 `comment` fields in `.fallowrc.json`, and its boundary findings carry no
+  rule id or hint. It adds no measurable time and has the best stale gate.
+- R14 and R71 are filesystem-placement policies. A non-TS path under `src/utils` needs a path check
+  with either engine; that is not a failure of an import engine.
 
 ## Revisit triggers
 
-- dependency-cruiser keys deduplication on the dependency type, and it can parse with TypeScript 7
-  or the repository already ships swc.
-- fallow boundaries gain a dynamic-import kind and per-rule ids and messages.
-- The AST and ownership rules stop consuming `resolveImportEdges`, so one engine can own the graph.
+- dependency-cruiser keys deduplication on the dependency type.
+- fallow boundaries gain a dynamic-import kind, and its rule packs cover files no entry point
+  reaches.
+- An engine can supply the shared import model above to the existing consumers with less total
+  machinery than `parseImports` and `resolveImportEdges`. The source-only AST checks do not have to
+  change first.
 
 ## Deletion
 
