@@ -521,11 +521,8 @@ async function cleanupStaleSimulatorRunnerBundles(device: DeviceInfo): Promise<v
 
   await Promise.allSettled(
     IOS_RUNNER_CONTAINER_BUNDLE_IDS.map(async (bundleId) => {
-      const result = await uninstallStaleSimulatorRunnerBundle(device, bundleId);
-      if (!result || isBenignSimulatorRunnerUninstallResult(result)) {
-        return;
-      }
       // Best-effort cleanup only; xcodebuild may still be able to install.
+      await uninstallStaleSimulatorRunnerBundle(device, bundleId);
     }),
   );
 }
@@ -552,18 +549,6 @@ async function uninstallStaleSimulatorRunnerBundle(
     });
     return undefined;
   }
-}
-
-function isBenignSimulatorRunnerUninstallResult(result: ExecResult): boolean {
-  if (result.exitCode === 0) return true;
-  const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
-  return (
-    output.includes('not installed') ||
-    output.includes('found nothing') ||
-    output.includes('no such file') ||
-    output.includes('invalid device') ||
-    output.includes('could not find')
-  );
 }
 
 /**
