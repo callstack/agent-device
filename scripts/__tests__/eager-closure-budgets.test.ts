@@ -86,6 +86,7 @@ function grew(baseCount: number): ClosureGrowthEvidence {
     baseWeight: 10,
     headWeight: 14,
     preservedBaseClosure: true,
+    addedModulesAreNew: true,
   };
 }
 
@@ -101,6 +102,7 @@ function passed(params: {
     baseWeight: 10,
     headWeight: 10,
     preservedBaseClosure: params.preservedBaseClosure ?? true,
+    addedModulesAreNew: true,
   };
 }
 
@@ -659,6 +661,7 @@ const carriedGrowth = carried.map((entry) => {
       headGraph: graph,
       baseWeights: topLevelStatementWeightsOf(baseGraph.keys(), baseTree),
       headWeights: headWeightsOf(graph),
+      baseTree,
       renamedBaseToHead,
     }),
   };

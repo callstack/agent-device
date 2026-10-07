@@ -20,10 +20,11 @@ import {
  * The NO-GROWTH rule and its split tolerance (#2469, ADR 0027), tested in both failing
  * directions. The gate's real-tree lane (`eager-closure-budgets.test.ts`) cannot distinguish a
  * correct tolerance from a vacuous one while the tree happens to contain no splits, so every
- * direction the two facts (containment, flat weight) guard gets its own planted repo here:
- * a pure split that must pass, a split smuggling a new heavy edge that must fail, a swap that
- * drops a merge-base module that must fail at flat weight, and a rename that must not read as a
- * drop.
+ * direction the three facts (containment, added-module novelty, flat weight) guard gets its own
+ * planted repo here: a pure split that must pass, a split smuggling a new heavy edge that must
+ * fail, a split pulling in a PRE-EXISTING closure-external module at weight offset by hub
+ * shrinkage that must fail, a swap that drops a merge-base module that must fail at flat
+ * weight, and a rename that must not read as a drop or as a new module.
  */
 
 test('no-growth fails growth with both counts and passes an equal or smaller closure', () => {
@@ -33,6 +34,7 @@ test('no-growth fails growth with both counts and passes an equal or smaller clo
     baseWeight: 200,
     headWeight: 200,
     preservedBaseClosure: true,
+    addedModulesAreNew: true,
     ...over,
   });
   expect(classifyGrowth('x.ts', at())).toBeNull();
@@ -50,10 +52,11 @@ test('no-growth fails growth with both counts and passes an equal or smaller clo
 // --- the split tolerance (#2469) -------------------------------------------------------------
 // The no-growth rule counts modules, and a split of a hub module is count growth with no new
 // eager work -- which made extracting any module inside a gated closure impossible (ADR 0027).
-// The tolerance is exactly two facts: the head still evaluates EVERY merge-base module, and the
-// closure's total top-level-statement weight did not grow. Both failing directions are planted.
+// The tolerance is exactly three facts: the head still evaluates EVERY merge-base module, every
+// newly evaluated module is new to the tree, and the closure's total top-level-statement weight
+// did not grow. Every failing direction is planted.
 
-test('a pure split passes: every base module survives and total weight is flat', () => {
+test('a pure split passes: every base module survives, added modules are new, weight flat', () => {
   // entry -> hub(8 statements) becomes entry -> hub(wiring only) -> part-a + part-b carrying the
   // declarations: count 2 -> 4, weight unchanged.
   const at = (over: Partial<ClosureGrowthEvidence> = {}) => ({
@@ -62,6 +65,7 @@ test('a pure split passes: every base module survives and total weight is flat',
     baseWeight: 10,
     headWeight: 10,
     preservedBaseClosure: true,
+    addedModulesAreNew: true,
     ...over,
   });
   expect(classifyGrowth('x.ts', at())).toBeNull();
@@ -75,6 +79,7 @@ test('a split smuggling eager work fails and names both the modules and the stat
     baseWeight: 10,
     headWeight: 14,
     preservedBaseClosure: true,
+    addedModulesAreNew: true,
   });
   expect(finding).toMatch(/evaluates 4 modules.*merge-base evaluated 2/);
   expect(finding).toMatch(/adds 2 module\(s\) and 4 top-level statement\(s\)/);
@@ -88,17 +93,40 @@ test('growth that drops a merge-base module fails even at flat weight: not a spl
     baseWeight: 10,
     headWeight: 10,
     preservedBaseClosure: false,
+    addedModulesAreNew: true,
   });
   expect(finding).toMatch(/evaluates 4 modules.*merge-base evaluated 2/);
   expect(finding).toMatch(/not a split of existing code/);
 });
 
+test('a pre-existing module newly made eager fails at flat weight: shrinkage cannot fund it', () => {
+  // The maintainer-review hole: containment holds and weight is flat only because the PR
+  // deleted statements elsewhere in the closure; the added module sat in the merge-base tree
+  // outside the closure, so it is a new eager edge, not re-homed code.
+  const finding = classifyGrowth('x.ts', {
+    baseCount: 2,
+    headCount: 4,
+    baseWeight: 10,
+    headWeight: 10,
+    preservedBaseClosure: true,
+    addedModulesAreNew: false,
+  });
+  expect(finding).toMatch(/evaluates 4 modules.*merge-base evaluated 2/);
+  expect(finding).toMatch(/newly evaluates a module the merge-base tree already had/);
+  expect(finding).toMatch(/shrinkage elsewhere cannot fund a new eager edge/);
+});
+
 /**
- * A hub repo at two states: the hub commit carrying three declarations, then the working tree
- * holding the pure split of two of them into parts. The smuggle test mutates this state BEFORE
- * its first working-tree walk, because the walker memoizes edges per path -- one walk per repo.
+ * A hub repo at two states: the hub commit carrying three declarations plus any committed
+ * extras (files that EXIST in the base tree but sit outside the entry's closure), then the
+ * working tree holding the pure split of two of them into parts. The smuggle tests mutate this
+ * state BEFORE their first working-tree walk, because the walker memoizes edges per path -- one
+ * walk per repo.
  */
-function mkSplitFixtureRepo(prefix: string): {
+function mkSplitFixtureRepo(
+  prefix: string,
+  committedExtras: Record<string, string> = {},
+): {
   repo: string;
   entry: string;
   hubTree: SourceTreeReader;
@@ -110,6 +138,7 @@ function mkSplitFixtureRepo(prefix: string): {
     'packages/demo/src/entry.ts',
     'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n',
   );
+  for (const [rel, content] of Object.entries(committedExtras)) write(rel, content);
   execFileSync('git', ['add', '-A'], { cwd: repo });
   execFileSync(
     'git',
@@ -135,6 +164,7 @@ function evidenceFromHub(entry: string, hubTree: SourceTreeReader): ClosureGrowt
     headGraph,
     baseWeights: topLevelStatementWeightsOf(baseGraph.keys(), hubTree),
     headWeights: topLevelStatementWeightsOf(headGraph.keys()),
+    baseTree: hubTree,
   });
 }
 
@@ -169,6 +199,33 @@ test('planted split smuggling a new heavy edge fails, naming the smuggled weight
   );
 });
 
+test('planted split pulling in a PRE-EXISTING closure-external module fails at offset weight', () => {
+  // The maintainer-review hole: `pre-existing-heavy.ts` is committed at the hub commit but no
+  // file imports it, so it sits in the merge-base tree OUTSIDE the closure. The split's part-c
+  // side-effect-imports it, and the weight is offset by merging b and c into one declaration --
+  // containment holds and weight is flat, so a two-fact rule passes it. The added module is not
+  // new to the tree, so the novelty fact fails and the verdict names shrinkage-funding.
+  const { entry, hubTree, write } = mkSplitFixtureRepo('eager-closure-split-pre-existing-', {
+    'packages/demo/src/pre-existing-heavy.ts': 'export const heavy = 42;\n',
+  });
+  write('packages/demo/src/part-b.ts', 'export const bc = { b: 2, c: 3 };\n');
+  write('packages/demo/src/part-c.ts', "import './pre-existing-heavy.ts';\n");
+  const evidence = evidenceFromHub(entry, hubTree);
+  expect(
+    evidence,
+    'the two facts this shape defeats both hold: 1+1+0+1 weight against 3, containment intact',
+  ).toMatchObject({
+    baseWeight: 3,
+    headWeight: 3,
+    preservedBaseClosure: true,
+    addedModulesAreNew: false,
+  });
+  const finding = classifyGrowth('demo/entry', evidence);
+  expect(finding, 'the third fact is the one that refuses it').toMatch(
+    /newly evaluates a module the merge-base tree already had/,
+  );
+});
+
 test('a renamed module inside the growth is not a dropped module', () => {
   const repo = mkGitFixtureRepo('eager-closure-split-rename-');
   const baseEntry = path.join(repo, 'packages/demo/src/entry.ts');
@@ -176,16 +233,15 @@ test('a renamed module inside the growth is not a dropped module', () => {
   execFileSync('git', ['mv', 'packages/demo/src/entry.ts', 'packages/demo/src/hub.ts'], {
     cwd: repo,
   });
-  const baseWeights = topLevelStatementWeightsOf(
-    [baseEntry],
-    createCommittedSourceTree(repo, 'HEAD'),
-  );
+  const baseTree = createCommittedSourceTree(repo, 'HEAD');
+  const baseWeights = topLevelStatementWeightsOf([baseEntry], baseTree);
   const headWeights = topLevelStatementWeightsOf([headEntry]);
   const shape = {
     baseGraph: new Map([[baseEntry, null]]),
     headGraph: new Map([[headEntry, null]]),
     baseWeights,
     headWeights,
+    baseTree,
   };
   expect(
     closureGrowthEvidence({
@@ -197,6 +253,22 @@ test('a renamed module inside the growth is not a dropped module', () => {
   expect(
     closureGrowthEvidence(shape).preservedBaseClosure,
     'without the rename map the same shape reads as a dropped module',
+  ).toBe(false);
+  // Novelty canonicalization: when the head path of a rename PRE-EXisted in the base tree (a
+  // rename landing on a path that sat outside the closure), only the rename map can tell the
+  // rename's head from a pre-existing module newly made eager.
+  const collidingTree = { exists: (file: string) => file === headEntry };
+  expect(
+    closureGrowthEvidence({
+      ...shape,
+      baseTree: collidingTree,
+      renamedBaseToHead: new Map([[baseEntry, headEntry]]),
+    }).addedModulesAreNew,
+    'the rename map says the pre-existing head path is the same module, not new eager code',
+  ).toBe(true);
+  expect(
+    closureGrowthEvidence({ ...shape, baseTree: collidingTree }).addedModulesAreNew,
+    'without the map the same path reads as a pre-existing module newly made eager',
   ).toBe(false);
 });
 
@@ -237,6 +309,7 @@ test('growth advice names both causes and both remedies, not one prescribed fix'
       baseWeight: 200,
       headWeight: 210,
       preservedBaseClosure: true,
+      addedModulesAreNew: true,
     }) ?? '';
   expect(finding).toMatch(/new static edge/);
   expect(finding).toMatch(/used to load on demand/);
