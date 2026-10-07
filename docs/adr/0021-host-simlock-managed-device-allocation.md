@@ -6,7 +6,7 @@ Accepted (2026-09-01; scope amended 2026-10-01). This ADR defines the minimal Ho
 [Simlock #70](https://github.com/callstackincubator/simlock/issues/70) tracks allocator-side work;
 the supported client contract and conformance tests enforce the boundary.
 
-Implementation alignment is pending: the [managed-device allocator contract](../../packages/contracts/src/managed-device-allocation.ts)
+Implementation alignment is pending: the [managed-device allocator contract](../../packages/managed-allocation/src/managed-device-allocation.ts)
 still requires `supersedeLeaseRequest`, `confirmLeaseActivation`, `getManagedIdentityStatus`,
 and `acknowledgeManagedIdentityRemoval`, and exposes `activation: 'external-fence'`. Host implementation
 must trim those requirements, their consumers/tests, and Android reuse documentation to this scope.
