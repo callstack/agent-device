@@ -133,7 +133,7 @@ constrain a relocation, they are not independent proof the placement is optimal.
 
 | File | Decision | Reason |
 | --- | --- | --- |
-| `src/daemon-diagnostics-scope.ts` | moved → `src/daemon-contracts/daemon-diagnostics-scope.ts` | Physical move landed: the helper now lives under the folder that derives its `daemon-contracts` zone, so `topFolder` replaces the per-file `ROOT_MODULE_ZONES` row and an internal rename needs no ownership-table edit. |
+| `src/daemon-diagnostics-scope.ts` | moved → `src/daemon-contracts/daemon-diagnostics-scope.ts` ([#3297](https://github.com/callstack/agent-device/pull/3297)) | Physical move landed: the helper now lives under the folder that derives its `daemon-contracts` zone, so `topFolder` replaces the per-file `ROOT_MODULE_ZONES` row and an internal rename needs no ownership-table edit. |
 | `src/daemon-policy-file.ts` | keep | Daemon ⇄ client shared contract from #2559, declared `daemon-contracts` by #3288 — the shared-below-both ownership the spine needs, since daemon-client (rank 5) dynamically imports it. |
 | `src/daemon.ts` | keep | Entry point (`internal/daemon` bundle entry); composition roots stay in root by umbrella §4. |
 | `src/platform-runtime-apple-runner-owner.ts` | retain for this batch | `platform-runtime-*` composition seam: R13's exact-importer rule and the ADR 0022 R76 inventory key on its path, so relocation requires coordinated ownership changes to both declarations — the rules constrain the move, they do not independently prove the placement. |
