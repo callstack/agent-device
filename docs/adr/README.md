@@ -33,7 +33,7 @@
 | [0029 Daemon Policy](0029-daemon-policy.md) | `AGENT_DEVICE_DAEMON_POLICY`, confining a daemon's commands, devices, or device shutdown, and where operator rules are enforced for batch/replay steps |
 | [0030 Process Lock Exclusion](0030-process-lock-exclusion.md) | process-lock publication/reclaim/release, retained mutation guards, and the single-protocol upgrade boundary |
 | [0031 macOS Native App Backend](0031-macos-native-app-backend.md) | `AGENT_DEVICE_MACOS_APP_BACKEND`, driving macOS app sessions without XCTest Automation Mode, why pointer actions are accessibility actions only, and the ghost cursor |
-| [0032 Layering Graph Engine](0032-layering-graph-engine.md) | replacing `scripts/layering/` graph rules with dependency-cruiser or fallow `boundaries`, why every layering rule reads one edge model, the measured edge-set and parity gaps, and the revisit triggers |
+| [0032 Layering Graph Engine](0032-layering-graph-engine.md) | evaluating replacement of `scripts/layering/` graph rules with dependency-cruiser or fallow `boundaries`, why every layering rule reads one edge model, the measured edge-set and parity gaps, and the revisit triggers |
 
 ADRs record *why*; the registries and gates they describe are the living source of truth — when
 prose and a registry disagree, the registry wins and the ADR needs a follow-up.
