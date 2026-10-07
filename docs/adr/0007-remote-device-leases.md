@@ -175,8 +175,9 @@ token like host holds; tenant `lease_allocate` refuses the backend. The host pic
 repeated PUT renews it, and a PUT naming another scope for an existing id is refused rather than
 rewritten. Heartbeat, expiry, and the loss on daemon restart are those of any lease, except that a
 tenant heartbeat or request cannot renew it for longer than the window of the host's last PUT, and
-only the host ends it: `DELETE /admin/leases`, expiry, or `close` when `retainOnClose` is false. A
-tenant `lease_release` is refused with `MACOS_APP_LEASE_HOST_OWNED`.
+a tenant cannot release it: `lease_release` is refused with `MACOS_APP_LEASE_HOST_OWNED`. The lease
+ends by the host's `DELETE /admin/leases/<lease-id>`, by expiry, by the loss on daemon restart, or
+when a session it holds closes and the host set `retainOnClose` to false.
 
 Request admission confines every request admitted under the lease, so `batch` steps and `replay`
 actions are confined when they re-enter it: an allow list of commands, the ones whose command
@@ -184,7 +185,7 @@ registry descriptor declares `appLease: 'allowed'` (later commands are refused, 
 lease admission otherwise exempts only `lease_heartbeat` and `lease_release` declare it),
 `open` and `close` of the leased bundle only, the `app` surface only, window-only screenshots, no
 input that names a host path or launches beside the app, and an existing session that is the leased
-app for every request but `open`, the `batch` envelope, and the lease's heartbeat, so a
+app for every request but `open` and the `batch` envelope, so a
 request naming no session cannot fall back to the host Mac. `open` requires the native app backend (ADR 0031), because XCTest
 posts screen events that can land outside the app's window. A pid-pinned lease is checked against the
 running process before each admitted request. A session opened under the lease holds its app, not
