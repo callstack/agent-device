@@ -20,11 +20,12 @@ whose production tree is `7dda0c2bf`'s; the harness lives only at that commit
 
 The edge-set, parity, clean-tree and runtime numbers are the output of the spike harness run at
 `d9959f510`. Retrieve it with `git show d9959f510:scripts/layering/boundary-engine-spike.ts`, after
-`git fetch origin pull/3286/head` if the commit is not local; usage is in its header. It builds both
-engine configs from `TARGET_DAG_RANK` and the rule tables, runs only on exactly the tracked
-production tree (1,837 files, 41 zones), and gives recorded R6 and R78 edges to each engine's
-known-violations baseline. The deletion table and the `.fallowrc.json` field count are counts of
-files at the same commit.
+`git fetch origin pull/3286/head` if the commit is not local; usage is in its header. It derives
+both engines' R5 and R6 rules from `model.ts`'s `RANKED_ZONES` and `zoneRank`, writes the other
+rules' paths inline (R77's from `RUNNER_SUBTREE`), runs only on exactly the tracked production tree
+(1,837 files, 41 zones), and gives recorded R6 and R78 edges to each engine's known-violations
+baseline. The deletion table and the `.fallowrc.json` field count are counts of files at the same
+commit.
 
 ### Edge-set diff against `resolveImportEdges`
 
