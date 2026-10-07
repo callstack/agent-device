@@ -18,8 +18,8 @@ You don't need to name a session. The implicit session is scoped to your git wor
 working directory) and to the platform the command selects: `--platform ios` runs in the `ios`
 session and `--platform android` in the `android` session.
 A session opened without `--platform` uses the platform-less `default` session, and commands that name a
-platform still join it as long as they match its device. Agents in different worktrees never attach
-to each other's session.
+platform still join it as long as they match its device. Agents in different worktrees do not attach
+to each other's implicit session; a named session (`--session <name>`) is shared across worktrees.
 
 ## Find a session's logs and artifacts
 
@@ -30,7 +30,7 @@ JSON output also includes `runnerLogPath` and `requestLogPath` when available.
 Each session artifact directory contains:
 
 - `requests/<request-id>.ndjson` - daemon request diagnostics for this session.
-- `events.ndjson` - session event timeline for requests and recorded actions; rotates to `events.ndjson.1` past 5 MB (`AGENT_DEVICE_EVENT_LOG_MAX_BYTES`, whole bytes), with `events.ndjson.window.json` tracking the retained files so `events` cursors stay valid across rotation.
+- `events.ndjson` - session event timeline for requests and recorded actions; rotates to `events.ndjson.1` past 5 MB (`AGENT_DEVICE_EVENT_LOG_MAX_BYTES`, whole bytes), with `events.ndjson.window.json` tracking the retained files so `events` cursors within the retained window stay valid across rotation. Older cursors expire.
 - `runner.log` - Apple runner and `xcodebuild` build/start output for this session.
 - `app.log` - app/device logs when `logs start` or `logs clear --restart` is active.
 

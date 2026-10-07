@@ -72,7 +72,7 @@ Use the agent_device tool to inspect and operate the app.
 - Call close when the device task is complete.
 ```
 
-In CI or another short-lived host, also close the named `agent-device` session in your runner's own cleanup path. The model's `close` call handles the normal tool loop, but it does not run after errors or cancellation.
+In CI or another short-lived host, also close the named `agent-device` session in your runner's own cleanup path. The model-directed `close` call is useful during the normal tool loop, but it does not replace deterministic cleanup after errors or cancellation.
 
 ## Choose where the tool runs
 

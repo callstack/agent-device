@@ -35,7 +35,7 @@ environment or user config.
 
 Config files are JSON objects with camelCase keys that match CLI flag names.
 
-Each key has an environment variable: `AGENT_DEVICE_` plus the key in uppercase snake case, for example:
+Supported environment variables use `AGENT_DEVICE_` plus the key in uppercase snake case. Not every key has one. For example:
 - `session` -> `AGENT_DEVICE_SESSION`
 - `daemonBaseUrl` -> `AGENT_DEVICE_DAEMON_BASE_URL`
 - `androidDeviceAllowlist` -> `AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST`

@@ -83,8 +83,8 @@ hosted session.
 - `--provider-network-profile`, `--provider-custom-network`, and `--provider-no-resign-app` are
   BrowserStack-only. `connect testmu` and TestMu AI session creation fail with the flag name
   instead of ignoring them.
-- agent-device turns on session video and device logs for every session, so `artifacts` always has
-  something to return.
+- agent-device requests session video and device logs on every session, so `artifacts` has something
+  to return once TestMu AI makes them available.
 
 ## Run on real devices
 

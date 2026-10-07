@@ -26,7 +26,7 @@ Tips:
 
 ## Response shape (click)
 
-`find "<query>" click --json` returns the element it matched:
+`find "<query>" click --json` returns metadata for the element it matched, taken from the resolved snapshot node:
 
 ```json
 {

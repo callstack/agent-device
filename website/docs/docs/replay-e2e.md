@@ -407,9 +407,11 @@ agent-device replay ./flow.ad
 agent-device replay ./flow.ad --from 4 --plan-digest ab12...
 ```
 
-For Maestro flows, `--from` counts top-level flow steps. A control step (`runFlow`, `repeat`, or `retry`)
-counts as one step, and you cannot resume at a command nested inside it. As with `.ad` replay, restore
-any state and environment values the skipped steps would have set before you resume.
+For Maestro flows, `--from` counts steps in the top-level plan. A `runFlow` with no condition, or with
+a condition that resolves before the run, is flattened into its commands (or dropped when the condition
+is false). A control step decided at run time (`runFlow`, `repeat`, or `retry`) counts as one step, and
+you cannot resume at a command nested inside it. As with `.ad` replay, restore any state and
+environment values the skipped steps would have set before you resume.
 
 Passing `--plan-digest` that no longer matches the current script — because you edited it, an include changed, or platform-conditioned expansion differs — fails `INVALID_ARGS` before any action; run a fresh full replay to get a new digest. `--from` is `replay`-only; `test` rejects it (a suite run must stay full and deterministic).
 

@@ -100,7 +100,7 @@ const closed = await client.sessions.close();
 
 ## Get artifacts and troubleshoot
 
-After `close`, AWS Device Farm returns remote-access video and log artifacts once it finalizes them. Run `agent-device artifacts --json`, or look up an earlier session by its ARN:
+After `close`, AWS Device Farm can return remote-access video and log artifacts once it finalizes them. Run `agent-device artifacts --json`, or look up an earlier session by its ARN:
 
 ```bash
 agent-device artifacts <remote-access-session-arn> --provider aws-device-farm --json
