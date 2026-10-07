@@ -33,11 +33,7 @@ export {
   resolveRunnerSigningBuildSettings,
   type RunnerXctestrunCacheMetadata,
 } from './runner-cache-metadata.ts';
-export {
-  createRunnerPhaseBudget,
-  requireRunnerPhaseRemainingMs,
-  type RunnerPhaseBudget,
-} from './runner-phase-budget.ts';
+export { requireRunnerPhaseRemainingMs, type RunnerPhaseBudget } from './runner-phase-budget.ts';
 
 const RUNNER_XCTESTRUN_CACHE_LOCK_TIMEOUT_MS = 10 * 60_000;
 const RUNNER_XCTESTRUN_CACHE_LOCK_POLL_MS = 100;
