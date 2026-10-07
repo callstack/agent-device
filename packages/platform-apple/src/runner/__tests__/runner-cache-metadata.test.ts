@@ -8,7 +8,6 @@ import type { ExecOptions } from '@agent-device/host-kit/command';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  createRunnerPhaseBudget,
   requireRunnerBuildSettingsMatchBuildLog,
   diffComparableRunnerCacheMetadata,
   resolveRunnerBundleBuildSettings,
@@ -18,8 +17,9 @@ import {
   resolveRunnerSandboxBuildArgs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
-  memoizedRunnerXcodeVersion,
 } from '../runner-cache-metadata.ts';
+import { createRunnerPhaseBudget } from '../runner-phase-budget.ts';
+import { memoizedRunnerXcodeVersion } from '../runner-toolchain-probe.ts';
 import { COLD_TOOLCHAIN_PROBE_TIMEOUT_MS } from '../apple-runner-platform.ts';
 import {
   appleToolchainProbeResult,

@@ -28,11 +28,13 @@ export {
   type RunnerXctestrunCacheKind,
 } from './runner-cache.ts';
 export {
-  createRunnerPhaseBudget,
   IOS_RUNNER_CONTAINER_BUNDLE_IDS,
-  requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerAppBundleId,
   resolveRunnerDerivedPath,
-  type RunnerPhaseBudget,
 } from './runner-cache-metadata.ts';
+export {
+  createRunnerPhaseBudget,
+  requireRunnerPhaseRemainingMs,
+  type RunnerPhaseBudget,
+} from './runner-phase-budget.ts';

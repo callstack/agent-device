@@ -1,11 +1,15 @@
-# ADR 0027: Descriptor Root Size vs Eager-Closure Budget (Proposed)
+# ADR 0027: Descriptor Root Size vs Eager-Closure Budget
 
 ## Status
 
-Proposed (2026-09-23). This ADR **decides nothing**. It records a conflict between two invariants
-that are both enforced and both correct, and states the one question a repo owner must answer before
-either invariant can be relied on for module placement. Until then, follow both: do not split the
-descriptor root, and do not add an approval path to the budget gate to let the split through.
+Accepted (2026-10-07, #2469). The conflict below is resolved in favor of allowing
+**byte-neutral (statement-neutral) re-homing**: the eager-closure budget's NO-GROWTH rule now
+tolerates exactly the split shape — the head closure still evaluates every merge-base module and
+the closure's total module-scope statement count does not grow. The rule lives in
+`scripts/__tests__/closure-growth-rule.ts`, planted in both directions by
+`scripts/__tests__/closure-growth-rule.test.ts`. The hard ADR-0019 checks (façade exactness, no
+platform implementation before binding) are untouched: the tolerance relaxes the module-count
+proxy, never the loading property.
 
 ## The conflict
 
@@ -26,16 +30,18 @@ Splitting a hub module necessarily adds static value edges beneath it, so every 
 reaches it grows by the number of new modules. The two rules have no shared approval path: one says
 the file must be divided, the other says the division must not be visible to any importer.
 
-## Rules at a glance, while unresolved
+## Rules at a glance, resolved
 
-- Do not split `registry.ts`. The budget gate is the binding constraint and has no waiver.
-- Do not add an approved-growth row, a baseline entry, or a suppression to pass it. That is the
-  allowlist `AGENTS.md` forbids.
+- A hub split is allowed when it is statement-neutral: every merge-base module stays in every
+  affected closure, and total module-scope statements do not grow. The gate enforces this; an
+  unexplained count growth still fails with no approval path, as before.
+- Do not add an approved-growth row, a baseline entry, or a suppression to pass the gate. That is
+  the allowlist `AGENTS.md` forbids; the split tolerance is a rule, not a waiver — it decides from
+  the two graphs, and nothing is hand-entered per split.
 - Do not make registry construction asynchronous to dodge the walker. ADR 0008's synchronous root is
   load-bearing for compile-time totality.
-- Closure-neutral edits inside the descriptor root are still welcome: relocating guards beside the
-  union they constrain, correcting stale claims, and moving non-eager content out are fine so long as
-  every measured entry surface is unchanged.
+- The split tolerance says a re-home adds no eager *work*; it does not license adding eager
+  *edges* under a façade. The ADR-0019 checks stay hard.
 
 ## Measured
 
@@ -69,23 +75,43 @@ The cost is genuinely a *count*, not weight: the same bytes are evaluated either
 makes the conflict worth deciding rather than absorbing silently, because the gate's proxy and the
 debt rule's proxy disagree at exactly this shape.
 
-## Decision required
+## Decision
 
-May a byte-neutral re-homing of a hub module's contents into new modules raise the eager module count
-of the entry surfaces that reach it — or must a hub module's contents stay inside the file its
-consumers already evaluate?
+May a byte-neutral re-homing of a hub module's contents into new modules raise the eager module
+count of the entry surfaces that reach it? **Yes — exactly when it is a split**, decided by two
+facts computed from the two closure graphs, not by an entered number:
 
-Answering "the count may rise" needs a bounded, auditable growth allowance on an invariant that
-currently refuses one. Answering "contents stay put" needs `AGENTS.md`'s 1,000-line rule to name the
-exception for a hub whose consumers evaluate it as one unit, so the size is treated as accepted and
-measured rather than as unaddressed debt. Either answer is fine; leaving it unstated means the next
-agent at this file discovers the conflict from a red gate and picks one silently.
+1. **Containment:** the head closure evaluates every module the merge-base closure evaluated
+   (renames canonicalized), so the growth is purely additive.
+2. **Flat weight:** the closure's total top-level statement count — wiring lines excluded, so
+   re-homing is invisible to it — does not exceed the merge-base closure's.
+
+This is issue #2469's candidate 4 (structure ∧ weight), implemented as the minimal slice: each
+half alone is refutable — containment without weight accepts a "split" that smuggles a new heavy
+edge; weight without containment accepts dropping a merge-base module behind an equal-sized
+replacement — and together they are the smallest pair that admits healthy extraction and refuses
+new eager work. Statements were chosen over bytes because formatting and comment churn move bytes
+while statements track the thing being preserved: module-scope evaluation work. Both are proxies;
+the planted tests in `scripts/__tests__/closure-growth-rule.test.ts` pin the acceptance pair in
+both directions, and the hard ADR-0019 checks remain the non-proxy backstop under it.
+
+Maintenance cost of an ordinary extraction under this rule: zero configuration edits. No row,
+baseline, or number is touched per split — the merge-base comparison recomputes everything. (The
+candidate-3 approval-row design instead costs one hand-edited row per split plus its retirement.)
+
+The `AGENTS.md` 1,000-line rule now has no hub exception to name: a statement-neutral split is
+shippable, so an oversized hub is addressable debt rather than accepted state.
 
 ## Alternatives considered and refuted
 
-- **Approved-growth row mirroring `APPROVED_OVER_CEILING` (issue, reason, owner):** refuted pending the
-  decision above. It would be auditable, but it is an allowlist on the one invariant deliberately
-  given no approval path, and `AGENTS.md` forbids adding one to obtain a pass.
+- **Approved-growth row mirroring `APPROVED_OVER_CEILING` (issue, reason, owner):** refuted. It
+  would be auditable, but it is an allowlist on the one invariant deliberately given no approval
+  path, `AGENTS.md` forbids adding one to obtain a pass, and every split would owe a row plus its
+  retirement — maintenance the chosen rule does not.
+- **Structure alone (#2469 candidate 2):** refuted by the planted smuggle test — a "new" module can
+  carry a new heavy edge, so containment proves nothing about eager work.
+- **Weight alone (#2469 candidate 1):** refuted by the planted drop test — a swap can keep the
+  statement total flat while quietly making the closure evaluate different modules.
 - **Leave the array in place:** the status quo, not a resolution — it leaves the size debt unowned and
   the conflict undocumented.
 - **Function-scoped `await import` per family:** passes the gate by making registry construction
@@ -99,5 +125,5 @@ agent at this file discovers the conflict from a red gate and picks one silently
 
 A complete, byte-faithful split of the descriptor array exists on
 `refactor/collocation-registry-family-split` (`40bf719a8b`, split commit `ad3aaa520e`) and is pushed.
-It is kept rather than deleted so that answering the question above does not require redoing the
-mechanical work; 80 descriptors, 79 byte-identical including comments.
+With this decision accepted, that branch is now shippable: its +11 is a statement-neutral split of
+exactly the tolerated shape, so it needs no gate change beyond this one.

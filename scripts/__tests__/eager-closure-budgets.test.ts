@@ -1,9 +1,11 @@
 import { expect, test } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { eagerClosureGraphOf } from '../../src/__tests__/eager-import-closure.fixtures.ts';
+import {
+  eagerClosureGraphOf,
+  topLevelStatementWeightsOf,
+} from '../../src/__tests__/eager-import-closure.fixtures.ts';
 import {
   baseProductionPathOf,
   createCommittedSourceTree,
@@ -11,10 +13,15 @@ import {
   mergeBaseWithMain,
   renamedSince,
 } from './committed-source-tree.ts';
+import { mkGitFixtureRepo } from './eager-closure-gate-fixtures.ts';
+import {
+  classifyGrowth,
+  closureGrowthEvidence,
+  type ClosureGrowthEvidence,
+} from './closure-growth-rule.ts';
 import {
   addedModules,
   APPROVED_OVER_CEILING,
-  classifyGrowth,
   classifyNewEntry,
   describeClosureGrowth,
   describeClosurePressure,
@@ -67,23 +74,35 @@ const absolute = (file: string) => path.resolve(repoRoot, file);
 // Each of these covers a hole that the real-tree assertions below cannot see: while the tree
 // satisfies its rules, a wrong comparison, an unfollowed rename, a reader that quietly falls
 // back to the working directory, and a one-level discovery scan all look like correct rules.
+// The NO-GROWTH rule, its split tolerance, and the growth-advice text are tested in
+// `closure-growth-rule.test.ts`, mirroring `closure-growth-rule.ts`; what follows covers this
+// module's own rules.
 
-test('no-growth fails growth with both counts and passes an equal or smaller closure', () => {
-  expect(classifyGrowth('x.ts', 42, 42)).toBeNull();
-  expect(classifyGrowth('x.ts', 42, 40)).toBeNull();
-  expect(classifyGrowth('x.ts', 42, 43)).toMatch(/evaluates 43 modules.*merge-base evaluated 42/);
-});
+/** Aggregation fixtures need evidence the rule FAILS: count growth it cannot excuse. */
+function grew(baseCount: number): ClosureGrowthEvidence {
+  return {
+    baseCount,
+    headCount: baseCount + 1,
+    baseWeight: 10,
+    headWeight: 14,
+    preservedBaseClosure: true,
+  };
+}
 
-test('growth advice names both causes and both remedies, not one prescribed fix', () => {
-  // #2423's review: a message that only ever says "move it behind a dynamic import" is wrong
-  // advice when the growth is a new module that belongs in an existing one. This pins that the
-  // verdict states both common causes and leaves the remedy to the reader.
-  const finding = classifyGrowth('x.ts', 42, 43) ?? '';
-  expect(finding).toMatch(/new static edge/);
-  expect(finding).toMatch(/used to load on demand/);
-  expect(finding).toMatch(/home in a module the closure already evaluates/);
-  expect(finding).toMatch(/function-scoped `await import`/);
-});
+/** Aggregation fixtures need evidence the rule PASSES, for each passing shape separately. */
+function passed(params: {
+  baseCount: number;
+  headCount: number;
+  preservedBaseClosure?: boolean;
+}): ClosureGrowthEvidence {
+  return {
+    baseCount: params.baseCount,
+    headCount: params.headCount,
+    baseWeight: 10,
+    headWeight: 10,
+    preservedBaseClosure: params.preservedBaseClosure ?? true,
+  };
+}
 
 test('growth against the merge-base lists every added module, each with its shortest route, bounded', () => {
   // The hole: the old diagnostic named only the FIRST added module, which hid the pattern when a
@@ -240,8 +259,8 @@ test('growth shared by two entries names the merge-base modules they already hav
 
   const shared = describeSharedGrowthHomes(
     [
-      { id: 'entry-a.ts', added: [addedFile], baseGraph: graphA, headClosureSize: graphA.size + 1 },
-      { id: 'entry-b.ts', added: [addedFile], baseGraph: graphB, headClosureSize: graphB.size + 1 },
+      { id: 'entry-a.ts', added: [addedFile], baseGraph: graphA, evidence: grew(graphA.size) },
+      { id: 'entry-b.ts', added: [addedFile], baseGraph: graphB, evidence: grew(graphB.size) },
     ],
     '/repo',
   );
@@ -258,7 +277,7 @@ test('growth that no other entry shares produces no shared-homes note', () => {
   const graphA = new Map<string, string | null>([['/repo/entry-a.ts', null]]);
   expect(
     describeSharedGrowthHomes(
-      [{ id: 'entry-a.ts', added: ['/repo/new.ts'], baseGraph: graphA, headClosureSize: 2 }],
+      [{ id: 'entry-a.ts', added: ['/repo/new.ts'], baseGraph: graphA, evidence: grew(1) }],
       '/repo',
     ),
     'nothing to aggregate when only one entry grew by this module',
@@ -283,13 +302,35 @@ test('an equal-size replacement is not growth, so the aggregate stays silent', (
     ['/repo/packages/demo/src/dropped-by-b.ts', '/repo/entry-b.ts'],
   ]);
 
-  expect(classifyGrowth('entry-a.ts', graphA.size, graphA.size)).toBeNull();
-  expect(classifyGrowth('entry-b.ts', graphB.size, graphB.size)).toBeNull();
+  expect(
+    classifyGrowth(
+      'entry-a.ts',
+      passed({ baseCount: graphA.size, headCount: graphA.size, preservedBaseClosure: false }),
+    ),
+  ).toBeNull();
   expect(
     describeSharedGrowthHomes(
       [
-        { id: 'entry-a.ts', added: [addedFile], baseGraph: graphA, headClosureSize: graphA.size },
-        { id: 'entry-b.ts', added: [addedFile], baseGraph: graphB, headClosureSize: graphB.size },
+        {
+          id: 'entry-a.ts',
+          added: [addedFile],
+          baseGraph: graphA,
+          evidence: passed({
+            baseCount: graphA.size,
+            headCount: graphA.size,
+            preservedBaseClosure: false,
+          }),
+        },
+        {
+          id: 'entry-b.ts',
+          added: [addedFile],
+          baseGraph: graphB,
+          evidence: passed({
+            baseCount: graphB.size,
+            headCount: graphB.size,
+            preservedBaseClosure: false,
+          }),
+        },
       ],
       '/repo',
     ),
@@ -298,17 +339,64 @@ test('an equal-size replacement is not growth, so the aggregate stays silent', (
   expect(
     describeSharedGrowthHomes(
       [
-        { id: 'entry-a.ts', added: [addedFile], baseGraph: graphA, headClosureSize: graphA.size },
+        {
+          id: 'entry-a.ts',
+          added: [addedFile],
+          baseGraph: graphA,
+          evidence: passed({
+            baseCount: graphA.size,
+            headCount: graphA.size,
+            preservedBaseClosure: false,
+          }),
+        },
         {
           id: 'entry-b.ts',
           added: [addedFile],
           baseGraph: graphB,
-          headClosureSize: graphB.size - 1,
+          evidence: passed({
+            baseCount: graphB.size,
+            headCount: graphB.size - 1,
+            preservedBaseClosure: false,
+          }),
         },
       ],
       '/repo',
     ),
     'a closure that shrank while adding a module is likewise not growth',
+  ).toBeNull();
+});
+
+test('a tolerated pure split produces no shared-homes note', () => {
+  // #2469: two entries that both grew by the SAME new modules because a shared hub split. The
+  // per-entry rule tolerates it (containment holds, weight flat), so the aggregate -- whose whole
+  // premise is entries the rule FAILED -- may not report it. Without this, every tolerated split
+  // would turn one green lane into two red aggregate failures.
+  const addedPart = '/repo/packages/demo/src/part.ts';
+  const sharedHome = '/repo/packages/demo/src/shared-home.ts';
+  const graph = (entry: string) =>
+    new Map<string, string | null>([
+      [entry, null],
+      [sharedHome, entry],
+    ]);
+  expect(
+    describeSharedGrowthHomes(
+      [
+        {
+          id: 'entry-a.ts',
+          added: [addedPart],
+          baseGraph: graph('/repo/entry-a.ts'),
+          evidence: passed({ baseCount: 2, headCount: 3 }),
+        },
+        {
+          id: 'entry-b.ts',
+          added: [addedPart],
+          baseGraph: graph('/repo/entry-b.ts'),
+          evidence: passed({ baseCount: 2, headCount: 3 }),
+        },
+      ],
+      '/repo',
+    ),
+    'both entries passed as pure splits: nothing failed, nothing to explain',
   ).toBeNull();
 });
 
@@ -327,7 +415,7 @@ test('disjoint growth groups keep their own entries and homes in separate blocks
       [entryPath, null],
       [home, entryPath],
     ]);
-    return { id, added: [added], baseGraph, headClosureSize: baseGraph.size + 1 };
+    return { id, added: [added], baseGraph, evidence: grew(baseGraph.size) };
   };
 
   const shared = describeSharedGrowthHomes(
@@ -357,40 +445,10 @@ test('disjoint growth groups keep their own entries and homes in separate blocks
 });
 
 /**
- * A committed fixture repository: one workspace package with a manifest export target, a
- * top-level façade, a nested façade, and a test source. Everything here is TRACKED, so anything a
- * caller writes afterwards is by definition uncommitted scratch.
- *
- * A real git repo rather than a bare tmpdir because tracked-vs-untracked only exists relative to
- * git, following `scripts/layering/platform-package-repository.test.ts`.
+ * A committed fixture repository (`mkGitFixtureRepo`, shared with
+ * `closure-growth-rule.test.ts`): one workspace package with a manifest export target, a
+ * top-level façade, a nested façade, and a test source.
  */
-function mkGitFixtureRepo(prefix: string): string {
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  const pkgDir = path.join(repo, 'packages/demo');
-  fs.mkdirSync(path.join(pkgDir, 'src/facades/nested'), { recursive: true });
-  fs.writeFileSync(
-    path.join(pkgDir, 'package.json'),
-    JSON.stringify({
-      name: '@agent-device/demo',
-      exports: { '.': './src/entry.ts' },
-    }),
-  );
-  fs.writeFileSync(path.join(pkgDir, 'src/entry.ts'), 'export const a = 1;\n');
-  fs.writeFileSync(path.join(pkgDir, 'src/facades/top.ts'), 'export const b = 2;\n');
-  fs.writeFileSync(path.join(pkgDir, 'src/facades/nested/deep.ts'), 'export const c = 3;\n');
-  fs.writeFileSync(path.join(pkgDir, 'src/facades/skip.test.ts'), 'export const d = 4;\n');
-  fs.mkdirSync(path.join(repo, 'scripts'));
-  fs.writeFileSync(path.join(repo, 'scripts/standalone.ts'), 'export const outside = 1;\n');
-  execFileSync('git', ['init', '-q'], { cwd: repo });
-  execFileSync('git', ['add', '.'], { cwd: repo });
-  execFileSync(
-    'git',
-    ['-c', 'user.name=Gate', '-c', 'user.email=gate@example.test', 'commit', '-qm', 'base'],
-    { cwd: repo },
-  );
-  return repo;
-}
-
 test('the committed-tree reader walks what was committed, not the working directory', () => {
   // The hole: a reader that falls back to `fs` for anything it cannot answer from git turns the
   // merge-base side into a second copy of the head side, and no-growth passes every growth.
@@ -569,6 +627,16 @@ const carried = others.flatMap((entry) => {
 });
 const introduced = others.filter((entry) => basePathOf(entry.entryFile) === null);
 
+/** Base-path -> head-path, the containment direction `closureGrowthEvidence` canonicalizes with. */
+const renamedBaseToHead = new Map(
+  [...renamedFrom].map(([headPath, basePath]) => [absolute(basePath), absolute(headPath)]),
+);
+
+/** Head-closure weights for `graph`, off the working tree (memoized per file). */
+function headWeightsOf(graph: ReadonlyMap<string, string | null>): Map<string, number> {
+  return topLevelStatementWeightsOf(graph.keys());
+}
+
 /**
  * Every carried entry's growth data, computed once so the per-entry NO-GROWTH test below and the
  * cross-entry shared-homes note after it read the same graphs instead of walking each closure
@@ -579,7 +647,21 @@ const carriedGrowth = carried.map((entry) => {
   const graph = eagerClosureGraphOf(entryPath);
   const baseGraph = baseGraphOf(entry.baseFile);
   const base = new Set(baseGraph.keys());
-  return { entry, entryPath, graph, baseGraph, base, added: addedModules(graph, base, entryPath) };
+  return {
+    entry,
+    entryPath,
+    graph,
+    baseGraph,
+    base,
+    added: addedModules(graph, base, entryPath),
+    evidence: closureGrowthEvidence({
+      baseGraph,
+      headGraph: graph,
+      baseWeights: topLevelStatementWeightsOf(baseGraph.keys(), baseTree),
+      headWeights: headWeightsOf(graph),
+      renamedBaseToHead,
+    }),
+  };
 });
 
 test('every hub exists and is not also a discovered façade', () => {
@@ -617,8 +699,8 @@ test.for(platformFacades)('$id evaluates exactly one module: itself', (entry) =>
 });
 
 test.for(carriedGrowth)('$entry.id evaluates no more modules than at the merge-base', (growth) => {
-  const { entry, entryPath, graph, base } = growth;
-  const finding = classifyGrowth(entry.id, base.size, graph.size);
+  const { entry, entryPath, graph, base, evidence } = growth;
+  const finding = classifyGrowth(entry.id, evidence);
   expect(
     finding,
     finding === null
@@ -640,7 +722,7 @@ test('entries that grow by the same new module report shared merge-base homes on
     id: growth.entry.id,
     added: growth.added,
     baseGraph: growth.baseGraph,
-    headClosureSize: growth.graph.size,
+    evidence: growth.evidence,
   }));
   const shared = describeSharedGrowthHomes(growths, repoRoot);
   expect(

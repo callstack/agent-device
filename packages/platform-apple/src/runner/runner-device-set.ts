@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { simulatorAddressFor } from './host.ts';
-import { memoizedRunnerXcodeVersion } from './runner-cache-metadata.ts';
+import { memoizedRunnerXcodeVersion } from './runner-toolchain-probe.ts';
 
 /** The scoped simulator set that holds this runner's simulator, or undefined for the default set. */
 export function runnerSimulatorSetPath(device: DeviceInfo): string | undefined {

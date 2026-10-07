@@ -16,7 +16,10 @@
 // - Every other entry that exists at the merge-base with origin/main: NO GROWTH. Its closure may
 //   not be larger than the closure of the same file (renames followed) in the committed
 //   merge-base tree, read through `committed-source-tree.ts`. Shrinking needs no edit: there is
-//   no number to keep in step, and the next merge-base keeps the gain.
+//   no number to keep in step, and the next merge-base keeps the gain. Module COUNT growth is
+//   tolerated for exactly one shape -- a pure SPLIT -- by the rule in `closure-growth-rule.ts`
+//   (#2469, ADR 0027). The hard ADR-0019 checks (façade exactness, platform implementation never
+//   eager) stay count- and pattern-based and are untouched.
 // - An entry absent at the merge-base: a per-category CEILING (`NEW_ENTRY_CEILINGS`). At or
 //   under it, nothing to write. Over it, one `APPROVED_OVER_CEILING` row naming the issue, the
 //   reason, and an owner; the row records no number, and the merge-base carries the entry from
@@ -30,6 +33,7 @@
 
 import path from 'node:path';
 import { facadeEntryFiles } from '../layering/package-boundaries.ts';
+import { classifyGrowth, type ClosureGrowthEvidence } from './closure-growth-rule.ts';
 
 export type EntryCategory =
   | 'platform-facade'
@@ -190,25 +194,9 @@ export function eagerClosureEntries(repoRoot: string): EagerClosureEntry[] {
 }
 
 /**
- * The no-growth verdict: `null` unless the head closure is larger than the merge-base one.
- *
- * The closing sentence deliberately does not prescribe one fix. #2423's review found that a
- * generic "move it behind a dynamic import" sent five reviewers toward the wrong change: the
- * growth there was a small new module that belonged in a module every affected entry already
- * evaluated, not behind a lazy boundary. There are two common causes and two remedies, and which
- * applies is exactly what the added-module listing this verdict is always printed alongside
- * (`describeClosureGrowth`) is for.
+ * What one entry's no-growth verdict reads, and the verdict itself, live in
+ * `closure-growth-rule.ts` (#2469); this module applies them and owns everything else.
  */
-export function classifyGrowth(id: string, base: number, head: number): string | null {
-  if (head <= base) return null;
-  return (
-    `${id} evaluates ${head} modules on import; the merge-base evaluated ${base}. That means ` +
-    'either a new static edge was added, or something that used to load on demand now loads ' +
-    'eagerly. The fix is either to give the new code a home in a module the closure already ' +
-    'evaluates, or to move the new edge behind a function-scoped `await import` -- see the ' +
-    'added module(s) below for which one fits.'
-  );
-}
 
 /** The ceiling verdict for a first-introduced entry: `null` when it fits or is approved. */
 export function classifyNewEntry(
@@ -495,12 +483,12 @@ export type GrowthForAggregation = {
   /** This entry's merge-base closure graph -- gives both membership and forward edges. */
   baseGraph: ReadonlyMap<string, string | null>;
   /**
-   * This entry's head closure size, so the aggregation can apply the same condition
-   * `classifyGrowth` does: an entry only grew when this exceeds `baseGraph.size`. A closure that
-   * swapped one module for another, or shrank while adding one, has newly evaluated modules and
-   * no growth -- `classifyGrowth` passes it, so nothing here may report it (#2471 review).
+   * The same evidence the per-entry NO-GROWTH test judged, so the aggregation applies the SAME
+   * condition `classifyGrowth` does -- including the split tolerance. A closure that swapped one
+   * module for another, shrank, or passed as a pure split has newly evaluated modules and no
+   * growth -- the rule passes it, so nothing here may report it (#2471 review).
    */
-  headClosureSize: number;
+  evidence: ClosureGrowthEvidence;
 };
 
 /** How many candidate homes one added-module block names before it just counts the rest. */
@@ -526,7 +514,16 @@ type SharedGrowthGroup = {
 
 /** How many modules an entry evaluates beyond its merge-base closure; `<= 0` is not growth. */
 function netGrowth(growth: GrowthForAggregation): number {
-  return growth.headClosureSize - growth.baseGraph.size;
+  return growth.evidence.headCount - growth.evidence.baseCount;
+}
+
+/**
+ * Did the per-entry rule actually fail this growth? The aggregation may fire only where
+ * `classifyGrowth` does -- equal-size swaps, shrinks, and tolerated pure splits have newly
+ * evaluated modules and no violation, so they must contribute nothing (#2471 review, #2469).
+ */
+function grewPastTheRule(growth: GrowthForAggregation): boolean {
+  return classifyGrowth(growth.id, growth.evidence) !== null;
 }
 
 /**
@@ -553,16 +550,16 @@ function hasNoInPackageChild(
 }
 
 /**
- * Every entry that actually GREW, indexed by each of its added modules -- one entry may appear
- * under several. Entries whose head closure is no larger than their merge-base one are dropped
- * here, which is what keeps the aggregation from reporting a swap the per-entry rule passes.
+ * Every entry the NO-GROWTH rule actually failed, indexed by each of its added modules -- one
+ * entry may appear under several. Entries the per-entry rule passes are dropped here, which is
+ * what keeps the aggregation from reporting a swap or a tolerated split (#2471 review, #2469).
  */
 function growthsByAddedModule(
   growths: readonly GrowthForAggregation[],
 ): Map<string, GrowthForAggregation[]> {
   const byAddedModule = new Map<string, GrowthForAggregation[]>();
   for (const growth of growths) {
-    if (netGrowth(growth) <= 0) continue;
+    if (!grewPastTheRule(growth)) continue;
     for (const added of growth.added) {
       const group = byAddedModule.get(added);
       if (group) group.push(growth);

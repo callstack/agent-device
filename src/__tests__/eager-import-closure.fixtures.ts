@@ -100,10 +100,51 @@ function collectEagerDynamicImports(node: unknown, eager: boolean, found: string
 
 /** Every specifier this file evaluates at load time, static or dynamic. */
 export function eagerlyEvaluatedModules(fileName: string, source: string): string[] {
+  return parseEagerModule(fileName, source).specifiers;
+}
+
+/**
+ * The file's eager WEIGHT: its count of top-level statements, excluding the statements that
+ * only name other modules (`import ...`, `export ... from ...`). Comments and formatting are
+ * invisible to it, and an `export` keyword on a moved declaration does not create a statement,
+ * so re-homing code between modules keeps the number whatever the wiring lines become; adding
+ * module-scope work does not. It is the weight compared by the split tolerance in
+ * `scripts/__tests__/closure-growth-rule.ts` (#2469).
+ */
+export function topLevelStatementCount(fileName: string, source: string): number {
+  return parseEagerModule(fileName, source).topLevelStatements;
+}
+
+type EagerModule = { specifiers: string[]; topLevelStatements: number };
+
+function parseEagerModule(fileName: string, source: string): EagerModule {
   const parsed = parseSync(fileName, source);
   const dynamic: string[] = [];
   collectEagerDynamicImports(parsed.program, true, dynamic);
-  return [...new Set([...staticEvaluatedRefs(parsed.module), ...dynamic])];
+  return {
+    specifiers: [...new Set([...staticEvaluatedRefs(parsed.module), ...dynamic])],
+    topLevelStatements: countTopLevelStatements(parsed.program),
+  };
+}
+
+function isWiringOnlyStatement(statement: AstNode): boolean {
+  if (statement.type === 'ImportDeclaration') return true;
+  // `export * from 'x'` and `export { a } from 'x'` name a module; `export const a = 1` does not.
+  if (statement.type === 'ExportNamedDeclaration' || statement.type === 'ExportAllDeclaration') {
+    return statement.source !== undefined && statement.source !== null;
+  }
+  return false;
+}
+
+function countTopLevelStatements(program: unknown): number {
+  const body = (program as { body?: unknown[] } | undefined)?.body;
+  if (!Array.isArray(body)) return 0;
+  return body.filter(
+    (statement) =>
+      statement !== null &&
+      typeof statement === 'object' &&
+      !isWiringOnlyStatement(statement as AstNode),
+  ).length;
 }
 
 /**
@@ -194,6 +235,8 @@ function resolveWorkspace(
 type TreeMemo = {
   packageDirs: Map<string, string>;
   directEdges: Map<string, string[]>;
+  /** Weight of each walked file, memoized with its edges (#2469). */
+  weights: Map<string, number>;
 };
 const treeMemos = new WeakMap<SourceTreeReader, TreeMemo>();
 
@@ -203,6 +246,7 @@ function memoOf(tree: SourceTreeReader): TreeMemo {
     memo = {
       packageDirs: readWorkspacePackageDirs(tree),
       directEdges: new Map(),
+      weights: new Map(),
     };
     treeMemos.set(tree, memo);
   }
@@ -210,17 +254,31 @@ function memoOf(tree: SourceTreeReader): TreeMemo {
 }
 
 /**
- * Specifiers per file, keyed by content: a merge-base and a working tree share almost every file
- * byte-for-byte and parsing is the expensive step, so a second tree parses only what differs.
+ * Specifiers and top-level weight per file, keyed by content: a merge-base and a working tree
+ * share almost every file byte-for-byte and parsing is the expensive step, so a second tree
+ * parses only what differs.
  */
-const parsedByFile = new Map<string, { source: string; specifiers: string[] }>();
+const parsedByFile = new Map<string, { source: string; module: EagerModule }>();
 
-function specifiersOf(file: string, source: string): string[] {
+function parsedModuleOf(file: string, source: string): EagerModule {
   const cached = parsedByFile.get(file);
-  if (cached && cached.source === source) return cached.specifiers;
-  const specifiers = eagerlyEvaluatedModules(file, source);
-  parsedByFile.set(file, { source, specifiers });
-  return specifiers;
+  if (cached && cached.source === source) return cached.module;
+  const module = parseEagerModule(file, source);
+  parsedByFile.set(file, { source, module });
+  return module;
+}
+
+/**
+ * Top-level-statement weight per file, as the split tolerance measures it. One read per path
+ * through the tree's reader; the parse itself is shared with the edge walk via `parsedByFile`.
+ */
+export function topLevelStatementWeightsOf(
+  files: Iterable<string>,
+  tree: SourceTreeReader = workingTreeReader,
+): Map<string, number> {
+  const weights = new Map<string, number>();
+  for (const file of files) weights.set(file, weightOf(file, tree));
+  return weights;
 }
 
 /** The repo files `file` evaluates directly, already resolved to absolute paths. */
@@ -229,7 +287,7 @@ function directEagerEdges(file: string, tree: SourceTreeReader): string[] {
   const cached = memo.directEdges.get(file);
   if (cached) return cached;
   const resolvedEdges: string[] = [];
-  for (const specifier of specifiersOf(file, tree.readFile(file))) {
+  for (const specifier of parsedModuleOf(file, tree.readFile(file)).specifiers) {
     const resolved = specifier.startsWith('.')
       ? resolveRelative(file, specifier, tree)
       : resolveWorkspace(specifier, memo.packageDirs, tree);
@@ -237,6 +295,15 @@ function directEagerEdges(file: string, tree: SourceTreeReader): string[] {
   }
   memo.directEdges.set(file, resolvedEdges);
   return resolvedEdges;
+}
+
+function weightOf(file: string, tree: SourceTreeReader): number {
+  const memo = memoOf(tree);
+  const cached = memo.weights.get(file);
+  if (cached !== undefined) return cached;
+  const weight = parsedModuleOf(file, tree.readFile(file)).topLevelStatements;
+  memo.weights.set(file, weight);
+  return weight;
 }
 
 /**

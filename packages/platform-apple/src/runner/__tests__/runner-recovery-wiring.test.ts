@@ -11,11 +11,8 @@ import { appleRunnerTestHost } from '../test-host.ts';
 import { withAppleRunnerProvider } from '../runner-provider.ts';
 import { classifyRunnerReportedError, type RunnerCommand } from '../runner-contract.ts';
 import { RUNNER_REPLY_LOST_REASON } from '../runner-error-classification.ts';
-import {
-  createRunnerPhaseBudget,
-  requireRunnerPhaseRemainingMs,
-  resolveExpectedRunnerCacheMetadata,
-} from '../runner-cache-metadata.ts';
+import { resolveExpectedRunnerCacheMetadata } from '../runner-cache-metadata.ts';
+import { createRunnerPhaseBudget, requireRunnerPhaseRemainingMs } from '../runner-phase-budget.ts';
 import { captureDiagnostics } from './runner-session-fixtures.ts';
 import {
   startFakeRunnerServer,

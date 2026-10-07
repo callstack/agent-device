@@ -22,7 +22,6 @@ import type {
   RunnerCacheRefusal,
 } from './runner-artifact-manifest.ts';
 export {
-  requireRunnerPhaseRemainingMs,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerArchBuildSettings,
   resolveRunnerBuildLocationSettings,
@@ -32,9 +31,13 @@ export {
   resolveRunnerPerformanceBuildSettings,
   resolveRunnerSandboxBuildArgs,
   resolveRunnerSigningBuildSettings,
-  type RunnerPhaseBudget,
   type RunnerXctestrunCacheMetadata,
 } from './runner-cache-metadata.ts';
+export {
+  createRunnerPhaseBudget,
+  requireRunnerPhaseRemainingMs,
+  type RunnerPhaseBudget,
+} from './runner-phase-budget.ts';
 
 const RUNNER_XCTESTRUN_CACHE_LOCK_TIMEOUT_MS = 10 * 60_000;
 const RUNNER_XCTESTRUN_CACHE_LOCK_POLL_MS = 100;
