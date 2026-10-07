@@ -28,9 +28,10 @@ Public route policy:
   Host drops any identity a client claims (tenant headers and body fields) and forwards the
   credential's principal to the daemon, which isolates sessions under it.
   Refused with 403 and a typed details.reason:
-    host-admin-refused               /admin/* routes and macos-app lease allocation
-    host-path-refused                inputs naming a path on the Host machine
+    host-admin-refused               macos-app lease allocation (/admin/* is not served)
+    host-path-refused                inputs naming a path on the Host machine, batch steps included
     host-component-download-refused  allowDownload
+    host-script-refused              replay and test, whose nested actions Host cannot check
   Anonymous /health shows only ok, service and rpcProtocolVersion.
 
 Worker:

@@ -82,6 +82,33 @@ test('a client-sent principal header never reaches the daemon', async () => {
   expect(upstream.requests[0]?.headers.has('x-agent-device-principal')).toBe(false);
 });
 
+test('an embedder admits authorized rpc params before they are forwarded', async () => {
+  const upstream = recordingUpstream(async (request) => Response.json(await request.json()));
+  const proxy = createDaemonProxy({
+    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamToken: 'daemon-secret',
+    clientToken: 'client-secret',
+    upstreamFetch: upstream.fetch,
+    admitRpc: ({ params }) =>
+      params.command === 'refuse'
+        ? new Response(null, { status: 403 })
+        : { ...params, rewritten: true },
+  });
+  const rpc = (command: string) =>
+    rpcRequest({ jsonrpc: '2.0', id: 1, method: 'agent-device.command', params: { command } });
+
+  expect((await proxy.handle(rpc('refuse'))).status).toBe(403);
+  expect(upstream.requests).toHaveLength(0);
+  const forwarded = (await (await proxy.handle(rpc('devices'))).json()) as {
+    params: Record<string, unknown>;
+  };
+  expect(forwarded.params).toMatchObject({
+    command: 'devices',
+    rewritten: true,
+    token: 'daemon-secret',
+  });
+});
+
 test('a request without the client token never reaches the upstream transport', async () => {
   const upstream = recordingUpstream(() => Response.json({}));
   const proxy = proxyWith(upstream.fetch);

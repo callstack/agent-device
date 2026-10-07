@@ -8,6 +8,7 @@ export const HOST_PATH_INPUT_KEYS = [
   'saveScript',
   'sessionSaveScript',
   'baseline',
+  'launchConsole',
   'artifactsDir',
   'stepsFile',
   'searchPath',

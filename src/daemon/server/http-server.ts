@@ -756,7 +756,10 @@ export async function createDaemonHttpServer(options: {
         };
         requestAbortRegistration = registerRequestAbort(requestIdForCleanup);
         const clientDeclaredTenant = daemonRequest.meta?.tenantId ?? daemonRequest.flags?.tenant;
-        const hostPrincipal = readHostPrincipal(req.headers);
+        // The principal counts only on a request that already holds the daemon token.
+        const hostPrincipal = enforceDaemonToken(daemonRequest.token, token)
+          ? undefined
+          : readHostPrincipal(req.headers);
 
         const authResult = await runHttpAuthHook(authHook, {
           headers: req.headers,

@@ -368,14 +368,6 @@ export function isRemoteTempArtifactPath(
   );
 }
 
-/** Any location `buildRemoteTempArtifactPath` or `buildRemoteTempArtifactDirPath` can produce. */
-export function isRemoteTempArtifactLocation(value: string): boolean {
-  return REMOTE_TEMP_ARTIFACT_LOCATION.test(value);
-}
-
-const REMOTE_TEMP_ARTIFACT_LOCATION =
-  /^\/tmp\/agent-device-[a-z][a-z-]*-\d+-[a-z0-9]+(?:\.[A-Za-z0-9]+)?$/;
-
 function remoteTempArtifactStem(prefix: string): string {
   return `agent-device-${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }

@@ -64,13 +64,7 @@ type MacOsAppLeaseRule =
  * Inputs that name a path on the daemon host or launch something beside the app. A client of a
  * remote daemon cannot see the host's disk, so none of these has a use under the lease.
  */
-const HOST_INPUT_KEYS = [
-  ...HOST_PATH_INPUT_KEYS,
-  'launchConsole',
-  'launchArgs',
-  'launchUrl',
-  'bundleUrl',
-] as const;
+const HOST_INPUT_KEYS = [...HOST_PATH_INPUT_KEYS, 'launchArgs', 'launchUrl', 'bundleUrl'] as const;
 
 /** Flags that pick a device other than the leased app's own; a lease never takes a device selector. */
 const DEVICE_SELECTOR_KEYS = [

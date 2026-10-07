@@ -129,17 +129,18 @@ test('a tenant claim on a lease method is dropped', async (t) => {
   assert.equal(host.admitted[0]?.meta?.runId, 'verify-812');
 });
 
-test('administration routes are refused with a typed reason', async (t) => {
+test('administration routes are not served, with or without the token', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const host = await startHostOverDaemon(t);
 
   for (const route of ['/admin/leases', '/admin/human-control/holds']) {
-    const response = await fetch(`${host.baseUrl}${route}`, {
-      headers: { authorization: `Bearer ${host.credential.token}` },
-    });
-    const body = (await response.json()) as Record<string, any>;
-    assert.equal(response.status, 403, route);
-    assert.equal(body.details?.reason, 'host-admin-refused', route);
+    const variants: Record<string, string>[] = [
+      {},
+      { authorization: `Bearer ${host.credential.token}` },
+    ];
+    for (const headers of variants) {
+      assert.equal((await fetch(`${host.baseUrl}${route}`, { headers })).status, 404, route);
+    }
   }
 });
 
@@ -147,12 +148,13 @@ test('allocating a host-administered macos-app lease is refused', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const host = await startHostOverDaemon(t);
 
-  const response = await host.rpc('agent_device.lease.allocate', {
-    runId: 'verify-812',
-    backend: 'macos-app',
-  });
-
-  assertRefused(response, 'host-admin-refused', host.admitted);
+  for (const backend of ['macos-app', ' MacOS-App ']) {
+    const response = await host.rpc('agent_device.lease.allocate', {
+      runId: 'verify-812',
+      backend,
+    });
+    assertRefused(response, 'host-admin-refused', host.admitted);
+  }
 });
 
 test('an install source naming a Host path is refused', async (t) => {
@@ -182,6 +184,44 @@ test('a flag naming a Host path is refused, and a daemon temp artifact location 
     flags: { out: '/tmp/agent-device-screenshot-1767225600000-k3x9qa.png' },
   });
   assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
+});
+
+test('Host paths hidden in URLs, uploads, batches and other commands are refused', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  const host = await startHostOverDaemon(t);
+  const planted = '/tmp/agent-device-evil-1-a.xctestrun';
+  const cases: Array<[string, Record<string, unknown>]> = [
+    [
+      'host-path-refused',
+      { command: 'screenshot', positionals: ['https://x/../../Users/op/.zshrc'] },
+    ],
+    [
+      'host-path-refused',
+      {
+        command: 'screenshot',
+        positionals: ['/Users/op/.zshrc'],
+        meta: { uploadedArtifactId: 'x' },
+      },
+    ],
+    [
+      'host-path-refused',
+      { command: 'batch', flags: { batchSteps: [{ command: 'screenshot', positionals: ['/x'] }] } },
+    ],
+    [
+      'host-path-refused',
+      { command: 'trace', positionals: ['stop', '/Users/op/.ssh/authorized_keys'] },
+    ],
+    [
+      'host-path-refused',
+      { command: 'push', positionals: ['com.example', '/Users/op/config.json'] },
+    ],
+    ['host-path-refused', { command: 'open', flags: { launchConsole: '/Users/op/.zprofile' } }],
+    ['host-path-refused', { command: 'open', flags: { iosXctestrunFile: planted } }],
+    ['host-script-refused', { command: 'replay', positionals: ['flow.ad'] }],
+  ];
+  for (const [reason, params] of cases) {
+    assertRefused(await host.command(params), reason, host.admitted);
+  }
 });
 
 test('a request that asks the allocator to download components is refused', async (t) => {

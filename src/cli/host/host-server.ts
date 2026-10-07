@@ -1,7 +1,7 @@
 import http from 'node:http';
 import https from 'node:https';
 import { createDaemonProxy, createDaemonProxyRequestListener } from '@agent-device/proxy';
-import { createHostFrontEnd, withHostPrincipal } from './host-front-end.ts';
+import { admitHostRpc, createHostFrontEnd, withHostPrincipal } from './host-front-end.ts';
 import type { HostServiceCredential } from './service-credential.ts';
 
 export type HostTlsMaterial = Readonly<{ cert: Buffer; key: Buffer }>;
@@ -22,6 +22,7 @@ export function createHostServer(options: {
     upstreamToken: options.upstreamToken,
     clientToken: options.credential.token,
     upstreamFetch: (request) => fetch(withHostPrincipal(request, options.credential.principal)),
+    admitRpc: admitHostRpc,
   });
   const listener = createDaemonProxyRequestListener(createHostFrontEnd(proxy, options.credential));
   return options.tls
