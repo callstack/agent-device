@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted (2026-10-07). Decision spike for #3278 (umbrella #3276, workstream 2), measured at
-`7dda0c2bf`. No rule moves. The spike's harness is temporary; see [Deletion](#deletion).
+Accepted (2026-10-07). Spike for #3278 (umbrella #3276), measured by the harness at `d9959f510`
+(production tree of `7dda0c2bf`). No rule moves; the harness is temporary ([Deletion](#deletion)).
 
 ## Rules at a glance
 
@@ -11,17 +11,16 @@ Accepted (2026-10-07). Decision spike for #3278 (umbrella #3276, workstream 2), 
   dependency-cruiser 18.5 nor fallow 3.32 replaces them.
 - Every layering rule reads one edge model. Do not enforce a subset from a second import graph: both
   engines disagree with it (tables below), and about 20 AST and ownership rules keep it alive.
-- Do not upgrade fallow to 3.x to get `boundaries`.
 - Fix the custom gap at the shared parser: `parseImports` misses TypeScript `import('x').T` type
   positions (9 file pairs). The fix may move the R9 type-cycle ratchet.
-- Revisit when a [trigger](#revisit-triggers) fires, re-running the harness first.
+- Do not upgrade fallow to 3.x for `boundaries`; revisit on a [trigger](#revisit-triggers).
 
 ## Measured
 
-`scripts/layering/boundary-engine-spike.ts` produces every number below (usage in its header). It
-generates both engine configs from `TARGET_DAG_RANK` and the rule tables, and refuses to run unless
-the production roots hold exactly the tracked tree (1,837 files, 41 zones). Recorded R6 and R78
-edges go to each engine's known-violations baseline.
+`scripts/layering/boundary-engine-spike.ts` produces the edge-set, parity, clean-tree and runtime
+numbers; the deletion table counts lines of the named code. The harness builds both engine configs
+from `TARGET_DAG_RANK` and the rule tables, runs only on exactly the tracked production tree (1,837
+files, 41 zones), and gives recorded R6 and R78 edges to each engine's known-violations baseline.
 
 ### Edge-set diff against `resolveImportEdges`
 
@@ -36,19 +35,18 @@ edges go to each engine's known-violations baseline.
 The 9 extra pairs are `import('./x').T` type positions custom misses; both engines are right.
 
 The 3.1.1 cross-check missed 88 dynamic and type-only edges; 18.5 misses none but mislabels 46 pairs
-(33 dynamic → type, 8 dynamic+type → type, 5 dynamic+value → value, with tsc or swc). It deduplicates
-a file's dependencies on `(specifier, moduleSystem, type-only flag)` (`getDependencyUniqueKey`, not
-configurable), so `typeof import('./x').f` and `await import('./x')` keep whichever comes first.
+(33 dynamic → type, 8 dynamic+type → type, 5 dynamic+value → value, with tsc or swc): its
+hardcoded `getDependencyUniqueKey` dedupes on `(specifier, moduleSystem, type-only flag)`, so
+`typeof import('./x').f` and `await import('./x')` keep whichever comes first.
 
 fallow's value-versus-type split matches custom exactly (6,136 runtime pairs each), with no dynamic
 kind. Its boundary check follows `export type *` barrels to the declaring module, so
-`src/commands/cli-runner.ts → src/agent-device-client.ts` counts as `commands → client`: one more R6
-finding. Clean-tree findings: custom 0, depcruise 10 (3 R6 survivors, 7 recorded R78 edges), fallow 11.
+`src/commands/cli-runner.ts → src/agent-device-client.ts` counts as `commands → client`, one more R6
+finding. Clean tree: custom 0, depcruise 10 (3 R6 survivors, 7 recorded R78 edges), fallow 11.
 
 ### Planted-violation parity
 
-`flag` rows must be reported; `pass` rows are the closest negative the custom rule admits. ✗ is a
-miss on `flag` or a false positive on `pass`.
+`pass` rows are the closest negative custom admits; ✗ is a missed `flag` or a flagged `pass`.
 
 | Plant | Expect | custom | depcruise | fallow |
 | --- | --- | --- | --- | --- |
@@ -84,13 +82,13 @@ fallow's R77 rule pack carries an id, message and line. On the stale row, depcru
 
 ### Runtime
 
-Medians of 5 runs after a warm-up, on a shared host (load average about 9):
+Medians of 5 runs after a warm-up, on a shared host (load average 9–17):
 
 | | custom | depcruise | fallow |
 | --- | --- | --- | --- |
-| graph build | 0.75 s, shared and kept | 1.63 s (tsc), 1.66 s (swc) | 3.26 s standalone |
+| graph build | 0.74 s, shared and kept | 1.66 s (tsc), 1.56 s (swc) | 3.04 s standalone |
 | the eight rules | 0.10 s | included | included |
-| marginal CI cost | 0.10 s | +1.6 s, a second graph | +0.26 s in the repo's dead-code run (3.27 → 3.53 s) |
+| marginal CI cost | 0.10 s | +1.6 s, a second graph | none measurable in the repo's dead-code run (3.23 → 3.13 s) |
 
 ### Lines deletable
 
@@ -108,9 +106,9 @@ Rule plus test lines a full migration would delete. The resolver and the R4/R5/R
 | R14, R71 | `retired-paths-policy.ts` | 218 | TS only (R14 gap) | TS only, generic |
 | shared | registry, imports, success line in `check.ts` | ≈25 | | |
 
-About 1,224 lines, half of them tests; a migration adds about 110 lines of generated config. An
-exact-edge R6 baseline also changes policy: it rejects swapping one inversion for another within a
-pair, which the per-pair count ratchet admits.
+About 1,224 lines, half of them tests; a migration adds a generator like the harness's
+`depcruiseConfig` and helpers (122 lines). An exact-edge R6 baseline also changes policy: it rejects
+swapping one inversion for another within a pair, which the per-pair count ratchet admits.
 
 ## Decision
 
@@ -122,10 +120,10 @@ the custom graph:
   fail on stale entries, and needs `typescript@<7` or `@swc/core` beside TypeScript 7 (+1.6 s).
   Adopting it for four rules would delete about 430 lines and put two disagreeing import graphs
   behind one gate.
-- **fallow** is already a dependency, adds about 0.3 s, and has the best stale gate. It has no
-  dynamic kind, so R5's and R77's lazy-seam exemption becomes violations or misses. Its boundary
-  findings carry no rule id or hint, its rule packs skip files no entry point reaches, and 3.x rejects
-  the 73 `comment` fields in `.fallowrc.json`.
+- **fallow** is already a dependency, adds no measurable time (±0.3 s between runs), and has the
+  best stale gate. With no dynamic kind, R5's and R77's lazy-seam exemption becomes violations or
+  misses. Its boundary findings carry no rule id or hint, its rule packs skip files no entry point
+  reaches, and 3.x rejects the 73 `comment` fields in `.fallowrc.json`.
 
 ## Revisit triggers
 
@@ -136,6 +134,6 @@ the custom graph:
 
 ## Deletion
 
-`scripts/layering/boundary-engine-spike.ts` is not a gate, and nothing keeps it compiling. The change
-that evaluates a revisit trigger re-runs it, updates the tables here, and deletes it together with
-any migrated rule's code from the deletion table.
+`scripts/layering/boundary-engine-spike.ts` is not a gate, and nothing keeps it compiling. The
+change that evaluates a revisit trigger re-runs it, updates the tables here, and deletes it together
+with any migrated rule's code from the deletion table.
