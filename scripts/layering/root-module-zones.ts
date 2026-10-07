@@ -40,9 +40,7 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/backend-snapshot-options.ts',
     'src/backend.ts',
     'src/io.ts',
-    'src/runtime-command-surface.ts',
     'src/runtime-contract.ts',
-    'src/runtime-factory.ts',
     'src/runtime.ts',
   ],
   // The platform composition the daemon, CLI and SDK import eagerly. It shares the zone with its
