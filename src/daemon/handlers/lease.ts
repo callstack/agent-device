@@ -25,6 +25,7 @@ import {
   leaseScopeToAllocateRequest,
   leaseScopeToHeartbeatRequest,
   leaseScopeToReleaseRequest,
+  type LeaseScope,
 } from '@agent-device/contracts/lease-scope';
 import { AppError, createRequestCanceledError, errorMessage } from '@agent-device/kernel/errors';
 import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
@@ -33,6 +34,11 @@ import { listDownloadableArtifacts } from '../artifact-tracking.ts';
 import { providerSessionIdFromData } from '../provider-session-ownership.ts';
 import type { DaemonProviderCredentials } from '../../provider-credential-fingerprint.ts';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
+import {
+  hostShapeAllocationUnavailable,
+  readHostShapeRequest,
+  type HostShapeAllocator,
+} from '../host-shape-allocation.ts';
 
 type LeaseHandlerArgs = {
   req: DaemonRequest;
@@ -44,6 +50,7 @@ type LeaseHandlerArgs = {
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  hostShapeAllocator?: HostShapeAllocator;
 };
 
 export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<DaemonResponse | null> {
@@ -73,6 +80,10 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       };
     }
     case 'lease_allocate': {
+      const hostPrincipal = req.internal?.hostPrincipal;
+      if (hostPrincipal) {
+        return await allocateHostShapeLease(args, hostPrincipal, leaseScope);
+      }
       assertTenantMayAllocate(leaseScope.leaseBackend);
       assertProviderRuntimeAvailable(
         leaseScope.leaseProvider,
@@ -169,6 +180,40 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     }
     default:
       return null;
+  }
+}
+
+/**
+ * A Host lease is always a fresh managed device (ADR 0021 §5): the allocator provisions it from
+ * the shape first, and only then is the Host lease published with the device it bound.
+ */
+async function allocateHostShapeLease(
+  args: LeaseHandlerArgs,
+  principal: string,
+  leaseScope: LeaseScope,
+): Promise<DaemonResponse> {
+  const shape = readHostShapeRequest(args.req.flags);
+  const allocator = args.hostShapeAllocator;
+  if (!allocator) throw hostShapeAllocationUnavailable();
+  const runId = leaseScope.runId ?? '';
+  const requestId = args.req.meta?.requestId;
+  const { deviceKey } = await allocator.allocate({
+    principal,
+    runId,
+    ...(leaseScope.clientId ? { clientId: leaseScope.clientId } : {}),
+    shape,
+    ...(leaseScope.leaseTtlMs !== undefined ? { ttlMs: leaseScope.leaseTtlMs } : {}),
+    signal: getRequestSignal(requestId) ?? new AbortController().signal,
+    deadline: Date.now() + LEASE_ALLOCATION_BUDGET_MS,
+  });
+  try {
+    const lease = args.leaseRegistry.allocateLease(
+      leaseScopeToAllocateRequest({ ...leaseScope, deviceKey }),
+    );
+    return { ok: true, data: { lease } };
+  } catch (error) {
+    await allocator.release({ principal, runId, deviceKey });
+    throw error;
   }
 }
 
@@ -327,7 +372,7 @@ function assertProviderCredentialsUnchanged(
 
 async function listArtifactsForRequest(
   req: DaemonRequest,
-  leaseScope: ReturnType<typeof resolveLeaseScope>,
+  leaseScope: LeaseScope,
   leaseRegistry: LeaseRegistry,
   cloudArtifactProvider: CloudArtifactProvider | undefined,
 ): Promise<AgentArtifactsResult> {
@@ -345,7 +390,7 @@ async function listArtifactsForRequest(
 }
 
 function shouldListDaemonArtifacts(
-  leaseScope: ReturnType<typeof resolveLeaseScope>,
+  leaseScope: LeaseScope,
   providerSessionId: string | undefined,
 ): boolean {
   return isProxyLeaseScope(leaseScope) || (!leaseScope.leaseProvider && !providerSessionId);
@@ -362,7 +407,7 @@ async function listDaemonArtifacts(tenantId: string | undefined): Promise<AgentA
 }
 
 async function listCloudArtifactsForRequest(
-  leaseScope: ReturnType<typeof resolveLeaseScope>,
+  leaseScope: LeaseScope,
   providerSessionId: string | undefined,
   leaseRegistry: LeaseRegistry,
   cloudArtifactProvider: CloudArtifactProvider | undefined,
@@ -396,7 +441,7 @@ async function listCloudArtifactsForRequest(
 
 function resolveProviderSession(
   leaseRegistry: LeaseRegistry,
-  leaseScope: ReturnType<typeof resolveLeaseScope>,
+  leaseScope: LeaseScope,
   providerSessionId: string | undefined,
 ): ReturnType<LeaseRegistry['resolveProviderSession']> {
   if (!providerSessionId) return undefined;

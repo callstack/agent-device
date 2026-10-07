@@ -64,8 +64,17 @@ export type DaemonHealthPayload = {
   hostArch?: string;
   /** The lease backends this daemon admits; a host checks it before relying on one. */
   leaseBackends?: readonly string[];
+  /** Optional capabilities a client checks before sending a request that relies on one. */
+  features?: readonly DaemonHealthFeature[];
   upstream?: unknown;
 };
+
+/**
+ * Host allocates a fresh device per lease from a shape (`--device "iPhone 16"`) instead of a
+ * local inventory identity (ADR 0021 §5). A client sends a shape only to a peer advertising it.
+ */
+export const DAEMON_HOST_DEVICE_SHAPE_FEATURE = 'device-shape';
+export type DaemonHealthFeature = typeof DAEMON_HOST_DEVICE_SHAPE_FEATURE;
 
 export function buildDaemonHealthPayload(
   service: DaemonHealthPayload['service'],
@@ -75,6 +84,7 @@ export function buildDaemonHealthPayload(
     instanceId?: string;
     hostArch?: string;
     leaseBackends?: readonly string[];
+    features?: readonly DaemonHealthFeature[];
   } = {},
 ): DaemonHealthPayload {
   return {
@@ -85,6 +95,7 @@ export function buildDaemonHealthPayload(
     ...(options.instanceId !== undefined ? { instanceId: options.instanceId } : {}),
     ...(options.hostArch !== undefined ? { hostArch: options.hostArch } : {}),
     ...(options.leaseBackends !== undefined ? { leaseBackends: options.leaseBackends } : {}),
+    ...(options.features !== undefined ? { features: options.features } : {}),
     ...(options.upstream !== undefined ? { upstream: options.upstream } : {}),
   };
 }

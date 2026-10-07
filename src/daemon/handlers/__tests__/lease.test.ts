@@ -21,6 +21,11 @@ import {
   createControlLatch,
   humanControlRequest,
 } from '../../__tests__/human-control-fixtures.ts';
+import type { HostShapeAllocator } from '../../host-shape-allocation.ts';
+import {
+  createScriptedManagedDeviceAllocator,
+  type ScriptedManagedDeviceAllocator,
+} from '../../../__tests__/test-utils/managed-device-allocator.fixtures.ts';
 
 for (const operation of ['allocate', 'release'] as const) {
   test(`host activation drains provider lease ${operation} before reporting active`, async () => {
@@ -553,4 +558,138 @@ test('a tenant cannot allocate a macos-app lease', async () => {
       error.code === 'UNAUTHORIZED' && error.details?.reason === 'MACOS_APP_LEASE_HOST_ALLOCATED',
   );
   assert.deepEqual(registry.listActiveLeases(), []);
+});
+
+const HOST_PRINCIPAL = 'host-svc-3f9c2a1b';
+
+/** The Host seam over the scripted allocator port, iOS first; the lease side owns the real one. */
+function hostAllocatorOverScriptedPort(port: ScriptedManagedDeviceAllocator) {
+  const released: string[] = [];
+  const allocator: HostShapeAllocator = {
+    allocate: async ({ principal, runId, shape, deadline, signal }) => {
+      const status = await port.requestLease({
+        requesterId: `${principal}/${runId}`,
+        requestGeneration: 1,
+        attemptKey: `${principal}/${runId}/1`,
+        shape,
+        deadlineAtMs: deadline,
+        admission: 'fail-fast',
+        activation: 'direct',
+        signal,
+      });
+      assert.equal(status.state, 'granted');
+      return { deviceKey: `${shape.platform}:mobile:${status.lease?.device.address}` };
+    },
+    release: async ({ deviceKey }) => {
+      released.push(deviceKey);
+    },
+  };
+  return { allocator, released };
+}
+
+function grantedSimulator(address: string) {
+  return {
+    requesterId: `${HOST_PRINCIPAL}/verify-812`,
+    requestGeneration: 1,
+    attemptKey: `${HOST_PRINCIPAL}/verify-812/1`,
+    state: 'granted',
+    lease: {
+      id: 'simlock-lease-1',
+      ttlDeadline: Date.now() + 60_000,
+      device: { address },
+      environment: { SIMLOCK_IOS_DEVICE_SET: '/var/simlock/devices' },
+    },
+  };
+}
+
+function hostAllocateRequest(flags: DaemonRequest['flags']): DaemonRequest {
+  return {
+    token: 'daemon-token',
+    session: 'default',
+    command: 'lease_allocate',
+    positionals: [],
+    flags,
+    meta: { tenantId: HOST_PRINCIPAL, runId: 'verify-812', clientId: 'ab12cd34' },
+    internal: { hostPrincipal: HOST_PRINCIPAL },
+  };
+}
+
+test('a Host lease is allocated by shape through the allocator and bound to its device', async () => {
+  const port = createScriptedManagedDeviceAllocator({
+    script: { requestLease: [grantedSimulator('SIM-UDID-1')] },
+  });
+  const { allocator } = hostAllocatorOverScriptedPort(port);
+  const registry = new LeaseRegistry();
+
+  const response = await handleLeaseCommands({
+    req: hostAllocateRequest({ platform: 'ios', device: 'iPhone 16' }),
+    sessionName: 'default',
+    sessionStore: makeSessionStore('agent-device-host-shape-'),
+    leaseRegistry: registry,
+    hostShapeAllocator: allocator,
+  });
+
+  assert.equal(response?.ok, true);
+  const input = port.calls[0]?.input as { requesterId: string; shape: unknown };
+  assert.deepEqual(input.shape, { platform: 'ios', deviceType: 'iPhone 16' });
+  assert.equal(input.requesterId, `${HOST_PRINCIPAL}/verify-812`);
+  const lease = (response?.ok ? response.data : undefined)?.lease as DeviceLease;
+  assert.equal(lease.deviceKey, 'ios:mobile:SIM-UDID-1');
+  assert.equal(lease.tenantId, HOST_PRINCIPAL);
+});
+
+test('a Host lease without an allocator is refused before any lease is published', async () => {
+  const registry = new LeaseRegistry();
+  await assert.rejects(
+    handleLeaseCommands({
+      req: hostAllocateRequest({ platform: 'ios', device: 'iPhone 16' }),
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-host-shape-'),
+      leaseRegistry: registry,
+    }),
+    (error) =>
+      error instanceof AppError && error.details?.reason === 'host-shape-allocation-unavailable',
+  );
+  assert.equal(registry.listActiveLeases().length, 0);
+});
+
+test('a Host lease is requested by type, never by an inventory identity', async () => {
+  const port = createScriptedManagedDeviceAllocator();
+  const { allocator } = hostAllocatorOverScriptedPort(port);
+  await assert.rejects(
+    handleLeaseCommands({
+      req: hostAllocateRequest({ platform: 'ios', device: 'iPhone 16', udid: 'SIM-UDID-9' }),
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-host-shape-'),
+      leaseRegistry: new LeaseRegistry(),
+      hostShapeAllocator: allocator,
+    }),
+    (error) => error instanceof AppError && error.details?.reason === 'host-shape-invalid',
+  );
+  assert.equal(port.calls.length, 0);
+});
+
+test('an allocation whose Host lease cannot be published is given back', async () => {
+  const port = createScriptedManagedDeviceAllocator({
+    script: { requestLease: [grantedSimulator('SIM-UDID-1')] },
+  });
+  const { allocator, released } = hostAllocatorOverScriptedPort(port);
+  const registry = new LeaseRegistry();
+  registry.allocateLease({
+    tenantId: 'someone-else',
+    runId: 'other-run',
+    leaseBackend: 'ios-simulator',
+    deviceKey: 'ios:mobile:SIM-UDID-1',
+  });
+
+  await assert.rejects(
+    handleLeaseCommands({
+      req: hostAllocateRequest({ platform: 'ios', device: 'iPhone 16' }),
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-host-shape-'),
+      leaseRegistry: registry,
+      hostShapeAllocator: allocator,
+    }),
+  );
+  assert.deepEqual(released, ['ios:mobile:SIM-UDID-1']);
 });

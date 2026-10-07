@@ -34,6 +34,14 @@ Public route policy:
     host-script-refused              replay and test, whose nested actions Host cannot check
   Anonymous /health shows only ok, service and rpcProtocolVersion.
 
+Requesting a device:
+  agent-device open com.example.app --platform ios --device "iPhone 16"
+  agent-device open com.example.app --platform android --device "Pixel 7" --os-version 15
+  On Host, --device names a device type. Host allocates a fresh device for every lease instead
+  of resolving the name against inventory; never pass a UDID or serial.
+  A Host whose daemon has no device allocator refuses this with host-shape-unsupported before
+  any lease is requested.
+
 Worker:
   agent-device connect proxy --daemon-base-url https://host.example:8443/agent-device --daemon-auth-token <token>
 

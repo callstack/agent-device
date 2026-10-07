@@ -941,6 +941,10 @@ async function resolveProxyLeaseState(options: {
       'No active proxy device lease for this session; run open first.',
     );
   }
+  // Loaded on demand so the daemon client it probes with stays out of the CLI's eager closure.
+  const { resolveHostShapeLeaseState } = await import('./host-device-shape-connection.ts');
+  const hostShapeState = await resolveHostShapeLeaseState(options.state, options.flags);
+  if (hostShapeState) return { state: hostShapeState };
   const device = await resolveSelectedDevice(options.client, options.flags);
   const scope = resolveConnectionDeviceScope(device);
   return {

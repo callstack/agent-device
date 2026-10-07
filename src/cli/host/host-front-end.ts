@@ -81,7 +81,13 @@ async function handleHostRequest(
   const response = await proxy.handle(request);
   if (!response.ok) return response;
   const payload = (await response.json()) as Record<string, unknown>;
-  return Response.json({ ...payload, service: HOST_SERVICE }, { status: response.status });
+  // The daemon owns the allocator, so its health is what says whether Host can allocate by shape.
+  const upstream = payload.upstream as Record<string, unknown> | undefined;
+  const features = Array.isArray(upstream?.features) ? { features: upstream.features } : {};
+  return Response.json(
+    { ...payload, service: HOST_SERVICE, ...features },
+    { status: response.status },
+  );
 }
 
 function hasHeaderToken(headers: Headers, token: string): boolean {
