@@ -2,6 +2,7 @@ import path from 'node:path';
 import { PLATFORMS } from '@agent-device/kernel/device';
 import { parseSync } from 'oxc-parser';
 import { destructuredDynamicImportBindings, visitAst } from './layering-ast.ts';
+import { declaredRootModuleZone } from './root-module-zones.ts';
 
 export type ImportEdge = {
   spec: string;
@@ -56,17 +57,24 @@ const TARGET_DAG_RANK = new Map([
   ['selectors', 1],
   ['session-journal', 1],
   ['core', 2],
+  ['daemon-contracts', 2],
+  ['command-runtime', 3],
   ['commands', 3],
   ['mcp', 3],
-  ['ai-sdk', 4],
   ['client', 4],
   ['daemon-server', 4],
   ['metro', 4],
+  ['platform-runtime', 4],
   ['remote', 4],
-  ['sdk', 4],
   ['plugins', 4],
   ['daemon-client', 5],
-  ['cli', 6],
+  // The SDK entries publish the typed client, which reaches the daemon through daemon-client.
+  ['ai-sdk', 6],
+  ['sdk', 6],
+  ['cli', 7],
+  // Reached only through `loadHost`'s import(), so every spine zone ranks below it.
+  ['platform-runtime-host', 8],
+  ['(root)', 9],
 ]);
 
 export const RANKED_ZONES: ReadonlySet<string> = new Set(TARGET_DAG_RANK.keys());
@@ -81,25 +89,19 @@ export function zoneRank(zone: string): number | null {
 }
 
 // Zones deliberately left OUT of the src folder spine. They are NOT unenforced:
-// every file remains under the global value-cycle rule (R4). `(root)` composes
-// the spine from above; extracted package zones are held by R11 package exports
-// and the no-root-back-import rule instead of their former src folder rank.
+// every file remains under the global value-cycle rule (R4) and the zone-level value DAG
+// (R80). Extracted package zones are held by R11 package exports and the no-root-back-import
+// rule instead of a src folder rank.
 //
-// The satellite zones used to be listed here too, on the grounds that ranking them would
-// invent an order the architecture had not committed to. Once `(root)` was emptied of shared
-// contracts, every one of them turned out to have a consistent rank already — so the order was
-// there, just unasserted. The former `utils` zone was retired into owning modules and packages.
-// Extracted workspace packages are not src/ zones: R11 owns their physical seams, and their zone
-// names only appear in workspace-aware graphs. The platform packages additionally carry R13's
+// Every other src/ zone is ranked, `(root)` included: root modules declare their zone in
+// `root-module-zones.ts`, and `(root)` ranks above the spine. Extracted workspace packages are
+// not src/ zones: R11 owns their physical seams, and their zone names only appear in
+// workspace-aware graphs. The platform packages additionally carry R13's
 // exact-family/composition/laziness policy.
 export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
-  '(root)',
   // Stand-ins the bundler resolves in place of a dependency it deliberately omits. Nothing in
   // the production graph imports them, so ranking them would claim an edge the alias replaces.
   'vendor',
-  // Private implementation submodules of the canonical root composition. R13 owns their exact
-  // importer and concrete-platform authority; giving them a spine rank would duplicate that seam.
-  'platform-runtime',
   'kernel',
   'host-kit',
   'capture-kit',
@@ -294,7 +296,7 @@ export function targetDagZone(file: string): string {
   // #2342 relocated the daemon client to its own `src/daemon-client/` folder, so the
   // client zone now falls out of the folder itself; `src/daemon/` is server-only.
   if (file.startsWith('src/daemon/')) return 'daemon-server';
-  return topFolder(file);
+  return declaredRootModuleZone(file) ?? topFolder(file);
 }
 
 // The set of zones every production file resolves into. A zone that is neither ranked

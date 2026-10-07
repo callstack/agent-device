@@ -74,8 +74,8 @@ type-only inversions, R7 pins SessionState field ownership, and the shared selec
   (`daemon/interaction/internal/interaction-common.ts`, step 3) and the recorder boundary
   (`session-action-recorder.ts`, step 4). The two-pass structure is two call sites, not a scattered
   concern.
-- Still outside every rule: **dynamic** import direction (0 inversions today, nothing watching),
-  and anything inside a zone.
+- Still outside every rule: **dynamic** import direction, out of scope by decision with the reason
+  recorded at R5 in `scripts/layering/check.ts` (#3280), and anything inside a zone.
 
 ## 0. Where the inversions ended up (and why 5 is the floor for now)
 
@@ -262,6 +262,16 @@ from outside `daemon/`: `DaemonRequest` (8), `SessionAction` (7), `ReplaySuiteRe
 moving `DaemonRequest` is most of what §1's second cluster needs.
 
 ## 3. `(root)`: what is left is there for a reason
+
+> **Status after #3280:** the section below is historical. Every root module now declares its zone
+> in `scripts/layering/root-module-zones.ts`, `(root)` ranks above the spine and holds only
+> `bin.ts`, `cli.ts` and `daemon.ts`, and R80 asserts that the zone graph of static value imports is
+> acyclic. That reduces `(root)` in the logical graph only: the modules still live directly under
+> `src/`, and the declaration is a bridge whose rows go as groups move into zone folders or
+> packages. The physical moves remain outstanding, starting with #3294. Ranking the composition roots did not weaken R2: it still rejects a direct `daemon/` ->
+> `commands/` import, and the daemon reaches the command surface through the ranked
+> `command-runtime` zone, which the zone graph now shows instead of hiding. The SDK entries rank
+> above `daemon-client`, because the typed client they publish reaches the daemon through it.
 
 13 files: 11 published `package.json` entrypoints, the three executables (`bin.ts`, `cli.ts`,
 `daemon.ts`), and the composition roots — `runtime.ts`, `agent-device-client.ts`,
