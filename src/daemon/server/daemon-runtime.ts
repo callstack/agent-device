@@ -39,7 +39,7 @@ import type { DaemonInvokeFn } from '../daemon-request.ts';
 import type { SessionRef, SessionState } from '../session-state.ts';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
-import { withDaemonDiagnosticsScope } from '../../daemon-diagnostics-scope.ts';
+import { withDaemonDiagnosticsScope } from '../../daemon-contracts/daemon-diagnostics-scope.ts';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
 import { finalizeDaemonLeases } from './daemon-lease-finalizer.ts';

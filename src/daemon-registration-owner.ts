@@ -22,7 +22,7 @@ import {
   type ProcessLockAcquisition,
 } from '@agent-device/host-kit/file';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
+import { withDaemonDiagnosticsScope } from './daemon-contracts/daemon-diagnostics-scope.ts';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import {
   resolveDaemonPaths,
