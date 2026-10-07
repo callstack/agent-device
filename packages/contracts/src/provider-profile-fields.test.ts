@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   rejectRefusedProviderProfileFields,
+  requireResolvedProfilePlatform,
+  requireResolvedProfileValue,
   type ProviderProfileFieldDeclaration,
 } from './provider-profile-fields.ts';
 
@@ -75,4 +77,27 @@ test('every refused field is reported at once', () => {
       JSON.stringify(error.details?.flags) ===
         '["--provider-os-version","--provider-geo-location","--provider-no-resign-app"]',
   );
+});
+
+test('a saved profile missing a required value asks for a reconnect, not a flag', () => {
+  assert.equal(
+    requireResolvedProfileValue('Pixel 8', 'Fake Cloud profile missed device.'),
+    'Pixel 8',
+  );
+  assert.equal(requireResolvedProfilePlatform('ios', 'Fake Cloud'), 'ios');
+  for (const run of [
+    () => requireResolvedProfileValue(undefined, 'Fake Cloud profile missed device.'),
+    () => requireResolvedProfilePlatform('web', 'Fake Cloud'),
+    () => requireResolvedProfilePlatform(undefined, 'Fake Cloud'),
+  ]) {
+    assert.throws(
+      run,
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'COMMAND_FAILED' &&
+        /^Fake Cloud profile missed/.test(error.message) &&
+        typeof error.details?.hint === 'string' &&
+        error.details.hint.startsWith('Reconnect'),
+    );
+  }
 });

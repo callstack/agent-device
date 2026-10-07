@@ -1,9 +1,5 @@
 import crypto from 'node:crypto';
-import {
-  BROWSERSTACK_CREDENTIAL_VARIABLES,
-  CLOUD_WEBDRIVER_PROVIDERS,
-  readBrowserStackCredentials,
-} from '@agent-device/provider-webdriver/providers';
+import { cloudWebDriverProviderDeclaration } from '@agent-device/provider-webdriver/providers';
 import type { LIMRUN_PROVIDER } from '@agent-device/provider-limrun';
 import type { EnvMap } from '@agent-device/kernel/source-value';
 import { readLimrunCredentialValues } from './provider-limrun-credentials.ts';
@@ -12,24 +8,12 @@ import { installedPlugins } from './plugins/store.ts';
 
 type CredentialValues = Readonly<Record<string, string | undefined>>;
 
-// Each provider's own reader, so the fingerprint sees exactly the values the provider uses. AWS
-// Device Farm is absent: it reads the AWS CLI credential chain, which no env hash identifies.
+// Limrun's reader narrows the variables to the leased platform; every other provider declares a
+// flat variable list, bundled or installed.
 const PROVIDER_CREDENTIAL_READERS: ReadonlyMap<
   string,
   (env: EnvMap, leaseBackend?: string) => CredentialValues
-> = new Map([
-  ['limrun' satisfies typeof LIMRUN_PROVIDER, readLimrunCredentialValues],
-  [
-    CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-    (env: EnvMap): CredentialValues => {
-      const { username, accessKey } = readBrowserStackCredentials(env);
-      return {
-        [BROWSERSTACK_CREDENTIAL_VARIABLES.username]: username,
-        [BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey]: accessKey,
-      };
-    },
-  ],
-]);
+> = new Map([['limrun' satisfies typeof LIMRUN_PROVIDER, readLimrunCredentialValues]]);
 
 /**
  * A versioned, non-reversible digest of the credentials a lease on `leaseBackend` reads from `env`,
@@ -43,8 +27,8 @@ export function providerCredentialFingerprint(
 ): string | undefined {
   const read = PROVIDER_CREDENTIAL_READERS.get(provider);
   if (read) return digest(read(env, leaseBackend));
-  // Whitespace-only counts as unset and other values are kept as is, as the plugin's requireEnv does.
-  const variables = pluginCredentialVariables(provider, env);
+  // Whitespace-only counts as unset and other values are kept as is, as the provider's requireEnv does.
+  const variables = declaredCredentialVariables(provider, env);
   return variables
     ? digest(
         Object.fromEntries(
@@ -54,9 +38,10 @@ export function providerCredentialFingerprint(
     : undefined;
 }
 
-// Read from the manifest, so neither the client nor the daemon evaluates plugin code.
-function pluginCredentialVariables(provider: string, env: EnvMap): readonly string[] | undefined {
-  if ((RESERVED_PLUGIN_PROVIDERS as readonly string[]).includes(provider)) return undefined;
+// Read from the declaration or manifest, so neither the client nor the daemon evaluates provider code.
+function declaredCredentialVariables(provider: string, env: EnvMap): readonly string[] | undefined {
+  if ((RESERVED_PLUGIN_PROVIDERS as readonly string[]).includes(provider))
+    return cloudWebDriverProviderDeclaration(provider)?.credentialVariables;
   return installedPlugins(env).find((plugin) => plugin.agentDevicePlugin.provider === provider)
     ?.agentDevicePlugin.credentialVariables;
 }

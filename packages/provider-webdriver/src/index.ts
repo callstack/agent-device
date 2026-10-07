@@ -1,65 +1,43 @@
+import { awsDeviceFarmProvider } from './aws-device-farm-provider.ts';
+import { browserStackProvider } from './browserstack-provider.ts';
 import type {
-  CloudArtifactsQuery,
-  CloudArtifactsResult,
-} from '@agent-device/contracts/observability';
-import type { ProviderWebDriverDependencies } from './dependencies.ts';
-import {
-  CLOUD_WEBDRIVER_PROFILE_FIELDS,
-  createCloudWebDriverProviderDefinitions,
-  type DefaultCloudWebDriverArtifactEnv,
-  type DefaultCloudWebDriverProviderRuntimeEnv,
-} from './provider-definitions.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
-import {
-  readAwsDeviceFarmRegionFromArn,
-  verifyCloudWebDriverConnection,
-  type CloudWebDriverConnectionVerification,
-  type CloudWebDriverConnectionVerificationOptions,
-} from './connection-verification.ts';
-import type { CloudWebDriverRuntime } from './runtime.ts';
+  BundledCloudWebDriverProvider,
+  CloudWebDriverProviderHost,
+} from './provider-plugin.ts';
+import { createCloudWebDriverRuntime, type CloudWebDriverRuntime } from './runtime.ts';
 
-export { CLOUD_WEBDRIVER_PROFILE_FIELDS, CLOUD_WEBDRIVER_PROVIDERS };
-export { readAwsDeviceFarmRegionFromArn };
-export { parseBrowserStackAppReference } from './browserstack.ts';
-export { requireBrowserStackCredentials } from './provider-definitions.ts';
-export type { CloudWebDriverKnownProviderName } from './providers.ts';
-export type { ProviderWebDriverDependencies, RunHostCommand } from './dependencies.ts';
+export { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
+export type { RunHostCommand } from './dependencies.ts';
 export type {
-  DefaultCloudWebDriverArtifactEnv,
-  DefaultCloudWebDriverProviderRuntimeEnv,
-} from './provider-definitions.ts';
-export type {
-  CloudWebDriverConnectionVerification,
-  CloudWebDriverConnectionVerificationOptions,
-} from './connection-verification.ts';
+  BundledCloudWebDriverProvider,
+  CloudWebDriverConnection,
+  CloudWebDriverProviderHost,
+} from './provider-plugin.ts';
+export type { CloudWebDriverRuntime } from './runtime.ts';
 
-export type ProviderWebDriver = {
-  readonly providerIds: readonly string[];
-  createDefaultRuntimes(env?: DefaultCloudWebDriverProviderRuntimeEnv): CloudWebDriverRuntime[];
-  listArtifactsFromEnv(
-    query: CloudArtifactsQuery,
-    env: DefaultCloudWebDriverArtifactEnv,
-  ): Promise<CloudArtifactsResult | undefined>;
-  verifyConnection(
-    options: CloudWebDriverConnectionVerificationOptions,
-  ): Promise<CloudWebDriverConnectionVerification>;
-};
+/**
+ * The hosted WebDriver providers agent-device ships. Each presents the shape an installed plugin
+ * returns, so moving one out of the bundle is a packaging change, not a provider rewrite.
+ */
+export const BUNDLED_CLOUD_WEBDRIVER_PROVIDERS: readonly BundledCloudWebDriverProvider[] =
+  Object.freeze([browserStackProvider, awsDeviceFarmProvider]);
 
-export function createProviderWebDriver(
-  dependencies: ProviderWebDriverDependencies,
-): ProviderWebDriver {
-  const definitions = createCloudWebDriverProviderDefinitions(dependencies);
-  return {
-    providerIds: definitions.map((definition) => definition.provider),
-    createDefaultRuntimes: (env = process.env) =>
-      definitions.map((definition) => definition.createRuntime(env, definition.profileFields)),
-    listArtifactsFromEnv: async (query, env) => {
-      if (!query.providerSessionId) return undefined;
-      return await definitions
-        .find((definition) => definition.provider === query.provider)
-        ?.listArtifactsFromEnv(query.providerSessionId, env);
-    },
-    verifyConnection: async (options) =>
-      await verifyCloudWebDriverConnection(options, dependencies),
-  };
+export function bundledCloudWebDriverProvider(
+  provider: string | undefined,
+): BundledCloudWebDriverProvider | undefined {
+  return BUNDLED_CLOUD_WEBDRIVER_PROVIDERS.find(
+    (bundled) => bundled.declaration.provider === provider,
+  );
+}
+
+/** One runtime per bundled provider, composed the way an installed WebDriver plugin is. */
+export function createBundledCloudWebDriverRuntimes(
+  host: CloudWebDriverProviderHost,
+): CloudWebDriverRuntime[] {
+  return BUNDLED_CLOUD_WEBDRIVER_PROVIDERS.map((bundled) =>
+    createCloudWebDriverRuntime({
+      ...bundled.create(host).webDriver,
+      clientVersion: host.clientVersion,
+    }),
+  );
 }

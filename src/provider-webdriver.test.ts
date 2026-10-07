@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { providerWebDriver } from './provider-webdriver.ts';
+import { bundledCloudWebDriverProvider } from '@agent-device/provider-webdriver';
+import { createBundledCloudWebDriverHost } from './provider-webdriver.ts';
 import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
 
-test('root provider facade runs AWS artifact lookup through the host command adapter', async () => {
+test('bundled AWS artifact lookup runs through the host command adapter', async () => {
   const tempDir = mkdtempForTestSync('agent-device-provider-webdriver-');
   const awsPath = path.join(tempDir, 'aws');
   const callsPath = path.join(tempDir, 'aws-calls.ndjson');
@@ -25,13 +26,16 @@ test('root provider facade runs AWS artifact lookup through the host command ada
   process.env.AGENT_DEVICE_TEST_AWS_CALLS_PATH = callsPath;
 
   try {
-    const result = await providerWebDriver.listArtifactsFromEnv(
-      {
-        provider: 'aws-device-farm',
-        providerSessionId: 'arn:aws:devicefarm:us-west-2:123:session/project/session/1',
-      },
-      { AWS_REGION: 'us-west-2' },
+    const provider = bundledCloudWebDriverProvider('aws-device-farm');
+    assert.ok(provider);
+    const { webDriver } = provider.create(
+      createBundledCloudWebDriverHost({ AWS_REGION: 'us-west-2' }),
     );
+    const providerSessionId = 'arn:aws:devicefarm:us-west-2:123:session/project/session/1';
+    const result = await webDriver.listArtifacts?.({
+      provider: 'aws-device-farm',
+      providerSessionId,
+    });
 
     assert.equal(result?.provider, 'aws-device-farm');
     assert.equal(result?.status, 'ready');
@@ -51,22 +55,8 @@ test('root provider facade runs AWS artifact lookup through the host command ada
     assert.deepEqual(
       calls.map((args) => args.slice(0, 6)),
       [
-        [
-          'devicefarm',
-          'list-artifacts',
-          '--region',
-          'us-west-2',
-          '--arn',
-          result?.providerSessionId,
-        ],
-        [
-          'devicefarm',
-          'list-artifacts',
-          '--region',
-          'us-west-2',
-          '--arn',
-          result?.providerSessionId,
-        ],
+        ['devicefarm', 'list-artifacts', '--region', 'us-west-2', '--arn', providerSessionId],
+        ['devicefarm', 'list-artifacts', '--region', 'us-west-2', '--arn', providerSessionId],
       ],
     );
     assert.deepEqual(

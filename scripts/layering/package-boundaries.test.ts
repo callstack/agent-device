@@ -802,6 +802,7 @@ test('the real tree parses, declares, and passes R11', () => {
   assert.ok(providerWebDriverPackage, 'provider-webdriver package must exist');
   assert.deepEqual([...providerWebDriverPackage.exportTargets.keys()].sort(), [
     '@agent-device/provider-webdriver',
+    '@agent-device/provider-webdriver/connection-verification',
     '@agent-device/provider-webdriver/plugin',
     '@agent-device/provider-webdriver/providers',
   ]);

@@ -4,25 +4,37 @@ import { parseBrowserStackAppReference } from './browserstack.ts';
 import { isBrowserStackAppReference } from './providers.ts';
 import { fetchProviderVerificationJson, sameOsVersion } from './webdriver-utils.ts';
 import type {
-  CloudWebDriverConnectionVerification,
-  CloudWebDriverConnectionVerificationOptions,
-} from './connection-verification.ts';
-import type { ProviderConnectionResource } from '@agent-device/contracts/remote';
+  ProviderConnectionResource,
+  ProviderConnectionVerification,
+} from '@agent-device/contracts/remote';
 
 const BROWSERSTACK_DEVICES_ENDPOINT =
   'https://api-cloud.browserstack.com/app-automate/devices.json';
 const BROWSERSTACK_APPS_ENDPOINT =
   'https://api-cloud.browserstack.com/app-automate/recent_apps?limit=100';
 
-type BrowserStackOptions = Extract<
-  CloudWebDriverConnectionVerificationOptions,
-  { provider: 'browserstack' }
->;
+/** Credentials plus the exact device, OS, and app a hosted Appium hub session is created with. */
+export type BrowserStackConnectionVerificationOptions = {
+  username: string;
+  accessKey: string;
+  platform: 'android' | 'ios';
+  deviceName: string;
+  osVersion: string;
+  app: string;
+  devicesEndpoint?: string | URL;
+  appsEndpoint?: string | URL;
+};
+
+export type BrowserStackConnectionVerification = ProviderConnectionVerification & {
+  provider: 'browserstack';
+  service: 'BrowserStack';
+  project?: never;
+};
 
 export async function verifyBrowserStackConnection(
-  options: BrowserStackOptions,
+  options: BrowserStackConnectionVerificationOptions,
   clientVersion: string,
-): Promise<CloudWebDriverConnectionVerification> {
+): Promise<BrowserStackConnectionVerification> {
   const providerApp = readBrowserStackAppOption(options.app);
   const auth = { username: options.username, accessKey: options.accessKey };
   const devices = await fetchBrowserStackJson(
@@ -71,7 +83,7 @@ function readBrowserStackAppOption(app: string): string {
 
 async function verifyBrowserStackApp(
   app: string,
-  options: BrowserStackOptions,
+  options: BrowserStackConnectionVerificationOptions,
   auth: { username: string; accessKey: string },
   clientVersion: string,
 ): Promise<ProviderConnectionResource> {

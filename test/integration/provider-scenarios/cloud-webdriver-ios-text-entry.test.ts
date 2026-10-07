@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   CLOUD_WEBDRIVER_PROVIDERS,
-  createProviderWebDriver,
+  createBundledCloudWebDriverRuntimes,
 } from '@agent-device/provider-webdriver';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
@@ -254,17 +254,17 @@ function textEntryTranscript(server: FakeIosWebDriverServer): string[] {
 
 async function createCloudIosWorld() {
   const server = await FakeIosWebDriverServer.start();
-  const providerWebDriver = createProviderWebDriver({
+  const runtimes = createBundledCloudWebDriverRuntimes({
+    env: {
+      BROWSERSTACK_USERNAME: 'browser-user',
+      BROWSERSTACK_ACCESS_KEY: 'browser-key',
+      BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+      BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
+    },
     clientVersion: CLIENT_VERSION,
     runHostCommand: async () => {
       throw new Error('BrowserStack scenario must not run host commands');
     },
-  });
-  const runtimes = providerWebDriver.createDefaultRuntimes({
-    BROWSERSTACK_USERNAME: 'browser-user',
-    BROWSERSTACK_ACCESS_KEY: 'browser-key',
-    BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-    BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
   });
   const providers = createProviderDeviceRuntimeRequestProviders(runtimes);
   const daemon = await createProviderScenarioHarness({

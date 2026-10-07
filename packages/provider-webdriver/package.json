@@ -23,6 +23,10 @@
     "./plugin": {
       "types": "./src/plugin.ts",
       "default": "./src/plugin.ts"
+    },
+    "./connection-verification": {
+      "types": "./src/connection-verification.ts",
+      "default": "./src/connection-verification.ts"
     }
   }
 }

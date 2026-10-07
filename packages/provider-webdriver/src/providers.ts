@@ -1,3 +1,5 @@
+import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
+
 export const CLOUD_WEBDRIVER_PROVIDERS = {
   browserStack: 'browserstack',
   awsDeviceFarm: 'aws-device-farm',
@@ -6,28 +8,54 @@ export const CLOUD_WEBDRIVER_PROVIDERS = {
 export type CloudWebDriverKnownProviderName =
   (typeof CLOUD_WEBDRIVER_PROVIDERS)[keyof typeof CLOUD_WEBDRIVER_PROVIDERS];
 
-const CLOUD_WEBDRIVER_KNOWN_PROVIDERS = new Set<string>(Object.values(CLOUD_WEBDRIVER_PROVIDERS));
-
-export function isCloudWebDriverProviderName(
-  provider: string | undefined,
-): provider is CloudWebDriverKnownProviderName {
-  return provider !== undefined && CLOUD_WEBDRIVER_KNOWN_PROVIDERS.has(provider);
-}
-
 /** The environment variables that hold BrowserStack credentials. */
 export const BROWSERSTACK_CREDENTIAL_VARIABLES = {
   username: 'BROWSERSTACK_USERNAME',
   accessKey: 'BROWSERSTACK_ACCESS_KEY',
 } as const;
 
-/** The BrowserStack credentials in the environment, exactly as every consumer and the fingerprint use them. */
-export function readBrowserStackCredentials(
-  env: Readonly<Record<string, string | undefined>>,
-): Readonly<{ username?: string; accessKey?: string }> {
-  return {
-    username: env[BROWSERSTACK_CREDENTIAL_VARIABLES.username] || undefined,
-    accessKey: env[BROWSERSTACK_CREDENTIAL_VARIABLES.accessKey] || undefined,
-  };
+/**
+ * What a bundled provider declares before any of its code runs: the same fields an installed
+ * plugin publishes under `agentDevicePlugin` in its manifest. Connect policy and the credential
+ * fingerprint read this, never the provider implementation.
+ */
+export type CloudWebDriverProviderDeclaration = Readonly<{
+  provider: CloudWebDriverKnownProviderName;
+  connection: ConnectionProviderCapabilities;
+  /** Absent for a provider whose credentials do not come from the environment. */
+  credentialVariables?: readonly string[];
+}>;
+
+const HOSTED_WEBDRIVER_CONNECTION: ConnectionProviderCapabilities = {
+  leaseKind: 'direct-device-provider',
+  requiresAppAttachment: false,
+  requiresRemoteDaemon: false,
+  supportsArtifacts: true,
+  supportsDeferredAppSelection: false,
+  supportsDirectPortReverse: false,
+  usesCloudWebDriverLease: true,
+};
+
+const CLOUD_WEBDRIVER_PROVIDER_DECLARATIONS: readonly CloudWebDriverProviderDeclaration[] =
+  Object.freeze([
+    {
+      provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+      connection: HOSTED_WEBDRIVER_CONNECTION,
+      credentialVariables: Object.values(BROWSERSTACK_CREDENTIAL_VARIABLES),
+    },
+    {
+      // AWS Device Farm reads the AWS CLI credential chain, which no environment hash identifies.
+      provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+      connection: { ...HOSTED_WEBDRIVER_CONNECTION, requiresAppAttachment: true },
+    },
+  ]);
+
+export function cloudWebDriverProviderDeclaration(
+  provider: string | undefined,
+): CloudWebDriverProviderDeclaration | undefined {
+  return CLOUD_WEBDRIVER_PROVIDER_DECLARATIONS.find(
+    (declaration) => declaration.provider === provider,
+  );
 }
 
 const BROWSERSTACK_APP_SCHEME = 'bs://';

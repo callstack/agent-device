@@ -9,7 +9,7 @@ import {
 } from '@agent-device/host-kit/request';
 import {
   CLOUD_WEBDRIVER_PROVIDERS,
-  createProviderWebDriver,
+  createBundledCloudWebDriverRuntimes,
 } from '@agent-device/provider-webdriver';
 import type { CloudArtifact } from '@agent-device/contracts/observability';
 import type { DeviceLease } from '@agent-device/contracts/device';
@@ -294,18 +294,18 @@ async function waitForSourceRequest(server: FakeWebDriverServer): Promise<void> 
 
 async function createCloudWebDriverWorld() {
   const server = await FakeWebDriverServer.start();
-  const providerWebDriver = createProviderWebDriver({
+  const runtimes = createBundledCloudWebDriverRuntimes({
+    env: {
+      BROWSERSTACK_USERNAME: 'browser-user',
+      BROWSERSTACK_ACCESS_KEY: 'browser-key',
+      BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+      BROWSERSTACK_APP_UPLOAD_ENDPOINT: `${server.url}/app-automate/upload`,
+      BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
+    },
     clientVersion: CLIENT_VERSION,
     runHostCommand: async () => {
       throw new Error('BrowserStack scenario must not run host commands');
     },
-  });
-  const runtimes = providerWebDriver.createDefaultRuntimes({
-    BROWSERSTACK_USERNAME: 'browser-user',
-    BROWSERSTACK_ACCESS_KEY: 'browser-key',
-    BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-    BROWSERSTACK_APP_UPLOAD_ENDPOINT: `${server.url}/app-automate/upload`,
-    BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
   });
   const providers = createProviderDeviceRuntimeRequestProviders(runtimes);
   const providerModules = runtimes.map((runtime) =>

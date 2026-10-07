@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { createProviderWebDriver } from './index.ts';
+import {
+  verifyAwsDeviceFarmConnection,
+  verifyBrowserStackConnection,
+} from './connection-verification.ts';
 import type { RunHostCommand } from './dependencies.ts';
 
+const CLIENT_VERSION = '1.2.3';
+
 const browserStackOptions = {
-  provider: 'browserstack' as const,
   username: 'browser-user',
   accessKey: 'browser-key',
   platform: 'android' as const,
@@ -43,11 +47,14 @@ test('BrowserStack verifies the selected resources without creating a session', 
   );
   vi.stubGlobal('fetch', fetchMock);
 
-  const result = await createProvider().verifyConnection({
-    ...browserStackOptions,
-    devicesEndpoint: 'https://browserstack.test/devices',
-    appsEndpoint: 'https://browserstack.test/apps',
-  });
+  const result = await verifyBrowserStackConnection(
+    {
+      ...browserStackOptions,
+      devicesEndpoint: 'https://browserstack.test/devices',
+      appsEndpoint: 'https://browserstack.test/apps',
+    },
+    CLIENT_VERSION,
+  );
 
   assert.equal(result.provider, 'browserstack');
   assert.deepEqual(result.device, {
@@ -74,11 +81,14 @@ test('BrowserStack classifies rejected credentials without exposing them', async
     vi.fn(async () => jsonResponse({}, 401)),
   );
 
-  await assert.rejects(createProvider().verifyConnection(browserStackOptions), (error: unknown) => {
-    assert.equal((error as { code?: string }).code, 'UNAUTHORIZED');
-    assert.doesNotMatch(JSON.stringify(error), /browser-key/);
-    return true;
-  });
+  await assert.rejects(
+    verifyBrowserStackConnection(browserStackOptions, CLIENT_VERSION),
+    (error: unknown) => {
+      assert.equal((error as { code?: string }).code, 'UNAUTHORIZED');
+      assert.doesNotMatch(JSON.stringify(error), /browser-key/);
+      return true;
+    },
+  );
 });
 
 test('BrowserStack points HTTP failures at its service status and transport failures at the network', async () => {
@@ -86,14 +96,17 @@ test('BrowserStack points HTTP failures at its service status and transport fail
     'fetch',
     vi.fn(async () => jsonResponse({}, 503)),
   );
-  await assert.rejects(createProvider().verifyConnection(browserStackOptions), (error: unknown) => {
-    assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
-    assert.equal(
-      (error as { details?: { hint?: string } }).details?.hint,
-      'Retry connect or check the BrowserStack service status.',
-    );
-    return true;
-  });
+  await assert.rejects(
+    verifyBrowserStackConnection(browserStackOptions, CLIENT_VERSION),
+    (error: unknown) => {
+      assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
+      assert.equal(
+        (error as { details?: { hint?: string } }).details?.hint,
+        'Retry connect or check the BrowserStack service status.',
+      );
+      return true;
+    },
+  );
 
   vi.stubGlobal(
     'fetch',
@@ -101,14 +114,17 @@ test('BrowserStack points HTTP failures at its service status and transport fail
       throw new TypeError('fetch failed');
     }),
   );
-  await assert.rejects(createProvider().verifyConnection(browserStackOptions), (error: unknown) => {
-    assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
-    assert.equal(
-      (error as { details?: { hint?: string } }).details?.hint,
-      'Check network access to api-cloud.browserstack.com and retry connect.',
-    );
-    return true;
-  });
+  await assert.rejects(
+    verifyBrowserStackConnection(browserStackOptions, CLIENT_VERSION),
+    (error: unknown) => {
+      assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
+      assert.equal(
+        (error as { details?: { hint?: string } }).details?.hint,
+        'Check network access to api-cloud.browserstack.com and retry connect.',
+      );
+      return true;
+    },
+  );
 });
 
 test('BrowserStack reports a non-JSON verification answer typed, with its status', async () => {
@@ -117,14 +133,17 @@ test('BrowserStack reports a non-JSON verification answer typed, with its status
     vi.fn(async () => new Response('<html>maintenance</html>', { status: 200 })),
   );
 
-  await assert.rejects(createProvider().verifyConnection(browserStackOptions), (error: unknown) => {
-    assert.ok(error instanceof AppError);
-    assert.equal(error.code, 'COMMAND_FAILED');
-    assert.equal(error.message, 'BrowserStack connection verification answer was not JSON.');
-    assert.equal(error.details?.status, 200);
-    assert.equal(error.details?.hint, 'Retry connect or check the BrowserStack service status.');
-    return true;
-  });
+  await assert.rejects(
+    verifyBrowserStackConnection(browserStackOptions, CLIENT_VERSION),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.message, 'BrowserStack connection verification answer was not JSON.');
+      assert.equal(error.details?.status, 200);
+      assert.equal(error.details?.hint, 'Retry connect or check the BrowserStack service status.');
+      return true;
+    },
+  );
 });
 
 test('BrowserStack verification canonicalizes the bs:// scheme and refuses an id outside its grammar', async () => {
@@ -135,10 +154,13 @@ test('BrowserStack verification canonicalizes the bs:// scheme and refuses an id
   );
   vi.stubGlobal('fetch', fetchMock);
 
-  const result = await createProvider().verifyConnection({
-    ...browserStackOptions,
-    app: 'BS://app-id',
-  });
+  const result = await verifyBrowserStackConnection(
+    {
+      ...browserStackOptions,
+      app: 'BS://app-id',
+    },
+    CLIENT_VERSION,
+  );
   assert.deepEqual(result.app, {
     status: 'verified',
     name: 'sample.apk',
@@ -147,7 +169,7 @@ test('BrowserStack verification canonicalizes the bs:// scheme and refuses an id
 
   fetchMock.mockClear();
   await assert.rejects(
-    createProvider().verifyConnection({ ...browserStackOptions, app: 'bs://a b' }),
+    verifyBrowserStackConnection({ ...browserStackOptions, app: 'bs://a b' }, CLIENT_VERSION),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'INVALID_ARGS');
@@ -172,7 +194,7 @@ test('BrowserStack defers a bs app reference outside the recent upload window', 
     ),
   );
 
-  const result = await createProvider().verifyConnection(browserStackOptions);
+  const result = await verifyBrowserStackConnection(browserStackOptions, CLIENT_VERSION);
 
   assert.deepEqual(result.app, {
     status: 'configured',
@@ -196,21 +218,23 @@ test('BrowserStack accepts an empty-object recent apps response', async () => {
     ),
   );
 
-  const result = await createProvider().verifyConnection(browserStackOptions);
+  const result = await verifyBrowserStackConnection(browserStackOptions, CLIENT_VERSION);
   assert.equal(result.app.status, 'configured');
 });
 
 test('AWS Device Farm verifies resources without creating a remote access session', async () => {
   const concurrency = { active: 0, max: 0 };
   const runHostCommand = createAwsRunner(awsResources, concurrency);
-  const result = await createProvider(runHostCommand).verifyConnection({
-    provider: 'aws-device-farm',
-    platform: 'android',
-    projectArn: 'project-arn',
-    deviceArn: 'device-arn',
-    appArn: 'app-arn',
-    region: 'us-west-2',
-  });
+  const result = await verifyAwsDeviceFarmConnection(
+    {
+      platform: 'android',
+      projectArn: 'project-arn',
+      deviceArn: 'device-arn',
+      appArn: 'app-arn',
+      region: 'us-west-2',
+    },
+    runHostCommand,
+  );
 
   assert.equal(result.provider, 'aws-device-farm');
   if (result.provider !== 'aws-device-farm') return;
@@ -233,12 +257,14 @@ test('AWS Device Farm reports an unattached app without pretending it is install
     project: awsResources.project,
     device: { ...awsResources.device, platform: 'IOS', name: 'iPhone 15', os: '17' },
   });
-  const result = await createProvider(runHostCommand).verifyConnection({
-    provider: 'aws-device-farm',
-    platform: 'ios',
-    projectArn: 'project-arn',
-    deviceArn: 'device-arn',
-  });
+  const result = await verifyAwsDeviceFarmConnection(
+    {
+      platform: 'ios',
+      projectArn: 'project-arn',
+      deviceArn: 'device-arn',
+    },
+    runHostCommand,
+  );
 
   assert.equal(result.app.status, 'missing');
   assert.match(result.app.message ?? '', /--aws-app-arn/);
@@ -252,12 +278,14 @@ test('AWS Device Farm rejects a device from the wrong platform before allocation
   });
 
   await assert.rejects(
-    createProvider(runHostCommand).verifyConnection({
-      provider: 'aws-device-farm',
-      platform: 'android',
-      projectArn: 'project-arn',
-      deviceArn: 'device-arn',
-    }),
+    verifyAwsDeviceFarmConnection(
+      {
+        platform: 'android',
+        projectArn: 'project-arn',
+        deviceArn: 'device-arn',
+      },
+      runHostCommand,
+    ),
     /is ios, not android/,
   );
   assert.equal(
@@ -265,10 +293,6 @@ test('AWS Device Farm rejects a device from the wrong platform before allocation
     false,
   );
 });
-
-function createProvider(runHostCommand: RunHostCommand = vi.fn()) {
-  return createProviderWebDriver({ clientVersion: '1.2.3', runHostCommand });
-}
 
 function createAwsRunner(
   resources: Partial<typeof awsResources>,

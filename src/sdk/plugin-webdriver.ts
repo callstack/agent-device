@@ -1,3 +1,1 @@
-import type { CloudWebDriverRuntimeOptions } from '@agent-device/provider-webdriver/plugin';
-
-export type WebDriverPluginOptions = Omit<CloudWebDriverRuntimeOptions, 'clientVersion'>;
+export type { CloudWebDriverProviderOptions as WebDriverPluginOptions } from '@agent-device/provider-webdriver/plugin';

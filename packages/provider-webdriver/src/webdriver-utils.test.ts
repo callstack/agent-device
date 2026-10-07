@@ -11,8 +11,11 @@ import {
   createHubUploadApp,
   postHubAppUpload,
   readFlag,
+  requireConnectFlag,
+  requireConnectPlatform,
   requireEnv,
   resolveHubAppReference,
+  resolveLocalAppArtifact,
   trimLeadingSlash,
   trimTrailingSlash,
 } from './webdriver-utils.ts';
@@ -251,3 +254,29 @@ test.skipIf(process.platform === 'win32')(
     }
   },
 );
+
+test('connect readers refuse blank values and name the command that needs them', () => {
+  assert.equal(requireConnectFlag('Pixel 8', 'example', '--device <name>'), 'Pixel 8');
+  assert.throws(() => requireConnectFlag('  ', 'example', '--device <name>'), {
+    code: 'INVALID_ARGS',
+    message: 'connect example requires --device <name>.',
+  });
+  const flags = { json: false, help: false, version: false };
+  assert.equal(requireConnectPlatform({ ...flags, platform: 'ios' }, 'example'), 'ios');
+  assert.throws(() => requireConnectPlatform({ ...flags, platform: 'web' }, 'example'), {
+    message: 'connect example requires --platform ios|android.',
+  });
+});
+
+test('a local app artifact must be an existing file under the connect cwd', async () => {
+  const tempDir = await mkdtempForTest('webdriver-utils-artifact-');
+  await fs.writeFile(path.join(tempDir, 'app.apk'), 'apk');
+  assert.equal(
+    resolveLocalAppArtifact('./app.apk', tempDir, 'Example'),
+    path.join(tempDir, 'app.apk'),
+  );
+  assert.throws(() => resolveLocalAppArtifact('.', tempDir, 'Example'), {
+    code: 'INVALID_ARGS',
+    message: `Example app file not found: ${path.resolve(tempDir, '.')}`,
+  });
+});

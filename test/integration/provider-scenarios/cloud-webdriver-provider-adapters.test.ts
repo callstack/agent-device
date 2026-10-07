@@ -6,7 +6,8 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   CLOUD_WEBDRIVER_PROVIDERS,
-  createProviderWebDriver,
+  bundledCloudWebDriverProvider,
+  createBundledCloudWebDriverRuntimes,
   type RunHostCommand,
 } from '@agent-device/provider-webdriver';
 import type {
@@ -36,17 +37,17 @@ test('BrowserStack facade prepares capabilities, uploads apps, and returns artif
     await withProviderScenarioTempDir('agent-device-browserstack-adapter-', async (tempDir) => {
       const appPath = path.join(tempDir, 'demo.apk');
       fs.writeFileSync(appPath, 'fake apk');
-      const provider = createProviderWebDriver({
-        clientVersion: CLIENT_VERSION,
-        runHostCommand: unexpectedHostCommand,
-      });
       const runtime = runtimeFor(
-        provider.createDefaultRuntimes({
-          BROWSERSTACK_USERNAME: 'user',
-          BROWSERSTACK_ACCESS_KEY: 'key',
-          BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-          BROWSERSTACK_APP_UPLOAD_ENDPOINT: `${server.url}/app-automate/upload`,
-          BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
+        createBundledCloudWebDriverRuntimes({
+          env: {
+            BROWSERSTACK_USERNAME: 'user',
+            BROWSERSTACK_ACCESS_KEY: 'key',
+            BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+            BROWSERSTACK_APP_UPLOAD_ENDPOINT: `${server.url}/app-automate/upload`,
+            BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
+          },
+          clientVersion: CLIENT_VERSION,
+          runHostCommand: unexpectedHostCommand,
         }),
         CLOUD_WEBDRIVER_PROVIDERS.browserStack,
       );
@@ -89,16 +90,16 @@ test('BrowserStack facade prepares capabilities, uploads apps, and returns artif
 
 test('BrowserStack facade nests device-feature capabilities inside bstack:options', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
-    const provider = createProviderWebDriver({
-      clientVersion: CLIENT_VERSION,
-      runHostCommand: unexpectedHostCommand,
-    });
     const runtime = runtimeFor(
-      provider.createDefaultRuntimes({
-        BROWSERSTACK_USERNAME: 'user',
-        BROWSERSTACK_ACCESS_KEY: 'key',
-        BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-        BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
+      createBundledCloudWebDriverRuntimes({
+        env: {
+          BROWSERSTACK_USERNAME: 'user',
+          BROWSERSTACK_ACCESS_KEY: 'key',
+          BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+          BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
+        },
+        clientVersion: CLIENT_VERSION,
+        runHostCommand: unexpectedHostCommand,
       }),
       CLOUD_WEBDRIVER_PROVIDERS.browserStack,
     );
@@ -151,12 +152,12 @@ test('BrowserStack facade nests device-feature capabilities inside bstack:option
 test('AWS Device Farm facade rejects device features it does not read at session preparation', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);
-    const provider = createProviderWebDriver({
-      clientVersion: CLIENT_VERSION,
-      runHostCommand: host.run,
-    });
     const runtime = runtimeFor(
-      provider.createDefaultRuntimes({ AWS_REGION: 'us-west-2' }),
+      createBundledCloudWebDriverRuntimes({
+        env: { AWS_REGION: 'us-west-2' },
+        clientVersion: CLIENT_VERSION,
+        runHostCommand: host.run,
+      }),
       CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
     );
     const lease = makeLease(CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
@@ -324,15 +325,15 @@ test('TestMu uploads the materializer-selected simulator archive through the plu
 
 test('BrowserStack refuses a refused field on a repeat allocation of its live lease', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
-    const provider = createProviderWebDriver({
-      clientVersion: CLIENT_VERSION,
-      runHostCommand: unexpectedHostCommand,
-    });
     const runtime = runtimeFor(
-      provider.createDefaultRuntimes({
-        BROWSERSTACK_USERNAME: 'user',
-        BROWSERSTACK_ACCESS_KEY: 'key',
-        BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+      createBundledCloudWebDriverRuntimes({
+        env: {
+          BROWSERSTACK_USERNAME: 'user',
+          BROWSERSTACK_ACCESS_KEY: 'key',
+          BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+        },
+        clientVersion: CLIENT_VERSION,
+        runHostCommand: unexpectedHostCommand,
       }),
       CLOUD_WEBDRIVER_PROVIDERS.browserStack,
     );
@@ -367,12 +368,12 @@ test('BrowserStack refuses a refused field on a repeat allocation of its live le
 test('AWS Device Farm facade uses the injected host-command capability for its full lifecycle', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);
-    const provider = createProviderWebDriver({
-      clientVersion: CLIENT_VERSION,
-      runHostCommand: host.run,
-    });
     const runtime = runtimeFor(
-      provider.createDefaultRuntimes({ AWS_REGION: 'us-west-2' }),
+      createBundledCloudWebDriverRuntimes({
+        env: { AWS_REGION: 'us-west-2' },
+        clientVersion: CLIENT_VERSION,
+        runHostCommand: host.run,
+      }),
       CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
     );
     const lease = makeLease(CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm);
@@ -466,20 +467,23 @@ test('AWS Device Farm facade uses the injected host-command capability for its f
   });
 }, 15_000);
 
-test('facade artifact lookup uses released provider ids without allocating a runtime', async () => {
+test('bundled artifact lookup uses released provider ids without allocating a runtime', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
-    const provider = createProviderWebDriver({
-      clientVersion: CLIENT_VERSION,
-      runHostCommand: unexpectedHostCommand,
-    });
-    const result = await provider.listArtifactsFromEnv(
-      { provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack, providerSessionId: 'wd-1' },
-      {
+    const provider = bundledCloudWebDriverProvider(CLOUD_WEBDRIVER_PROVIDERS.browserStack);
+    assert.ok(provider);
+    const { webDriver } = provider.create({
+      env: {
         BROWSERSTACK_USERNAME: 'user',
         BROWSERSTACK_ACCESS_KEY: 'key',
         BROWSERSTACK_SESSION_DETAILS_ENDPOINT: `${server.url}/app-automate/sessions`,
       },
-    );
+      clientVersion: CLIENT_VERSION,
+      runHostCommand: unexpectedHostCommand,
+    });
+    const result = await webDriver.listArtifacts?.({
+      provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+      providerSessionId: 'wd-1',
+    });
     assert.deepEqual(
       result?.cloudArtifacts.map((artifact) => artifact.kind),
       ['video', 'appium-log', 'device-log', 'provider-session', 'provider-session'],

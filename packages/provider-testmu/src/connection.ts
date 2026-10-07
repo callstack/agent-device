@@ -1,52 +1,55 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import type { ProviderPluginHost } from 'agent-device/plugins';
 import type { CliFlags } from '@agent-device/contracts/command';
 import {
   rejectRefusedProviderProfileFields,
+  requireResolvedProfilePlatform,
+  requireResolvedProfileValue,
   type ProviderProfileFieldDeclaration,
 } from '@agent-device/contracts/provider-profile-fields';
-import { canonicalTestMuAppReference, isTestMuAppReference } from './providers.ts';
+import {
+  requireConnectFlag,
+  requireConnectPlatform,
+  resolveLocalAppArtifact,
+} from '@agent-device/provider-webdriver/plugin';
+import {
+  canonicalTestMuAppReference,
+  isTestMuAppReference,
+  requireTestMuCredentials,
+} from './providers.ts';
 import { verifyTestMuConnection } from './testmu-connection-verification.ts';
 import { readTestMuDeviceFeatureFields, readTestMuDeviceType } from './testmu-device-features.ts';
+
+const PROVIDER = 'testmu';
+const SERVICE = 'TestMu AI';
 
 export function createTestMuConnection(
   host: ProviderPluginHost,
   fields: ProviderProfileFieldDeclaration,
 ) {
-  const required = (value: string | undefined, name: string) => {
-    if (value?.trim()) return value;
-    throw host.createError('INVALID_ARGS', `connect testmu requires ${name}.`);
-  };
   return {
     resolve: ({ flags, cwd }: { flags: CliFlags; cwd: string }) => {
       rejectRefusedProviderProfileFields(flags, fields);
-      required(host.env.LT_USERNAME, 'LT_USERNAME');
-      required(host.env.LT_ACCESS_KEY, 'LT_ACCESS_KEY');
-      if (flags.platform !== 'android' && flags.platform !== 'ios')
-        throw host.createError('INVALID_ARGS', 'connect testmu requires --platform ios|android.');
-      let app = canonicalTestMuAppReference(
-        required(flags.providerApp, '--provider-app <lt://app-id, URL, or local path>'),
+      requireTestMuCredentials(host.env, `connect ${PROVIDER}`);
+      const platform = requireConnectPlatform(flags, PROVIDER);
+      const app = connectAppReference(
+        requireConnectFlag(
+          flags.providerApp,
+          PROVIDER,
+          '--provider-app <lt://app-id, URL, or local path>',
+        ),
+        cwd,
+        host,
       );
-      if (app.startsWith('lt://')) {
-        if (!isTestMuAppReference(app))
-          throw host.createError(
-            'INVALID_ARGS',
-            'connect testmu requires a valid lt:// app reference.',
-          );
-      } else if (!/^https?:\/\//i.test(app)) {
-        app = path.resolve(cwd, app);
-        if (!fs.statSync(app, { throwIfNoEntry: false })?.isFile())
-          throw host.createError('INVALID_ARGS', `TestMu AI app file not found: ${app}`);
-      }
       return {
         profile: {
-          leaseProvider: 'testmu',
-          leaseBackend:
-            flags.leaseBackend ?? (flags.platform === 'ios' ? 'ios-instance' : 'android-instance'),
-          platform: flags.platform,
-          device: required(flags.device, '--device <name>'),
-          providerOsVersion: required(flags.providerOsVersion, '--provider-os-version <version>'),
+          leaseProvider: PROVIDER,
+          platform,
+          device: requireConnectFlag(flags.device, PROVIDER, '--device <name>'),
+          providerOsVersion: requireConnectFlag(
+            flags.providerOsVersion,
+            PROVIDER,
+            '--provider-os-version <version>',
+          ),
           providerApp: app,
           providerDeviceType: readTestMuDeviceType(flags),
           providerProject: flags.providerProject,
@@ -57,23 +60,36 @@ export function createTestMuConnection(
         extraFlags: { providerApp: app },
       };
     },
-    verify: async ({ flags }: { flags: CliFlags }) => {
-      if (flags.platform !== 'android' && flags.platform !== 'ios')
-        throw host.createError('INVALID_ARGS', 'TestMu profile missed platform.');
-      return await verifyTestMuConnection(
+    verify: async ({ flags }: { flags: CliFlags }) =>
+      await verifyTestMuConnection(
         {
-          provider: 'testmu',
-          username: required(host.env.LT_USERNAME, 'LT_USERNAME'),
-          accessKey: required(host.env.LT_ACCESS_KEY, 'LT_ACCESS_KEY'),
-          platform: flags.platform,
-          deviceName: required(flags.device, '--device'),
-          osVersion: required(flags.providerOsVersion, '--provider-os-version'),
-          app: canonicalTestMuAppReference(required(flags.providerApp, '--provider-app')),
+          provider: PROVIDER,
+          ...requireTestMuCredentials(host.env, `connect ${PROVIDER}`),
+          platform: requireResolvedProfilePlatform(flags.platform, SERVICE),
+          deviceName: requireResolvedProfileValue(flags.device, 'TestMu AI profile missed device.'),
+          osVersion: requireResolvedProfileValue(
+            flags.providerOsVersion,
+            'TestMu AI profile missed OS version.',
+          ),
+          app: canonicalTestMuAppReference(
+            requireResolvedProfileValue(flags.providerApp, 'TestMu AI profile missed app.'),
+          ),
           deviceType: readTestMuDeviceType(flags),
           apiEndpoint: host.env.TESTMU_API_ENDPOINT,
         },
         host.clientVersion,
-      );
-    },
+      ),
   };
+}
+
+/** An `lt://` id is canonicalized, a public URL passes through, and anything else must be a local file. */
+function connectAppReference(app: string, cwd: string, host: ProviderPluginHost): string {
+  const reference = canonicalTestMuAppReference(app);
+  if (reference.startsWith('lt://')) {
+    if (isTestMuAppReference(reference)) return reference;
+    throw host.createError('INVALID_ARGS', 'connect testmu requires a valid lt:// app reference.');
+  }
+  return /^https?:\/\//i.test(reference)
+    ? reference
+    : resolveLocalAppArtifact(reference, cwd, SERVICE);
 }

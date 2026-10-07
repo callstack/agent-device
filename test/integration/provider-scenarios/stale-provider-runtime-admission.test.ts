@@ -3,7 +3,7 @@ import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts
 import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
 import {
   CLOUD_WEBDRIVER_PROVIDERS,
-  createProviderWebDriver,
+  createBundledCloudWebDriverRuntimes,
 } from '@agent-device/provider-webdriver';
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
@@ -183,15 +183,16 @@ async function expectUnsupportedDeploymentAdmission(params: {
 }
 
 function webDriverRuntime(endpoint: string) {
-  const runtimes = createProviderWebDriver({
+  const runtimes = createBundledCloudWebDriverRuntimes({
+    env: {
+      BROWSERSTACK_USERNAME: 'browser-user',
+      BROWSERSTACK_ACCESS_KEY: 'browser-key',
+      BROWSERSTACK_WEBDRIVER_ENDPOINT: `${endpoint}/wd/hub/`,
+    },
     clientVersion: 'test',
     runHostCommand: async () => {
       throw new Error('stale WebDriver admission never invokes host commands');
     },
-  }).createDefaultRuntimes({
-    BROWSERSTACK_USERNAME: 'browser-user',
-    BROWSERSTACK_ACCESS_KEY: 'browser-key',
-    BROWSERSTACK_WEBDRIVER_ENDPOINT: `${endpoint}/wd/hub/`,
   });
   const runtime = runtimes.find(
     (candidate) => candidate.provider === CLOUD_WEBDRIVER_PROVIDERS.browserStack,
@@ -201,10 +202,11 @@ function webDriverRuntime(endpoint: string) {
 }
 
 function awsWebDriverRuntime(host: AwsRemoteAccessHost) {
-  const runtimes = createProviderWebDriver({
+  const runtimes = createBundledCloudWebDriverRuntimes({
+    env: { AWS_REGION: 'us-west-2' },
     clientVersion: 'test',
     runHostCommand: host.run,
-  }).createDefaultRuntimes({ AWS_REGION: 'us-west-2' });
+  });
   const runtime = runtimes.find(
     (candidate) => candidate.provider === CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
   );

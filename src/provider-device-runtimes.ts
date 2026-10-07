@@ -1,4 +1,3 @@
-import type { DefaultCloudWebDriverProviderRuntimeEnv } from '@agent-device/provider-webdriver';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { LIMRUN_PROVIDER } from '@agent-device/provider-limrun';
 import type {
@@ -8,16 +7,18 @@ import type {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { PlatformRuntimeProviderRegistration } from './platform-runtime-gateway.ts';
 import { asAppError, type AppError } from '@agent-device/kernel/errors';
-import { providerWebDriver } from './provider-webdriver.ts';
+import {
+  BUNDLED_CLOUD_WEBDRIVER_PROVIDER_IDS,
+  bundledCloudWebDriverRuntimes,
+} from './provider-webdriver.ts';
 import { readLimrunCredentials, type LimrunCredentials } from './provider-limrun-credentials.ts';
 
-export type DefaultProviderDeviceRuntimeEnv = DefaultCloudWebDriverProviderRuntimeEnv &
-  NodeJS.ProcessEnv;
+export type DefaultProviderDeviceRuntimeEnv = NodeJS.ProcessEnv;
 
-export const DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS = [
-  ...providerWebDriver.providerIds,
+export const DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: readonly string[] = Object.freeze([
+  ...BUNDLED_CLOUD_WEBDRIVER_PROVIDER_IDS,
   'limrun' satisfies typeof LIMRUN_PROVIDER,
-] as const;
+]);
 
 export type DefaultProviderRuntimeComposition = Readonly<{
   runtimes: readonly ProviderDeviceRuntime[];
@@ -71,7 +72,7 @@ export async function createDaemonProviderRuntimeComposition(
 export async function createDefaultProviderRuntimeComposition(
   env: DefaultProviderDeviceRuntimeEnv = process.env,
 ): Promise<DefaultProviderRuntimeComposition> {
-  const runtimes = providerWebDriver.createDefaultRuntimes(env);
+  const runtimes = bundledCloudWebDriverRuntimes(env);
   const platformModules = [...createProviderPlatformRuntimeRegistrations(runtimes)];
   let limrunCredentials: LimrunCredentials | undefined;
   try {

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import type { CliFlags } from '@agent-device/contracts/command';
 import type {
   LeaseLifecycleContext,
   ProviderDeviceInstallOptions,
@@ -356,4 +357,26 @@ export function requireEnv<Key extends string>(
   const value = env[key];
   if (value?.trim()) return value;
   throw new AppError('INVALID_ARGS', `${providerLabel} requires ${key} in the environment.`);
+}
+
+/** Connect-time flag readers every hosted-WebDriver provider shares; errors name the command. */
+export function requireConnectPlatform(flags: CliFlags, provider: string): 'android' | 'ios' {
+  if (flags.platform === 'android' || flags.platform === 'ios') return flags.platform;
+  throw new AppError('INVALID_ARGS', `connect ${provider} requires --platform ios|android.`);
+}
+
+export function requireConnectFlag(
+  value: string | undefined,
+  provider: string,
+  flag: string,
+): string {
+  if (value?.trim()) return value;
+  throw new AppError('INVALID_ARGS', `connect ${provider} requires ${flag}.`);
+}
+
+/** A local app artifact resolved against `cwd`; `connect` refuses a path that is not a file. */
+export function resolveLocalAppArtifact(app: string, cwd: string, service: string): string {
+  const resolved = path.resolve(cwd, app);
+  if (fs.statSync(resolved, { throwIfNoEntry: false })?.isFile()) return resolved;
+  throw new AppError('INVALID_ARGS', `${service} app file not found: ${resolved}`);
 }

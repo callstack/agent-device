@@ -12,10 +12,13 @@ import {
   type RemoteConnectionState,
 } from '../remote/remote-connection-state.ts';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
-import { resolveCloudWebDriverConnectProfile } from '../cli/connection/cloud-webdriver-profile.ts';
+import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { verifyLimrunConnection } from '@agent-device/provider-limrun';
-import { providerWebDriver } from '../provider-webdriver.ts';
+import {
+  verifyAwsDeviceFarmConnection,
+  verifyBrowserStackConnection,
+} from '@agent-device/provider-webdriver/connection-verification';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
@@ -29,8 +32,12 @@ vi.mock('@agent-device/provider-limrun', async (importOriginal) => ({
   verifyLimrunConnection: vi.fn(),
 }));
 
-vi.mock('../provider-webdriver.ts', () => ({
-  providerWebDriver: { verifyConnection: vi.fn() },
+vi.mock('@agent-device/provider-webdriver/connection-verification', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('@agent-device/provider-webdriver/connection-verification')
+  >()),
+  verifyBrowserStackConnection: vi.fn(),
+  verifyAwsDeviceFarmConnection: vi.fn(),
 }));
 
 afterEach(() => {
@@ -40,7 +47,8 @@ afterEach(() => {
 
 const mockedResolveCloudAccessForConnect = vi.mocked(resolveCloudAccessForConnect);
 const mockedVerifyLimrunConnection = vi.mocked(verifyLimrunConnection);
-const mockedVerifyWebDriverConnection = vi.mocked(providerWebDriver.verifyConnection);
+const mockedVerifyBrowserStackConnection = vi.mocked(verifyBrowserStackConnection);
+const mockedVerifyAwsDeviceFarmConnection = vi.mocked(verifyAwsDeviceFarmConnection);
 
 beforeEach(() => {
   mockedVerifyLimrunConnection.mockResolvedValue({
@@ -57,39 +65,36 @@ beforeEach(() => {
       message: 'Run apps to choose an uploaded asset before allocation.',
     },
   });
-  mockedVerifyWebDriverConnection.mockImplementation(async (options) =>
-    options.provider === 'browserstack'
-      ? {
-          provider: 'browserstack',
-          service: 'BrowserStack',
-          verificationMessage: 'Credentials, device, and uploaded app verified.',
-          device: {
-            status: 'verified',
-            name: options.deviceName,
-            platform: options.platform,
-            osVersion: options.osVersion,
-          },
-          app: { status: 'verified', reference: options.app },
-        }
-      : {
-          provider: 'aws-device-farm',
-          service: 'AWS Device Farm',
-          verificationMessage: 'Credentials, project, and device verified.',
-          project: { name: 'Agent Device', reference: options.projectArn },
-          device: {
-            status: 'verified',
-            name: 'iPhone 15',
-            reference: options.deviceArn,
-            platform: options.platform,
-            osVersion: '17',
-          },
-          app: {
-            status: 'missing',
-            message:
-              'No app upload is attached; AWS Device Farm does not support install after allocation.',
-          },
-        },
-  );
+  mockedVerifyBrowserStackConnection.mockImplementation(async (options) => ({
+    provider: 'browserstack',
+    service: 'BrowserStack',
+    verificationMessage: 'Credentials, device, and uploaded app verified.',
+    device: {
+      status: 'verified',
+      name: options.deviceName,
+      platform: options.platform,
+      osVersion: options.osVersion,
+    },
+    app: { status: 'verified', reference: options.app },
+  }));
+  mockedVerifyAwsDeviceFarmConnection.mockImplementation(async (options) => ({
+    provider: 'aws-device-farm',
+    service: 'AWS Device Farm',
+    verificationMessage: 'Credentials, project, and device verified.',
+    project: { name: 'Agent Device', reference: options.projectArn },
+    device: {
+      status: 'verified',
+      name: 'iPhone 15',
+      reference: options.deviceArn,
+      platform: options.platform,
+      osVersion: '17',
+    },
+    app: {
+      status: 'missing',
+      message:
+        'No app upload is attached; AWS Device Farm does not support install after allocation.',
+    },
+  }));
 });
 
 test('connect without remote config generates one from cloud connection profile', async () => {
@@ -463,19 +468,17 @@ test('connect browserstack canonicalizes the app scheme and refuses a malformed 
       'bs://app-id',
     );
     // Verification must look up the reference the profile saved, not the spelling typed.
-    const verified = mockedVerifyWebDriverConnection.mock.calls[0]?.[0];
-    assert.equal(verified?.provider === 'browserstack' ? verified.app : undefined, 'bs://app-id');
+    assert.equal(mockedVerifyBrowserStackConnection.mock.calls[0]?.[0].app, 'bs://app-id');
 
     for (const app of ['bs://', 'bs://a b', 'BS://a/b']) {
-      assert.throws(
-        () =>
-          resolveCloudWebDriverConnectProfile({
-            provider: 'browserstack',
-            stateDir,
-            cwd: tempRoot,
-            env: { BROWSERSTACK_USERNAME: 'browser-user', BROWSERSTACK_ACCESS_KEY: 'browser-key' },
-            flags: { json: false, help: false, version: false, ...flags, providerApp: app },
-          }),
+      await assert.rejects(
+        resolveConnectProviderProfile({
+          provider: 'browserstack',
+          stateDir,
+          cwd: tempRoot,
+          env: { BROWSERSTACK_USERNAME: 'browser-user', BROWSERSTACK_ACCESS_KEY: 'browser-key' },
+          flags: { json: false, help: false, version: false, ...flags, providerApp: app },
+        }),
         (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'INVALID_ARGS');
@@ -522,9 +525,8 @@ test('connect --remote-config verifies a direct provider profile before saving s
       flags: { remoteConfig },
     });
 
-    assert.equal(mockedVerifyWebDriverConnection.mock.calls.length, 1);
-    assert.deepEqual(mockedVerifyWebDriverConnection.mock.calls[0]?.[0], {
-      provider: 'browserstack',
+    assert.equal(mockedVerifyBrowserStackConnection.mock.calls.length, 1);
+    assert.deepEqual(mockedVerifyBrowserStackConnection.mock.calls[0]?.[0], {
       username: 'browser-user',
       accessKey: 'browser-key',
       platform: 'android',
@@ -811,27 +813,26 @@ test('connect does not activate provider state when verification fails', async (
   }
 });
 
-test('connect aws-device-farm rejects device-feature flags it does not read', () => {
+test('connect aws-device-farm rejects device-feature flags it does not read', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-aws-reject-');
 
   try {
-    assert.throws(
-      () =>
-        resolveCloudWebDriverConnectProfile({
-          provider: 'aws-device-farm',
-          stateDir: path.join(tempRoot, '.state'),
-          cwd: tempRoot,
-          env: {},
-          flags: {
-            json: false,
-            help: false,
-            version: false,
-            platform: 'android',
-            device: 'Google Pixel 8',
-            providerDeviceOrientation: 'portrait',
-            providerTimezone: 'New_York',
-          },
-        }),
+    await assert.rejects(
+      resolveConnectProviderProfile({
+        provider: 'aws-device-farm',
+        stateDir: path.join(tempRoot, '.state'),
+        cwd: tempRoot,
+        env: {},
+        flags: {
+          json: false,
+          help: false,
+          version: false,
+          platform: 'android',
+          device: 'Google Pixel 8',
+          providerDeviceOrientation: 'portrait',
+          providerTimezone: 'New_York',
+        },
+      }),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.code, 'INVALID_ARGS');

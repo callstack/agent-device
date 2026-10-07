@@ -5,12 +5,12 @@ import type { ProviderDeviceType } from '@agent-device/contracts/remote';
 import {
   buildCloudWebDriverBaseCapabilities,
   readFlag,
-  requireEnv,
   requireFlag,
   requireRequest,
   requireRequestPlatform,
 } from '@agent-device/provider-webdriver/plugin';
 import { createTestMuConnection } from './connection.ts';
+import { requireTestMuCredentials } from './providers.ts';
 import {
   buildTestMuCapabilities,
   createTestMuUploadApp,
@@ -139,16 +139,6 @@ export default function testMuPlugin(host: ProviderPluginHost) {
   };
   return { webDriver, connection: createTestMuConnection(host, TESTMU_PROFILE_FIELDS) };
 }
-function requireTestMuCredentials(
-  env: ProviderPluginHost['env'],
-  providerLabel: string,
-): { username: string; accessKey: string } {
-  return {
-    username: requireEnv(env, 'LT_USERNAME', providerLabel),
-    accessKey: requireEnv(env, 'LT_ACCESS_KEY', providerLabel),
-  };
-}
-
 /** Each pool has its own upload API, so each has its own override. */
 function testMuAppUploadEndpoint(
   env: ProviderPluginHost['env'],

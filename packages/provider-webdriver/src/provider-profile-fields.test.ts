@@ -1,8 +1,12 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { ProviderProfileField } from '@agent-device/contracts/provider-profile-fields';
-import { CLOUD_WEBDRIVER_PROFILE_FIELDS } from './provider-definitions.ts';
-import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
+import type {
+  ProviderProfileField,
+  ProviderProfileFieldDeclaration,
+} from '@agent-device/contracts/provider-profile-fields';
+import { AWS_DEVICE_FARM_PROFILE_FIELDS } from './aws-device-farm.ts';
+import { BROWSERSTACK_PROFILE_FIELDS } from './browserstack.ts';
+import { BUNDLED_CLOUD_WEBDRIVER_PROVIDERS } from './index.ts';
 import { BROWSERSTACK_DEVICE_FEATURE_SPECS } from './browserstack-device-features.ts';
 
 // Fields a hub reads directly while building its session, outside the device-feature table.
@@ -14,29 +18,37 @@ const HUB_SESSION_FIELDS: readonly ProviderProfileField[] = [
   'providerSessionName',
 ];
 
-function consumedFields(provider: keyof typeof CLOUD_WEBDRIVER_PROFILE_FIELDS): string[] {
-  const { fields } = CLOUD_WEBDRIVER_PROFILE_FIELDS[provider];
+function consumedFields({ fields }: ProviderProfileFieldDeclaration): string[] {
   return (Object.keys(fields) as ProviderProfileField[])
     .filter((field) => fields[field] === 'consumed')
     .sort();
 }
 
-test('every declaration names the provider it is registered under', () => {
-  for (const [provider, declaration] of Object.entries(CLOUD_WEBDRIVER_PROFILE_FIELDS)) {
-    assert.equal(declaration.provider, provider);
+test('every bundled runtime reads the profile fields declared under its provider id', () => {
+  const host = {
+    env: {},
+    clientVersion: 'test',
+    runHostCommand: async () => {
+      throw new Error('declarations need no host command');
+    },
+  };
+  for (const bundled of BUNDLED_CLOUD_WEBDRIVER_PROVIDERS) {
+    const { webDriver } = bundled.create(host);
+    assert.equal(webDriver.provider, bundled.declaration.provider);
+    assert.equal(webDriver.profileFields.provider, bundled.declaration.provider);
   }
 });
 
 // A consumed device feature with no capability row would be accepted and then dropped at the hub.
 test('BrowserStack consumes exactly the fields its capability builder reads', () => {
   assert.deepEqual(
-    consumedFields(CLOUD_WEBDRIVER_PROVIDERS.browserStack),
+    consumedFields(BROWSERSTACK_PROFILE_FIELDS),
     [...HUB_SESSION_FIELDS, ...BROWSERSTACK_DEVICE_FEATURE_SPECS.map((spec) => spec.field)].sort(),
   );
 });
 
 test('AWS Device Farm consumes only its own fields and the session name', () => {
-  assert.deepEqual(consumedFields(CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm), [
+  assert.deepEqual(consumedFields(AWS_DEVICE_FARM_PROFILE_FIELDS), [
     'awsAppArn',
     'awsDeviceArn',
     'awsInteractionMode',

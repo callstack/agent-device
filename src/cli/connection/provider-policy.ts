@@ -1,15 +1,34 @@
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
-import {
-  CLOUD_WEBDRIVER_PROVIDERS,
-  isCloudWebDriverProviderName,
-  type CloudWebDriverKnownProviderName,
-} from '@agent-device/provider-webdriver/providers';
+import { cloudWebDriverProviderDeclaration } from '@agent-device/provider-webdriver/providers';
 import { pluginConnectionCapabilities, pluginConnectionNames } from '../../plugins/connection.ts';
-
-export type DirectDeviceConnectProvider = CloudWebDriverKnownProviderName | 'limrun';
 import { RESERVED_PLUGIN_PROVIDERS as BUILTIN_CONNECT_PROVIDERS } from '../../plugins/manifest.ts';
+
 export type BuiltinConnectProvider = (typeof BUILTIN_CONNECT_PROVIDERS)[number];
 export type ConnectProvider = BuiltinConnectProvider | (string & {});
+
+const LIMRUN_CONNECTION: ConnectionProviderCapabilities = {
+  leaseKind: 'direct-device-provider',
+  requiresAppAttachment: false,
+  requiresRemoteDaemon: false,
+  supportsArtifacts: false,
+  supportsDeferredAppSelection: true,
+  supportsDirectPortReverse: true,
+  usesCloudWebDriverLease: false,
+};
+
+function remoteDaemonConnection(
+  leaseKind: 'proxy' | 'remote-provider',
+): ConnectionProviderCapabilities {
+  return {
+    leaseKind,
+    requiresAppAttachment: false,
+    requiresRemoteDaemon: true,
+    supportsArtifacts: false,
+    supportsDeferredAppSelection: false,
+    supportsDirectPortReverse: false,
+    usesCloudWebDriverLease: false,
+  };
+}
 
 export function isConnectProviderName(
   value: string | undefined,
@@ -18,43 +37,25 @@ export function isConnectProviderName(
   return (
     value === 'cloud' ||
     value === 'proxy' ||
-    isDirectDeviceConnectProvider(value) ||
+    value === 'limrun' ||
+    cloudWebDriverProviderDeclaration(value) !== undefined ||
     pluginConnectionCapabilities(value, env) !== undefined
   );
-}
-
-function isDirectDeviceConnectProvider(
-  provider: string | undefined,
-): provider is DirectDeviceConnectProvider {
-  return provider === 'limrun' || isCloudWebDriverProviderName(provider);
 }
 
 export function connectProviderNamesForError(): string {
   return [...BUILTIN_CONNECT_PROVIDERS, ...pluginConnectionNames()].join(', ');
 }
 
+/** Bundled and installed providers declare their capabilities; the rest is the daemon's own routing. */
 export function connectionProviderCapabilities(
   provider: string | undefined,
   env: NodeJS.ProcessEnv = process.env,
 ): ConnectionProviderCapabilities {
-  const directDeviceProvider = isDirectDeviceConnectProvider(provider);
-  const cloudWebDriver = isCloudWebDriverProviderName(provider);
-  if (!directDeviceProvider && provider !== 'cloud' && provider !== 'proxy') {
-    const plugin = pluginConnectionCapabilities(provider, env);
-    if (plugin) return plugin;
-  }
-  return {
-    leaseKind:
-      provider === 'proxy'
-        ? 'proxy'
-        : directDeviceProvider
-          ? 'direct-device-provider'
-          : 'remote-provider',
-    requiresAppAttachment: provider === CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-    requiresRemoteDaemon: !directDeviceProvider,
-    supportsArtifacts: cloudWebDriver,
-    supportsDeferredAppSelection: provider === 'limrun',
-    supportsDirectPortReverse: provider === 'limrun',
-    usesCloudWebDriverLease: cloudWebDriver,
-  };
+  if (provider === 'limrun') return LIMRUN_CONNECTION;
+  if (provider === 'proxy') return remoteDaemonConnection('proxy');
+  const declared =
+    cloudWebDriverProviderDeclaration(provider)?.connection ??
+    (provider === 'cloud' ? undefined : pluginConnectionCapabilities(provider, env));
+  return declared ?? remoteDaemonConnection('remote-provider');
 }

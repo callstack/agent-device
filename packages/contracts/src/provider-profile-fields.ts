@@ -42,6 +42,27 @@ export function rejectRefusedProviderProfileFields(
   );
 }
 
+/**
+ * A value a saved provider profile must carry before verification can run. Connect writes every
+ * field its provider requires, so a missing one means a hand-authored profile needs regenerating.
+ */
+export function requireResolvedProfileValue<T>(value: T | undefined, message: string): T {
+  if (value !== undefined) return value;
+  throw new AppError('COMMAND_FAILED', message, {
+    hint: 'Reconnect to regenerate and validate the provider profile.',
+  });
+}
+
+export function requireResolvedProfilePlatform(
+  platform: string | undefined,
+  service: string,
+): 'android' | 'ios' {
+  if (platform === 'android' || platform === 'ios') return platform;
+  throw new AppError('COMMAND_FAILED', `${service} profile missed a mobile platform.`, {
+    hint: 'Reconnect with --platform ios|android.',
+  });
+}
+
 // The flags bag keeps the field, not the spelling, so name every spelling the user could have typed.
 function describeFlag(field: ProviderProfileField): string {
   const aliases = PROVIDER_PROFILE_FIELD_FLAG_ALIASES[field];

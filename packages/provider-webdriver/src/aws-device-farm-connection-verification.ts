@@ -2,24 +2,28 @@ import { AppError } from '@agent-device/kernel/errors';
 import { createAwsDeviceFarmCommandRunner } from './aws-device-farm.ts';
 import type { RunHostCommand } from './dependencies.ts';
 import type {
-  CloudWebDriverConnectionVerification,
-  CloudWebDriverConnectionVerificationOptions,
-} from './connection-verification.ts';
-import type { ProviderConnectionResource } from '@agent-device/contracts/remote';
+  ProviderConnectionResource,
+  ProviderConnectionVerification,
+} from '@agent-device/contracts/remote';
 
-type AwsOptions = Extract<
-  CloudWebDriverConnectionVerificationOptions,
-  { provider: 'aws-device-farm' }
->;
+export type AwsDeviceFarmConnectionVerificationOptions = {
+  platform: 'android' | 'ios';
+  projectArn: string;
+  deviceArn: string;
+  appArn?: string;
+  region?: string;
+};
 
-export function readAwsDeviceFarmRegionFromArn(arn: string): string | undefined {
-  return /^arn:[^:]+:devicefarm:([^:]+):/.exec(arn)?.[1];
-}
+export type AwsDeviceFarmConnectionVerification = ProviderConnectionVerification & {
+  provider: 'aws-device-farm';
+  service: 'AWS Device Farm';
+  project: { name?: string; reference: string };
+};
 
 export async function verifyAwsDeviceFarmConnection(
-  options: AwsOptions,
+  options: AwsDeviceFarmConnectionVerificationOptions,
   runHostCommand: RunHostCommand,
-): Promise<CloudWebDriverConnectionVerification> {
+): Promise<AwsDeviceFarmConnectionVerification> {
   const runAwsJson = createAwsDeviceFarmCommandRunner({
     runHostCommand,
     region: options.region,
@@ -67,7 +71,7 @@ export async function verifyAwsDeviceFarmConnection(
 
 function verifyAwsUpload(
   upload: Record<string, unknown>,
-  options: AwsOptions,
+  options: AwsDeviceFarmConnectionVerificationOptions,
 ): ProviderConnectionResource {
   const status = readString(upload.status);
   if (status !== 'SUCCEEDED') {

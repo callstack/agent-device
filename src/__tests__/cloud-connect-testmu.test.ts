@@ -7,16 +7,14 @@ import {
   readActiveConnectionState,
   type RemoteConnectionState,
 } from '../remote/remote-connection-state.ts';
-import { resolveCloudWebDriverConnectProfile as resolveBuiltinProfile } from '../cli/connection/cloud-webdriver-profile.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { verifyTestMuConnection } from '@agent-device/testmu/connection-verification';
 import testMuPlugin from '@agent-device/testmu';
 import { createPluginHost } from '../plugins/host.ts';
-import { persistAndResolveGeneratedProfile } from '../cli/connection/generated-config.ts';
+import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
 import { selectPlugin, pluginHome } from '../plugins/plugin.fixtures.ts';
 import { installedPlugins } from '../plugins/store.ts';
 import manifest from '@agent-device/testmu/package.json' with { type: 'json' };
-import type { CliFlags } from '@agent-device/contracts/command';
 import type { PluginConnection } from '../plugins/connection.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
@@ -34,20 +32,6 @@ vi.mock('../plugins/load.ts', () => ({
     return await runConnection(registration.connection);
   },
 }));
-function resolveCloudWebDriverConnectProfile(options: {
-  provider: 'testmu' | 'browserstack' | 'aws-device-farm';
-  flags: CliFlags;
-  stateDir: string;
-  cwd: string;
-  env?: NodeJS.ProcessEnv;
-}) {
-  if (options.provider !== 'testmu')
-    return resolveBuiltinProfile({ ...options, provider: options.provider });
-  const resolved = testMuPlugin(createPluginHost(options.env ?? {}, undefined)).connection.resolve(
-    options,
-  );
-  return persistAndResolveGeneratedProfile({ ...options, ...resolved });
-}
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -126,11 +110,11 @@ test('connect testmu generates a local provider profile and verifies the virtual
   }
 });
 
-test('connect canonicalizes an upper-case app scheme and refuses an empty app id', () => {
+test('connect canonicalizes an upper-case app scheme and refuses an empty app id', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-app-scheme-');
   const base = { json: false, help: false, version: false, platform: 'ios' as const };
-  const connect = (provider: 'testmu' | 'browserstack', providerApp: string) =>
-    resolveCloudWebDriverConnectProfile({
+  const connect = async (provider: 'testmu' | 'browserstack', providerApp: string) =>
+    await resolveConnectProviderProfile({
       provider,
       stateDir: path.join(tempRoot, `.state-${provider}`),
       cwd: tempRoot,
@@ -144,12 +128,12 @@ test('connect canonicalizes an upper-case app scheme and refuses an empty app id
     });
 
   try {
-    const upperCase = connect('testmu', 'LT://APP1');
+    const upperCase = await connect('testmu', 'LT://APP1');
     assert.equal(readGeneratedConfig(upperCase.remoteConfigPath).providerApp, 'lt://APP1');
     // Connect verification reads these flags, so they must carry the canonical reference too.
     assert.equal(upperCase.flags.providerApp, 'lt://APP1');
     assert.equal(
-      readGeneratedConfig(connect('browserstack', 'Bs://abc').remoteConfigPath).providerApp,
+      readGeneratedConfig((await connect('browserstack', 'Bs://abc')).remoteConfigPath).providerApp,
       'bs://abc',
     );
     for (const [provider, app] of [
@@ -158,8 +142,8 @@ test('connect canonicalizes an upper-case app scheme and refuses an empty app id
       ['testmu', 'LT://a/b'],
       ['browserstack', 'bs://'],
     ] as const) {
-      assert.throws(
-        () => connect(provider, app),
+      await assert.rejects(
+        connect(provider, app),
         (error: unknown) =>
           error instanceof AppError &&
           error.code === 'INVALID_ARGS' &&
@@ -197,29 +181,28 @@ test('connect testmu verifies against TESTMU_API_ENDPOINT', async () => {
   }
 });
 
-test('connect testmu rejects BrowserStack network and re-sign flags before saving a profile', () => {
+test('connect testmu rejects BrowserStack network and re-sign flags before saving a profile', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-testmu-reject-');
 
   try {
-    assert.throws(
-      () =>
-        resolveCloudWebDriverConnectProfile({
-          provider: 'testmu',
-          stateDir: path.join(tempRoot, '.state'),
-          cwd: tempRoot,
-          env: { LT_USERNAME: 'lt-user', LT_ACCESS_KEY: 'lt-key' },
-          flags: {
-            json: false,
-            help: false,
-            version: false,
-            platform: 'ios',
-            device: 'iPhone 16',
-            providerOsVersion: '18.0',
-            providerApp: 'lt://APP1',
-            providerNetworkProfile: '3g-lossy',
-            providerNoResignApp: true,
-          },
-        }),
+    await assert.rejects(
+      resolveConnectProviderProfile({
+        provider: 'testmu',
+        stateDir: path.join(tempRoot, '.state'),
+        cwd: tempRoot,
+        env: { LT_USERNAME: 'lt-user', LT_ACCESS_KEY: 'lt-key' },
+        flags: {
+          json: false,
+          help: false,
+          version: false,
+          platform: 'ios',
+          device: 'iPhone 16',
+          providerOsVersion: '18.0',
+          providerApp: 'lt://APP1',
+          providerNetworkProfile: '3g-lossy',
+          providerNoResignApp: true,
+        },
+      }),
       (error: unknown) => {
         assert.ok(error instanceof AppError);
         assert.equal(error.code, 'INVALID_ARGS');
@@ -287,7 +270,7 @@ test('connect testmu stores and verifies the real-device pool', async () => {
   }
 });
 
-test('providers other than TestMu refuse --provider-device-type before saving a profile', () => {
+test('providers other than TestMu refuse --provider-device-type before saving a profile', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-connect-device-type-reject-');
   const base = { json: false, help: false, version: false, platform: 'android' as const };
 
@@ -313,15 +296,14 @@ test('providers other than TestMu refuse --provider-device-type before saving a 
         {},
       ],
     ] as const) {
-      assert.throws(
-        () =>
-          resolveCloudWebDriverConnectProfile({
-            provider,
-            stateDir: path.join(tempRoot, '.state'),
-            cwd: tempRoot,
-            env,
-            flags: { ...flags, providerDeviceType: 'real' },
-          }),
+      await assert.rejects(
+        resolveConnectProviderProfile({
+          provider,
+          stateDir: path.join(tempRoot, '.state'),
+          cwd: tempRoot,
+          env,
+          flags: { ...flags, providerDeviceType: 'real' },
+        }),
         (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'INVALID_ARGS');
