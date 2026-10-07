@@ -82,6 +82,9 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ...from(
         DAEMON_HTTP,
         'DaemonHealthPayload',
+        'DaemonHealthFeature',
+        'DAEMON_HOST_DEVICE_SHAPE_FEATURE',
+        'DAEMON_HOST_SERVICE',
         'buildDaemonHealthPayload',
         'buildDaemonInstanceMismatchRpcResponse',
       ),

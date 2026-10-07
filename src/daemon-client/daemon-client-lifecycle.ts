@@ -37,6 +37,7 @@ import {
   type DaemonTakeoverDecision,
 } from './daemon-launch-spec.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import type { CliFlags } from '@agent-device/contracts/command';
 
 import {
   getDaemonMetadataState,
@@ -49,6 +50,7 @@ import {
   canConnect,
   cachedRemoteDaemonHealth,
   isDaemonTransportUnavailableError,
+  type RemoteDaemonHealth,
 } from './daemon-client-transport.ts';
 
 export type DaemonClientSettings = {
@@ -171,13 +173,7 @@ async function ensureLocalDaemon(settings: DaemonClientSettings): Promise<Ensure
 }
 
 async function ensureRemoteDaemon(settings: DaemonClientSettings): Promise<EnsuredDaemon> {
-  const remoteInfo: DaemonInfo = {
-    transport: 'http',
-    // Remote mode reuses the auth token as the daemon token so the existing JSON-RPC contract still works.
-    token: settings.remoteAuthToken ?? '',
-    pid: 0,
-    baseUrl: settings.remoteBaseUrl,
-  };
+  const remoteInfo = remoteDaemonInfo(settings.remoteBaseUrl, settings.remoteAuthToken);
   const health = await cachedRemoteDaemonHealth(remoteInfo);
   if (health.reachable) {
     remoteInfo.remoteInstanceId = health.instanceId;
@@ -846,6 +842,29 @@ function readRecentLogTail(logPath: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function remoteDaemonInfo(baseUrl: string | undefined, authToken: string | undefined): DaemonInfo {
+  return {
+    transport: 'http',
+    // Remote mode reuses the auth token as the daemon token so the existing JSON-RPC contract still works.
+    token: authToken ?? '',
+    pid: 0,
+    baseUrl,
+  };
+}
+
+/**
+ * The health of the remote endpoint these flags name, read through the same cache the RPC
+ * transport probes before every command, so asking first costs no extra request.
+ */
+export async function readRemoteDaemonHealthForFlags(
+  flags: Pick<CliFlags, 'daemonBaseUrl' | 'daemonAuthToken'>,
+): Promise<RemoteDaemonHealth | undefined> {
+  const baseUrl = resolveRemoteDaemonBaseUrl(flags.daemonBaseUrl);
+  if (!baseUrl) return undefined;
+  const authToken = flags.daemonAuthToken ?? process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
+  return await cachedRemoteDaemonHealth(remoteDaemonInfo(baseUrl, authToken));
 }
 
 function resolveRemoteDaemonBaseUrl(raw: string | undefined): string | undefined {

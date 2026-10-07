@@ -145,6 +145,15 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
         'Start the official stdio MCP server. It exposes structured command tools backed by the agent-device client.',
     },
   },
+  host: {
+    text: {
+      summary: 'Serve the local daemon to remote verification workers',
+      description:
+        'Run the Host front-end: start or reuse the local HTTP daemon and serve it to remote workers, authenticated by one persistent service credential stored under the state dir. See help host.',
+    },
+    listUsageOverride: 'host',
+    allowedFlags: ['proxyHost', 'proxyPort', 'hostTlsCert', 'hostTlsKey', 'stateDir'],
+  },
   proxy: {
     text: {
       summary: 'Expose a local daemon through an HTTP tunnel',

@@ -152,6 +152,8 @@ export type RemoteDaemonHealth = {
   rpcProtocolVersion?: number;
   instanceId?: string;
   hostArch?: string;
+  /** Capabilities the peer advertises, such as Host's device-shape allocation. */
+  features?: readonly string[];
   /** The daemon behind a proxy, as the proxy's health reported it. */
   upstream?: RemoteDaemonHealthLink;
   /** The probe ran out of its time budget before an answer, rather than failing outright. */
@@ -160,7 +162,7 @@ export type RemoteDaemonHealth = {
 
 type RemoteDaemonHealthLink = Pick<
   RemoteDaemonHealth,
-  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch'
+  'service' | 'version' | 'rpcProtocolVersion' | 'instanceId' | 'hostArch' | 'features'
 >;
 
 export async function canConnect(
@@ -355,6 +357,9 @@ function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink
       typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
     ...(typeof parsed.instanceId === 'string' ? { instanceId: parsed.instanceId } : {}),
     ...(typeof parsed.hostArch === 'string' ? { hostArch: parsed.hostArch } : {}),
+    ...(Array.isArray(parsed.features)
+      ? { features: parsed.features.filter((feature) => typeof feature === 'string') }
+      : {}),
   };
 }
 

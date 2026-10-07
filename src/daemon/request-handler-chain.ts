@@ -25,6 +25,7 @@ import type { RequestPlatformProviderScope } from '@agent-device/contracts/platf
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import type { DaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
+import type { HostShapeAllocator } from './host-shape-allocation.ts';
 
 type RequestHandlerChainParams = {
   req: DaemonRequest;
@@ -37,6 +38,7 @@ type RequestHandlerChainParams = {
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  hostShapeAllocator?: HostShapeAllocator;
   providerAppCatalog?: ProviderAppCatalog;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
@@ -155,6 +157,7 @@ async function runLeaseHandler(
       providerCredentials: params.providerCredentials,
       leaseLifecycleProvider: params.leaseLifecycleProvider,
       cloudArtifactProvider: params.cloudArtifactProvider,
+      hostShapeAllocator: params.hostShapeAllocator,
     }),
   );
 }
