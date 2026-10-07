@@ -6,7 +6,25 @@
     "emitDeclarationOnly": true,
     "declaration": true,
     "declarationDir": "./dist-types",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
   },
-  "include": ["src"]
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../capture-kit"
+    },
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../host-kit"
+    },
+    {
+      "path": "../kernel"
+    },
+    {
+      "path": "../selectors"
+    }
+  ]
 }

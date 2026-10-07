@@ -6,7 +6,46 @@
     "emitDeclarationOnly": true,
     "declaration": true,
     "declarationDir": "./dist-types",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
   },
-  "include": ["src", "../command-registry/src/global.d.ts"]
+  "include": ["src", "../command-registry/src/global.d.ts"],
+  "references": [
+    {
+      "path": "../ad-replay"
+    },
+    {
+      "path": "../ad-script"
+    },
+    {
+      "path": "../capture-kit"
+    },
+    {
+      "path": "../command-registry"
+    },
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../device-selection"
+    },
+    {
+      "path": "../host-kit"
+    },
+    {
+      "path": "../kernel"
+    },
+    {
+      "path": "../maestro"
+    },
+    {
+      "path": "../replay-test"
+    },
+    {
+      "path": "../selectors"
+    },
+    {
+      "path": "../session-journal"
+    }
+  ]
 }

@@ -6,7 +6,8 @@
     "emitDeclarationOnly": true,
     "declaration": true,
     "declarationDir": "./dist-types",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
   },
   "include": ["src"]
 }

@@ -9,14 +9,14 @@
     "resolveJsonModule": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noEmit": true,
     "incremental": true,
-    "tsBuildInfoFile": ".tmp/tsconfig.tsbuildinfo",
+    "tsBuildInfoFile": "./.tmp/tsconfig.tsbuildinfo",
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
     "rewriteRelativeImportExtensions": true,
     "verbatimModuleSyntax": true,
     "types": ["node"],
+    "noEmit": true,
     "paths": {
       "agent-device/plugins": ["./src/sdk/plugins.ts"],
       "agent-device/plugins/webdriver": ["./src/sdk/plugin-webdriver.ts"]
@@ -27,5 +27,85 @@
     "test",
     "scripts/help-conformance-command-validator.ts",
     "packages/command-registry/src/global.d.ts"
+  ],
+  "references": [
+    {
+      "path": "packages/ad-replay"
+    },
+    {
+      "path": "packages/ad-script"
+    },
+    {
+      "path": "packages/capture-kit"
+    },
+    {
+      "path": "packages/command-registry"
+    },
+    {
+      "path": "packages/contracts"
+    },
+    {
+      "path": "packages/device-selection"
+    },
+    {
+      "path": "packages/host-kit"
+    },
+    {
+      "path": "packages/kernel"
+    },
+    {
+      "path": "packages/maestro"
+    },
+    {
+      "path": "packages/managed-allocation"
+    },
+    {
+      "path": "packages/platform-android"
+    },
+    {
+      "path": "packages/platform-apple"
+    },
+    {
+      "path": "packages/platform-harmonyos"
+    },
+    {
+      "path": "packages/platform-linux"
+    },
+    {
+      "path": "packages/platform-vega"
+    },
+    {
+      "path": "packages/platform-web"
+    },
+    {
+      "path": "packages/provider-limrun"
+    },
+    {
+      "path": "packages/provider-testmu"
+    },
+    {
+      "path": "packages/provider-webdriver"
+    },
+    {
+      "path": "packages/provision-kit"
+    },
+    {
+      "path": "packages/proxy"
+    },
+    {
+      "path": "packages/replay-port"
+    },
+    {
+      "path": "packages/replay-test"
+    },
+    {
+      "path": "packages/selectors"
+    },
+    {
+      "path": "packages/session-journal"
+    },
+    {
+      "path": "packages/xml"
+    }
   ]
 }

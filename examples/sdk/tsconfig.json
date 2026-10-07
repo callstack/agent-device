@@ -1,6 +1,9 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "../../.tmp/examples-sdk.tsbuildinfo",
     "paths": {
       "agent-device": ["../../src/sdk/index.ts"],
       "agent-device/io": ["../../src/sdk/io.ts"],
@@ -21,5 +24,39 @@
   // prior build, workspace link, or publish step. Running an example for real
   // still resolves `agent-device` as a self-referencing package (needs
   // `pnpm build`), matching how a real consumer would import it.
-  "include": [".", "../../packages/command-registry/src/global.d.ts"]
+  //
+  // Composite under `tsc -b`, so every file its program loads through `paths`
+  // must be listed here — hence the `../../src/**/*` include with the test and
+  // fixture exclusions. The workspace packages those sources reach are project
+  // references: their exports-map `.ts` targets resolve to the `dist-types`
+  // declarations the graph emits instead of becoming unlisted foreign inputs.
+  "include": [".", "../../src/**/*", "../../packages/command-registry/src/global.d.ts"],
+  "exclude": ["../../src/**/*.test.ts", "../../src/**/__tests__/**", "../../src/**/*.fixtures.ts"],
+  "references": [
+    { "path": "../../packages/ad-replay" },
+    { "path": "../../packages/ad-script" },
+    { "path": "../../packages/capture-kit" },
+    { "path": "../../packages/command-registry" },
+    { "path": "../../packages/contracts" },
+    { "path": "../../packages/device-selection" },
+    { "path": "../../packages/host-kit" },
+    { "path": "../../packages/kernel" },
+    { "path": "../../packages/maestro" },
+    { "path": "../../packages/managed-allocation" },
+    { "path": "../../packages/platform-android" },
+    { "path": "../../packages/platform-apple" },
+    { "path": "../../packages/platform-harmonyos" },
+    { "path": "../../packages/platform-linux" },
+    { "path": "../../packages/platform-vega" },
+    { "path": "../../packages/platform-web" },
+    { "path": "../../packages/provider-limrun" },
+    { "path": "../../packages/provider-webdriver" },
+    { "path": "../../packages/provision-kit" },
+    { "path": "../../packages/proxy" },
+    { "path": "../../packages/replay-port" },
+    { "path": "../../packages/replay-test" },
+    { "path": "../../packages/selectors" },
+    { "path": "../../packages/session-journal" },
+    { "path": "../../packages/xml" }
+  ]
 }
