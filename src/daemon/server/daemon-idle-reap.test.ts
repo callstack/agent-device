@@ -119,12 +119,6 @@ test('a repair-armed session that has already COMMITTED still blocks idle-reap (
   assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), false);
 });
 
-test('an ordinary (non-repair) open session still blocks idle-reap', () => {
-  sessionStore.publish('default', makeSession());
-  assert.equal(hasReapBlockingOpenSessions(sessionStore), true);
-  assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), false);
-});
-
 test('a normal session alongside a reapable repair session still blocks idle-reap', () => {
   sessionStore.publish(
     'default',

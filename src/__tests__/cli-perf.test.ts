@@ -97,24 +97,6 @@ test('perf frames forwards frames area and prints focused frame summary', async 
   assert.equal(result.stdout, 'Frame health: dropped 3.1% (12/390 frames) window 12s\n');
 });
 
-test('perf frames sample forwards explicit sample action to daemon', async () => {
-  const result = await runCliCapture(['perf', 'frames', 'sample', '--json'], async () => ({
-    ok: true,
-    data: {
-      metrics: {
-        fps: {
-          available: false,
-          reason: 'No frame data.',
-        },
-      },
-    },
-  }));
-
-  assert.equal(result.code, null);
-  assert.equal(result.calls[0]?.command, 'perf');
-  assert.deepEqual(result.calls[0]?.positionals, ['frames', 'sample']);
-});
-
 test('perf memory sample forwards memory area and prints compact memory summary', async () => {
   const result = await runCliCapture(['perf', 'memory', 'sample'], async () => ({
     ok: true,

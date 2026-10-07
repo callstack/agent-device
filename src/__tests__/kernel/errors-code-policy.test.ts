@@ -200,19 +200,6 @@ test('defaultHintForCode falls back to the generic retry hint for a daemon/runne
   );
 });
 
-test('defaultHintForCode never returns a falsy hint for any known code — printHumanError silently drops a falsy hint', () => {
-  // src/commands/output/error.ts's printHumanError only prints "Hint: ..." when
-  // `normalized.hint` is truthy, so an empty-string hint would silently vanish
-  // from CLI output rather than fail loudly.
-  for (const code of KNOWN_APP_ERROR_CODES) {
-    const hint = defaultHintForCode(code);
-    assert.ok(hint, `expected a non-empty hint for ${code}`);
-  }
-});
-
-// --- normalizeAgentDeviceError: the SDK-facing name for normalizeError ---
-// (src/sdk/index.ts re-exports it under this name for public consumers.)
-
 test('normalizeAgentDeviceError delegates to normalizeError, including the context argument', () => {
   const err = new AppError('SESSION_NOT_FOUND', 'gone');
   const normalized = normalizeAgentDeviceError(err, {

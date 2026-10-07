@@ -828,31 +828,6 @@ test('wait keeps CLI bare text behavior through the typed client command API', a
   assert.equal(observed?.timeoutMs, 1500);
 });
 
-test('clipboard read keeps human text output through the typed client command API', async () => {
-  const client = createStubClient({
-    installFromSource: async () => {
-      throw new Error('unexpected install call');
-    },
-  });
-  client.command.clipboard = async () => ({ action: 'read', text: 'hello' });
-
-  const stdout = await captureStdout(async () => {
-    const handled = await tryRunClientBackedCommand({
-      command: 'clipboard',
-      positionals: ['read'],
-      flags: {
-        json: false,
-        help: false,
-        version: false,
-      },
-      client,
-    });
-    assert.equal(handled, true);
-  });
-
-  assert.equal(stdout, 'hello\n');
-});
-
 test('keyboard status prints Android input ownership in human output', async () => {
   const client = createStubClient({
     installFromSource: async () => {

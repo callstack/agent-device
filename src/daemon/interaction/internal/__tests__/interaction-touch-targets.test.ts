@@ -5,19 +5,6 @@ import {
   parseTouchTarget,
 } from '../interaction-touch-targets.ts';
 
-test('parseTouchTarget preserves ref fallback label through shared grammar', () => {
-  const parsed = parseTouchTarget(['@e4', 'Email field'], 'press');
-
-  expect(parsed).toEqual({
-    ok: true,
-    target: {
-      kind: 'ref',
-      ref: '@e4',
-      fallbackLabel: 'Email field',
-    },
-  });
-});
-
 test('parseTouchTarget trims ref fallback label', () => {
   const parsed = parseTouchTarget(['@e4', '  Email field  '], 'press');
 

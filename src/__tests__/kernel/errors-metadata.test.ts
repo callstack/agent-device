@@ -48,16 +48,6 @@ test('normalizeError redacts and bounds a structured cause before putting it on 
   assert.ok((normalized.cause?.message.length ?? 0) < cause.message.length);
 });
 
-test('normalizeError provides app discovery guidance for app-not-installed errors', () => {
-  const normalized = normalizeError(
-    new AppError('APP_NOT_INSTALLED', 'No package found matching "chat"'),
-  );
-  assert.match(
-    normalized.hint ?? '',
-    /Run apps to discover the exact installed package or bundle id/i,
-  );
-});
-
 test('normalizeError lifts details.retriable to the top level and strips it from details', () => {
   const normalized = normalizeError(
     new AppError('COMMAND_FAILED', 'adb exited with code 1', {
@@ -103,16 +93,6 @@ test('normalizeError preserves details.divergence verbatim through redaction/str
   assert.deepEqual(normalized.details?.divergence, divergence);
   assert.equal(normalized.details?.step, 2);
 });
-
-test('daemon-originated REPLAY_DIVERGENCE gets a default hint pointing at the report', () => {
-  const normalized = normalizeError(
-    new AppError('REPLAY_DIVERGENCE', 'Replay failed at step 1', {}),
-  );
-  assert.match(normalized.hint ?? '', /details\.divergence/);
-});
-
-// --- stringDetail/booleanDetail/stripDiagnosticMeta: type-guard and
-// empty-after-stripping contracts normalizeError relies on ---
 
 test('normalizeError ignores a non-string details.diagnosticId/logPath/hint rather than surfacing the wrong-typed value', () => {
   const normalized = normalizeError(

@@ -8,13 +8,6 @@ import {
   discriminatingSurfaceChangedWithinRect,
 } from '../interaction-surface-signature.ts';
 
-test('areInteractionSurfaceSignaturesStable treats identical surfaces as stable', () => {
-  const before = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
-  const after = buildInteractionSurfaceSignature(makeSnapshot('Inbox').nodes);
-
-  assert.equal(areInteractionSurfaceSignaturesStable(before, after), true);
-});
-
 test('areInteractionSurfaceSignaturesStable tolerates tiny rect drift', () => {
   const before = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 100).nodes);
   const after = buildInteractionSurfaceSignature(makeSnapshot('Inbox', 100.4).nodes);

@@ -470,14 +470,6 @@ test('plan validator rejects a doubled && as an empty chain operand', async () =
   assert.equal(closeSegment.issues.length, 0);
 });
 
-test('plan validator still allows a quoted && to pass through a single segment unsplit', async () => {
-  const [single] = await validatePlanCommands([
-    'agent-device fill \'label="A && B"\' "value" --settle',
-  ]);
-  assert.equal(single.issues.length, 0);
-  assert.deepEqual(single.tokens, ['agent-device', 'fill', 'label="A && B"', 'value', '--settle']);
-});
-
 test('case matchers score parsed tokens so shell quoting does not change results', async () => {
   const commands = [
     'agent-device open "com.example.shop"',

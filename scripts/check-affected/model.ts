@@ -27,73 +27,9 @@ import { deviceLaneOwnership } from './device-lanes.ts';
 // the command-reference docs gate, which used to be reachable only as a workflow
 // job nothing in this repo could name. The run-gate action is the only way a CI lane
 // declares ownership, so `check:gate-manifest` fails when a registered check has no lane.
-// Raw shell earns no ownership credit.
-export type CheckId =
-  | 'format'
-  | 'lint'
-  | 'typecheck'
-  | 'test-app-typecheck'
-  | 'test-app-security'
-  | 'layering'
-  | 'di-seams'
-  | 'fallow'
-  | 'mcp-metadata'
-  | 'build'
-  | 'package'
-  | 'vitest-related'
-  | 'unit'
-  | 'unit-ci'
-  | 'coverage'
-  | 'provider-integration'
-  | 'integration-node'
-  | 'macos-coverage'
-  | 'ios-snapshot-differential'
-  | 'integration-progress'
-  | 'swift-runner-ios'
-  | 'swift-runner-macos'
-  | 'android-helpers'
-  | 'macos-helper'
-  | 'web-smoke'
-  | 'replay-compat'
-  | 'daemon-wire-compat'
-  // Tooling gates: each proves one of the checkers above still behaves.
-  | 'affected-selector'
-  | 'gate-manifest'
-  | 'gate-manifest-model'
-  | 'depgraph'
-  | 'tmpdir-leaks'
-  | 'tmpdir-leaks-model'
-  | 'coverage-model'
-  | 'wire-compat-model'
-  | 'production-exports'
-  | 'bundle-owner-files'
-  | 'freerange'
-  | 'fixture-cache'
-  | 'fixture-fallback'
-  | 'command-docs'
-  | 'agent-guidance'
-  | 'xctest-selection'
-  | 'packaged-runner-swift'
-  // Gates that drive their own runner — declared nowhere, registered here.
-  | 'maestro-conformance'
-  | 'maestro-differential'
-  | 'maestro-regenerate'
-  | 'fuzz-parsers'
-  | 'mutation'
-  | 'mutation-affected'
-  | 'mutation-check'
-  | 'mutation-model'
-  | 'concurrency-torture'
-  | 'replay-ios'
-  | 'replay-ios-device'
-  | 'replay-macos'
-  | 'replay-linux'
-  | 'linux-command-evidence'
-  | 'replay-android';
-
-// The complete local check universe. A fail-open plan selects all of these;
-// keep it in sync with the catalog in checks.ts (asserted by the self-test).
-export const ALL_CHECKS: readonly CheckId[] = [
+// Raw shell earns no ownership credit. A fail-open plan selects all of these; keep it in sync
+// with the catalog in checks.ts (asserted by the self-test).
+export const ALL_CHECKS = [
   'format',
   'lint',
   'typecheck',
@@ -155,7 +91,9 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'replay-linux',
   'linux-command-evidence',
   'replay-android',
-];
+] as const;
+
+export type CheckId = (typeof ALL_CHECKS)[number];
 
 export type SelectionReason = {
   check: CheckId;
