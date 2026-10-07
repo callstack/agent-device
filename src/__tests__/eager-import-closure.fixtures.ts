@@ -129,9 +129,13 @@ function parseEagerModule(fileName: string, source: string): EagerModule {
 
 function isWiringOnlyStatement(statement: AstNode): boolean {
   if (statement.type === 'ImportDeclaration') return true;
-  // `export * from 'x'` and `export { a } from 'x'` name a module; `export const a = 1` does not.
-  if (statement.type === 'ExportNamedDeclaration' || statement.type === 'ExportAllDeclaration') {
-    return statement.source !== undefined && statement.source !== null;
+  if (statement.type === 'ExportAllDeclaration') return true; // `export * from 'x'` names a module.
+  if (statement.type === 'ExportNamedDeclaration') {
+    // `export { a } from 'x'` names a module, and a source-less `export { a }` only re-names a
+    // local binding -- the re-export half of a split's wiring. What still counts is the shape
+    // that OWNS a declaration: `export const a = 1`, `export function a() {}`.
+    if (statement.source != null) return true;
+    return statement.declaration == null;
   }
   return false;
 }

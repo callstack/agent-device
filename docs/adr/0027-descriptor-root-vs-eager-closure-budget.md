@@ -40,8 +40,9 @@ the file must be divided, the other says the division must not be visible to any
   the two graphs, and nothing is hand-entered per split.
 - Do not make registry construction asynchronous to dodge the walker. ADR 0008's synchronous root is
   load-bearing for compile-time totality.
-- The split tolerance says a re-home adds no eager *work*; it does not license adding eager
-  *edges* under a façade. The ADR-0019 checks stay hard.
+- The split tolerance guarantees flat statement weight over a preserved closure; it does not
+  license adding eager *edges* under a façade — the head must still evaluate every merge-base
+  module, and the ADR-0019 checks stay hard.
 
 ## Measured
 
@@ -89,11 +90,18 @@ facts computed from the two closure graphs, not by an entered number:
 This is issue #2469's candidate 4 (structure ∧ weight), implemented as the minimal slice: each
 half alone is refutable — containment without weight accepts a "split" that smuggles a new heavy
 edge; weight without containment accepts dropping a merge-base module behind an equal-sized
-replacement — and together they are the smallest pair that admits healthy extraction and refuses
-new eager work. Statements were chosen over bytes because formatting and comment churn move bytes
-while statements track the thing being preserved: module-scope evaluation work. Both are proxies;
-the planted tests in `scripts/__tests__/closure-growth-rule.test.ts` pin the acceptance pair in
-both directions, and the hard ADR-0019 checks remain the non-proxy backstop under it.
+replacement — and together they admit healthy extraction while refusing any growth in the
+closure's module-scope statement weight. Statements were chosen over bytes because formatting and
+comment churn move bytes while statements track the thing being preserved: module-scope
+declarations and calls. The guarantee is exactly **flat statement weight over a preserved
+closure**, not equality of eager behavior: a split that REPLACES an existing statement with a
+more expensive top-level call moves no count and no weight, so it passes — nothing
+count-based, in modules or statements, can see a like-for-like replacement. That residue is
+bounded by what the tolerance cannot hide: the head still evaluates only merge-base modules plus
+what they pull in, the hard ADR-0019 checks (façade exactness, no platform implementation before
+binding) stay count- and pattern-based under it, and the added-module listing every failure
+prints is what a reviewer reads. The planted tests in
+`scripts/__tests__/closure-growth-rule.test.ts` pin the acceptance pair in both directions.
 
 Maintenance cost of an ordinary extraction under this rule: zero configuration edits. No row,
 baseline, or number is touched per split — the merge-base comparison recomputes everything. (The

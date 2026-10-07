@@ -13,17 +13,18 @@
 //    (renames canonicalized), so nothing was dropped or swapped -- the growth is purely
 //    addition.
 // 2. FLAT WEIGHT: the closure's total top-level statement count (`topLevelStatementCount`:
-//    wiring excluded) did not grow, so the added files carry re-homed declarations, not new
-//    module-scope work. Any smuggled eager work -- a module-scope call into a new heavy edge --
-//    adds statements and stays red.
+//    wiring excluded) did not grow. Smuggled eager work that ADDS a module-scope statement --
+//    a call into a new heavy edge -- raises the weight and stays red.
 //
-// Each alone is insufficient: containment without weight accepts a split that smuggles eager
-// work; weight without containment accepts dropping a merge-base module while adding a heavier
-// one at the same statement count. Together they are the smallest rule that admits healthy
-// extraction and refuses new eager edges, which is why they replace neither the count (the
-// comparison still fires first: growth must exist to be tolerated) nor the hard ADR-0019 checks
-// (façade exactness, no platform implementation before binding), which stay count- and
-// pattern-based and untouched.
+// Each alone is insufficient: containment without weight accepts a split that smuggles an
+// added statement; weight without containment accepts dropping a merge-base module while
+// adding a heavier one at the same statement count. The guarantee the pair states is exactly
+// "flat statement weight over a preserved closure" -- a split that REPLACES a statement with
+// a more expensive one is invisible to any count, in modules or in statements, and is not
+// what this tolerance was built to admit. It replaces neither the count comparison (which
+// still fires first: growth must exist to be tolerated) nor the hard ADR-0019 checks (façade
+// exactness, no platform implementation before binding), which stay count- and pattern-based
+// and untouched.
 
 /**
  * What one entry's no-growth verdict reads. Counts come from the closure graphs; weights are the

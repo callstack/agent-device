@@ -70,9 +70,10 @@ family rather than arguing from the shape:
 2. Report the change in files-touched for that family against the recorded baseline of the four
    recurring eight-package commits.
 3. Report eager-closure deltas per entry surface. `scripts/__tests__/eager-closure-budgets.ts` has no
-   growth-approval path; [ADR 0027](0027-descriptor-root-vs-eager-closure-budget.md) tolerates only a
-   statement-neutral re-home. A row table is a **new eager value**, so it passes only if its
-   module-scope weight comes with a statement-neutral re-home somewhere in the same closure —
+   growth-approval path; [ADR 0027](0027-descriptor-root-vs-eager-closure-budget.md) tolerates
+   module-count growth only when the head closure preserves every merge-base module and its total
+   module-scope weight does not grow. A row table is a **new eager value**: it passes only by
+   satisfying both conditions — preserving the base closure and keeping total weight no greater —
    otherwise the gate stays red and this ADR should be withdrawn rather than granted an exception.
 
 If the fan-out does not visibly shrink, close this as rejected and leave the two authored lists in

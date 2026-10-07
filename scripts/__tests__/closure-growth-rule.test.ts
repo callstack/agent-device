@@ -217,6 +217,13 @@ test('the weight counts module-scope work, not wiring or re-exporting', () => {
     ),
     'the scan() call is module-scope work, only the import is wiring',
   ).toBe(1);
+  expect(
+    topLevelStatementCount(
+      're-export.ts',
+      "import { a } from './a.ts';\nexport { a };\nexport const b = 2;\n",
+    ),
+    'a source-less `export { a }` re-names a local binding: the other wiring half of a split',
+  ).toBe(1);
 });
 
 test('growth advice names both causes and both remedies, not one prescribed fix', () => {
