@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readNamedExports } from './facade-exports.ts';
+import { readFacadeReExportEdgesByModule, readNamedExports } from './facade-exports.ts';
 
 test('readNamedExports collects re-export and direct-declaration forms, resolving aliases', () => {
   const source = [
@@ -78,4 +78,37 @@ test('readNamedExports collects every declarator of a multi-declarator export', 
   // Documented in the helper's contract; the direct-declaration test above
   // only exercises a single declarator, so the second name went unpinned.
   assert.deepEqual(readNamedExports('export const a = 1, b = 2;'), ['a', 'b']);
+});
+
+test('readFacadeReExportEdgesByModule groups edges by module with source-side names', () => {
+  const edges = readFacadeReExportEdgesByModule(
+    [
+      "export { a } from './x.ts';",
+      "export { b as c } from './x.ts';",
+      "export { D } from './y.ts';",
+      "export * as ns from './z.ts';",
+      'export function local() {}',
+    ].join('\n'),
+  );
+  assert.deepEqual(
+    [...edges.entries()],
+    [
+      [
+        './x.ts',
+        [
+          { imported: 'a', exported: 'a' },
+          { imported: 'b', exported: 'c' },
+        ],
+      ],
+      ['./y.ts', [{ imported: 'D', exported: 'D' }]],
+      ['./z.ts', [{ imported: 'namespace:ns', exported: 'ns' }]],
+    ],
+  );
+});
+
+test('readFacadeReExportEdgesByModule refuses bare export * like readNamedExports', () => {
+  assert.throws(
+    () => readFacadeReExportEdgesByModule("export * from './x.ts';"),
+    /cannot enumerate/,
+  );
 });
