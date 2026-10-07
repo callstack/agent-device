@@ -156,7 +156,7 @@ resolve after planning, and interpolation never splits a token, so the count is 
 values are not. The removal process these inputs follow — announce, warn for one minor release,
 publish the migration guide, prove the repository is clean, then remove the branch and its tests —
 is documented in the public
-[gesture migration guide](https://agent-device.dev/docs/migrating-gestures).
+[gesture migration guide](https://oss.callstack.com/agent-device/docs/migrating-gestures).
 
 Repeated coordinate swipes are bounded at the public command contract and daemon trust boundary.
 Individual count and pause limits prevent pathological fields, while the combined planned gesture
