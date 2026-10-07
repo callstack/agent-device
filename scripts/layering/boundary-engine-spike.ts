@@ -3,36 +3,46 @@
 // check; ADR 0032's tables are this script's output, and the ADR says when to delete it.
 //
 // Usage (engines are not repository dependencies; install them into a scratch directory):
-//   pnpm add --dir <dir> fallow@3.32.0 dependency-cruiser@18.5.0 typescript@6.0.3 \
+//   pnpm add --dir <dir> fallow@3.32.0 dependency-cruiser@18.5.0 typescript@6.0.3 @swc/core \
 //     --config.node-linker=hoisted
 //   node --experimental-strip-types scripts/layering/boundary-engine-spike.ts <dir>
 //
 // dependency-cruiser 18.5 accepts `typescript >=2 <7`; the repository's TypeScript 7 cannot parse
-// for it, hence the separate TypeScript 6 install. Plants are written into the working tree under
-// `ws2-plant` names and removed (and the one edited file restored) before the script exits.
+// for it, hence TypeScript 6, with swc measured as the alternative parser.
+//
+// The engines read the disk while the custom rules read tracked files, so the script refuses to run
+// unless the production roots hold exactly the tracked tree. Plants are recorded in a manifest
+// before any file changes. Normal exit, a thrown error and SIGINT/SIGTERM/SIGHUP all restore the tree
+// from it; after a SIGKILL, the next run restores it before measuring.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { LAYERING_RULES, type LayeringContext, type LayeringRuleId } from './check.ts';
 import { RANKED_ZONES, resolveImportEdges, targetDagZone, zoneRank } from './model.ts';
 import { workspaceSpecifierTargets } from './package-boundaries.ts';
 import { measureRatchets } from './ratchet-reference.ts';
 import { RUNNER_SUBTREE } from './apple-runner-host-port-policy.ts';
-import { listTrackedProductionSources, listTrackedTypeScriptFiles } from './tracked-sources.ts';
+import {
+  isProductionSourceFile,
+  listTrackedProductionSources,
+  listTrackedTypeScriptFiles,
+} from './tracked-sources.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
 const enginesDir = path.resolve(process.argv[2] ?? '');
 const FALLOW = path.join(enginesDir, 'node_modules/.bin/fallow');
 const DEPCRUISE = path.join(enginesDir, 'node_modules/.bin/depcruise');
-const RUNS = 3;
+const RUNS = 5;
+const PRODUCTION_ROOTS = ['src', 'packages/*/src'];
+const OUT = path.join(repoRoot, '.tmp/boundary-engine-spike');
+const PLANT_MANIFEST = path.join(repoRoot, '.tmp/boundary-engine-spike.plants.json');
 
 type Kind = 'value' | 'type' | 'dynamic';
 type Pair = `${string} -> ${string}`;
 
-// ---------------------------------------------------------------------------------------------
 // Zones: the inverse of `targetDagZone`, as a path regex (dependency-cruiser) and a glob (fallow).
-
 function zoneRoot(zone: string, files: readonly string[]): { regex: string; glob: string } {
   if (zone === '(root)') return { regex: '^src/[^/]+\\.ts$', glob: 'src/*.ts' };
   const sample = files.find((file) => targetDagZone(file) === zone)!;
@@ -50,111 +60,90 @@ function higherRanked(zone: string): string[] {
   return [...RANKED_ZONES].filter((other) => zoneRank(other)! > rank).sort();
 }
 
-const R2_HINT =
-  'commands/ is the command surface, above core/ and daemon/; put the shared rule below both.';
-const R5_HINT =
-  'value import against the ranked spine; move the shared contract below both owners.';
-const R6_HINT =
-  'type-only import against the ranked spine; declare the shared type below both zones.';
+const R2_HINT = 'commands/ sits above core/ and daemon/; put the shared rule below both.';
+const R5_HINT = 'value import against the ranked spine; move the contract below both zones.';
+const R6_HINT = 'type-only import against the ranked spine; move the type below both zones.';
 const R77_HINT = 'reach host-kit through the runner host port (runner/host.ts).';
-const R78_HINT =
-  'the daemon client composes the daemon over the network; read only the recorded ' +
-  'DaemonRequest/DaemonResponse types.';
+const R78_HINT = 'the client reaches the daemon over the network; read only recorded types.';
 const RETIRED_HINT = 'retired root; move the file to its owning package or command zone.';
 
-// ---------------------------------------------------------------------------------------------
 // dependency-cruiser configuration, generated from the same declarations the custom rules read.
 
 const TYPE_DEPS = ['type-only', 'type-import'];
+/** Test modules, helpers included. Only R77 polices them; every other rule is production-only. */
+const TEST_PATH = String.raw`(^|/)__tests__/|\.test\.ts$`;
+
+const rule = (name: string, comment: string, from: object, to: object) => ({
+  name,
+  comment,
+  severity: 'error',
+  from,
+  to,
+});
 
 function depcruiseConfig(zones: readonly string[], files: readonly string[]) {
   const rx = (zone: string) => zoneRoot(zone, files).regex;
-  const forbidden: object[] = [
-    {
-      name: 'R2-commands-floor',
-      comment: R2_HINT,
-      severity: 'error',
-      from: { path: '^src/(core|daemon)/' },
-      to: { path: '^src/commands/' },
-    },
-    {
-      name: 'R2-commands-schema',
-      comment: 'commands/schema/ renders the command facets; commands must not import it back.',
-      severity: 'error',
-      from: { path: '^src/commands/', pathNot: '^src/commands/schema/' },
-      to: { path: '^src/commands/schema/' },
-    },
-    {
-      name: 'R4-value-import-cycle',
-      comment: 'production value-import cycle; type-only and dynamic edges do not count.',
-      severity: 'error',
-      from: { pathNot: '\\.test\\.ts$' },
-      to: {
+  const runtime = [...TYPE_DEPS, 'dynamic-import'];
+  const forbidden = [
+    rule('R2-commands-floor', R2_HINT, { path: '^src/(core|daemon)/' }, { path: '^src/commands/' }),
+    rule(
+      'R2-commands-schema',
+      'commands/schema/ renders the command facets; commands must not import it back.',
+      { path: '^src/commands/', pathNot: '^src/commands/schema/' },
+      { path: '^src/commands/schema/' },
+    ),
+    rule(
+      'R4-value-import-cycle',
+      'production value-import cycle; type-only and dynamic edges do not count.',
+      { pathNot: TEST_PATH },
+      {
         circular: true,
-        dependencyTypesNot: [...TYPE_DEPS, 'dynamic-import'],
-        viaOnly: { dependencyTypesNot: [...TYPE_DEPS, 'dynamic-import'] },
+        pathNot: TEST_PATH,
+        dependencyTypesNot: runtime,
+        viaOnly: { pathNot: TEST_PATH, dependencyTypesNot: runtime },
       },
-    },
-    {
-      name: 'R77-apple-runner-host-port',
-      comment: R77_HINT,
-      severity: 'error',
-      from: { path: `^${RUNNER_SUBTREE}` },
-      to: { path: '^packages/host-kit/src/', dependencyTypesNot: TYPE_DEPS },
-    },
-    {
-      name: 'R78-daemon-client-runtime',
-      comment: R78_HINT,
-      severity: 'error',
-      from: { path: '^src/daemon-client/' },
-      to: { path: '^src/daemon/', dependencyTypesNot: TYPE_DEPS },
-    },
-    {
-      // The recorded type edges live in the known-violations baseline.
-      name: 'R78-daemon-client-type',
-      comment: R78_HINT,
-      severity: 'error',
-      from: { path: '^src/daemon-client/' },
-      to: { path: '^src/daemon/', dependencyTypes: TYPE_DEPS },
-    },
+    ),
+    rule(
+      'R77-apple-runner-host-port',
+      R77_HINT,
+      { path: `^${RUNNER_SUBTREE}` },
+      { path: '^packages/host-kit/src/', dependencyTypesNot: TYPE_DEPS },
+    ),
+    rule(
+      'R78-daemon-client-runtime',
+      R78_HINT,
+      { path: '^src/daemon-client/' },
+      { path: '^src/daemon/', dependencyTypesNot: TYPE_DEPS },
+    ),
+    // The recorded type edges live in the known-violations baseline.
+    rule(
+      'R78-daemon-client-type',
+      R78_HINT,
+      { path: '^src/daemon-client/' },
+      { path: '^src/daemon/', dependencyTypes: TYPE_DEPS },
+    ),
     // A retired root is reached by an outgoing, incoming, or no edge at all.
     ...[
       ['R14', '^src/utils/'],
       ['R71', '^src/replay/'],
-    ].flatMap(([id, root]) =>
-      [
-        ['out', { path: root }, {}],
-        ['in', {}, { path: root }],
-        ['orphan', { path: root, orphan: true }, {}],
-      ].map(([kind, from, to]) => ({
-        name: `${id}-retired-${kind}`,
-        comment: RETIRED_HINT,
-        severity: 'error',
-        from,
-        to,
-      })),
-    ),
+    ].flatMap(([id, root]) => [
+      rule(`${id}-retired-out`, RETIRED_HINT, { path: root }, {}),
+      rule(`${id}-retired-in`, RETIRED_HINT, {}, { path: root }),
+      rule(`${id}-retired-orphan`, RETIRED_HINT, { path: root, orphan: true }, {}),
+    ]),
   ];
   for (const zone of zones) {
     const higher = higherRanked(zone);
     if (higher.length === 0) continue;
+    const from = { path: rx(zone), pathNot: TEST_PATH };
     const to = `(${higher.map(rx).join('|')})`;
     forbidden.push(
-      {
-        name: `R5-zero-back-edges.${zone}`,
-        comment: R5_HINT,
-        severity: 'error',
-        from: { path: rx(zone), pathNot: '\\.test\\.ts$' },
-        to: { path: to, dependencyTypesNot: [...TYPE_DEPS, 'dynamic-import'] },
-      },
-      {
-        // Ratcheted through the known-violations baseline.
-        name: `R6-type-spine-inversion.${zone}`,
-        comment: R6_HINT,
-        severity: 'error',
-        from: { path: rx(zone), pathNot: '\\.test\\.ts$' },
-        to: { path: to, dependencyTypes: TYPE_DEPS },
-      },
+      rule(`R5-zero-back-edges.${zone}`, R5_HINT, from, { path: to, dependencyTypesNot: runtime }),
+      // Ratcheted through the known-violations baseline.
+      rule(`R6-type-spine-inversion.${zone}`, R6_HINT, from, {
+        path: to,
+        dependencyTypes: TYPE_DEPS,
+      }),
     );
   }
   return {
@@ -163,8 +152,8 @@ function depcruiseConfig(zones: readonly string[], files: readonly string[]) {
       tsPreCompilationDeps: true,
       tsConfig: { fileName: 'tsconfig.json' },
       includeOnly: '^(src|packages/[^/]+/src)/',
-      // R77 polices runner test files too; every other rule is production-only.
-      exclude: { path: `^(?!${RUNNER_SUBTREE}).*((^|/)__tests__/|\\.test\\.ts$)` },
+      // R77 polices runner test files too, so only they stay in the graph.
+      exclude: { path: `^(?!${RUNNER_SUBTREE}).*(${TEST_PATH})` },
       doNotFollow: { path: 'node_modules' },
       enhancedResolveOptions: {
         exportsFields: ['exports'],
@@ -176,7 +165,6 @@ function depcruiseConfig(zones: readonly string[], files: readonly string[]) {
   };
 }
 
-// ---------------------------------------------------------------------------------------------
 // fallow configuration. Zones are first-match; rules are per-zone allowlists, so the generator
 // turns each forbidden set into its complement.
 
@@ -266,41 +254,47 @@ function nonProductionGlobs(): string[] {
   return [...globs].sort();
 }
 
-// ---------------------------------------------------------------------------------------------
-// Engine runs.
-
 type Finding = { rule: string; from: string; to: string; message: string };
 
 function run(bin: string, args: readonly string[]) {
-  const start = performance.now();
-  const { stdout, status } = spawnSync(bin, args, {
+  const { stdout, stderr, status, signal } = spawnSync(bin, args, {
     cwd: repoRoot,
     encoding: 'utf8',
     maxBuffer: 1 << 30,
   });
-  return { stdout, status, ms: performance.now() - start };
+  // A signal reaches the child too; stop here so the plants are restored rather than measured.
+  if (signal) throw new Error(`${path.basename(bin)} stopped by ${signal}`);
+  return { stdout, stderr, status };
 }
 
-/** Median wall time of `RUNS` measured calls after one warm-up, and the last result. */
-function timed<T extends { ms: number }>(measure: () => T): { last: T; ms: number } {
+function parseOutput<T>(label: string, result: ReturnType<typeof run>): T {
+  try {
+    return JSON.parse(result.stdout) as T;
+  } catch {
+    throw new Error(
+      `${label} exited ${result.status} without JSON output:\n${result.stderr.trim().slice(-2000)}`,
+    );
+  }
+}
+
+/** Median wall time of `RUNS` calls after one warm-up, and the last result. */
+function timed<T>(measure: () => T): { last: T; ms: number } {
   const times: number[] = [];
   let last = measure();
   for (let index = 0; index < RUNS; index++) {
+    const start = performance.now();
     last = measure();
-    times.push(last.ms);
+    times.push(performance.now() - start);
   }
   return { last, ms: times.sort((a, b) => a - b)[Math.floor(RUNS / 2)]! };
 }
 
-const finding = (rule: string, from: string, to = '', message = ''): Finding => ({
-  rule,
-  from,
-  to,
-  message,
-});
+function finding(rule: string, from: string, to = '', message = ''): Finding {
+  return { rule, from, to, message };
+}
 
 function depcruise(config: string, extra: readonly string[] = []) {
-  const { stdout, status, ms } = run(DEPCRUISE, [
+  const output = run(DEPCRUISE, [
     '--config',
     config,
     '--output-type',
@@ -309,7 +303,7 @@ function depcruise(config: string, extra: readonly string[] = []) {
     'src',
     'packages',
   ]);
-  const result = JSON.parse(stdout) as {
+  const result = parseOutput<{
     modules: { source: string; dependencies: { resolved: string; dependencyTypes: string[] }[] }[];
     summary: {
       baselineStale?: number;
@@ -320,16 +314,16 @@ function depcruise(config: string, extra: readonly string[] = []) {
         cycle?: { name: string }[];
       }[];
     };
-  };
+  }>('dependency-cruiser', output);
   const findings = result.summary.violations.map((v) =>
     finding(v.rule.name, v.from, v.to, v.cycle?.map((step) => step.name).join(' -> ')),
   );
-  return { result, findings, status, ms };
+  return { result, findings, status: output.status };
 }
 
 /** `filtered: false` runs every issue type, which the stale-baseline gate requires. */
 function fallow(config: string, extra: readonly string[] = [], filtered = true) {
-  const { stdout, ms } = run(FALLOW, [
+  const output = run(FALLOW, [
     'dead-code',
     '--config',
     config,
@@ -340,18 +334,13 @@ function fallow(config: string, extra: readonly string[] = [], filtered = true) 
     ...(filtered ? ['--boundary-violations', '--circular-deps', '--policy-violations'] : []),
     ...extra,
   ]);
-  const json = JSON.parse(stdout) as {
-    boundary_violations: {
-      from_path: string;
-      to_path: string;
-      from_zone: string;
-      to_zone: string;
-    }[];
+  const json = parseOutput<{
+    boundary_violations: { from_path: string; to_path: string }[];
     boundary_coverage_violations: { path: string }[];
     circular_dependencies: { files: string[] }[];
     policy_violations: { path: string; rule_id?: string; message?: string }[];
     gate_outcomes?: Record<string, { status?: string; failed?: boolean }>;
-  };
+  }>('fallow', output);
   const findings = [
     ...json.boundary_violations.map((v) => finding('boundary-violation', v.from_path, v.to_path)),
     ...json.boundary_coverage_violations.map((v) => finding('boundary-coverage', v.path)),
@@ -360,10 +349,9 @@ function fallow(config: string, extra: readonly string[] = [], filtered = true) 
     ),
     ...json.policy_violations.map((v) => finding(`policy:${v.rule_id ?? ''}`, v.path)),
   ];
-  return { json, findings, ms };
+  return { json, findings };
 }
 
-// ---------------------------------------------------------------------------------------------
 // Custom side: the real rule registry over in-memory sources.
 
 const RULE_IDS: readonly LayeringRuleId[] = [
@@ -382,15 +370,14 @@ function readSources(files: readonly string[]): Map<string, string> {
   return new Map(files.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]));
 }
 
-function customRun(
+function customContext(
   sources: Map<string, string>,
   allSources: Map<string, string>,
   trackedSrcUtilsFiles: readonly string[],
   reference: LayeringContext['reference'],
-) {
-  const start = performance.now();
+): LayeringContext {
   const edges = resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot));
-  const context: LayeringContext = {
+  return {
     sourceFiles: [...sources.keys()],
     sources,
     allTypeScriptSources: allSources,
@@ -399,11 +386,11 @@ function customRun(
     ratchets: measureRatchets(sources, edges),
     reference,
   };
-  const violations = RULE_IDS.flatMap((id) => LAYERING_RULES[id](context));
-  return { edges, violations, ms: performance.now() - start };
 }
 
-// ---------------------------------------------------------------------------------------------
+const customRules = (context: LayeringContext) =>
+  RULE_IDS.flatMap((id) => LAYERING_RULES[id](context));
+
 // Planted violations. `flag` plants must be reported under their rule; `pass` plants are the
 // closest negatives the custom rule deliberately admits.
 
@@ -530,34 +517,67 @@ const plantFiles = (plant: Plant) => [
   ...(plant.edit ? [plant.edit.file] : []),
 ];
 
-function writePlants(plants: readonly Plant[] = PLANTS): () => void {
-  const written: string[] = [];
-  const edited = new Map<string, string>();
+type PlantManifest = { written: string[]; edited: Record<string, string> };
+
+/** Undoes the recorded plants, whichever run wrote them; a no-op when none are on disk. */
+function restorePlants(): void {
+  if (!fs.existsSync(PLANT_MANIFEST)) return;
+  const manifest = JSON.parse(fs.readFileSync(PLANT_MANIFEST, 'utf8')) as PlantManifest;
+  for (const file of manifest.written) fs.rmSync(path.join(repoRoot, file), { force: true });
+  for (const dir of ['src/utils', 'src/replay']) {
+    const full = path.join(repoRoot, dir);
+    if (fs.existsSync(full) && fs.readdirSync(full).length === 0) fs.rmdirSync(full);
+  }
+  for (const [file, original] of Object.entries(manifest.edited)) {
+    fs.writeFileSync(path.join(repoRoot, file), original);
+  }
+  fs.rmSync(PLANT_MANIFEST);
+}
+
+/** Records every planned change in the manifest before touching the tree. */
+function writePlants(plants: readonly Plant[] = PLANTS): void {
+  const manifest: PlantManifest = { written: [], edited: {} };
+  for (const plant of plants) {
+    manifest.written.push(...Object.keys(plant.files ?? {}));
+    if (!plant.edit) continue;
+    const original = fs.readFileSync(path.join(repoRoot, plant.edit.file), 'utf8');
+    if (!original.includes(plant.edit.from)) {
+      throw new Error(`edit anchor missing in ${plant.edit.file}`);
+    }
+    manifest.edited[plant.edit.file] = original;
+  }
+  fs.mkdirSync(path.dirname(PLANT_MANIFEST), { recursive: true });
+  fs.writeFileSync(PLANT_MANIFEST, JSON.stringify(manifest));
   for (const plant of plants) {
     for (const [file, content] of Object.entries(plant.files ?? {})) {
       fs.mkdirSync(path.dirname(path.join(repoRoot, file)), { recursive: true });
       fs.writeFileSync(path.join(repoRoot, file), `${content}\n`);
-      written.push(file);
     }
     if (plant.edit) {
-      const original = fs.readFileSync(path.join(repoRoot, plant.edit.file), 'utf8');
-      if (!original.includes(plant.edit.from))
-        throw new Error(`edit anchor missing in ${plant.edit.file}`);
-      edited.set(plant.edit.file, original);
-      fs.writeFileSync(
-        path.join(repoRoot, plant.edit.file),
-        original.replace(plant.edit.from, plant.edit.to),
-      );
+      const { file, from, to } = plant.edit;
+      fs.writeFileSync(path.join(repoRoot, file), manifest.edited[file]!.replace(from, to));
     }
   }
-  return () => {
-    for (const file of written) fs.rmSync(path.join(repoRoot, file), { force: true });
-    for (const dir of ['src/utils', 'src/replay']) {
-      const full = path.join(repoRoot, dir);
-      if (fs.existsSync(full) && fs.readdirSync(full).length === 0) fs.rmdirSync(full);
-    }
-    for (const [file, original] of edited) fs.writeFileSync(path.join(repoRoot, file), original);
-  };
+}
+
+/** The engines read the disk and the custom rules read tracked files: their inputs must agree. */
+function assertTrackedScope(): void {
+  const drift = execFileSync(
+    'git',
+    ['status', '--porcelain', '--ignored', '--untracked-files=all', '--', ...PRODUCTION_ROOTS],
+    { cwd: repoRoot, encoding: 'utf8' },
+  ).trim();
+  if (drift) {
+    throw new Error(`production roots differ from the tracked tree; clean them first:\n${drift}`);
+  }
+}
+
+/** The repository's fallow config as 3.x reads it: no `//` lines, no `comment` annotations. */
+function repoFallowConfig(): Record<string, unknown> {
+  const text = fs.readFileSync(path.join(repoRoot, '.fallowrc.json'), 'utf8');
+  return JSON.parse(text.replaceAll(/^\s*\/\/.*$/gm, ''), (key, value: unknown) =>
+    key === 'comment' ? undefined : value,
+  ) as Record<string, unknown>;
 }
 
 function hits(plant: Plant, findings: readonly Finding[], rulePrefix: RegExp | null): Finding[] {
@@ -570,8 +590,6 @@ function hits(plant: Plant, findings: readonly Finding[], rulePrefix: RegExp | n
       ),
   );
 }
-
-// ---------------------------------------------------------------------------------------------
 
 function pairKinds(edges: readonly { file: string; target: string; kind: Kind }[]) {
   const pairs = new Map<Pair, Set<Kind>>();
@@ -593,15 +611,21 @@ function tally<T extends string>(keys: Iterable<T>): Record<string, number> {
 }
 
 function main(): void {
-  if (!fs.existsSync(FALLOW) || !fs.existsSync(DEPCRUISE)) {
-    throw new Error(
-      'usage: boundary-engine-spike.ts <dir with fallow, dependency-cruiser, typescript@6>',
-    );
+  const engines = [FALLOW, DEPCRUISE, path.join(enginesDir, 'node_modules/@swc/core')];
+  if (!engines.every((engine) => fs.existsSync(engine))) {
+    throw new Error('usage: boundary-engine-spike.ts <dir with the engines in the header>');
   }
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+    process.on(signal, () => {
+      restorePlants();
+      process.exit(128 + os.constants.signals[signal]);
+    });
+  }
+  restorePlants();
+  assertTrackedScope();
   // fallow refuses rule packs outside the project root; `.tmp/` is gitignored.
-  const out = path.join(repoRoot, '.tmp/boundary-engine-spike');
-  fs.rmSync(out, { recursive: true, force: true });
-  fs.mkdirSync(out, { recursive: true });
+  fs.rmSync(OUT, { recursive: true, force: true });
+  fs.mkdirSync(OUT, { recursive: true });
   const files = listTrackedProductionSources(repoRoot);
   const fileSet = new Set(files);
   const zones = [...new Set(files.map(targetDagZone))].sort();
@@ -613,10 +637,11 @@ function main(): void {
     ref: 'HEAD',
     ...measureRatchets(sources, resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot))),
   };
-  const customTimed = timed(() => customRun(sources, allSources, [], reference));
-  const clean = customTimed.last;
+  const customGraph = timed(() => resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot)));
+  const cleanContext = customContext(sources, allSources, [], reference);
+  const customTimed = timed(() => customRules(cleanContext));
   const custom = pairKinds(
-    clean.edges.map((edge) => ({
+    cleanContext.edges.map((edge) => ({
       file: edge.file,
       target: edge.target,
       kind: edge.dynamic ? 'dynamic' : edge.typeOnly ? 'type' : 'value',
@@ -624,15 +649,20 @@ function main(): void {
   );
 
   // Configs.
-  const dcConfig = path.join(out, 'depcruise.json');
-  fs.writeFileSync(dcConfig, JSON.stringify(depcruiseConfig(zones, files), null, 1));
-  const rulePack = path.join(out, 'layering.rulepack.json');
-  fs.writeFileSync(rulePack, JSON.stringify(R77_RULE_PACK, null, 1));
-  const fallowRc = path.join(out, 'fallow.json');
-  fs.writeFileSync(
-    fallowRc,
-    JSON.stringify(fallowConfig(zones, files, rulePack, nonProductionGlobs()), null, 1),
-  );
+  const writeConfig = (name: string, config: object) => {
+    const file = path.join(OUT, name);
+    fs.writeFileSync(file, JSON.stringify(config, null, 1));
+    return file;
+  };
+  const dcRules = depcruiseConfig(zones, files);
+  const dcConfig = writeConfig('depcruise.json', dcRules);
+  const dcSwcConfig = writeConfig('depcruise-swc.json', {
+    ...dcRules,
+    options: { ...dcRules.options, parser: 'swc' },
+  });
+  const rulePack = writeConfig('layering.rulepack.json', R77_RULE_PACK);
+  const boundaries = fallowConfig(zones, files, rulePack, nonProductionGlobs());
+  const fallowRc = writeConfig('fallow.json', boundaries);
 
   // Edge sets. dependency-cruiser exposes the graph with kinds; fallow exposes kinds only through
   // boundary findings, so one zone per file is the instrument: `allow: []` reports every edge,
@@ -665,7 +695,7 @@ function main(): void {
         ),
       },
     };
-    const file = path.join(out, `fallow-per-file-${typeOnly}.json`);
+    const file = path.join(OUT, `fallow-per-file-${typeOnly}.json`);
     fs.writeFileSync(file, JSON.stringify(config));
     const { json } = fallow(file);
     return new Set(
@@ -686,14 +716,30 @@ function main(): void {
   const fallowTimed = timed(() => fallow(fallowRc));
   const fallowClean = fallowTimed.last;
 
+  // What boundaries would cost inside the repository's own dead-code run.
+  const repoRc = writeConfig('fallow-repo.json', repoFallowConfig());
+  const repoBoundariesRc = writeConfig('fallow-repo-boundaries.json', {
+    ...repoFallowConfig(),
+    ...boundaries,
+  });
+  const runtimeMs = {
+    customGraph: customGraph.ms,
+    customRules: customTimed.ms,
+    depcruiseTsc: dcTimed.ms,
+    depcruiseSwc: timed(() => depcruise(dcSwcConfig)).ms,
+    fallowBoundaries: fallowTimed.ms,
+    fallowRepoDeadCode: timed(() => fallow(repoRc, [], false)).ms,
+    fallowRepoDeadCodeWithBoundaries: timed(() => fallow(repoBoundariesRc, [], false)).ms,
+  };
+
   // Clean-tree baselines: the R6 survivors and R78's recorded type edges are the only findings the
   // custom rules admit, so the engines carry them as known violations.
-  const dcBaseline = path.join(out, 'depcruise-known.json');
+  const dcBaseline = path.join(OUT, 'depcruise-known.json');
   fs.writeFileSync(
     dcBaseline,
     run(DEPCRUISE, ['--config', dcConfig, '--output-type', 'baseline', 'src', 'packages']).stdout,
   );
-  const fallowBaseline = path.join(out, 'fallow-baseline.json');
+  const fallowBaseline = path.join(OUT, 'fallow-baseline.json');
   fallow(fallowRc, ['--save-baseline', fallowBaseline], false);
 
   // The stale-baseline gate judges only unfiltered runs. Control: the unplanted tree passes it.
@@ -703,40 +749,34 @@ function main(): void {
   const fallowStaleControl = fallowStaleGate();
 
   // Planted run.
-  const restore = writePlants();
+  writePlants();
   let planted: { custom: Finding[]; dc: Finding[]; fallow: Finding[] };
   try {
-    const plantedSources = new Map(sources);
-    const plantedAll = new Map(allSources);
-    const utils: string[] = [];
-    for (const plant of PLANTS) {
-      for (const [file, content] of Object.entries(plant.files ?? {})) {
-        if (file.startsWith('src/utils/')) utils.push(file);
-        if (!file.endsWith('.ts')) continue;
-        plantedAll.set(file, `${content}\n`);
-        if (!file.endsWith('.test.ts')) plantedSources.set(file, `${content}\n`);
-      }
-      if (plant.edit) {
-        const edited = fs.readFileSync(path.join(repoRoot, plant.edit.file), 'utf8');
-        plantedSources.set(plant.edit.file, edited);
-        plantedAll.set(plant.edit.file, edited);
-      }
-    }
-    const customPlanted = customRun(plantedSources, plantedAll, utils, reference);
+    // The custom side reads the planted tree as if it were tracked.
+    const touched = [...new Set(PLANTS.flatMap(plantFiles))];
+    const plantedTs = touched.filter((file) => file.endsWith('.ts'));
+    const customPlanted = customRules(
+      customContext(
+        readSources([...new Set([...files, ...plantedTs.filter(isProductionSourceFile)])]),
+        readSources([...new Set([...allSources.keys(), ...plantedTs])]),
+        touched.filter((file) => file.startsWith('src/utils/')),
+        reference,
+      ),
+    );
     const fallowPlanted = fallow(fallowRc, ['--baseline', fallowBaseline]);
     planted = {
-      custom: customPlanted.violations.map((v) => finding(v.rule, v.file, '', v.message)),
+      custom: customPlanted.map((v) => finding(v.rule, v.file, '', v.message)),
       dc: depcruise(dcConfig, ['--ignore-known', dcBaseline]).findings,
       fallow: fallowPlanted.findings,
     };
   } finally {
-    restore();
+    restorePlants();
   }
 
   // Stale known violations, one plant at a time so no other change can stale an entry.
   const staleVerdicts = new Map<string, { depcruise: string[]; fallow: string[] }>();
   for (const plant of PLANTS.filter((candidate) => candidate.stale)) {
-    const restoreStale = writePlants([plant]);
+    writePlants([plant]);
     try {
       const gate = fallowStaleGate();
       const dcRun = depcruise(dcConfig, ['--ignore-known', dcBaseline]);
@@ -748,7 +788,7 @@ function main(): void {
         fallow: gate?.status === 'fail' ? ['stale-baseline gate (exit 1)'] : [],
       });
     } finally {
-      restoreStale();
+      restorePlants();
     }
   }
 
@@ -795,20 +835,20 @@ function main(): void {
     tree: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim(),
     files: files.length,
     zones: zones.length,
-    runtimeMs: { custom: customTimed.ms, depcruise: dcTimed.ms, fallow: fallowTimed.ms },
+    runtimeMs,
     edgeDiff: {
       depcruise: diff(dcPairs, false),
       // fallow does not separate dynamic from static imports: compare on value|type.
       fallow: diff(fallowPairs, true),
     },
     cleanTreeFindings: {
-      custom: clean.violations.length,
+      custom: customTimed.last.length,
       depcruise: tally(dc.findings.map((f) => f.rule.replace(/\..*$/, ''))),
       fallow: tally(fallowClean.findings.map((f) => f.rule)),
     },
     parity,
     fallowStaleBaselineUnplanted: fallowStaleControl,
-    artifacts: out,
+    artifacts: OUT,
   };
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
 }
