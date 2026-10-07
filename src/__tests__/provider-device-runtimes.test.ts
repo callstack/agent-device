@@ -85,6 +85,25 @@ test('default provider runtimes load Limrun when a Limrun API key is configured'
   await Promise.all(runtimes.map(async (runtime) => await runtime.shutdown()));
 });
 
+test('credentials alone do not enable the optional Doublespeed plugin', async () => {
+  const { runtimes, platformModules } = await createDefaultProviderRuntimeComposition({
+    DOUBLESPEED_API_KEY: 'dsx_test_key',
+  });
+
+  const doublespeed = runtimes.find((runtime) => runtime.provider === 'doublespeed');
+  assert.equal(doublespeed, undefined);
+  assert.equal(
+    runtimes.some((runtime) => runtime.provider === 'limrun'),
+    false,
+  );
+  assertPlatformModuleCoverage(runtimes, platformModules);
+  assert.equal(
+    platformModules.some(({ runtime }) => runtime === doublespeed),
+    false,
+  );
+  await Promise.all(runtimes.map(async (runtime) => await runtime.shutdown()));
+});
+
 test('default provider runtimes load Limrun for an existing instance without an API key', async () => {
   const { runtimes, platformModules } = await createDefaultProviderRuntimeComposition({
     LIM_IOS_INSTANCE_URL: 'https://region.limrun.example/v1/ios_x/api',
@@ -94,6 +113,7 @@ test('default provider runtimes load Limrun for an existing instance without an 
   const limrun = runtimes.find((runtime) => runtime.provider === 'limrun');
   assert.ok(limrun);
   assertPlatformModuleCoverage(runtimes, platformModules, [limrun]);
+
   await Promise.all(runtimes.map(async (runtime) => await runtime.shutdown()));
 });
 

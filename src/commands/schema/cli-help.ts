@@ -582,16 +582,18 @@ Providers:
   BrowserStack: agent-device connect browserstack verifies credentials, the exact device, and a bs:// app reference, then stores a local provider profile. It does not create an App Automate session.
   AWS Device Farm: agent-device connect aws-device-farm verifies credentials and the exact project, device, and optional app upload, then stores a local provider profile. It does not create a remote access session.
   Limrun: agent-device connect limrun verifies access to the selected iOS or Android instance service, then stores a local provider profile. It does not create an instance.
+  Doublespeed: agent-device connect doublespeed verifies access to the Doublespeed iOS simulator service, then stores a local provider profile. It does not create a simulator.
 
 After direct-provider connect:
   Read the printed Device, App, Next, and workflow-note lines. They are also available as verification/device/app/liveSession/nextSteps/notes in --json output.
   BrowserStack and AWS Device Farm create the hosted session on open. open needs the installed package or bundle identifier, not the app artifact name or ARN.
   Before provider allocation, apps lists compatible uploaded app assets without creating an instance when the selected provider exposes a catalog. open <exact-asset-name> creates the instance with that asset, resolves its installed app id, and launches it. install remains available when the app comes from a fresh local path or URL.
+  A new Doublespeed simulator has no user app. Run install <bundle-id> <app-path-or-url> first, then open the installed id.
   AWS Device Farm cannot install after allocation. If connect reports no attached app, run its printed reconnect command, which includes --session <name> --force, before open.
   Do not run devices as a pre-open catalog probe for direct providers; it can allocate the deferred provider session. Limrun is the exception for apps: before allocation it lists uploaded assets for the selected platform.
 
 Device cloud interfaces:
-  CLI is the canonical bootstrap path: connect limrun/browserstack/aws-device-farm, then use normal open/snapshot/click/close/artifacts/disconnect commands.
+  CLI is the canonical bootstrap path: connect limrun/doublespeed/browserstack/aws-device-farm, then use normal open/snapshot/click/close/artifacts/disconnect commands.
   JavaScript can skip persisted connect state by passing leaseProvider plus provider fields to createAgentDeviceClient or per-command options.
   MCP exposes operational tools such as open, snapshot, click, close, and artifacts. It does not expose connect/disconnect; run CLI connect first in the same state dir before relying on MCP tools.
 
@@ -653,6 +655,19 @@ Limrun direct-device flow:
   agent-device close
   agent-device disconnect
 
+Doublespeed direct-simulator flow:
+  agent-device plugins add @agent-device/doublespeed
+  DOUBLESPEED_API_KEY=...
+  agent-device connect doublespeed --platform ios
+
+  After adding or updating the plugin, close active sessions and run agent-device daemon stop with the same --state-dir before continuing.
+  Doublespeed creates remote iOS simulators only. Do not pass local device selectors such as --udid, --serial, or --device; set DOUBLESPEED_DEVICE to choose the simulator model.
+  agent-device install com.example.app ./Example.app
+  agent-device open com.example.app
+  agent-device snapshot -i
+  agent-device close
+  agent-device disconnect
+
 Local profile flow:
   agent-device connect --remote-config ./remote-config.json
   agent-device open com.example.app
@@ -669,14 +684,15 @@ Rules:
   Use connect without --remote-config when the cloud control plane owns the connection profile.
   Prefer connect --remote-config over --daemon-base-url, --tenant, --run-id, and --lease-id when using a local profile.
   Use agent-device proxy for direct tunnel access to a Mac you control. Expose the printed proxy URL through cloudflared/ngrok, then run agent-device connect proxy with the tunnel URL and printed token before normal commands.
-  Use Limrun, BrowserStack, and AWS Device Farm through local provider profiles; they do not accept a remote agent-device daemon URL.
-  Device cloud credentials must be available before the command starts. Limrun uses LIMRUN_API_KEY, or the LIM_*_INSTANCE_* variables for an existing instance. BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
+  Use Limrun, BrowserStack, and AWS Device Farm through local provider profiles; they do not accept a remote agent-device daemon URL. Doublespeed uses a local provider profile the same way.
+  Device cloud credentials must be available before the command starts. Limrun uses LIMRUN_API_KEY, or the LIM_*_INSTANCE_* variables for an existing instance. Doublespeed uses DOUBLESPEED_API_KEY. BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
   A local daemon keeps the Limrun and BrowserStack credentials it started with. When the shell holds different ones, the first command that allocates a lease refuses with reason provider-credentials-changed; run agent-device daemon stop with the same --state-dir, then rerun the command. A shell that sets none of them uses the daemon's. A daemon with an HTTP auth hook serves remote callers and does not compare.
   Direct-provider connect performs read-only provider calls and saves active connection state only after verification succeeds. It never creates a device, instance, App Automate session, or AWS remote access session.
   connect without --session always creates a fresh remote session and prints that session in its next-step commands. Concurrent callers must pass the returned --session on every command; the ambient active connection is only a single-workflow convenience.
   To replace an existing connection, pass its returned session explicitly with --session <name> --force. --force without --session creates another fresh session and does not release or overwrite an unrelated active connection.
   Prefer short-lived AWS role credentials in CI. Generated connection profiles store app/device selectors and ARNs, not Limrun API keys or instance tokens, BrowserStack access keys, or AWS credentials.
-  Limrun Android supports direct ADB port reverse for local Metro. Limrun iOS requires a public Metro/React DevTools URL because it cannot reach local host ports directly.
+  Limrun Android supports direct ADB port reverse for local Metro. Limrun iOS and Doublespeed require a public Metro/React DevTools URL because they cannot reach local host ports directly.
+
   After closing a device cloud session, run agent-device artifacts --json to retrieve provider video/log/dashboard URLs when the provider has made them available.
   connect proxy stores the connection profile and client identity. Proxy device leases are acquired on open and expire after five minutes without commands; devices may inspect proxy inventory without allocating.
   Multiple agents can share one proxy when each uses connect proxy, open, commands, close, and disconnect.

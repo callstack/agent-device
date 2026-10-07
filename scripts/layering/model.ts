@@ -108,7 +108,9 @@ export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
   ...PLATFORMS.map((family) => `platform-${family}`),
   'provider-webdriver',
   'provider-limrun',
+  'provider-doublespeed',
   'proxy',
+
   'xml',
 ]);
 

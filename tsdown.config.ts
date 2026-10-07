@@ -102,6 +102,7 @@ export default defineConfig({
     'android-adb': 'src/sdk/android-adb.ts',
     limrun: 'src/sdk/limrun.ts',
     plugins: 'src/sdk/plugins.ts',
+    'plugins/webdriver': 'src/sdk/plugin-webdriver.ts',
     contracts: 'src/sdk/contracts.ts',
     selectors: 'src/sdk/selectors.ts',
     finders: 'src/sdk/finders.ts',

@@ -73,6 +73,10 @@
     "./plugins": {
       "types": "./dist/src/plugins.d.ts",
       "import": "./dist/src/plugins.js"
+    },
+    "./plugins/webdriver": {
+      "types": "./dist/src/plugins/webdriver.d.ts",
+      "import": "./dist/src/plugins/webdriver.js"
     }
   },
   "engines": {
@@ -175,7 +179,7 @@
     "check:unit": "pnpm test:unit && pnpm check:tmpdir-leaks && pnpm test:smoke",
     "check": "pnpm check:tooling && pnpm check:fallow && pnpm check:unit",
     "prepack": "npm_config_dry_run=false pnpm release:prepare",
-    "typecheck": "tsc -b packages/xml packages/kernel packages/contracts packages/device-selection packages/host-kit packages/capture-kit packages/managed-allocation packages/provision-kit packages/platform-apple packages/platform-android packages/platform-harmonyos packages/platform-vega packages/platform-linux packages/platform-web packages/ad-script packages/selectors packages/command-registry packages/session-journal packages/ad-replay packages/maestro packages/replay-port packages/replay-test packages/provider-webdriver packages/provider-limrun packages/proxy && tsc -p tsconfig.json && tsc -p examples/sdk/tsconfig.json",
+    "typecheck": "tsc -b packages/xml packages/kernel packages/contracts packages/device-selection packages/host-kit packages/capture-kit packages/managed-allocation packages/provision-kit packages/platform-apple packages/platform-android packages/platform-harmonyos packages/platform-vega packages/platform-linux packages/platform-web packages/ad-script packages/selectors packages/command-registry packages/session-journal packages/ad-replay packages/maestro packages/replay-port packages/replay-test packages/provider-webdriver packages/provider-limrun packages/proxy packages/provider-doublespeed && tsc -p tsconfig.json && tsc -p examples/sdk/tsconfig.json",
     "test-app:install": "pnpm install --dir examples/test-app",
     "test-app:start": "pnpm --dir examples/test-app start",
     "test-app:ios": "pnpm --dir examples/test-app ios",
@@ -342,6 +346,7 @@
     "vite": "^8.2.1",
     "vitest": "^4.1.11",
     "yaml": "^2.9.0",
-    "yauzl": "^3.4.0"
+    "yauzl": "^3.4.0",
+    "@agent-device/doublespeed": "workspace:*"
   }
 }

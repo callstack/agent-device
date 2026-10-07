@@ -76,6 +76,7 @@ test('runtime snapshot upgrades an absent truncation flag only for producers tha
     'simulator-ax-bridge': false,
     'appium-source': undefined,
     'limrun-ios-tree': undefined,
+    'doublespeed-ios-tree': undefined,
   } as const satisfies Record<IosSnapshotProducer, boolean | undefined>;
 
   for (const producer of Object.keys(expected) as IosSnapshotProducer[]) {

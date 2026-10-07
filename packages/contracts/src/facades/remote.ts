@@ -11,6 +11,7 @@ export type {
   ResolvedMetroKind,
 } from '../metro.ts';
 export type {
+  ConnectionProviderCapabilities,
   ProviderConnectionResource,
   ProviderConnectionVerification,
 } from '../provider-connection.ts';

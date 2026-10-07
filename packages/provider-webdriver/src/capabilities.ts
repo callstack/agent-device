@@ -171,3 +171,15 @@ function applyCapabilityOverrides(
   }
   return next;
 }
+
+export function buildCloudWebDriverBaseCapabilities(
+  platform: CloudWebDriverPlatform,
+  deviceName: string,
+  configured: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    platformName: platform === 'ios' ? 'iOS' : 'Android',
+    'appium:deviceName': deviceName,
+    ...configured,
+  };
+}

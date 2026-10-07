@@ -2,6 +2,10 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": [
     "tsdown.config.ts",
+    "scripts/check-provider-plugin.mjs",
+    "packages/provider-doublespeed/test/package-smoke.mjs",
+    "packages/provider-doublespeed/tsdown.config.ts",
+    "packages/provider-doublespeed/src/plugin.ts",
     "vitest.mutation.config.ts",
     "src/sdk/index.ts",
     "src/sdk/io.ts",
@@ -10,6 +14,7 @@
     "src/sdk/remote-config.ts",
     "src/sdk/install-source.ts",
     "src/sdk/plugins.ts",
+    "src/sdk/plugin-webdriver.ts",
     "src/sdk/android-adb.ts",
     "src/sdk/contracts.ts",
     "src/sdk/selectors.ts",
@@ -68,6 +73,11 @@
     "@arethetypeswrong/cli"
   ],
   "ignoreExports": [
+    {
+      "comment": "The standalone packed-install harness loads this fixture from the selected package path and reads its request scenarios dynamically.",
+      "file": "packages/provider-*/test/package-smoke.mjs",
+      "exports": ["*"]
+    },
     {
       "comment": "Android perf mechanics are selected through the lazy platform host so importing agent-device does not eagerly load adb mechanics. Fallow cannot follow the dynamic property read in src/platform-runtime-perf-host.ts.",
       "file": "packages/platform-android/src/perf.ts",
@@ -289,7 +299,8 @@
     },
     {
       "comment": "Tool config default exports, loaded by the tool rather than imported.",
-      "file": "{oxlint.config.ts,tsdown.config.ts,packages/proxy/tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts}",
+      "file": "{oxlint.config.ts,tsdown.config.ts,packages/provider-*/tsdown.config.ts,packages/proxy/tsdown.config.ts,vitest.mutation.config.ts,website/rspress.config.ts}",
+
       "exports": ["default"]
     },
     {

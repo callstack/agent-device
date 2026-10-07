@@ -102,14 +102,14 @@ export function workspacePackagesFromManifests(
     const manifest = JSON.parse(manifests.get(manifestFile)!) as {
       name?: string;
       private?: boolean;
-      exports?: Record<string, { default?: string } | string>;
+      exports?: Record<string, { default?: string; import?: string } | string>;
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
     };
     if (!manifest.name) continue;
     const exportTargets = new Map<string, string>();
     for (const [subpath, target] of Object.entries(manifest.exports ?? {})) {
-      const targetFile = typeof target === 'string' ? target : target.default;
+      const targetFile = typeof target === 'string' ? target : (target.default ?? target.import);
       if (!targetFile) continue;
       exportTargets.set(
         path.posix.join(manifest.name, subpath),
@@ -119,6 +119,7 @@ export function workspacePackagesFromManifests(
     const workspaceDependencyField = manifest.private === true ? 'dependencies' : 'devDependencies';
     const workspaceDependencies = new Set(
       Object.entries(manifest[workspaceDependencyField] ?? {})
+
         .filter(([, range]) => range.startsWith('workspace:'))
         .map(([name]) => name),
     );

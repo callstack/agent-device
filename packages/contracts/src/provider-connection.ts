@@ -17,3 +17,13 @@ export type ProviderConnectionVerification = {
   device: ProviderConnectionResource;
   app: ProviderConnectionResource;
 };
+
+export type ConnectionProviderCapabilities = {
+  leaseKind: 'proxy' | 'direct-device-provider' | 'remote-provider';
+  requiresAppAttachment: boolean;
+  requiresRemoteDaemon: boolean;
+  supportsArtifacts: boolean;
+  supportsDeferredAppSelection: boolean;
+  supportsDirectPortReverse: boolean;
+  usesCloudWebDriverLease: boolean;
+};

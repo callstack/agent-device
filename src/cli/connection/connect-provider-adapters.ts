@@ -14,7 +14,15 @@ import { resolveLimrunConnectProfile } from './limrun-profile.ts';
 import { readLimrunCredentials } from '../../provider-limrun-credentials.ts';
 import { resolveProxyConnectProfile } from './proxy-profile.ts';
 import { profileToCliFlags } from '../remote-config-flags.ts';
-import { isConnectProviderName, type ConnectProvider } from './provider-policy.ts';
+import {
+  isConnectProviderName,
+  type ConnectProvider,
+  type BuiltinConnectProvider,
+} from './provider-policy.ts';
+import { withPluginConnection } from '../../plugins/load.ts';
+import { readMetroProfileFields } from './profile-fields.ts';
+import { buildConnectClientId } from './client-id.ts';
+import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 
 type ConnectProfile = { flags: CliFlags; remoteConfigPath: string };
 type ResolvedConnectProfile = ConnectProfile & { provider?: ConnectProvider };
@@ -75,7 +83,7 @@ const CONNECT_PROVIDER_ADAPTERS = {
     resolve: resolveLimrunConnectProfile,
     verify: verifyLimrun,
   },
-} satisfies Record<ConnectProvider, ConnectProviderAdapter>;
+} satisfies Record<BuiltinConnectProvider, ConnectProviderAdapter>;
 
 export async function resolveConnectProviderProfile(options: {
   provider?: ConnectProvider;
@@ -100,17 +108,52 @@ export async function resolveConnectProviderProfile(options: {
         remoteConfig: resolved.resolvedPath,
       },
       remoteConfigPath: resolved.resolvedPath,
-      ...(isConnectProviderName(leaseProvider) ? { provider: leaseProvider } : {}),
+      ...(isConnectProviderName(leaseProvider, env) ? { provider: leaseProvider } : {}),
     };
   }
   const provider =
     options.provider ?? (shouldUseProxyConnectShortcut(options.flags) ? 'proxy' : 'cloud');
-  const profile = await CONNECT_PROVIDER_ADAPTERS[provider].resolve({
+  const context = {
     flags: options.flags,
     stateDir: options.stateDir,
     cwd,
     env,
-  });
+  };
+  const adapter = (CONNECT_PROVIDER_ADAPTERS as Partial<Record<string, ConnectProviderAdapter>>)[
+    provider
+  ];
+  const profile = adapter
+    ? await adapter.resolve(context)
+    : await withPluginConnection(provider, env, async (connection) => {
+        const resolved = await connection.resolve(context);
+        if (resolved.profile.leaseProvider !== provider)
+          throw new AppError(
+            'INVALID_ARGS',
+            'Plugin connection profile must select its declared provider',
+          );
+        const clientId = buildConnectClientId(
+          provider,
+          context.stateDir,
+          context.flags.session,
+          resolved.profile.device,
+        );
+        return persistAndResolveGeneratedProfile({
+          ...context,
+          ...resolved,
+          provider,
+          profile: {
+            tenant: context.flags.tenant ?? provider,
+            sessionIsolation: context.flags.sessionIsolation ?? 'tenant',
+            runId: context.flags.runId ?? `${provider}-${clientId}`,
+            clientId,
+            target: context.flags.target ?? 'mobile',
+            session: context.flags.session,
+            stateDir: context.stateDir,
+            ...readMetroProfileFields(context.flags),
+            ...resolved.profile,
+          },
+        });
+      });
   return { ...profile, provider };
 }
 
@@ -125,10 +168,20 @@ export async function verifyResolvedConnectProvider(
         'Remote connection profile loaded. Access is checked by the first remote command.',
     };
   }
-  return await CONNECT_PROVIDER_ADAPTERS[resolved.provider].verify({
+  const context = {
     flags: resolved.flags,
     env: process.env,
-  });
+  };
+  const adapter = (CONNECT_PROVIDER_ADAPTERS as Partial<Record<string, ConnectProviderAdapter>>)[
+    resolved.provider
+  ];
+  return adapter
+    ? await adapter.verify(context)
+    : await withPluginConnection(
+        resolved.provider,
+        context.env,
+        async (connection) => await connection.verify(context),
+      );
 }
 
 async function verifyBrowserStack(

@@ -8,6 +8,7 @@ import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { unavailableCloudArtifactsResult } from './artifact-results.ts';
 import {
   createCloudWebDriverCapabilities,
+  buildCloudWebDriverBaseCapabilities,
   type CloudWebDriverProviderCapabilities,
 } from './capabilities.ts';
 import { WebDriverClient, type WebDriverSession } from './webdriver-client.ts';
@@ -17,7 +18,6 @@ import { snapshotBackendForPlatform } from './runtime-helpers.ts';
 import { releaseOnFailure } from './webdriver-utils.ts';
 import type {
   CloudWebDriverBaseSession,
-  CloudWebDriverPlatform,
   CloudWebDriverPreparedSession,
   CloudWebDriverRuntimeOptions,
 } from './runtime.ts';
@@ -291,18 +291,6 @@ export class WebDriverSessionManager {
       });
     }
   }
-}
-
-export function buildCloudWebDriverBaseCapabilities(
-  platform: CloudWebDriverPlatform,
-  deviceName: string,
-  configured: Record<string, unknown> = {},
-): Record<string, unknown> {
-  return {
-    platformName: platform === 'ios' ? 'iOS' : 'Android',
-    'appium:deviceName': deviceName,
-    ...configured,
-  };
 }
 
 /**

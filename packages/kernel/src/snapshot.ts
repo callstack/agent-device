@@ -478,7 +478,7 @@ export function formatRole(type: string): string {
 /**
  * The channel↔producer pairs that can actually occur. One channel is fed by several producers
  * with different guarantees: `xctest` trees come from the local Apple runner, Appium
- * page-source XML, or a limrun element tree, and only the runner's output has been through the
+ * page-source XML, or a Limrun or Doublespeed element tree, and only the runner's output has been through the
  * runner's presentation (clip fold, effective geometry, scope). Logic that assumes
  * presentation, scope, or geometry guarantees must key on the producer, never on the channel
  * alone.
@@ -492,7 +492,12 @@ export function formatRole(type: string): string {
 export type SnapshotProvenance =
   | {
       backend: 'xctest';
-      producer: 'apple-runner' | 'simulator-ax-bridge' | 'appium-source' | 'limrun-ios-tree';
+      producer:
+        | 'apple-runner'
+        | 'simulator-ax-bridge'
+        | 'appium-source'
+        | 'limrun-ios-tree'
+        | 'doublespeed-ios-tree';
     }
   | { backend: 'android'; producer: 'android-uiautomator' | 'appium-source' }
   | { backend: 'harmonyos-arkui'; producer: 'harmonyos-uitest' }
