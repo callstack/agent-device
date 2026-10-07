@@ -8,7 +8,7 @@ Platform constraints that change what you see during automation, and what to do 
 
 ## iOS: "Allow Paste" dialog never appears
 
-iOS 16+ shows an "Allow Paste" system prompt when an app reads `UIPasteboard.general` in the foreground. When `agent-device` launches or activates an iOS app, it does so through the XCUITest runner, and iOS silently grants pasteboard access in that context, so the prompt never appears.
+iOS 16+ shows an "Allow Paste" system prompt when an app reads `UIPasteboard.general` in the foreground. When `agent-device` launches or activates an iOS app, it does so through the Apple runner (an XCUITest runner), and iOS silently grants pasteboard access in that context, so the prompt never appears.
 
 This Apple platform constraint affects every XCUITest-based automation tool.
 

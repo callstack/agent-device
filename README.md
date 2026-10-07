@@ -31,7 +31,7 @@ agent-device doctor
 agent-device help workflow
 ```
 
-Run `doctor` yourself before you hand the CLI to an agent. `help workflow` links to the guides for debugging, replay, and profiling; installed help always matches the installed version.
+Run `doctor` yourself before you hand the CLI to an agent. `help workflow` links to the guides for debugging, replay, and profiling.
 
 ### Drive an app from the CLI
 
@@ -126,7 +126,7 @@ With the CLI installed, prompts like these work end to end:
 ## Next steps
 
 - [AI Agent Setup](https://oss.callstack.com/agent-device/docs/agent-setup): skills, project rules, and per-client setup for Cursor, Codex, Claude Code, Windsurf, and others.
-- [Quick Start](https://oss.callstack.com/agent-device/docs/quick-start): a guided run on the bundled Expo test app with screenshots, replay, and performance data.
+- [Quick Start](https://oss.callstack.com/agent-device/docs/quick-start): open an app, read its UI, and interact with it from the command line.
 - [Replay & E2E](https://oss.callstack.com/agent-device/docs/replay-e2e) and [Debugging & Profiling](https://oss.callstack.com/agent-device/docs/debugging-profiling): repeatable tests and bug hunting.
 
 ## Where to run agent-device

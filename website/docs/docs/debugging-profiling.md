@@ -38,7 +38,7 @@ For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to Rea
 
 React Native warning and error overlays come from the app. Treat them as findings or blockers: capture them, check `react-devtools errors` when connected, run `agent-device react-native dismiss-overlay` when the overlay is unrelated, then re-snapshot and report the overlay.
 
-Use `alert wait`, `alert accept`, and `alert dismiss` for Android runtime permission prompts, Android native alerts, and iOS platform/app-owned modal dialogs. Do not use `settings permission` to answer a dialog already on screen. Reserve `settings permission` for setup or resetting permission state before a flow.
+For permission prompts and other alerts already on screen, see [Wait and alerts](/docs/commands#wait-and-alerts).
 
 ## React Native JS memory through CDP
 
@@ -79,9 +79,15 @@ agent-device logs path
 
 This flow gives you logs, recent network activity, and a quick metrics sample from the active app session, starting from an empty log.
 
-`open` prints `Session state: <path>`. Inspect that directory for per-run artifacts: `requests/<request-id>.ndjson` contains daemon request diagnostics, `runner.log` contains Apple runner/`xcodebuild` output, and `app.log` contains app/device logs when log capture is active. Check the top-level daemon log only for daemon startup and lifecycle issues.
+`open` prints `Session state: <path>`. That directory holds the run's request diagnostics, Apple runner output, and app logs; see [Find a session's logs and artifacts](/docs/sessions#find-a-sessions-logs-and-artifacts).
 
 When a command fails, use `--json` to inspect `error.details.stderr` when it is present. Diagnostic stderr is secret-redacted and retains up to 8,192 characters; longer output keeps its beginning and end with a truncation marker between them. Other diagnostic strings remain limited to 400 characters. Compact retry summaries may retain less output.
+
+When a command fails against a remote daemon, the `Diagnostics Log:` path is always on your machine:
+agent-device downloads the failing request's record over the same base URL and token into
+`<state-dir>/remote-diagnostics/<session>/<request-id>.ndjson`, so a CI job can keep it as a build
+artifact. If the download fails, the line reads `unavailable` with the remote daemon, the
+request id, and the reason — never a path on the daemon host.
 
 On iOS simulators, `logs` scope by bundle id and the resolved app executable. For launch-time stdout/stderr, capture the direct app launch console instead of starting raw `simctl` streams:
 
@@ -127,7 +133,27 @@ agent-device logs mark "before submit"
 
 - Logging is off by default; turn it on only for focused debugging windows.
 - Prefer `logs clear --restart` for clean repro loops.
-- Run `logs path`, then grep the file instead of loading whole logs into agent context.
+
+#### Search app logs with grep
+
+Run `logs path` to get the log file, then `grep` that path so only matching lines enter agent context:
+
+```bash
+# Prints the app log path, for example ~/.agent-device/sessions/default/app.log
+agent-device logs path
+
+# -n adds line numbers; -E allows | without escaping
+grep -n "Error\|Exception\|Fatal" ~/.agent-device/sessions/default/app.log
+grep -n -E "Error|Exception|Fatal|crash" ~/.agent-device/sessions/default/app.log
+grep -n -E "agent-device.*mark|before submit" ~/.agent-device/sessions/default/app.log
+
+# Last 50 lines only
+tail -50 ~/.agent-device/sessions/default/app.log
+```
+
+- Replace the example path with the one `logs path` prints.
+- Prefer targeted patterns (such as `Error`, `Exception`, or your own log tags) over reading the whole file.
+- `logs mark "before submit"` writes a line prefixed with `[agent-device][mark][...]`, so grep for `agent-device.*mark` to find your timing markers.
 
 ### Network inspection
 
@@ -138,9 +164,8 @@ agent-device network dump 25 --include all
 ```
 
 - `network dump` parses recent HTTP(s) entries from the session app log for app/device sessions and from managed `agent-browser` request history for web sessions.
-- `network log` is an alias for `network dump`.
 - For app/device sessions, results depend on what the app writes to the platform log.
-- Web `network dump` includes request and response headers when requested, but not request or response bodies.
+- For the alias and per-platform limits, see [Media and logs](/docs/commands#media-and-logs).
 
 ### Audio probes
 
@@ -180,7 +205,6 @@ agent-device perf trace stop --kind perfetto --out app.perfetto-trace
 - `perf memory sample` returns a compact memory-only payload. Prefer it over raw `dumpsys`/`leaks` output for a first pass: arrays stay bounded and the top consumers are listed compactly.
 - Example sample shape: `{"metrics":{"memory":{"available":true,"totalPssKb":562958,"totalRssKb":570304,"topConsumers":[{"name":"Dalvik Heap","pssKb":213456}]}}}`.
 - `perf memory snapshot` escalates to file artifacts. Android supports Java HPROF capture for active app processes when the build/device allows heap dumping. iOS simulator and macOS app sessions support memgraph capture. On physical iOS devices, memgraph capture reports unavailable with a hint.
-- For React Native JavaScript heap leaks, use `agent-device cdp` against the Metro CDP target instead of native/process memory samples; see the CDP section above.
 - Heap and memgraph artifacts are returned as paths plus compact metadata. Example default output: `Memory artifact (android-hprof): /tmp/app.hprof (42MB)`. They are not printed or embedded in JSON by default. Native allocation tracing (heapprofd) is not supported.
 - `perf cpu profile ... --kind xctrace` collects an Apple native `.trace`; `report` aggregates every run, returns at most ten weighted top functions in JSON, and prints five. `perf trace ... --kind xctrace` keeps trace data as an artifact.
 - On iOS simulators and macOS, process sampling and captures target the resolved app executable. Other running copies with the same executable name are excluded, including copies installed on another simulator.

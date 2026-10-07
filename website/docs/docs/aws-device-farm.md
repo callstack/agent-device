@@ -80,7 +80,7 @@ To use AWS Device Farm only through MCP, run `connect` in the same effective sta
 
 ## Use the Node.js client
 
-Configure the client directly when your Node process manages the AWS credentials and selectors:
+Configure the client directly when your Node.js process manages the AWS credentials and selectors:
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';

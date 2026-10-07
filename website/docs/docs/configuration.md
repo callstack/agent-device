@@ -73,11 +73,8 @@ protected, operator-controlled configuration. Do not put either value in `./agen
 Remote daemon URLs that aren't loopback always require authentication. Saved `connect` profiles and
 explicit `--remote-config` files also work; generated profiles do not store tokens.
 
-When a command fails against a remote daemon, the `Diagnostics Log:` path is always on your machine:
-agent-device downloads the failing request's record over the same base URL and token into
-`<state-dir>/remote-diagnostics/<session>/<request-id>.ndjson`, so a CI job can keep it as a build
-artifact. If the download fails, the line reads `unavailable` with the remote daemon, the
-request id, and the reason — never a path on the daemon host.
+When a command fails against a remote daemon, its `Diagnostics Log:` path is on your machine; see
+[Capture a clean repro window](/docs/debugging-profiling#capture-a-clean-repro-window).
 
 Project-safe keys include command defaults such as `platform`, `target`, `device`, `session`,
 `snapshotDepth`, recording/capture options, and action timing. These keys are allowed only in user or
@@ -115,10 +112,8 @@ Project config can also set `snapshotDepth`, `snapshotScope`, `screenshotScale`,
 
 Use a numeric `artifact` value for an artifact ID. Use a string `artifact` value for an artifact name.
 
-Project config can set a default lock for named sessions, with the usual env mapping:
-- `sessionLock` -> `AGENT_DEVICE_SESSION_LOCK`
-
-Most local automation doesn't need this, because implicit sessions are already scoped to the workspace. Use `sessionLock`, `--session-lock`, or `AGENT_DEVICE_SESSION_LOCK` when you run a named session.
+Project config can set a default lock mode for named sessions with `sessionLock`
+(`AGENT_DEVICE_SESSION_LOCK`). See [Lock a named session to a device](/docs/sessions#lock-a-named-session-to-a-device).
 
 ## Supported environment variables
 

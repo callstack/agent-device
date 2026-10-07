@@ -55,6 +55,9 @@ Notes:
 - Steps written as `positionals`/`flags` are rejected (that shape was removed in 0.21). Rewrite each step with structured input, for example `{"command":"open","input":{"app":"settings","platform":"ios"}}`.
 - `batch` and `replay` steps can't be nested inside a batch.
 - `--on-error stop` is the only error mode: the batch stops at the first failing step.
+- A batch runs at most 100 steps by default. Pass `--max-steps <n>` to raise or lower the limit, up to 1000.
+- A step without `platform` uses the batch's `--platform`. Session lock defaults don't override it.
+- Steps use the same session binding and [session lock mode](/docs/sessions#lock-a-named-session-to-a-device) as the `batch` command itself.
 
 ## Response shape
 

@@ -62,9 +62,15 @@ agent-device takeover --session remote-session
 ```
 
 The command runs in the foreground and keeps the hold until you press Ctrl+C. While it holds,
-read-only diagnostics still work, the agent session stays open, and its lease does not expire from
-inactivity. The hold activates after mutations already in progress finish. To check or recover a hold,
-run `takeover status` or `takeover release <hold-id>` with the same session.
+state-changing commands fail with `DEVICE_IN_USE` and `details.reason: "human_control_active"`.
+Snapshots, screenshots, selector reads, logs, and other read-only diagnostics still work, the agent
+session stays open, and its lease does not expire from inactivity. The hold activates after
+mutations already in progress finish. To check or recover a hold, run `takeover status` or
+`takeover release <hold-id>` with the same session.
+
+If the `takeover` process disappears, its hold expires on its own. When the last hold on the device
+is released or expires, the lease's inactivity window starts over. A tenant can change only the
+holds owned by its own lease.
 
 If the requesting connection disconnects while the hold waits for those mutations, the pending hold
 is removed and never activates. This applies to both tenant RPCs and host PUTs. An active hold lasts

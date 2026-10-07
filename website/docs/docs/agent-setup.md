@@ -13,22 +13,9 @@ In short: install the CLI, let the agent start with the requested app, and have 
 
 ```bash
 npm install -g agent-device@latest
-agent-device --version
-agent-device help workflow
 ```
 
-To try it once without a global install:
-
-```bash
-npx agent-device --version
-npx agent-device help workflow
-```
-
-Use a global install for agent workflows so every command and terminal session uses the same version. A project-local install also works when you want the version pinned in your lockfile.
-
-Don't tell agents to pick an npm version or run `npx -y agent-device@latest` on their own: that downloads and runs whatever npm serves, without asking you. For unattended agent use, give the agent a trusted installed binary, a project-local install, or a version pinned by you or your project config.
-
-For Node, Xcode, Android SDK, macOS, and iOS device prerequisites, see [Installation](/docs/installation).
+Use a global or project-local install so every agent command runs the same version. For Node, Xcode, Android SDK, macOS, and iOS device prerequisites, and for when one-off `npx` use is safe, see [Installation](/docs/installation).
 
 ## Install the skills
 
@@ -89,6 +76,10 @@ Without a global install, pin a version you've reviewed for unattended agent use
 ```
 
 In MCP registries, the server is listed as `io.github.callstack/agent-device` (npm package `agent-device`, stdio transport). Glama lists it at [callstack/agent-device](https://glama.ai/mcp/servers/callstack/agent-device).
+
+## Fix a missing agent-device command
+
+Some agent clients run commands with a different `PATH` than your normal shell, so a global install that works in your terminal can be missing in the agent's terminal or MCP server. Run `command -v agent-device` in your own terminal and give the agent that absolute path, or use it as the MCP server `command`. If the path is under a version manager or a package-manager global bin directory, check your shell startup files for how that directory gets on `PATH`; the agent client may not load them.
 
 ## Cursor
 
@@ -173,7 +164,7 @@ Put the [recommended rule](#recommended-agent-rule) in `AGENTS.md` or the projec
 agent-device open <app-or-url> --platform ios --foreground
 ```
 
-Codex may run commands with a different `PATH` than your normal shell. If you installed `agent-device` globally but Codex can't find it, run `command -v agent-device` in your own terminal and give Codex that absolute path for `open` and later commands.
+If Codex can't find `agent-device`, see [Fix a missing agent-device command](#fix-a-missing-agent-device-command).
 
 For reviews or planning-only tasks, tell the agent not to touch devices unless you ask.
 

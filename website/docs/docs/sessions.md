@@ -47,13 +47,45 @@ covers daemon startup and lifecycle issues.
 
 ## Share a session by name
 
-Name a session only when you want a shared, reusable handle:
+Name a session only when you want a shared, reusable handle. Pass `--session <name>` or set
+`AGENT_DEVICE_SESSION`:
 
 ```bash
 agent-device open Contacts --platform ios --session my-session
 agent-device snapshot -i
 agent-device close --session my-session
 ```
+
+Don't run commands that change state in parallel on the same session. Run actions such as `open`,
+`press`, `fill`, `type`, `scroll`, `back`, `alert`, `replay`, `batch`, and `close` one at a time.
+
+## Lock a named session to a device
+
+A lock keeps a named session's commands on its device: per-call selectors that conflict with the
+session are rejected or dropped. Most local automation doesn't need one, because implicit sessions are
+already scoped to the workspace.
+
+Setting `AGENT_DEVICE_SESSION` turns on the lock in `reject` mode by default. Choose how conflicts are handled with
+`--session-lock reject|strip`, `AGENT_DEVICE_SESSION_LOCK=reject|strip`, or the `sessionLock` config key:
+
+```bash
+AGENT_DEVICE_SESSION=qa-ios AGENT_DEVICE_SESSION_LOCK=strip agent-device snapshot --platform android
+```
+
+- `reject` fails a command whose selectors conflict with the lock.
+- `strip` drops conflicting platform and scope selectors (`--platform`, `--target`,
+  `--ios-simulator-device-set`, `--android-device-allowlist`) and runs the command on the locked
+  device. Only those selectors are dropped.
+- In either mode, a selector that names a different device than the lock (`--udid`, `--serial`,
+  `--device`) is never dropped. The command fails with `INVALID_ARGS` and names both the requested and
+  the locked device, because continuing would run it on a device you did not select. If you want the
+  requested device, close the locked session; if you want the locked one, remove the selector.
+- CLI scope flags normally override environment values. With `strip` active, conflicting per-call
+  selectors are ignored instead.
+- The daemon enforces the lock, so CLI, Node.js client, and direct RPC requests get the same conflict
+  handling. Direct RPC callers pass `meta.lockPolicy` and optional `meta.lockPlatform` on
+  `agent_device.command` requests.
+- `batch` steps keep the batch's `--platform` under a lock; see [Batching](/docs/batching).
 
 ## Drive two platforms from one checkout
 
@@ -108,14 +140,8 @@ budget, so several agents can queue on one device.
 ## Notes
 
 - `open <app>` in an existing session switches the active app and updates the session's bundle id.
-- `open <url>` in iOS sessions opens deep links.
-- `open <app> <url>` in iOS sessions opens deep links.
-- On iOS devices, `http(s)://` URLs open in Safari when no app is active. Custom scheme URLs require an active app in the session.
-- On iOS, `appstate` reports on the session app: its name from the session record and, when a
-  runner is live, its `XCUIApplication` state (`state`, `source: runner`). It can't tell you which
-  app is in the foreground, because no Apple target reports that outside a session. To see whether the
-  session app held the foreground during a command, read the [`targetActivation` disclosure](/docs/commands#foreground-repairs-on-ios).
+  On iOS, to see whether the session app held the foreground during a command, read the
+  [`targetActivation` disclosure](/docs/commands#foreground-repairs-on-ios).
 - For remote `connect --remote-config` sessions, see [Commands](/docs/commands#remote-metro-workflow).
-- Use `--session <name>` to share a named session on purpose. Don't run commands that change state in parallel on the same session; run actions such as open, press, fill, type, scroll, back, alert, replay, batch, and close one at a time.
 
 For replay scripts and deterministic E2E guidance, see [Replay & E2E](/docs/replay-e2e).

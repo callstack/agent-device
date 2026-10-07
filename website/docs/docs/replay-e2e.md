@@ -37,6 +37,7 @@ agent-device open Settings --platform ios --session e2e --save-script ./workflow
 ```
 
 - Missing parent directories are created.
+- The script is written on the machine running the daemon, so `--save-script` is rejected when you use a remote daemon.
 - For a bare file name that could be read as another argument, use `--save-script=workflow.ad` or a path-like value such as `./workflow.ad`.
 
 ## `.ad` line grammar
@@ -76,6 +77,7 @@ agent-device replay ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --s
 ```
 
 - Replay reads `.ad` scripts.
+- The CLI reads script paths on your machine and sends the script, with any Maestro `runFlow` includes, to the daemon. The same `replay` or `test` command works against a local or a remote daemon without copying files. A script that doesn't exist on your machine fails at once, naming the path you typed.
 - A script that does not end in `close` leaves its session open. For a script that does end in
   `close`, pass `--keep-session` to skip only that final action and keep working in the same
   session:
@@ -86,8 +88,7 @@ agent-device replay ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --s
   ```
 
   Earlier `close` actions still run. `test` does not accept the flag because each suite attempt
-  cleans up its own session, and Maestro YAML rejects it because the Maestro runtime manages the
-  session lifecycle.
+  cleans up its own session.
 - `press`, `click`, and `longpress` steps wait up to 2 seconds for their target to appear before
   they fail, so a step recorded against a screen that was still loading passes once the target
   shows up. The wait covers only a target that is not on screen yet: a target that is covered,
@@ -144,7 +145,7 @@ Each `open <appId>` exports with an explicit `launchApp.appId`, so a flow can sw
 
 Deep links, including schemes without `//` such as `tel:` and `mailto:`, export as `openLink`. A standalone `open tel:+15551234567` emits only the link command; `open com.example.app mailto:agent@example.test` emits the app launch followed by the link.
 
-Export is strict. It writes Maestro YAML for compatible flow actions such as app launch, taps, long press, text input, keyboard dismiss/enter, back, home, text visibility assertions, coordinate swipes, basic scroll, screenshots, and `.ad` `env` directives. `home` exports as `pressKey: Home`, so flows that visit the home screen and reopen the app can be exported. Agent-only inspection or maintenance actions such as `snapshot`, `get`, `record`, `trace`, `settings`, and unsupported selector shapes fail with the source line and action instead of being silently dropped. Known semantic differences are reported as warnings; for example, `.ad` `fill` exports as `tapOn` plus `inputText`, which may append text in Maestro rather than replacing existing field contents. Native `.ad` `label=` selectors export as Maestro `text:` selectors and warn because Maestro text matching is broader than label-only matching.
+Export is strict. It writes Maestro YAML for compatible flow actions such as app launch, taps, long press, text input, keyboard dismiss/enter, back, home, text visibility assertions, coordinate swipes, basic scroll, screenshots, and `.ad` `env` directives. `home` exports as `pressKey: Home`, so flows that visit the home screen and reopen the app can be exported. Agent-only inspection or maintenance actions such as `snapshot`, `get`, `record`, `trace`, `settings`, and unsupported selector shapes fail with the source line and action instead of being silently dropped. Known semantic differences are reported as warnings; for example, `.ad` `fill` exports as `tapOn` plus `inputText`, which may append text in Maestro rather than replacing existing field contents. Native `.ad` `label=` selectors export as Maestro `text:` selectors and warn because Maestro text matching is broader than label-only matching. A strict `wait absent` is reported as unsupported rather than mapped to Maestro's more lenient `notVisible` condition.
 
 ## Run a lightweight `.ad` suite
 
@@ -385,7 +386,7 @@ A failing `replay`/`test` step returns a structured `REPLAY_DIVERGENCE` error. T
 
 Text output prints a compact summary of the same fields; `--json`/MCP carry the full object.
 
-### Resuming a failed replay
+## Resume a failed replay
 
 `replay --from <n> --plan-digest <sha256>` resumes **at** plan step `n`, not after it, skipping `1..n-1` without executing them. Both flags come from a divergence report's `resume` field — `from` is the failed step, `planDigest` is the digest of the exact unchanged plan that produced it.
 
@@ -424,7 +425,7 @@ Passing `--plan-digest` that no longer matches the current script — because yo
 - Replay fails after UI/layout changes:
   - Read the divergence report's `suggestions` and repair the selector by hand; there is no automated rewrite. Because the edit changes the plan digest, run a fresh full replay instead of using the old resume flags.
 - Repeated re-runs are slow or the app is stateful, but the script is still correct:
-  - Leave the replay plan unchanged, repair app state so the reported failed step can be retried, then use its `--from`/`--plan-digest`. Resume starts at `--from`; it does not skip that step.
+  - Repair app state and resume with the unchanged `--from`/`--plan-digest`. See [Resume a failed replay](#resume-a-failed-replay).
 - Replay file parse error:
   - Validate quoting in `.ad` lines (unclosed double quotes are rejected). A selector with a space
     needs quotes, and `help scripting` states how each quote form decodes.

@@ -83,11 +83,11 @@ agent-device artifacts --json
 agent-device disconnect
 ```
 
-To use BrowserStack only through MCP, run `connect` in the same effective state directory before you start `agent-device mcp`. MCP exposes `open`, `snapshot`, `click`, `close`, and `artifacts`, but not provider `connect` commands.
+To use BrowserStack only through MCP, run `connect` in the same effective state directory before you start `agent-device mcp`. MCP exposes device commands such as `open`, `snapshot`, `close`, and `artifacts`, but not provider `connect` commands.
 
 ## Use the Node.js client
 
-Configure the client directly when your Node process manages the BrowserStack credentials and selectors instead of a saved CLI connection profile:
+Configure the client directly when your Node.js process manages the BrowserStack credentials and selectors instead of a saved CLI connection profile:
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';

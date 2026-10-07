@@ -35,19 +35,13 @@ agent-device help
 Run `agent-device doctor` yourself after installing to check that local devices, toolchains, and
 dev servers are ready before you hand the CLI to an agent.
 
-A global install gives agents a stable `agent-device` command and help topics that match the installed version:
+A global install gives agents a stable `agent-device` command. Start with the core workflow guide; [Commands](/docs/commands) lists the other help topics:
 
 ```bash
 agent-device help workflow
-agent-device help debugging
-agent-device help react-devtools
-agent-device help cdp
-agent-device help tv
 ```
 
-Some agent clients run commands with a different `PATH` than your normal shell. If the agent terminal can't find `agent-device` after a global install, run `command -v agent-device` in your own terminal and give the agent that absolute path. If the command lives under a version manager or package-manager global bin directory, check your shell startup files for how it gets on `PATH`.
-
-For Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skills, and project rules, see [AI Agent Setup](/docs/agent-setup). For the first app automation commands, see [Quick Start](/docs/quick-start).
+For Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skills, and project rules, see [AI Agent Setup](/docs/agent-setup); to expose commands as MCP tools with `agent-device mcp`, see [MCP server](/docs/agent-setup#mcp-server). If an agent can't find `agent-device` after a global install, see [Fix a missing agent-device command](/docs/agent-setup#fix-a-missing-agent-device-command). For the first app automation commands, see [Quick Start](/docs/quick-start).
 
 ## Update the CLI
 
@@ -60,16 +54,6 @@ agent-device --version
 ```
 
 Set `AGENT_DEVICE_NO_UPDATE_NOTIFIER=1` to disable the notice.
-
-## Agent clients and MCP
-
-The `agent-device mcp` server exposes installed `agent-device` commands as structured MCP tools. MCP tools use the same daemon client as the CLI.
-
-```bash
-agent-device mcp
-```
-
-Use [AI Agent Setup](/docs/agent-setup#mcp-server) for copy-paste MCP client configuration.
 
 ## Without installing
 
@@ -93,9 +77,8 @@ vega device list
 ```
 
 - Start and stop the local emulator with `vega virtual-device start` and `vega virtual-device stop`; `agent-device` does not boot it implicitly.
-- Vega OS support covers the VVD only. `agent-device` does not discover or control physical Fire TV devices.
-- List the VVD with `agent-device devices --platform vega --target tv`, then select it explicitly with `--serial VirtualDevice`.
 - Appium is optional. You don't need it for device discovery, app lifecycle, or remote-button control.
+- For selecting the VVD and what Vega OS supports, see [TV targets](/docs/commands#tv-targets).
 
 ## macOS desktop notes
 
@@ -105,17 +88,23 @@ vega device list
 
 ## iOS physical device prerequisites
 
-- The device is paired and listed by `xcrun devicectl list devices`.
+Run `agent-device help physical-device` for the same setup guidance from the CLI.
+
+- Xcode is installed with `xcrun devicectl` and `xcrun xctrace` available.
+- The device is paired, trusted, connected, unlocked when needed, and listed by `xcrun devicectl list devices`.
 - Developer Mode is on in the device's Settings.
-- Signing is configured in Xcode (Automatic Signing recommended), or through these environment variables:
+- The Apple runner must be signed before commands can run on the device. Start with Automatic Signing in Xcode and set only these environment variables:
   - `AGENT_DEVICE_IOS_TEAM_ID`
-  - `AGENT_DEVICE_IOS_SIGNING_IDENTITY`
-  - `AGENT_DEVICE_IOS_PROVISIONING_PROFILE`
-  - `AGENT_DEVICE_IOS_BUNDLE_ID` (optional base bundle ID for the runner app)
+  - `AGENT_DEVICE_IOS_BUNDLE_ID` (optional base bundle ID for the runner app; its tests use `<id>.uitests`)
+- To find team IDs and Apple Development signing certificates, run `security find-identity -v -p codesigning`.
+- If Xcode can't choose a provisioning profile, set `AGENT_DEVICE_IOS_PROVISIONING_PROFILE` to the profile name, not a file path.
+- Set `AGENT_DEVICE_IOS_SIGNING_IDENTITY` only when `xcodebuild` asks for a specific identity.
+- The profile and team must allow both `AGENT_DEVICE_IOS_BUNDLE_ID` and `<id>.uitests`.
 - Free Apple Developer (Personal Team) accounts can fail with "bundle identifier is not available" for generic IDs. Set `AGENT_DEVICE_IOS_BUNDLE_ID` to a unique reverse-DNS value (for example `com.yourname.agentdevice.runner`).
 - When the runner fails to start, `error.details.reason` is one of `signing_no_development_team`, `signing_provisioning_profile_missing`, `bundle_identifier_already_registered`, `signing_unspecified`, `devtools_security_developer_mode_disabled` (the Mac's `DevToolsSecurity` setting, which says nothing about the device's Developer Mode toggle), `device_developer_mode_disabled`, `device_developer_disk_image_unavailable`, or `build_failed_unclassified` when the cause is unknown. Branch on `details.reason` and follow `hint`; the error code is `COMMAND_FAILED` for every reason.
 - The two `device_*` reasons come from the device itself (`xcrun devicectl device info details`), checked before the runner builds. `device_developer_mode_disabled` means the Developer Mode toggle in Settings is off; turn it on. `device_developer_disk_image_unavailable` means Developer Mode is on but the developer disk image isn't available yet, usually because device support is still installing; wait and retry.
-- If device setup is slow, keep the device connected, retry, and check the daemon diagnostics.
+- The first run builds the Apple runner and takes longer than later commands. Keep the device connected; if setup times out, retry with `--debug` to see signing and build diagnostics.
+- If you set `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` together with `AGENT_DEVICE_IOS_CLEAN_DERIVED`, keep the path in a subdirectory of the project's `.tmp/` directory. For any other path, the command fails instead of cleaning it, and the error hint names both fixes.
 
 ## Troubleshoot daemon startup and upgrades
 
