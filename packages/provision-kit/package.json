@@ -38,6 +38,10 @@
       "types": "./src/install-source-network.ts",
       "default": "./src/install-source-network.ts"
     },
+    "./github-actions-artifact-source": {
+      "types": "./src/github-actions-artifact-source.ts",
+      "default": "./src/github-actions-artifact-source.ts"
+    },
     "./install-source-network-transport": {
       "types": "./src/install-source-network-transport.ts",
       "default": "./src/install-source-network-transport.ts"
