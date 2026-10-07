@@ -13,7 +13,8 @@
 // The engines read the disk while the custom rules read tracked files, so the script refuses to run
 // unless the production roots hold exactly the tracked tree. Plants are recorded in a manifest
 // before any file changes. Normal exit, a thrown error and SIGINT/SIGTERM/SIGHUP all restore the tree
-// from it; after a SIGKILL, the next run restores it before measuring.
+// from it; after a SIGKILL, the next run restores it first, or stops untouched if a planted file was
+// edited in between.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -256,12 +257,13 @@ function nonProductionGlobs(): string[] {
 
 type Finding = { rule: string; from: string; to: string; message: string };
 
+const SPAWN = { cwd: repoRoot, encoding: 'utf8', maxBuffer: 1 << 30 } as const;
+const DEPCRUISE_ROOTS = ['src', 'packages'];
+const FALLOW_ARGS = ['dead-code', '--no-cache', '--quiet', '--format', 'json'];
+const FALLOW_FILTERS = ['--boundary-violations', '--circular-deps', '--policy-violations'];
+
 function run(bin: string, args: readonly string[]) {
-  const { stdout, stderr, status, signal } = spawnSync(bin, args, {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    maxBuffer: 1 << 30,
-  });
+  const { stdout, stderr, status, signal } = spawnSync(bin, args, SPAWN);
   // A signal reaches the child too; stop here so the plants are restored rather than measured.
   if (signal) throw new Error(`${path.basename(bin)} stopped by ${signal}`);
   return { stdout, stderr, status };
@@ -294,15 +296,7 @@ function finding(rule: string, from: string, to = '', message = ''): Finding {
 }
 
 function depcruise(config: string, extra: readonly string[] = []) {
-  const output = run(DEPCRUISE, [
-    '--config',
-    config,
-    '--output-type',
-    'json',
-    ...extra,
-    'src',
-    'packages',
-  ]);
+  const output = run(DEPCRUISE, ['--config', config, '-T', 'json', ...extra, ...DEPCRUISE_ROOTS]);
   const result = parseOutput<{
     modules: { source: string; dependencies: { resolved: string; dependencyTypes: string[] }[] }[];
     summary: {
@@ -323,17 +317,8 @@ function depcruise(config: string, extra: readonly string[] = []) {
 
 /** `filtered: false` runs every issue type, which the stale-baseline gate requires. */
 function fallow(config: string, extra: readonly string[] = [], filtered = true) {
-  const output = run(FALLOW, [
-    'dead-code',
-    '--config',
-    config,
-    '--no-cache',
-    '--quiet',
-    '--format',
-    'json',
-    ...(filtered ? ['--boundary-violations', '--circular-deps', '--policy-violations'] : []),
-    ...extra,
-  ]);
+  const filters = filtered ? FALLOW_FILTERS : [];
+  const output = run(FALLOW, [...FALLOW_ARGS, '--config', config, ...filters, ...extra]);
   const json = parseOutput<{
     boundary_violations: { from_path: string; to_path: string }[];
     boundary_coverage_violations: { path: string }[];
@@ -517,46 +502,64 @@ const plantFiles = (plant: Plant) => [
   ...(plant.edit ? [plant.edit.file] : []),
 ];
 
-type PlantManifest = { written: string[]; edited: Record<string, string> };
+/** Every file a plant touches: its content before the plant (`null`: absent) and as planted. */
+type PlantManifest = Record<string, { before: string | null; planted: string }>;
 
-/** Undoes the recorded plants, whichever run wrote them; a no-op when none are on disk. */
+function readOrNull(file: string): string | null {
+  const full = path.join(repoRoot, file);
+  return fs.existsSync(full) ? fs.readFileSync(full, 'utf8') : null;
+}
+
+/**
+ * Undoes the recorded plants, whichever run wrote them; a no-op when none are on disk. A file holding
+ * neither its planted nor its original content was edited since, so nothing is restored at all.
+ */
 function restorePlants(): void {
   if (!fs.existsSync(PLANT_MANIFEST)) return;
   const manifest = JSON.parse(fs.readFileSync(PLANT_MANIFEST, 'utf8')) as PlantManifest;
-  for (const file of manifest.written) fs.rmSync(path.join(repoRoot, file), { force: true });
+  const files = Object.entries(manifest).map(([file, entry]) => ({
+    file,
+    ...entry,
+    now: readOrNull(file),
+  }));
+  const changed = files.filter(({ before, planted, now }) => now !== planted && now !== before);
+  if (changed.length > 0) {
+    throw new Error(
+      'edited since they were planted, so nothing was restored. Return each to its planted or ' +
+        `original content, then re-run to restore the rest (${PLANT_MANIFEST}):\n` +
+        changed.map(({ file }) => file).join('\n'),
+    );
+  }
+  for (const { file, before, planted, now } of files) {
+    if (now !== planted) continue;
+    if (before === null) fs.rmSync(path.join(repoRoot, file));
+    else fs.writeFileSync(path.join(repoRoot, file), before);
+  }
   for (const dir of ['src/utils', 'src/replay']) {
     const full = path.join(repoRoot, dir);
     if (fs.existsSync(full) && fs.readdirSync(full).length === 0) fs.rmdirSync(full);
-  }
-  for (const [file, original] of Object.entries(manifest.edited)) {
-    fs.writeFileSync(path.join(repoRoot, file), original);
   }
   fs.rmSync(PLANT_MANIFEST);
 }
 
 /** Records every planned change in the manifest before touching the tree. */
 function writePlants(plants: readonly Plant[] = PLANTS): void {
-  const manifest: PlantManifest = { written: [], edited: {} };
+  const manifest: PlantManifest = {};
   for (const plant of plants) {
-    manifest.written.push(...Object.keys(plant.files ?? {}));
-    if (!plant.edit) continue;
-    const original = fs.readFileSync(path.join(repoRoot, plant.edit.file), 'utf8');
-    if (!original.includes(plant.edit.from)) {
-      throw new Error(`edit anchor missing in ${plant.edit.file}`);
+    for (const [file, content] of Object.entries(plant.files ?? {})) {
+      manifest[file] = { before: readOrNull(file), planted: `${content}\n` };
     }
-    manifest.edited[plant.edit.file] = original;
+    if (!plant.edit) continue;
+    const { file, from, to } = plant.edit;
+    const before = readOrNull(file);
+    if (!before?.includes(from)) throw new Error(`edit anchor missing in ${file}`);
+    manifest[file] = { before, planted: before.replace(from, to) };
   }
   fs.mkdirSync(path.dirname(PLANT_MANIFEST), { recursive: true });
   fs.writeFileSync(PLANT_MANIFEST, JSON.stringify(manifest));
-  for (const plant of plants) {
-    for (const [file, content] of Object.entries(plant.files ?? {})) {
-      fs.mkdirSync(path.dirname(path.join(repoRoot, file)), { recursive: true });
-      fs.writeFileSync(path.join(repoRoot, file), `${content}\n`);
-    }
-    if (plant.edit) {
-      const { file, from, to } = plant.edit;
-      fs.writeFileSync(path.join(repoRoot, file), manifest.edited[file]!.replace(from, to));
-    }
+  for (const [file, { planted }] of Object.entries(manifest)) {
+    fs.mkdirSync(path.dirname(path.join(repoRoot, file)), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, file), planted);
   }
 }
 
@@ -737,7 +740,7 @@ function main(): void {
   const dcBaseline = path.join(OUT, 'depcruise-known.json');
   fs.writeFileSync(
     dcBaseline,
-    run(DEPCRUISE, ['--config', dcConfig, '--output-type', 'baseline', 'src', 'packages']).stdout,
+    run(DEPCRUISE, ['--config', dcConfig, '-T', 'baseline', ...DEPCRUISE_ROOTS]).stdout,
   );
   const fallowBaseline = path.join(OUT, 'fallow-baseline.json');
   fallow(fallowRc, ['--save-baseline', fallowBaseline], false);
