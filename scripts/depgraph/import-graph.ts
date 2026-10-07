@@ -16,6 +16,14 @@ export const VALUE_EDGES: ReadonlySet<EdgeKind> = new Set(['value']);
 export const EXECUTABLE_EDGES: ReadonlySet<EdgeKind> = new Set(['value', 'dynamic']);
 
 /**
+ * Every collapsed edge kind, for the structural questions ("does anything reference this file
+ * at all") that community detection and zone-level cycle reporting ask. Community algorithms
+ * treat the graph as undirected regardless of kind, so mixing kinds in is the right input, not
+ * a loosening of a rule — there is no gate riding on this set.
+ */
+export const ALL_EDGES: ReadonlySet<EdgeKind> = new Set(['value', 'type', 'dynamic']);
+
+/**
  * Identity of one file pair, shared by `collapseEdges` and the graph's edge ids. NUL cannot occur
  * in a file path, so distinct pairs never share an id.
  */

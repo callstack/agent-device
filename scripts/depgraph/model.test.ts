@@ -435,6 +435,12 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
     edgeAuthorities: string[][];
     authorityCounts: Record<string, number>;
     typeInversions: Record<string, number>;
+    dominatorSummary: { entry: string; reachableFiles: number; totalFiles: number };
+    zoneSccSummary: { zones: number; components: { zones: string[]; size: number }[] };
+    cohesionSummary: {
+      modularity: { declaredZones: number; detectedCommunities: number };
+      zoneCohesion: { zone: string; cohesionShare: number }[];
+    };
   };
 
   // Wire shape: the fields a consumer queries. A rename here is a breaking change for any script
@@ -447,6 +453,9 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
     'edges',
     'cycles',
     'typeInversions',
+    'dominatorSummary',
+    'zoneSccSummary',
+    'cohesionSummary',
   ]) {
     assert.ok(field in payload, `legacy payload field ${field} disappeared`);
   }
@@ -461,6 +470,25 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
   assert.ok(payload.zones.length > 0);
   assert.ok(Object.keys(payload.typeInversions).length > 0);
 
+  // Report-only fields (#3283): no gate reads these, so this pins only the wire shape.
+  assert.equal(payload.dominatorSummary.entry, 'src/daemon.ts');
+  assert.ok(payload.dominatorSummary.reachableFiles > 0);
+  assert.ok(payload.dominatorSummary.reachableFiles <= payload.dominatorSummary.totalFiles);
+  assert.ok(payload.zoneSccSummary.zones > 0);
+  assert.ok(
+    payload.zoneSccSummary.components.every(
+      (component) => component.zones.length === component.size,
+    ),
+  );
+  assert.ok(payload.cohesionSummary.modularity.declaredZones <= 1);
+  assert.ok(payload.cohesionSummary.modularity.detectedCommunities <= 1);
+  for (const { cohesionShare } of payload.cohesionSummary.zoneCohesion) {
+    assert.ok(
+      cohesionShare > 0 && cohesionShare <= 1,
+      `cohesionShare out of range: ${cohesionShare}`,
+    );
+  }
+
   // The printed summary must agree with the payload it was derived from.
   const inversions = Object.values(payload.typeInversions).reduce((sum, n) => sum + n, 0);
   assert.match(
@@ -470,6 +498,33 @@ test('build.ts writes the default path and a summary consistent with the JSON', 
   assert.match(stdout, new RegExp(`type-only spine inversions \\(R6\\): ${inversions}`));
   const reachable = payload.edges.filter(([, , , flags]) => (flags & 2) !== 0).length;
   assert.match(stdout, new RegExp(`reachable at distance >= 2: ${reachable}`));
+  assert.match(
+    stdout,
+    new RegExp(
+      `dominator summary for src/daemon\\.ts: ${payload.dominatorSummary.reachableFiles} of ${payload.dominatorSummary.totalFiles} files loaded eagerly`,
+    ),
+  );
+  assert.match(stdout, /zone-level SCCs: \d+ cyclic group\(s\) across \d+ zones/);
+  assert.match(
+    stdout,
+    /modularity: declared zones -?\d+\.\d{3}, detected communities -?\d+\.\d{3}/,
+  );
+});
+
+test('build.ts honours --dominator-entry', () => {
+  const { status, stdout } = runBuild(['--dominator-entry', 'src/cli/entry.ts']);
+  assert.equal(status, 0, stdout);
+  const payload = JSON.parse(readFileSync('.tmp/depgraph/graph.json', 'utf8')) as {
+    dominatorSummary: { entry: string };
+  };
+  assert.equal(payload.dominatorSummary.entry, 'src/cli/entry.ts');
+  assert.match(stdout, /dominator summary for src\/cli\/entry\.ts:/);
+});
+
+test('build.ts reports a typed error for a dominator entry outside the graph', () => {
+  const { status, stderr } = runBuild(['--dominator-entry', 'src/does-not-exist.ts']);
+  assert.notEqual(status, 0);
+  assert.match(stderr, /src\/does-not-exist\.ts is not a production source file/);
 });
 
 test('build.ts honours --out and reports the path it wrote', () => {

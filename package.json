@@ -153,7 +153,7 @@
     "check:layering": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/layering/*.test.ts && node --experimental-strip-types scripts/layering/check.ts",
     "check:di-seams": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/di-seams/*.test.ts && node --experimental-strip-types scripts/di-seams/check.ts",
     "depgraph": "node --experimental-strip-types scripts/depgraph/build.ts",
-    "depgraph:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/depgraph/model.test.ts scripts/depgraph/import-graph.test.ts scripts/depgraph/affected.test.ts",
+    "depgraph:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/depgraph/model.test.ts scripts/depgraph/import-graph.test.ts scripts/depgraph/affected.test.ts scripts/depgraph/structure-summary.test.ts",
     "check:production-exports": "fallow dead-code --config fallow-production-exports.json --production --unused-exports --fail-on-issues",
     "check:bundle-owner-files": "node --experimental-strip-types scripts/check-bundle-owner-files.ts",
     "check:package": "node --experimental-strip-types scripts/check-package.ts",

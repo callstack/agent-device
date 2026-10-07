@@ -19,10 +19,24 @@ import { zoneRank } from '../layering/model.ts';
 import { runAffected } from './affected-run.ts';
 import { loadGraph } from './load.ts';
 import { computeLevels, markTransitivelyReachableEdges, type GraphData } from './model.ts';
+import {
+  computeCohesionSummary,
+  computeDominatorSummary,
+  computeZoneSccSummary,
+  type CohesionSummary,
+  type DominatorSummary,
+  type ZoneSccSummary,
+} from './structure-summary.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
 }).trim();
+
+/**
+ * The daemon is the one process entry point whose eager-load closure is worth asking about by
+ * default; `--dominator-entry` overrides it for any other file.
+ */
+const DEFAULT_DOMINATOR_ENTRY = 'src/daemon.ts';
 
 /** Compact wire form. Nodes and edges are index-addressed to keep the payload small. */
 type Payload = {
@@ -49,6 +63,13 @@ type Payload = {
   cycles: { kind: string; path: number[] }[];
   /** Type-only spine inversions per zone pair, by the gate's counting rule. */
   typeInversions: Record<string, number>;
+  /**
+   * Report-only structural summaries (scripts/depgraph/structure-summary.ts): no layering or
+   * check-affected gate reads these fields today.
+   */
+  dominatorSummary: DominatorSummary;
+  zoneSccSummary: ZoneSccSummary;
+  cohesionSummary: CohesionSummary;
 };
 
 function headCommit(): string {
@@ -84,7 +105,7 @@ function hasValueCycle(graph: Pick<GraphData, 'cycles'>): boolean {
   return graph.cycles.some((cycle) => cycle.kind === 'value');
 }
 
-function buildPayload(): Payload {
+function buildPayload(dominatorEntry: string): Payload {
   const graph = loadGraph(repoRoot);
   if (!hasValueCycle(graph)) markTransitivelyReachableEdges(graph.edges);
   const levels = computeLevels(graph.nodes, graph.edges);
@@ -118,6 +139,9 @@ function buildPayload(): Payload {
       path: cycle.path.map((file) => nodeIndex.get(file)!),
     })),
     typeInversions: graph.typeInversions,
+    dominatorSummary: computeDominatorSummary(dominatorEntry, graph),
+    zoneSccSummary: computeZoneSccSummary(graph),
+    cohesionSummary: computeCohesionSummary(graph),
   };
 }
 
@@ -134,6 +158,9 @@ function formatSummary(payload: Payload, jsonPath: string): string {
   const authorityCounts = Object.entries(payload.authorityCounts)
     .map(([label, count]) => `${label}=${count}`)
     .join(', ');
+  const { dominatorSummary, zoneSccSummary, cohesionSummary } = payload;
+  const topBottleneck = dominatorSummary.bottlenecks[0];
+  const leastCohesive = cohesionSummary.zoneCohesion[0];
   return (
     `Dependency graph: ${payload.generated.files} files, ${payload.generated.edges} edges, ` +
     `${payload.zones.length} zones\n` +
@@ -144,8 +171,26 @@ function formatSummary(payload: Payload, jsonPath: string): string {
     `  value edges whose target is also reachable at distance >= 2: ${transitivelyReachable}\n` +
     `  declared-authority labels: ${authorityCounts}\n` +
     `    (reachability only — not a removability claim, see scripts/depgraph/README.md)\n` +
+    `  dominator summary for ${dominatorSummary.entry}: ${dominatorSummary.reachableFiles} of ` +
+    `${dominatorSummary.totalFiles} files loaded eagerly` +
+    (topBottleneck
+      ? `, biggest branch ${topBottleneck.file} (${topBottleneck.files} files, ${topBottleneck.loc} loc)\n`
+      : '\n') +
+    `  zone-level SCCs: ${zoneSccSummary.components.length} cyclic group(s) across ` +
+    `${zoneSccSummary.zones} zones\n` +
+    `  modularity: declared zones ${cohesionSummary.modularity.declaredZones.toFixed(3)}, ` +
+    `detected communities ${cohesionSummary.modularity.detectedCommunities.toFixed(3)}` +
+    (leastCohesive
+      ? `, least cohesive zone ${leastCohesive.zone} (${(leastCohesive.cohesionShare * 100).toFixed(0)}%)\n`
+      : '\n') +
     `  wrote ${path.relative(repoRoot, jsonPath)}\n`
   );
+}
+
+/** A flag's value, or `undefined` when the flag is absent or trailing with nothing after it. */
+function flagValue(argv: readonly string[], flag: string): string | undefined {
+  const index = argv.indexOf(flag);
+  return index >= 0 ? argv[index + 1] : undefined;
 }
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -153,13 +198,12 @@ async function main(argv: readonly string[]): Promise<number> {
   // this stays the whole-graph report.
   if (argv[0] === 'affected') return await runAffected(argv.slice(1), repoRoot);
 
-  const outFlag = argv.indexOf('--out');
-  const jsonPath =
-    outFlag >= 0 && argv[outFlag + 1]
-      ? path.resolve(argv[outFlag + 1]!)
-      : path.join(repoRoot, '.tmp/depgraph/graph.json');
+  const jsonPath = path.resolve(
+    flagValue(argv, '--out') ?? path.join(repoRoot, '.tmp/depgraph/graph.json'),
+  );
+  const dominatorEntry = flagValue(argv, '--dominator-entry') ?? DEFAULT_DOMINATOR_ENTRY;
 
-  const payload = buildPayload();
+  const payload = buildPayload(dominatorEntry);
   fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
   fs.writeFileSync(jsonPath, `${JSON.stringify(payload, null, 2)}\n`);
 

@@ -107,8 +107,10 @@ Extraction stays with the layering gate; traversal does not. `import-graph.ts` t
 edges into a [`@statelyai/graph`](https://stately.ai/docs/packages/graph) graph filtered to the
 edge kinds a question needs (value for evaluation order, value + dynamic for what a handler can
 run), and the report and `affected` query use its BFS, postorder, and transitive reduction rather
-than hand-rolled walks. The library also carries centrality, community, dominator, and layout
-algorithms; reach for them in a throwaway probe before writing a new traversal here.
+than hand-rolled walks. `structure-summary.ts` additionally uses its dominator tree, strongly
+connected components, and Louvain community detection — see "Structural summaries" below. The
+library also carries centrality and layout algorithms; reach for them in a throwaway probe before
+writing a new traversal here.
 
 ## What the JSON carries
 
@@ -122,6 +124,34 @@ algorithms; reach for them in a throwaway probe before writing a new traversal h
   dynamic. Flags bitfield: `1` spine back-edge, `2` target also reachable at distance >= 2, `4` type-only
   inversion.
 - `cycles[]` — each with `kind` (`value` / `type` / `dynamic`) and its node path.
+- `dominatorSummary`, `zoneSccSummary`, `cohesionSummary` — see "Structural summaries" below.
+
+## Structural summaries (report-only)
+
+`scripts/depgraph/structure-summary.ts` adds three fields nothing in `scripts/layering/` or
+`scripts/check-affected/` reads. They are the numbers workstream 7 of #3276 asked to keep a
+permanent home in the tooling, not a gate.
+
+- **`dominatorSummary`** — the dominator tree of one entry's eager-load closure over VALUE edges
+  only (dynamic imports are a deliberate cold-start seam, so they never join the closure).
+  `reachableFiles` is the eager closure size; `bottlenecks` ranks every reachable file by how many
+  files become unreachable if it disappeared — the size of the branch moving it behind `import()`
+  would cut. Defaults to `src/daemon.ts`; override with `pnpm depgraph --dominator-entry <path>`.
+- **`zoneSccSummary`** — strongly connected components of the zone graph, built from VALUE zone
+  pairs only (`zoneEdges` entries with `valueCount > 0`), the same edge kind R4 keeps acyclic at
+  file level. R4 is file-level; nothing stops a loop from closing once files collapse into zones —
+  the guardrail gap workstream 4 of #3276 names. A component with `size > 1` is a live cycle.
+- **`cohesionSummary`** — Louvain communities (`getLouvainCommunities`, mixing every edge kind
+  since community detection treats the graph as undirected) versus declared zones, scored with
+  `getModularity`, plus a per-zone `cohesionShare`: the share of a zone's files that land in its
+  largest detected community. Low values are where the folder partition cuts across a cluster the
+  import graph actually forms.
+
+```sh
+pnpm depgraph
+pnpm depgraph --dominator-entry src/cli/entry.ts
+jq '{dominatorSummary, zoneSccSummary, cohesionSummary}' .tmp/depgraph/graph.json
+```
 
 ## Declared-authority overlay
 
