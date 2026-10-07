@@ -46,7 +46,10 @@ import type {
   PlatformRuntimeOperations,
   PlatformRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
+import {
+  createFullyUnavailablePlatformRuntimeFacts,
+  createUnavailablePlatformRuntimeFacts,
+} from '@agent-device/contracts/platform-runtime-unavailable';
 import {
   bindProviderScreenshotInteractor,
   screenshotRuntimeOperationFacts,
@@ -484,45 +487,8 @@ function webDriverFacts(
 ): RuntimeFacts<PlatformRuntimeOperations> {
   if (!webDriverSessionActive(options, device)) {
     return createUnavailablePlatformRuntimeFacts(device, options.owner, {
-      appLog: inactiveSession,
-      appDeployment: inactiveSession,
-      network: inactiveSession,
-      screenRecording: inactiveSession,
-      screenshot: inactiveSession,
-      viewport: inactiveSession,
-      focus: inactiveSession,
-      gesture: inactiveSession,
-      scroll: inactiveSession,
-      typeText: inactiveSession,
-      touch: inactiveSession,
-      elementText: inactiveSession,
-      back: inactiveSession,
-      orientation: inactiveSession,
-      tvRemote: inactiveSession,
-      keyboard: inactiveSession,
-      clipboard: inactiveSession,
-      systemButton: inactiveSession,
+      ...createFullyUnavailablePlatformRuntimeFacts(inactiveSession),
       fold: foldUnavailable,
-      triggerAppEvent: inactiveSession,
-      settings: inactiveSession,
-      readAlert: inactiveSession,
-      awaitAlert: inactiveSession,
-      acceptAlert: inactiveSession,
-      dismissAlert: inactiveSession,
-      audioProbeCapture: inactiveSession,
-      audioProbeQuery: inactiveSession,
-      perf: inactiveSession,
-      lifecycle: applicationLifecycleOperationFacts({
-        resolveOpenTarget: inactiveSession,
-        prepareApplicationOpen: inactiveSession,
-        openApplication: inactiveSession,
-        applyRuntimeHints: inactiveSession,
-        clearRuntimeHints: inactiveSession,
-        closeApplication: inactiveSession,
-        finalizeApplicationClose: inactiveSession,
-        prepareAppleRunner: inactiveSession,
-        configureProviderPortReverse: inactiveSession,
-      }),
     });
   }
   const deployment = options.deployment?.fact(device) ?? deploymentUnavailable;

@@ -5,16 +5,12 @@ import {
   type AwsDeviceFarmArtifact,
   type AwsDeviceFarmArtifactGroup,
 } from './aws-device-farm-artifacts.ts';
-import type {
-  CloudWebDriverPlatform,
-  CloudWebDriverRuntimeOptions,
-  CloudWebDriverPrepareSession,
-} from './runtime.ts';
-import type { DeviceLease, LeaseLifecycleContext } from '@agent-device/contracts/device';
+import type { CloudWebDriverPlatform, CloudWebDriverPrepareSession } from './runtime.ts';
+import type { LeaseLifecycleContext } from '@agent-device/contracts/device';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RunHostCommand } from './dependencies.ts';
-import { releaseOnFailure, resolveLeaseValue, type LeaseValue } from './webdriver-utils.ts';
+import { releaseOnFailure } from './webdriver-utils.ts';
 
 export const AWS_DEVICE_FARM_CAPABILITY_OVERRIDES = {
   install: {
@@ -72,25 +68,16 @@ export type AwsCreateRemoteAccessSessionInput = {
 };
 
 export type AwsDeviceFarmWebDriverRuntimeOptions = {
-  clientVersion: string;
+  client: AwsDeviceFarmClient;
   projectArn: string;
   deviceArn: string;
-  region?: string;
-  platform?: CloudWebDriverPlatform;
-  deviceName?: string;
+  platform: CloudWebDriverPlatform;
+  deviceName: string;
   appArn?: string;
-  sessionName?: LeaseValue<string>;
-  webdriverCapabilities?:
-    | Record<string, unknown>
-    | ((lease: DeviceLease) => Record<string, unknown>);
-  client?: AwsDeviceFarmClient;
+  sessionName?: string;
   pollIntervalMs?: number;
   startupTimeoutMs?: number;
   interactionMode?: AwsCreateRemoteAccessSessionInput['interactionMode'];
-  configuration?: AwsCreateRemoteAccessSessionInput['configuration'];
-  deviceId?: CloudWebDriverRuntimeOptions['deviceId'];
-  requestPolicy?: CloudWebDriverRuntimeOptions['requestPolicy'];
-  prepareSession?: CloudWebDriverRuntimeOptions['prepareSession'];
 };
 
 export type AwsCliDeviceFarmClientOptions = {
@@ -134,25 +121,15 @@ export function createAwsCliDeviceFarmClient(
 }
 
 export function createAwsDeviceFarmPrepareSession(
-  options: Required<
-    Pick<
-      AwsDeviceFarmWebDriverRuntimeOptions,
-      'client' | 'platform' | 'deviceName' | 'projectArn' | 'deviceArn'
-    >
-  > &
-    Omit<
-      AwsDeviceFarmWebDriverRuntimeOptions,
-      'client' | 'platform' | 'deviceName' | 'clientVersion'
-    >,
+  options: AwsDeviceFarmWebDriverRuntimeOptions,
 ): CloudWebDriverPrepareSession {
   return async ({ lease, req, base }) => {
     const remoteAccess = await options.client.createRemoteAccessSession({
       projectArn: options.projectArn,
       deviceArn: options.deviceArn,
       appArn: options.appArn,
-      name: resolveLeaseValue(options.sessionName, lease) ?? `agent-device-${lease.leaseId}`,
+      name: options.sessionName ?? `agent-device-${lease.leaseId}`,
       interactionMode: options.interactionMode,
-      configuration: options.configuration,
     });
     // The ARN is a billed session from here on; any failure short of RUNNING
     // must stop it before surfacing, or it bills until AWS reaps it.
@@ -173,20 +150,17 @@ export function createAwsDeviceFarmPrepareSession(
       throw error;
     }
     const deviceName = running.device?.name ?? options.deviceName;
-    const configured =
-      typeof options.webdriverCapabilities === 'function'
-        ? options.webdriverCapabilities(lease)
-        : (options.webdriverCapabilities ?? {});
     const awsDefaults = options.platform === 'android' ? { 'appium:autoLaunch': false } : {};
     return {
       ...base,
       endpoint,
       platform: options.platform,
       deviceName,
-      webdriverCapabilities: buildCloudWebDriverBaseCapabilities(options.platform, deviceName, {
-        ...awsDefaults,
-        ...configured,
-      }),
+      webdriverCapabilities: buildCloudWebDriverBaseCapabilities(
+        options.platform,
+        deviceName,
+        awsDefaults,
+      ),
       cleanup: async () => {
         await options.client.stopRemoteAccessSession(running.arn);
         return { awsDeviceFarmSessionArn: running.arn };

@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type {
-  DeviceLease,
   LeaseLifecycleContext,
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
@@ -13,8 +12,6 @@ import {
 } from '@agent-device/contracts/remote';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
-
-export type LeaseValue<T> = T | ((lease: DeviceLease) => T);
 
 /** Best-effort release after a failure; a failed release rides along as `cleanupError`, never masks the primary. */
 export async function releaseOnFailure(
@@ -28,13 +25,6 @@ export async function releaseOnFailure(
       primaryError.details = { ...primaryError.details, cleanupError: errorMessage(cleanupError) };
     }
   }
-}
-
-export function resolveLeaseValue<T>(
-  value: LeaseValue<T> | undefined,
-  lease: DeviceLease,
-): T | undefined {
-  return typeof value === 'function' ? (value as (lease: DeviceLease) => T)(lease) : value;
 }
 
 export function basicAuthHeader(credentials: { username: string; accessKey: string }): string {
