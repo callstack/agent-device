@@ -1,0 +1,12 @@
+{
+  // Freerange's own view of the root program (#3289 CI OOM). `fr` resolves a tsconfig from the
+  // process cwd and then loads EVERY `references` project as a full simultaneous ts.Program —
+  // 26 programs / ~13.5k file slots / >2.8 GB heap before its analysis even starts — so running
+  // it from the repo root against the reference-bearing tsconfig.json exhausts Node's default
+  // 4 GB heap (exit 134). `extends` does not inherit `references`, so this file hands fr the
+  // single root program (includes and options resolve through the base config below, and
+  // package sources still reach the program transitively through the exports-map `.ts` targets
+  // exactly as they did before project references existed) while `tsc -b` keeps using the real
+  // graph. Keep this config reference-free: adding `references` here reintroduces the OOM.
+  "extends": "../../tsconfig.json"
+}

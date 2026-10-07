@@ -66,6 +66,21 @@ test('the root manifest declares every workspace package as a workspace dependen
   );
 });
 
+test('the freerange config stays a reference-free view of the root program', () => {
+  // `fr` loads every `references` project as a full simultaneous ts.Program (~26 programs,
+  // >2.8 GB heap before analysis) and OOMs Node's default 4 GB on this workspace (#3289 CI).
+  // The wrapper at scripts/freerange/tsconfig.json exists only because `extends` does not
+  // inherit references (planted with --showConfig); if someone adds references to it, the
+  // gate reintroduces the OOM, so the absence is pinned here rather than trusted to the comment.
+  const config = readTsconfig('scripts/freerange/tsconfig.json');
+  assert.equal(config.references, undefined, 'references on the freerange config OOM gate');
+  assert.equal(
+    config.extends,
+    '../../tsconfig.json',
+    'the freerange view must stay the root program itself (no include/exclude drift)',
+  );
+});
+
 test('every package tsconfig references exactly its manifest workspace dependencies', () => {
   // The per-package half of the same single-source-of-truth claim (#3279 requirement 1):
   // references are DERIVED from the manifest DAG, so an import a manifest gains must add the
