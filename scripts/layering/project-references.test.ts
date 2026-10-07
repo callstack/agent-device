@@ -15,10 +15,23 @@ import { readWorkspacePackages } from './package-boundaries.ts';
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
 /** tsconfig JSONC minus line comments; both comment-bearing files use `//` only. */
-function readTsconfig(relativePath: string): { references?: { path: string }[] } {
+function readTsconfig(relativePath: string): {
+  references?: { path: string }[];
+  extends?: string;
+  compilerOptions?: Record<string, unknown>;
+} {
   const source = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
   return JSON.parse(source.replaceAll(/^\s*\/\/.*$/gm, ''));
 }
+
+/**
+ * The published root package name. It names no composite project: the root tsconfig is a
+ * noEmit entry point TS6310 forbids referencing, so a workspace dependency on it is
+ * type-resolved through tsconfig `paths`, never through a reference edge.
+ */
+const rootPackageName = (
+  JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as { name: string }
+).name;
 
 /** Repo-relative package dir for one `references[].path` entry, resolved from its project. */
 function referencedPackageDirs(tsconfigFile: string, projectDir: string): string[] {
@@ -86,6 +99,10 @@ test('every package tsconfig references exactly its manifest workspace dependenc
   // references are DERIVED from the manifest DAG, so an import a manifest gains must add the
   // matching reference (edge freshness, which tsc -b never asks for) and a removed one must
   // drop it (an extra reference hides a stale edge that tsc -b tolerates silently).
+  // The one expressible-edge exception: a workspace dependency on the ROOT package
+  // (`agent-device`) has no composite project to point at (TS6310). Those imports are
+  // type-resolved through tsconfig `paths`, so the dependency is asserted present in
+  // paths instead of references.
   const packages = readWorkspacePackages(repoRoot);
   const nameByDir = new Map(packages.map((pkg) => [pkg.dir, pkg.name]));
   for (const pkg of packages) {
@@ -98,8 +115,17 @@ test('every package tsconfig references exactly its manifest workspace dependenc
     }
     assert.deepEqual(
       referencedDirs.map((dir) => nameByDir.get(dir)),
-      [...pkg.workspaceDependencies].sort(),
+      [...pkg.workspaceDependencies].filter((name) => name !== rootPackageName).sort(),
       `${pkg.dir}/tsconfig.json references must equal its manifest workspace:* dependencies`,
     );
+    if (pkg.workspaceDependencies.has(rootPackageName)) {
+      const config = readTsconfig(`${pkg.dir}/tsconfig.json`);
+      const paths = (config.compilerOptions?.paths ?? {}) as Record<string, unknown>;
+      assert.ok(
+        Object.keys(paths).some((key) => key.startsWith(`${rootPackageName}/`)),
+        `${pkg.dir} depends on the root package without a paths mapping; tsc cannot ` +
+          'resolve it (the root project cannot be referenced)',
+      );
+    }
   }
 });
