@@ -35,6 +35,7 @@ import {
   resolveRunnerArchBuildSettings,
   resolveRunnerBuildLocationSettings,
   resolveRunnerBundleBuildSettings,
+  resolveRunnerDerivedBasePath,
   resolveRunnerDerivedPath,
   resolveRunnerMaxConcurrentDestinationsFlag,
   resolveRunnerPerformanceBuildSettings,
@@ -366,10 +367,7 @@ async function buildXctestrunArtifact(params: {
     ),
     derived,
   );
-  // An AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH override is a fixed tree rebuilt incrementally, not a keyed cache.
-  if (path.basename(derived) === resolveRunnerCacheKey(expectedCacheMetadata)) {
-    await trimRunnerBuildScratchBestEffort(derived, [built, ...builtProductPaths]);
-  }
+  await trimRunnerBuildScratchBestEffort(device, derived, [built, ...builtProductPaths]);
   emitRunnerXctestrunDecision('build', 'built_new', {
     derived,
     xctestrunPath: built,
@@ -388,12 +386,17 @@ async function buildXctestrunArtifact(params: {
 
 /** Runs under the cache lock, so no rebuild or reuse of this key sees the tree mid-trim. */
 async function trimRunnerBuildScratchBestEffort(
+  device: DeviceInfo,
   derived: string,
   protectedPaths: readonly string[],
 ): Promise<void> {
   try {
     const { trimRunnerBuildScratch } = await import('./runner-cache-trim.ts');
-    const removed = await trimRunnerBuildScratch(derived, protectedPaths);
+    const removed = await trimRunnerBuildScratch(
+      derived,
+      protectedPaths,
+      resolveRunnerDerivedBasePath(device),
+    );
     if (removed.length > 0)
       emitRunnerXctestrunDecision('clean', 'build_scratch_trimmed', { derived });
   } catch (error) {

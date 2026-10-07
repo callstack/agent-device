@@ -657,7 +657,7 @@ function isNonEmptyArray<Item>(value: unknown): value is Item[] {
   return Array.isArray(value) && value.length > 0;
 }
 
-function isPathInsideDirectory(targetPath: string, directoryPath: string): boolean {
+export function isPathInsideDirectory(targetPath: string, directoryPath: string): boolean {
   const relativePath = path.relative(path.resolve(directoryPath), path.resolve(targetPath));
   return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
 }

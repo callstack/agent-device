@@ -491,7 +491,7 @@ export function resolveRunnerDerivedPath(
   return path.join(base, cacheKey);
 }
 
-function resolveRunnerDerivedBasePath(device: DeviceInfo): string {
+export function resolveRunnerDerivedBasePath(device: DeviceInfo): string {
   return path.join(RUNNER_DERIVED_ROOT, 'derived', resolveRunnerDerivedBaseName(device));
 }
 

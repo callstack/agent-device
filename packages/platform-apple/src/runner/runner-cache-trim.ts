@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { isPathInsideDirectory } from './runner-artifact-manifest.ts';
 import { RUNNER_CACHE_METADATA_FILE } from './runner-cache-metadata.ts';
 
 /**
@@ -9,16 +10,29 @@ import { RUNNER_CACHE_METADATA_FILE } from './runner-cache-metadata.ts';
  * scratch, so the scratch is never read again; a runner source or Xcode change mints a new key
  * instead of building into this one.
  *
- * Returns the removed entries relative to `derived`. Nothing is removed when a product lies
- * outside `derived`. The caller trims only a keyed cache directory.
+ * Returns the removed entries relative to `derived`. Nothing is removed when `derived` does not
+ * resolve, by real path, to a direct child of `managedRoot`, or when a product lies outside
+ * `derived`. A symlinked `derived` therefore trims only when its target is a key in `managedRoot`.
  */
 export async function trimRunnerBuildScratch(
   derived: string,
   protectedPaths: readonly string[],
+  managedRoot: string,
 ): Promise<string[]> {
+  if (!isManagedKey(derived, managedRoot)) return [];
   const kept = resolveKeptPaths(derived, protectedPaths);
   if (!kept) return [];
   return await trimDirectory(derived, derived, kept);
+}
+
+function isManagedKey(derived: string, managedRoot: string): boolean {
+  try {
+    const realRoot = fs.realpathSync(managedRoot);
+    const realDerived = fs.realpathSync(derived);
+    return isPathInsideDirectory(realDerived, realRoot) && path.dirname(realDerived) === realRoot;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -31,11 +45,15 @@ function resolveKeptPaths(derived: string, protectedPaths: readonly string[]): S
   try {
     const realDerived = fs.realpathSync(derived);
     for (const protectedPath of protectedPaths) {
-      const lexical = path.relative(derived, protectedPath);
-      const real = path.relative(realDerived, fs.realpathSync(protectedPath));
-      if (isOutside(lexical) || isOutside(real)) return null;
-      kept.add(keptUnit(lexical));
-      kept.add(keptUnit(real));
+      const realProtected = fs.realpathSync(protectedPath);
+      if (
+        !isPathInsideDirectory(protectedPath, derived) ||
+        !isPathInsideDirectory(realProtected, realDerived)
+      ) {
+        return null;
+      }
+      kept.add(keptUnit(path.relative(derived, protectedPath)));
+      kept.add(keptUnit(path.relative(realDerived, realProtected)));
     }
   } catch {
     return null;
@@ -46,10 +64,6 @@ function resolveKeptPaths(derived: string, protectedPaths: readonly string[]): S
 function keptUnit(relative: string): string {
   const segments = relative.split(path.sep);
   return segments.slice(0, segments[0] === 'Build' ? 2 : 1).join(path.sep);
-}
-
-function isOutside(relative: string): boolean {
-  return !relative || relative.startsWith('..') || path.isAbsolute(relative);
 }
 
 async function trimDirectory(

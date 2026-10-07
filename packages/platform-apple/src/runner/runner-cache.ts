@@ -27,6 +27,7 @@ export {
   resolveRunnerArchBuildSettings,
   resolveRunnerBuildLocationSettings,
   resolveRunnerBundleBuildSettings,
+  resolveRunnerDerivedBasePath,
   resolveRunnerDerivedPath,
   resolveRunnerMaxConcurrentDestinationsFlag,
   resolveRunnerPerformanceBuildSettings,
