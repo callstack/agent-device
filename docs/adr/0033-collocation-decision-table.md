@@ -165,10 +165,12 @@ files have no seam (published facade, public-type collision, root dependency fac
 
 ## Follow-ups (tracked on #3281)
 
-- Physical root-pass moves remain **outstanding** per the maintainer design decision:
-  `daemon-diagnostics-scope.ts`, `runtime-command-surface.ts`, and `runtime-factory.ts` move
-  under [#3294](https://github.com/callstack/agent-device/issues/3294) (child of #3276).
-  #3288's zone assignments classify these files; reclassification is not completed collocation.
+- Physical root-pass moves under [#3294](https://github.com/callstack/agent-device/issues/3294)
+  (child of #3276): `daemon-diagnostics-scope.ts` has moved into `src/daemon-contracts/`
+  ([#3297](https://github.com/callstack/agent-device/pull/3297)); `runtime-command-surface.ts` and
+  `runtime-factory.ts` remain **outstanding** under #3294. The folder derives its zone, replacing
+  the moved file's `ROOT_MODULE_ZONES` row; #3288's zone assignment alone was classification, and
+  this move completes that file's collocation.
 
 ## Refuted alternatives
 
