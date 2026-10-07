@@ -2,8 +2,8 @@
 pageType: home
 
 hero:
-  name: Agent-native app automation for mobile, TV, and desktop.
-  tagline: agent-device gives coding agents structured UI access, deterministic interactions, and app-level evidence across mobile, TV, and desktop targets. Use it to verify generated code, debug broken flows, profile runtime behavior, and turn exploratory QA into replayable checks.
+  name: App automation for coding agents on mobile, TV, and desktop.
+  tagline: agent-device lets coding agents read app UI as structured data, interact with it, and collect evidence across mobile, TV, and desktop targets. Use it to verify generated code, debug broken flows, profile runtime behavior, and turn exploratory QA into replayable checks.
   actions:
     - theme: brand
       text: Get Started
@@ -16,13 +16,13 @@ features:
   - title: One CLI, many app surfaces
     details: Control iOS, Android, tvOS, Android TV, Amazon Vega OS TV apps in the Vega Virtual Device, macOS, and Linux desktop targets through one CLI.
   - title: Accessibility-first snapshots
-    details: On supported targets, accessibility trees give agents structured UI context without forcing screenshot-only reasoning.
-  - title: Agent-native interactions
+    details: On supported targets, agents read the accessibility tree instead of reasoning from screenshots alone.
+  - title: Interactions by ref, selector, or finder
     details: Tap, pan, fling, pinch, rotate, scroll, focus, type, assert, and find visible UI through refs, selectors, and semantic finders.
-  - title: Built-in debugging and profiling
-    details: Use each target's supported backends to collect logs, inspect traffic, capture screens and recordings, and sample performance.
+  - title: Debugging and profiling
+    details: Collect logs, inspect network traffic, capture screenshots and recordings, and sample performance where the target supports it.
   - title: Session and replay
-    details: Open apps, keep stateful context, and replay recorded `.ad` actions to reproduce flows without AI at runtime.
+    details: Keep app state across commands in a session, and replay recorded `.ad` scripts to reproduce flows without an AI agent.
   - title: React Native internals
-    details: Use agent-device react-devtools for component trees and render profiles, and agent-device cdp for React Native JS heap snapshots, diffs, and leak retainers.
+    details: Use `agent-device react-devtools` for component trees and render profiles, and `agent-device cdp` for JS heap snapshots, diffs, and leak retainers.
 ---

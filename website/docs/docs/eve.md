@@ -4,7 +4,7 @@ title: Eve
 
 # Eve
 
-[Eve](https://eve.dev/) is Vercel's filesystem-first framework for durable agents. Files under `agent/tools/` become typed model tools, which makes them a natural place to adapt the `agent-device` Node.js client.
+[Eve](https://eve.dev/) is Vercel's filesystem-first framework for durable agents. Files under `agent/tools/` become typed model tools, so you give the agent device access by wrapping the `agent-device` Node.js client in one of those files.
 
 Create an Eve project, then add `agent-device`:
 
@@ -60,7 +60,7 @@ export default defineTool({
 });
 ```
 
-Eve discovers the file automatically; no tool registry is required. Tell the agent how to use it in `agent/instructions.md`:
+Eve picks up the file automatically; you don't register it anywhere. Tell the agent how to use it in `agent/instructions.md`:
 
 ```md
 Use the agent_device tool to inspect and operate the app.
@@ -72,12 +72,12 @@ Use the agent_device tool to inspect and operate the app.
 - Call close when the device task is complete.
 ```
 
-For CI or another short-lived host, the outer runner should still close the named `agent-device` session in its own cleanup path. Model-directed `close` is useful during the normal tool loop, but it is not a replacement for deterministic cleanup after errors or cancellation.
+In CI or another short-lived host, also close the named `agent-device` session in your runner's own cleanup path. The model's `close` call handles the normal tool loop, but it does not run after errors or cancellation.
 
-## Runtime placement
+## Choose where the tool runs
 
 Run the tool in Eve's app runtime when it needs local access to simulators, emulators, platform tooling, and daemon state. If Eve is hosted separately from the devices, connect through an [agent-device remote proxy](/docs/remote-proxy) instead.
 
-Eve is currently beta, so check its [current documentation](https://eve.dev/) when upgrading. For a production example, read [Building Mobile QA Agents With Vercel Eve](https://www.callstack.com/blog/building-reviewable-mobile-qa-agents-with-vercel-eve), which covers a PR QA agent using an `agent_device` tool and a deterministic CI runner.
+Eve is in beta; check the [Eve documentation](https://eve.dev/) when you upgrade it. For a production example, read [Building Mobile QA Agents With Vercel Eve](https://www.callstack.com/blog/building-reviewable-mobile-qa-agents-with-vercel-eve), which covers a PR QA agent using an `agent_device` tool and a deterministic CI runner.
 
 See [Node.js API](/docs/client-api) for the complete client surface.

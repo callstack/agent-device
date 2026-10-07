@@ -14,4 +14,4 @@ agent-device connect testmu --platform ios --device "iPhone 16" --provider-os-ve
 See the [TestMu AI guide](https://agent-device.dev/docs/testmu) for setup and supported operations.
 To update the plugin, run `agent-device plugins update @agent-device/testmu`.
 
-After adding or updating a plugin, close your sessions and run `agent-device daemon stop` before reconnecting.
+After you add or update the plugin, close your sessions and run `agent-device daemon stop` before reconnecting.

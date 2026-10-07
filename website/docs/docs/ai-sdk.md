@@ -4,7 +4,7 @@ title: AI SDK
 
 # AI SDK
 
-Use `agent-device/ai-sdk` to give an [AI SDK](https://ai-sdk.dev/) agent a typed set of tools for navigating and inspecting an app. The tools run in-process, share one named session, and default to the focused perceive-and-act surface most agents need.
+Use `agent-device/ai-sdk` to give an [AI SDK](https://ai-sdk.dev/) agent a typed set of tools for navigating and inspecting an app. The tools run in-process, share one named session, and by default cover the core loop of reading the screen and acting on it.
 
 ```bash
 pnpm add agent-device ai
@@ -48,13 +48,13 @@ try {
 }
 ```
 
-Set `AI_MODEL` to a model available through your configured AI SDK provider. The agent sees the available device tools and chooses the calls needed to complete the prompt. The returned `client` targets the same session; keep cleanup in `finally` so the device is released even if generation fails.
+Set `AI_MODEL` to a model available through your configured AI SDK provider. The agent decides which device tools to call to complete the prompt. The returned `client` targets the same session; close it in `finally` so the device is released even if generation fails.
 
-## Options
+## Choose tools and approvals
 
 `set: 'core'` is the default. It exposes the perceive-and-act loop: open, close, snapshot, click, press, fill, type, get, is, find, wait, back, scroll, swipe, alert, and screenshot.
 
 - Pass `set: 'all'` when the agent also needs device-management or observability commands.
-- Pass `approval: { close: 'user-approval' }` to require approval for a command. `createAgentDeviceTools()` returns the map as `toolApproval`, ready to pass to [`ToolLoopAgent`](https://ai-sdk.dev/docs/agents/tool-approvals).
+- Pass `approval: { close: 'user-approval' }` to require user approval before a command runs. `createAgentDeviceTools()` returns the map as `toolApproval`, ready to pass to [`ToolLoopAgent`](https://ai-sdk.dev/docs/agents/tool-approvals).
 
-See the [Node.js API](/docs/client-api) when the host application needs deterministic setup or other direct device control outside the agent loop. See the AI SDK reference for [`ToolLoopAgent`](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool-loop-agent).
+Use the [Node.js API](/docs/client-api) when your application needs deterministic setup or other direct device control outside the agent loop. See the AI SDK reference for [`ToolLoopAgent`](https://ai-sdk.dev/docs/reference/ai-sdk-core/tool-loop-agent).

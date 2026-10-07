@@ -5,7 +5,23 @@ description: Install agent-device for AI agent app automation, mobile testing, s
 
 # Installation
 
-Install `agent-device` on the machine where the coding agent will run terminal commands.
+Install `agent-device` on the machine where your coding agent runs terminal commands.
+
+## Requirements
+
+- Node.js 22.12 or newer
+- Node.js 24 or newer for web automation. Web commands fail on older Node.js versions, so check
+  `node --version` in the shell that runs `agent-device web setup` and `agent-device doctor`
+  before you trust a web result.
+- Xcode for iOS simulator and device automation (`simctl` and `devicectl`). `agent-device` uses
+  the Xcode in `DEVELOPER_DIR`, otherwise the one from `xcode-select -p`. A `DEVELOPER_DIR`
+  exported in the shell where you run `agent-device` applies to that command, even when a local
+  daemon is already running; without it, the daemon uses the environment it started in. Set
+  `DEVELOPER_DIR=""` to use the daemon host's `xcode-select` selection instead.
+- Android SDK and ADB for Android
+- HarmonyOS Command Line Tools for HarmonyOS (`hdc` available through `HDC_SDK_PATH`, `DEVECO_SDK_HOME`, or `HARMONYOS_COMMAND_LINE_TOOLS`)
+- Amazon Vega Developer Tools and an SDK-matched Vega Virtual Device for Vega OS TV
+- Swift 5.9 or newer (Xcode command-line tools) for macOS desktop targets. `agent-device` builds its local macOS helper on first use
 
 ## Global install
 
@@ -16,10 +32,10 @@ agent-device --version
 agent-device help
 ```
 
-Run `agent-device doctor` yourself after installation to check local device,
-toolchain, and dev-server readiness before handing the CLI to an agent.
+Run `agent-device doctor` yourself after installing to check that local devices, toolchains, and
+dev servers are ready before you hand the CLI to an agent.
 
-Use global install for normal agent workflows. It gives agents a stable `agent-device` command and version-matched help topics:
+A global install gives agents a stable `agent-device` command and help topics that match the installed version:
 
 ```bash
 agent-device help workflow
@@ -29,11 +45,13 @@ agent-device help cdp
 agent-device help tv
 ```
 
-Some agent clients run commands in an environment that differs from the user's normal install shell. If `agent-device` is missing in the agent terminal but was installed globally elsewhere, resolve the command the same way the user would from a normal terminal session, then use the absolute binary path for agent commands. This may require inspecting shell startup behavior or package-manager/global bin locations; do not assume the agent process `PATH` is the user's `PATH`.
+Some agent clients run commands with a different `PATH` than your normal shell. If the agent terminal can't find `agent-device` after a global install, run `command -v agent-device` in your own terminal and give the agent that absolute path. If the command lives under a version manager or package-manager global bin directory, check your shell startup files for how it gets on `PATH`.
 
 For Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skills, and project rules, see [AI Agent Setup](/docs/agent-setup). For the first app automation commands, see [Quick Start](/docs/quick-start).
 
-Interactive CLI runs periodically check for a newer published `agent-device` package in the background. When an upgrade is available, the CLI suggests reinstalling the package globally:
+## Update the CLI
+
+Interactive CLI runs periodically check npm for a newer `agent-device` release in the background. When one is available, the CLI suggests reinstalling globally:
 
 ```bash
 npm install -g agent-device@latest
@@ -45,7 +63,7 @@ Set `AGENT_DEVICE_NO_UPDATE_NOTIFIER=1` to disable the notice.
 
 ## Agent clients and MCP
 
-The official MCP server exposes direct structured tools for installed `agent-device` commands. Tools use command contracts through `AgentDeviceClient`, so app and device automation still uses the same daemon implementation.
+The `agent-device mcp` server exposes installed `agent-device` commands as structured MCP tools. MCP tools run through the same daemon as the CLI.
 
 ```bash
 agent-device mcp
@@ -61,27 +79,11 @@ npx agent-device help workflow
 npx agent-device open Settings --platform ios
 ```
 
-One-off `npx` usage is fine for humans and scripts that intentionally fetch from npm. For agents, prefer a global install, a project-local install, or a version supplied by the user or project config so repeated commands resolve to a known CLI. Do not ask agents to choose a version or run `npx -y agent-device@latest` without an explicit trust decision.
-
-## Requirements
-
-- Node.js 22.12 or newer
-- Node.js 24 or newer for web automation, which hard-fails below it. The rest of the CLI keeps the
-  22.12 floor, so check `node --version` in the shell that runs `agent-device web setup` and
-  `agent-device doctor` before trusting a web result.
-- Xcode for iOS simulator/device automation (`simctl` + `devicectl`). `xcrun` picks the Xcode from
-  `DEVELOPER_DIR`, otherwise `xcode-select -p`. A `DEVELOPER_DIR` exported in the shell running
-  `agent-device` applies to the Apple tools a local daemon runs for that command; without it, the
-  daemon uses the environment it was started in. Set `DEVELOPER_DIR=""` to use the daemon host's
-  `xcode-select` selection instead.
-- Android SDK / ADB for Android
-- HarmonyOS Command Line Tools for HarmonyOS (`hdc` available through `HDC_SDK_PATH`, `DEVECO_SDK_HOME`, or `HARMONYOS_COMMAND_LINE_TOOLS`)
-- Amazon Vega Developer Tools and an SDK-matched Vega Virtual Device for Vega OS TV
-- On macOS desktop targets, Swift 5.9+ / Xcode command-line tools are used to build the local `agent-device-macos-helper` on first use from source checkouts
+One-off `npx` use is fine for you and for scripts that intentionally fetch from npm. For agents, use a global install, a project-local install, or a version pinned by you or your project config, so repeated commands resolve to a known CLI. Don't let agents choose a version or run `npx -y agent-device@latest` unless you've decided to trust whatever npm serves.
 
 ## Vega OS TV prerequisites
 
-Install the latest Amazon Vega Developer Tools and matching Vega SDK/VVD through Amazon's supported installer, then load its environment and verify the tools:
+Install the Amazon Vega Developer Tools and a matching Vega SDK and Vega Virtual Device (VVD) with Amazon's installer, then load its environment and verify the tools:
 
 ```bash
 source ~/vega/env
@@ -91,47 +93,46 @@ vega device list
 ```
 
 - Start and stop the local emulator with `vega virtual-device start` and `vega virtual-device stop`; `agent-device` does not boot it implicitly.
-- Initial Vega OS support is VVD-only; physical Fire TV discovery and control are not admitted until hardware evidence is validated.
-- Use `agent-device devices --platform vega --target tv`, then select the VVD explicitly with `--serial VirtualDevice`.
-- Appium is optional evidence tooling; it is not required for agent-device discovery, app lifecycle, or remote-button control.
+- Vega OS support covers the VVD only. `agent-device` does not discover or control physical Fire TV devices.
+- List the VVD with `agent-device devices --platform vega --target tv`, then select it explicitly with `--serial VirtualDevice`.
+- Appium is optional. You don't need it for device discovery, app lifecycle, or remote-button control.
 
 ## macOS desktop notes
 
-- The macOS desktop path uses a local `agent-device-macos-helper` for permission checks (`settings permission ...`), alert handling, and helper-backed desktop snapshot surfaces (`frontmost-app`, `desktop`, `menubar`).
-- Source checkouts build the helper lazily on first use and cache it under `~/.agent-device/macos-helper/current/`.
-- Release distribution should ship a stable signed/notarized helper build so macOS trust/TCC state is tied to a durable code signature instead of an ad-hoc local binary.
-- Local helper overrides through `AGENT_DEVICE_MACOS_HELPER_BIN` are intended for operators and packaged distributions; the value must be an absolute executable path.
+- macOS desktop automation uses a local `agent-device-macos-helper` for permission checks (`settings permission ...`), alert handling, and the `frontmost-app`, `desktop`, and `menubar` snapshot surfaces.
+- `agent-device` builds the helper on first use and after updates, and caches it under `~/.agent-device/macos-helper/current/`.
+- To use your own helper build, set `AGENT_DEVICE_MACOS_HELPER_BIN` to its absolute executable path.
 
 ## iOS physical device prerequisites
 
-- Device is paired and visible in `xcrun devicectl list devices`.
-- Developer Mode enabled on device.
-- Signing configured in Xcode (Automatic Signing recommended), or use:
-- `AGENT_DEVICE_IOS_TEAM_ID`
-- `AGENT_DEVICE_IOS_SIGNING_IDENTITY`
-- `AGENT_DEVICE_IOS_PROVISIONING_PROFILE`
-- `AGENT_DEVICE_IOS_BUNDLE_ID` (optional runner bundle-id base override)
-- Free Apple Developer (Personal Team) accounts can fail with "bundle identifier is not available" for generic IDs; set `AGENT_DEVICE_IOS_BUNDLE_ID` to a unique reverse-DNS value (for example `com.yourname.agentdevice.runner`).
-- A runner startup failure is typed, not prose: `error.details.reason` is one of `signing_no_development_team`, `signing_provisioning_profile_missing`, `bundle_identifier_already_registered`, `signing_unspecified`, `devtools_security_developer_mode_disabled` (the Mac's `DevToolsSecurity` setting, which says nothing about the device's Developer Mode toggle), `device_developer_mode_disabled`, `device_developer_disk_image_unavailable`, or `build_failed_unclassified` when nothing proved a cause. Branch on `details.reason` and follow `hint`; the code stays `COMMAND_FAILED` for every reason.
-- The two `device_*` reasons come from the iPhone itself, read over `xcrun devicectl device info details` before the runner builds: `developerModeStatus` for the Settings toggle and `ddiServicesAvailable` for the developer disk image. They are reported apart on purpose. A phone with Developer Mode off cannot serve its disk image either, so it gets the toggle reason; a phone with the toggle on and only the image down gets the disk-image reason, which is a device-support install that has not finished rather than a setting anyone turned off.
-- If device setup is slow, keep the device connected and inspect daemon diagnostics after retrying.
+- The device is paired and listed by `xcrun devicectl list devices`.
+- Developer Mode is on in the device's Settings.
+- Signing is configured in Xcode (Automatic Signing recommended), or through these environment variables:
+  - `AGENT_DEVICE_IOS_TEAM_ID`
+  - `AGENT_DEVICE_IOS_SIGNING_IDENTITY`
+  - `AGENT_DEVICE_IOS_PROVISIONING_PROFILE`
+  - `AGENT_DEVICE_IOS_BUNDLE_ID` (optional base bundle ID for the runner app)
+- Free Apple Developer (Personal Team) accounts can fail with "bundle identifier is not available" for generic IDs. Set `AGENT_DEVICE_IOS_BUNDLE_ID` to a unique reverse-DNS value (for example `com.yourname.agentdevice.runner`).
+- When the runner fails to start, `error.details.reason` is one of `signing_no_development_team`, `signing_provisioning_profile_missing`, `bundle_identifier_already_registered`, `signing_unspecified`, `devtools_security_developer_mode_disabled` (the Mac's `DevToolsSecurity` setting, which says nothing about the device's Developer Mode toggle), `device_developer_mode_disabled`, `device_developer_disk_image_unavailable`, or `build_failed_unclassified` when the cause is unknown. Branch on `details.reason` and follow `hint`; the error code is `COMMAND_FAILED` for every reason.
+- The two `device_*` reasons come from the device itself (`xcrun devicectl device info details`), checked before the runner builds. `device_developer_mode_disabled` means the Developer Mode toggle in Settings is off; turn it on. `device_developer_disk_image_unavailable` means Developer Mode is on but the developer disk image isn't available yet, usually because device support is still installing; wait and retry.
+- If device setup is slow, keep the device connected, retry, and check the daemon diagnostics.
 
-## Daemon startup and upgrades
+## Troubleshoot daemon startup and upgrades
 
-If daemon startup fails, retry with `--debug` and inspect the retained state and diagnostics. `agent-device session state-dir` prints the resolved directory without starting a daemon.
+If the daemon fails to start, retry with `--debug` and check the state directory and diagnostics. `agent-device session state-dir` prints the resolved directory without starting a daemon.
 
-Before upgrading across the daemon lock change, stop every older client and daemon using that directory with their original CLI. Prevent older versions from returning while the upgraded version runs. Use a single deployed version or separate environments for concurrent installations.
+Before you upgrade from a version that predates the current daemon lock format, stop every older client and daemon that uses the state directory, using their original CLI. Don't let older versions restart while the upgraded version runs. To run several versions at once, give each its own environment and state directory.
 
-If you used a source checkout before worktree-specific state directories, stop its daemon in `~/.agent-device` from that older checkout:
+If you ran a source checkout from before state directories were per worktree, stop its daemon in `~/.agent-device` from that older checkout:
 
 ```sh
 AGENT_DEVICE_STATE_DIR="$HOME/.agent-device" pnpm clean:daemon
 ```
 
-The upgraded checkout defaults to a different directory, so its plain `pnpm clean:daemon` does not target that legacy daemon.
+An upgraded checkout uses a different default directory, so a plain `pnpm clean:daemon` there doesn't reach the old daemon.
 
-Startup refuses legacy lock files and unverified ownership. Confirm every user of the state directory stopped before manual recovery; removing `daemon.json` or `daemon.lock` alone is not a safe reset.
+The daemon refuses to start when it finds a legacy lock file or can't verify who owns the state directory. Before you recover manually, confirm that every client and daemon using the directory has stopped. Deleting `daemon.json` or `daemon.lock` alone is not a safe reset.
 
-Packaged installs default to `~/.agent-device`; source checkouts use a worktree directory under `~/.agent-device/dev/`. `AGENT_DEVICE_STATE_DIR` or `--state-dir` overrides either default.
+Packaged installs use `~/.agent-device` by default; source checkouts use a per-worktree directory under `~/.agent-device/dev/`. Set `AGENT_DEVICE_STATE_DIR` or pass `--state-dir` to override either default.
 
-For source checkouts, `pnpm clean:daemon --prune-dev` first stops the invoking checkout's daemon, even when its state directory has recent activity. It then selects development directories with no activity for 14 days, using the newest mtime of the directory and its immediate children. It retires only registration it can confirm abandoned. Directories, session artifacts and logs remain.
+In a source checkout, `pnpm clean:daemon --prune-dev` first stops the current checkout's daemon, even if its state directory was used recently. It then finds development state directories with no activity for 14 days (by the newest modification time of the directory and its immediate children) and removes daemon registrations it can confirm are abandoned. It keeps the directories, session artifacts, and logs.

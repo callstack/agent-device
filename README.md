@@ -31,7 +31,7 @@ agent-device doctor
 agent-device help workflow
 ```
 
-Run `doctor` yourself before handing the CLI to an agent; `help workflow` links to the guides for debugging, replay, and profiling, and the installed help always matches the installed version.
+Run `doctor` yourself before you hand the CLI to an agent. `help workflow` links to the guides for debugging, replay, and profiling; installed help always matches the installed version.
 
 ### Drive an app from the CLI
 
@@ -61,7 +61,7 @@ agent-device screenshot ./contact-form.png
 agent-device close
 ```
 
-Refs are only valid from the latest output: after a `--settle` command, use the refs in its diff, and take a new snapshot only if the diff omits what you need. Snapshots come from the app's accessibility tree, so clear labels, roles, and test IDs make agent runs more reliable; use screenshots and video as evidence or when accessibility data is poor.
+Refs are valid only in the latest output: after a `--settle` command, use the refs in its diff, and take a new snapshot only if the diff omits what you need. Snapshots come from the app's accessibility tree, so clear labels, roles, and test IDs make agent runs more reliable; use screenshots and video as evidence or when accessibility data is poor.
 
 ![agent-device demo showing Codex using agent-device to create a new contact in the iOS Contacts app from a simple prompt](./website/docs/public/agent-device-contacts.gif)
 
@@ -143,9 +143,9 @@ The same session and evidence model works at every step: the agent explores the 
 
 `agent-device` keeps device state in sessions. It uses a local accessibility bridge for iOS Simulator snapshots and XCTest for iOS interactions, physical iOS, and tvOS; ADB and the snapshot helper on Android; HDC and ArkUI `uitest` on HarmonyOS; Vega CLI/VDA on the Vega Virtual Device; a local helper on macOS; and AT-SPI on Linux.
 
-Support depth varies by target. Newer backends such as HarmonyOS and Vega OS cover a subset of commands; run `agent-device capabilities --platform <platform>` to see what a target supports.
+Support depth varies by target. Some backends, such as HarmonyOS and Vega OS, cover a subset of commands; run `agent-device capabilities --platform <platform>` to see what a target supports.
 
-Sessions are scoped to the caller's git worktree, and host-local device claims stop parallel agents from taking over each other's simulators and emulators. Inspect ownership without a daemon via `agent-device device status`, and settle provably dead owners with `agent-device device release --stale`. The same commands drive hosted devices on [BrowserStack, AWS Device Farm, TestMu AI, and Limrun](https://oss.callstack.com/agent-device/docs/device-clouds).
+Sessions are scoped to the caller's git worktree, and host-local device claims stop parallel agents from taking over each other's simulators and emulators. Run `agent-device device status` to inspect ownership without a daemon, and `agent-device device release --stale` to release claims whose owner is provably no longer running. The same commands drive hosted devices on [BrowserStack, AWS Device Farm, TestMu AI, and Limrun](https://oss.callstack.com/agent-device/docs/device-clouds).
 
 `agent-device` uses the inspect-act-verify process from Vercel's [agent-browser](https://github.com/vercel-labs/agent-browser) for mobile, TV, and desktop apps. Basic `--platform web` support runs `agent-browser` in the same session and replay system.
 

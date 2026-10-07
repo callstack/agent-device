@@ -4,12 +4,13 @@ title: Configuration
 
 # Configuration
 
-Use configuration for persistent CLI defaults instead of repeating flags on every command. Repository
-configuration and operator-controlled configuration have different trust scopes.
+Set CLI defaults in a config file instead of repeating flags on every command. A repository's
+`./agent-device.json` can only set safe command defaults; connection, credential, and provider
+settings belong in your user config, an explicit `--config` file, or environment variables.
 
 ## Config file locations
 
-agent-device checks these sources in priority order:
+agent-device reads these sources in order; later sources override earlier ones:
 
 | Priority | Location | Scope |
 | --- | --- | --- |
@@ -18,29 +19,29 @@ agent-device checks these sources in priority order:
 | 3 | `AGENT_DEVICE_*` env vars | Override config values |
 | 4 (highest) | CLI flags | Override everything |
 
-Project-level values override user-level values where they are permitted. Environment variables override
-both. CLI flags always win. `--config <path>` or `AGENT_DEVICE_CONFIG` loads one explicit,
+Project values override user values for the keys a project may set. Environment variables override
+both, and CLI flags always win. `--config <path>` or `AGENT_DEVICE_CONFIG` loads one explicit,
 operator-controlled file instead of the default locations.
 
 Set `AGENT_DEVICE_HOME` to an absolute path (or `~/...`) to relocate the user config and
-[managed provider plugins](./plugins.md). This setting does not relocate daemon state.
+[managed provider plugins](./plugins.md). It does not move daemon state.
 
 `./agent-device.json` cannot contain endpoint, credential, daemon transport/server, tenant/run/lease,
-provider/cloud, Metro connection, or other operator-controlled fields. The CLI rejects those keys during
-parse, before it creates a daemon transport or sends a health request. This prevents a repository from
-pairing its chosen endpoint with a token from the user environment or user config.
+provider/cloud, Metro connection, or other operator-controlled fields. The CLI rejects those keys before
+it contacts any daemon, so a repository can't pair an endpoint it chose with a token from your
+environment or user config.
 
 ## Config format
 
-Config files use JSON objects with camelCase keys matching existing CLI flag names.
+Config files are JSON objects with camelCase keys that match CLI flag names.
 
-Environment variables follow the same fields using `AGENT_DEVICE_*` uppercase snake case names, for example:
+Each key has an environment variable: `AGENT_DEVICE_` plus the key in uppercase snake case, for example:
 - `session` -> `AGENT_DEVICE_SESSION`
 - `daemonBaseUrl` -> `AGENT_DEVICE_DAEMON_BASE_URL`
 - `androidDeviceAllowlist` -> `AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST`
 - `screenshotScale` -> `AGENT_DEVICE_SCREENSHOT_SCALE`
 
-Config and environment sources use canonical option values rather than CLI flag names. Example:
+Config files and environment variables take option values, not flag names. For example:
 - config: `"appsFilter": "user-installed"`
 - CLI equivalent: omit `--all`
 
@@ -55,8 +56,8 @@ Example:
 }
 ```
 
-Use user config, an explicit config, CLI flags, environment variables, or `connect`/`--remote-config`
-for remote connections. For example, a user-owned config may contain:
+Set up remote connections through your user config, an explicit config, CLI flags, environment
+variables, or `connect`/`--remote-config`. For example, your user config can contain:
 
 ```json
 {
@@ -69,18 +70,18 @@ for remote connections. For example, a user-owned config may contain:
 
 For CI, provide both `AGENT_DEVICE_DAEMON_BASE_URL` and `AGENT_DEVICE_DAEMON_AUTH_TOKEN` from
 protected, operator-controlled configuration. Do not put either value in `./agent-device.json`.
-For non-loopback remote daemon URLs, the client still requires authentication. Saved `connect` profiles
-and explicit `--remote-config` workflows remain supported; generated profiles do not persist tokens.
+Remote daemon URLs that aren't loopback always require authentication. Saved `connect` profiles and
+explicit `--remote-config` files also work; generated profiles do not store tokens.
 
-When a command fails against a remote daemon, the `Diagnostics Log:` path is always on the calling
-machine: the failing request's record is fetched over the same base URL and token into
+When a command fails against a remote daemon, the `Diagnostics Log:` path is always on your machine:
+agent-device downloads the failing request's record over the same base URL and token into
 `<state-dir>/remote-diagnostics/<session>/<request-id>.ndjson`, so a CI job can keep it as a build
-artifact. If the record cannot be fetched the line reads `unavailable` with the remote daemon, the
+artifact. If the download fails, the line reads `unavailable` with the remote daemon, the
 request id, and the reason — never a path on the daemon host.
 
 Project-safe keys include command defaults such as `platform`, `target`, `device`, `session`,
-`snapshotDepth`, recording/capture options, and action timing. Connection and provider keys below are
-user- or explicit-config only:
+`snapshotDepth`, recording/capture options, and action timing. These keys are allowed only in user or
+explicit config:
 
 - `stateDir`
 - `daemonBaseUrl`
@@ -97,9 +98,9 @@ user- or explicit-config only:
 - request headers and structured install sources
 - local code and write destinations (`reporter`, `reportJunit`, `saveScript`, `launchConsole`)
 
-Project config can use project-safe command defaults such as `snapshotDepth`, `snapshotScope`, `screenshotScale`, `activity`, `relaunch`, `shutdown`, `fps`, and `quality`. Local path and executable-module selectors such as `stepsFile` and `reporter` are user- or explicit-config only.
+Project config can also set `snapshotDepth`, `snapshotScope`, `screenshotScale`, `activity`, `relaunch`, `shutdown`, `fps`, and `quality`. Local paths and executable modules, such as `stepsFile` and `reporter`, are allowed only in user or explicit config.
 
-`install-from-source` can read a structured GitHub Actions artifact source from user or explicit config when a compatible remote daemon resolves CI artifacts server-side. Repository config rejects this operator-controlled source:
+`install-from-source` can read a GitHub Actions artifact source from user or explicit config when the remote daemon supports resolving CI artifacts. Repository config rejects this key:
 
 ```json
 {
@@ -114,14 +115,14 @@ Project config can use project-safe command defaults such as `snapshotDepth`, `s
 
 Use a numeric `artifact` value for an artifact ID. Use a string `artifact` value for an artifact name.
 
-Explicit named-session lock defaults use project-safe config and the same env mapping:
+Project config can set a default lock for named sessions, with the usual env mapping:
 - `sessionLock` -> `AGENT_DEVICE_SESSION_LOCK`
 
-Most local automation can omit this because implicit `default` sessions are workspace-scoped; use `sessionLock`, `--session-lock`, or `AGENT_DEVICE_SESSION_LOCK` when intentionally running an explicitly named session.
+Most local automation doesn't need this, because implicit sessions are already scoped to the workspace. Use `sessionLock`, `--session-lock`, or `AGENT_DEVICE_SESSION_LOCK` when you run a named session.
 
 ## Supported environment variables
 
-These env vars are the supported user-facing configuration surface. Other `AGENT_DEVICE_*` names may appear in source, tests, CI, runner logs, or child-process contracts, but they are internal unless documented here or in command-specific docs.
+Only the variables below, and those documented on command pages, are supported. Other `AGENT_DEVICE_*` names you may see in logs or source are internal.
 
 | Category | Env vars | Decision |
 | --- | --- | --- |
@@ -133,20 +134,17 @@ These env vars are the supported user-facing configuration surface. Other `AGENT
 | App hooks and logs | `AGENT_DEVICE_APP_EVENT_URL_TEMPLATE`, `AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE`, `AGENT_DEVICE_MACOS_APP_EVENT_URL_TEMPLATE`, `AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE`, `AGENT_DEVICE_APP_LOG_MAX_BYTES`, `AGENT_DEVICE_APP_LOG_MAX_FILES`, `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS`, `AGENT_DEVICE_EVENT_LOG_MAX_BYTES` | Public. Byte caps take whole integers (`5242880`), not `5MB`. |
 | Apple runner setup | `AGENT_DEVICE_IOS_TEAM_ID`, `AGENT_DEVICE_IOS_SIGNING_IDENTITY`, `AGENT_DEVICE_IOS_PROVISIONING_PROFILE`, `AGENT_DEVICE_IOS_BUNDLE_ID`, `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH`, `AGENT_DEVICE_IOS_CLEAN_DERIVED`, `AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP` | Public operator controls. Cleanup of an `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` override is only automatic for paths under project `.tmp/`; keys in the managed runner cache are swept after a build. `AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP` is the number of most-recent runner cache keys per platform folder (for example `ios-simulator` and `ios-device` are counted separately) guaranteed to survive a new build, the new key included (default 3, `0` keeps all). Keys used in the last day, held by a build, or named by a live runner lease also survive, so it is not a hard disk-usage cap. |
 | Install/update and platform helpers | `AGENT_DEVICE_NO_UPDATE_NOTIFIER`, `AGENT_DEVICE_MACOS_HELPER_BIN`, `AGENT_DEVICE_ANDROID_SNAPSHOT_HELPER_SESSION` | Public operator controls |
-| macOS app backend | `AGENT_DEVICE_MACOS_APP_BACKEND`, `AGENT_DEVICE_MACOS_GHOST_CURSOR` | Public operator controls, read by the daemon. `native` drives macOS app sessions through the macOS helper instead of XCTest; see [Commands](/docs/commands). Unset or `xctest` keeps the runner. The drawn agent pointer adds about 0.3 s to each native click, fill, type, and scroll; `AGENT_DEVICE_MACOS_GHOST_CURSOR=0` turns it off. Restart the daemon after changing either value. |
+| macOS app backend | `AGENT_DEVICE_MACOS_APP_BACKEND`, `AGENT_DEVICE_MACOS_GHOST_CURSOR` | Public operator controls, read by the daemon. `native` drives macOS app sessions through the macOS helper instead of XCTest; see [Commands](/docs/commands). Unset or `xctest` uses the runner. The drawn agent pointer adds about 0.3 s to each native click, fill, type, and scroll; `AGENT_DEVICE_MACOS_GHOST_CURSOR=0` turns it off. Restart the daemon after changing either value. |
 
 ## Command-specific defaults
 
-Command-specific keys are applied only when the current command supports them.
+A command-specific key applies only to commands that support it, so one config file works across all commands. For example:
 
-Examples:
 - A default `snapshotDepth` applies to `snapshot`, `diff snapshot`, `click`, `fill`, `get`, `wait`, `find`, and `is`.
 - The same `snapshotDepth` value is ignored for commands like `open`, `close`, or `devices`.
 - A default `screenshotScale` (or `AGENT_DEVICE_SCREENSHOT_SCALE`) applies to `screenshot`; an explicit `--scale` wins.
 
-This keeps one shared config file usable across different command families.
+## When config fails to load
 
-## Failure behavior
-
-- If `--config` or `AGENT_DEVICE_CONFIG` points to a missing file, agent-device fails during CLI parse before contacting the daemon.
-- Invalid JSON, unknown keys, invalid values, or an operator-controlled key in project config also fail during CLI parse with `INVALID_ARGS`. Rejections name the key and never echo its value.
+- If `--config` or `AGENT_DEVICE_CONFIG` points to a missing file, the command fails before it contacts the daemon.
+- Invalid JSON, unknown keys, invalid values, or an operator-controlled key in project config also fail before the daemon is contacted, with `INVALID_ARGS`. The error names the key and never prints its value.

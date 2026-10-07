@@ -5,10 +5,10 @@ description: Drive TestMu AI (formerly LambdaTest) virtual devices, Android emul
 
 # TestMu AI
 
-TestMu AI (formerly LambdaTest) hosts virtual devices for Android emulator and iOS simulator
-WebDriver sessions, and real devices you select with `--provider-device-type real`. One Appium hub
-fronts both pools; agent-device selects the pool with `isRealMobile` and defaults to the
-virtual-device pool.
+Use TestMu AI (formerly LambdaTest) to run agent-device on hosted Android emulators, iOS
+simulators, and real devices over WebDriver. agent-device uses virtual devices (emulators and
+simulators) by default; pass `--provider-device-type real` for a real device. You need a TestMu AI
+account and the `@agent-device/testmu` plugin.
 
 ## Install the plugin
 
@@ -16,13 +16,13 @@ virtual-device pool.
 agent-device plugins add @agent-device/testmu
 ```
 
-The provider is an optional npm package installed under `AGENT_DEVICE_HOME`.
-After adding or updating it, close sessions and run `agent-device daemon stop`
-with the state directory you use; the next device command loads the selected plugin.
+The plugin is an optional npm package installed under `AGENT_DEVICE_HOME`.
+After you add or update it, close open sessions and run `agent-device daemon stop`
+with the state directory you use; the next device command loads the plugin.
 
-## Credentials and connection
+## Set credentials and connect
 
-Set TestMu AI credentials in a non-interactive environment. These are the same variables every
+Export your TestMu AI credentials, for example from CI secrets. These are the same variables every
 TestMu AI SDK reads:
 
 ```bash
@@ -40,22 +40,21 @@ agent-device connect testmu \
   --provider-app lt://APP-id
 ```
 
-`--device` and `--provider-os-version` must match the virtual-device catalog spelling exactly. The
-hub rejects `--provider-os-version 18` for a device listed with `18.0`, so `connect` does too and
-lists the versions the device offers.
+`--device` and `--provider-os-version` must match the spelling in TestMu AI's virtual-device
+catalog exactly. TestMu AI rejects `--provider-os-version 18` for a device listed as `18.0`, so
+`connect` rejects it too and lists the versions the device offers.
 
 `--provider-app` accepts a TestMu AI app reference such as `lt://APP...`, an HTTP(S) app URL, or
 an existing local app path (`.apk`, or a zipped simulator `.app` for iOS). When `open` creates the
 hosted session, agent-device uploads a local path, and TestMu AI fetches a URL, through the
 virtual-device upload API.
 
-During `connect`, agent-device checks the device/OS pair against TestMu AI's virtual-device
-catalog (`/capability/generator?isVirtualDevice=true`), verifies the credentials against your
-uploaded-app listing, looks an `lt://` reference up in that listing, and confirms that a local
-artifact exists before saving its absolute path. `connect` does not prove the app usable: an `lt://`
-id missing from the listing is still accepted, and TestMu AI validates it, like a URL or local
-upload, only when the session is created. `open` still needs the app's installed package or bundle
-identifier, not the upload name or `lt://` id.
+`connect` checks the device/OS pair against TestMu AI's virtual-device catalog, verifies the
+credentials against your uploaded-app list, looks up an `lt://` reference in that list, and confirms
+that a local app file exists before saving its absolute path. A successful `connect` does not prove
+the app works: it still accepts an `lt://` ID missing from the list, and TestMu AI validates that ID,
+like a URL or local upload, only when the session starts. `open` takes the app's installed package or
+bundle identifier, not the upload name or `lt://` ID.
 
 Optional labels:
 
@@ -76,22 +75,22 @@ Optional device features:
 --provider-locale fr_FR                                      # (alias --locale)
 ```
 
-TestMu AI receives these values in `lt:options` when it creates the hosted session.
+agent-device sends these values to TestMu AI as `lt:options` capabilities when it creates the
+hosted session.
 
-- Without `--provider-appium-version`, agent-device sends no Appium version and TestMu AI starts
-  its default server for the device. Pin a version when a suite depends on one.
+- Without `--provider-appium-version`, TestMu AI starts its default Appium server for the device.
+  Pin a version when your suite depends on one.
 - `--provider-network-profile`, `--provider-custom-network`, and `--provider-no-resign-app` are
-  BrowserStack capabilities; `connect testmu` and TestMu AI session creation refuse them by flag
-  name rather than ignoring them.
-- Session video and device logs are requested on every session so `artifacts` has something to
-  return.
+  BrowserStack-only. `connect testmu` and TestMu AI session creation fail with the flag name
+  instead of ignoring them.
+- agent-device turns on session video and device logs for every session, so `artifacts` always has
+  something to return.
 
-## Real devices
+## Run on real devices
 
-Pass `--provider-device-type real` to run on a physical device. Everything else works as for
-virtual devices: `connect` checks the device/OS pair against the real-device catalog
-(`/capability/generator?isVirtualDevice=false`), and a local path or URL is uploaded through the
-real-device upload API.
+Pass `--provider-device-type real` to run on a physical device. Everything else works as it does
+for virtual devices: `connect` checks the device/OS pair against the real-device catalog, and
+agent-device uploads a local path or URL through the real-device upload API.
 
 ```bash
 agent-device connect testmu \
@@ -114,14 +113,14 @@ agent-device connect testmu \
   the versions it offers.
 - Real iOS devices install a signed `.ipa`; a zipped simulator `.app` only runs on simulators.
   Android takes an `.apk` or `.aab`.
-- Real and virtual devices have separate upload APIs. Pass an `lt://` id that was uploaded for the
-  pool you connect to; when in doubt, pass the local path or URL and let agent-device upload it.
+- Real and virtual devices have separate uploads. Pass an `lt://` ID uploaded for the device type
+  you connect to; when in doubt, pass the local path or URL and let agent-device upload it.
 - `TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT` redirects real-device uploads, as
   `TESTMU_APP_UPLOAD_ENDPOINT` does for virtual-device uploads.
 - `--provider-device-type` applies only to TestMu AI; BrowserStack, AWS Device Farm, and Limrun
   refuse it on every route, including `client.leases.allocate()`.
 
-## CLI workflow
+## Run a session from the CLI
 
 ```bash
 export LT_USERNAME=...
@@ -142,20 +141,23 @@ agent-device artifacts --json
 agent-device disconnect
 ```
 
-For MCP-only use, run `connect` in the same effective state directory before starting
-`agent-device mcp`. MCP exposes `open`, `snapshot`, `click`, `close`, and `artifacts`, but not
+To use TestMu AI only through MCP, run `connect` in the same effective state directory before you
+start `agent-device mcp`. MCP exposes `open`, `snapshot`, `click`, `close`, and `artifacts`, but not
 provider `connect` commands.
 
-## Node.js client
+## Use the Node.js client
 
-The typed client reaches TestMu AI through a lease. Allocate one with the provider selectors, then
-scope a client to it for normal commands. `sessions.close()` ends the hosted session and releases
-the lease; `leases.release()` in `finally` is then a no-op, and still releases the lease when a
-command fails first. The daemon reads `LT_USERNAME` and `LT_ACCESS_KEY` from its environment and
-keeps the values it started with. If your shell holds different ones, the first command that
-allocates a lease, such as `open`, refuses before it creates a session; run
-`agent-device daemon stop` (with the same `--state-dir`) and rerun the command. A shell that sets
-neither variable uses the daemon's. Add `providerDeviceType: 'real'` to `leases.allocate` to run on a real device.
+The Node.js client reaches TestMu AI through a lease. Allocate one with the provider selectors, then
+create a client scoped to it for device commands. `sessions.close()` ends the hosted session and
+releases the lease. Keep `leases.release()` in `finally`: it does nothing after a successful close,
+and releases the lease when a command fails first. Add `providerDeviceType: 'real'` to
+`leases.allocate` to run on a real device.
+
+The daemon reads `LT_USERNAME` and `LT_ACCESS_KEY` from its environment and keeps the values it
+started with. If your shell holds different ones, the first command that allocates a lease, such as
+`open`, refuses before it creates a session. Run `agent-device daemon stop` (with the same
+`--state-dir`) and rerun the command. A shell that sets neither variable uses the daemon's
+credentials.
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';
@@ -195,25 +197,26 @@ if (providerSessionId) {
 }
 ```
 
-## Artifacts and troubleshooting
+## Get artifacts and troubleshoot
 
 After `close`, TestMu AI can return session video, Appium logs, device logs, network and command
 logs, a screenshot archive, and the App Automation dashboard link. Run `agent-device artifacts
---json`, or look up a previous session explicitly:
+--json`, or look up an earlier session by its ID:
 
 ```bash
 agent-device artifacts <webdriver-session-id> --provider testmu --json
 ```
 
-The TestMu AI session id is the WebDriver session id. If artifact lookup is pending immediately
-after `close`, retry it; TestMu AI finalizes video and log URLs after the session ends.
+The TestMu AI session ID is the WebDriver session ID. If artifacts are still pending right after
+`close`, retry the lookup; TestMu AI finalizes video and log URLs after the session ends.
 
-WebDriver, upload, and catalog/session-detail endpoints can be redirected for a staging or private
-TestMu AI deployment with `TESTMU_WEBDRIVER_ENDPOINT`, `TESTMU_APP_UPLOAD_ENDPOINT` (virtual
+To use a staging or private TestMu AI deployment, redirect the WebDriver, upload, and
+catalog/session-detail endpoints with `TESTMU_WEBDRIVER_ENDPOINT`, `TESTMU_APP_UPLOAD_ENDPOINT` (virtual
 devices), `TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT` (real devices), and `TESTMU_API_ENDPOINT`. The
-app listing `connect` uses to check credentials stays fixed at
+app list that `connect` uses to check credentials always comes from
 `https://manual-api.lambdatest.com/app/data`.
 
 On hosted WebDriver sessions, `fill` checks that the field received focus before it sends keys. If
-it cannot confirm focus, it fails without typing. Use `snapshot -i` to confirm the target, or
-`press <target>` followed by `type <text>`.
+it cannot confirm focus, it fails without typing. Use `snapshot -i` to confirm the target. If the
+driver cannot report focus at all, use `press <target>` followed by `type <text>`, which sends text
+without confirming where it lands.

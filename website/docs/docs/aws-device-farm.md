@@ -5,15 +5,15 @@ description: Drive AWS Device Farm remote-access sessions with agent-device.
 
 # AWS Device Farm
 
-Use AWS Device Farm for hosted Android and iOS remote-access WebDriver sessions. The adapter does not route Vega OS or accept a Vega Fire TV ARN. The initial Vega workflow uses a local VVD.
+Use AWS Device Farm to run agent-device on hosted Android and iOS devices through remote-access WebDriver sessions. You need an AWS account with a Device Farm project and the AWS CLI installed. AWS Device Farm does not cover Vega OS: agent-device rejects a Vega Fire TV ARN. For Vega, use a local Vega Virtual Device (VVD).
 
-## Credentials and connection
+## Set credentials and connect
 
-AWS Device Farm uses the AWS CLI credential provider chain. `agent-device` runs `aws devicefarm ...`, so it works with any non-interactive AWS CLI credential source available in CI. It does not require `aws login`. See the [AWS CLI environment variable reference](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html) for supported credential sources.
+agent-device runs `aws devicefarm ...`, so it uses the AWS CLI credential provider chain and works with any non-interactive AWS CLI credential source in CI. You do not need `aws login`. See the [AWS CLI environment variable reference](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html) for supported credential sources.
 
-Use short-lived CI credentials instead of long-lived IAM user keys. In GitHub Actions, use OIDC to assume an IAM role and let the action export standard AWS environment variables. AWS documents [IAM OIDC providers](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc.html), and the official [`configure-aws-credentials` action](https://github.com/aws-actions/configure-aws-credentials) documents the GitHub Actions setup.
+Use short-lived CI credentials instead of long-lived IAM user keys. In GitHub Actions, use OIDC to assume an IAM role and let the action export the standard AWS environment variables. AWS documents [IAM OIDC providers](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc.html), and the official [`configure-aws-credentials` action](https://github.com/aws-actions/configure-aws-credentials) documents the GitHub Actions setup.
 
-For example, a CI job might set:
+For example, a CI job can set:
 
 ```bash
 export AWS_REGION=us-west-2
@@ -30,7 +30,7 @@ export AWS_WEB_IDENTITY_TOKEN_FILE=/path/to/token
 export AWS_REGION=us-west-2
 ```
 
-Connect with the Device Farm project, device, and optional app upload:
+Connect with the Device Farm project, the device, and an optional app upload:
 
 ```bash
 agent-device connect aws-device-farm \
@@ -40,7 +40,7 @@ agent-device connect aws-device-farm \
   --aws-app-arn arn:aws:devicefarm:us-west-2:<account-id>:upload:<upload-id>
 ```
 
-`--aws-app-arn` is optional when the remote-access session does not need an uploaded app. You can also provide the ARNs through environment variables:
+Omit `--aws-app-arn` when the remote-access session does not need an uploaded app. You can also pass the ARNs through environment variables:
 
 ```bash
 export AWS_DEVICE_FARM_PROJECT_ARN=...
@@ -48,13 +48,13 @@ export AWS_DEVICE_FARM_DEVICE_ARN=...
 export AWS_DEVICE_FARM_APP_ARN=...
 ```
 
-`AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN`, `AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN`, and `AGENT_DEVICE_AWS_DEVICE_FARM_APP_ARN` are accepted as agent-device-specific aliases.
+agent-device also accepts `AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN`, `AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN`, and `AGENT_DEVICE_AWS_DEVICE_FARM_APP_ARN` as aliases.
 
-`connect` makes read-only `get-project`, `get-device`, and, when supplied, `get-upload` calls. It rejects a device or app for the wrong platform, and an app upload that is not ready. AWS Device Farm does not support app installation after remote-access session allocation. When an app is required, run the printed reconnect command, including `--session <name> --force`, before `open`.
+`connect` makes read-only `get-project`, `get-device`, and, when you pass an app, `get-upload` calls. It rejects a device or app for the wrong platform, and an app upload that is not ready. You cannot install an app once the remote-access session is allocated. When an app is required, run the printed reconnect command, including `--session <name> --force`, before `open`.
 
-## CLI workflow
+## Run a session from the CLI
 
-Every unscoped `connect` creates a fresh connection. The printed next steps include its generated `--session`. Keep that flag on every command when multiple processes or CI jobs share a host. The active connection is only safe for one sequential workflow. To replace a named connection, run `connect ... --session <name> --force`. An unscoped `--force` creates a new connection and leaves existing sessions untouched.
+Every `connect` without `--session` creates a new connection, and the printed next steps include its generated `--session`. Keep that flag on every command when several processes or CI jobs share a host; the active connection is safe only for one sequential workflow. To replace a named connection, run `connect ... --session <name> --force`. `--force` without `--session` creates a new connection and leaves existing sessions untouched.
 
 ```bash
 export AWS_REGION=us-west-2
@@ -76,11 +76,11 @@ agent-device artifacts --json
 agent-device disconnect
 ```
 
-For MCP-only use, run `connect` in the same effective state directory before starting `agent-device mcp`. MCP exposes operational tools but not provider `connect` commands.
+To use AWS Device Farm only through MCP, run `connect` in the same effective state directory before you start `agent-device mcp`. MCP exposes device commands such as `open`, `snapshot`, `close`, and `artifacts`, but not provider `connect` commands.
 
-## Node.js client
+## Use the Node.js client
 
-Use direct client configuration when the Node process manages AWS credentials and selectors:
+Configure the client directly when your Node process manages the AWS credentials and selectors:
 
 ```ts
 import { createAgentDeviceClient } from 'agent-device';
@@ -98,16 +98,16 @@ await client.apps.open({ app: 'com.example.app' });
 const closed = await client.sessions.close();
 ```
 
-## Artifacts and troubleshooting
+## Get artifacts and troubleshoot
 
-After `close`, AWS Device Farm can return remote-access video and log artifacts after the provider finalizes them. Run `agent-device artifacts --json`, or look up a previous session explicitly:
+After `close`, AWS Device Farm returns remote-access video and log artifacts once it finalizes them. Run `agent-device artifacts --json`, or look up an earlier session by its ARN:
 
 ```bash
 agent-device artifacts <remote-access-session-arn> --provider aws-device-farm --json
 ```
 
-If `connect` fails, use the reported `aws devicefarm get-*` error to check the credential chain, ARN, region, resource platform, or upload readiness. The provider has not allocated a device yet. If artifacts are pending immediately after `close`, retry the lookup.
+If `connect` fails, use the reported `aws devicefarm get-*` error to check the credential chain, ARN, region, resource platform, or upload readiness. A failed `connect` has not allocated a device yet. If artifacts are still pending right after `close`, retry the lookup.
 
-On hosted WebDriver sessions, `fill` checks that the field received focus before it sends keys. If it cannot confirm focus, it fails without typing. Use `snapshot -i` to confirm the target. If the driver cannot expose focus at all, use `press <target>` followed by `type <text>`. That sends text without confirming the destination.
+On hosted WebDriver sessions, `fill` checks that the field received focus before it sends keys. If it cannot confirm focus, it fails without typing. Use `snapshot -i` to confirm the target. If the driver cannot report focus at all, use `press <target>` followed by `type <text>`, which sends text without confirming where it lands.
 
-A screen that never goes still — a looping video, a live ticker, continuous animation — gives the provider's driver no quiet moment to read the UI tree, so `snapshot -i` can run out of its read budget on a rented device while `screenshot` of the same screen still returns. Snapshots covers what that failure means and what to do instead; on a metered device the difference matters, because every second of the walk is billed. Take the screenshot, drive from `@refs` an earlier snapshot captured, and remember that `--depth` trims a tree after it arrives, so it cannot shorten a read that never returned.
+On a screen that never goes still, such as a looping video, a live ticker, or continuous animation, `snapshot -i` can time out while `screenshot` of the same screen still returns. On a metered device every second of that read is billed, so do not retry the snapshot in a loop. Take a screenshot instead and drive from `@refs` an earlier snapshot captured. `--depth` trims the tree after it arrives, so it cannot shorten a read that never finishes. See [Snapshots](/docs/snapshots) for details.

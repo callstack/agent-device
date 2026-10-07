@@ -15,6 +15,7 @@
       "agent-device/android-adb": ["../../src/sdk/android-adb.ts"],
       "agent-device/contracts": ["../../src/sdk/contracts.ts"],
       "agent-device/finders": ["../../src/sdk/finders.ts"],
+      "agent-device/selectors": ["../../src/sdk/selectors.ts"],
       "agent-device/ai-sdk": ["../../src/ai-sdk/index.ts"]
     }
   },

@@ -4,11 +4,10 @@ title: Batching
 
 # Batching
 
-Use `batch` to run multiple commands in a single daemon request.
+Use `batch` to run several commands in one daemon request. It saves round trips when you already know
+the next sequence of actions.
 
-This is useful for agent workflows that already know the next sequence of actions and want to reduce orchestration overhead.
-
-## CLI examples
+## Run a batch from the CLI
 
 From a file:
 
@@ -21,7 +20,7 @@ agent-device batch \
   --json
 ```
 
-Inline for small payloads:
+Inline, for small payloads:
 
 ```bash
 agent-device batch --steps '[{"command":"open","input":{"app":"settings"}},{"command":"wait","input":{"kind":"duration","durationMs":100}}]'
@@ -29,7 +28,7 @@ agent-device batch --steps '[{"command":"open","input":{"app":"settings"}},{"com
 
 ## Step payload format
 
-`batch` accepts a JSON array of steps:
+Pass `batch` a JSON array of steps:
 
 ```json
 [
@@ -51,11 +50,11 @@ agent-device batch --steps '[{"command":"open","input":{"app":"settings"}},{"com
 
 Notes:
 
-- `input` is required and uses the same fields as the matching MCP/Node command.
-- Unknown top-level step fields are rejected. Supported keys are `command`, `input`, and `runtime`.
-- The legacy `positionals`/`flags` step shape was removed in 0.21. Migrate each step to structured input, for example `{"command":"open","input":{"app":"settings","platform":"ios"}}`.
-- nested `batch` and `replay` steps are rejected.
-- `--on-error stop` is the supported behavior.
+- `input` is required and takes the same fields as the matching MCP or Node client command.
+- A step can only have `command`, `input`, and `runtime` keys; any other key is rejected.
+- Steps written as `positionals`/`flags` are rejected (that shape was removed in 0.21). Rewrite each step with structured input, for example `{"command":"open","input":{"app":"settings","platform":"ios"}}`.
+- `batch` and `replay` steps can't be nested inside a batch.
+- `--on-error stop` is the only error mode: the batch stops at the first failing step.
 
 ## Response shape
 
@@ -78,7 +77,7 @@ Success:
 }
 ```
 
-In non-JSON mode, `batch` also prints a short per-step summary after the overall completion line.
+Without `--json`, `batch` prints the overall completion line followed by a short summary of each step.
 
 Failure:
 
@@ -102,16 +101,16 @@ Failure:
 }
 ```
 
-## Agent best practices
+## Tips for agents
 
-- Batch only one related screen flow at a time.
-- After mutating steps (`open`, `click`, `fill`, `swipe`), add a sync guard (`wait`, `is exists`) before critical reads.
-- Treat prior refs/snapshots as stale after UI changes.
+- Keep each batch to one screen flow.
+- After steps that change the UI (`open`, `click`, `fill`, `swipe`), add a `wait` or `is exists` step before reads that matter.
+- Treat earlier refs and snapshots as stale after the UI changes.
 - Prefer `--steps-file` over inline JSON.
-- Keep batches moderate (about 5-20 steps).
-- Replan from the failing step using `details.step` and `details.partialResults`.
+- Keep batches to about 5-20 steps.
+- When a batch fails, use `details.step` and `details.partialResults` to replan from the failing step.
 
-## Canonical recipes
+## Example recipes
 
 Open app -> open thread -> type -> send
 
@@ -150,9 +149,10 @@ Open app -> open action menu -> choose option -> verify
 ]
 ```
 
-## Stale accessibility tree risk
+## Avoid acting on a stale accessibility tree
 
-Rapid UI changes can outpace accessibility tree updates. Mitigate by inserting explicit waits and splitting long workflows into phases:
+The accessibility tree can lag behind fast UI changes. Add explicit waits, and split long workflows
+into separate batches by phase:
 
 1. navigate
 2. verify/extract

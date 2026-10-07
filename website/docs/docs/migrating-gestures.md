@@ -6,17 +6,17 @@ title: Migrating Gestures
 
 `agent-device` 0.20.0 removed the timed forms of `swipe`, `gesture fling`, and `gesture swipe`, and
 the `velocity` argument of `gesture rotate`. Nothing is silently reinterpreted: every removed form
-now fails with an `INVALID_ARGS` error that names its replacement.
+fails with an `INVALID_ARGS` error that names its replacement.
 
-This page is the migration for all four public surfaces — CLI, Node.js, MCP, and saved `.ad`
-recordings — plus the policy that governs the next such removal.
+Find your surface below — CLI, Node.js, MCP, or saved `.ad` recordings — and apply its rewrite. The
+last sections cover how future removals are handled.
 
 ## What changed
 
-Gesture vocabulary now separates a *throw* from a *deliberate drag*:
+Gesture commands separate a *throw* from a *deliberate drag*:
 
 - `swipe` and `gesture fling` are quick, fixed-duration directional throws. They do not take a
-  duration, because a caller-supplied duration made them something else.
+  duration; a timed movement is a drag, which is `gesture pan`.
 - `gesture pan` is the deliberate timed translation. It keeps `durationMs`.
 - `gesture rotate` derives its pacing from the requested `degrees`.
 
@@ -41,15 +41,14 @@ agent-device swipe 197 650 197 300 300
 agent-device gesture pan 197 650 0 -350 300
 ```
 
-Drop the duration instead when the timing was incidental and a throw is what you wanted. The
-resulting gesture is a 100ms fling, which travels further on a scrollable list than a 300ms drag
-over the same distance:
+If you wanted a throw and the duration did not matter, drop the duration instead. The result is a
+100ms fling, which travels further on a scrollable list than a 300ms drag over the same distance:
 
 ```bash
 agent-device swipe 197 650 197 300
 ```
 
-The error message computes this for you:
+The error message includes both rewrites with your coordinates filled in:
 
 ```
 swipe accepts 4 arguments: x1 y1 x2 y2. The trailing durationMs positional was removed:
@@ -61,9 +60,9 @@ for a default-duration swipe.
 
 `interactions.swipe`, `interactions.fling`, and `interactions.swipeGesture` no longer accept
 `durationMs`; `interactions.rotateGesture` no longer accepts `velocity`. Passing them is a type
-error at compile time and an `INVALID_ARGS` rejection at runtime — the rejection happens
-client-side, before the request reaches the daemon, so a plain JavaScript caller or a stale
-compiled build gets the error rather than a silently retimed gesture.
+error at compile time and an `INVALID_ARGS` rejection at runtime. The client rejects the call before
+it reaches the daemon, so plain JavaScript and stale compiled builds get the error rather than a
+silently retimed gesture.
 
 ```ts
 // before
@@ -88,18 +87,15 @@ The `swipe`, `gesture` (`fling`, `swipe` kinds), and `gesture rotate` tool schem
 advertise `durationMs` or `velocity`, so an agent reading the schema will not produce the removed
 form. An agent that sends one anyway — from a cached schema or a memorized example — gets an
 `INVALID_ARGS` rejection that names the removed key and the command to use instead, for example
-`gesture fling does not accept durationMs; use gesture pan for timed movement`. This is the
-structured-input equivalent of the CLI error; it names the replacement command but, unlike the CLI
-and `.ad` messages, does not echo a fully-substituted rewrite, because the structured request
-carries no positional string to rewrite.
+`gesture fling does not accept durationMs; use gesture pan for timed movement`. Unlike the CLI and
+`.ad` errors, the MCP error names the replacement command without a filled-in rewrite.
 
-No MCP server configuration changes.
+You do not need to change your MCP server configuration.
 
 ## Saved `.ad` recordings
 
-`.ad` scripts keep their positional syntax: it is the same vocabulary as the CLI, and it is not
-scheduled for removal (see [Positional `.ad` syntax](#positional-ad-syntax) below). Only the removed
-arguments have to go.
+`.ad` scripts keep their positional syntax, which matches the CLI and is not scheduled for removal
+(see [Positional `.ad` syntax](#positional-ad-syntax) below). Remove only the retired arguments.
 
 A script that still carries one fails **when it is parsed**, before the replay executes any device
 action, and the error names the line:
@@ -120,18 +116,16 @@ swipe 206 650 206 300 300 --count 2 --pause-ms 200 --pattern one-way
 swipe 206 650 206 300 --count 2 --pause-ms 200 --pattern one-way
 ```
 
-A duration held in a variable (`swipe 197 650 197 300 ${DURATION}`) is reported the same way — the
-preflight counts arguments, so it does not need the value.
+A duration held in a variable (`swipe 197 650 197 300 ${DURATION}`) is reported the same way: the
+check counts arguments, so it does not need the value.
 
-**The authoritative check is the parser itself.** Every retired form is rejected when the script is
-parsed, before the replay runs any device action, so running the suite (`agent-device test <glob>`,
-or `agent-device replay <file>.ad`) finds every stale line by construction and names it — a missed
-grep can never let one reach execution. The patterns below are a bulk pre-flight to locate them
-without a device. They follow the `.ad` tokenizer: tokens are separated by any whitespace (space or
-tab), and the numeric slots accept a bare or double-quoted number or `${VAR}` — so
-`swipe\t…\t"300"` is flagged like `swipe … 300`. They still stop short of the tokenizer's rarer
-encodings (a quoted command word, backslash escapes inside a quoted token), which is why the parser,
-not the grep, is the gate.
+**Running your scripts is the definitive check.** Every retired form is rejected when the script is
+parsed, before the replay runs any device action, so `agent-device test <glob>` or
+`agent-device replay <file>.ad` finds and names every stale line. To locate them in bulk without a
+device, use the patterns below. They split tokens on any whitespace (space or tab) and match a bare
+or double-quoted number or `${VAR}` in each numeric slot, so `swipe\t…\t"300"` is flagged like
+`swipe … 300`. They miss rarer spellings, such as a quoted command word or backslash escapes inside a
+quoted token, so treat a clean grep as a first pass and the run as the proof.
 
 ```bash
 # a numeric slot: bare/quoted number (optionally signed) or ${VAR}. Requiring a
@@ -147,25 +141,23 @@ grep -rnE "\\bgesture[[:space:]]+swipe[[:space:]]+\"?[a-z-]+\"?[[:space:]]+$num"
 grep -rnE "\\bgesture[[:space:]]+rotate([[:space:]]+$num){4}" --include='*.ad' .
 ```
 
-Re-recording also produces a migrated script: the recorder writes the canonical form, so a fresh
-`open --save-script` → interact → `close` run is a valid alternative to editing by hand. Recording
-evidence is only captured from action zero, so arm at `open`; a bare `close --save-script` on a
-session that was not armed at `open` is rejected.
+Instead of editing by hand, you can re-record: the recorder writes the current form, so a fresh
+`open --save-script` → interact → `close` run produces a migrated script. Recording starts at
+`open`, so pass `--save-script` there; `close --save-script` on a session opened without it is
+rejected.
 
 ### Maestro flows
 
-Maestro `swipe` with a `duration` is **not** affected. `agent-device` runs Maestro YAML through its
-own compatibility engine, which normalizes a timed Maestro swipe to the canonical `gesture pan`
-input and preserves Maestro's fast-swipe-then-hold execution profile. Maestro flows need no
-migration.
+Maestro `swipe` with a `duration` is **not** affected, and Maestro flows need no migration.
+`agent-device` runs a timed Maestro swipe as `gesture pan` and keeps Maestro's
+fast-swipe-then-hold timing.
 
-`replay export` writes an explicit `duration: 100` — the canonical fling duration — so an exported
-flow runs at the speed the `.ad` script ran, rather than picking up Maestro's own 400ms default.
+`replay export` writes an explicit `duration: 100`, the fling duration, so an exported flow runs at
+the speed the `.ad` script ran instead of Maestro's 400ms default.
 
 ## Deprecation policy
 
-This is the process a public gesture input follows on its way out, and the bar the next removal has
-to clear:
+Before a public gesture input is removed, it goes through these steps:
 
 1. **Announce.** The input is documented as deprecated, and the release notes name the
    replacement.
@@ -176,26 +168,22 @@ to clear:
    concrete before/after per surface.
 4. **Prove the repository is clean.** A repository-wide search for the removed shape returns no hits
    in fixtures, examples, skills, docs, or tests. `agent-device` has no usage telemetry, so this
-   search — plus the migration guide's publication — is the evidence, and it is the reason the
-   removal cannot be inferred from "nobody complained".
+   search and the published migration guide are the evidence; silence from users is not.
 5. **Remove.** The input is rejected with an `INVALID_ARGS` error that states the replacement, and
-   the normalization branch and its compatibility tests are deleted in the same change. For an input
-   that can appear in a saved recording, the rejection must fire at parse time and name the line, so
-   a stale script never half-executes.
+   the compatibility path is deleted. For an input that can appear in a saved recording, the
+   rejection fires at parse time and names the line, so a stale script never half-executes.
 
 The 0.20.0 removal completed all five steps.
 
 ## Positional `.ad` syntax
 
-Positional gesture parsing in `.ad` is **not** a compatibility shim and is not scheduled for
+Positional gesture arguments in `.ad` are **not** a compatibility shim and are not scheduled for
 removal.
 
-`.ad` is a line-based script format whose syntax is the CLI's syntax. Its gesture codec —
-`gesturePayloadFromPositionals` / `gesturePayloadToPositionals` — is what defines the file format,
-not a bridge to an older one. CLI, Node.js, and MCP already send structured input directly; the
-codec's only remaining jobs are parsing CLI argv and reading and writing `.ad` lines, and both are
-the current public syntax. Replacing it with a structured payload would make recordings
-unreadable and ungreppable for no behavioral gain.
+`.ad` is a line-based script format that uses the CLI's syntax, so positional gestures are the file
+format itself, not a bridge to an older one. Node.js and MCP send structured input; the CLI and
+`.ad` files use positional arguments. Keeping `.ad` positional keeps recordings readable and
+searchable with grep.
 
 See [ADR 0013](https://github.com/callstack/agent-device/blob/main/docs/adr/0013-unified-gesture-plans.md)
 for the gesture normalization and planning model this rests on.

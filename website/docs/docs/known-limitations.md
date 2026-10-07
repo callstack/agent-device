@@ -4,61 +4,65 @@ title: Known Limitations
 
 # Known Limitations
 
-Platform constraints that affect automation behavior.
+Platform constraints that change what you see during automation, and what to do instead.
 
-## iOS: "Allow Paste" dialog suppressed under XCUITest
+## iOS: "Allow Paste" dialog never appears
 
-iOS 16+ shows an "Allow Paste" system prompt when an app reads `UIPasteboard.general` in the foreground. When an app is launched or activated through the XCUITest runner (which `agent-device` uses for iOS), the iOS runtime detects the testing context and silently grants pasteboard access — the prompt never appears.
+iOS 16+ shows an "Allow Paste" system prompt when an app reads `UIPasteboard.general` in the foreground. When `agent-device` launches or activates an iOS app, it does so through the XCUITest runner, and iOS silently grants pasteboard access in that context, so the prompt never appears.
 
-This is an Apple platform constraint that affects all XCUITest-based automation tools.
+This Apple platform constraint affects every XCUITest-based automation tool.
 
 **Workarounds:**
 
-- **Pre-fill the pasteboard** — put the text the app will read there before it reads:
+- **Pre-fill the pasteboard** with the text the app will read, before it reads:
   ```bash
   agent-device clipboard write "some text" --platform ios --udid <simulator-udid>
   ```
-- **Test the dialog manually** — the "Allow Paste" UX cannot be exercised through XCUITest-based automation.
+- **Test the dialog manually.** XCUITest-based automation cannot exercise the "Allow Paste" UX.
 
 ## iOS simulator: `simctl pbcopy` writes nothing under Xcode 27
 
-Under Xcode 27, `xcrun simctl pbcopy <udid>` exits 0 but leaves the simulator's pasteboard empty:
-it hands the simulator only a promise of the data, owned by the `simctl` process, which has exited
-by the time anything reads it. `simctl pbinfo` then lists a `Promised` item that reads back empty.
-`agent-device clipboard write` therefore writes an iOS simulator's pasteboard from the XCTest runner
-inside the device. A tvOS simulator has no pasteboard the runner can write, so it still goes
-through `simctl pbcopy`.
+Under Xcode 27, `xcrun simctl pbcopy <udid>` exits 0 but leaves the simulator's pasteboard empty.
+`simctl pbinfo` then lists a `Promised` item that reads back empty.
 
-## Android: non-ASCII text on real devices without the test IME helper
+Use `agent-device clipboard write` instead: on an iOS simulator it writes the pasteboard from inside
+the device and does not depend on `simctl pbcopy`. A tvOS simulator has no pasteboard that
+`agent-device` can write from inside the device, so `clipboard write` on tvOS still uses
+`simctl pbcopy` and is subject to this problem.
 
-`adb shell input text` (the local ASCII-only fallback) cannot inject non-ASCII text (for example Chinese characters or emoji) on any Android system image. `agent-device` ships its own headless test IME (`android-ime-helper`) that handles this natively — it also removes the visible system keyboard from snapshots entirely, which the manual-ADBKeyBoard workaround this section used to describe never did.
+## Android: non-ASCII text on real devices needs `--test-ime`
 
-- **Emulators**: the test IME activates automatically on `open`; non-ASCII `fill`/`type` just work, no setup needed.
-- **Real devices**: pass `--test-ime` to `open` to opt in (off by default on real hardware, since a stuck helper IME leaves the real keyboard unavailable until restored — `agent-device` restores the previous IME on session close and on daemon startup if a prior session crashed, and `agent-device doctor` flags a stuck test IME with the exact `adb shell ime set <id>` command to fix it manually if needed). `test` and `replay` accept the same setting on the flow command itself (`--test-ime` / `--no-test-ime`, or `testIme` in config), which applies it to the sessions each flow run opens — this is the route a Maestro `eraseText` or non-ASCII `fill` step needs when the flow owns the session.
+`adb shell input text` cannot type non-ASCII text (for example Chinese characters or emoji) on any Android system image. `agent-device` installs its own headless test IME (`android-ime-helper`) to type that text. The test IME also keeps the on-screen system keyboard out of snapshots.
 
-If a stale input session drops a `fill` commit, agent-device rebinds the helper and retries once. An unconfirmed rebind stops text entry until it can be confirmed. If keyboard restoration cannot read its recovery record, `close` reports a failure and retains the record for startup recovery.
+- **Emulators**: the test IME turns on automatically on `open`. Non-ASCII `fill` and `type` work without setup.
+- **Real devices**: pass `--test-ime` to `open` to opt in. It is off by default on real hardware because a stuck helper IME leaves the real keyboard unavailable until restored. `agent-device` restores the previous IME when the session closes, and on daemon startup if a previous session crashed. If the keyboard still looks stuck, `agent-device doctor` flags it and prints the exact `adb shell ime set <id>` command that restores it.
+- **`test` and `replay`**: pass `--test-ime` or `--no-test-ime` to the flow command, or set `testIme` in config. The setting applies to every session the flow run opens. Use this when a Maestro `eraseText` or non-ASCII `fill` step runs in a session the flow owns.
 
-If the helper cannot be installed (locked-down managed devices, some cloud providers), text entry falls back to the existing ASCII-only `adb shell input text` path and non-ASCII `fill`/`type` reports the gap.
+If a stale input session drops a `fill` commit, `agent-device` rebinds the helper and retries once. If it cannot confirm the rebind, text entry stops until it can. If keyboard restoration cannot read its recovery record, `close` reports a failure and keeps the record so startup recovery can retry.
 
-## Android: first helper install can wait on an OEM install dialog
+If the helper cannot be installed (locked-down managed devices, some cloud providers), text entry falls back to ASCII-only `adb shell input text`, and non-ASCII `fill` and `type` report that they cannot enter the text.
 
-Some OEM builds gate the first install of a package behind the system package installer and keep `adb install` open until someone confirms it on the device screen. That applies to both `agent-device` helper APKs (the snapshot helper and the test IME), one time per package: on ColorOS, reported on an OPPO Find N6, the first install needs two taps — confirm the install, then dismiss the completion screen — and every later install of the same package is silent.
+## Android: first snapshot times out waiting on an OEM install dialog
 
-An unattended first Android snapshot therefore times out with a helper install failure whose hint says to check the device screen for a pending install confirmation. Confirm the prompts on the device and retry; if no dialog is showing, restart the ADB server as the hint says.
+Some OEM builds make the first install of a package go through the system package installer, and `adb install` waits until someone confirms it on the device screen. This applies to both `agent-device` helper APKs (the snapshot helper and the test IME), once per package. On ColorOS (reported on an OPPO Find N6), the first install needs two taps: confirm the install, then dismiss the completion screen. Later installs of the same package are silent.
+
+On such a device, an unattended first Android snapshot times out with a helper install failure. Its hint tells you to check the device screen for a pending install confirmation. Confirm the prompts on the device and retry. If no dialog is showing, restart the ADB server as the hint says.
 
 ## Android: WSL needs Linux platform-tools
 
-Under WSL, the Windows `adb.exe` (for example from an `ANDROID_HOME` under `/mnt/c`) answers `adb version` but resolves every host path it is given as a Windows path, so recordings, pulls, and installs fail. Install Linux Android platform-tools inside WSL, put them first on `PATH`, and point `ANDROID_HOME` at a Linux SDK. `agent-device doctor` fails the toolchain check with reason `android_adb_windows_binary_on_posix_host` when `adb` reports a Windows install path or reports that it is running on Windows. The same check catches a Windows `adb.exe` reached from macOS or Linux through WSL interop or Wine.
+Under WSL, the Windows `adb.exe` (for example from an `ANDROID_HOME` under `/mnt/c`) answers `adb version` but treats every host path as a Windows path, so recordings, pulls, and installs fail.
+
+Install Linux Android platform-tools inside WSL, put them first on `PATH`, and point `ANDROID_HOME` at a Linux SDK. `agent-device doctor` fails the toolchain check with reason `android_adb_windows_binary_on_posix_host` when `adb` reports a Windows install path or reports that it is running on Windows. The same check catches a Windows `adb.exe` reached from macOS or Linux through WSL interop or Wine.
 
 ## Android: no clipboard access over adb on Android 16
 
-`agent-device` reaches the Android clipboard through `adb shell cmd clipboard`. That command works only on a build whose clipboard service implements a shell command, and AOSP's `ClipboardService` does not: the class carries no shell command at `android13-release`, `android14-release`, `android15-release` or `android16-release`, nor on current AOSP `main`, and a physical device runs that same class. On Android 16 (API 36) every `cmd clipboard get text` and `cmd clipboard set text <text>` call is answered by the framework's default `Binder.handleShellCommand` — `No shell command implementation.` on stderr, exit status **0** — so the clipboard is never touched even though the call reports success.
+On Android 16 (API 36), `adb shell cmd clipboard` exits with status **0** but never touches the clipboard; it prints `No shell command implementation.` on stderr. AOSP's clipboard service has no shell command implementation (not at `android13-release` through `android16-release`, nor on AOSP `main`), and physical devices ship the same service.
 
-`agent-device` asks each device once whether its clipboard service answers, and refuses rather than repeating that silence:
+`agent-device` checks each device once and refuses instead of reporting a false success:
 
-- `capabilities` omits `clipboard` on such a device;
-- `clipboard read` and `clipboard write` fail with `UNSUPPORTED_OPERATION` and a hint naming the missing shell command and the substitute, instead of answering `text: ""` and "Clipboard updated".
+- `capabilities` omits `clipboard` on such a device.
+- `clipboard read` and `clipboard write` fail with `UNSUPPORTED_OPERATION` and a hint naming the missing shell command and the substitute, instead of returning `text: ""` or "Clipboard updated".
 
-**Workaround:** verify a copy flow from the app side — trigger the app's copy action, paste into a focused text field, and read that field back with `snapshot`. It proves the app's own clipboard write, which an adb-side read never did.
+**Workaround:** verify a copy flow from the app side. Trigger the app's copy action, paste into a focused text field, and read that field back with `snapshot`. This proves the app's own clipboard write, which an adb-side read never could.
 
-On a build that does implement `cmd clipboard`, note that Android 10+ restricts clipboard reads to the app with input focus or the current input method service (adb is neither), so an adb-side read can still come back blank there. `agent-device` reports the empty clipboard it was given rather than guessing at a denial it has not observed; if you have such a build, file it with the output of `adb shell cmd clipboard get text; echo rc=$?`.
+On a build that does implement `cmd clipboard`, Android 10+ still restricts clipboard reads to the app with input focus or the current input method service, and adb is neither. An adb-side read can therefore come back blank. `agent-device` reports the empty clipboard it received rather than guessing at a denial. If you hit this on such a build, file an issue with the output of `adb shell cmd clipboard get text; echo rc=$?`.

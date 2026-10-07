@@ -4,15 +4,17 @@ title: Quick Start
 
 # Quick Start
 
-For client-specific setup in Cursor, Codex, Claude Code, Windsurf, Cline, Goose, and other coding agents, see [AI Agent Setup](/docs/agent-setup). For a single text bundle that agents can ingest, use [llms-full.txt](https://oss.callstack.com/agent-device/llms-full.txt).
+Open an app, read its UI, and interact with it from the command line.
 
-Every device automation follows this pattern:
+Before you start, [install `agent-device`](/docs/installation) and the platform tools for your target: Xcode for iOS, the Android SDK and ADB for Android, or the HarmonyOS Command Line Tools for HarmonyOS. To set up Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent, see [AI Agent Setup](/docs/agent-setup). To give an agent the whole documentation as one text file, use [llms-full.txt](https://oss.callstack.com/agent-device/llms-full.txt).
+
+Device automation follows this pattern:
 
 ```bash
 # 1. Discover the installed app identifier when needed
 agent-device apps --platform ios # or android or harmonyos
 
-# 2. Navigate
+# 2. Open the app
 agent-device open SampleApp --platform ios # or android or harmonyos
 
 # 3. Snapshot to get element refs
@@ -25,18 +27,18 @@ agent-device snapshot -i
 # 4. Interact using refs
 agent-device click @e2
 
-# 5. Re-snapshot before next interactions; if a target only appears in an off-screen summary, scroll and re-snapshot first
+# 5. Snapshot again before the next interaction; if a target only appears in an off-screen summary, scroll and snapshot again first
 agent-device snapshot -i
 
-# 6. Optional: see structural changes since last baseline
+# 6. Optional: see what changed since the last snapshot
 agent-device diff snapshot
 # or, from snapshot-focused help/examples:
 agent-device snapshot --diff
 ```
 
-React Native dev or debug builds often show warning or error overlays that can intercept taps or hide the real UI state. Check for them near app open and after major transitions. If they are not the requested behavior, dismiss them and continue, but mention them in your summary if you saw them.
+React Native dev and debug builds often show warning or error overlays that can intercept taps or hide the real UI. Check for them after opening the app and after major transitions. If they aren't what you're testing, dismiss them and continue, and mention them in your summary.
 
-Boot target if there is no ready device/simulator:
+If no device, simulator, or emulator is running, boot one:
 
 ```bash
 agent-device boot --platform ios # or android
@@ -44,7 +46,7 @@ agent-device boot --platform ios # or android
 agent-device boot --platform android --device Pixel_9_Pro_XL
 # Android headless emulator boot (AVD name):
 agent-device boot --platform android --device Pixel_9_Pro_XL --headless
-# Turn off a simulator/emulator when finished:
+# Shut down a simulator or emulator when finished:
 agent-device shutdown --platform ios
 agent-device shutdown --platform android --device Pixel_9_Pro_XL
 ```
@@ -53,38 +55,39 @@ agent-device shutdown --platform android --device Pixel_9_Pro_XL
 
 ```bash
 agent-device apps --platform android    # Discover the exact package name when unsure
-agent-device capabilities --platform android # Discover target-supported commands for dynamic integrations
+agent-device capabilities --platform android # List the commands this target supports
 agent-device open SampleApp
 agent-device snapshot -i                 # Get visible interactive elements with refs
-agent-device diff snapshot               # Preferred exploration form for structural deltas
+agent-device diff snapshot               # Show what changed since the last snapshot
 agent-device click @e2                   # Click by ref
 agent-device fill @e3 "test@example.com" # Clear then type (Android verifies and retries once if needed)
 agent-device press @e3
 agent-device type " more" --delay-ms 80  # Append into the already focused field
 agent-device get text @e1                # Get text content
-agent-device screenshot page.png         # Save to specific path
-agent-device install com.example.app ./build/app.apk     # Install app binary in-place
+agent-device screenshot page.png         # Save to a specific path
+agent-device install com.example.app ./build/app.apk     # Install over the existing app
 agent-device install-from-source https://example.com/builds/app.apk --platform android
-agent-device reinstall com.example.app ./build/app.apk   # Fresh-state uninstall + install
+agent-device reinstall com.example.app ./build/app.apk   # Uninstall, then install with fresh state
 agent-device shutdown --platform android --device Pixel_9_Pro_XL
 agent-device close
 ```
 
-`install`/`reinstall` binary format support:
+`install` and `reinstall` accept these app formats:
+
 - Android: `.apk` and `.aab`
 - iOS: `.app` and `.ipa`
 - HarmonyOS: `.hap`
 - `.aab` requires `bundletool` in `PATH`, or `AGENT_DEVICE_BUNDLETOOL_JAR=<absolute-path-to-bundletool-all.jar>` with `java` in `PATH`.
 - `.aab` installs use bundletool `build-apks --mode universal`.
-- `.ipa` installs extract `Payload/*.app`; if multiple app bundles exist, `<app>` selects the target by bundle id or bundle name.
-- Use `install-from-source` for existing artifact URLs, including direct Android `.apk`/`.aab` and iOS `.ipa` URLs, and archives with one installable artifact. Use `install-from-source --github-actions-artifact <owner/repo:artifact>` for daemon-resolved GitHub Actions artifacts.
+- `.ipa` installs extract `Payload/*.app`. If the archive contains several app bundles, `<app>` selects one by bundle ID or bundle name.
+- Use `install-from-source` to install from a URL: a direct Android `.apk`/`.aab` or iOS `.ipa` link, or an archive containing one installable artifact. For a GitHub Actions artifact, use `install-from-source --github-actions-artifact <owner/repo:artifact>`.
 
-If `open` fails because no booted simulator/emulator/device is available, run `boot --platform ios|android` and retry.
-If `open` fails because the app id is wrong or missing, run `apps` and retry with the discovered package or bundle id instead of guessing.
+If `open` fails because no simulator, emulator, or device is booted, run `boot --platform ios|android` and retry.
+If `open` fails because the app ID is wrong or missing, run `apps` and retry with the package name or bundle ID it lists.
 
-## Fast batching
+## Run several steps in one command
 
-When an agent already knows a short sequence of actions, batch them:
+When an agent already knows a short sequence of actions, send them as one batch:
 
 ```bash
 agent-device batch \
@@ -114,11 +117,11 @@ Example batch payload for a known chat flow:
 ]
 ```
 
-See [Batching](/docs/batching) for payload format, failure handling, and best practices.
+See [Batching](/docs/batching) for the payload format, failure handling, and best practices.
 
-## Semantic discovery
+## Find elements without refs
 
-Use `find` for human-readable targeting without refs:
+Use `find` to target elements by visible text, label, or role:
 
 ```bash
 agent-device find "Sign In" click
@@ -126,13 +129,13 @@ agent-device find label "Email" fill "user@example.com"
 agent-device find role button click
 ```
 
-## Replay
+## Replay a flow
 
-For deterministic replay scripts and E2E guidance, see [Replay & E2E](/docs/replay-e2e).
+To record and replay deterministic scripts, see [Replay & E2E](/docs/replay-e2e).
 
-## Scrolling
+## Scroll
 
-Navigate content that extends beyond the viewport:
+Scroll to reach content outside the viewport:
 
 ```bash
 agent-device scroll down 0.5            # Scroll down half screen
@@ -140,9 +143,8 @@ agent-device scroll up 0.3              # Scroll up 30%
 agent-device scroll down --pixels 320   # Scroll down by a fixed distance
 ```
 
-## Settings helpers
+## Change device settings
 
-Toggle device settings directly:
 
 ```bash
 agent-device settings wifi on
@@ -154,15 +156,15 @@ agent-device settings location set 37.3349 -122.009
 agent-device settings permission grant camera
 ```
 
-Note: iOS `settings` commands are simulator-only. On macOS, only `settings appearance ...` and `settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>` are supported.
+iOS `settings` commands work on simulators only. On macOS, only `settings appearance ...` and `settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>` are supported.
 
-## JSON output
+## Get JSON output
 
-For programmatic parsing in scripts:
+Add `--json` to parse output in scripts:
 
 ```bash
 agent-device snapshot --json
 agent-device get text @e1 --json
 ```
 
-Note: The default snapshot text is an agent-facing, token-efficient view for planning and targeting actions. Use `--raw` or `--json` when you need the full provider tree.
+The default snapshot text is a compact view meant for agents to plan and target actions. Use `--raw` or `--json` when you need the full accessibility tree.

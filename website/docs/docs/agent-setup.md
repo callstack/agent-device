@@ -5,13 +5,11 @@ description: Configure Cursor, Codex, Claude Code, Windsurf, Cline, Goose, iOS S
 
 # AI Agent Setup
 
-`agent-device` is built for AI agents, but humans usually install it, grant device permissions, and decide which agent client should use it.
+Set up Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent to drive mobile, TV, desktop, and web apps with `agent-device`, through skills, project rules, or MCP.
 
-Use this page to wire Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent into mobile, TV, desktop, and web app verification. It covers skills, project rules, and MCP setup for React Native QA, Expo app verification, iOS Simulator automation, Android Emulator automation, tvOS checks, Android TV checks, Vega OS VVD control, web browser sessions, debugging, profiling, and exploratory QA.
+In short: install the CLI, let the agent start with the requested app, and have it read the installed CLI help only for specialized work or when a command is unclear. MCP tools run through the same daemon as the CLI.
 
-The short version: install the CLI, let the agent start normal work with the requested app, and use version-matched help only for specialized work or an unclear command shape. MCP tools use command contracts backed by the same `AgentDeviceClient` execution path as the CLI adapters.
-
-## Prerequisite: install the CLI
+## Install the CLI
 
 ```bash
 npm install -g agent-device@latest
@@ -19,32 +17,32 @@ agent-device --version
 agent-device help workflow
 ```
 
-For one-off human use without a global install:
+To try it once without a global install:
 
 ```bash
 npx agent-device --version
 npx agent-device help workflow
 ```
 
-Global install is better for normal agent workflows because repeated commands and terminal sessions resolve to one stable version. Project-local installs are also good when you want a lockfile-pinned agent-device version.
+Use a global install for agent workflows so every command and terminal session uses the same version. A project-local install also works when you want the version pinned in your lockfile.
 
-Avoid telling agents to choose an npm version or run `npx -y agent-device@latest` autonomously: it fetches and executes a mutable npm package without a human prompt. For unattended agent use, prefer a trusted installed binary, a project-local install, or a version supplied by the user or project config.
+Don't tell agents to pick an npm version or run `npx -y agent-device@latest` on their own: that downloads and runs whatever npm serves, without asking you. For unattended agent use, give the agent a trusted installed binary, a project-local install, or a version pinned by you or your project config.
 
 For Node, Xcode, Android SDK, macOS, and iOS device prerequisites, see [Installation](/docs/installation).
 
 ## Install the skills
 
-Install the CLI first, then install the repository skills when your agent runtime supports them:
+If your agent client supports skills, install them after the CLI:
 
 ```bash
 npx skills add callstack/agent-device
 ```
 
-Skills are distributed from the GitHub repository rather than the npm package. The [agent-device skill](https://github.com/callstack/agent-device/blob/main/skills/agent-device/SKILL.md) is the canonical router for skill-aware clients. For focused simulator work, use the [iOS Simulator skill](https://github.com/callstack/agent-device/blob/main/skills/ios-simulator/SKILL.md) or [Android Emulator skill](https://github.com/callstack/agent-device/blob/main/skills/android-emulator/SKILL.md). They start normal work directly and route agents to the separately installed, version-matched CLI help only when the task is specialized or a command shape is unclear.
+Skills come from the GitHub repository, not the npm package. The [agent-device skill](https://github.com/callstack/agent-device/blob/main/skills/agent-device/SKILL.md) is the main entry point. For simulator-only work, use the [iOS Simulator skill](https://github.com/callstack/agent-device/blob/main/skills/ios-simulator/SKILL.md) or [Android Emulator skill](https://github.com/callstack/agent-device/blob/main/skills/android-emulator/SKILL.md). Skills tell the agent to start work directly and to read the installed CLI help only when the task is specialized or a command is unclear. Because the help ships with the CLI, it always matches your installed version.
 
 ## Recommended agent rule
 
-Add this as a project rule, custom instruction, or skill equivalent when your agent client supports it:
+Add this as a project rule or custom instruction if your agent client supports one:
 
 ```text
 Use agent-device only for app/device automation tasks. For a normal app-driving task, start immediately. Do not probe first with `--help`, `--version`, `devices`, `appstate`, `snapshot`, or `screenshot`; open the requested app in the foreground and continue from its initial interactive snapshot. For TV, Fire TV, or Vega OS tasks, read `agent-device help tv`. For exploratory QA, read `agent-device help dogfood`. For logs, network, audio, traces, or runtime failures, read `agent-device help debugging`. For React Native component trees, props/state/hooks, slow renders, or rerenders, read `agent-device help react-devtools`. For React Native JavaScript heap growth, heap snapshots, allocation hotspots, or retained-object leaks, read `agent-device help cdp`. For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to React DevTools or debugging evidence, read `agent-device help react-native`.
@@ -54,17 +52,17 @@ Use MCP tools or the CLI in the integrated terminal. If `agent-device` is not on
 
 ## MCP server
 
-`agent-device mcp` starts the official stdio MCP server. It exposes direct structured tools for installed CLI commands. Tools run through command contracts and `AgentDeviceClient`; local-only workflows stay CLI-only rather than subprocess fallbacks.
+`agent-device mcp` starts the stdio MCP server. It exposes installed CLI commands as structured tools. Some local workflows are CLI-only and have no MCP tool.
 
-For web automation, MCP tools can target `platform: "web"` after the managed backend is available, but `agent-device web setup` and `agent-device web doctor` are CLI-only. Run setup from a terminal in the same effective state directory before asking an MCP client to drive a browser session.
+For web automation, MCP tools can target `platform: "web"` once the managed browser backend is set up, but `agent-device web setup` and `agent-device web doctor` are CLI-only. Run setup from a terminal that uses the same state directory as the MCP server before you ask an MCP client to drive a browser session.
 
-The server also ships its own guidance, so MCP-only clients do not depend on a separately installed skill: the handshake (`initialize` and `server/discover`) returns compact `instructions` with the workflow card (start with `open`, act with `settle: true`, verify, `close`, ref fidelity, sparse-AX recovery), and an MCP-only `help` tool returns the same guides as `agent-device help <topic|command>` on demand. `help` is not a startup step; agents call it for specialized work (gestures, scripting, TV, macOS, web, remote, debugging) or an unclear command shape.
+MCP-only clients don't need a separately installed skill. When a client connects (`initialize` and `server/discover`), the server returns short `instructions` with the core workflow: start with `open`, act with `settle: true`, verify, `close`, how to keep refs accurate, and how to recover when the accessibility tree is sparse. An MCP-only `help` tool returns the same guides as `agent-device help <topic|command>`. Agents don't call `help` at startup; they call it for specialized work (gestures, scripting, TV, macOS, web, remote, debugging) or when a command is unclear.
 
-Tool execution failures are returned as MCP tool results with `isError: true`; clients and agents should inspect the tool result, not only the successful JSON-RPC envelope.
+When a tool fails, the server returns an MCP tool result with `isError: true`. Check the tool result, not only whether the JSON-RPC call succeeded.
 
-MCP clients must not use this server as a generic shell runner. If the CLI is missing, agents should ask a human before installing or updating packages, reconnect the server after setup, and retry the intended app-driving command without adding version/help probes.
+The server does not run arbitrary shell commands. If the CLI is missing, the agent should ask you before installing or updating packages, reconnect the server after setup, and retry the original app-driving command without adding version or help probes.
 
-Global install configuration:
+Configuration for a global install:
 
 ```json
 {
@@ -77,7 +75,7 @@ Global install configuration:
 }
 ```
 
-No global install variant. Pin a user- or project-selected package version for unattended agent use:
+Without a global install, pin a version you've reviewed for unattended agent use:
 
 ```json
 {
@@ -90,13 +88,13 @@ No global install variant. Pin a user- or project-selected package version for u
 }
 ```
 
-Registry metadata uses MCP name `io.github.callstack/agent-device`, npm package `agent-device`, stdio transport, `mcpName` package verification, `server.json`, `glama.json`, and `smithery.yaml`. Glama lists the server at [callstack/agent-device](https://glama.ai/mcp/servers/callstack/agent-device).
+In MCP registries, the server is listed as `io.github.callstack/agent-device` (npm package `agent-device`, stdio transport). Glama lists it at [callstack/agent-device](https://glama.ai/mcp/servers/callstack/agent-device).
 
 ## Cursor
 
-Cursor works well with either the plain CLI or MCP tools. Use the CLI path when you want the most auditable setup and terminal-visible commands. Add MCP when you want Cursor Agent to discover structured `agent-device` tools directly from chat.
+Cursor can use the CLI or MCP tools. Use the CLI when you want every command visible in the terminal. Add MCP when you want Cursor Agent to discover `agent-device` tools directly from chat.
 
-### Cursor path A: CLI only
+### Cursor: use the CLI
 
 Create a project rule:
 
@@ -130,9 +128,9 @@ Then ask Cursor Agent to run:
 agent-device open <app-or-url> --platform ios --foreground
 ```
 
-### Cursor path B: MCP tools
+### Cursor: use MCP tools
 
-Create project MCP config:
+Create a project MCP config:
 
 ```bash
 mkdir -p .cursor
@@ -148,13 +146,13 @@ cat > .cursor/mcp.json <<'JSON'
 JSON
 ```
 
-Restart Cursor or reconnect MCP from Cursor settings, then ask Cursor Agent:
+Restart Cursor or reconnect MCP in Cursor settings, then ask Cursor Agent:
 
 ```text
 Use the agent-device MCP tools to inspect the iOS app. Open the app, take an interactive snapshot, act on visible refs/selectors, verify with another snapshot, and close the session.
 ```
 
-If the MCP server fails because Cursor cannot find the global binary, use the absolute binary path in `.cursor/mcp.json`:
+If the MCP server fails to start because Cursor can't find the global binary, use the absolute binary path in `.cursor/mcp.json`:
 
 ```json
 {
@@ -169,21 +167,21 @@ If the MCP server fails because Cursor cannot find the global binary, use the ab
 
 ## Codex
 
-Put the recommended rule in `AGENTS.md` or the project instructions. Let Codex run `agent-device` in the terminal:
+Put the [recommended rule](#recommended-agent-rule) in `AGENTS.md` or the project instructions, then let Codex run `agent-device` in the terminal:
 
 ```bash
 agent-device open <app-or-url> --platform ios --foreground
 ```
 
-Some agent clients run commands in an environment that differs from the user's normal install shell. If the user installed `agent-device` globally but the agent cannot find it, resolve the command the same way the user would from a normal terminal session, then use the absolute binary path for the intended `open` and subsequent commands. This may require inspecting shell startup behavior or package-manager/global bin locations; do not assume the agent process `PATH` is the user's `PATH`.
+Codex may run commands with a different `PATH` than your normal shell. If you installed `agent-device` globally but Codex can't find it, run `command -v agent-device` in your own terminal and give Codex that absolute path for `open` and later commands.
 
-For reviews or planning-only tasks, tell the agent not to run devices unless explicitly requested.
+For reviews or planning-only tasks, tell the agent not to touch devices unless you ask.
 
 ## Claude Code
 
-Claude Code works through the terminal CLI and through the VS Code extension panel. The VS Code extension can use MCP servers configured by the Claude CLI and managed with `/mcp`.
+Claude Code can use `agent-device` from the terminal or from the VS Code extension. The VS Code extension uses MCP servers you add with the `claude` CLI and manage with `/mcp`.
 
-### Claude path A: CLI only
+### Claude Code: use the CLI
 
 Put this in `CLAUDE.md`:
 
@@ -213,7 +211,7 @@ Then ask Claude Code to run:
 agent-device open <app-or-url> --platform android --foreground
 ```
 
-### Claude path B: MCP tools
+### Claude Code: use MCP tools
 
 Add a user-scoped server:
 
@@ -240,32 +238,30 @@ Confirm `agent-device` is connected, then ask:
 Use the agent-device MCP tools to verify the app. Open the app, take an interactive snapshot, use refs/selectors for actions, verify with another snapshot, and close the session.
 ```
 
-If Claude cannot start the MCP server because the extension process cannot find the global binary, remove and re-add it with an absolute path:
+If Claude Code can't start the MCP server because the extension can't find the global binary, remove the server and add it again with an absolute path:
 
 ```bash
 claude mcp remove agent-device
 claude mcp add --transport stdio --scope user agent-device -- /absolute/path/to/agent-device mcp
 ```
 
-The same CLI commands remain available in the integrated terminal for long-running or manual workflows.
+You can still run CLI commands in the integrated terminal for long-running or manual workflows.
 
 ## Windsurf, Cline, Goose, and other MCP clients
 
-Use the [MCP server](#mcp-server) configuration when the client supports `mcpServers`, then tell the agent to use MCP tools or terminal CLI commands for device workflows.
+If the client supports `mcpServers`, use the [MCP server](#mcp-server) configuration, then tell the agent to use MCP tools or terminal CLI commands for device work.
 
-If the client has project rules or custom instructions, add the recommended agent rule above. If it does not, ask the agent to open the requested app and continue from the initial interactive snapshot; introduce a help topic only when the task is specialized or a command shape is unclear.
+If the client supports project rules or custom instructions, add the [recommended agent rule](#recommended-agent-rule). If it doesn't, ask the agent to open the requested app and continue from the initial interactive snapshot; point it to a help topic only when the task is specialized or a command is unclear.
 
-## Why this setup works
+## Related pages
 
-The CLI stays the auditable automation surface, installed help stays version-matched with the commands, skills and rules route agents toward the right help topics, and MCP gives compatible clients direct structured tools backed by the same daemon/client implementation.
-
-For the broader positioning, supported targets, observability features, and how `agent-device` differs from scripted test frameworks, see [Introduction](/docs/introduction). For exact command groups and platform behavior, see [Commands](/docs/commands).
+For supported targets, evidence features, and how `agent-device` differs from scripted test frameworks, see [Introduction](/docs/introduction). For command groups and platform behavior, see [Commands](/docs/commands).
 
 For the local execution model, permissions, artifacts, and sensitive data guidance, see [Security & Trust](/docs/security-trust).
 
 ## Agent-readable docs
 
-Use [llms-full.txt](https://oss.callstack.com/agent-device/llms-full.txt) when an agent needs a single text bundle of the current docs. The installed CLI remains authoritative for exact command syntax:
+Use [llms-full.txt](https://oss.callstack.com/agent-device/llms-full.txt) when an agent needs the whole documentation as one text file. For exact command syntax, the installed CLI help is authoritative:
 
 ```bash
 agent-device help
