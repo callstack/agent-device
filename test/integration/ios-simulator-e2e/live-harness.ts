@@ -13,6 +13,7 @@ import {
 } from '../live-device-e2e/runtime.ts';
 import type { IosSimulatorBehaviorId } from './behavior-coverage.ts';
 import { liveCommandsForScenario } from './coverage.ts';
+import { isObservationPreventedStepMiss } from './live-step-retry-policy.ts';
 import { liveBehaviorsForScenario, writeCoverageReport } from './live-coverage-report.ts';
 
 export { assertCoverageComplete, writeCoverageReport } from './live-coverage-report.ts';
@@ -67,7 +68,26 @@ const harness = createLiveDeviceHarness<LiveContext, IosSimulatorBehaviorId>({
   writeCoverageReport,
 });
 
-export const { runScenario, runStep, sessionExists, verifyBehavior, verifyCommand } = harness;
+/**
+ * Every iOS live step carries the observation-prevented re-issue policy (#2491): one runner
+ * restart or bridge rebuild re-issues its own wait instead of failing the job, while a readable
+ * miss (target absent, budget exhausted after a readable capture, wrong asserted value) fails at
+ * once exactly as before. Steps that already own a miss policy (`allowFailure` / `expectFailure`,
+ * like the destination-wait and cleanup retry loops) are exempt inside the harness itself.
+ */
+export function runStep(
+  context: LiveContext,
+  step: string,
+  args: string[],
+  options: Parameters<typeof harness.runStep>[3] = {},
+): Promise<CliJsonResult> {
+  return harness.runStep(context, step, args, {
+    reattemptInfrastructureMiss: isObservationPreventedStepMiss,
+    ...options,
+  });
+}
+
+export const { runScenario, sessionExists, verifyBehavior, verifyCommand } = harness;
 
 export function verifyNestedReplayCommand(
   context: LiveContext,

@@ -65,8 +65,47 @@ type RunStepOptions = {
   allowFailure?: boolean;
   commonFlags?: boolean;
   expectFailure?: boolean;
+  /**
+   * A platform's typed classifier for a failed step whose result says the DEVICE prevented the
+   * observation rather than the product answering wrongly (a wait whose own `details.reason` is
+   * an observation-prevented verdict). When it answers true, the step is re-issued and only the
+   * last attempt is asserted, so one runner restart or bridge rebuild costs a repeat of the wait,
+   * not the job. A step that already owns a miss policy (`allowFailure` / `expectFailure`) never
+   * gets this layer under it, and a miss the classifier refuses fails exactly as before.
+   */
+  reattemptInfrastructureMiss?: (result: CliJsonResult) => boolean;
   timeoutMs?: number;
 };
+
+/** Issues one step gets when its own miss says infrastructure prevented the observation. */
+const INFRASTRUCTURE_MISS_ISSUES = 2;
+
+/**
+ * The re-issue policy a step runs under. A step that already owns a miss policy is issued once:
+ * its caller reads the failed result or expects failure, and a silent second issue would rewrite
+ * what that policy observed.
+ */
+function reattemptPolicyFor(
+  stepOptions: RunStepOptions,
+): ((result: CliJsonResult) => boolean) | undefined {
+  return stepOptions.allowFailure === true || stepOptions.expectFailure === true
+    ? undefined
+    : stepOptions.reattemptInfrastructureMiss;
+}
+
+/** Whether this failed issue of the step is one the platform policy re-issues instead of asserting. */
+function willReissueMiss(
+  result: CliJsonResult,
+  reattempt: ((result: CliJsonResult) => boolean) | undefined,
+  issue: number,
+): boolean {
+  return (
+    result.status !== 0 &&
+    reattempt !== undefined &&
+    issue < INFRASTRUCTURE_MISS_ISSUES &&
+    reattempt(result)
+  );
+}
 
 export function createLiveDeviceContext<BehaviorId extends string>(options: {
   artifactRoot: string;
@@ -168,6 +207,32 @@ export function createLiveDeviceHarness<
     args: string[],
     stepOptions: RunStepOptions = {},
   ): Promise<CliJsonResult> {
+    const reattempt = reattemptPolicyFor(stepOptions);
+    for (let issue = 1; ; issue += 1) {
+      const issuedStep = issue === 1 ? step : `${step} (re-issue after observation-prevented miss)`;
+      const { result, fullArgs } = await issueStep(context, issuedStep, args, stepOptions);
+      // A miss the policy will re-issue keeps its step record but writes no failure evidence and
+      // keeps its error to itself: the evidence and the verdict belong to the final issue, which
+      // is the only outcome this step is judged on.
+      if (willReissueMiss(result, reattempt, issue)) continue;
+      await assertStepOutcome(
+        context,
+        issuedStep,
+        fullArgs,
+        result,
+        stepOptions.expectFailure === true && result.status !== 0,
+        stepOptions,
+      );
+      return result;
+    }
+  }
+
+  async function issueStep(
+    context: Context,
+    step: string,
+    args: string[],
+    stepOptions: RunStepOptions,
+  ): Promise<{ result: CliJsonResult; fullArgs: string[] }> {
     const fullArgs = buildStepArgs(context, args, stepOptions);
     const startedAt = Date.now();
     const result = await (options.runCli ?? runBuiltCliJson)(fullArgs, context.env, {
@@ -185,9 +250,8 @@ export function createLiveDeviceHarness<
       status: result.status,
       step,
     });
-    await assertStepOutcome(context, step, fullArgs, result, failedAsExpected, stepOptions);
     updateSessionState(context, args[0], result.status);
-    return result;
+    return { result, fullArgs };
   }
 
   function buildStepArgs(

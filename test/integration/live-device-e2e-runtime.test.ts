@@ -161,6 +161,130 @@ test('a successful scenario has no diagnostic capture', async () => {
   assert.equal(fs.existsSync(path.join(context.artifactDir, 'failed-step.txt')), false);
 });
 
+// #2491: the lane re-issues one step whose own typed miss says observation was prevented, so a
+// single runner restart costs a repeat of the wait instead of the job. The classifier is injected
+// so these cases pin the harness mechanism, and `live-step-retry-policy.ts`'s tests pin the
+// verdicts the iOS lane feeds it.
+
+function reissueFixture(options: {
+  /** Statuses served per issue of the step; the last one repeats. */
+  statuses: number[];
+}) {
+  const context = createLiveDeviceContext<string>({
+    artifactRoot: mkdtempForTestSync('step-reissue-'),
+    session: 'owned-fixture',
+  });
+  const calls: string[][] = [];
+  let issues = 0;
+  const harness = createLiveDeviceHarness<typeof context, string>({
+    behaviorsForScenario: () => [],
+    commandsForScenario: () => [],
+    commonFlags: (_current, args) => [...args, '--json'],
+    runCli: async (args): Promise<CliJsonResult> => {
+      calls.push(args);
+      if (args[0] === 'screenshot' || args[0] === 'snapshot') {
+        if (args[0] === 'screenshot') fs.writeFileSync(args[1]!, 'fixture-png');
+        return { status: 0, stdout: '', stderr: '', json: { success: true, data: { nodes: [] } } };
+      }
+      issues += 1;
+      const status = options.statuses[Math.min(issues, options.statuses.length) - 1]!;
+      return status === 0
+        ? { status: 0, stdout: '', stderr: '', json: { success: true } }
+        : {
+            status: 1,
+            stdout: '',
+            stderr: '',
+            json: { error: { code: 'COMMAND_FAILED', details: { reason: 'wait_stub' } } },
+          };
+    },
+    writeCoverageReport: () => {},
+  });
+  return { context, harness, calls };
+}
+
+test('an observation-prevented miss re-issues the step once and the step passes', async () => {
+  let classified = 0;
+  const { context, harness, calls } = reissueFixture({ statuses: [1, 0] });
+  const result = await harness.runStep(context, 'wait for text', ['wait', 'text', 'Home'], {
+    reattemptInfrastructureMiss: () => {
+      classified += 1;
+      return true;
+    },
+  });
+  assert.equal(result.status, 0);
+  assert.equal(classified, 1);
+  assert.equal(calls.filter((args) => args[0] === 'wait').length, 2);
+  assert.deepEqual(
+    context.stepHistory
+      .filter((record) => record.commandName === 'wait')
+      .map((record) => [record.step, record.status, record.accepted]),
+    [
+      ['wait for text', 1, false],
+      ['wait for text (re-issue after observation-prevented miss)', 0, true],
+    ],
+  );
+});
+
+test('a re-issued miss writes no failure evidence; the final issue owns it', async () => {
+  const { context, harness, calls } = reissueFixture({ statuses: [1, 1] });
+  await assert.rejects(
+    harness.runStep(context, 'wait for text', ['wait', 'text', 'Home'], {
+      reattemptInfrastructureMiss: () => true,
+    }),
+    /re-issue after observation-prevented miss/,
+  );
+  assert.equal(calls.filter((args) => args[0] === 'wait').length, 2);
+  // Evidence capture ran once, for the issue the step is judged on, and its report names that
+  // issue rather than the one the policy already accepted to repeat.
+  assert.equal(calls.filter((args) => args[0] === 'screenshot').length, 1);
+  const report = fs.readFileSync(path.join(context.artifactDir, 'failed-step.txt'), 'utf8');
+  assert.match(report, /re-issue after observation-prevented miss/);
+});
+
+test('a miss the classifier refuses fails at once with the recorded evidence', async () => {
+  const { context, harness, calls } = reissueFixture({ statuses: [1] });
+  await assert.rejects(
+    harness.runStep(context, 'wait for text', ['wait', 'text', 'Home'], {
+      reattemptInfrastructureMiss: () => false,
+    }),
+    /step: wait for text/,
+  );
+  assert.equal(calls.filter((args) => args[0] === 'wait').length, 1);
+  assert.ok(fs.existsSync(path.join(context.artifactDir, 'failed-step.txt')));
+});
+
+test('a successful step never consults the re-attribution classifier', async () => {
+  let classified = 0;
+  const { context, harness, calls } = reissueFixture({ statuses: [0] });
+  await harness.runStep(context, 'wait for text', ['wait', 'text', 'Home'], {
+    reattemptInfrastructureMiss: () => {
+      classified += 1;
+      return true;
+    },
+  });
+  assert.equal(classified, 0);
+  assert.equal(calls.filter((args) => args[0] === 'wait').length, 1);
+});
+
+test('a step with its own allowFailure policy is issued once even when the classifier would retry', async () => {
+  const { context, harness, calls } = reissueFixture({ statuses: [1] });
+  const result = await harness.runStep(context, 'probe', ['is', 'visible', 'id="canary"'], {
+    allowFailure: true,
+    reattemptInfrastructureMiss: () => true,
+  });
+  assert.equal(result.status, 1);
+  assert.equal(calls.filter((args) => args[0] === 'is').length, 1);
+});
+
+test('a step with expectFailure is issued once even when the classifier would retry', async () => {
+  const { context, harness, calls } = reissueFixture({ statuses: [1] });
+  await harness.runStep(context, 'refusal', ['capabilities', '--x'], {
+    expectFailure: true,
+    reattemptInfrastructureMiss: () => true,
+  });
+  assert.equal(calls.filter((args) => args[0] === 'capabilities').length, 1);
+});
+
 test('unwritable artifact output cannot replace the scenario failure', async () => {
   const { context, harness, reports } = fixture();
   fs.renameSync(context.artifactDir, `${context.artifactDir}-moved`);
