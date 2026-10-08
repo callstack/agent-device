@@ -34,6 +34,20 @@ export {
   stopAllIosRunnerSessions,
   stopIosRunnerSession,
 } from '../runner/runner-session.ts';
+import type { RunnerWarmLossNotice } from '../runner/runner-destination-watch.ts';
+
+/**
+ * Takes the #3321 warm-runner loss notice recorded for this device, once, if a retained runner was
+ * stopped because its Simulator destination was replaced under it. Loaded on call, not at import:
+ * the watcher module must not join the façade closures the eager-closure budget holds flat, and
+ * the read happens once per `open` at most.
+ */
+export async function takeRunnerWarmLossNotice(
+  deviceId: string,
+): Promise<RunnerWarmLossNotice | undefined> {
+  const { takeRunnerWarmLossNotice: take } = await import('../runner/runner-destination-watch.ts');
+  return take(deviceId);
+}
 export {
   hasCachedAppleRunnerArtifact,
   resolveRunnerAppBundleId,

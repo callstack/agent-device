@@ -109,4 +109,6 @@ export const appleRunnerHost: AppleRunnerHost = {
   visitXmlPlistEntries,
   leaseOwnerStateDir: getRunnerLeaseOwnerStateDir,
   hasDeviceClaimAuthority: (device) => getRunnerDeviceClaimAuthorityProbe()?.(device) ?? false,
+  observeSimulatorBootTimeMs: async (device) =>
+    (await import('../simulator-boot.ts')).observeSimulatorBootTimeMs(device),
 };

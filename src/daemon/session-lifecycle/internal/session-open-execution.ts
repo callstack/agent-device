@@ -56,6 +56,7 @@ import {
 } from '../../device/device-claims.ts';
 import type { TakenOverDeviceClaim } from '../../device/device-claim-reboot.ts';
 import { deviceBootObservation } from '../../../platform-runtime-device-boot.ts';
+import type { RunnerWarmLossNotice } from '../../../platform-runtime-warm-runner-notice.ts';
 import { appendResponseWarning } from './session-open-warnings.ts';
 import {
   buildAllocatorHeldRefusal,
@@ -118,6 +119,35 @@ function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim): string {
   return (
     `Took the device from session "${tookOver.session}" in workspace "${tookOver.workspace}": ` +
     'that device rebooted after its claim was taken, so its app and runner were already gone.'
+  );
+}
+
+/**
+ * Reads and consumes the warm-runner loss notice #3321's destination watcher recorded for this
+ * device. Reached through the root's platform-runtime seam by function-scoped import: the notice
+ * exists only on iOS simulators, and only when a retained runner was stopped, so the common open
+ * must not pay for the platform module's evaluation.
+ */
+async function readWarmRunnerLossNotice(
+  device: DeviceInfo,
+): Promise<RunnerWarmLossNotice | undefined> {
+  const { takeWarmRunnerLossNotice } = await import(
+    '../../../platform-runtime-warm-runner-notice.ts'
+  );
+  return await takeWarmRunnerLossNotice(device);
+}
+
+/**
+ * What the caller's `open` output says when the runner this session left warm after `close` had to
+ * be stopped because the Simulator was shut down externally while it was retained (#3321). Names
+ * the typed reason so automation can key on it without parsing prose.
+ */
+function warmRunnerLossWarning(notice: RunnerWarmLossNotice): string {
+  return (
+    'The warm iOS runner left by the previous close was stopped: the simulator was shut down ' +
+    'externally while it was retained, and the retained runner had begun rebooting it. ' +
+    'This open started a fresh runner and left the simulator booted from now on. ' +
+    `reason=${notice.reason}`
   );
 }
 
@@ -309,6 +339,10 @@ export async function completeOpenCommand(params: {
   });
   if (tookOverDeviceClaim) {
     appendResponseWarning(openResult, deviceClaimTakeoverWarning(tookOverDeviceClaim));
+  }
+  const warmLossNotice = await readWarmRunnerLossNotice(device);
+  if (warmLossNotice) {
+    appendResponseWarning(openResult, warmRunnerLossWarning(warmLossNotice));
   }
   const nextRef = publishOpenSession({
     req,

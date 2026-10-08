@@ -7,7 +7,7 @@ import {
   buildSimctlArgsForDevice,
   runXcrun,
 } from './host.ts';
-import { isApplePlatform, type DeviceInfo } from '@agent-device/kernel/device';
+import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
 import { flushRunnerLogAppends, getFreePort, resolveRunnerLaunchLogPath } from './runner-io.ts';
@@ -82,6 +82,13 @@ export type RunnerSessionOptions = AppleRunnerLifecycleOptions;
 const runnerSessions = new Map<string, RunnerSession>();
 const runnerSessionLocks = new Map<string, Promise<unknown>>();
 const runnerIdleStopTimers = new Map<string, NodeJS.Timeout>();
+/**
+ * Devices whose runner a `close` retained for warm reuse, until the window ends. Owns the
+ * retention fact separately from the idle-stop timer: the timer is disabled when
+ * `AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS=0`, and the destination watcher's duty (#3321) covers the
+ * whole retain-until-daemon-exit behavior just the same.
+ */
+const runnerWarmRetainedDevices = new Set<string>();
 const RUNNER_RETAINED_IDLE_STOP_DEFAULT_MS = 5 * 60_000;
 const RUNNER_STALE_BUNDLE_UNINSTALL_TIMEOUT_MS = 10_000;
 
@@ -652,10 +659,65 @@ export function scheduleIosRunnerIdleStop(deviceId: string): void {
 }
 
 export function cancelIosRunnerIdleStop(deviceId: string): void {
+  endRunnerWarmRetention(deviceId);
   const timer = runnerIdleStopTimers.get(deviceId);
   if (!timer) return;
   clearTimeout(timer);
   runnerIdleStopTimers.delete(deviceId);
+}
+
+/**
+ * Ends this device's warm-retention window. The destination watcher's duty (#3321) covers exactly
+ * the time between a retaining `close` and the moment the runner is used or stopped again; after
+ * that point nothing may act on a stale watch. Retention always begins in code that has already
+ * loaded the watcher module, so the close here reads it from the module cache.
+ */
+function endRunnerWarmRetention(deviceId: string): void {
+  if (!runnerWarmRetainedDevices.delete(deviceId)) return;
+  void import('./runner-destination-watch.ts').then(
+    ({ closeRunnerDestinationWatch }) => closeRunnerDestinationWatch(deviceId),
+    () => {},
+  );
+}
+
+/**
+ * Whether this session is the device's runner sitting in the post-`close` idle-retention window:
+ * retained by a close and nothing has used or stopped it since, still registered, and not being
+ * torn down. Any use (`ensureRunnerSession`) or teardown leaves the window, which is exactly when
+ * the destination watcher must stop acting without stopping anything itself.
+ */
+function isRunnerIdleRetained(deviceId: string, session: RunnerSession | undefined): boolean {
+  return (
+    runnerWarmRetainedDevices.has(deviceId) &&
+    session !== undefined &&
+    runnerSessions.get(deviceId) === session &&
+    canWorkWithRunnerSession(session)
+  );
+}
+
+/**
+ * Arms the #3321 push watcher over a runner this close retained. Reached through a function-scoped
+ * import: the watcher module is needed only at the start of a retention window and must not join
+ * the façade closures the eager-closure budget holds at merge-base size.
+ */
+async function armRunnerDestinationWatch(session: RunnerSession | undefined): Promise<void> {
+  // Local Simulators only: the push signal is the runner's loopback listener, the reboot owner is
+  // Xcode's Simulator destination machinery, and `launchd_sim` is the boot witness. A retained
+  // physical-device runner has none of these and stays exactly as it was.
+  if (session?.device.kind !== 'simulator' || !isIosFamily(session.device)) return;
+  if (!isRunnerIdleRetained(session.deviceId, session)) return;
+  const { attachRunnerDestinationWatch } = await import('./runner-destination-watch.ts');
+  const deviceId = session.deviceId;
+  attachRunnerDestinationWatch({
+    device: session.device,
+    sessionId: session.sessionId,
+    port: session.port,
+    runnerPid: session.child.pid,
+    isArmed: () => isRunnerIdleRetained(deviceId, session),
+    onStop: async () => {
+      await stopIosRunnerSession(deviceId);
+    },
+  });
 }
 
 function resolveRunnerIdleStopMs(env: NodeJS.ProcessEnv = process.env): number {
@@ -743,8 +805,12 @@ export async function releaseIosRunnerOnClose(
   options: { retain: boolean },
 ): Promise<void> {
   const session = runnerSessions.get(deviceId);
-  if (options.retain && !isRunnerMainThreadOccupied(session)) {
+  if (options.retain && session && !isRunnerMainThreadOccupied(session)) {
+    // The flag is set after the scheduler because the scheduler's own cancel step ends any
+    // retention the previous window left open, and marking first would erase this one.
     scheduleIosRunnerIdleStop(deviceId);
+    runnerWarmRetainedDevices.add(deviceId);
+    await armRunnerDestinationWatch(session);
     return;
   }
   if (options.retain) {

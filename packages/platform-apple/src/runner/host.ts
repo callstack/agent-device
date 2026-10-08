@@ -16,6 +16,7 @@ import type { IosPhysicalDeviceRunnerControl } from '../core/physical-device-rou
 import type * as ApplePlistXml from '../core/plist-xml.ts';
 import type * as AppleRunnerOwnerState from '../core/runner-owner-state.ts';
 import type * as AppleSimctl from '../core/simctl.ts';
+import type * as AppleSimulatorBoot from '../simulator-boot.ts';
 import type * as AppleToolProvider from '../core/tool-provider.ts';
 
 /**
@@ -103,6 +104,14 @@ export type AppleRunnerHost = Pick<
      * family/OS/id, never a bare id). Embedders without a claim store answer false.
      */
     hasDeviceClaimAuthority: AppleRunnerOwnerState.RunnerDeviceClaimAuthorityProbe;
+    /**
+     * When this Simulator's current boot began, read from the host (`launchd_sim`). The warm-loss
+     * watcher classifies destination loss by device identity rather than port liveness, because
+     * Xcode restarts the runner app onto the same port after rebooting the destination (#3321).
+     * The production binding loads the observer on first call, not at binding time: that module
+     * sits outside the façade closures this port's eager budget holds flat.
+     */
+    observeSimulatorBootTimeMs: typeof AppleSimulatorBoot.observeSimulatorBootTimeMs;
   };
 
 /** The runner's deadline type is the host's read side; the {@link Deadline} shim below builds them. */
@@ -195,6 +204,7 @@ export const visitXmlPlistEntries = delegate('visitXmlPlistEntries');
 export const resolveIosPhysicalDeviceControl = delegate('resolveIosPhysicalDeviceControl');
 export const leaseOwnerStateDir = delegate('leaseOwnerStateDir');
 export const hasDeviceClaimAuthority = delegate('hasDeviceClaimAuthority');
+export const observeSimulatorBootTimeMs = delegate('observeSimulatorBootTimeMs');
 
 /**
  * Deadline keeps its root call-site shape (`Deadline.fromTimeoutMs(...)`);
