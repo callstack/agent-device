@@ -71,7 +71,7 @@ import type { Interactor, RunnerContext } from '@agent-device/contracts/interact
 import { readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { WebDriverDeploymentRuntime } from './runtime-deployment.ts';
+import { type WebDriverDeploymentRuntime, webDriverInactiveSession } from './runtime-deployment.ts';
 import { bindWebDriverApplicationLifecycle } from './lifecycle.ts';
 import {
   capabilitySupported,
@@ -107,10 +107,7 @@ const pushUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'Push notifications are unavailable for WebDriver provider-owned devices.',
 );
-const inactiveSession = unavailableFact(
-  'owner-capability-missing',
-  'The WebDriver provider session is no longer active for this device.',
-);
+const inactiveSession = webDriverInactiveSession;
 const snapshotUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'This WebDriver provider runtime does not expose snapshot capture for this device.',

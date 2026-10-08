@@ -7,7 +7,16 @@ import type {
   AppDeploymentResult,
   DeployMaterializedAppInput,
 } from '@agent-device/contracts/app-deployment-runtime';
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOperationFact,
+  unavailableFact,
+} from '@agent-device/contracts/platform-runtime';
+
+/** The refusal every WebDriver cell reports once the provider session is gone. */
+export const webDriverInactiveSession = unavailableFact(
+  'owner-capability-missing',
+  'The WebDriver provider session is no longer active for this device.',
+);
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { capabilitySupported, unsupportedCapabilityMessage } from './capabilities.ts';
@@ -117,19 +126,12 @@ export function createWebDriverDeploymentRuntime(
 }
 
 function deploymentFact(session: WebDriverProviderSession | undefined): RuntimeOperationFact {
-  if (!session) {
-    return Object.freeze({
-      available: false,
-      reason: 'owner-capability-missing',
-      hint: 'The WebDriver provider session is no longer active for this device.',
-    } as const);
-  }
+  if (!session) return webDriverInactiveSession;
   if (!capabilitySupported(session.capabilities, 'install')) {
-    return Object.freeze({
-      available: false,
-      reason: 'owner-capability-missing',
-      hint: unsupportedCapabilityMessage(session.capabilities, 'install'),
-    } as const);
+    return unavailableFact(
+      'owner-capability-missing',
+      unsupportedCapabilityMessage(session.capabilities, 'install'),
+    );
   }
   return Object.freeze({ available: true } as const);
 }
