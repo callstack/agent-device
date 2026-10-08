@@ -140,19 +140,25 @@ const SELECTED_TRAIT = 1n << 3n;
 const KEYBOARD_FOCUS_TRAIT = 1n << 21n;
 
 /**
- * A WebKit page — Safari's, or a `WKWebView`'s — lives in a WebContent process and reaches UIKit's
- * tree as an `AXRemoteElement` under the web view, with its children in that other process. The
- * guest reader snapshots one process, so it delivers that element as a leaf (#2484). Such a leaf
- * is opaque when it sits under a `WebView`-typed ancestor and its frame reaches the viewport: the
- * page is on screen and the tree does not describe it. A leaf whose frame is zero-area or off
- * screen hosts nothing the capture can miss; one that reports no frame at all is refused, because
- * nothing proves it is empty. Remote elements outside a web view are not classified here — no
- * capture has shown one — and content truncated away above the web view stays disclosed as
- * truncation, not as a boundary.
+ * Two hosts put another process's UI into this one's tree as an `AXRemoteElement`, with the
+ * children in that other process:
+ *
+ * - a WebKit page — Safari's, or a `WKWebView`'s — lives in a WebContent process under the web
+ *   view (#2484);
+ * - a scene-hosted remote view controller, such as a share or action extension presented over the
+ *   host app, lives in the extension's process under a `_UISceneHostingView`.
+ *
+ * The guest reader snapshots one process, so it delivers that element as a leaf. Such a leaf is
+ * opaque when it sits under one of those hosts and its frame reaches the viewport: the content is
+ * on screen and the tree does not describe it. A leaf whose frame is zero-area or off screen hosts
+ * nothing the capture can miss; one that reports no frame at all is refused, because nothing proves
+ * it is empty. Remote elements under any other host are not classified here — no capture has shown
+ * one — and content truncated away above the host stays disclosed as truncation, not as a boundary.
  */
 const REMOTE_ELEMENT_CLASS = 'AXRemoteElement';
 const EMPTY_RECT: Rect = { x: 0, y: 0, width: 0, height: 0 };
 const WEB_VIEW_TYPE = 'WebView';
+const SCENE_HOSTING_VIEW_CLASS = '_UISceneHostingView';
 
 export function decodeSnapshotBridgeTree(
   tree: unknown,
@@ -164,7 +170,7 @@ export function decodeSnapshotBridgeTree(
     throw snapshotSourceError('malformed-tree', 'guest-tree-root-invalid');
   }
   const nodes: RawSnapshotNode[] = [];
-  const webHostedRemoteLeaves: (Rect | undefined)[] = [];
+  const hostedRemoteLeaves: (Rect | undefined)[] = [];
   let maxTraversalDepth = 0;
   for (const root of roots) {
     visitNode(root, undefined, 0, false);
@@ -198,7 +204,7 @@ export function decodeSnapshotBridgeTree(
     nodes,
     maxTraversalDepth,
     viewport,
-    opaqueRemoteElements: webHostedRemoteLeaves.filter((rect) => isOpaqueRemoteLeaf(rect, viewport))
+    opaqueRemoteElements: hostedRemoteLeaves.filter((rect) => isOpaqueRemoteLeaf(rect, viewport))
       .length,
     unresolvedCoordinateSpaceWindows: countUnresolvedCoordinateSpaceWindows(nodes, viewport),
   };
@@ -207,7 +213,7 @@ export function decodeSnapshotBridgeTree(
     value: Record<string, unknown>,
     parentIndex: number | undefined,
     depth: number,
-    underWebView: boolean,
+    underRemoteHost: boolean,
   ): void {
     if (nodes.length >= limits.maxNodes) {
       throw snapshotSourceError('malformed-tree', 'node-limit-exceeded', {
@@ -227,13 +233,13 @@ export function decodeSnapshotBridgeTree(
     const node = nodeFacts(value, index, parentIndex, depth);
     nodes.push(node);
     maxTraversalDepth = Math.max(maxTraversalDepth, depth);
-    if (isWebHostedRemoteLeaf(node, children.length, underWebView)) {
-      webHostedRemoteLeaves.push(node.rect);
+    if (isHostedRemoteLeaf(node, children.length, underRemoteHost)) {
+      hostedRemoteLeaves.push(node.rect);
     }
-    const hostsWeb = underWebView || node.type === WEB_VIEW_TYPE;
+    const hostsRemote = underRemoteHost || isRemoteContentHost(node);
     for (const child of children) {
       if (!isRecord(child)) throw snapshotSourceError('malformed-tree', 'child-invalid');
-      visitNode(child, index, depth + 1, hostsWeb);
+      visitNode(child, index, depth + 1, hostsRemote);
     }
   }
 }
@@ -299,12 +305,16 @@ function elementTypeName(
   return ELEMENT_TYPE_NAMES[automationType] ?? 'Other';
 }
 
-function isWebHostedRemoteLeaf(
+function isRemoteContentHost(node: RawSnapshotNode): boolean {
+  return node.type === WEB_VIEW_TYPE || node.role === SCENE_HOSTING_VIEW_CLASS;
+}
+
+function isHostedRemoteLeaf(
   node: RawSnapshotNode,
   childCount: number,
-  underWebView: boolean,
+  underRemoteHost: boolean,
 ): boolean {
-  return underWebView && node.role === REMOTE_ELEMENT_CLASS && childCount === 0;
+  return underRemoteHost && node.role === REMOTE_ELEMENT_CLASS && childCount === 0;
 }
 
 function isOpaqueRemoteLeaf(rect: Rect | undefined, viewport: IosViewportEvidence): boolean {

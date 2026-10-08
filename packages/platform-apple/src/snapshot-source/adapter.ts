@@ -211,8 +211,9 @@ function createAcquisition(
   if (typeof generation !== 'string' || !generation) {
     throw snapshotSourceError('malformed-tree', 'generation-invalid');
   }
-  // A tree that ends at a web view's out-of-process page would present the screen without the
-  // page, and refs issued from it would target the host views around it rather than the page.
+  // A tree that ends at out-of-process content — a web view's page, or a scene-hosted extension —
+  // would present the screen without it, and refs issued from it would target the host views around
+  // it rather than the content.
   // The source refuses it as a screen it cannot describe, like a missing automation mode, so the
   // route serves the XCTest runner, which resolves remote elements (#2484).
   if (decoded.opaqueRemoteElements > 0) {

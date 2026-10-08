@@ -222,7 +222,7 @@ test('the bridge tree counts web-hosted remote leaves that reach the viewport', 
     decode({ [automationType]: 0, [frame]: viewport, [children]: [remoteLeaf(viewport)] })
       .opaqueRemoteElements,
     0,
-    'a remote leaf outside a web view is not classified',
+    'a remote leaf outside a remote-content host is not classified',
   );
   assert.equal(
     decode(
@@ -233,6 +233,48 @@ test('the bridge tree counts web-hosted remote leaves that reach the viewport', 
     ).opaqueRemoteElements,
     0,
     'a crossed boundary is not opaque',
+  );
+});
+
+test('the bridge tree counts scene-hosted remote leaves that reach the viewport', () => {
+  // A share extension presented over Photos on iOS 26: the extension's controls live in its own
+  // process, under the host app's scene-hosting view, and the reader stops at the remote element.
+  const viewport = { X: 0, Y: 0, Width: 402, Height: 874 };
+  const sceneHosted = (rect?: Record<string, number>) => ({
+    [application]: '_UISceneHostingView',
+    [frame]: viewport,
+    [children]: [
+      {
+        [application]: '_UIScenePresentationView',
+        [frame]: viewport,
+        [children]: [
+          {
+            [application]: 'AXRemoteElement',
+            [baseType]: 'NSObject',
+            ...(rect ? { [frame]: rect } : {}),
+            [children]: [],
+          },
+        ],
+      },
+    ],
+  });
+  const decode = (host: Record<string, unknown>) =>
+    decodeSnapshotBridgeTree(
+      { [application]: 'PhotosApplication', [frame]: viewport, [children]: [host] },
+      { truncated: false },
+      limits,
+    );
+
+  const opaque = decode(sceneHosted(viewport));
+  assert.equal(opaque.nodes[1]?.role, '_UISceneHostingView');
+  assert.equal(opaque.nodes[3]?.role, 'AXRemoteElement');
+  assert.equal(opaque.opaqueRemoteElements, 1);
+
+  assert.equal(decode(sceneHosted()).opaqueRemoteElements, 1, 'frameless leaf refuses');
+  assert.equal(
+    decode(sceneHosted({ X: 0, Y: 0, Width: 0, Height: 0 })).opaqueRemoteElements,
+    0,
+    'a dismissed extension leaves a zero-area leaf that hosts nothing',
   );
 });
 

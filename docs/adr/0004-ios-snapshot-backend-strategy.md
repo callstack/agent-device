@@ -49,9 +49,12 @@ such a leaf sits under a `WebView`-typed ancestor and reaches the viewport (`rem
 instead of publishing a screen without its page: refs issued from it would target the host views
 around the page rather than the page. A leaf whose frame is zero-area or off screen hosts nothing
 the capture can miss and is published; one that reports no frame is refused, because nothing proves
-it empty. Remote elements outside a web view are not classified — no capture has shown one — and a
-web view truncated away by the node or depth cap stays disclosed as truncation. XCTest resolves
-remote elements, so the fallback serves the page (#2484).
+it empty. A scene-hosted remote view controller — a share or action extension presented over the
+host app — reaches the tree the same way: an `AXRemoteElement` leaf under a `_UISceneHostingView`,
+with the extension's controls in its own process. The source refuses that leaf by the same rule.
+Remote elements under any other host are not classified — no capture has shown one — and a host
+truncated away by the node or depth cap stays disclosed as truncation. XCTest resolves remote
+elements, so the fallback serves the page or the extension (#2484).
 
 The refusal opens the generation circuit, as any failure that says something about the app itself
 does, so a hybrid app that showed one web screen takes XCTest for its remaining native screens until
