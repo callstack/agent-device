@@ -48,7 +48,7 @@ gate rejects value-import cycles (R4) and spine back-edges (R5); the graph addit
   not attempt. ~2300 of them: a place to look, never a work list. They are exactly the value
   edges the transitive reduction drops. A value-import cycle (an R4 failure) makes the reduction
   undefined, so the report then lists the cycle and leaves this count uncomputed.
-- **type-only and dynamic cycles** — 23 of them, all outside R4 by design (a type-only import is
+- **type-only and dynamic cycles** — 22 of them, all outside R4 by design (a type-only import is
   free at runtime, a dynamic one is a deliberate cold-start seam). Worth reading when a module
   feels hard to reason about.
 
