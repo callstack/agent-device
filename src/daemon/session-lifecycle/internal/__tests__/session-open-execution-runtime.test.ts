@@ -693,6 +693,10 @@ test('native macOS app sessions claim their app, so another app opens beside the
     expect(otherAppInSession?.ok).toBe(false);
     if (otherAppInSession?.ok !== false) return;
     expect(otherAppInSession.error.details?.reason).toBe('app-claim-scope');
+    const linkInSession = await open('one', 'demo://route');
+    expect(linkInSession?.ok).toBe(false);
+    if (linkInSession?.ok !== false) return;
+    expect(linkInSession.error.details?.reason).toBe('app-claim-scope');
     expect((await open('one', 'com.example.one'))?.ok).toBe(true);
   } finally {
     for (const ref of sessionStore.listRefs()) await clearDeviceClaim(ref.session.deviceClaim);

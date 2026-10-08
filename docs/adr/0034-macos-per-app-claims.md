@@ -22,9 +22,13 @@ because 0032 and 0033 exist on main.
    device: dead or superseded owners are reconciled and removed, other foreign claims conflict,
    and this daemon's own are left to its session store.
 5. In one daemon, a per-app open conflicts only with sessions on the whole device or on the same
-   app. A per-app session may reopen only its app on the `app` surface.
-6. Helper screenshots take a host-wide lock (`~/.agent-device/macos-helper/screen-capture.lock`)
-   for the length of one capture. It is the only action sessions on different apps serialize on.
+   app. A per-app session may reopen only its app on the `app` surface; a link opens as
+   `open <app> <url>`, because a bare URL's handler is not known before launch.
+6. Helper screenshots take a host-wide lock (`macos-screen-capture.lock` in the device claims
+   directory) for the length of one capture. It is the only action sessions on different apps
+   serialize on.
+7. App keys are lowercase, because LaunchServices matches bundle ids without regard to case.
+   An `open --wait` does not wait for a session that holds another app.
 
 ## Context
 
@@ -49,8 +53,14 @@ before the claim and before launch. An open whose app cannot be resolved that ea
 whole device rather than guessing.
 
 **What stays whole-Mac.** Surfaces other than `app` post real pointer events or read every app.
-The clipboard and appearance settings are host-global state that no claim protected before; a
-per-app session can still reach them.
+Some commands still reach past the session app, as they did before this ADR: the clipboard and
+appearance settings (host-global state), `close <other app>` (quits any app, including one another
+daemon's session holds), and `settings permission` (opens System Settings in front).
+
+**Background open applies to every native surface.** `open` cannot see the session surface, so
+under the native backend an `open <app> --surface frontmost-app` no longer brings the app forward
+and the session drives whatever is in front. Use `open --surface frontmost-app` without an app, or
+the `app` surface.
 
 ## Rejected alternatives
 

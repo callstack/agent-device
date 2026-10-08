@@ -102,6 +102,10 @@ export async function acquireDeviceClaim(params: {
       owner: readCurrentOwnerIdentity(),
     });
     if (deviceClaim.status === 'conflict') return deviceClaim;
+    if (deviceClaim.status === 'held') {
+      const held = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey));
+      if (held) return { status: 'conflict', conflict: held };
+    }
     const appKey = appScopedDeviceKey(deviceKey, app.bundleId);
     return await withDeviceClaimLock(
       appKey,

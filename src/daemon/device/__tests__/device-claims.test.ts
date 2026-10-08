@@ -859,7 +859,7 @@ test('app claims of different apps coexist and the same app stays exclusive', as
     session: 'three',
     workspace: '/three',
     stateDir: root,
-    app: { bundleId: 'com.example.one' },
+    app: { bundleId: 'com.Example.One' },
   });
   assert.equal(same.status, 'conflict');
 });

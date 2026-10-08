@@ -488,13 +488,17 @@ export function reopenOutsideAppClaim(params: {
   }
   return errorResponse(
     'INVALID_ARGS',
-    `Session "${session.name}" holds ${session.appBundleId ?? 'one app'} only, so it cannot open another app or surface.`,
+    `Session "${session.name}" holds ${session.appBundleId ?? 'one app'} only, so it can reopen only that app on the app surface.`,
     {
       reason: 'app-claim-scope',
       deviceKey: heldKey,
-      hint: 'Close this session, or open the other app in a new --session.',
+      hint: `To open a link in this app, name the app: open ${session.appBundleId ?? '<app>'} <url>. For another app or surface, close this session or use a new --session.`,
     },
   );
+}
+
+function sameBundleId(resolved: string | undefined, claimed: string): boolean {
+  return resolved !== undefined && resolved.toLowerCase() === claimed.toLowerCase();
 }
 
 async function acquireDeviceClaimForOwner(params: {
@@ -622,6 +626,17 @@ export async function openNewSessionWithDeviceClaim(params: {
     if (details.type === 'response') {
       await rollbackClaim();
       return { type: 'response', response: details.response };
+    }
+    if (app && !sameBundleId(details.details.appBundleId, app.bundleId)) {
+      await rollbackClaim();
+      return {
+        type: 'response',
+        response: errorResponse(
+          'COMMAND_FAILED',
+          `${openTarget ?? 'The app'} resolved to ${details.details.appBundleId ?? 'no app'} after its claim was taken for ${app.bundleId}.`,
+          { reason: 'app-claim-scope', hint: 'Run the same open again.' },
+        ),
+      };
     }
     // Preparation can boot the device or warm caches, but it cannot establish session ownership.
     // Stamping here is what covers a boot preparation caused for this very open; from

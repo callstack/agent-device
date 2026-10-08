@@ -5,6 +5,9 @@ import { Deadline, sleep } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionStore } from './session-store.ts';
+import type { SessionState } from './session-state.ts';
+import { canonicalLocalDeviceKey } from './device/device-claim-paths.ts';
+import { deviceClaimIdentity } from './device/device-claims.ts';
 import type { SessionRecoveryOptions } from './session-recovery-hints.ts';
 
 /**
@@ -118,15 +121,30 @@ export function beginOpenDeviceWait(params: {
 }
 
 /** The other session holding `deviceId`, or `undefined` when nothing stands between this open and
- * the device — including when this open's own session is what holds it. */
+ * the device — including when this open's own session is what holds it. A session holding one app
+ * of the device (ADR 0034) is not waited for: the open it would conflict with is the same app's,
+ * which the claim refuses at once, and every other open runs beside it. */
 function findSessionHoldingDevice(
   sessionStore: SessionStore,
   deviceId: string,
   sessionName: string,
 ): ReturnType<SessionStore['findByDevice']> {
-  const inUse = sessionStore.findByDevice(deviceId);
-  if (!inUse || inUse.address === sessionName) return undefined;
-  return inUse;
+  return sessionStore
+    .listRefs()
+    .find(
+      (ref) =>
+        ref.session.device.id === deviceId &&
+        ref.address !== sessionName &&
+        !holdsAppScopedClaim(ref.session),
+    );
+}
+
+function holdsAppScopedClaim(session: SessionState): boolean {
+  const heldKey = session.deviceClaim?.deviceKey;
+  return (
+    heldKey !== undefined &&
+    heldKey !== canonicalLocalDeviceKey(deviceClaimIdentity(session.device))
+  );
 }
 
 type LockedAttempt<Outcome> = { ran: true; outcome: Outcome } | { ran: false };

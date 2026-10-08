@@ -249,7 +249,7 @@ test('macOS helper screenshots never run two captures at once', async () => {
       run: async () => {
         active += 1;
         maxActive = Math.max(maxActive, active);
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 10));
         active -= 1;
         return helperReturn({ path: '/tmp/out.png', surface: 'app' });
       },

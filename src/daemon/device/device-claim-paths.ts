@@ -26,10 +26,11 @@ function formatLocalDeviceKey(
 
 /**
  * The claim key of one app on a device: a per-app claim excludes other sessions of that app only,
- * while the device key itself excludes every app (ADR 0034).
+ * while the device key itself excludes every app (ADR 0034). LaunchServices matches bundle ids
+ * without regard to case, so the key does too.
  */
 export function appScopedDeviceKey(deviceKey: string, bundleId: string): string {
-  return `${deviceKey}:app:${bundleId}`;
+  return `${deviceKey}:app:${bundleId.toLowerCase()}`;
 }
 
 export function resolveDeviceClaimRoot(): string {

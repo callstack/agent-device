@@ -175,7 +175,7 @@ test('only a fresh open with a budget and a resolved device gets a wait', () => 
 test('a free device is read once in the store and records no wait', async () => {
   const req = openRequest({ waitMs: 30_000 });
   const store = makeSessionStore('agent-device-open-wait-');
-  const looks = vi.spyOn(store, 'findByDevice');
+  const looks = vi.spyOn(store, 'listRefs');
 
   const wait = beginWait({
     req,
@@ -258,7 +258,7 @@ test('a budget that runs out busy costs the whole budget, then lets the open ref
   vi.useFakeTimers();
   const req = openRequest({ waitMs: 1000 });
   const store = storeWithHolder();
-  const looks = vi.spyOn(store, 'findByDevice');
+  const looks = vi.spyOn(store, 'listRefs');
   const wait = beginWait({
     req,
     sessionName: OPENER_ADDRESS,
@@ -316,3 +316,37 @@ async function waitUntil(start: () => Promise<void>, budgetMs: number): Promise<
   await vi.advanceTimersByTimeAsync(budgetMs);
   await running;
 }
+
+test('a session holding one app of the Mac is not waited for', async () => {
+  const mac = {
+    platform: 'apple',
+    appleOs: 'macos',
+    id: 'host-macos-local',
+    name: 'Host Mac',
+    kind: 'device',
+    target: 'desktop',
+    booted: true,
+  } as const;
+  const store = makeSessionStore('agent-device-open-wait-');
+  store.publish(HOLDER_ADDRESS, {
+    ...session(HOLDER_ADDRESS),
+    device: mac,
+    deviceClaim: {
+      deviceKey: 'local:apple:macos:host-macos-local:app:com.example.one',
+      ownerToken: 'token',
+      ownerPid: process.pid,
+      ownerStartTime: null,
+    },
+  });
+  const req = openRequest({ waitMs: 30_000 });
+
+  const wait = beginWait({
+    req,
+    sessionName: OPENER_ADDRESS,
+    sessionStore: store,
+    deviceId: mac.id,
+  })!;
+  await wait.waitForDeviceOutsideLocks();
+
+  expect(readOpenWaitAttempt(req)).toEqual({});
+});
