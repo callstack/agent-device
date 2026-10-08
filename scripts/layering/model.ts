@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { PLATFORMS } from '@agent-device/kernel/device';
-import { genCycles, getStronglyConnectedComponents } from '@statelyai/graph';
+import { createGraph, genDFS, getStronglyConnectedComponents, getSubgraph } from '@statelyai/graph';
 import { parseSync } from 'oxc-parser';
 import { destructuredDynamicImportBindings, visitAst } from './layering-ast.ts';
 import { declaredRootModuleZone } from './root-module-zones.ts';
@@ -404,47 +404,28 @@ export function resolveImportEdges(
 
 export function findValueImportCycles(edges: readonly ResolvedImportEdge[]): string[][] {
   const graph = importGraphFromResolvedEdges(edges, VALUE_EDGES);
-  const componentByFile = new Map<string, number>();
-  const cyclicComponents = new Set<number>();
-  const membersByComponent = new Map<number, string[]>();
-  const components = getStronglyConnectedComponents(graph);
   const selfCycleFiles = new Set(
     graph.edges.filter((edge) => edge.sourceId === edge.targetId).map((edge) => edge.sourceId),
   );
-
-  for (const [index, component] of components.entries()) {
+  const components = getStronglyConnectedComponents(graph).filter(
+    (component) => component.length > 1 || selfCycleFiles.has(component[0]!.id),
+  );
+  const cycles = components.map((component) => {
     const memberIds = component.map(({ id }) => id);
-    if (memberIds.length < 2 && !selfCycleFiles.has(memberIds[0]!)) continue;
-    cyclicComponents.add(index);
-    membersByComponent.set(index, memberIds);
-    for (const id of memberIds) componentByFile.set(id, index);
-  }
-
-  if (cyclicComponents.size === 0) return [];
-
-  const edgesByComponent = new Map<number, ResolvedImportEdge[]>();
-  for (const edge of edges) {
-    if (edge.dynamic || edge.typeOnly) continue;
-    const component = componentByFile.get(edge.file);
-    if (component === undefined || componentByFile.get(edge.target) !== component) continue;
-    const componentEdges = edgesByComponent.get(component) ?? [];
-    componentEdges.push(edge);
-    edgesByComponent.set(component, componentEdges);
-  }
-
-  const cycles = [...cyclicComponents].map((component) => {
-    const componentGraph = importGraphFromResolvedEdges(
-      edgesByComponent.get(component) ?? [],
-      VALUE_EDGES,
-      membersByComponent.get(component),
-    );
-    const firstCycle = genCycles(componentGraph).next();
-    if (firstCycle.done) {
-      throw new Error(
-        `Expected a cycle inside strongly connected component: ${membersByComponent.get(component)!.join(', ')}`,
-      );
+    const componentGraph = getSubgraph(graph, memberIds);
+    const firstEdgeByFile = new Map<string, (typeof graph.edges)[number]>();
+    for (const edge of componentGraph.edges) {
+      if (!firstEdgeByFile.has(edge.sourceId)) firstEdgeByFile.set(edge.sourceId, edge);
     }
-    return [firstCycle.value.source.id, ...firstCycle.value.steps.map(({ node }) => node.id)];
+    // Inside an SCC every file has an outgoing edge. DFS finds its first back edge before
+    // backtracking, so following only the first outgoing edge preserves the reported cycle.
+    const firstEdgeGraph = createGraph({
+      nodes: componentGraph.nodes,
+      edges: [...firstEdgeByFile.values()],
+    });
+    const path = [...genDFS(firstEdgeGraph, [...memberIds].sort()[0]!)].map(({ id }) => id);
+    const target = firstEdgeByFile.get(path.at(-1)!)!.targetId;
+    return [...path.slice(path.indexOf(target)), target];
   });
 
   return cycles.sort((left, right) => left[0]!.localeCompare(right[0]!));

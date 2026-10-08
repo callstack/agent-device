@@ -97,7 +97,7 @@ type Deriver = {
   ownersOf: (testFile: string) => ModuleId[];
 };
 
-/** A deriver with caches shared across files — one graph walk per module, not per query. */
+/** Shares the tracked-source graph and mutated-source sets across test queries. */
 export function ownershipDeriver(repoRoot: string): Deriver {
   const graph = ownershipGraph(repoRoot);
   const sources = KERNEL_MODULES.map((module) => ({

@@ -372,6 +372,32 @@ test('collectCycles separates gate-rejected value cycles from type-only and dyna
   );
 });
 
+test('collectCycles keeps the representative and edge kinds for a chorded three-file SCC', () => {
+  const edges = resolveImportEdges(
+    sources({
+      'src/core/a.ts': "import './b.ts';\nimport './c.ts';",
+      'src/core/b.ts': "import './c.ts';",
+      'src/core/c.ts': "import './a.ts';\nimport type { B } from './b.ts';\nvoid import('./b.ts');",
+    }),
+  );
+  assert.deepEqual(collectCycles(edges), [
+    { kind: 'value', path: ['src/core/a.ts', 'src/core/b.ts', 'src/core/c.ts', 'src/core/a.ts'] },
+  ]);
+});
+
+test('collectCycles preserves the first DFS back edge when a chord closes below the SCC root', () => {
+  const edges = resolveImportEdges(
+    sources({
+      'src/core/a.ts': "import './b.ts';",
+      'src/core/b.ts': "import './c.ts';",
+      'src/core/c.ts': "import './b.ts';\nimport './a.ts';",
+    }),
+  );
+  assert.deepEqual(collectCycles(edges), [
+    { kind: 'value', path: ['src/core/b.ts', 'src/core/c.ts', 'src/core/b.ts'] },
+  ]);
+});
+
 test('buildGraph reports zone membership, degrees, and cross-zone edge counts', () => {
   const files = sources({
     'packages/kernel/src/errors.ts': 'export const fail = 1;\n',

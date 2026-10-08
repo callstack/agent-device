@@ -19,8 +19,6 @@ import { genPostorder, getSuccessors, getTransitiveReduction } from '@statelyai/
 import { edgeKind, importEdgeId, importGraph, VALUE_EDGES } from './import-graph.ts';
 import type { EdgeKind } from './import-graph.ts';
 
-export type { EdgeKind } from './import-graph.ts';
-
 export const AUTHORITY_LABELS = [
   'vocabulary',
   'capability',
