@@ -80,10 +80,11 @@ export function closureGrowthEvidence(params: {
   renamedBaseToHead?: ReadonlyMap<string, string>;
   /**
    * Weight-bearing statement texts of each merge-base production source DELETED since the
-   * merge-base (`deletedSourcesSince`, which deliberately skips `-M`, mapped through
-   * `statementTextsOf`). Git's rename detection is a similarity heuristic and a rewritten move
-   * evades it, showing up as delete + brand-new path; content is not a heuristic, so an added
-   * module carrying a deleted source's code is a move of pre-existing code, not a new file.
+   * merge-base (`deletedSourcesSince`, which lists only the deletions git's DEFAULT rename
+   * pairing did not absorb, mapped through `statementTextsOf`). Git's rename detection is a
+   * similarity heuristic and a rewritten move evades it, showing up as delete + brand-new path;
+   * content is not a heuristic, so an added module carrying a deleted source's code is a move of
+   * pre-existing code, not a new file.
    */
   deletedSourceTexts?: readonly (readonly string[])[];
 }): ClosureGrowthEvidence {

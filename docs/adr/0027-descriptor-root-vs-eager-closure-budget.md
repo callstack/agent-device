@@ -155,7 +155,8 @@ shippable, so an oversized hub is addressable debt rather than accepted state.
   statement texts close it down to a stated threshold: two identical normalized statements from
   one deleted source is the move signal, one is tolerated as coincidence (short constants repeat
   across the repo), and a transplant rewritten statement-by-statement stays outside a textual
-  probe — what remains heuristic-free is the LIST of deleted sources (an `-M`-less diff), not the
+  probe — what remains heuristic-free is the LIST of deleted sources (git's own delete listing,
+  needing no similarity pairing to have been attempted), not the
   content match.
 - **Weight alone (#2469 candidate 1):** refuted by the planted drop test — a swap can keep the
   statement total flat while quietly making the closure evaluate different modules.

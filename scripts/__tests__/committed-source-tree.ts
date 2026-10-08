@@ -55,10 +55,14 @@ export function renamedSince(repoRoot: string, base: string): ReadonlyMap<string
 }
 
 /**
- * Production source paths tracked at `base` but gone from the working tree, WITHOUT `-M`, so a
- * rename the similarity detector would pair stays visible here too. `renamedSince` answers by
- * detection and misses a moved-and-rewritten module; the split tolerance reads these paths'
- * content directly so such a move stays non-novel (#3298 review).
+ * Production source paths tracked at `base` but gone from the working tree. Plain `git diff`
+ * already pairs renames by default, so this lists only the deletions that pairing did NOT
+ * absorb -- a moved-and-rewritten module the detector could not pair, which `renamedSince`
+ * answers by detection and therefore misses; the split tolerance reads these paths' content
+ * directly so such a move stays non-novel (#3298 review). The default pairing is load-bearing:
+ * it keeps a split's re-homed hub OUT of this list (paired to its closest part), and passing
+ * `--no-renames` would put it here, making the split's own parts share two statements with
+ * "deleted source" and refusing the very extraction the tolerance exists for.
  */
 export function deletedSourcesSince(repoRoot: string, base: string): string[] {
   const status = git(repoRoot, ['diff', '--name-only', '--diff-filter=D', '-z', base]);
