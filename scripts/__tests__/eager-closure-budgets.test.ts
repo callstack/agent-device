@@ -63,7 +63,8 @@ import {
  * - Cost: one unit-lane test file plus two data/reader modules; five git processes for the
  *   merge-base side (merge-base, ls-tree, one cat-file batch for the whole base tree — which is
  *   also where the novelty check reads a deleted source's statements — one rename diff, and one
- *   default-pairing delete diff listing only the deletions rename detection did not absorb),
+ *   default-pairing (requested via --find-renames, not left to gitconfig) delete diff listing
+ *   only the deletions rename detection did not absorb),
  *   no device. The
  *   walker memoizes per-file edges per tree and parses each file once per distinct content, so
  *   the base tree pays only for the files the branch changed.

@@ -55,21 +55,30 @@ export function renamedSince(repoRoot: string, base: string): ReadonlyMap<string
 }
 
 /**
- * Production source paths tracked at `base` but gone from the working tree. Plain `git diff`
- * already pairs renames by default, so this lists only the deletions that pairing did NOT
- * absorb -- a moved-and-rewritten module the detector could not pair, which `renamedSince`
+ * Production source paths tracked at `base` but gone from the working tree. The diff requests
+ * rename pairing explicitly (`--find-renames`, so a `diff.renames=false` gitconfig cannot
+ * weaken it), and --diff-filter=D drops the paired ones, so this lists only the deletions that
+ * pairing did NOT absorb -- a moved-and-rewritten module the detector could not pair, which
+ * `renamedSince`
  * answers by detection and therefore misses. The split tolerance reads these paths' content
  * through `movedFromDeletedSource`: two or more statements shared with ONE deleted source is a
  * move signal, so a verbatim transplant stays non-novel; one shared statement is tolerated as
  * coincidence, and a statement-by-statement rewrite evades a textual match. This probe is the
  * reinforcement -- containment is what structurally refuses a dropped-and-swapped base module
- * (#3298 review). The default pairing is load-bearing:
- * it keeps a split's re-homed hub OUT of this list (paired to its closest part), and passing
- * `--no-renames` would put it here, making the split's own parts share two statements with
- * "deleted source" and refusing the very extraction the tolerance exists for.
+ * (#3298 review). And the pairing itself is load-bearing: it keeps a split's re-homed hub OUT
+ * of this list (paired to its closest part), while disabling it (--no-renames, or the gitconfig
+ * the explicit flag overrides) would put the hub here, making the split's own parts share two
+ * statements with "deleted source" and refusing the very extraction the tolerance exists for.
  */
 export function deletedSourcesSince(repoRoot: string, base: string): string[] {
-  const status = git(repoRoot, ['diff', '--name-only', '--diff-filter=D', '-z', base]);
+  const status = git(repoRoot, [
+    'diff',
+    '--name-only',
+    '--find-renames',
+    '--diff-filter=D',
+    '-z',
+    base,
+  ]);
   return status
     .toString('utf8')
     .split('\0')
