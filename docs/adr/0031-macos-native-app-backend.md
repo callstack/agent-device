@@ -40,6 +40,8 @@ Electron, Catalyst, and wheel delivery with window fields remain unmeasured.
    Other helper surfaces retain 12 levels.
 6. Screenshots capture only the session app's front window through ScreenCaptureKit.
 
+7. A native `app` session whose target resolves before launch claims only that app. `open` launches or reopens that app with `open -g` ([ADR 0035](0035-macos-per-app-claims.md)).
+
 ## Context
 
 XCTest drives a macOS app through XCUIApplication and puts the host in Automation Mode.

@@ -26,7 +26,12 @@ import {
 } from './open-policy.ts';
 import type { LaunchObservationPort } from './snapshot-observability.ts';
 import type { LaunchConfirmationAttempt, LaunchConfirmationTarget } from './launch-confirmation.ts';
-import { isApplePlatform, isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  isApplePlatform,
+  isIosFamily,
+  isMacOs,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
 const POST_CLOSE_SETTLE_MS = 300;
@@ -264,6 +269,7 @@ async function dispatchAppleOpen(
     positionals: launch.positionals,
     appBundleId: input.appBundleId,
     execution: input.execution,
+    ...(input.background ? { background: true } : {}),
     ...(localIosSimulator && input.relaunch && !input.execution.clearAppState
       ? { terminateRunningApp: true }
       : {}),
@@ -302,9 +308,10 @@ async function openLaunchUrl(
   await invokeApplicationOpen({
     device: binding.device,
     interactor: await binding.resolveInteractor(execution, input.appBundleId),
-    positionals: [url],
+    positionals: isMacOs(binding.device) && input.appBundleId ? [input.appBundleId, url] : [url],
     appBundleId: input.appBundleId,
     execution,
+    ...(input.background ? { background: true } : {}),
   });
 }
 

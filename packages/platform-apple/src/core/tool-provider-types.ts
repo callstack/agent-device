@@ -32,9 +32,12 @@ export type ApplePlistProvider = {
   readJson(path: string, signal?: AbortSignal): Promise<Record<string, unknown> | null>;
 };
 
+export type MacOsOpenOptions = { background?: boolean };
+
 export type AppleMacOsHostProvider = {
-  openBundle(bundleId: string, url?: string): Promise<void>;
-  openTarget(target: string): Promise<void>;
+  /** `background` launches or reopens without bringing the app to the front. */
+  openBundle(bundleId: string, url?: string, options?: MacOsOpenOptions): Promise<void>;
+  openTarget(target: string, options?: MacOsOpenOptions): Promise<void>;
   readClipboard(): Promise<string>;
   writeClipboard(text: string): Promise<void>;
   readDarkMode(): Promise<boolean>;

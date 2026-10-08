@@ -77,6 +77,7 @@ export function createAppleInteractor(
         launchArgs: options?.launchArgs,
         terminateRunningApp: options?.terminateRunningApp,
         url: options?.url,
+        background: options?.background,
         runnerOptions: runnerOpts,
       }),
     openDevice: () => openIosDevice(device),

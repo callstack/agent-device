@@ -8,6 +8,7 @@ import type { IosAppInfo } from '../../core/app-info.ts';
 import type {
   AppleMacOsHostProvider,
   AppleToolCommandExecutor,
+  MacOsOpenOptions,
 } from '../../core/tool-provider-types.ts';
 
 type ApplePlistJsonReader = (plistPath: string) => Promise<Record<string, unknown> | null>;
@@ -17,17 +18,20 @@ export function createLocalAppleMacOsHostProvider(
   readPlistJson: ApplePlistJsonReader,
 ): AppleMacOsHostProvider {
   return {
-    openBundle: async (bundleId, url) => {
+    openBundle: async (bundleId, url, options) => {
       // Loaded on the first bundle open, not when this provider is constructed: the probe's host-kit
       // reads stay off the Apple façades' eager closure (ADR 0019), and an open of an already-listed
       // app is the common path that never needs them until `open` actually runs.
       const { waitForLaunchServicesRegistration } =
         await import('./launch-services-registration.ts');
       await waitForLaunchServicesRegistration(runCommand, bundleId);
-      await runCommand('open', buildMacOpenArgs(bundleId, url));
+      await runCommand('open', [
+        ...openActivationArgs(options),
+        ...buildMacOpenArgs(bundleId, url),
+      ]);
     },
-    openTarget: async (target) => {
-      await runCommand('open', [target]);
+    openTarget: async (target, options) => {
+      await runCommand('open', [...openActivationArgs(options), target]);
     },
     readClipboard: async () => {
       const result = requireExecSuccess(
@@ -69,6 +73,10 @@ export function createLocalAppleMacOsHostProvider(
     },
     listApps: async (filter) => await listLocalMacApps(runCommand, readPlistJson, filter),
   };
+}
+
+function openActivationArgs(options: MacOsOpenOptions | undefined): string[] {
+  return options?.background ? ['-g'] : [];
 }
 
 function buildMacOpenArgs(bundleId: string, url?: string): string[] {

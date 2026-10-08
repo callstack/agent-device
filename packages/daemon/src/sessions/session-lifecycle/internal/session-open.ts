@@ -1,3 +1,4 @@
+import { reopenOutsideAppClaim } from './session-open-claims.ts';
 import type { HostEnvironment } from '@agent-device/kernel/source-value';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
@@ -261,6 +262,19 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     // frame becomes stale before those effects, rather than after the later visible launch.
     requireOpenSessionAdmission(sessionStore, sessionName, existingRef);
     const preparedSession = sessionStore.requireCurrent(existingRef);
+    if (preparedSession.deviceClaim?.app) {
+      const resolved = await admission.runtime.operations.resolveOpenTarget({
+        target: openTarget,
+        surface: surfaceResult,
+        foreground: false,
+      });
+      const outsideAppClaim = reopenOutsideAppClaim({
+        session: preparedSession,
+        surface: surfaceResult,
+        appBundleId: resolved.appBundleId,
+      });
+      if (outsideAppClaim) return { type: 'response', response: outsideAppClaim };
+    }
     expireRefFrame(preparedSession);
     const details = await prepareOpenCommandDetails({
       req,

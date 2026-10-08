@@ -9,13 +9,18 @@ import {
   ensureHostDirectory,
   hostFileExistsSync,
   hostHomeDirectory,
+  resolveDeviceClaimRoot,
   readHostBinaryFile,
   readHostDirectory,
   readHostTextFile,
   renameHostPath,
   writeHostTextFile,
 } from '@agent-device/host-kit/host-file';
-import { hostPlatform, writeHostStderr } from '@agent-device/host-kit/process';
+import {
+  hostPlatform,
+  readCurrentOwnerIdentity,
+  writeHostStderr,
+} from '@agent-device/host-kit/process';
 import {
   resolveExecutableOverridePath,
   runCmdBackground,
@@ -616,5 +621,36 @@ export async function runMacOsScreenshotAction(
 }> {
   const args = ['screenshot', '--out', outPath];
   appendMacOsHelperContextArgs(args, options);
-  return await runMacOsHelper(args, { signal: options.signal, env: options.env });
+  return await withMacOsScreenCaptureLock(
+    options,
+    async () => await runMacOsHelper(args, { signal: options.signal, env: options.env }),
+  );
+}
+
+/**
+ * ScreenCaptureKit fails or hangs window captures that two processes start at the same time
+ * (measured on macOS 27 with two helpers capturing two apps), so every helper capture on this Mac
+ * runs alone, whichever daemon asks. The lock sits in the host-global device claims directory,
+ * the store every daemon on the host already coordinates through.
+ */
+async function withMacOsScreenCaptureLock<T>(
+  options: { env: Readonly<EnvMap>; signal?: AbortSignal },
+  task: () => Promise<T>,
+): Promise<T> {
+  const lockRoot = resolveDeviceClaimRoot(options.env);
+  await ensureHostDirectory(lockRoot);
+  const { acquireProcessLock, withProcessLock } = await import('@agent-device/host-kit/file');
+  return await withProcessLock({
+    acquire: async () => {
+      const owner = readCurrentOwnerIdentity();
+      return await acquireProcessLock({
+        lockDirPath: path.join(path.resolve(lockRoot), 'macos-screen-capture.lock'),
+        owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
+        timeoutMs: MACOS_HELPER_TIMEOUT_MS + 5_000,
+        description: 'the macOS screen capture lock',
+        signal: options.signal,
+      });
+    },
+    task,
+  });
 }

@@ -69,6 +69,7 @@ import {
   type LifecycleOperationsLoader,
 } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
 import { resolveAndroidPackageForOpen } from '@agent-device/platform-android/mechanics';
+
 import {
   makeAndroidDevice,
   makeAndroidEmulator,

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { publishFileSync } from './atomic-file.ts';
 import { emitDiagnostic } from './diagnostics.ts';
 import {
@@ -307,22 +307,24 @@ function isSameClaim(left: ProcessLockOwnerRecord, right: ProcessLockOwnerRecord
 }
 
 export async function acquireProcessLock(
-  params: ProcessLockOptions & { timeoutMs?: number; pollMs?: number },
+  params: ProcessLockOptions & { timeoutMs?: number; pollMs?: number; signal?: AbortSignal },
 ): Promise<ProcessLockRelease> {
   return (await acquireProcessLockAcquisition(params)).release;
 }
 
 export async function acquireProcessLockAcquisition(
-  params: ProcessLockOptions & { timeoutMs?: number; pollMs?: number },
+  params: ProcessLockOptions & { timeoutMs?: number; pollMs?: number; signal?: AbortSignal },
 ): Promise<ProcessLockAcquisition> {
   const deadline = Date.now() + (params.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS);
   const pollMs = params.pollMs ?? DEFAULT_LOCK_POLL_MS;
   do {
+    if (params.signal?.aborted) throw createRequestCanceledError();
     const attempt = tryAcquireProcessLock(params);
     if (attempt.status === 'acquired') return attempt.acquisition;
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
-    await sleep(Math.min(pollMs, remaining));
+    await sleep(Math.min(pollMs, remaining), params.signal);
+    if (params.signal?.aborted) throw createRequestCanceledError();
   } while (Date.now() < deadline);
   const reading = readProcessLockOwner(path.join(params.lockDirPath, OWNER_FILE_NAME));
   throw new AppError(

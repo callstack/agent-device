@@ -17,6 +17,7 @@ type LifecycleEffectContext = ApplicationLifecycleExecution &
     appBundleId?: string;
     signal: AbortSignal;
     terminateRunningApp?: boolean;
+    background?: boolean;
   }>;
 
 /**
@@ -200,6 +201,7 @@ export function applicationLifecycleFixtureInteractor(
           launchArgs: options?.launchArgs,
           launchConsole: options?.launchConsole,
           terminateRunningApp: options?.terminateRunningApp,
+          background: options?.background,
         }),
       );
       clearAppState = false;
@@ -237,6 +239,7 @@ function lifecycleEffectContext(
     launchArgs?: readonly string[];
     launchConsole?: string;
     terminateRunningApp?: boolean;
+    background?: boolean;
   }>,
 ): LifecycleEffectContext {
   return {
@@ -254,6 +257,7 @@ function lifecycleEffectContext(
     runnerLeaseContext: runner.runnerLeaseContext,
     appBundleId: input.appBundleId ?? runner.appBundleId,
     signal: runner.signal ?? new AbortController().signal,
+    ...(input.background ? { background: true } : {}),
     ...(input.terminateRunningApp === undefined
       ? {}
       : { terminateRunningApp: input.terminateRunningApp }),

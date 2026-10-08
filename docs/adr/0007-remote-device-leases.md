@@ -251,7 +251,10 @@ The host picks the lease id.
 A repeated PUT renews the lease.
 A PUT that names another scope for an existing id is refused, not rewritten.
 
+A session opened under a `macos-app` lease takes no host device claim (ADR 0035). Within one daemon, it conflicts with whole-Mac sessions and sessions on the same app. It can run beside sessions on other apps.
+
 Heartbeat, expiry, and the loss on daemon restart are those of any lease, with two exceptions:
+
 
 - A tenant heartbeat or request cannot renew the lease for longer than the window of the host's last PUT.
 - A tenant cannot release the lease. `lease_release` is refused with `MACOS_APP_LEASE_HOST_OWNED`.

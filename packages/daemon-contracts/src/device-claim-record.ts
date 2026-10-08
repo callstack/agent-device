@@ -6,7 +6,7 @@ import {
 } from '@agent-device/kernel/device';
 import { isRecord } from '@agent-device/kernel/record';
 
-import { canonicalLocalDeviceKey } from './device-claim-paths.ts';
+import { appScopedDeviceKey, canonicalLocalDeviceKey } from './device-claim-paths.ts';
 
 /** Schema version of a process-owned claim record; v1/v2 records normalize to it on read. */
 export const DEVICE_CLAIM_SCHEMA_VERSION = 3;
@@ -30,7 +30,10 @@ const DEVICE_CLAIM_OWNER_KINDS: readonly DeviceClaimOwnerKind[] = [
  * A claim owned by one process: the session or the sessionless command that took it. Its principal
  * is `ownerPid`/`ownerStartTime`/`ownerToken`, which is what every clearing surface matches on.
  */
+export type DeviceClaimApp = { bundleId: string };
+
 export type DeviceClaim = {
+  app?: DeviceClaimApp;
   schemaVersion: 3;
   deviceKey: string;
   device: DeviceIdentity & { name: string };
@@ -60,6 +63,7 @@ export type DeviceClaim = {
  * that holder release, abandon, or keep fencing the claim, and nothing else.
  */
 export type DeviceClaimSessionOwnership = {
+  app?: DeviceClaimApp;
   deviceKey: string;
   ownerToken: string;
   ownerPid: number;
@@ -70,6 +74,7 @@ export type DeviceClaimSessionOwnership = {
 export function ownershipFromClaim(claim: DeviceClaim): DeviceClaimSessionOwnership {
   return {
     deviceKey: claim.deviceKey,
+    ...(claim.app ? { app: claim.app } : {}),
     ownerToken: claim.ownerToken,
     ownerPid: claim.ownerPid,
     ownerStartTime: claim.ownerStartTime,
@@ -157,10 +162,15 @@ function decodeClaimFields(
   const owner = decodeClaimOwner(raw);
   const timestamps = decodeClaimTimestamps(raw);
   if (!location || !owner || !timestamps) return null;
-  if (location.deviceKey !== canonicalLocalDeviceKey(identity)) return null;
+  const app = decodeClaimApp(raw.app);
+  if (app === null) return null;
+  const deviceKey = canonicalLocalDeviceKey(identity);
+  if (location.deviceKey !== (app ? appScopedDeviceKey(deviceKey, app.bundleId) : deviceKey))
+    return null;
   return {
     schemaVersion: DEVICE_CLAIM_SCHEMA_VERSION,
     ...location,
+    ...(app ? { app } : {}),
     device: { ...identity, name },
     ...owner,
     ...timestamps,
@@ -226,4 +236,11 @@ function isPositiveInteger(value: unknown): value is number {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function decodeClaimApp(value: unknown): DeviceClaimApp | null | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return null;
+  const bundleId = readNonEmptyString(value.bundleId);
+  return bundleId ? { bundleId } : null;
 }

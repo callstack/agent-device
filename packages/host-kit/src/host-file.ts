@@ -29,3 +29,5 @@ export {
   writeHostTextFile,
   writeHostTextFileSync,
 } from './internal/host-file.ts';
+
+export { resolveDeviceClaimRoot } from './internal/device-claim-root.ts';

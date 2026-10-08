@@ -904,3 +904,24 @@ test('release waits for a guard another process holds for a filesystem step', as
   assert.equal(next.status, 'acquired');
   if (next.status === 'acquired') await next.acquisition.release();
 });
+
+test('cancelled lock contention returns request_canceled without replacing the holder', async () => {
+  const lockDirPath = path.join(tmpDir, 'cancelled.lock');
+  const owner = currentProcessOwner();
+  const release = await acquireProcessLock({ lockDirPath, owner });
+  const before = fs.readFileSync(path.join(lockDirPath, 'owner.json'), 'utf8');
+  const controller = new AbortController();
+  const waiting = acquireProcessLock({
+    lockDirPath,
+    owner,
+    signal: controller.signal,
+    pollMs: 60_000,
+  });
+  controller.abort();
+  await assert.rejects(
+    waiting,
+    (error: unknown) => error instanceof AppError && error.details?.reason === 'request_canceled',
+  );
+  assert.equal(fs.readFileSync(path.join(lockDirPath, 'owner.json'), 'utf8'), before);
+  await release();
+});

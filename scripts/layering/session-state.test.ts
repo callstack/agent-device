@@ -298,7 +298,6 @@ test('known SessionRef-returning store methods seed computed destructuring', () 
   for (const read of [
     'store.lookup(address)',
     'store.publish(address, session)',
-    'store.findByDevice(deviceId)',
     'store.refresh(ref)',
   ]) {
     assert.deepEqual(

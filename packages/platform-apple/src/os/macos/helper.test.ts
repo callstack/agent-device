@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, beforeEach } from 'vitest';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { macOsHelperSurface } from '@agent-device/contracts/session';
 import { AppError } from '@agent-device/kernel/errors';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
@@ -13,6 +14,14 @@ import {
   runMacOsScreenshotAction,
   runMacOsSnapshotAction,
 } from './helper.ts';
+
+let captureEnv: Record<string, string | undefined>;
+beforeEach(() => {
+  captureEnv = {
+    ...process.env,
+    AGENT_DEVICE_CLAIMS_DIR: mkdtempForTestSync('macos-capture-claims'),
+  };
+});
 
 const desktop = macOsHelperSurface('desktop', 'xctest')!;
 const menubar = macOsHelperSurface('menubar', 'xctest')!;
@@ -46,7 +55,7 @@ test('macOS helper snapshot passes cancellation to the helper process', async ()
   await withAppleToolProvider(
     provider,
     async () =>
-      await runMacOsSnapshotAction(desktop, { env: process.env, signal: controller.signal }),
+      await runMacOsSnapshotAction(desktop, { env: captureEnv, signal: controller.signal }),
   );
 
   assert.equal(receivedSignal, controller.signal);
@@ -75,7 +84,7 @@ test('macOS helper press carries the hold, repeat count, and interval to the cli
     provider,
     async () =>
       await runMacOsPressAction(12, 34, {
-        env: process.env,
+        env: captureEnv,
         surface: menubar,
         bundleId: 'com.example.Menu',
         holdMs: 800,
@@ -119,7 +128,7 @@ test('macOS helper press carries an explicit zero interval instead of dropping i
     provider,
     async () =>
       await runMacOsPressAction(7, 8, {
-        env: process.env,
+        env: captureEnv,
         surface: desktop,
         clicks: 2,
         intervalMs: 0,
@@ -151,7 +160,7 @@ test('macOS helper press keeps repeats independent and names a double-click expl
     provider,
     async () =>
       await runMacOsPressAction(7, 8, {
-        env: process.env,
+        env: captureEnv,
         surface: frontmostApp,
         clicks: 3,
         doubleClick: true,
@@ -187,7 +196,7 @@ test('macOS helper press outlives its own click schedule and forwards cancellati
     provider,
     async () =>
       await runMacOsPressAction(1, 2, {
-        env: process.env,
+        env: captureEnv,
         surface: desktop,
         holdMs: 10_000,
         clicks: 4,
@@ -230,7 +239,7 @@ test('macOS helper press stays a single held click when nothing is repeated', as
 
   await withAppleToolProvider(
     provider,
-    async () => await runMacOsPressAction(5, 6, { env: process.env, surface: frontmostApp }),
+    async () => await runMacOsPressAction(5, 6, { env: captureEnv, surface: frontmostApp }),
   );
 
   assert.equal(receivedArgs.includes('--clicks'), false);
@@ -252,7 +261,7 @@ test('macOS helper screenshot argv carries only --out and --surface', async () =
   await withAppleToolProvider(
     provider,
     async () =>
-      await runMacOsScreenshotAction('/tmp/out.png', { env: process.env, surface: desktop }),
+      await runMacOsScreenshotAction('/tmp/out.png', { env: captureEnv, surface: desktop }),
   );
 
   assert.deepEqual(receivedArgs, ['screenshot', '--out', '/tmp/out.png', '--surface', 'desktop']);
@@ -289,7 +298,7 @@ for (const hint of [
       runMacOsScreenshotAction('/tmp/out.png', {
         surface: nativeApp,
         bundleId: 'com.apple.TextEdit',
-        env: process.env,
+        env: captureEnv,
       }).then(
         () => undefined,
         (error: unknown) => error,
@@ -304,6 +313,40 @@ for (const hint of [
   });
 }
 
+test('macOS helper screenshots never run two captures at once', async () => {
+  let active = 0;
+  let maxActive = 0;
+  const provider = createLocalAppleToolProvider({
+    macosHelper: {
+      run: async () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        active -= 1;
+        return helperReturn({ path: '/tmp/out.png', surface: 'app' });
+      },
+    },
+  });
+  const app = macOsHelperSurface('app', 'native')!;
+
+  await withAppleToolProvider(provider, async () => {
+    await Promise.all([
+      runMacOsScreenshotAction('/tmp/one.png', {
+        env: captureEnv,
+        surface: app,
+        bundleId: 'com.example.one',
+      }),
+      runMacOsScreenshotAction('/tmp/two.png', {
+        env: captureEnv,
+        surface: app,
+        bundleId: 'com.example.two',
+      }),
+    ]);
+  });
+
+  assert.equal(maxActive, 1);
+});
+
 test('helper entry points accept only an owner-routed surface', () => {
   // Never invoked: each directive fails typecheck once its entry point widens back to an
   // unbranded or optional surface.
@@ -311,7 +354,7 @@ test('helper entry points accept only an owner-routed surface', () => {
     // @ts-expect-error a bare literal skips the routing owner
     await runMacOsSnapshotAction('desktop');
     // @ts-expect-error a bare literal skips the routing owner
-    await runMacOsScreenshotAction(out, { env: process.env, surface: 'menubar' });
+    await runMacOsScreenshotAction(out, { env: captureEnv, surface: 'menubar' });
     // @ts-expect-error the surface is required
     await runMacOsReadTextAction(1, 2, { bundleId: 'com.example' });
     // @ts-expect-error the surface is required

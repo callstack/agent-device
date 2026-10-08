@@ -13,6 +13,7 @@ import {
   describeOpenWaitForRefusal,
   readOpenWaitAttempt,
   readOpenWaitBudgetMs,
+  sessionConflictsWithOpen,
 } from '../open-device-contention-wait.ts';
 
 // `--wait <ms>` is the one answer to a device another session is holding. Two things make that
@@ -175,7 +176,7 @@ test('only a fresh open with a budget and a resolved device gets a wait', () => 
 test('a free device is read once in the store and records no wait', async () => {
   const req = openRequest({ waitMs: 30_000 });
   const store = makeSessionStore('agent-device-open-wait-');
-  const looks = vi.spyOn(store, 'findByDevice');
+  const looks = vi.spyOn(store, 'listRefs');
 
   const wait = beginWait({
     req,
@@ -258,7 +259,7 @@ test('a budget that runs out busy costs the whole budget, then lets the open ref
   vi.useFakeTimers();
   const req = openRequest({ waitMs: 1000 });
   const store = storeWithHolder();
-  const looks = vi.spyOn(store, 'findByDevice');
+  const looks = vi.spyOn(store, 'listRefs');
   const wait = beginWait({
     req,
     sessionName: OPENER_ADDRESS,
@@ -316,3 +317,134 @@ async function waitUntil(start: () => Promise<void>, budgetMs: number): Promise<
   await vi.advanceTimersByTimeAsync(budgetMs);
   await running;
 }
+
+const HOST_MAC = {
+  platform: 'apple',
+  appleOs: 'macos',
+  id: 'host-macos-local',
+  name: 'Host Mac',
+  kind: 'device',
+  target: 'desktop',
+  booted: true,
+} as const;
+
+/** A store whose holder drives `com.example.one` alone, through an app claim. */
+function storeWithAppHolder(): SessionStore {
+  const store = makeSessionStore('agent-device-open-wait-');
+  store.publish(HOLDER_ADDRESS, {
+    ...session(HOLDER_ADDRESS),
+    device: HOST_MAC,
+    deviceClaim: {
+      deviceKey: 'local:apple:macos:host-macos-local:app:com.example.one',
+      ownerToken: 'token',
+      ownerPid: process.pid,
+      ownerStartTime: null,
+      app: { bundleId: 'com.example.one' },
+    },
+  });
+  return store;
+}
+
+/**
+ * An open that resolves its claim under the locks, as the new-session open does: it reports a
+ * conflicting session to the wait and refuses, or opens.
+ */
+function openClaiming(req: DaemonRequest, store: SessionStore, openerApp?: { bundleId: string }) {
+  return async () => {
+    const conflict = store
+      .listRefs()
+      .some(
+        (ref) => ref.address !== OPENER_ADDRESS && sessionConflictsWithOpen(ref.session, openerApp),
+      );
+    if (!conflict) return 'opened';
+    req.internal?.reportOpenDeviceConflict?.(openerApp);
+    return 'refused';
+  };
+}
+
+for (const { opener, openerApp, waits } of [
+  { opener: 'a whole-Mac opener', openerApp: undefined, waits: true },
+  { opener: 'a same-app opener', openerApp: { bundleId: 'COM.example.one' }, waits: true },
+  { opener: 'a different-app opener', openerApp: { bundleId: 'com.example.two' }, waits: false },
+]) {
+  test(`${opener} ${waits ? 'waits for' : 'runs beside'} a session holding one app`, async () => {
+    vi.useFakeTimers();
+    const req = openRequest({ waitMs: 30_000 });
+    const store = storeWithAppHolder();
+    const holder = store.lookup(HOLDER_ADDRESS)!;
+    setTimeout(() => store.retire(holder), 600);
+    const wait = beginWait({
+      req,
+      sessionName: OPENER_ADDRESS,
+      sessionStore: store,
+      deviceId: HOST_MAC.id,
+    })!;
+    await wait.waitForDeviceOutsideLocks();
+    const trace = lockTrace({});
+    const startedAtMs = Date.now();
+
+    const running = wait
+      .runWhenDeviceIsUnheld({
+        acquireLocks: trace.acquireLocks,
+        task: openClaiming(req, store, openerApp),
+      })
+      .then((outcome) => ({ outcome, waitedMs: Date.now() - startedAtMs }));
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    const { outcome, waitedMs } = await running;
+    expect(outcome).toBe('opened');
+    expect(trace.order).toEqual(
+      waits ? ['acquire', 'release', 'acquire', 'release'] : ['acquire', 'release'],
+    );
+    expect(waitedMs >= 600).toBe(waits);
+  });
+}
+
+test('a whole-Mac opener whose budget runs out beside an app session reports the wait', async () => {
+  vi.useFakeTimers();
+  const req = openRequest({ waitMs: 1000 });
+  const store = storeWithAppHolder();
+  const wait = beginWait({
+    req,
+    sessionName: OPENER_ADDRESS,
+    sessionStore: store,
+    deviceId: HOST_MAC.id,
+  })!;
+  await wait.waitForDeviceOutsideLocks();
+
+  const running = wait.runWhenDeviceIsUnheld({
+    acquireLocks: lockTrace({}).acquireLocks,
+    task: openClaiming(req, store),
+  });
+  await vi.advanceTimersByTimeAsync(10_000);
+
+  expect(await running).toBe('refused');
+  expect(readOpenWaitAttempt(req).waitedMs).toBe(1000);
+});
+
+test('the wait spend is readable from the request a lease admission copied after the spend', async () => {
+  vi.useFakeTimers();
+  const req = openRequest({ waitMs: 1000 });
+  const store = storeWithAppHolder();
+  const wait = beginWait({
+    req,
+    sessionName: OPENER_ADDRESS,
+    sessionStore: store,
+    deviceId: HOST_MAC.id,
+  })!;
+  await wait.waitForDeviceOutsideLocks();
+
+  let admitted = req;
+  const running = wait.runWhenDeviceIsUnheld({
+    acquireLocks: lockTrace({}).acquireLocks,
+    task: async () => {
+      admitted = { ...admitted, internal: { ...admitted.internal } };
+      return await openClaiming(admitted, store)();
+    },
+  });
+  await vi.advanceTimersByTimeAsync(10_000);
+
+  expect(await running).toBe('refused');
+  expect(admitted).not.toBe(req);
+  expect(readOpenWaitAttempt(admitted).waitedMs).toBe(1000);
+});
