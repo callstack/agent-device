@@ -77,7 +77,7 @@ agent-device replay ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --s
 ```
 
 - Replay reads `.ad` scripts.
-- The CLI reads script paths on your machine and sends the script, with any Maestro `runFlow` includes, to the daemon. The same `replay` or `test` command works against a local or a remote daemon without copying files. A script that doesn't exist on your machine fails at once, naming the path you typed.
+- The CLI reads script paths on your machine and sends the script, with the Maestro `runFlow` includes it can resolve and read, to the daemon. An include it cannot read is left out, and the run fails if it reaches that include. The same `replay` or `test` command works against a local or a remote daemon without copying files. A script that doesn't exist on your machine fails at once, naming the path you typed.
 - A script that does not end in `close` leaves its session open. For a script that does end in
   `close`, pass `--keep-session` to skip only that final action and keep working in the same
   session:

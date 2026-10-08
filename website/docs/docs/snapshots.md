@@ -128,9 +128,10 @@ agent-device snapshot -s @e12
 
 ## Truncated captures
 
-`truncated: true` means the capture hit one of its node limits: 5000 nodes for the Android snapshot
-helper and the iOS Simulator accessibility bridge, and their own bounds for the XCTest runner and the
-web provider. On Android the limit applies before any `-s` scope.
+`truncated: true` means the Android snapshot helper or the iOS Simulator accessibility bridge hit its
+5000-node limit, or the web provider hit its own bound. On Android the limit applies before any `-s`
+scope. The Apple runner does not return a partial tree: above its limit (50,000 nodes, or 5,000 with
+`--raw`) the snapshot fails with a hint to scope it or take a screenshot instead.
 
 Every backend walks the tree in document order, so what gets cut is what comes last: footers, tab
 bars, items after a long list, even when they are on screen. The snapshot carries a warning when this

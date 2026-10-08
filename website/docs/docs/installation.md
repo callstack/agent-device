@@ -93,7 +93,7 @@ Run `agent-device help physical-device` for the same setup guidance from the CLI
 - Xcode is installed with `xcrun devicectl` and `xcrun xctrace` available.
 - The device is paired, trusted, connected, unlocked when needed, and listed by `xcrun devicectl list devices`.
 - Developer Mode is on in the device's Settings.
-- The Apple runner must be signed before commands can run on the device. Start with Automatic Signing in Xcode and set only these environment variables:
+- The Apple runner must be signed before commands can run on the device. Start with Automatic Signing in Xcode and these environment variables; add the others below only when needed:
   - `AGENT_DEVICE_IOS_TEAM_ID`
   - `AGENT_DEVICE_IOS_BUNDLE_ID` (optional base bundle ID for the runner app; its tests use `<id>.uitests`)
 - To find team IDs and Apple Development signing certificates, run `security find-identity -v -p codesigning`.

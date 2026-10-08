@@ -40,8 +40,9 @@ Actions:
 matches before you act. `find` has no `longpress` or `swipe` action; run `list`, then run the gesture
 on the ref you picked, for example `longpress @e14`.
 
-When more than one element matches, `find` rejects the query and lists the candidates. This applies
-to text queries and selector expressions alike. Add `--first` or `--last` to pick a match by
+When more than one element matches, the mutating actions (`click`, `focus`, `fill`, `type`) reject
+the query and list the candidates. This applies to text queries and selector expressions alike.
+Read-only actions (`exists`, `wait`, `get`) use the first match, and `list` returns every match. Add `--first` or `--last` to pick a match by
 position instead.
 
 ```bash

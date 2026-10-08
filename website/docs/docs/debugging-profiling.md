@@ -85,7 +85,7 @@ When a command fails, use `--json` to inspect `error.details.stderr` when it is 
 
 When a command fails against a remote daemon, the `Diagnostics Log:` path is always on your machine:
 agent-device downloads the failing request's record over the same base URL and token into
-`<state-dir>/remote-diagnostics/<session>/<request-id>.ndjson`, so a CI job can keep it as a build
+`<state-dir>/remote-diagnostics/<session>/requests/<request-id>.ndjson`, so a CI job can keep it as a build
 artifact. If the download fails, the line reads `unavailable` with the remote daemon, the
 request id, and the reason — never a path on the daemon host.
 
