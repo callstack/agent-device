@@ -92,12 +92,16 @@ facts computed from the two closure graphs and the merge-base tree, not by an en
    (renames canonicalized), so nothing was dropped or swapped.
 2. **Added-module novelty:** every module the head closure evaluates that the base closure did
    not is absent from the merge-base tree at its rename-canonicalized path AND carries no code
-   from a source deleted since the merge-base. A module the tree already had, sitting outside
-   the closure, becoming eager — under its own name, a renamed one, or a rewritten move that
-   evades git's `-M` similarity pairing — is a new edge, not re-homed code; and without this
-   fact, weight deleted elsewhere in the closure would fund it. Rename canonicalization
-   preserves modules ALREADY IN the base closure; it is not a pass for an external module
-   moved in, which fails the check at the base path the merge-base necessarily still has.
+   from a source deleted since the merge-base — matched when the added module shares **two or
+   more identical normalized top-level statements** with one deleted source; a single shared
+   statement is treated as coincidence, because short constants (a schema version, a default
+   timeout) repeat across the repo and branding every reuse a move would poison new files).
+   A module the tree already had, sitting outside the closure, becoming eager — under its own
+   name, a renamed one, or a rewritten move that evades git's `-M` similarity pairing — is a
+   new edge, not re-homed code; and without this fact, weight deleted elsewhere in the closure
+   would fund it. Rename canonicalization preserves modules ALREADY IN the base closure; it is
+   not a pass for an external module moved in, which fails the check at the base path the
+   merge-base necessarily still has.
 3. **Flat weight:** the closure's total top-level statement count — wiring lines excluded, so
    re-homing is invisible to it — does not exceed the merge-base closure's.
 
@@ -109,14 +113,20 @@ unrelated shrinkage paying for a smuggled edge — and the three together admit 
 while refusing any growth in the closure's module-scope statement weight. Statements were chosen
 over bytes because formatting and comment churn move bytes while statements track the thing being
 preserved: module-scope declarations and calls. The guarantee is exactly **newly evaluated
-modules are new code — new paths carrying no deleted source's statements — and total statement
-weight is flat over a preserved closure**, not equality of eager behavior: a split that REPLACES
-an existing statement with a more expensive top-level call inside an existing file moves no
-count and no weight, so it passes — nothing count-based, in modules or statements, can see a
-like-for-like replacement. That residue is bounded by what the tolerance cannot hide: every
-module the head newly evaluates is a path the merge-base tree did not have AND carries none of
-the statements of any source deleted since the merge-base (so it cannot smuggle pre-existing
-implementation into eager scope, rewritten or not), the hard ADR-0019 checks (façade exactness,
+modules are new code — new paths that share at most one coincidental statement with any source
+deleted since the merge-base (`movedFromDeletedSource`'s deliberate two-statement move-signal
+threshold) — and total statement weight is flat over a preserved closure**, not
+equality of eager behavior: a split that REPLACES an existing statement with a more expensive
+top-level call inside an existing file moves no count and no weight, so it passes — nothing
+count-based, in modules or statements, can see a like-for-like replacement. That residue is
+bounded by what the tolerance cannot hide: every module the head newly evaluates is a path the
+merge-base tree did not have AND is not a verbatim transplant — the move probe above brands any
+added module sharing two or more statements with one deleted source as pre-existing code.
+The probe is deliberately conservative and textual:
+code REWRITTEN or reformulated during a move does not match it and would pass as novel, so what
+is verified is "no verbatim transplant of a deleted source," not "no repurposed logic" (the
+weight fact is what still refuses a transplant made heavier). What keeps the residue small is
+everything around the probe: the hard ADR-0019 checks (façade exactness,
 no platform implementation before binding) stay count- and pattern-based under it, and the
 added-module listing every failure prints is what a reviewer reads. The planted tests in
 `scripts/__tests__/closure-growth-rule.test.ts` pin every failing direction.
@@ -142,7 +152,11 @@ shippable, so an oversized hub is addressable debt rather than accepted state.
 - **Novelty by merge-base tree path alone (the rule's second draft on #3298):** refuted by the
   planted rewritten-move test — a move that changes the path and churns formatting reports to
   git as delete + add, so an absent destination is not proof of new code. The deleted sources'
-  statement texts are the heuristic-free provenance that closes it.
+  statement texts close it down to a stated threshold: two identical normalized statements from
+  one deleted source is the move signal, one is tolerated as coincidence (short constants repeat
+  across the repo), and a transplant rewritten statement-by-statement stays outside a textual
+  probe — what remains heuristic-free is the LIST of deleted sources (an `-M`-less diff), not the
+  content match.
 - **Weight alone (#2469 candidate 1):** refuted by the planted drop test — a swap can keep the
   statement total flat while quietly making the closure evaluate different modules.
 - **Leave the array in place:** the status quo, not a resolution — it leaves the size debt unowned and

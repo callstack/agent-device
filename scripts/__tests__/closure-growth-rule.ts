@@ -14,10 +14,14 @@
 //    (renames canonicalized), so nothing was dropped or swapped -- the growth is purely
 //    addition.
 // 2. ADDED-MODULE NOVELTY: every module the head closure evaluates that the base closure did
-//    not is absent from the merge-base tree AT ITS RENAME-CANONICALIZED PATH and carries no
-//    statement text from a source deleted since the merge-base. A module the merge-base tree
-//    already had, sitting outside the closure, becoming eager -- under its own name, a new
-//    one, or a rewritten move `-M` cannot pair -- is a NEW EDGE, not re-homed code; without
+//    not is absent from the merge-base tree AT ITS RENAME-CANONICALIZED PATH and is not a
+//    verbatim transplant of a deleted source: two or more identical normalized top-level
+//    statements shared with one source deleted since the merge-base mark a move
+//    (`movedFromDeletedSource`); a rewritten transplant evades a textual probe and would pass
+//    as novel, which the flat-weight fact then has to catch if it is heavier. A module the
+//    merge-base tree already had, sitting outside the closure, becoming eager -- under its own
+//    name, a new one, or a rewritten move `-M` cannot pair -- is a NEW EDGE, not re-homed code;
+//    without
 //    this fact, weight deleted elsewhere in the closure would fund it. Canonicalization
 //    preserves modules ALREADY IN the base closure; a moved-in external module fails novelty
 //    at the base path the merge-base still has.
@@ -29,8 +33,8 @@
 // pre-existing module in at flat weight; novelty without containment accepts dropping a
 // merge-base module; weight without the other two accepts an unrelated shrinkage paying for a
 // smuggled edge. The guarantee the triple states is exactly "newly evaluated modules are new
-// CODE -- new paths carrying no deleted source's statements -- and total statement weight is
-// flat over a preserved closure" -- a split that REPLACES a statement with a more expensive
+// CODE -- new paths the deleted-source probe cannot match to a deleted source's statements --
+// and total statement weight is flat over a preserved closure" -- a split that REPLACES a statement with a more expensive
 // one inside an existing file is invisible to any count, in modules or in statements, and is
 // not what this tolerance was built to admit. It replaces neither the count comparison (which
 // still fires first: growth must exist to be tolerated) nor the hard ADR-0019 checks (façade

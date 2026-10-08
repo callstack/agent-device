@@ -60,8 +60,10 @@ import {
  *   ceilings, the committed-tree reader, rename following, the bounded attribution, recursive
  *   discovery) additionally has its own failing-direction test below, because a real tree that
  *   happens to satisfy its rules cannot distinguish a correct rule from a vacuous one.
- * - Cost: one unit-lane test file plus two data/reader modules; four git processes for the
- *   merge-base side (merge-base, ls-tree, one cat-file batch, one rename diff), no device. The
+ * - Cost: one unit-lane test file plus two data/reader modules; five git processes for the
+ *   merge-base side (merge-base, ls-tree, one cat-file batch for the whole base tree — which is
+ *   also where the novelty check reads a deleted source's statements — one rename diff, and one
+ *   `-M`-less delete diff listing the sources the rename diff cannot pair), no device. The
  *   walker memoizes per-file edges per tree and parses each file once per distinct content, so
  *   the base tree pays only for the files the branch changed.
  * - Kill criterion: if two consecutive quarters show no rule ever firing, or
