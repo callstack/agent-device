@@ -12,12 +12,12 @@ name: Mutation Affected
 # ownership instead would run the full ten-shard sweep on 24 of the last 40
 # merged PRs.
 #
-# On a harness diff the matrix is the canary (`LANE_CANARY`, the registry's
-# cheapest real sweep — lane sources own no kernel, so derivation alone would
-# select nothing) plus any kernel that same diff reaches through the import
-# graph (scripts/mutation/ownership.ts): a kernel source, or a test that reaches
-# one. Selected modules are sharded like the weekly sweep, so the PR's wall
-# clock is one module rather than their sum.
+# On a harness diff the matrix is the canary (`LANE_CANARY`, selected by
+# observed end-to-end runtime within the job budget — lane sources own no kernel,
+# so derivation alone would select nothing) plus any kernel that same diff
+# reaches through the import graph (scripts/mutation/ownership.ts): a kernel
+# source, or a test that reaches one. Selected modules are sharded like the
+# weekly sweep, so the PR's wall clock is one module rather than their sum.
 
 on:
   pull_request:
