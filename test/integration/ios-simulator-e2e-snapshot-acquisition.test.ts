@@ -74,6 +74,23 @@ test('a sparse capture is rejected whatever strategy it names', () => {
   );
 });
 
+test('a verdict with a state outside the declared vocabulary is rejected', () => {
+  // The kernel declares ['healthy', 'recovered', 'sparse'] and the runner's allCases is pinned to
+  // the same fixture; a verdict outside that set means the two sides diverged, and certifying
+  // depth facts off a tree the lane cannot classify is the same meaningless-green defect as
+  // ruling a sparse capture healthy.
+  for (const state of ['unknown', 'degraded', undefined]) {
+    assert.throws(
+      () =>
+        assertSimulatorSnapshotAcquisition(
+          capture({ ...(state === undefined ? {} : { state }), backend: 'tree' }),
+          'regular depth-1 snapshot',
+        ),
+      /state outside the declared vocabulary/,
+    );
+  }
+});
+
 test('a capture that declares its hittability evidence missing is rejected', () => {
   assert.throws(
     () =>

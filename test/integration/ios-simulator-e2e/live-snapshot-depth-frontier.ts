@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 
+import { SNAPSHOT_QUALITY_STATES } from '@agent-device/kernel/snapshot';
+
 import {
   assertWaitText,
   type LiveSnapshotNode as SnapshotNode,
@@ -150,7 +152,9 @@ const PRE_SELECTED_REASON_CODES: ReadonlySet<unknown> = new Set(['deferred', 're
  * served nothing: `sparse` means no backend served the screen, and `recovered` with a code other
  * than the two pre-selected ones means the strategy the presented depth semantics belong to failed
  * mid-capture and another answered (#1569 — two strategies are not comparable views of one screen).
- * Either one fails here with the response that proved it.
+ * Either one fails here with the response that proved it. A verdict whose state is outside the
+ * kernel-declared `SNAPSHOT_QUALITY_STATES` exhausts nothing and fails too — the lane must not
+ * certify a tree whose acquisition it does not classify.
  */
 export function assertSimulatorSnapshotAcquisition(
   result: { json?: any },
@@ -158,6 +162,10 @@ export function assertSimulatorSnapshotAcquisition(
 ): void {
   const quality = result.json?.data?.snapshotQuality;
   if (quality !== undefined) {
+    assert.ok(
+      (SNAPSHOT_QUALITY_STATES as readonly unknown[]).includes(quality.state),
+      `${description} disclosed a quality state outside the declared vocabulary: ${JSON.stringify(result)}`,
+    );
     assert.notEqual(
       quality.state,
       'sparse',
