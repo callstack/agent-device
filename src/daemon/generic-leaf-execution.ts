@@ -1,6 +1,4 @@
-// What a runtime-owned generic leaf resolves to and how the generic dispatcher runs it. The leaves
-// and the dispatcher both import this; leaves never import the dispatcher, so the lazy settle seam in
-// `generic-settle.ts` keeps the interaction runtime out of their import cycles.
+// Shared by the generic dispatcher and its leaves; leaves must not import the dispatcher.
 
 import type { DaemonCommandContext } from './context.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';

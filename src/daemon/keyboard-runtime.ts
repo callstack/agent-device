@@ -35,7 +35,7 @@ type KeyboardRuntimeAction = 'status' | 'dismiss' | 'enter';
 
 /**
  * `keyboard`'s resolve/execute split (mirrors {@link ResolvedGenericExecution} from
- * `request-generic-dispatch.ts`), but scoped to what the session route actually has: a resolved
+ * `generic-leaf-execution.ts`), but scoped to what the session route actually has: a resolved
  * command context, never a full {@link SessionState} — `keyboard status`/`dismiss` run sessionless
  * through an explicit selector, so a handler that required one would be proving something false.
  */
