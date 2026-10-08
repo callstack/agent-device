@@ -16,7 +16,7 @@ import {
 } from '../layering/model.ts';
 import { ARCHITECTURE_OWNERSHIP, matchesDeclaredRoot } from '../layering/architecture-ownership.ts';
 import { genPostorder, getSuccessors, getTransitiveReduction } from '@statelyai/graph';
-import { importEdgeId, importGraph, VALUE_EDGES } from './import-graph.ts';
+import { edgeKind, importEdgeId, importGraph, VALUE_EDGES } from './import-graph.ts';
 import type { EdgeKind } from './import-graph.ts';
 
 export type { EdgeKind } from './import-graph.ts';
@@ -163,12 +163,6 @@ function countLines(source: string): number {
     if (source[index] === '\n') lines++;
   }
   return lines;
-}
-
-function edgeKind(edge: ResolvedImportEdge): EdgeKind {
-  if (edge.dynamic) return 'dynamic';
-  if (edge.typeOnly) return 'type';
-  return 'value';
 }
 
 /**

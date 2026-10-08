@@ -40,9 +40,15 @@ export function providerSnapshotPresentationViolations(
   }
 
   const violations: LayeringViolation[] = [];
+  const reachableEdges = [...edgesByFile.values()].flat();
+  const graph = importGraphFromResolvedEdges(
+    reachableEdges.filter((edge) => !isPresentationTarget(edge.file)),
+    ALL_EDGES,
+    sources.keys(),
+  );
   for (const file of sources.keys()) {
     if (!PROVIDER_SOURCE.test(file)) continue;
-    violations.push(...presentationImportViolations(file, edgesByFile));
+    violations.push(...presentationImportViolations(file, edgesByFile, graph));
     violations.push(...residueViolations(file, sources.get(file)!));
   }
   return violations;
@@ -51,16 +57,11 @@ export function providerSnapshotPresentationViolations(
 function presentationImportViolations(
   providerFile: string,
   edgesByFile: ReadonlyMap<string, readonly ResolvedImportEdge[]>,
+  graph: ReturnType<typeof importGraphFromResolvedEdges>,
 ): LayeringViolation[] {
   const origins = new Map<string, ResolvedImportEdge>();
   const visited = new Set([providerFile]);
   const violations: LayeringViolation[] = [];
-  const reachableEdges = [...edgesByFile.values()].flat();
-  const graph = importGraphFromResolvedEdges(
-    reachableEdges.filter((edge) => !isPresentationTarget(edge.file)),
-    ALL_EDGES,
-    [providerFile],
-  );
 
   for (const { id: file } of genBFS(graph, providerFile)) {
     if (isPresentationTarget(file)) continue;

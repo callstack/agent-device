@@ -35,6 +35,12 @@ type ResolvedGraphEdge = {
   typeOnly: boolean;
 };
 
+export function edgeKind(edge: Pick<ResolvedGraphEdge, 'dynamic' | 'typeOnly'>): EdgeKind {
+  if (edge.dynamic) return 'dynamic';
+  if (edge.typeOnly) return 'type';
+  return 'value';
+}
+
 /**
  * Identity of one file pair, shared by `collapseEdges` and the graph's edge ids. NUL cannot occur
  * in a file path, so distinct pairs never share an id.
@@ -77,7 +83,7 @@ export function importGraphFromResolvedEdges(
   const seen = new Set<string>();
   const graphEdges: ImportGraphEdge[] = [];
   for (const edge of edges) {
-    const kind: EdgeKind = edge.dynamic ? 'dynamic' : edge.typeOnly ? 'type' : 'value';
+    const kind = edgeKind(edge);
     if (!kinds.has(kind)) continue;
     const id = importEdgeId(edge.file, edge.target);
     if (seen.has(id)) continue;

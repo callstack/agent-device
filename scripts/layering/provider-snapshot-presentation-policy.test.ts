@@ -88,7 +88,10 @@ test('R73 preserves breadth-first origin and finding order through a shared impo
   const sources = new Map([
     [provider, "import '../../../src/graph-first.ts';\nimport '../../../src/graph-second.ts';\n"],
     [first, "import '../packages/capture-kit/src/snapshot/first.ts';\nimport './graph-join.ts';\n"],
-    [second, "import '../packages/capture-kit/src/snapshot/second.ts';\n"],
+    [
+      second,
+      "import '../packages/capture-kit/src/snapshot/second.ts';\nimport './graph-join.ts';\n",
+    ],
     [join, "import '../packages/capture-kit/src/snapshot/joined.ts';\n"],
     [firstPresentation, 'export const first = true;\n'],
     [secondPresentation, 'export const second = true;\n'],
