@@ -14,10 +14,10 @@ import { bindLocalTypeTextInteractor } from './type-text-runtime.ts';
 /**
  * The whole local interactor-backed operation set a pointer-driving family binds: the uniform
  * one-fact-one-bind leaves the interactor catalog walks, plus the four that carry extra input of their own — gesture and touch read the
- * fact map, and touch needs a pause clock. Android and Linux each held a byte-identical copy of
- * this list; it is one list now, so neither family can drift from the other by forgetting a
- * member. Capture stays out: an owner's snapshot mechanics are its own (Linux captures a surface
- * through its host, Android drives the interactor), so there is no shared reading to make.
+ * fact map, and touch needs a pause clock. Android, Linux, and HarmonyOS bind this one list, so
+ * no pointer-driving family can drift from another by forgetting a member. Capture stays out: an
+ * owner's snapshot mechanics are its own (Linux captures a surface through its host, Android
+ * drives the interactor), so there is no shared reading to make.
  */
 export function bindLocalInteractorOperationSet(
   params: Readonly<{

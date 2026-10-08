@@ -7,7 +7,6 @@ import {
   buildSimctlArgsForDevice,
   runXcrun,
 } from './host.ts';
-import type { ExecResult } from '@agent-device/host-kit/command';
 import { isApplePlatform, type DeviceInfo } from '@agent-device/kernel/device';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
@@ -530,9 +529,9 @@ async function cleanupStaleSimulatorRunnerBundles(device: DeviceInfo): Promise<v
 async function uninstallStaleSimulatorRunnerBundle(
   device: DeviceInfo,
   bundleId: string,
-): Promise<ExecResult | undefined> {
+): Promise<void> {
   try {
-    return await runXcrun(buildSimctlArgsForDevice(device, ['uninstall', device.id, bundleId]), {
+    await runXcrun(buildSimctlArgsForDevice(device, ['uninstall', device.id, bundleId]), {
       allowFailure: true,
       timeoutMs: RUNNER_STALE_BUNDLE_UNINSTALL_TIMEOUT_MS,
     });
@@ -547,7 +546,6 @@ async function uninstallStaleSimulatorRunnerBundle(
         error: error instanceof Error ? error.message : String(error),
       },
     });
-    return undefined;
   }
 }
 
