@@ -11,17 +11,9 @@
   },
   "include": ["src"],
   "references": [
-    {
-      "path": "../capture-kit"
-    },
-    {
-      "path": "../contracts"
-    },
-    {
-      "path": "../host-kit"
-    },
-    {
-      "path": "../kernel"
-    }
+    { "path": "../capture-kit" },
+    { "path": "../contracts" },
+    { "path": "../host-kit" },
+    { "path": "../kernel" }
   ]
 }

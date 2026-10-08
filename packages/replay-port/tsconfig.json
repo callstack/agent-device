@@ -11,41 +11,17 @@
   },
   "include": ["src", "../command-registry/src/global.d.ts"],
   "references": [
-    {
-      "path": "../ad-replay"
-    },
-    {
-      "path": "../ad-script"
-    },
-    {
-      "path": "../capture-kit"
-    },
-    {
-      "path": "../command-registry"
-    },
-    {
-      "path": "../contracts"
-    },
-    {
-      "path": "../device-selection"
-    },
-    {
-      "path": "../host-kit"
-    },
-    {
-      "path": "../kernel"
-    },
-    {
-      "path": "../maestro"
-    },
-    {
-      "path": "../replay-test"
-    },
-    {
-      "path": "../selectors"
-    },
-    {
-      "path": "../session-journal"
-    }
+    { "path": "../ad-replay" },
+    { "path": "../ad-script" },
+    { "path": "../capture-kit" },
+    { "path": "../command-registry" },
+    { "path": "../contracts" },
+    { "path": "../device-selection" },
+    { "path": "../host-kit" },
+    { "path": "../kernel" },
+    { "path": "../maestro" },
+    { "path": "../replay-test" },
+    { "path": "../selectors" },
+    { "path": "../session-journal" }
   ]
 }

@@ -11,17 +11,9 @@
   },
   "include": ["src"],
   "references": [
-    {
-      "path": "../contracts"
-    },
-    {
-      "path": "../host-kit"
-    },
-    {
-      "path": "../kernel"
-    },
-    {
-      "path": "../provision-kit"
-    }
+    { "path": "../contracts" },
+    { "path": "../host-kit" },
+    { "path": "../kernel" },
+    { "path": "../provision-kit" }
   ]
 }

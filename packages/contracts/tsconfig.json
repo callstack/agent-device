@@ -10,9 +10,5 @@
     "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
   },
   "include": ["src"],
-  "references": [
-    {
-      "path": "../kernel"
-    }
-  ]
+  "references": [{ "path": "../kernel" }]
 }

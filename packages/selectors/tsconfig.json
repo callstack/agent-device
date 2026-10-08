@@ -11,17 +11,9 @@
   },
   "include": ["src"],
   "references": [
-    {
-      "path": "../ad-script"
-    },
-    {
-      "path": "../capture-kit"
-    },
-    {
-      "path": "../contracts"
-    },
-    {
-      "path": "../kernel"
-    }
+    { "path": "../ad-script" },
+    { "path": "../capture-kit" },
+    { "path": "../contracts" },
+    { "path": "../kernel" }
   ]
 }

@@ -6,7 +6,7 @@
     "emitDeclarationOnly": true,
     "declaration": true,
     "declarationDir": "./dist-types",
-    "tsBuildInfoFile": "./dist-types/.tsbuildinfo",
+    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo",
     "rootDir": "./src",
     "paths": {
       "agent-device/plugins": ["./node_modules/agent-device/src/sdk/plugins.ts"],

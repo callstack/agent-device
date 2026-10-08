@@ -11,23 +11,11 @@
   },
   "include": ["src"],
   "references": [
-    {
-      "path": "../capture-kit"
-    },
-    {
-      "path": "../contracts"
-    },
-    {
-      "path": "../host-kit"
-    },
-    {
-      "path": "../kernel"
-    },
-    {
-      "path": "../provision-kit"
-    },
-    {
-      "path": "../selectors"
-    }
+    { "path": "../capture-kit" },
+    { "path": "../contracts" },
+    { "path": "../host-kit" },
+    { "path": "../kernel" },
+    { "path": "../provision-kit" },
+    { "path": "../selectors" }
   ]
 }

@@ -11,17 +11,9 @@
   },
   "include": ["src"],
   "references": [
-    {
-      "path": "../capture-kit"
-    },
-    {
-      "path": "../contracts"
-    },
-    {
-      "path": "../kernel"
-    },
-    {
-      "path": "../platform-android"
-    }
+    { "path": "../capture-kit" },
+    { "path": "../contracts" },
+    { "path": "../kernel" },
+    { "path": "../platform-android" }
   ]
 }
