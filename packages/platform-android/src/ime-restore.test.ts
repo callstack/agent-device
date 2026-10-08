@@ -296,7 +296,7 @@ describe('a close cancelled mid-settle', () => {
   });
 });
 
-test('an ordinary close restores without any flush wait', async () => {
+test('an ordinary close restores without any flush wait but registers the window', async () => {
   bindAndroidAdbHostStub();
   setAndroidTestImeActiveForTests(DEVICE, true);
 
@@ -308,6 +308,37 @@ test('an ordinary close restores without any flush wait', async () => {
 
   expect(result).toMatchObject({ restored: true, reason: 'ok' });
   expect(sleep).not.toHaveBeenCalled();
+  // Registration is what lets a later kill-bound close — including another session's — see the
+  // window this restore opened.
+  expect([...pendingTestImeFlushSettles.keys()]).toEqual([`${STATE_DIR}:${DEVICE.id}`]);
+});
+
+test("a kill-bound close after another close's restore waits out the registered window", async () => {
+  // The reviewer's cross-session hole: session A's ordinary close confirmed the restore and
+  // dropped ownership; session B's close --shutdown must not kill inside A's flush window even
+  // though its own call inspects nothing.
+  const host = bindAndroidAdbHostStub();
+  await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
+  setAndroidTestImeActiveForTests(DEVICE, true);
+  const deviceAdb = fakeImeDeviceAdb(stuckDeviceState());
+  await withAndroidAdbProvider(
+    { exec: deviceAdb },
+    { serial: DEVICE.id },
+    async () => await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR, shutdownTarget: false }),
+  );
+
+  sleep.mockClear();
+  const result = await withAndroidAdbProvider(
+    { exec: deviceAdb },
+    { serial: DEVICE.id },
+    async () => await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR, shutdownTarget: true }),
+  );
+
+  expect(result).toEqual({ restored: false, reason: 'not-activated-here' });
+  expect(sleep).toHaveBeenCalledTimes(1);
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(0);
+  expect([...pendingTestImeFlushSettles.keys()]).toEqual([]);
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
 });
 
 test('a shutdown of a physical device restores without any flush wait', async () => {
