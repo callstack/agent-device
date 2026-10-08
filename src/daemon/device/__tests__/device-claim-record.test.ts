@@ -126,3 +126,18 @@ test('a record of an unknown schema version is unreadable', () => {
   expect(decodeStoredDeviceClaim(null)).toBeNull();
   expect(decodeStoredDeviceClaim([allocatorClaim()])).toBeNull();
 });
+
+test('an app claim decodes only at the key of its own app', () => {
+  const app = { bundleId: 'com.example.one' };
+  const appKey = `${DEVICE_KEY}:app:com.example.one`;
+  const record = decodeStoredDeviceClaim(currentClaim({ deviceKey: appKey, app }));
+  if (!record || isAllocatorHeldDeviceClaim(record)) throw new Error('expected process-owned');
+  expect(record.app).toEqual(app);
+
+  expect(decodeStoredDeviceClaim(currentClaim({ app }))).toBeNull();
+  expect(decodeStoredDeviceClaim(currentClaim({ deviceKey: appKey }))).toBeNull();
+  expect(
+    decodeStoredDeviceClaim(currentClaim({ deviceKey: `${DEVICE_KEY}:app:com.example.two`, app })),
+  ).toBeNull();
+  expect(decodeStoredDeviceClaim(currentClaim({ deviceKey: appKey, app: {} }))).toBeNull();
+});

@@ -35,6 +35,7 @@
 | [0031 macOS Native App Backend](0031-macos-native-app-backend.md) | `AGENT_DEVICE_MACOS_APP_BACKEND`, driving macOS app sessions without XCTest Automation Mode, why pointer actions are accessibility actions only, and the ghost cursor |
 | [0032 Layering Graph Engine](0032-layering-graph-engine.md) | evaluating replacement of `scripts/layering/` graph rules with dependency-cruiser or fallow `boundaries`, why graph-based layering checks share one replaceable import model, the measured edge-set and parity gaps, and the revisit triggers |
 | [0033 Collocation decision table](0033-collocation-decision-table.md) | moving or adding a file listed in umbrella #3276 §5, re-proposing a move that table refused, reading a zone's collocation decisions |
+| [0034 macOS Per-App Device Claims](0034-macos-per-app-claims.md) | claim keys below a device, the device-then-app lock order, native macOS app sessions running beside each other, stale per-app claims |
 
 ADRs record *why*; the registries and gates they describe are the living source of truth — when
 prose and a registry disagree, the registry wins and the ADR needs a follow-up.

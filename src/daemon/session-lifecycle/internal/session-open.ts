@@ -39,6 +39,7 @@ import {
   completeOpenCommand,
   openNewSessionWithDeviceClaim,
   renewOpenSessionClaim,
+  reopenOutsideAppClaim,
   type OpenApplicationRuntime,
   type SessionOpenResult,
   type RuntimeHintApplyOperation,
@@ -243,6 +244,12 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       foreground: false,
     });
     if (details.type === 'response') return { type: 'response', response: details.response };
+    const outsideAppClaim = reopenOutsideAppClaim({
+      session: preparedSession,
+      surface: surfaceResult,
+      appBundleId: details.details.appBundleId,
+    });
+    if (outsideAppClaim) return { type: 'response', response: outsideAppClaim };
 
     // Preparation may have booted the device to reach this surface, and a boot an owner caused for
     // its own reopen cannot later read as a boot its owner walked away from.

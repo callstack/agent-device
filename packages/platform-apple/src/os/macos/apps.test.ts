@@ -5,7 +5,8 @@ vi.mock('node:timers/promises', () => ({ setTimeout: vi.fn(async () => undefined
 vi.mock('./helper.ts', () => ({ quitMacOsApp: vi.fn() }));
 
 import { quitMacOsApp } from './helper.ts';
-import { closeMacOsApp } from './apps.ts';
+import { closeMacOsApp, openMacOsApp } from './apps.ts';
+import { createLocalAppleToolProvider, withAppleToolProvider } from '../../core/tool-provider.ts';
 
 const MACOS_DEVICE: DeviceInfo = {
   platform: 'apple',
@@ -75,4 +76,38 @@ test('closeMacOsApp bounds termination confirmation', async () => {
     details: { reason: 'MACOS_APP_TERMINATION_TIMEOUT', attempts: 20 },
   });
   expect(mockQuitMacOsApp).toHaveBeenCalledTimes(20);
+});
+
+test('openMacOsApp leaves the frontmost app in front only under the native backend', async () => {
+  const opened = async (backend: string | undefined) => {
+    const calls: string[][] = [];
+    const provider = createLocalAppleToolProvider({
+      runCommand: async (cmd, args) => {
+        if (cmd === 'open') calls.push(args);
+        return { exitCode: 0, stdout: '', stderr: '' };
+      },
+    });
+    vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', backend ?? '');
+    try {
+      await withAppleToolProvider(provider, async () => {
+        await openMacOsApp(MACOS_DEVICE, 'com.example.demo');
+        await openMacOsApp(MACOS_DEVICE, 'com.example.demo', { url: 'demo://open' });
+        await openMacOsApp(MACOS_DEVICE, 'demo://open');
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    return calls;
+  };
+
+  expect(await opened('native')).toEqual([
+    ['-g', '-b', 'com.example.demo'],
+    ['-g', '-b', 'com.example.demo', 'demo://open'],
+    ['-g', 'demo://open'],
+  ]);
+  expect(await opened(undefined)).toEqual([
+    ['-b', 'com.example.demo'],
+    ['-b', 'com.example.demo', 'demo://open'],
+    ['demo://open'],
+  ]);
 });
