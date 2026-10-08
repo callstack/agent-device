@@ -31,7 +31,7 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     '1',
     '--debug',
   ]);
-  assertSimulatorBridgeSnapshot(regular, 'regular depth-1 snapshot');
+  assertSimulatorSnapshotAcquisition(regular, 'regular depth-1 snapshot');
   const regularNodes = snapshotNodes(regular);
   const regularRoot = requireRoot(regularNodes, 'regular depth-1 snapshot');
   const projectedChild = requireIdentifier(regularNodes, CHILD_ID, 'regular depth-1 snapshot');
@@ -59,7 +59,7 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     'snapshot',
     '--raw',
   ]);
-  assertSimulatorBridgeSnapshot(rawFull, 'full raw visible-depth snapshot');
+  assertSimulatorSnapshotAcquisition(rawFull, 'full raw visible-depth snapshot');
   const rawFullNodes = snapshotNodes(rawFull);
   const rawChild = requireIdentifier(rawFullNodes, CHILD_ID, 'full raw visible-depth snapshot');
   assert.ok(
@@ -73,7 +73,7 @@ export async function assertRegularVisibleDepthFrontier(context: LiveContext): P
     '--depth',
     '1',
   ]);
-  assertSimulatorBridgeSnapshot(rawDepthOne, 'raw depth-1 visible-depth snapshot');
+  assertSimulatorSnapshotAcquisition(rawDepthOne, 'raw depth-1 visible-depth snapshot');
   const rawDepthOneNodes = snapshotNodes(rawDepthOne);
   assert.equal(
     rawDepthOneNodes.some((node) => node.identifier === CHILD_ID),
@@ -122,12 +122,54 @@ function numericDepth(node: SnapshotNode): number {
   return node.depth as number;
 }
 
-function assertSimulatorBridgeSnapshot(result: { json?: any }, description: string): void {
-  assert.equal(
-    result.json?.data?.snapshotQuality?.backend,
-    undefined,
-    `${description} must not carry XCTest tree quality metadata: ${JSON.stringify(result)}`,
-  );
+/**
+ * Reason codes that name a PRE-SELECTED backend rather than a capture that degraded
+ * (`deferred`: the runner's penalty circuit; `requested-backend`: the caller asked for that
+ * strategy). They are the two codes the product's own quality-warning renderer exempts from any
+ * degradation sentence for the same reason: nothing on THIS capture went wrong.
+ */
+const PRE_SELECTED_REASON_CODES: ReadonlySet<unknown> = new Set(['deferred', 'requested-backend']);
+
+/**
+ * The acquisition disclosure this scenario accepts before reading depth facts off the capture,
+ * keyed on the typed `snapshotQuality` verdict and never on the fallback warning's wording.
+ *
+ * A regular or raw capture of the fixture is served one of two ways, and each discloses itself
+ * here (#3328):
+ *
+ * - the host AX bridge served it. The bridge publishes no quality verdict at all
+ *   (`presentIosSnapshotAcquisition` reports the tree it read without one), so an absent verdict IS
+ *   the bridge's disclosure.
+ * - the route sent the capture to the XCTest runner instead — the bridge probe circuit is open for
+ *   this app generation, the bridge is still being prepared, a system surface is presented — and
+ *   the runner always stamps which of its own strategies served the payload. That disclosure is
+ *   legitimate on a regular snapshot: the bridge is a fast path, its circuit is per app generation,
+ *   and a runner-served capture keeps the hittability evidence this scenario asserts below.
+ *
+ * What the scenario may NOT be read from is a capture whose own verdict says it degraded or
+ * served nothing: `sparse` means no backend served the screen, and `recovered` with a code other
+ * than the two pre-selected ones means the strategy the presented depth semantics belong to failed
+ * mid-capture and another answered (#1569 — two strategies are not comparable views of one screen).
+ * Either one fails here with the response that proved it.
+ */
+export function assertSimulatorSnapshotAcquisition(
+  result: { json?: any },
+  description: string,
+): void {
+  const quality = result.json?.data?.snapshotQuality;
+  if (quality !== undefined) {
+    assert.notEqual(
+      quality.state,
+      'sparse',
+      `${description} reports no backend served this screen: ${JSON.stringify(result)}`,
+    );
+    if (quality.state === 'recovered') {
+      assert.ok(
+        PRE_SELECTED_REASON_CODES.has(quality.reasonCode),
+        `${description} fell back to another capture strategy mid-capture, so its presented depth is not comparable: ${JSON.stringify(result)}`,
+      );
+    }
+  }
   assert.equal(
     result.json?.data?.warnings?.includes(MISSING_HITTABILITY_WARNING) ?? false,
     false,
