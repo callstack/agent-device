@@ -497,8 +497,24 @@ export function reopenOutsideAppClaim(params: {
   );
 }
 
-function sameBundleId(resolved: string | undefined, claimed: string): boolean {
-  return resolved !== undefined && resolved.toLowerCase() === claimed.toLowerCase();
+function appClaimKeyFor(device: DeviceInfo, app: DeviceClaimApp | undefined): string | undefined {
+  return app
+    ? appScopedDeviceKey(canonicalLocalDeviceKey(deviceClaimIdentity(device)), app.bundleId)
+    : undefined;
+}
+
+/** The claim was taken for the app resolved before preparation; the open must launch that app. */
+function openedOutsideAppClaim(
+  app: DeviceClaimApp | undefined,
+  resolved: string | undefined,
+  openTarget: string | undefined,
+): DaemonResponse | undefined {
+  if (!app || resolved?.toLowerCase() === app.bundleId.toLowerCase()) return undefined;
+  return errorResponse(
+    'COMMAND_FAILED',
+    `${openTarget ?? 'The app'} resolved to ${resolved ?? 'no app'} after its claim was taken for ${app.bundleId}.`,
+    { reason: 'app-claim-scope', hint: 'Run the same open again.' },
+  );
 }
 
 async function acquireDeviceClaimForOwner(params: {
@@ -548,6 +564,43 @@ async function acquireDeviceClaimForOwner(params: {
   }
 }
 
+/** Takes the claim a new session needs: its app's, or the whole device's. */
+async function claimNewSessionDevice(params: {
+  req: DaemonRequest;
+  device: DeviceInfo;
+  surface: SessionSurface;
+  openTarget: string | undefined;
+  lifecycle: OpenApplicationRuntime;
+  sessionName: string;
+  sessionStore: SessionStore;
+  reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+}): Promise<
+  | { response: DaemonResponse }
+  | {
+      app: DeviceClaimApp | undefined;
+      deviceClaim: DeviceClaimSessionOwnership | undefined;
+      tookOverDeviceClaim: TakenOverDeviceClaim | undefined;
+    }
+> {
+  const { req, device, lifecycle, sessionStore } = params;
+  const app = await resolveAppClaim(params);
+  const conflict = findNewSessionDeviceConflict({
+    req,
+    device,
+    sessionStore,
+    appClaimKey: appClaimKeyFor(device, app),
+  });
+  if (conflict) return { response: conflict };
+  const ownerClaim = await acquireDeviceClaimForOwner({ ...params, owner: lifecycle.owner, app });
+  if (ownerClaim.status === 'conflict') {
+    return { response: buildDeviceClaimConflictError(device, ownerClaim.conflict) };
+  }
+  if (ownerClaim.status === 'refused') return { response: ownerClaim.response };
+  return ownerClaim.status === 'acquired'
+    ? { app, deviceClaim: ownerClaim.ownership, tookOverDeviceClaim: ownerClaim.tookOver }
+    : { app, deviceClaim: undefined, tookOverDeviceClaim: undefined };
+}
+
 export async function openNewSessionWithDeviceClaim(params: {
   req: DaemonRequest;
   sessionName: string;
@@ -579,30 +632,18 @@ export async function openNewSessionWithDeviceClaim(params: {
     selection,
   } = params;
   requireOpenSessionAdmission(sessionStore, sessionName, undefined);
-  const app = await resolveAppClaim({ req, device, surface, openTarget, lifecycle });
-  const appClaimKey = app
-    ? appScopedDeviceKey(canonicalLocalDeviceKey(deviceClaimIdentity(device)), app.bundleId)
-    : undefined;
-  const conflict = findNewSessionDeviceConflict({ req, device, sessionStore, appClaimKey });
-  if (conflict) return { type: 'response', response: conflict };
-
-  const ownerClaim = await acquireDeviceClaimForOwner({
+  const claimed = await claimNewSessionDevice({
     req,
     device,
-    owner: lifecycle.owner,
+    surface,
+    openTarget,
+    lifecycle,
     sessionName,
     sessionStore,
     reconcileOrphanedDeviceClaim,
-    app,
   });
-  if (ownerClaim.status === 'conflict')
-    return {
-      type: 'response',
-      response: buildDeviceClaimConflictError(device, ownerClaim.conflict),
-    };
-  if (ownerClaim.status === 'refused') return { type: 'response', response: ownerClaim.response };
-  const deviceClaim = ownerClaim.status === 'acquired' ? ownerClaim.ownership : undefined;
-  const tookOverDeviceClaim = ownerClaim.status === 'acquired' ? ownerClaim.tookOver : undefined;
+  if ('response' in claimed) return { type: 'response', response: claimed.response };
+  const { app, deviceClaim, tookOverDeviceClaim } = claimed;
   const effects: NewSessionOpenEffects = { mayHaveStarted: false };
   const rollbackClaim = async () =>
     await rollbackNewSessionClaim({
@@ -627,16 +668,10 @@ export async function openNewSessionWithDeviceClaim(params: {
       await rollbackClaim();
       return { type: 'response', response: details.response };
     }
-    if (app && !sameBundleId(details.details.appBundleId, app.bundleId)) {
+    const outsideClaim = openedOutsideAppClaim(app, details.details.appBundleId, openTarget);
+    if (outsideClaim) {
       await rollbackClaim();
-      return {
-        type: 'response',
-        response: errorResponse(
-          'COMMAND_FAILED',
-          `${openTarget ?? 'The app'} resolved to ${details.details.appBundleId ?? 'no app'} after its claim was taken for ${app.bundleId}.`,
-          { reason: 'app-claim-scope', hint: 'Run the same open again.' },
-        ),
-      };
+      return { type: 'response', response: outsideClaim };
     }
     // Preparation can boot the device or warm caches, but it cannot establish session ownership.
     // Stamping here is what covers a boot preparation caused for this very open; from

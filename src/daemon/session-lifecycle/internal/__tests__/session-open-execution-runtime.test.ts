@@ -75,7 +75,6 @@ import {
 } from '../../../../platform-runtime-runtime-hints.ts';
 import { resolveAndroidPackageForOpen } from '@agent-device/platform-android/mechanics';
 import { resolveIosApp } from '@agent-device/platform-apple/app-resolution';
-import { clearDeviceClaim } from '../../../device/device-claims.ts';
 import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
 import {
   makeAndroidEmulator,
@@ -656,51 +655,42 @@ for (const transition of ['rebuild', 'retire'] as const) {
 test('native macOS app sessions claim their app, so another app opens beside them', async () => {
   vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', 'native');
   vi.mocked(resolveIosApp).mockImplementation(async (_device, app) => app);
+  mockResolveTargetDevice.mockResolvedValue({
+    platform: 'apple',
+    appleOs: 'macos',
+    id: 'host-macos-local',
+    name: 'Host Mac',
+    kind: 'device',
+    target: 'desktop',
+    booted: true,
+  });
   const sessionStore = makeSessionStore();
-  try {
-    mockResolveTargetDevice.mockResolvedValue({
-      platform: 'apple',
-      appleOs: 'macos',
-      id: 'host-macos-local',
-      name: 'Host Mac',
-      kind: 'device',
-      target: 'desktop',
-      booted: true,
+  const open = async (session: string, app: string) =>
+    await handleSessionCommands({
+      req: {
+        token: 't',
+        session,
+        command: 'open',
+        positionals: [app],
+        flags: { platform: 'macos' },
+      },
+      sessionName: session,
+      logPath: path.join(mkdtempForTestSync('agent-device-macos-app-claim-'), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
     });
-    const open = async (session: string, app: string) =>
-      await handleSessionCommands({
-        req: {
-          token: 't',
-          session,
-          command: 'open',
-          positionals: [app],
-          flags: { platform: 'macos' },
-        },
-        sessionName: session,
-        logPath: path.join(mkdtempForTestSync('agent-device-macos-app-claim-'), 'daemon.log'),
-        sessionStore,
-        invoke: noopInvoke,
-      });
+  const refusedFor = { ok: false, error: { details: { reason: 'app-claim-scope' } } };
 
-    expect((await open('one', 'com.example.one'))?.ok).toBe(true);
-    expect((await open('two', 'com.example.two'))?.ok).toBe(true);
-    const sameApp = await open('three', 'com.example.one');
-    expect(sameApp?.ok).toBe(false);
-    if (sameApp?.ok !== false) return;
-    expect(sameApp.error.code).toBe('DEVICE_IN_USE');
+  expect(await open('one', 'com.example.one')).toMatchObject({ ok: true });
+  expect(await open('two', 'com.example.two')).toMatchObject({ ok: true });
+  expect(await open('three', 'com.example.one')).toMatchObject({
+    ok: false,
+    error: { code: 'DEVICE_IN_USE' },
+  });
+  expect(await open('one', 'com.example.two')).toMatchObject(refusedFor);
+  expect(await open('one', 'demo://route')).toMatchObject(refusedFor);
+  expect(await open('one', 'com.example.one')).toMatchObject({ ok: true });
 
-    const otherAppInSession = await open('one', 'com.example.two');
-    expect(otherAppInSession?.ok).toBe(false);
-    if (otherAppInSession?.ok !== false) return;
-    expect(otherAppInSession.error.details?.reason).toBe('app-claim-scope');
-    const linkInSession = await open('one', 'demo://route');
-    expect(linkInSession?.ok).toBe(false);
-    if (linkInSession?.ok !== false) return;
-    expect(linkInSession.error.details?.reason).toBe('app-claim-scope');
-    expect((await open('one', 'com.example.one'))?.ok).toBe(true);
-  } finally {
-    for (const ref of sessionStore.listRefs()) await clearDeviceClaim(ref.session.deviceClaim);
-    vi.unstubAllEnvs();
-    vi.mocked(resolveIosApp).mockImplementation(async () => 'com.example.demo');
-  }
+  vi.unstubAllEnvs();
+  vi.mocked(resolveIosApp).mockImplementation(async () => 'com.example.demo');
 });
