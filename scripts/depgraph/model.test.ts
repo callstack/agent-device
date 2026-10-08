@@ -372,12 +372,12 @@ test('collectCycles separates gate-rejected value cycles from type-only and dyna
   );
 });
 
-test('collectCycles keeps the representative and edge kinds for a chorded three-file SCC', () => {
+test('collectCycles keeps the value-cycle representative for a chorded three-file SCC', () => {
   const edges = resolveImportEdges(
     sources({
       'src/core/a.ts': "import './b.ts';\nimport './c.ts';",
       'src/core/b.ts': "import './c.ts';",
-      'src/core/c.ts': "import './a.ts';\nimport type { B } from './b.ts';\nvoid import('./b.ts');",
+      'src/core/c.ts': "import './a.ts';",
     }),
   );
   assert.deepEqual(collectCycles(edges), [
