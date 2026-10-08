@@ -115,12 +115,16 @@ test('a failed restore keeps the record and the marker for a later retry', async
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
 });
 
-test('devices this process never activated are left alone', async () => {
-  bindAndroidAdbHostStub();
+test('devices this process never activated are left alone, marker and all', async () => {
+  // The retained marker is the only record an orphaned helper has after a daemon restart; a
+  // close that inspected nothing must not consume it.
+  const host = bindAndroidAdbHostStub();
+  await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
   const state = stuckDeviceState();
   const result = await restoreWith(state);
-  expect(result).toEqual({ restored: false, reason: 'no-record' });
+  expect(result).toEqual({ restored: false, reason: 'not-activated-here' });
   expect(state.settings.get('default_input_method')).toBe(HELPER_SERVICE);
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
 });
 
 // #3318: `ime set` is durable only after SettingsProvider's delayed XML flush (AOSP caps it at
@@ -209,8 +213,9 @@ describe('a close cancelled mid-settle', () => {
         }),
     );
 
-    // The owned flag is gone, so this close takes the no-record path — yet the kill it precedes
-    // must still wait for the window the aborted close left open.
+    // The owned flag is gone, so this close inspects nothing — yet the kill it precedes must
+    // still wait for the window the aborted close left open, and consuming that deadline is what
+    // earns the marker clear (a nothing-inspected close could never clear it on its own).
     sleep.mockClear();
     const second = new AbortController();
     const result = await withAndroidAdbProvider(
@@ -224,7 +229,7 @@ describe('a close cancelled mid-settle', () => {
         }),
     );
 
-    expect(result).toEqual({ restored: false, reason: 'no-record' });
+    expect(result).toEqual({ restored: false, reason: 'not-activated-here' });
     expect(sleep).toHaveBeenCalledTimes(1);
     expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(0);
     expect(sleep.mock.calls[0]?.[1]).toBe(second.signal);
@@ -233,7 +238,8 @@ describe('a close cancelled mid-settle', () => {
   });
 
   test('a second close after the window already elapsed skips the wait', async () => {
-    bindAndroidAdbHostStub();
+    const host = bindAndroidAdbHostStub();
+    await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
     pendingTestImeFlushSettles.set(`${STATE_DIR}:${DEVICE.id}`, Date.now() - 1);
 
     const result = await withAndroidAdbProvider(
@@ -243,13 +249,16 @@ describe('a close cancelled mid-settle', () => {
         await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR, shutdownTarget: true }),
     );
 
-    expect(result).toEqual({ restored: false, reason: 'no-record' });
+    expect(result).toEqual({ restored: false, reason: 'not-activated-here' });
     expect(sleep).not.toHaveBeenCalled();
     expect([...pendingTestImeFlushSettles.keys()]).toEqual([]);
+    // The consumed deadline stands for one a confirmed restore opened, so the marker may go.
+    expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
   });
 
   test('an ordinary close never waits on a pending window it cannot race', async () => {
-    bindAndroidAdbHostStub();
+    const host = bindAndroidAdbHostStub();
+    await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
     pendingTestImeFlushSettles.set(`${STATE_DIR}:${DEVICE.id}`, Date.now() + 2_500);
 
     const result = await withAndroidAdbProvider(
@@ -258,9 +267,11 @@ describe('a close cancelled mid-settle', () => {
       async () => await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR }),
     );
 
-    expect(result).toEqual({ restored: false, reason: 'no-record' });
+    expect(result).toEqual({ restored: false, reason: 'not-activated-here' });
     expect(sleep).not.toHaveBeenCalled();
+    // An ordinary close consumes nothing and inspects nothing: both stay for the next caller.
     expect([...pendingTestImeFlushSettles.keys()]).toEqual([`${STATE_DIR}:${DEVICE.id}`]);
+    expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
   });
 });
 

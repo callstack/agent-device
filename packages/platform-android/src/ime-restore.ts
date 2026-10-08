@@ -25,6 +25,7 @@ import {
 // durable evidence until the device is observed clean.
 
 export type AndroidTestImeRestoreReason =
+  | 'not-activated-here'
   | 'no-record'
   | 'record-unreadable'
   | 'helper-not-active'
@@ -49,21 +50,27 @@ function flushSettleKey(stateDir: string, serial: string): string {
   return `${stateDir}:${serial}`;
 }
 
-// Wait out a window left open by a previous aborted close. Returns false only when this call was
-// cancelled first, which keeps both the deadline and the pending marker in place for the next
-// close: an aborted settle is never a completed settle.
-async function awaitPendingFlushSettle(key: string, signal?: AbortSignal): Promise<boolean> {
+// Wait out a window left open by a previous aborted close. `consumed` means this call retired a
+// deadline a confirmed restore opened, which proves the device clean together with the covered
+// window. `aborted` means this call was cancelled first, keeping both the deadline and the
+// pending marker in place for the next close: an aborted settle is never a completed settle.
+type FlushSettleOutcome = 'none' | 'consumed' | 'aborted';
+
+async function awaitPendingFlushSettle(
+  key: string,
+  signal?: AbortSignal,
+): Promise<FlushSettleOutcome> {
   const deadlineAtMs = pendingTestImeFlushSettles.get(key);
-  if (deadlineAtMs === undefined) return true;
+  if (deadlineAtMs === undefined) return 'none';
   const remainingMs = deadlineAtMs - Date.now();
   if (remainingMs <= 0) {
     pendingTestImeFlushSettles.delete(key);
-    return true;
+    return 'consumed';
   }
   await sleep(remainingMs, signal);
-  if (signal?.aborted) return false;
+  if (signal?.aborted) return 'aborted';
   pendingTestImeFlushSettles.delete(key);
-  return true;
+  return 'consumed';
 }
 
 // Run the flush settle for the restore just confirmed on this device. A cancelled close resolves
@@ -89,15 +96,17 @@ export async function restoreAndroidTestIme(
     // earlier aborted close is consumed here rather than outrunning this call's own restore.
     // An ordinary close starts no kill, so it neither consumes the window nor needs it covered;
     // the pending deadline stays for the next shutdown-bound close.
-    let flushWindowCovered = true;
-    if (killingTarget) {
-      flushWindowCovered = await awaitPendingFlushSettle(settleKey, options.signal);
-    }
+    const settleOutcome = killingTarget
+      ? await awaitPendingFlushSettle(settleKey, options.signal)
+      : 'none';
+    let flushWindowCovered = settleOutcome !== 'aborted';
     let result: AndroidTestImeRestoreResult;
     if (!activeTestImeDevices.has(deviceKey)) {
       // Skip devices this process never activated (orphans from another process are handled by
-      // restoreOrphanedAndroidTestImeOnDaemonStartup and the doctor check).
-      result = { restored: false, reason: 'no-record' };
+      // restoreOrphanedAndroidTestImeOnDaemonStartup and the doctor check). Nothing was inspected,
+      // so the device's recovery status stays unknown and its pending marker is none of ours —
+      // unless this call just consumed a deadline opened by a confirmed restore.
+      result = { restored: false, reason: 'not-activated-here' };
     } else {
       // Drop the owned-flag first so restoreAndroidTestImeFor's "owned by a live session" guard
       // does not skip this intentional close-time restore. The IME really is back on the previous
@@ -109,17 +118,20 @@ export async function restoreAndroidTestIme(
         flushWindowCovered = await settleTestImeFlushWindow(settleKey, options.signal);
       }
     }
-    if (flushWindowCovered && isDeviceRecoveryComplete(result.reason)) {
+    const recoveryComplete =
+      isDeviceRecoveryComplete(result.reason) ||
+      (result.reason === 'not-activated-here' && settleOutcome === 'consumed');
+    if (flushWindowCovered && recoveryComplete) {
       await requireAndroidAdbHost().imeRecoveryMarkers.clear(options.stateDir, device.id);
     }
     return result;
   });
 }
 
-// A device no longer needs recovery once the helper is confirmed off it (restored, or already not
-// the active IME, or no record). A `set-failed` (still stuck), `record-unreadable` (the device may be
-// on Android's fallback IME) or `owned-by-live-session` (a live session will restore it on close)
-// keeps its pending marker for a later retry.
+// The device was inspected and the helper is confirmed off it (restored, already not the active
+// IME, or no rebind record). A `set-failed` (still stuck), `record-unreadable` (the device may be
+// on Android's fallback IME), `owned-by-live-session` (a live session will restore it on close)
+// or `not-activated-here` (nothing was inspected) keeps its pending marker for a later retry.
 function isDeviceRecoveryComplete(reason: AndroidTestImeRestoreReason): boolean {
   return reason === 'ok' || reason === 'helper-not-active' || reason === 'no-record';
 }
