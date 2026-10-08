@@ -14,7 +14,7 @@ import type {
 } from './request-runtime-binding.ts';
 import { ensureBoundDeviceReady } from './request-runtime-binding.ts';
 import type { DaemonCommandContext } from './context.ts';
-import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
+import type { ResolvedGenericExecution } from './generic-leaf-execution.ts';
 import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';
 
 /** Builds the failure a command reports when its exact device cell does not admit an operation. */

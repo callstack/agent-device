@@ -6,7 +6,7 @@ import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
-import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
+import type { GenericPlatformExecutionParams } from '../generic-leaf-execution.ts';
 import { resolveScreenshotGenericExecution } from '../screenshot-runtime.ts';
 import { screenshotRuntimeFixture, writeSolidPng } from './screenshot-runtime-fixture.ts';
 import type { DaemonRequest } from '../daemon-request.ts';

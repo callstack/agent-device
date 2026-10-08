@@ -5,7 +5,7 @@ import type { Point } from '@agent-device/kernel/snapshot';
 import { successText } from '@agent-device/kernel/success-text';
 import { readPointPositionals } from '@agent-device/kernel/validation';
 import type { DaemonCommandContext } from './context.ts';
-import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
+import type { ResolvedGenericExecution } from './generic-leaf-execution.ts';
 import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 import { runtimeExecutionFromContext } from './snapshot-runtime-capture-input.ts';
 

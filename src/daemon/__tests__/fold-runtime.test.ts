@@ -19,7 +19,7 @@ import {
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
+import type { GenericPlatformExecutionParams } from '../generic-leaf-execution.ts';
 import { readRequestedFoldPose, resolveBoundFoldRuntime } from '../fold-runtime.ts';
 import { expectRefusesUnavailableExactOwnerFact } from './runtime-binding-conformance.ts';
 

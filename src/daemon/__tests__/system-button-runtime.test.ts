@@ -22,7 +22,7 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
 import { LeaseRegistry } from '../lease-registry.ts';
 import { activateCompleteRefFrame, refFrameState } from '../ref-frame.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
+import type { GenericPlatformExecutionParams } from '../generic-leaf-execution.ts';
 import {
   resolveBoundSystemButtonRuntime,
   type SystemButtonCommand,

@@ -19,7 +19,7 @@ import { resolveBoundFocusRuntime } from '../focus-runtime.ts';
 import { resolveBoundFoldRuntime } from '../fold-runtime.ts';
 import { resolveBoundGestureRuntime } from '../gesture-runtime.ts';
 import { resolveBoundOrientationRuntime } from '../orientation-runtime.ts';
-import type { ResolvedGenericExecution } from '../request-generic-dispatch.ts';
+import type { ResolvedGenericExecution } from '../generic-leaf-execution.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

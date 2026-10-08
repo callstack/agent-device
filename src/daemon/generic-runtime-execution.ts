@@ -1,4 +1,4 @@
-import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
+import type { ResolvedGenericExecution } from './generic-leaf-execution.ts';
 import { resolveBoundFocusRuntime } from './focus-runtime.ts';
 import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
 import { resolveBoundScrollRuntime } from './scroll-runtime.ts';

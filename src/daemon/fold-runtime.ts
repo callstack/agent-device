@@ -9,7 +9,7 @@ import { foldRuntimeUse } from '@agent-device/contracts/platform-runtime-operati
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { successText } from '@agent-device/kernel/success-text';
-import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
+import type { ResolvedGenericExecution } from './generic-leaf-execution.ts';
 import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 
 /** `fold <pose>`, parsed with the same aliases the CLI reader accepts. */

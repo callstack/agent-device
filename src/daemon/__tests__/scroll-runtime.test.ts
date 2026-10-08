@@ -5,7 +5,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonRequest } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
-import type { GenericPlatformExecutionParams } from '../request-generic-dispatch.ts';
+import type { GenericPlatformExecutionParams } from '../generic-leaf-execution.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { BoundDeviceRuntime, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
 import {

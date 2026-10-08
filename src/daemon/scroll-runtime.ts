@@ -34,7 +34,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import { withSuccessText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from './context.ts';
 import type { SessionState } from './session-state.ts';
-import type { ResolvedGenericExecution } from './request-generic-dispatch.ts';
+import type { ResolvedGenericExecution } from './generic-leaf-execution.ts';
 import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from './runtime-admission.ts';
 import {
   observeScrollMovement,
