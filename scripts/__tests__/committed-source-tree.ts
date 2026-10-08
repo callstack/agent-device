@@ -58,8 +58,12 @@ export function renamedSince(repoRoot: string, base: string): ReadonlyMap<string
  * Production source paths tracked at `base` but gone from the working tree. Plain `git diff`
  * already pairs renames by default, so this lists only the deletions that pairing did NOT
  * absorb -- a moved-and-rewritten module the detector could not pair, which `renamedSince`
- * answers by detection and therefore misses; the split tolerance reads these paths' content
- * directly so such a move stays non-novel (#3298 review). The default pairing is load-bearing:
+ * answers by detection and therefore misses. The split tolerance reads these paths' content
+ * through `movedFromDeletedSource`: two or more statements shared with ONE deleted source is a
+ * move signal, so a verbatim transplant stays non-novel; one shared statement is tolerated as
+ * coincidence, and a statement-by-statement rewrite evades a textual match. This probe is the
+ * reinforcement -- containment is what structurally refuses a dropped-and-swapped base module
+ * (#3298 review). The default pairing is load-bearing:
  * it keeps a split's re-homed hub OUT of this list (paired to its closest part), and passing
  * `--no-renames` would put it here, making the split's own parts share two statements with
  * "deleted source" and refusing the very extraction the tolerance exists for.
