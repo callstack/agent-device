@@ -34,7 +34,7 @@ extension RunnerTests {
             failure: .notFocused
           )
         }
-        clearTextInput(clearTarget)
+        clearTextInput(app: app, clearTarget)
         // nil means the value is unreadable (secure fields), not "not empty": leave `verified`
         // nil there rather than reporting a mismatch the runner cannot actually observe.
         let observed = editableTextValue(for: clearTarget, treatingPlaceholderAsEmpty: true)
@@ -125,7 +125,7 @@ extension RunnerTests {
       }
       if currentText == nil || currentText?.isEmpty == false {
         let clearStartedAt = Date()
-        clearTextInput(replacementTarget)
+        clearTextInput(app: app, replacementTarget)
         activeTarget = activeTarget.withElement(replacementTarget)
         logTextEntryPhase(
           commandId: commandId,
@@ -465,7 +465,7 @@ extension RunnerTests {
       expectedText.count,
       observedText.count
     )
-    clearTextInput(repairTarget)
+    clearTextInput(app: app, repairTarget)
     repairTarget.typeText(expectedText)
     let repairedTarget = target.withElement(repairTarget)
     let repairedResult = verifyTextEntry(

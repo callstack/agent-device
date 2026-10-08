@@ -243,7 +243,7 @@ extension RunnerTests {
     }
   }
 
-  func clearTextInput(_ element: XCUIElement) {
+  func clearTextInput(app: XCUIApplication, _ element: XCUIElement) {
     // Skip the clear (delete burst + moveCaretToEnd edge-tap) ONLY when we can confirm the
     // field is empty. Why skip: the edge-tap computes a point from the element frame, which can
     // be stale after the field repositions on focus (e.g. the Settings search bar jumps
@@ -257,7 +257,7 @@ extension RunnerTests {
       return
     }
 #if !os(tvOS)
-    moveCaretToEnd(element: element)
+    moveCaretToEnd(app: app, element: element)
 #endif
     let count = estimatedDeleteCount(for: element)
     let deletes = String(repeating: XCUIKeyboardKey.delete.rawValue, count: count)
@@ -410,28 +410,29 @@ extension RunnerTests {
     return nil
   }
 
-  private func moveCaretToEnd(element: XCUIElement) {
+  private func moveCaretToEnd(app: XCUIApplication, element: XCUIElement) {
 #if os(tvOS)
     return
 #else
-    // The edge-tap point must come from a frame read that cannot record: this runs AFTER the
-    // command's own focus tap, and an input that stopped answering its resolving query on focus
-    // (#3060) turns `element.frame` into a recorded failure. With no trustworthy frame there is no
-    // point to dispatch — an edge-tap from a stale frame records a failure or navigates away, the
-    // shape `clearTextInput`'s comment refuses — so degrade to the caller's point-free delete
-    // burst rather than tapping a handle that can no longer resolve.
-    guard let frame = textEntrySnapshotFrame(element) else {
+    // Both the point AND its dispatch must stay off the handle: this runs AFTER the command's own
+    // focus tap, and an input that stopped answering its resolving query on focus (#3060) makes
+    // every post-focus handle touch a recorder — `element.frame` records directly, and an
+    // element-anchored `coordinate(...).tap()` re-runs that same query to resolve its anchor when
+    // the action executes. A fresh `snapshot()` proves the handle answered moments earlier, not
+    // that it still answers at tap-dispatch time. So the point comes from the snapshot frame and
+    // goes out app-relative through `tapAt`, which resolves no element at all — the shape
+    // `waitForTextEntryReadinessAfterTap` settled on in #3237. With no trustworthy frame, or a
+    // zero-size one (how a departed handle reads), there is no point to dispatch — an edge-tap
+    // from a frame the field moved after records a failure or navigates away, the shape
+    // `clearTextInput`'s comment refuses — so degrade to the caller's point-free delete burst.
+    guard let frame = textEntrySnapshotFrame(element), !frame.isEmpty else {
       return
     }
-    guard !frame.isEmpty else {
-      element.tap()
-      return
-    }
-    let origin = element.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
-    let target = origin.withOffset(
-      CGVector(dx: max(2, frame.width - 4), dy: max(2, frame.height / 2))
+    _ = tapAt(
+      app: app,
+      x: frame.minX + max(2, frame.width - 4),
+      y: frame.minY + max(2, frame.height / 2)
     )
-    target.tap()
 #endif
   }
 
