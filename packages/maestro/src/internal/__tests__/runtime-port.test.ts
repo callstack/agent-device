@@ -351,6 +351,35 @@ describe('MaestroRuntimePort', () => {
     expect(operations.resolveGestureViewport).not.toHaveBeenCalled();
   });
 
+  test('reports an out-of-range index with its own message and typed reason', async () => {
+    const operations = makeOperations({
+      resolveTarget: async (_input, context) => ({
+        generation: context.generation,
+        matched: true,
+        visible: true,
+        candidateCount: 2,
+        failureReason: 'index-out-of-range',
+        ref: undefined,
+      }),
+      tapOn: async () => undefined,
+    });
+    const command = parseMaestroProgram('---\n- tapOn:\n    text: Not Now\n    index: 2\n')
+      .commands[0]!;
+
+    await expect(
+      createMaestroRuntimePort(operations).execute({
+        command: command as Extract<typeof command, { kind: 'tapOn' }>,
+        generation: 0,
+        env: {},
+        invalidateObservation: vi.fn(),
+      }),
+    ).rejects.toMatchObject({
+      message:
+        'Maestro target "text":"Not Now", "index":2 matched 2 element(s); its index is out of range.',
+      details: { reason: 'maestro-test-failure', targetFailureReason: 'index-out-of-range' },
+    });
+  });
+
   test('reports optional tap misses to the interpreter without hiding infrastructure failures', async () => {
     const tapOn = vi.fn(async () => undefined);
     const missingOperations = makeOperations({

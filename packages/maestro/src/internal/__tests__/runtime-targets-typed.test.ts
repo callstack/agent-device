@@ -124,6 +124,62 @@ test('typed childOf reports a scoped miss when only an outside child matches', (
   });
 });
 
+test('reports an out-of-range index as its own typed failure instead of a visible miss', () => {
+  const snapshot = makeSnapshot([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 320, height: 640 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Not Now',
+      rect: { x: 16, y: 500, width: 120, height: 44 },
+    },
+    {
+      index: 2,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Not Now',
+      rect: { x: 16, y: 560, width: 120, height: 44 },
+    },
+  ]);
+
+  expect(
+    resolveMaestroTargetFromSnapshot(
+      snapshot,
+      { selector: { text: 'Not Now', index: 2 } },
+      'android',
+    ),
+  ).toMatchObject({
+    ok: false,
+    failureReason: 'index-out-of-range',
+    message: 'Maestro selector matched 2 visible element(s); index 2 is out of range.',
+    evidence: { matched: true, visible: true, candidateCount: 2 },
+  });
+});
+
+test('reports matched-but-invisible targets with a typed no-visible-match reason', () => {
+  const snapshot = makeSnapshot([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 320, height: 640 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Hidden',
+      rect: { x: 16, y: 500, width: 120, height: 44 },
+      visibleToUser: false,
+    },
+  ]);
+
+  expect(
+    resolveMaestroTargetFromSnapshot(snapshot, { selector: { text: 'Hidden' } }, 'android'),
+  ).toMatchObject({
+    ok: false,
+    failureReason: 'no-visible-match',
+    message: 'Maestro selector matched 1 element(s), but none were visible.',
+    evidence: { matched: true, visible: false, candidateCount: 1 },
+  });
+});
+
 test('keeps Maestro-visible app content matchable while a React Native overlay is present', () => {
   const snapshot = makeSnapshot([
     {

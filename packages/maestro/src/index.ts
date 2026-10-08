@@ -61,6 +61,7 @@ export {
   type MaestroSelector,
   type MaestroSinglePointerGestureInput,
   type MaestroSnapshotTargetQuery,
+  type MaestroTargetFailureReason,
   type MaestroTargetMatch,
   type MaestroTargetQuery,
   type MaestroTargetResolution,

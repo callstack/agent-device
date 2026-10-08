@@ -33,6 +33,7 @@ import { literalFromMaestroRegex } from './selector-regex.ts';
 import {
   resolveMaestroTargetFromSnapshot,
   hasMaestroRecursiveRelations,
+  type MaestroTargetFailureReason,
   type MaestroTargetQuery as MaestroSnapshotTargetQuery,
   type MaestroTargetResolution,
 } from './runtime-targets.ts';
@@ -91,6 +92,7 @@ export type {
   MaestroSelector,
   MaestroSinglePointerGestureInput,
   MaestroSnapshotTargetQuery,
+  MaestroTargetFailureReason,
   MaestroTargetMatch,
   MaestroTargetQuery,
   MaestroTargetResolution,

@@ -44,11 +44,13 @@ export async function observeMaestroCondition(
 
 export function maestroObservationMatches(
   condition: MaestroObservationCondition,
-  match: Pick<MaestroTargetMatch, 'matched' | 'visible'>,
+  match: Pick<MaestroTargetMatch, 'matched' | 'visible' | 'failureReason'>,
 ): boolean {
-  return condition.kind === 'visible'
-    ? match.matched && match.visible
-    : !match.matched || !match.visible;
+  // A typed failure reason means no element was selected (for example an
+  // out-of-range `index` over matches that are otherwise visible), so the
+  // observed selector holds only when a target actually resolved.
+  const holds = match.matched && match.visible && match.failureReason === undefined;
+  return condition.kind === 'visible' ? holds : !holds;
 }
 
 export async function resolveMaestroTarget(
@@ -63,9 +65,10 @@ export async function resolveMaestroTarget(
   );
   const validated = validateTargetMatch(match, request.generation);
   if (!validated.matched || !validated.visible || !validated.rect) {
-    throw maestroTestFailure('Maestro target did not resolve to a visible element.', {
+    throw maestroTestFailure(maestroTargetFailureMessage(selector, validated), {
       selector,
       candidateCount: validated.candidateCount,
+      ...(validated.failureReason ? { targetFailureReason: validated.failureReason } : {}),
     });
   }
   return {
@@ -91,6 +94,28 @@ export function observationForTarget(target: MaestroTargetResolution): MaestroOb
     candidateCount: target.candidateCount,
     evidence,
   };
+}
+
+function maestroTargetFailureMessage(selector: MaestroSelector, match: MaestroTargetMatch): string {
+  const selectorText = formatMaestroSelector(selector);
+  switch (match.failureReason) {
+    case 'selector-did-not-match':
+      return `Maestro target ${selectorText} did not match any element.`;
+    case 'no-visible-match':
+      return `Maestro target ${selectorText} matched ${match.candidateCount} element(s), but none were visible.`;
+    case 'index-out-of-range':
+      return `Maestro target ${selectorText} matched ${match.candidateCount} element(s); its index is out of range.`;
+    case 'no-usable-geometry':
+      return `Maestro target ${selectorText} did not provide usable geometry.`;
+    default:
+      return 'Maestro target did not resolve to a visible element.';
+  }
+}
+
+function formatMaestroSelector(selector: MaestroSelector): string {
+  const entries = Object.entries(selector).filter(([, value]) => value !== undefined);
+  if (entries.length === 0) return 'selector';
+  return entries.map(([key, value]) => `"${key}":${JSON.stringify(value)}`).join(', ');
 }
 
 function isRect(value: unknown): value is { x: number; y: number; width: number; height: number } {

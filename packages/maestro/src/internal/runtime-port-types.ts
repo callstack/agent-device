@@ -13,6 +13,7 @@ import type {
   MaestroObservationCondition,
   MaestroObservationEvidence,
 } from './engine-types.ts';
+import type { MaestroTargetFailureReason } from './runtime-targets.ts';
 
 export type MaestroRuntimeReadContext = {
   readonly appId?: string;
@@ -40,6 +41,13 @@ export type MaestroTargetMatch = {
   readonly ref?: string;
   readonly dispatchSelector?: MaestroDispatchSelector;
   readonly surfaceSignature?: string;
+  /**
+   * The typed reason for a failed resolution. An out-of-range `index` or a degenerate
+   * candidate geometry leaves a resolution matched and visible with no target, and
+   * `MaestroTargetMatch` is observation evidence too, where `matched`/`visible` ARE the
+   * outcome — so the absence of a dispatch target travels as its own reason.
+   */
+  readonly failureReason?: MaestroTargetFailureReason;
 };
 
 export type MaestroDispatchSelector = {

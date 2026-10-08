@@ -150,6 +150,46 @@ test('computes expensive target evidence only for the command policies that cons
   expect(relational).not.toHaveProperty('dispatchSelector');
 });
 
+test('projects an out-of-range index miss onto target evidence with its typed failure reason', () => {
+  const snapshot = makeSnapshot([
+    { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      kind: formatRole('Button'),
+      identifier: 'not-now',
+      label: 'Not Now',
+      rect: { x: 20, y: 700, width: 120, height: 44 },
+    },
+    {
+      index: 2,
+      parentIndex: 0,
+      type: 'Button',
+      kind: formatRole('Button'),
+      identifier: 'not-now',
+      label: 'Not Now',
+      rect: { x: 20, y: 760, width: 120, height: 44 },
+    },
+  ]);
+
+  const miss = resolveTypedMaestroTarget({
+    context: { generation: 3, env: {} },
+    snapshot,
+    platform: 'ios',
+    query: { selector: { id: 'not-now', index: 2 }, purpose: 'tap', timeoutMs: 0 },
+  });
+
+  expect(miss).toMatchObject({
+    generation: 3,
+    matched: true,
+    visible: true,
+    candidateCount: 2,
+    failureReason: 'index-out-of-range',
+  });
+  expect(miss).not.toHaveProperty('rect');
+});
+
 test('matches iOS Maestro ids on semantic nodes suppressed from interactive presentation', async () => {
   const snapshot = makeSnapshot([
     { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 402, height: 874 } },

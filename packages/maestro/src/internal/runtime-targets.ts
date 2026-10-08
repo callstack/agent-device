@@ -30,6 +30,13 @@ export type MaestroTargetEvidence = {
   ref?: string;
 };
 
+/** Why a target resolution produced no actionable element, kept distinct from the matched/visible observation outcome. */
+export type MaestroTargetFailureReason =
+  | 'selector-did-not-match'
+  | 'no-visible-match'
+  | 'index-out-of-range'
+  | 'no-usable-geometry';
+
 type MaestroInteractivePresentation = {
   snapshot: SnapshotState;
   presentedIndexesBySourceIndex: ReadonlyMap<number, readonly number[]>;
@@ -44,7 +51,12 @@ export type MaestroTargetResolution =
       dispatchCandidates: number;
       evidence: MaestroTargetEvidence;
     }
-  | { ok: false; message: string; evidence: MaestroTargetEvidence };
+  | {
+      ok: false;
+      message: string;
+      failureReason: MaestroTargetFailureReason;
+      evidence: MaestroTargetEvidence;
+    };
 
 export function resolveMaestroTargetFromSnapshot(
   snapshot: SnapshotState,
@@ -66,6 +78,7 @@ export function resolveMaestroTargetFromSnapshot(
     return {
       ok: false,
       message: 'Maestro childOf parent did not match.',
+      failureReason: 'selector-did-not-match',
       evidence: buildMaestroTargetEvidence(query, candidates.matches, [], undefined),
     };
   }
@@ -84,7 +97,14 @@ export function resolveMaestroTargetFromSnapshot(
   const rect = options.interactiveBounds
     ? (presentedTarget?.rect ?? semanticRect)
     : (semanticRect ?? presentedTarget?.rect);
-  if (!rect) return failedTargetResolution(query, matches, rankedMatches, evidence);
+  if (!rect) {
+    return {
+      ok: false,
+      message: 'Maestro target did not provide usable geometry.',
+      failureReason: 'no-usable-geometry',
+      evidence,
+    };
+  }
 
   return {
     ok: true,
@@ -168,11 +188,35 @@ function failedTargetResolution(
     return {
       ok: false,
       message: `Maestro selector matched ${matches.length} element(s), but none were visible.`,
+      failureReason: 'no-visible-match',
       evidence,
     };
   }
-  const index = query.selector.index === undefined ? '' : ` index ${query.selector.index}`;
-  return { ok: false, message: `Maestro selector did not match${index}.`, evidence };
+  const index = query.selector.index;
+  if (rankedMatches.length > 0) {
+    // Visible matches exist, so the miss comes from applying `index` or from
+    // degenerate candidate geometry rather than from the selector itself.
+    if (index !== undefined && selectMaestroSnapshotNode(rankedMatches, index) === undefined) {
+      return {
+        ok: false,
+        message: `Maestro selector matched ${rankedMatches.length} visible element(s); index ${index} is out of range.`,
+        failureReason: 'index-out-of-range',
+        evidence,
+      };
+    }
+    return {
+      ok: false,
+      message: 'Maestro target did not provide usable geometry.',
+      failureReason: 'no-usable-geometry',
+      evidence,
+    };
+  }
+  return {
+    ok: false,
+    message: 'Maestro selector did not match.',
+    failureReason: 'selector-did-not-match',
+    evidence,
+  };
 }
 
 function countInteractionDispatchCandidates(

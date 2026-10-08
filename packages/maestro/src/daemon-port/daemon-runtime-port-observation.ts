@@ -272,6 +272,7 @@ function targetMatchFromResolution(
       matched: resolution.evidence.matched,
       visible: resolution.evidence.visible,
       candidateCount: resolution.evidence.candidateCount,
+      failureReason: resolution.failureReason,
       ...(resolution.evidence.ref ? { ref: resolution.evidence.ref } : {}),
       ...(viewport ? { viewport } : {}),
     };
