@@ -168,127 +168,124 @@ function literalSpecifier(node: unknown): string | undefined {
   return undefined;
 }
 
-function scanDynamicImports(source: string): ImportEdge[] {
-  const edges: ImportEdge[] = [];
-  const parsed = parseSync('layering-imports.ts', source);
-  const destructured = destructuredDynamicImportBindings(parsed.program);
-  visitAst(parsed.program, (node) => {
-    if (node.type !== 'ImportExpression') return;
-    const spec = literalSpecifier(node.source);
-    if (spec === undefined) return;
-    const start = node.start as number | undefined;
-    const capture = typeof start === 'number' ? destructured.get(start) : undefined;
-    edges.push({
-      spec,
-      dynamic: true,
-      typeOnly: false,
-      line: sourceLine(source, start),
-      symbols: capture ? [...capture.symbols] : [],
-      bindingResidue: capture?.residue ?? false,
-    });
+type LocatedImportEdge = { edge: ImportEdge; start: number; order: number };
+
+function importedName(node: unknown): string | undefined {
+  if (node === null || typeof node !== 'object') return undefined;
+  const record = node as Record<string, unknown>;
+  return record.type === 'Identifier' && typeof record.name === 'string' ? record.name : undefined;
+}
+
+function namedSymbols(
+  specifiers: readonly Record<string, unknown>[],
+  importedField: 'imported' | 'local',
+): string[] {
+  const symbols = specifiers.flatMap((specifier) => {
+    const name = importedName(specifier[importedField]);
+    return specifier.type ===
+      (importedField === 'imported' ? 'ImportSpecifier' : 'ExportSpecifier') && name !== undefined
+      ? [name]
+      : [];
   });
-  return edges;
+  return [...new Set(symbols)];
 }
 
-function scanSideEffectImport(line: string, lineNo: number): ImportEdge | null {
-  const match = /^\s*import\s+['"]([^'"]+)['"]/.exec(line);
-  return match
-    ? {
-        spec: match[1]!,
-        dynamic: false,
-        typeOnly: false,
-        line: lineNo,
-        symbols: [],
-        bindingResidue: false,
-      }
-    : null;
+function specifierTypeOnly(
+  declaration: Record<string, unknown>,
+  specifiers: readonly Record<string, unknown>[],
+  kindField: 'importKind' | 'exportKind',
+): boolean {
+  if (declaration[kindField] === 'type') return true;
+  return specifiers.length > 0 && specifiers.every((specifier) => specifier[kindField] === 'type');
 }
 
-function withoutImportComments(statement: string): string {
-  return statement.replaceAll(
-    /(["'])(?:\\.|(?!\1)[^\\\r\n])*?\1|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g,
-    (match) => (match.startsWith('/*') ? ' ' : match.startsWith('//') ? '\n' : match),
-  );
-}
-
-type NamedSpecifier = { name: string; typeOnly: boolean };
-type ParsedNamedSpecifiers = { index: number; specifiers: NamedSpecifier[] };
-
-function parseNamedSpecifiers(statement: string): ParsedNamedSpecifiers | null {
-  const named = /\{([\s\S]*?)\}/.exec(statement);
-  if (!named) return null;
-
-  const specifiers: NamedSpecifier[] = [];
-  for (const specifier of named[1]!.split(',')) {
-    const trimmed = specifier.trim();
-    const typeOnly = /^type\b/.test(trimmed);
-    const sourceName = trimmed.replace(/^type\s+/, '');
-    const name = /^[A-Za-z_$][\w$]*/.exec(sourceName)?.[0];
-    if (name) specifiers.push({ name, typeOnly });
-  }
-  return { index: named.index, specifiers };
-}
-
-function importedSymbols(statement: string): string[] {
-  const parsed = parseNamedSpecifiers(statement);
-  return [...new Set(parsed?.specifiers.map(({ name }) => name) ?? [])];
-}
-
-function statementIsTypeOnly(statement: string): boolean {
-  if (/^\s*(?:import|export)\s+type\b/.test(statement)) return true;
-  const parsed = parseNamedSpecifiers(statement);
-  if (!parsed) return false;
-  const prefix = statement
-    .slice(0, parsed.index)
-    .replace(/^\s*(?:import|export)\s+/, '')
-    .trim()
-    .replace(/,$/, '')
-    .trim();
-  if (prefix.length > 0) return false;
-  return parsed.specifiers.length > 0 && parsed.specifiers.every(({ typeOnly }) => typeOnly);
-}
-
-function scanFromImport(lines: string[], index: number): ImportEdge | null {
-  const fromMatch = /(?:^|[\s;}])from\s+['"]([^'"]+)['"]/.exec(lines[index]!);
-  if (!fromMatch) return null;
-
-  let start = index;
-  while (start >= 0 && !/^\s*(?:import|export)\b/.test(lines[start]!)) start--;
-  if (start < 0) return null;
-
-  const statement = lines.slice(start, index + 1).join('\n');
-  const normalizedStatement = withoutImportComments(statement);
+function staticImportEdge(
+  source: string,
+  node: Record<string, unknown>,
+  specifierNode: unknown,
+  typeOnly: boolean,
+  symbols: string[],
+): ImportEdge | null {
+  const spec = literalSpecifier(specifierNode);
+  if (spec === undefined) return null;
+  const start = node.start as number | undefined;
   return {
-    spec: fromMatch[1]!,
+    spec,
     dynamic: false,
-    typeOnly: statementIsTypeOnly(normalizedStatement),
-    line: start + 1,
-    symbols: importedSymbols(normalizedStatement),
+    typeOnly,
+    line: sourceLine(source, start),
+    symbols,
     bindingResidue: false,
   };
 }
 
 export function parseImports(source: string): ImportEdge[] {
-  const lines = source.split('\n');
-  const dynamicImports = scanDynamicImports(source);
-  const dynamicImportsByLine = new Map<number, ImportEdge[]>();
-  for (const edge of dynamicImports) {
-    const lineEdges = dynamicImportsByLine.get(edge.line) ?? [];
-    lineEdges.push(edge);
-    dynamicImportsByLine.set(edge.line, lineEdges);
-  }
-  const edges: ImportEdge[] = [];
-  for (let index = 0; index < lines.length; index++) {
-    edges.push(...(dynamicImportsByLine.get(index + 1) ?? []));
-    const sideEffect = scanSideEffectImport(lines[index]!, index + 1);
-    if (sideEffect) {
-      edges.push(sideEffect);
-      continue;
+  const parsed = parseSync('layering-imports.ts', source);
+  const destructured = destructuredDynamicImportBindings(parsed.program);
+  const located: LocatedImportEdge[] = [];
+  let order = 0;
+
+  visitAst(parsed.program, (node) => {
+    const start = typeof node.start === 'number' ? node.start : 0;
+    if (node.type === 'ImportExpression') {
+      const spec = literalSpecifier(node.source);
+      if (spec === undefined) return;
+      const capture = destructured.get(start);
+      located.push({
+        start,
+        order: order++,
+        edge: {
+          spec,
+          dynamic: true,
+          typeOnly: false,
+          line: sourceLine(source, start),
+          symbols: capture ? [...capture.symbols] : [],
+          bindingResidue: capture?.residue ?? false,
+        },
+      });
+      return;
     }
-    const fromImport = scanFromImport(lines, index);
-    if (fromImport) edges.push(fromImport);
-  }
-  return edges;
+
+    let edge: ImportEdge | null = null;
+    if (node.type === 'ImportDeclaration') {
+      const specifiers = Array.isArray(node.specifiers)
+        ? (node.specifiers as Record<string, unknown>[])
+        : [];
+      edge = staticImportEdge(
+        source,
+        node,
+        node.source,
+        specifierTypeOnly(node, specifiers, 'importKind'),
+        namedSymbols(specifiers, 'imported'),
+      );
+    } else if (node.type === 'ExportNamedDeclaration' && node.source) {
+      const specifiers = Array.isArray(node.specifiers)
+        ? (node.specifiers as Record<string, unknown>[])
+        : [];
+      edge = staticImportEdge(
+        source,
+        node,
+        node.source,
+        specifierTypeOnly(node, specifiers, 'exportKind'),
+        namedSymbols(specifiers, 'local'),
+      );
+    } else if (node.type === 'ExportAllDeclaration') {
+      edge = staticImportEdge(source, node, node.source, node.exportKind === 'type', []);
+    } else if (node.type === 'TSImportType') {
+      edge = staticImportEdge(source, node, node.source, true, []);
+    }
+    if (edge) located.push({ edge, start, order: order++ });
+  });
+
+  return located
+    .sort(
+      (left, right) =>
+        left.edge.line - right.edge.line ||
+        Number(right.edge.dynamic) - Number(left.edge.dynamic) ||
+        left.start - right.start ||
+        left.order - right.order,
+    )
+    .map(({ edge }) => edge);
 }
 
 export function topFolder(file: string): string {

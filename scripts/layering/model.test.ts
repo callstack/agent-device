@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
+import { workspaceSpecifierTargets } from './package-boundaries.ts';
 import {
   fieldClassificationDrift,
   findSessionStateWrites,
@@ -29,6 +30,7 @@ test('parseImports distinguishes value, type-only, dynamic, and value re-export 
   const edges = parseImports(
     [
       "import value from './value.ts';",
+      "import './side-effect.ts';",
       "import type { TypeA } from './types.ts';",
       "import { type TypeB, type TypeC } from './more-types.ts';",
       "import { type TypeD, runtime } from './mixed.ts';",
@@ -42,6 +44,7 @@ test('parseImports distinguishes value, type-only, dynamic, and value re-export 
     edges.map(({ spec, dynamic, typeOnly }) => ({ spec, dynamic, typeOnly })),
     [
       { spec: './value.ts', dynamic: false, typeOnly: false },
+      { spec: './side-effect.ts', dynamic: false, typeOnly: false },
       { spec: './types.ts', dynamic: false, typeOnly: true },
       { spec: './more-types.ts', dynamic: false, typeOnly: true },
       { spec: './mixed.ts', dynamic: false, typeOnly: false },
@@ -50,6 +53,111 @@ test('parseImports distinguishes value, type-only, dynamic, and value re-export 
       { spec: './dynamic.ts', dynamic: true, typeOnly: false },
     ],
   );
+});
+
+test('parseImports records TSImportType edges separately from dynamic imports', () => {
+  const edges = parseImports(
+    [
+      "type Imported = import('./type-only.ts').Imported;",
+      "type Queried = typeof import('./type-query.ts').value;",
+      "type SameTarget = import('./same-target.ts').Target; void import('./same-target.ts');",
+    ].join('\n'),
+  );
+
+  assert.deepEqual(
+    edges.map(({ spec, dynamic, typeOnly, line, symbols }) => ({
+      spec,
+      dynamic,
+      typeOnly,
+      line,
+      symbols,
+    })),
+    [
+      {
+        spec: './type-only.ts',
+        dynamic: false,
+        typeOnly: true,
+        line: 1,
+        symbols: [],
+      },
+      {
+        spec: './type-query.ts',
+        dynamic: false,
+        typeOnly: true,
+        line: 2,
+        symbols: [],
+      },
+      {
+        spec: './same-target.ts',
+        dynamic: true,
+        typeOnly: false,
+        line: 3,
+        symbols: [],
+      },
+      {
+        spec: './same-target.ts',
+        dynamic: false,
+        typeOnly: true,
+        line: 3,
+        symbols: [],
+      },
+    ],
+  );
+
+  const resolved = resolveImportEdges(
+    new Map([
+      [
+        'src/core/consumer.ts',
+        "type Imported = import('../commands/target.ts').Target; void import('../commands/target.ts');",
+      ],
+      ['src/commands/target.ts', 'export type Target = unknown;'],
+    ]),
+  );
+  assert.deepEqual(
+    resolved.map(({ file, target, dynamic, typeOnly }) => ({ file, target, dynamic, typeOnly })),
+    [
+      {
+        file: 'src/core/consumer.ts',
+        target: 'src/commands/target.ts',
+        dynamic: true,
+        typeOnly: false,
+      },
+      {
+        file: 'src/core/consumer.ts',
+        target: 'src/commands/target.ts',
+        dynamic: false,
+        typeOnly: true,
+      },
+    ],
+  );
+});
+
+test('the nine recorded TSImportType file pairs resolve as type edges', () => {
+  const expected = [
+    'packages/contracts/src/platform-runtime.ts\0packages/contracts/src/device-shutdown-runtime.ts',
+    'packages/platform-apple/src/runner/runner-provider.ts\0packages/platform-apple/src/runner/runner-artifact.ts',
+    'src/daemon/interaction/index.ts\0src/daemon/gesture-runtime.ts',
+    'src/daemon/interaction/index.ts\0src/daemon/touch-runtime.ts',
+    'src/daemon/interaction/internal/interaction.ts\0packages/contracts/src/android-observation.ts',
+    'src/daemon/snapshot-runtime-binding.ts\0packages/contracts/src/focus-runtime.ts',
+    'src/daemon/snapshot-runtime-binding.ts\0packages/contracts/src/interactor-types.ts',
+    'src/daemon/snapshot-runtime-binding.ts\0packages/contracts/src/type-text-runtime.ts',
+    'src/sdk/artifacts.ts\0packages/platform-android/src/mechanics.ts',
+  ].sort();
+  const expectedPairs = new Set(expected);
+  const sources = new Map(
+    listSourceFiles().map((file) => [file, readFileSync(path.resolve(file), 'utf8')]),
+  );
+  const actual = [
+    ...new Set(
+      resolveImportEdges(sources, workspaceSpecifierTargets(process.cwd()))
+        .filter((edge) => !edge.dynamic && edge.typeOnly)
+        .map((edge) => `${edge.file}\0${edge.target}`)
+        .filter((pair) => expectedPairs.has(pair)),
+    ),
+  ].sort();
+
+  assert.deepEqual(actual, expected);
 });
 
 test('parseImports detects multiline dynamic imports', () => {
