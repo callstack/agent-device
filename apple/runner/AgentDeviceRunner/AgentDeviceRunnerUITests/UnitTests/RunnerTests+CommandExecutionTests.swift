@@ -214,6 +214,61 @@ extension RunnerTests {
     )
     XCTAssertNotNil(textEntryTapWitness)
   }
+
+  /// #3238: the report's `fill @e6` row. A coordinate `fill` resolves the input, taps it for focus,
+  /// and then reads that handle's frame to build the target's refresh point — after the tap. A field
+  /// that stopped answering its resolving query on focus turns that read into a recorded
+  /// "No matches found for …", which the dispatch path turns into `XCTEST_RECORDED_FAILURE` plus an
+  /// invalidated target for a focus the gesture had already delivered. The fill must still terminate
+  /// with a typed reason — this fixture's field leaves the accessibility tree entirely, so the
+  /// runner cannot resolve it to type into and refuses rather than typing app-wide — and it must
+  /// record nothing on the way there.
+  @MainActor
+  func testCoordinateFillOnInputThatLeavesTheTreeOnFocusFailsTypedAndRecordsNothing() throws {
+    app.launchArguments = [
+      "--agent-device-text-entry-regression",
+      "--agent-device-text-entry-unqueryable-on-focus",
+    ]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    let field = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(field.waitForExistence(timeout: appExistenceTimeout))
+    // The fixture keeps its keyboard down with an empty inputView, but a simulator with the software
+    // keyboard forced on takes the fill's keyboard-visible branch, which has different resolution.
+    // That is an environment fact, so the test that pins the hidden-keyboard branch skips on it.
+    try XCTSkipIf(
+      isKeyboardVisible(app: app),
+      "software keyboard is up: this simulator cannot exercise the hidden-keyboard replacement path"
+    )
+    let frame = field.frame
+    mainOwned.app = app
+    mainOwned.bundleId = "com.callstack.agentdevice.runner"
+    mainOwned.processIdentifier = try XCTUnwrap(Self.processIdentifier(of: app))
+
+    let failures = currentXCTestFailureCount()
+    let fill = try runnerCommandFixture(
+      #"{"appBundleId":"com.callstack.agentdevice.runner","command":"type","commandId":"fill-unqueryable-on-focus","text":"fresh","textEntryMode":"replace","x":\#(frame.midX),"y":\#(frame.midY)}"#
+    )
+    let response = try execute(command: fill)
+
+    XCTAssertFalse(
+      didRecordXCTestFailure(since: failures),
+      String(describing: response.error)
+    )
+    XCTAssertFalse(response.ok, String(describing: response.data))
+    XCTAssertEqual(response.error?.code, "TEXT_INPUT_NOT_FOCUSED")
+    // The app's own delegate callback: the gesture landed and took focus; what the old seam lost was
+    // the session, not the tap. Without this, a fill that never reached the field would pass too.
+    XCTAssertEqual(
+      app.staticTexts["agent-device-text-entry-focus"].label,
+      "focus",
+      "the fill's focus tap must have reached the field"
+    )
+  }
 #endif
 }
 #endif

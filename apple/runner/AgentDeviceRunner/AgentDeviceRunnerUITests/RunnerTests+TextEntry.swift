@@ -357,6 +357,21 @@ extension RunnerTests {
     return app.descendants(matching: identity.elementType).matching(identifier: identity.identifier).element
   }
 
+  /// Reads the frame a post-focus point is computed from, through the channel that records nothing.
+  /// A tap holds a handle bound to the query that resolved its element, and asking that handle for
+  /// `element.frame` re-runs the query: an element that stopped answering it once it took focus — a
+  /// Flutter password field whose two accessibility channels disagree when focused (#3060) — makes
+  /// XCTest record "No matches found for …", which ends the runner session for work the dispatch had
+  /// already landed. `snapshot()` answers the same query through the throwing channel and records
+  /// nothing, which is already how `probeTextEntryInput` and `withElement` reach an element. Nil means
+  /// no trustworthy frame: callers must degrade to a route that needs no point rather than dispatch
+  /// one computed from where the element used to be.
+  func textEntrySnapshotFrame(_ element: XCUIElement) -> CGRect? {
+    // Skipped when the input is already gone, so a removed field does not pay the snapshot's
+    // ~2-second wait for a match before its point degrades (the same guard `withElement` makes).
+    safely("TEXT_ENTRY_SNAPSHOT_FRAME", { element.exists ? try? element.snapshot() : nil })?.frame
+  }
+
   /// Snapshots one candidate: its identity, a proven no-match, or a failure that proves nothing.
   func probeTextEntryInput(_ element: XCUIElement) -> TextEntryInputProbe {
     var probe = TextEntryInputProbe.unavailable
@@ -399,7 +414,15 @@ extension RunnerTests {
 #if os(tvOS)
     return
 #else
-    let frame = element.frame
+    // The edge-tap point must come from a frame read that cannot record: this runs AFTER the
+    // command's own focus tap, and an input that stopped answering its resolving query on focus
+    // (#3060) turns `element.frame` into a recorded failure. With no trustworthy frame there is no
+    // point to dispatch — an edge-tap from a stale frame records a failure or navigates away, the
+    // shape `clearTextInput`'s comment refuses — so degrade to the caller's point-free delete
+    // burst rather than tapping a handle that can no longer resolve.
+    guard let frame = textEntrySnapshotFrame(element) else {
+      return
+    }
     guard !frame.isEmpty else {
       element.tap()
       return

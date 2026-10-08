@@ -137,7 +137,7 @@ extension RunnerTests {
     if keyboardVisibleBeforeTap, let target {
       return TextEntryTarget(
         element: target,
-        refreshPoint: textEntryRefreshPoint(for: target) ?? requestedPoint,
+        refreshPoint: textEntryRefreshPoint(for: target, fallbackTo: requestedPoint),
         prefersFocusedElement: false
       )
     }
@@ -157,18 +157,32 @@ extension RunnerTests {
       : (waitForTextEntryReadiness(app: app, target: readyTarget) ?? stabilized.element ?? target)
     return TextEntryTarget(
       element: element,
-      refreshPoint: textEntryRefreshPoint(for: element) ?? requestedPoint,
+      refreshPoint: textEntryRefreshPoint(for: element, fallbackTo: requestedPoint),
       prefersFocusedElement: false
     )
   }
 
-  private func textEntryRefreshPoint(for element: XCUIElement?) -> CGPoint? {
+  /// The field's current center for a refresh point that survives a focus move, or `requestedPoint`
+  /// when the field reads with an empty frame. Read through `textEntrySnapshotFrame`, not
+  /// `element.frame`: this runs after the focus tap, and a field that stopped answering its
+  /// resolving query on focus (#3060) turns that read into a recorded failure which ends the runner
+  /// session for a focus the dispatch had already landed. When the read could not answer at all,
+  /// the target gets NO refresh point rather than the pre-focus one: this route's first resolve is
+  /// not yet bound to an identity, and a field that went unqueryable on focus may have moved the
+  /// layout so the old point names a different input, so fail closed with a typed reason instead of
+  /// typing into that other field.
+  private func textEntryRefreshPoint(
+    for element: XCUIElement?,
+    fallbackTo requestedPoint: CGPoint?
+  ) -> CGPoint? {
     guard let element else {
+      return requestedPoint
+    }
+    guard let frame = textEntrySnapshotFrame(element) else {
       return nil
     }
-    let frame = element.frame
     guard !frame.isEmpty else {
-      return nil
+      return requestedPoint
     }
     return CGPoint(x: frame.midX, y: frame.midY)
   }
