@@ -244,7 +244,7 @@ describe('a close cancelled mid-settle', () => {
     // A window from an earlier aborted close still has most of its budget left when this close's
     // own restore writes again. SettingsState rewrites the whole file, so one wait to the newer
     // write's window persists both writes — the timestamp takes the max, never a second entry.
-    testImeLastRestoreAtMs.set(DEVICE.id, Date.now() - 100);
+    testImeLastRestoreAtMs.set(DEVICE.id, performance.now() - 100);
 
     const result = await withAndroidAdbProvider(
       { exec: fakeImeDeviceAdb(stuckDeviceState()) },
@@ -263,7 +263,7 @@ describe('a close cancelled mid-settle', () => {
     const host = bindAndroidAdbHostStub();
     await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
     // A restore whose whole flush window has already passed.
-    testImeLastRestoreAtMs.set(DEVICE.id, Date.now() - 2_501);
+    testImeLastRestoreAtMs.set(DEVICE.id, performance.now() - 2_501);
 
     const result = await withAndroidAdbProvider(
       { exec: fakeImeDeviceAdb(stuckDeviceState()) },
@@ -283,7 +283,7 @@ describe('a close cancelled mid-settle', () => {
   test('an ordinary close never waits on a pending window it cannot race', async () => {
     const host = bindAndroidAdbHostStub();
     await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
-    testImeLastRestoreAtMs.set(DEVICE.id, Date.now());
+    testImeLastRestoreAtMs.set(DEVICE.id, performance.now());
 
     const result = await withAndroidAdbProvider(
       { exec: fakeImeDeviceAdb(stuckDeviceState()) },

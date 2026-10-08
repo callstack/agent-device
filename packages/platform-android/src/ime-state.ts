@@ -21,13 +21,15 @@ export type AndroidTestImeOwnership = {
 // margin past the cap only has to absorb the AtomicFile rename.
 const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
 
-// Per-device monotonic last-restore timestamps, keyed by serial: the flush window is a property
-// of the device's SettingsProvider, not of any host state dir or of the close that performed the
-// restore. Every restore only moves the timestamp forward, so it can never consume evidence a
-// later kill needs — the wait is always derived from the newest write, which is also why windows
-// coalesce into one wait rather than stacking. Every path that may `adb emu kill` calls
-// awaitTestImeFlushWindow first; the kill-bound close finalization also consumes the outcome so
-// the pending marker clears only under a completed (or never-owed) wait.
+// Per-device monotonic last-restore timestamps, keyed by serial and read from the process
+// monotonic clock (performance.now), never the wall clock: the flush window is a property of the
+// device's SettingsProvider, not of any host state dir or of the close that performed the
+// restore, and a wall-clock step (VM resume, NTP correction) must never be able to shrink the
+// remaining wait. Every restore only moves the timestamp forward, so it can never consume
+// evidence a later kill needs — the wait is always derived from the newest write, which is also
+// why windows coalesce into one wait rather than stacking. Every path that may `adb emu kill`
+// calls awaitTestImeFlushWindow first; the kill-bound close finalization also consumes the
+// outcome so the pending marker clears only under a completed (or never-owed) wait.
 // @internal the map is exported for tests; production touches it only through the helpers here.
 export const testImeLastRestoreAtMs = new Map<string, number>();
 
@@ -36,7 +38,10 @@ export type TestImeFlushWait = 'idle' | 'covered' | 'aborted';
 // The write that earned the window calls this, on every confirmed emulator restore — close-time,
 // cross-session, or startup-orphan recovery.
 export function registerTestImeRestore(serial: string): void {
-  testImeLastRestoreAtMs.set(serial, Math.max(testImeLastRestoreAtMs.get(serial) ?? 0, Date.now()));
+  testImeLastRestoreAtMs.set(
+    serial,
+    Math.max(testImeLastRestoreAtMs.get(serial) ?? 0, performance.now()),
+  );
 }
 
 // Wait until the device's newest restore write is older than the flush window. Returns 'idle'
@@ -55,7 +60,7 @@ export async function awaitTestImeFlushWindow(
   if (signal?.aborted) return 'aborted';
   const restoredAtMs = testImeLastRestoreAtMs.get(serial);
   if (restoredAtMs === undefined) return 'idle';
-  const remainingMs = restoredAtMs + SETTINGS_PROVIDER_FLUSH_SETTLE_MS - Date.now();
+  const remainingMs = restoredAtMs + SETTINGS_PROVIDER_FLUSH_SETTLE_MS - performance.now();
   if (remainingMs <= 0) {
     testImeLastRestoreAtMs.delete(serial);
     return 'covered';

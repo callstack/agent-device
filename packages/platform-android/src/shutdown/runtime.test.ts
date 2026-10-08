@@ -60,16 +60,38 @@ test('only Android emulators are available', () => {
 // caller) inherits it without knowing about the test IME.
 test('a kill waits out a registered test-IME flush window before running adb emu kill', async () => {
   const device = androidDevice();
-  testImeLastRestoreAtMs.set(device.id, Date.now());
+  testImeLastRestoreAtMs.set(device.id, performance.now());
 
   await expect(
     createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal()),
   ).resolves.toEqual(success());
 
   expect(sleep).toHaveBeenCalledTimes(1);
-  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(0);
+  // The wait must cover the registered window, not merely be positive: the timestamp was set
+  // milliseconds before the kill, so the remaining settle is the whole ~2.5 s budget minus that
+  // gap. A regression sleeping a fixed unrelated amount would fail here.
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(2_000);
   expect(run).toHaveBeenCalledTimes(1);
   expect([...testImeLastRestoreAtMs.keys()]).toEqual([]);
+});
+
+test('a forward host wall-clock jump cannot shorten a registered flush window', async () => {
+  // The window is timed on the process monotonic clock, so an NTP/VM-resume step of the wall
+  // clock must leave the kill-side remaining wait at the full budget.
+  const device = androidDevice();
+  testImeLastRestoreAtMs.set(device.id, performance.now());
+  const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Number.MAX_SAFE_INTEGER);
+
+  try {
+    await expect(
+      createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal()),
+    ).resolves.toEqual(success());
+  } finally {
+    nowSpy.mockRestore();
+  }
+
+  expect(sleep).toHaveBeenCalledTimes(1);
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(2_000);
 });
 
 test('a kill skips the wait entirely when no flush window is open', async () => {
@@ -85,7 +107,7 @@ test('a kill skips the wait entirely when no flush window is open', async () => 
 
 test('a kill cancelled inside the flush window never reaches adb emu kill', async () => {
   const device = androidDevice();
-  testImeLastRestoreAtMs.set(device.id, Date.now());
+  testImeLastRestoreAtMs.set(device.id, performance.now());
   const controller = new AbortController();
   sleep.mockImplementationOnce((_ms, waitSignal) => {
     controller.abort();
