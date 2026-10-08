@@ -1,6 +1,5 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { sleep } from '@agent-device/host-kit/retry';
 import { emitAndroidAdbDiagnostic, requireAndroidAdbHost } from './adb-host.ts';
 import { resolveAndroidAdbExecutor } from './adb-provider-scope.ts';
 import { runAdbShell } from './adb-executor.ts';
@@ -17,8 +16,10 @@ import {
 } from './ime-settings-record.ts';
 import {
   activeTestImeDevices,
-  pendingTestImeFlushSettles,
+  awaitTestImeFlushWindow,
+  registerTestImeRestore,
   withAndroidTestImeRecoveryLock,
+  type TestImeFlushWait,
 } from './ime-state.ts';
 
 // Restore and startup orphan recovery: undo the helper switch exactly when it is safe, keep
@@ -39,58 +40,19 @@ export type AndroidTestImeRestoreResult = {
   reason: AndroidTestImeRestoreReason;
 };
 
-// Android's SettingsProvider persists a setting change asynchronously: `ime set` answers from
-// memory and the XML flush follows up to MAX_WRITE_SETTINGS_DELAY_MILLIS later (AOSP
-// SettingsState.java, 2020ms cap). A device killed inside that window reboots from the stale
-// file, so a restore followed by an immediate `adb emu kill` loses the keyboard on restart.
-// The provider exposes no shell flush; holding the kill past the cap is the owning fix. The
-// window runs from the oldest unwritten mutation and doWriteState() rewrites the whole file from
-// the in-memory map, so windows coalesce into one deadline at max(existing, write + cap) rather
-// than stacking; the margin past the cap only has to absorb the AtomicFile rename.
-const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
-
-function flushSettleKey(stateDir: string, serial: string): string {
-  return `${stateDir}:${serial}`;
-}
-
-// `idle`: no deadline was open, or this call is not kill-bound and leaves it in place.
-// `retired`: a deadline — this process's own restore write or one another close left behind —
-// was waited out and cleared. `aborted`: the wait was cancelled, so the deadline and the pending
-// marker both stay in place. An aborted settle is never a completed settle.
-type FlushSettleOutcome = 'idle' | 'retired' | 'aborted';
-
-// A confirmed restore registers its flush window here, not on the close that performed it: the
-// kill that must miss the window can arrive from another session's `close --shutdown`, after this
-// process has dropped device ownership and taken a no-op `not-activated-here` close. Windows
-// coalesce because doWriteState() rewrites the whole file — one later deadline covers every
-// pending write, including an older aborted settle's.
-function registerFlushDeadline(key: string): void {
-  const dueAtMs = Date.now() + SETTINGS_PROVIDER_FLUSH_SETTLE_MS;
-  pendingTestImeFlushSettles.set(key, Math.max(pendingTestImeFlushSettles.get(key) ?? 0, dueAtMs));
-}
-
-async function awaitFlushDeadline(key: string, signal?: AbortSignal): Promise<FlushSettleOutcome> {
-  const deadlineAtMs = pendingTestImeFlushSettles.get(key);
-  if (deadlineAtMs === undefined) return 'idle';
-  const remainingMs = deadlineAtMs - Date.now();
-  if (remainingMs > 0) {
-    await sleep(remainingMs, signal);
-    if (signal?.aborted) return 'aborted';
-  }
-  pendingTestImeFlushSettles.delete(key);
-  return 'retired';
-}
-
-// Whether this call proved the device needs no further recovery. A reason from an inspected
-// device answers directly once the window it owed is covered; an aborted settle never covers it.
-// A nothing-inspected `not-activated-here` close earns the clear only by retiring a deadline a
-// confirmed restore opened — its own close opened none.
+// One marker-clear rule, owned here and used by both callers of the inner restore. A reason
+// from an inspected device proves recovery complete once this call's flush wait is not
+// abandoned: a kill-bound close must reach 'covered' (an aborted wait is never a completed
+// settle), while an ordinary close or the startup scan owe no wait at all — neither kills, and
+// the device's window stays open in the timestamp for the next kill-bound path to wait out. A
+// nothing-inspected `not-activated-here` close earns the clear only by covering a window a
+// confirmed restore registered — its own call inspected nothing and earns nothing alone.
 function isRecoveryMarkerClearEarned(
   reason: AndroidTestImeRestoreReason,
-  outcome: FlushSettleOutcome,
+  settleOutcome: TestImeFlushWait,
 ): boolean {
-  if (isDeviceRecoveryComplete(reason)) return outcome !== 'aborted';
-  return reason === 'not-activated-here' && outcome === 'retired';
+  if (isDeviceRecoveryComplete(reason)) return settleOutcome !== 'aborted';
+  return reason === 'not-activated-here' && settleOutcome === 'covered';
 }
 
 export async function restoreAndroidTestIme(
@@ -98,23 +60,14 @@ export async function restoreAndroidTestIme(
   options: { stateDir: string; shutdownTarget?: boolean; signal?: AbortSignal },
 ): Promise<AndroidTestImeRestoreResult> {
   return await withAndroidTestImeRecoveryLock(options.stateDir, device.id, async () => {
-    const settleKey = flushSettleKey(options.stateDir, device.id);
     const result = await restoreOwnedAndroidTestIme(device);
-    // Every confirmed restore registers its flush window, even on an ordinary close: the kill
-    // that must miss the window can arrive later from another session's `close --shutdown`, on a
-    // path where this process has already dropped ownership. Only emulators can be killed by the
-    // runtime, so only they carry windows; the caller owns the kill-bound predicate and this
-    // layer does not re-derive it.
-    if (result.restored && device.kind === 'emulator') {
-      registerFlushDeadline(settleKey);
-    }
-    // A kill-bound close returns only after every open window is retired, so the finalizer's
-    // kill lands after the flush. An ordinary close never waits and leaves deadlines in place.
-    const outcome =
+    // Only a kill-bound close waits: it returns after the device's flush window is covered, so
+    // the finalizer's kill lands after the provider's write. Ordinary closes never sleep.
+    const settleOutcome: TestImeFlushWait =
       options.shutdownTarget === true
-        ? await awaitFlushDeadline(settleKey, options.signal)
+        ? await awaitTestImeFlushWindow(device.id, options.signal)
         : 'idle';
-    if (isRecoveryMarkerClearEarned(result.reason, outcome)) {
+    if (isRecoveryMarkerClearEarned(result.reason, settleOutcome)) {
       await requireAndroidAdbHost().imeRecoveryMarkers.clear(options.stateDir, device.id);
     }
     return result;
@@ -152,6 +105,9 @@ function isDeviceRecoveryComplete(reason: AndroidTestImeRestoreReason): boolean 
 //    marks an unconfirmed rebind. If the user (or a concurrent session) switched away, leave it.
 //  - Only clear the persisted recovery value AFTER confirming the previous IME is actually
 //    restored (read-back). A failed `ime set` keeps the value so recovery can retry.
+//  - A confirmed `ime set` on an emulator registers the flush window HERE, beside the write that
+//    earns it. This is the only site that knows the write landed, so no caller — close-time or
+//    startup-orphan — can restore without registering, and no future call site can forget to.
 async function restoreAndroidTestImeFor(
   adb: AndroidAdbExecutor,
   device: DeviceInfo,
@@ -198,7 +154,12 @@ async function restoreAndroidTestImeFor(
     });
     return { restored: false, previousIme, reason: 'set-failed' };
   }
-  // Confirmed back on the previous IME — now it is safe to drop the recovery value.
+  // Confirmed back on the previous IME. The provider's flush window opened at this write, so
+  // register it here — before the record cleanup, before any caller can race a kill against it.
+  if (device.kind === 'emulator') {
+    registerTestImeRestore(device.id);
+  }
+  // Now it is safe to drop the recovery value.
   await clearPersistedPreviousIme(adb).catch(() => {});
   await clearPersistedRebindDisplacement(adb).catch(() => {});
   emitAndroidAdbDiagnostic({
@@ -259,7 +220,11 @@ export async function restoreOrphanedAndroidTestImeOnDaemonStartup(params: {
             data: { device: serial, previousIme: result.previousIme },
           });
         }
-        if (isDeviceRecoveryComplete(result.reason)) {
+        // The inner restore has registered the device's flush window; startup never kills and
+        // never waits, so its settle outcome is 'idle' — the same single clear rule the close
+        // path applies, not a second notion of "done". The deadline stays in the map for the
+        // next kill-bound path (close --shutdown or the shutdown runtime) to wait out.
+        if (isRecoveryMarkerClearEarned(result.reason, 'idle')) {
           await markers.clear(params.stateDir, serial);
         }
       });

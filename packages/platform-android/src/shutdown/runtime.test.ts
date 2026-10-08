@@ -3,6 +3,14 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/device-shutdown-runtime';
 import { canShutdownTarget, createAndroidShutdownRuntime } from './runtime.ts';
 
+const sleep = vi.hoisted(() => vi.fn(async (_ms: number, _signal?: AbortSignal) => {}));
+vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/retry')>()),
+  sleep,
+}));
+
+import { testImeLastRestoreAtMs } from '../ime-state.ts';
+
 const run = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
 const commands: DeviceShutdownRuntimeDependencies['commands'] = {
   which: async () => 'adb',
@@ -12,6 +20,8 @@ const commands: DeviceShutdownRuntimeDependencies['commands'] = {
 beforeEach(() => {
   run.mockReset();
   run.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+  sleep.mockClear();
+  testImeLastRestoreAtMs.clear();
 });
 
 test('an already-stopped emulator succeeds without adb', async () => {
@@ -43,6 +53,52 @@ test('only Android emulators are available', () => {
   expect(canShutdownTarget(androidDevice())).toBe(true);
   expect(canShutdownTarget({ ...androidDevice(), kind: 'device' })).toBe(false);
   expect(canShutdownTarget({ ...androidDevice(), platform: 'web' })).toBe(false);
+});
+
+// #3318: this runtime is the only executor of `adb emu kill`, so the flush-window hold lives
+// here — every kill path (close --shutdown, the standalone shutdown command, any future
+// caller) inherits it without knowing about the test IME.
+test('a kill waits out a registered test-IME flush window before running adb emu kill', async () => {
+  const device = androidDevice();
+  testImeLastRestoreAtMs.set(device.id, Date.now());
+
+  await expect(
+    createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal()),
+  ).resolves.toEqual(success());
+
+  expect(sleep).toHaveBeenCalledTimes(1);
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(0);
+  expect(run).toHaveBeenCalledTimes(1);
+  expect([...testImeLastRestoreAtMs.keys()]).toEqual([]);
+});
+
+test('a kill skips the wait entirely when no flush window is open', async () => {
+  const device = androidDevice();
+
+  await expect(
+    createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal()),
+  ).resolves.toEqual(success());
+
+  expect(sleep).not.toHaveBeenCalled();
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
+test('a kill cancelled inside the flush window never reaches adb emu kill', async () => {
+  const device = androidDevice();
+  testImeLastRestoreAtMs.set(device.id, Date.now());
+  const controller = new AbortController();
+  sleep.mockImplementationOnce((_ms, waitSignal) => {
+    controller.abort();
+    return waitSignal?.aborted ? Promise.resolve() : new Promise(() => {});
+  });
+
+  await expect(
+    createAndroidShutdownRuntime({ commands }).shutdownTarget(device, controller.signal),
+  ).rejects.toBeDefined();
+
+  expect(run).not.toHaveBeenCalled();
+  // The window stays registered so a retry still waits out the remainder.
+  expect([...testImeLastRestoreAtMs.keys()]).toEqual([device.id]);
 });
 
 function signal(): AbortSignal {

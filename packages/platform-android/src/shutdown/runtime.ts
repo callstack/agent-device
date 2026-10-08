@@ -2,6 +2,7 @@ import type { DeviceShutdownRuntimeDependencies } from '@agent-device/contracts/
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
+import { awaitTestImeFlushWindow } from '../ime-state.ts';
 
 const SHUTDOWN_TIMEOUT_MS = 15_000;
 
@@ -31,6 +32,13 @@ async function shutdownAndroidTarget(
 ): Promise<TargetShutdownResult> {
   if (device.booted === false) return stoppedTargetSuccess();
 
+  signal.throwIfAborted();
+  // Every kill of an emulator goes through here, so this is where the settings-provider flush
+  // window is enforced for ALL kill paths — close --shutdown, the standalone shutdown command,
+  // and any future caller. A restore this process registered postpones the kill until the
+  // provider has rewritten its file; an abort cancels the kill rather than letting it land
+  // inside the window, and the timestamp stays for the retry to wait out the remainder.
+  await awaitTestImeFlushWindow(device.id, signal);
   signal.throwIfAborted();
   try {
     const result = await commands.run(
