@@ -1,5 +1,12 @@
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+
+const sleep = vi.hoisted(() => vi.fn(async (_ms: number, _signal?: AbortSignal) => {}));
+vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/retry')>()),
+  sleep,
+}));
+
 import { bindAndroidAdbHostStub } from './adb-host.fixtures.ts';
 import { withAndroidAdbProvider } from './adb-provider-scope.ts';
 import {
@@ -31,16 +38,21 @@ function stuckDeviceState(): FakeImeDeviceState {
   };
 }
 
-async function restoreWith(state: FakeImeDeviceState) {
+async function restoreWith(state: FakeImeDeviceState, options: { shutdownTarget?: boolean } = {}) {
   return await withAndroidAdbProvider(
     { exec: fakeImeDeviceAdb(state) },
     { serial: DEVICE.id },
-    async () => await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR }),
+    async () =>
+      await restoreAndroidTestIme(DEVICE, {
+        stateDir: STATE_DIR,
+        shutdownTarget: options.shutdownTarget,
+      }),
   );
 }
 
 beforeEach(() => {
   resetAndroidTestImeActivationCacheForTests();
+  sleep.mockClear();
 });
 
 test.each([false, true])('close restores the previous IME with displaced=%s', async (displaced) => {
@@ -108,6 +120,76 @@ test('devices this process never activated are left alone', async () => {
   const result = await restoreWith(state);
   expect(result).toEqual({ restored: false, reason: 'no-record' });
   expect(state.settings.get('default_input_method')).toBe(HELPER_SERVICE);
+});
+
+// #3318: `ime set` is durable only after SettingsProvider's delayed XML flush (AOSP caps it at
+// 2 s), so a kill started while that window is open reboots the emulator onto the helper IME.
+test('a restore before an emulator shutdown waits out the settings-provider flush window', async () => {
+  const host = bindAndroidAdbHostStub();
+  await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
+  setAndroidTestImeActiveForTests(DEVICE, true);
+  const markerDuringSettle: string[][] = [];
+  sleep.mockImplementationOnce(async () => {
+    // The marker must survive the settle so a daemon crash mid-window still recovers.
+    markerDuringSettle.push([...(host.markerStore.get(STATE_DIR) ?? [])]);
+  });
+  const signal = new AbortController().signal;
+
+  const result = await withAndroidAdbProvider(
+    { exec: fakeImeDeviceAdb(stuckDeviceState()) },
+    { serial: DEVICE.id },
+    async () =>
+      await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR, shutdownTarget: true, signal }),
+  );
+
+  expect(result).toMatchObject({ restored: true, reason: 'ok' });
+  expect(sleep).toHaveBeenCalledTimes(1);
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(2_000);
+  // A cancelled close never reaches the kill, so the settle must stop early with it.
+  expect(sleep.mock.calls[0]?.[1]).toBe(signal);
+  expect(markerDuringSettle).toEqual([[DEVICE.id]]);
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
+});
+
+test('an ordinary close restores without any flush wait', async () => {
+  bindAndroidAdbHostStub();
+  setAndroidTestImeActiveForTests(DEVICE, true);
+
+  const result = await withAndroidAdbProvider(
+    { exec: fakeImeDeviceAdb(stuckDeviceState()) },
+    { serial: DEVICE.id },
+    async () => await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR, shutdownTarget: false }),
+  );
+
+  expect(result).toMatchObject({ restored: true, reason: 'ok' });
+  expect(sleep).not.toHaveBeenCalled();
+});
+
+test('a shutdown of a physical device restores without any flush wait', async () => {
+  bindAndroidAdbHostStub();
+  const device: DeviceInfo = { ...DEVICE, kind: 'device', id: 'R5800ABC1' };
+  setAndroidTestImeActiveForTests(device, true);
+
+  const result = await withAndroidAdbProvider(
+    { exec: fakeImeDeviceAdb(stuckDeviceState()) },
+    { serial: device.id },
+    async () => await restoreAndroidTestIme(device, { stateDir: STATE_DIR, shutdownTarget: true }),
+  );
+
+  expect(result).toMatchObject({ restored: true, reason: 'ok' });
+  expect(sleep).not.toHaveBeenCalled();
+});
+
+test('a restore that did not switch the IME back skips the flush wait', async () => {
+  bindAndroidAdbHostStub();
+  setAndroidTestImeActiveForTests(DEVICE, true);
+  const state = stuckDeviceState();
+  state.imeSetFails = true;
+
+  const result = await restoreWith(state, { shutdownTarget: true });
+
+  expect(result).toMatchObject({ restored: false, reason: 'set-failed' });
+  expect(sleep).not.toHaveBeenCalled();
 });
 
 test('startup recovery never scans devices without a pending marker, and retains offline markers', async () => {

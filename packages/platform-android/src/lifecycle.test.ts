@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import type {
+  CloseApplicationFinalizationInput,
   LocalApplicationInteractorHost,
   OpenApplicationInput,
 } from '@agent-device/contracts/application-lifecycle-runtime';
@@ -32,6 +33,11 @@ function createLifecycle(
     snapshot?: (options: SnapshotOptions) => Promise<unknown>;
     openedAppBundleId?: string;
     signal?: AbortSignal;
+    restoreTestIme?: (
+      device: DeviceInfo,
+      input: Readonly<{ stateDir: string; shutdownTarget: boolean; signal: AbortSignal }>,
+    ) => Promise<void>;
+    shutdownTarget?: () => Promise<unknown>;
   }> = {},
 ): LifecycleFixture {
   const calls: string[] = [];
@@ -56,7 +62,9 @@ function createLifecycle(
       android: { ensureReady: async () => ({ ...device, booted: true }) },
     },
     deviceShutdown: {
-      android: { shutdownTarget: async () => undefined },
+      android: {
+        shutdownTarget: async () => await (params.shutdownTarget?.() ?? Promise.resolve(undefined)),
+      },
     },
     androidApplications: {
       resolveOpenTarget: async () => ({}),
@@ -66,7 +74,7 @@ function createLifecycle(
       applyRuntimeHints: async () => {},
       clearRuntimeHints: async () => {},
       activateTestIme: async () => {},
-      restoreTestIme: async () => {},
+      restoreTestIme: params.restoreTestIme ?? (async () => {}),
       recoverTestImeStartup: async () => {},
       hasTestImeRecoveryEvidence: async () => false,
     },
@@ -212,4 +220,70 @@ test('an app open whose launched package cannot be identified reports it unident
 
   expect(calls).toEqual(['open:Example']);
   expect(outcome.timing.postOpenObservation).toBe('app-unidentified');
+});
+
+function finalizationInput(
+  overrides: Partial<CloseApplicationFinalizationInput> = {},
+): CloseApplicationFinalizationInput {
+  return {
+    appBundleId: 'com.example.app',
+    surface: 'app',
+    retainRunner: false,
+    stateDir: '/state',
+    ...overrides,
+  };
+}
+
+test('close --shutdown restores the keyboard and only then kills the emulator (#3318)', async () => {
+  const sequence: string[] = [];
+  let finishRestore: () => void = () => {};
+  const { lifecycle } = createLifecycle({
+    restoreTestIme: async (_device, input) => {
+      sequence.push(`restore:${input.shutdownTarget}`);
+      await new Promise<void>((resolve) => {
+        finishRestore = resolve;
+      });
+      sequence.push('restored');
+    },
+    shutdownTarget: async () => {
+      sequence.push('shutdown');
+      return { success: true, exitCode: 0, stdout: '', stderr: '' };
+    },
+  });
+
+  let settled = false;
+  const finalizing = lifecycle
+    .finalizeApplicationClose(finalizationInput({ shutdownTarget: true }))
+    .then((result) => {
+      settled = true;
+      return result ?? {};
+    });
+  await vi.waitFor(() => expect(sequence).toEqual(['restore:true']));
+  await Promise.resolve();
+  // The kill must wait on the awaited restore, which absorbs the settings-provider flush window.
+  expect(settled).toBe(false);
+  expect(sequence).toEqual(['restore:true']);
+  finishRestore();
+
+  const result = await finalizing;
+  expect(sequence).toEqual(['restore:true', 'restored', 'shutdown']);
+  expect(result.shutdown).toMatchObject({ success: true });
+});
+
+test('an ordinary close tells the restore no emulator kill is coming', async () => {
+  const sequence: string[] = [];
+  const { lifecycle } = createLifecycle({
+    restoreTestIme: async (_device, input) => {
+      sequence.push(`restore:${input.shutdownTarget}`);
+    },
+    shutdownTarget: async () => {
+      sequence.push('shutdown');
+      return { success: true, exitCode: 0, stdout: '', stderr: '' };
+    },
+  });
+
+  const result = await lifecycle.finalizeApplicationClose(finalizationInput());
+
+  expect(sequence).toEqual(['restore:false']);
+  expect(result).toEqual({});
 });

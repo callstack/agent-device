@@ -78,7 +78,11 @@ export function createAndroidApplicationTools(): AndroidApplicationTools {
     },
     restoreTestIme: async (device, input) => {
       const { restoreAndroidTestIme } = await loadAndroidMechanics();
-      const result = await restoreAndroidTestIme(device, { stateDir: input.stateDir });
+      const result = await restoreAndroidTestIme(device, {
+        stateDir: input.stateDir,
+        shutdownTarget: input.shutdownTarget,
+        signal: input.signal,
+      });
       if (result.reason !== 'set-failed' && result.reason !== 'record-unreadable') return;
       throw new AppError(
         'COMMAND_FAILED',

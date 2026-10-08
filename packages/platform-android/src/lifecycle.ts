@@ -77,8 +77,12 @@ export function bindAndroidApplicationLifecycle(
       });
     },
     finalizeApplicationClose: async (input) => {
+      // The restore absorbs the settings-provider flush window before an emulator kill starts
+      // (#3318); it must not run concurrently with the shutdown.
       await host.androidApplications.restoreTestIme(device, {
         stateDir: input.stateDir,
+        shutdownTarget: input.shutdownTarget === true && device.kind === 'emulator',
+        signal,
       });
       const shutdown =
         input.shutdownTarget && device.kind === 'emulator'

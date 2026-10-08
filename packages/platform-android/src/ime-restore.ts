@@ -1,5 +1,6 @@
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
+import { sleep } from '@agent-device/host-kit/retry';
 import { emitAndroidAdbDiagnostic, requireAndroidAdbHost } from './adb-host.ts';
 import { resolveAndroidAdbExecutor } from './adb-provider-scope.ts';
 import { runAdbShell } from './adb-executor.ts';
@@ -33,9 +34,16 @@ export type AndroidTestImeRestoreResult = {
   reason: AndroidTestImeRestoreReason;
 };
 
+// Android's SettingsProvider persists a setting change asynchronously: `ime set` answers from
+// memory and the XML flush follows up to MAX_WRITE_SETTINGS_DELAY_MILLIS later (AOSP
+// SettingsState.java, 2020ms cap). A device killed inside that window reboots from the stale
+// file, so a restore followed by an immediate `adb emu kill` loses the keyboard on restart.
+// The provider exposes no shell flush; holding the kill past the cap is the owning fix.
+const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
+
 export async function restoreAndroidTestIme(
   device: DeviceInfo,
-  options: { stateDir: string },
+  options: { stateDir: string; shutdownTarget?: boolean; signal?: AbortSignal },
 ): Promise<AndroidTestImeRestoreResult> {
   return await withAndroidTestImeRecoveryLock(options.stateDir, device.id, async () => {
     const deviceKey = getAndroidImeHelperDeviceKey(device);
@@ -49,6 +57,12 @@ export async function restoreAndroidTestIme(
     activeTestImeDevices.delete(deviceKey);
     const adb = resolveAndroidAdbExecutor(device);
     const result = await restoreAndroidTestImeFor(adb, device);
+    // The close finalizer starts the emulator kill only after this resolves, so the settle keeps
+    // the kill out of the flush window; the pending marker stays written through it as the
+    // crash-recovery fence. A cancelled close never reaches the kill, so the settle stops early.
+    if (result.restored && options.shutdownTarget && device.kind === 'emulator') {
+      await sleep(SETTINGS_PROVIDER_FLUSH_SETTLE_MS, options.signal);
+    }
     if (isDeviceRecoveryComplete(result.reason)) {
       await requireAndroidAdbHost().imeRecoveryMarkers.clear(options.stateDir, device.id);
     }

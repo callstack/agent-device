@@ -396,7 +396,10 @@ export type AndroidApplicationTools = Readonly<{
   applyRuntimeHints(device: DeviceInfo, input: RuntimeHintsApplicationInput): Promise<void>;
   clearRuntimeHints(device: DeviceInfo, input: RuntimeHintsApplicationInput): Promise<void>;
   activateTestIme(device: DeviceInfo, input: Readonly<{ stateDir: string }>): Promise<void>;
-  restoreTestIme(device: DeviceInfo, input: Readonly<{ stateDir: string }>): Promise<void>;
+  restoreTestIme(
+    device: DeviceInfo,
+    input: Readonly<{ stateDir: string; shutdownTarget: boolean; signal: AbortSignal }>,
+  ): Promise<void>;
   recoverTestImeStartup(input: Readonly<{ stateDir: string }>): Promise<void>;
   hasTestImeRecoveryEvidence(stateDir: string): Promise<boolean>;
 }>;
