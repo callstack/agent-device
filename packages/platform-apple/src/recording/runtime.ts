@@ -3,7 +3,7 @@ import { AppError, asAppError } from '@agent-device/kernel/errors';
 import { execFailureDetails } from '@agent-device/host-kit/command';
 import type { CleanupOutcome, FinishOutcome } from '@agent-device/contracts/durable-resource';
 import type { HostCommandResult } from '@agent-device/contracts/platform-runtime-host';
-import type { RuntimeOwnerRef } from '@agent-device/contracts/platform-runtime';
+import { type RuntimeOwnerRef, unavailableFact } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingRuntimeHost } from '@agent-device/contracts/screen-recording-runtime-host';
 import {
   RECORDING_OUTPUT_UNPLAYABLE_REASON,
@@ -40,13 +40,13 @@ const SIMULATOR_BACKEND_LABEL = 'simctl recordVideo';
 
 export function appleScreenRecordingFacts(device: DeviceInfo) {
   if (device.appleOs === 'watchos')
-    return unavailable('unsupported-platform-leaf', 'watchOS recording is not supported.');
+    return unavailableFact('unsupported-platform-leaf', 'watchOS recording is not supported.');
   if (
     isIosFamily(device) &&
     device.kind === 'device' &&
     device.iosPhysicalDeviceBackend === 'xctest'
   ) {
-    return unavailable(
+    return unavailableFact(
       'unsupported-device-backend',
       'This command requires a CoreDevice-backed physical iOS device. The selected XCTest backend supports open, close, interactions, snapshots, and screenshots.',
     );
@@ -503,11 +503,4 @@ function snapshot(
         }),
     ...(timing.runnerSessionId === undefined ? {} : { runnerSessionId: timing.runnerSessionId }),
   });
-}
-
-function unavailable(
-  reason: 'unsupported-platform-leaf' | 'unsupported-device-backend',
-  hint: string,
-) {
-  return Object.freeze({ available: false, reason, hint } as const);
 }

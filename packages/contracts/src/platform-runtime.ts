@@ -392,11 +392,7 @@ function normalizeRuntimeFact(value: RuntimeFactInput): RuntimeOperationFact | u
   if (value.available !== false) return undefined;
   if (!isRuntimeOperationUnavailabilityReason(value.reason)) return undefined;
   if (value.hint !== undefined && typeof value.hint !== 'string') return undefined;
-  return Object.freeze({
-    available: false,
-    reason: value.reason,
-    ...(value.hint === undefined ? {} : { hint: value.hint }),
-  });
+  return unavailableFact(value.reason, value.hint);
 }
 
 function requireRuntimeOperation<Operations extends object>(

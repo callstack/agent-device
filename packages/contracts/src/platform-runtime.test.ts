@@ -13,6 +13,7 @@ import {
   sameRuntimeOwner,
   type BoundDeviceRuntime,
   type DeviceBinding,
+  unavailableFact,
 } from './platform-runtime.ts';
 import { runtimeUse } from './platform-runtime-use.ts';
 
@@ -306,3 +307,17 @@ function testBinding(
     [Symbol.asyncDispose]: async () => undefined,
   };
 }
+
+test('unavailableFact freezes the cell and omits hint when none is given', () => {
+  const bare = unavailableFact('unsupported-device-kind');
+  const hinted = unavailableFact('unsupported-provider-mode', 'provider-owned');
+  assert.deepEqual(bare, { available: false, reason: 'unsupported-device-kind' });
+  assert.equal('hint' in bare, false);
+  assert.deepEqual(hinted, {
+    available: false,
+    reason: 'unsupported-provider-mode',
+    hint: 'provider-owned',
+  });
+  assert.equal(Object.isFrozen(bare), true);
+  assert.equal(Object.isFrozen(hinted), true);
+});
