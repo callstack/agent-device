@@ -84,48 +84,63 @@ async function settleTestImeFlushWindow(key: string, signal?: AbortSignal): Prom
   return true;
 }
 
+// Whether this call proved the device needs no further recovery. A reason from an inspected
+// device answers directly; a nothing-inspected `not-activated-here` close earns it only by
+// consuming a deadline a confirmed restore opened. The window must be covered either way — an
+// aborted settle is never a completed settle.
+function isRecoveryMarkerClearEarned(
+  reason: AndroidTestImeRestoreReason,
+  settleOutcome: FlushSettleOutcome,
+  flushWindowCovered: boolean,
+): boolean {
+  if (!flushWindowCovered) return false;
+  if (isDeviceRecoveryComplete(reason)) return true;
+  return reason === 'not-activated-here' && settleOutcome === 'consumed';
+}
+
 export async function restoreAndroidTestIme(
   device: DeviceInfo,
   options: { stateDir: string; shutdownTarget?: boolean; signal?: AbortSignal },
 ): Promise<AndroidTestImeRestoreResult> {
   return await withAndroidTestImeRecoveryLock(options.stateDir, device.id, async () => {
-    const deviceKey = getAndroidImeHelperDeviceKey(device);
-    const settleKey = flushSettleKey(options.stateDir, device.id);
-    const killingTarget = options.shutdownTarget === true && device.kind === 'emulator';
+    const settling = options.shutdownTarget === true && device.kind === 'emulator';
     // This call returns before the close finalizer may start the kill, so a window opened by an
     // earlier aborted close is consumed here rather than outrunning this call's own restore.
     // An ordinary close starts no kill, so it neither consumes the window nor needs it covered;
     // the pending deadline stays for the next shutdown-bound close.
-    const settleOutcome = killingTarget
-      ? await awaitPendingFlushSettle(settleKey, options.signal)
+    const settleOutcome = settling
+      ? await awaitPendingFlushSettle(flushSettleKey(options.stateDir, device.id), options.signal)
       : 'none';
-    let flushWindowCovered = settleOutcome !== 'aborted';
-    let result: AndroidTestImeRestoreResult;
-    if (!activeTestImeDevices.has(deviceKey)) {
-      // Skip devices this process never activated (orphans from another process are handled by
-      // restoreOrphanedAndroidTestImeOnDaemonStartup and the doctor check). Nothing was inspected,
-      // so the device's recovery status stays unknown and its pending marker is none of ours —
-      // unless this call just consumed a deadline opened by a confirmed restore.
-      result = { restored: false, reason: 'not-activated-here' };
-    } else {
-      // Drop the owned-flag first so restoreAndroidTestImeFor's "owned by a live session" guard
-      // does not skip this intentional close-time restore. The IME really is back on the previous
-      // keyboard, so text routing must stop preferring the helper channel even on an abort.
-      activeTestImeDevices.delete(deviceKey);
-      const adb = resolveAndroidAdbExecutor(device);
-      result = await restoreAndroidTestImeFor(adb, device);
-      if (result.restored && killingTarget) {
-        flushWindowCovered = await settleTestImeFlushWindow(settleKey, options.signal);
-      }
-    }
-    const recoveryComplete =
-      isDeviceRecoveryComplete(result.reason) ||
-      (result.reason === 'not-activated-here' && settleOutcome === 'consumed');
-    if (flushWindowCovered && recoveryComplete) {
+    const result = await restoreOwnedAndroidTestIme(device);
+    const flushWindowCovered =
+      result.restored && settling
+        ? await settleTestImeFlushWindow(
+            flushSettleKey(options.stateDir, device.id),
+            options.signal,
+          )
+        : settleOutcome !== 'aborted';
+    if (isRecoveryMarkerClearEarned(result.reason, settleOutcome, flushWindowCovered)) {
       await requireAndroidAdbHost().imeRecoveryMarkers.clear(options.stateDir, device.id);
     }
     return result;
   });
+}
+
+// Restore this process's own device, or report that it never activated one. For an unactivated
+// device nothing is inspected (orphans from another process are handled by
+// restoreOrphanedAndroidTestImeOnDaemonStartup and the doctor check), so recovery stays unknown.
+async function restoreOwnedAndroidTestIme(
+  device: DeviceInfo,
+): Promise<AndroidTestImeRestoreResult> {
+  const deviceKey = getAndroidImeHelperDeviceKey(device);
+  if (!activeTestImeDevices.has(deviceKey)) {
+    return { restored: false, reason: 'not-activated-here' };
+  }
+  // Drop the owned-flag first so restoreAndroidTestImeFor's "owned by a live session" guard does
+  // not skip this intentional close-time restore. The IME really is back on the previous keyboard,
+  // so text routing must stop preferring the helper channel even on an abort.
+  activeTestImeDevices.delete(deviceKey);
+  return await restoreAndroidTestImeFor(resolveAndroidAdbExecutor(device), device);
 }
 
 // The device was inspected and the helper is confirmed off it (restored, already not the active
