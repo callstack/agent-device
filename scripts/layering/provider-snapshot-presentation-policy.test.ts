@@ -77,6 +77,41 @@ test('R73 rejects a provider import of the capture-kit presentation runtime subp
   );
 });
 
+test('R73 preserves breadth-first origin and finding order through a shared import graph', () => {
+  const provider = 'packages/provider-webdriver/src/provider.ts';
+  const first = 'src/graph-first.ts';
+  const second = 'src/graph-second.ts';
+  const join = 'src/graph-join.ts';
+  const firstPresentation = 'packages/capture-kit/src/snapshot/first.ts';
+  const secondPresentation = 'packages/capture-kit/src/snapshot/second.ts';
+  const joinedPresentation = 'packages/capture-kit/src/snapshot/joined.ts';
+  const sources = new Map([
+    [provider, "import '../../../src/graph-first.ts';\nimport '../../../src/graph-second.ts';\n"],
+    [first, "import '../packages/capture-kit/src/snapshot/first.ts';\nimport './graph-join.ts';\n"],
+    [second, "import '../packages/capture-kit/src/snapshot/second.ts';\n"],
+    [join, "import '../packages/capture-kit/src/snapshot/joined.ts';\n"],
+    [firstPresentation, 'export const first = true;\n'],
+    [secondPresentation, 'export const second = true;\n'],
+    [joinedPresentation, 'export const joined = true;\n'],
+  ]);
+  const result = providerSnapshotPresentationViolations(
+    sources,
+    resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot)),
+  );
+
+  assert.deepEqual(
+    result.map(({ line, message }) => ({
+      line,
+      target: /reaches (.+?) before/.exec(message)?.[1],
+    })),
+    [
+      { line: 1, target: firstPresentation },
+      { line: 2, target: secondPresentation },
+      { line: 1, target: joinedPresentation },
+    ],
+  );
+});
+
 for (const planted of [
   {
     name: 'a planted provider residue discard',

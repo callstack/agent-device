@@ -11,9 +11,11 @@
 //   exports map cannot replace it: it restricts external specifiers, not the transitive walk
 //   into packages/capture-kit/src/snapshot/ or a provider-local `residue` property or assignment.
 
+import { genBFS } from '@statelyai/graph';
 import { parseSync } from 'oxc-parser';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 import { memberPath, propertyName, visitAst } from './layering-ast.ts';
+import { ALL_EDGES, importGraphFromResolvedEdges } from '../depgraph/import-graph.ts';
 
 export const PROVIDER_SNAPSHOT_PRESENTATION_RULE = 'R73 provider-snapshot-presentation-ownership';
 export const IOS_SNAPSHOT_ACQUISITION_ENTRYPOINT =
@@ -52,11 +54,16 @@ function presentationImportViolations(
 ): LayeringViolation[] {
   const origins = new Map<string, ResolvedImportEdge>();
   const visited = new Set([providerFile]);
-  const queue = [providerFile];
   const violations: LayeringViolation[] = [];
+  const reachableEdges = [...edgesByFile.values()].flat();
+  const graph = importGraphFromResolvedEdges(
+    reachableEdges.filter((edge) => !isPresentationTarget(edge.file)),
+    ALL_EDGES,
+    [providerFile],
+  );
 
-  while (queue.length > 0) {
-    const file = queue.shift()!;
+  for (const { id: file } of genBFS(graph, providerFile)) {
+    if (isPresentationTarget(file)) continue;
     for (const edge of edgesByFile.get(file) ?? []) {
       const origin = origins.get(file) ?? edge;
       if (isPresentationTarget(edge.target)) {
@@ -72,7 +79,6 @@ function presentationImportViolations(
       if (visited.has(edge.target)) continue;
       visited.add(edge.target);
       origins.set(edge.target, origin);
-      queue.push(edge.target);
     }
   }
   return violations;

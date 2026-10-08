@@ -1,5 +1,7 @@
+import { genDFS } from '@statelyai/graph';
 import { isProductionSourceFile } from './tracked-sources.ts';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
+import { ALL_EDGES, importGraphFromResolvedEdges } from '../depgraph/import-graph.ts';
 
 // The classified inventory of every production daemon import that reaches the root platform-runtime
 // composition modules (#2278, ADR 0022, #2542). R65 already bans daemon imports of concrete platform
@@ -52,27 +54,19 @@ export function isRootPlatformRuntimeTarget(target: string): boolean {
 export function computePlatformMechanicsHubs(
   edges: readonly ResolvedImportEdge[],
 ): ReadonlySet<string> {
-  const importersByTarget = new Map<string, string[]>();
   const roots: string[] = [];
+  const rootSet = new Set<string>();
   for (const edge of edges) {
-    const importers = importersByTarget.get(edge.target);
-    if (importers === undefined) importersByTarget.set(edge.target, [edge.file]);
-    else importers.push(edge.file);
-    if (isRootPlatformRuntimeTarget(edge.target) && !roots.includes(edge.target)) {
+    if (isRootPlatformRuntimeTarget(edge.target) && !rootSet.has(edge.target)) {
+      rootSet.add(edge.target);
       roots.push(edge.target);
     }
   }
 
-  const hubs = new Set<string>(roots);
-  const seen = new Set<string>(roots);
-  const frontier = [...roots];
-  while (frontier.length > 0) {
-    for (const importer of importersByTarget.get(frontier.pop()!) ?? []) {
-      if (seen.has(importer)) continue;
-      seen.add(importer);
-      frontier.push(importer);
-      if (!importer.startsWith('src/daemon/')) hubs.add(importer);
-    }
+  const hubs = new Set<string>();
+  const graph = importGraphFromResolvedEdges(edges, ALL_EDGES, roots);
+  for (const { id: importer } of genDFS(graph, { from: roots, direction: 'incoming' })) {
+    if (!importer.startsWith('src/daemon/')) hubs.add(importer);
   }
   return hubs;
 }

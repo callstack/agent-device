@@ -17,8 +17,9 @@ import {
 import { ARCHITECTURE_OWNERSHIP, matchesDeclaredRoot } from '../layering/architecture-ownership.ts';
 import { genPostorder, getSuccessors, getTransitiveReduction } from '@statelyai/graph';
 import { importEdgeId, importGraph, VALUE_EDGES } from './import-graph.ts';
+import type { EdgeKind } from './import-graph.ts';
 
-export type EdgeKind = 'value' | 'type' | 'dynamic';
+export type { EdgeKind } from './import-graph.ts';
 
 export const AUTHORITY_LABELS = [
   'vocabulary',

@@ -20,11 +20,15 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { genBFS, type Graph } from '@statelyai/graph';
 import {
   readWorkspacePackages,
   workspaceSpecifierTargets,
 } from '../layering/package-boundaries.ts';
+import { resolveImportEdges } from '../layering/model.ts';
+import { listTrackedTypeScriptFiles } from '../layering/tracked-sources.ts';
 import { walkFiles } from '../lib/walk-files.ts';
+import { ALL_EDGES, importGraphFromResolvedEdges } from '../depgraph/import-graph.ts';
 import {
   affectedModules,
   isKernelTestFile,
@@ -55,52 +59,32 @@ function exportTargetsFor(repoRoot: string): Map<string, string> {
   return cachedExportTargets.targets;
 }
 
-/**
- * Repository-relative modules a file imports: relative specifiers plus
- * workspace package specifiers resolved through their `exports` maps.
- */
-function importsOf(file: string, repoRoot: string, cache: Map<string, string[]>): string[] {
-  const cached = cache.get(file);
+const graphByRepository = new Map<string, Graph>();
+
+function ownershipGraph(repoRoot: string): Graph {
+  const cached = graphByRepository.get(repoRoot);
   if (cached) return cached;
-  const absolute = path.join(repoRoot, file);
-  const text = fs.existsSync(absolute) ? fs.readFileSync(absolute, 'utf8') : '';
-  const specifiers = [...text.matchAll(/(?:from|import)\s*\(?\s*'(?<spec>[.@][^']+)'/g)].map(
-    (match) => match.groups!.spec,
+  const files = listTrackedTypeScriptFiles(repoRoot);
+  const sources = new Map(
+    files.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]),
   );
-  const exportTargets = exportTargetsFor(repoRoot);
-  const resolved = [
-    ...new Set(
-      specifiers.flatMap((specifier) => {
-        if (specifier.startsWith('@')) {
-          const target = exportTargets.get(specifier);
-          return target && fs.existsSync(path.join(repoRoot, target)) ? [target] : [];
-        }
-        const base = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
-        return [base, `${base}.ts`, `${base}/index.ts`].filter((candidate) =>
-          fs.existsSync(path.join(repoRoot, candidate)),
-        );
-      }),
-    ),
-  ].filter((candidate) => candidate.endsWith('.ts'));
-  cache.set(file, resolved);
-  return resolved;
+  const graph = importGraphFromResolvedEdges(
+    resolveImportEdges(sources, exportTargetsFor(repoRoot)),
+    ALL_EDGES,
+    files,
+  );
+  graphByRepository.set(repoRoot, graph);
+  return graph;
+}
+
+function reachableInGraph(file: string, graph: Graph): Set<string> {
+  const root = normalizePath(file);
+  return new Set([root, ...[...genBFS(graph, root)].map(({ id }) => id)]);
 }
 
 /** Every repository-relative module `file` reaches through the import graph. */
-export function reachableFrom(
-  file: string,
-  repoRoot: string,
-  cache: Map<string, string[]> = new Map(),
-): Set<string> {
-  const seen = new Set<string>();
-  const queue = [normalizePath(file)];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    if (seen.has(current)) continue;
-    seen.add(current);
-    queue.push(...importsOf(current, repoRoot, cache));
-  }
-  return seen;
+export function reachableFrom(file: string, repoRoot: string): Set<string> {
+  return reachableInGraph(file, ownershipGraph(repoRoot));
 }
 
 /** The concrete sources Stryker mutates for a module. */
@@ -115,14 +99,14 @@ type Deriver = {
 
 /** A deriver with caches shared across files — one graph walk per module, not per query. */
 export function ownershipDeriver(repoRoot: string): Deriver {
-  const importCache = new Map<string, string[]>();
+  const graph = ownershipGraph(repoRoot);
   const sources = KERNEL_MODULES.map((module) => ({
     id: module.id,
     sources: new Set(mutatedSources(module, repoRoot)),
   }));
   return {
     ownersOf(testFile) {
-      const reachable = reachableFrom(testFile, repoRoot, importCache);
+      const reachable = reachableInGraph(testFile, graph);
       return sources
         .filter((entry) => [...entry.sources].some((source) => reachable.has(source)))
         .map((entry) => entry.id);

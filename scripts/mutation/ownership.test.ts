@@ -43,9 +43,15 @@ test('a kernel is owned by tests that reach it indirectly', () => {
   );
 });
 
+test('reachability includes its query root when the file is absent from the tracked graph', () => {
+  assert.deepEqual(
+    [...reachableFrom('src/untracked-fixture.ts', repoRoot)],
+    ['src/untracked-fixture.ts'],
+  );
+});
+
 test('ownership is complete: every test reaching a kernel owns it', () => {
   const owned = ownedTestFiles(repoRoot);
-  const cache = new Map<string, string[]>();
   for (const module of KERNEL_MODULES) {
     const sources = mutatedSources(module, repoRoot);
     assert.ok(sources.length > 0, `${module.id} mutates nothing`);
@@ -55,7 +61,7 @@ test('ownership is complete: every test reaching a kernel owns it', () => {
       `${module.id} has no owning tests — its score cannot be attributed`,
     );
     for (const testFile of files) {
-      const reachable = reachableFrom(testFile, repoRoot, cache);
+      const reachable = reachableFrom(testFile, repoRoot);
       assert.ok(
         sources.some((source) => reachable.has(source)),
         `${testFile} owns ${module.id} without reaching it`,

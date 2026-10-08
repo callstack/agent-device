@@ -9,7 +9,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { genBFS } from '@statelyai/graph';
 import { describe, expect, it } from 'vitest';
+import { parseImports } from '../layering/model.ts';
+import { importGraphFromResolvedEdges, STATIC_EDGES } from '../depgraph/import-graph.ts';
 import { CASE_GENERATION_INPUTS, NON_GENERATING_MODULES } from './envelope.ts';
 
 const FUZZ_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -17,26 +20,34 @@ const FUZZ_DIR = path.dirname(fileURLToPath(import.meta.url));
 /** Roots of case generation: the arbitraries, the seeds, the loop, and the violation rule. */
 const ROOTS = ['arbitraries.ts', 'generate.ts', 'targets.ts', 'invariant.ts'] as const;
 
-function localImportsOf(file: string): string[] {
-  const source = fs.readFileSync(path.join(FUZZ_DIR, file), 'utf8');
-  return [...source.matchAll(/from '\.\/([\w-]+\.ts)'/g)].map((match) => match[1]!);
+function generationGraph() {
+  const sources = new Map(
+    fs
+      .readdirSync(FUZZ_DIR)
+      .filter((file) => file.endsWith('.ts'))
+      .map((file) => [file, fs.readFileSync(path.join(FUZZ_DIR, file), 'utf8')]),
+  );
+  const edges = [];
+  for (const [file, source] of sources) {
+    if (file in NON_GENERATING_MODULES) continue;
+    for (const edge of parseImports(source)) {
+      if (!edge.spec.startsWith('./')) continue;
+      const target = path.posix.normalize(path.posix.join(path.posix.dirname(file), edge.spec));
+      if (!sources.has(target)) continue;
+      edges.push({ file, target, dynamic: edge.dynamic, typeOnly: edge.typeOnly });
+    }
+  }
+  return importGraphFromResolvedEdges(edges, STATIC_EDGES, sources.keys());
 }
+
+const graph = generationGraph();
 
 /**
  * Walk stops at a waived module: what a non-generating module imports cannot reach a case either
  * (the runner imports the target registry, which would otherwise drag the whole harness in).
  */
 function generationClosure(): Set<string> {
-  const seen = new Set<string>();
-  const queue = [...ROOTS];
-  while (queue.length > 0) {
-    const file = queue.pop()!;
-    if (seen.has(file)) continue;
-    seen.add(file);
-    if (file in NON_GENERATING_MODULES) continue;
-    queue.push(...localImportsOf(file));
-  }
-  return seen;
+  return new Set([...genBFS(graph, { from: ROOTS })].map(({ id }) => id));
 }
 
 describe('configHash coverage', () => {

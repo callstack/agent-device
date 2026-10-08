@@ -3,7 +3,8 @@
 // a graph built here, so a kind filter is the only thing that distinguishes their subgraphs.
 
 import { createGraph, type Graph } from '@statelyai/graph';
-import type { EdgeKind, GraphEdge } from './model.ts';
+
+export type EdgeKind = 'value' | 'type' | 'dynamic';
 
 /** The subgraph R4 keeps acyclic: what a module needs before it can evaluate. */
 export const VALUE_EDGES: ReadonlySet<EdgeKind> = new Set(['value']);
@@ -14,6 +15,7 @@ export const VALUE_EDGES: ReadonlySet<EdgeKind> = new Set(['value']);
  * dynamic edges would cut every handler chain at its root.
  */
 export const EXECUTABLE_EDGES: ReadonlySet<EdgeKind> = new Set(['value', 'dynamic']);
+export const STATIC_EDGES: ReadonlySet<EdgeKind> = new Set(['value', 'type']);
 
 /**
  * Every collapsed edge kind, for the structural question ("does anything reference this file at
@@ -23,6 +25,15 @@ export const EXECUTABLE_EDGES: ReadonlySet<EdgeKind> = new Set(['value', 'dynami
  * does not use this set: it builds its own zone graph from VALUE zone pairs only, to mirror R4.
  */
 export const ALL_EDGES: ReadonlySet<EdgeKind> = new Set(['value', 'type', 'dynamic']);
+
+type ImportGraphEdge = { from: string; to: string; kind: EdgeKind };
+
+type ResolvedGraphEdge = {
+  file: string;
+  target: string;
+  dynamic: boolean;
+  typeOnly: boolean;
+};
 
 /**
  * Identity of one file pair, shared by `collapseEdges` and the graph's edge ids. NUL cannot occur
@@ -37,7 +48,7 @@ export function importEdgeId(from: string, to: string): string {
  * isolated modules still exist as nodes.
  */
 export function importGraph(
-  edges: readonly GraphEdge[],
+  edges: readonly ImportGraphEdge[],
   kinds: ReadonlySet<EdgeKind>,
   files: Iterable<string> = [],
 ): Graph {
@@ -55,4 +66,23 @@ export function importGraph(
       targetId: edge.to,
     })),
   });
+}
+
+/** Build a traversal graph from the normalized edges produced by the layering model. */
+export function importGraphFromResolvedEdges(
+  edges: readonly ResolvedGraphEdge[],
+  kinds: ReadonlySet<EdgeKind>,
+  files: Iterable<string> = [],
+): Graph {
+  const seen = new Set<string>();
+  const graphEdges: ImportGraphEdge[] = [];
+  for (const edge of edges) {
+    const kind: EdgeKind = edge.dynamic ? 'dynamic' : edge.typeOnly ? 'type' : 'value';
+    if (!kinds.has(kind)) continue;
+    const id = importEdgeId(edge.file, edge.target);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    graphEdges.push({ from: edge.file, to: edge.target, kind });
+  }
+  return importGraph(graphEdges, kinds, files);
 }
