@@ -12,6 +12,7 @@ const WAIVED_TOPICS: Record<string, string> = {
   cdp: 'JS-heap forensics niche; add cases when heap-guidance regressions show up in practice.',
   commands:
     'Derived command/configuration reference, not a planning loop; catalog completeness is structurally tested.',
+  host: 'Operator setup for the Host front-end, not a planning loop; no worker-planning case is defined yet.',
   macos: 'macOS surface guidance is thin and stable; no observed planning regressions yet.',
   maestro: 'Compatibility reference, not a planning loop; conformance is oracle-tested instead.',
   'physical-device': 'Needs device-specific setup guidance; no portable planning task defined yet.',

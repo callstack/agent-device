@@ -463,6 +463,18 @@ test('usageForCommand resolves remote help topic', async () => {
   assert.match(help, /install-from-source --github-actions-artifact org\/repo:artifact/);
 });
 
+test('usageForCommand resolves host help topic', async () => {
+  const help = await usageForCommand('host');
+  if (help === null) throw new Error('Expected host help text');
+  assert.match(help, /^agent-device \S+ — host/);
+  assert.match(help, /host\/service-credential\.json \(mode 0600, directory 0700\)/);
+  assert.match(help, /--tls-cert <path> --tls-key <path>/);
+  assert.match(
+    help,
+    /GET \/health is public\. Every other route needs the service token \(401 without it\);\s+unserved routes get 404\./,
+  );
+});
+
 test('usageForCommand resolves physical-device help topic', async () => {
   const help = await usageForCommand('physical-device');
   if (help === null) throw new Error('Expected physical-device help text');

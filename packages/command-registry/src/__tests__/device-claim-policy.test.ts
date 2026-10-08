@@ -61,6 +61,7 @@ test('every command that deviates from require-owner is a reviewed, diffable set
       'daemon',
       'debug',
       'disconnect',
+      'host',
       'human_control',
       'install-from-source',
       'lease_allocate',
