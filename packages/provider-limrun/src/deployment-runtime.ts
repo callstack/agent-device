@@ -9,7 +9,10 @@ import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import {
+  type RuntimeOperationFact,
+  unavailableFact,
+} from '@agent-device/contracts/platform-runtime';
 import type { ProviderDeviceInstallResult } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -17,16 +20,14 @@ import type { LimrunRequestOperationDrain } from './request-cancellation.ts';
 import { isSupportedLimrunRuntimeDevice } from './runtime-device.ts';
 
 const available = Object.freeze({ available: true } as const);
-const deploymentUnavailable = Object.freeze({
-  available: false,
-  reason: 'owner-capability-missing',
-  hint: 'The Limrun provider session is no longer active for this device.',
-} as const);
-const pushUnavailable = Object.freeze({
-  available: false,
-  reason: 'unsupported-provider-mode',
-  hint: 'Push notifications are unavailable for Limrun provider-owned devices.',
-} as const);
+const deploymentUnavailable = unavailableFact(
+  'owner-capability-missing',
+  'The Limrun provider session is no longer active for this device.',
+);
+const pushUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'Push notifications are unavailable for Limrun provider-owned devices.',
+);
 
 export type LimrunAppDeploymentRuntimeOptions = Readonly<{
   host: PlatformRuntimeHost;
