@@ -237,6 +237,27 @@ describe('a close cancelled mid-settle', () => {
     expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
   });
 
+  test('a restore while a window is open coalesces into one deadline, not two waits', async () => {
+    bindAndroidAdbHostStub();
+    setAndroidTestImeActiveForTests(DEVICE, true);
+    // A window from an earlier aborted close still has most of its budget left when this close's
+    // own restore writes again. SettingsState rewrites the whole file, so one wait to the later
+    // deadline persists both writes.
+    pendingTestImeFlushSettles.set(`${STATE_DIR}:${DEVICE.id}`, Date.now() + 2_400);
+
+    const result = await withAndroidAdbProvider(
+      { exec: fakeImeDeviceAdb(stuckDeviceState()) },
+      { serial: DEVICE.id },
+      async () =>
+        await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR, shutdownTarget: true }),
+    );
+
+    expect(result).toMatchObject({ restored: true, reason: 'ok' });
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(2_000);
+    expect([...pendingTestImeFlushSettles.keys()]).toEqual([]);
+  });
+
   test('a second close after the window already elapsed skips the wait', async () => {
     const host = bindAndroidAdbHostStub();
     await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);

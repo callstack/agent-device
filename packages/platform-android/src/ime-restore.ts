@@ -43,59 +43,52 @@ export type AndroidTestImeRestoreResult = {
 // memory and the XML flush follows up to MAX_WRITE_SETTINGS_DELAY_MILLIS later (AOSP
 // SettingsState.java, 2020ms cap). A device killed inside that window reboots from the stale
 // file, so a restore followed by an immediate `adb emu kill` loses the keyboard on restart.
-// The provider exposes no shell flush; holding the kill past the cap is the owning fix.
+// The provider exposes no shell flush; holding the kill past the cap is the owning fix. The
+// window runs from the oldest unwritten mutation and doWriteState() rewrites the whole file from
+// the in-memory map, so windows coalesce into one deadline at max(existing, write + cap) rather
+// than stacking; the margin past the cap only has to absorb the AtomicFile rename.
 const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
 
 function flushSettleKey(stateDir: string, serial: string): string {
   return `${stateDir}:${serial}`;
 }
 
-// Wait out a window left open by a previous aborted close. `consumed` means this call retired a
-// deadline a confirmed restore opened, which proves the device clean together with the covered
-// window. `aborted` means this call was cancelled first, keeping both the deadline and the
-// pending marker in place for the next close: an aborted settle is never a completed settle.
-type FlushSettleOutcome = 'none' | 'consumed' | 'aborted';
+// `idle`: nothing was open and this call opened none. `retired`: a deadline — this call's own
+// restore write or one an earlier aborted close left behind — was waited out and cleared.
+// `aborted`: the wait was cancelled, so the deadline and the pending marker both stay in place.
+// An aborted settle is never a completed settle.
+type FlushSettleOutcome = 'idle' | 'retired' | 'aborted';
 
-async function awaitPendingFlushSettle(
+async function settleFlushWindow(
   key: string,
+  registeredAtMs: number | undefined,
   signal?: AbortSignal,
 ): Promise<FlushSettleOutcome> {
-  const deadlineAtMs = pendingTestImeFlushSettles.get(key);
-  if (deadlineAtMs === undefined) return 'none';
-  const remainingMs = deadlineAtMs - Date.now();
-  if (remainingMs <= 0) {
-    pendingTestImeFlushSettles.delete(key);
-    return 'consumed';
+  let deadlineAtMs = pendingTestImeFlushSettles.get(key);
+  if (registeredAtMs !== undefined) {
+    deadlineAtMs = Math.max(deadlineAtMs ?? 0, registeredAtMs + SETTINGS_PROVIDER_FLUSH_SETTLE_MS);
+    pendingTestImeFlushSettles.set(key, deadlineAtMs);
   }
-  await sleep(remainingMs, signal);
-  if (signal?.aborted) return 'aborted';
+  if (deadlineAtMs === undefined) return 'idle';
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs > 0) {
+    await sleep(remainingMs, signal);
+    if (signal?.aborted) return 'aborted';
+  }
   pendingTestImeFlushSettles.delete(key);
-  return 'consumed';
-}
-
-// Run the flush settle for the restore just confirmed on this device. A cancelled close resolves
-// the sleep early without reaching the deadline, so the deadline survives for the next close.
-async function settleTestImeFlushWindow(key: string, signal?: AbortSignal): Promise<boolean> {
-  const deadlineAtMs = Date.now() + SETTINGS_PROVIDER_FLUSH_SETTLE_MS;
-  pendingTestImeFlushSettles.set(key, deadlineAtMs);
-  await sleep(SETTINGS_PROVIDER_FLUSH_SETTLE_MS, signal);
-  if (signal?.aborted) return false;
-  pendingTestImeFlushSettles.delete(key);
-  return true;
+  return 'retired';
 }
 
 // Whether this call proved the device needs no further recovery. A reason from an inspected
-// device answers directly; a nothing-inspected `not-activated-here` close earns it only by
-// consuming a deadline a confirmed restore opened. The window must be covered either way — an
-// aborted settle is never a completed settle.
+// device answers directly once the window it owed is covered; an aborted settle never covers it.
+// A nothing-inspected `not-activated-here` close earns the clear only by retiring a deadline a
+// confirmed restore opened — its own close opened none.
 function isRecoveryMarkerClearEarned(
   reason: AndroidTestImeRestoreReason,
-  settleOutcome: FlushSettleOutcome,
-  flushWindowCovered: boolean,
+  outcome: FlushSettleOutcome,
 ): boolean {
-  if (!flushWindowCovered) return false;
-  if (isDeviceRecoveryComplete(reason)) return true;
-  return reason === 'not-activated-here' && settleOutcome === 'consumed';
+  if (isDeviceRecoveryComplete(reason)) return outcome !== 'aborted';
+  return reason === 'not-activated-here' && outcome === 'retired';
 }
 
 export async function restoreAndroidTestIme(
@@ -103,23 +96,21 @@ export async function restoreAndroidTestIme(
   options: { stateDir: string; shutdownTarget?: boolean; signal?: AbortSignal },
 ): Promise<AndroidTestImeRestoreResult> {
   return await withAndroidTestImeRecoveryLock(options.stateDir, device.id, async () => {
-    const settling = options.shutdownTarget === true && device.kind === 'emulator';
-    // This call returns before the close finalizer may start the kill, so a window opened by an
-    // earlier aborted close is consumed here rather than outrunning this call's own restore.
-    // An ordinary close starts no kill, so it neither consumes the window nor needs it covered;
-    // the pending deadline stays for the next shutdown-bound close.
-    const settleOutcome = settling
-      ? await awaitPendingFlushSettle(flushSettleKey(options.stateDir, device.id), options.signal)
-      : 'none';
     const result = await restoreOwnedAndroidTestIme(device);
-    const flushWindowCovered =
-      result.restored && settling
-        ? await settleTestImeFlushWindow(
-            flushSettleKey(options.stateDir, device.id),
-            options.signal,
-          )
-        : settleOutcome !== 'aborted';
-    if (isRecoveryMarkerClearEarned(result.reason, settleOutcome, flushWindowCovered)) {
+    // A kill-bound close returns only after every open window is covered — including one an
+    // earlier aborted close left behind — so the finalizer's kill lands after the flush. The
+    // restore's own write registers its window here, after the write, coalescing with the old
+    // deadline instead of stacking behind it: one sleep to max(old, write + cap). An ordinary
+    // close starts no kill, so it opens nothing and leaves any leftover deadline in place.
+    const settling = options.shutdownTarget === true && device.kind === 'emulator';
+    const outcome = settling
+      ? await settleFlushWindow(
+          flushSettleKey(options.stateDir, device.id),
+          result.restored ? Date.now() : undefined,
+          options.signal,
+        )
+      : 'idle';
+    if (isRecoveryMarkerClearEarned(result.reason, outcome)) {
       await requireAndroidAdbHost().imeRecoveryMarkers.clear(options.stateDir, device.id);
     }
     return result;
