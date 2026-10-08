@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
+import { workspaceSpecifierTargets } from './package-boundaries.ts';
 import {
   fieldClassificationDrift,
   findSessionStateWrites,
@@ -167,63 +168,65 @@ test('parseImports records TSImportType edges separately from dynamic imports', 
   );
 });
 
+const RECORDED_IMPORT_TYPE_CASES = [
+  [
+    'packages/contracts/src/platform-runtime.ts',
+    'packages/contracts/src/device-shutdown-runtime.ts',
+    './device-shutdown-runtime.ts',
+    'DeviceShutdownRuntime',
+  ],
+  [
+    'packages/platform-apple/src/runner/runner-provider.ts',
+    'packages/platform-apple/src/runner/runner-artifact.ts',
+    './runner-artifact.ts',
+    'RunnerStartAdmission',
+  ],
+  [
+    'src/daemon/interaction/index.ts',
+    'src/daemon/gesture-runtime.ts',
+    '../gesture-runtime.ts',
+    'BoundGestureExecutor',
+  ],
+  [
+    'src/daemon/interaction/index.ts',
+    'src/daemon/touch-runtime.ts',
+    '../touch-runtime.ts',
+    'BoundTouchExecutor',
+  ],
+  [
+    'src/daemon/interaction/internal/interaction.ts',
+    'packages/contracts/src/android-observation.ts',
+    '@agent-device/contracts/android-observation',
+    'AndroidObservationAdapter',
+  ],
+  [
+    'src/daemon/snapshot-runtime-binding.ts',
+    'packages/contracts/src/focus-runtime.ts',
+    '@agent-device/contracts/focus-runtime',
+    'FocusPointInput',
+  ],
+  [
+    'src/daemon/snapshot-runtime-binding.ts',
+    'packages/contracts/src/interactor-types.ts',
+    '@agent-device/contracts/interactor-types',
+    'TypeTextBackendResult',
+  ],
+  [
+    'src/daemon/snapshot-runtime-binding.ts',
+    'packages/contracts/src/type-text-runtime.ts',
+    '@agent-device/contracts/type-text-runtime',
+    'TypeTextInput',
+  ],
+  [
+    'src/sdk/artifacts.ts',
+    'packages/platform-android/src/mechanics.ts',
+    '@agent-device/platform-android/mechanics',
+    'resolveAndroidArchivePackageName',
+  ],
+] as const;
+
 test('the nine recorded TSImportType shapes resolve with source-side symbols', () => {
-  const cases = [
-    [
-      'packages/contracts/src/platform-runtime.ts',
-      'packages/contracts/src/device-shutdown-runtime.ts',
-      './device-shutdown-runtime.ts',
-      'DeviceShutdownRuntime',
-    ],
-    [
-      'packages/platform-apple/src/runner/runner-provider.ts',
-      'packages/platform-apple/src/runner/runner-artifact.ts',
-      './runner-artifact.ts',
-      'RunnerStartAdmission',
-    ],
-    [
-      'src/daemon/interaction/index.ts',
-      'src/daemon/gesture-runtime.ts',
-      '../gesture-runtime.ts',
-      'BoundGestureExecutor',
-    ],
-    [
-      'src/daemon/interaction/index.ts',
-      'src/daemon/touch-runtime.ts',
-      '../touch-runtime.ts',
-      'BoundTouchExecutor',
-    ],
-    [
-      'src/daemon/interaction/internal/interaction.ts',
-      'packages/contracts/src/android-observation.ts',
-      '@agent-device/contracts/android-observation',
-      'AndroidObservationAdapter',
-    ],
-    [
-      'src/daemon/snapshot-runtime-binding.ts',
-      'packages/contracts/src/focus-runtime.ts',
-      '@agent-device/contracts/focus-runtime',
-      'FocusPointInput',
-    ],
-    [
-      'src/daemon/snapshot-runtime-binding.ts',
-      'packages/contracts/src/interactor-types.ts',
-      '@agent-device/contracts/interactor-types',
-      'TypeTextBackendResult',
-    ],
-    [
-      'src/daemon/snapshot-runtime-binding.ts',
-      'packages/contracts/src/type-text-runtime.ts',
-      '@agent-device/contracts/type-text-runtime',
-      'TypeTextInput',
-    ],
-    [
-      'src/sdk/artifacts.ts',
-      'packages/platform-android/src/mechanics.ts',
-      '@agent-device/platform-android/mechanics',
-      'resolveAndroidArchivePackageName',
-    ],
-  ] as const;
+  const cases = RECORDED_IMPORT_TYPE_CASES;
   const sources = new Map<string, string>();
   const exports = new Map<string, string>();
   for (const [index, [file, target, spec, symbol]] of cases.entries()) {
@@ -251,6 +254,32 @@ test('the nine recorded TSImportType shapes resolve with source-side symbols', (
       symbols: [symbol],
     })),
   );
+});
+
+test('the recorded production type dependencies resolve from their owning declarations', () => {
+  const sources = new Map(
+    listSourceFiles().map((file) => [file, readFileSync(path.resolve(file), 'utf8')]),
+  );
+  const edges = resolveImportEdges(sources, workspaceSpecifierTargets(process.cwd()));
+  for (const [recordedFile, target, , recordedSymbol] of RECORDED_IMPORT_TYPE_CASES) {
+    // #3304 moved the shutdown declaration to an ordinary type import in the operations module.
+    const movedShutdown = recordedFile === 'packages/contracts/src/platform-runtime.ts';
+    const file = movedShutdown
+      ? 'packages/contracts/src/platform-runtime-operations.ts'
+      : recordedFile;
+    const symbol = movedShutdown ? 'DeviceShutdownRuntimeOperations' : recordedSymbol;
+    assert.ok(
+      edges.some(
+        (edge) =>
+          edge.file === file &&
+          edge.target === target &&
+          !edge.dynamic &&
+          edge.typeOnly &&
+          edge.symbols.includes(symbol),
+      ),
+      `missing production type dependency: ${file} -> ${target} (${symbol})`,
+    );
+  }
 });
 
 test('parseImports detects multiline dynamic imports', () => {
