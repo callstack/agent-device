@@ -118,12 +118,11 @@ export function mutateGlobs(ids: readonly ModuleId[] = ALL_MODULE_IDS): string[]
 }
 
 /**
- * The module a lane-tooling change proves itself against. `kernel-errors` is the
- * cheapest real sweep in the registry (one file, ~183 mutants), so a change to
- * the harness or the config runs actual mutants end to end without paying for
- * the full sweep.
+ * The module a lane-tooling change proves itself against. Keep this to a real
+ * end-to-end sweep whose observed related-test scope fits the 30-minute job
+ * budget; mutant count alone does not capture replay cost.
  */
-export const LANE_CANARY: ModuleId = 'kernel-errors';
+export const LANE_CANARY: ModuleId = 'snapshot-occlusion';
 
 /** One mutation job: a module, optionally one slice of it. */
 export type ShardSpec = { name: string; module: ModuleId; shard?: string };
