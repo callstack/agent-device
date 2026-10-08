@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
-import { workspaceSpecifierTargets } from './package-boundaries.ts';
 import {
   fieldClassificationDrift,
   findSessionStateWrites,
@@ -25,6 +24,26 @@ import {
   resolveImportEdges,
   unclassifiedZones,
 } from './model.ts';
+
+test('parseImports rejects malformed source instead of returning an incomplete graph', () => {
+  assert.throws(
+    () => parseImports("import { Broken from './broken.ts';"),
+    /Cannot parse imports.*Expected/,
+  );
+});
+
+test('parseImports ignores import-like declarations inside comments and template text', () => {
+  const source = [
+    'const documentation = `',
+    "import { phantom } from './phantom.ts';",
+    "export { phantom } from './also-phantom.ts';",
+    '`;',
+    '/*',
+    "import './comment.ts';",
+    '*/',
+  ].join('\n');
+  assert.deepEqual(parseImports(source), []);
+});
 
 test('parseImports distinguishes value, type-only, dynamic, and value re-export edges', () => {
   const edges = parseImports(
@@ -148,32 +167,90 @@ test('parseImports records TSImportType edges separately from dynamic imports', 
   );
 });
 
-test('the nine recorded TSImportType file pairs resolve as type edges', () => {
-  const expected = [
-    'packages/contracts/src/platform-runtime.ts\0packages/contracts/src/device-shutdown-runtime.ts',
-    'packages/platform-apple/src/runner/runner-provider.ts\0packages/platform-apple/src/runner/runner-artifact.ts',
-    'src/daemon/interaction/index.ts\0src/daemon/gesture-runtime.ts',
-    'src/daemon/interaction/index.ts\0src/daemon/touch-runtime.ts',
-    'src/daemon/interaction/internal/interaction.ts\0packages/contracts/src/android-observation.ts',
-    'src/daemon/snapshot-runtime-binding.ts\0packages/contracts/src/focus-runtime.ts',
-    'src/daemon/snapshot-runtime-binding.ts\0packages/contracts/src/interactor-types.ts',
-    'src/daemon/snapshot-runtime-binding.ts\0packages/contracts/src/type-text-runtime.ts',
-    'src/sdk/artifacts.ts\0packages/platform-android/src/mechanics.ts',
-  ].sort();
-  const expectedPairs = new Set(expected);
-  const sources = new Map(
-    listSourceFiles().map((file) => [file, readFileSync(path.resolve(file), 'utf8')]),
+test('the nine recorded TSImportType shapes resolve with source-side symbols', () => {
+  const cases = [
+    [
+      'packages/contracts/src/platform-runtime.ts',
+      'packages/contracts/src/device-shutdown-runtime.ts',
+      './device-shutdown-runtime.ts',
+      'DeviceShutdownRuntime',
+    ],
+    [
+      'packages/platform-apple/src/runner/runner-provider.ts',
+      'packages/platform-apple/src/runner/runner-artifact.ts',
+      './runner-artifact.ts',
+      'RunnerStartAdmission',
+    ],
+    [
+      'src/daemon/interaction/index.ts',
+      'src/daemon/gesture-runtime.ts',
+      '../gesture-runtime.ts',
+      'BoundGestureExecutor',
+    ],
+    [
+      'src/daemon/interaction/index.ts',
+      'src/daemon/touch-runtime.ts',
+      '../touch-runtime.ts',
+      'BoundTouchExecutor',
+    ],
+    [
+      'src/daemon/interaction/internal/interaction.ts',
+      'packages/contracts/src/android-observation.ts',
+      '@agent-device/contracts/android-observation',
+      'AndroidObservationAdapter',
+    ],
+    [
+      'src/daemon/snapshot-runtime-binding.ts',
+      'packages/contracts/src/focus-runtime.ts',
+      '@agent-device/contracts/focus-runtime',
+      'FocusPointInput',
+    ],
+    [
+      'src/daemon/snapshot-runtime-binding.ts',
+      'packages/contracts/src/interactor-types.ts',
+      '@agent-device/contracts/interactor-types',
+      'TypeTextBackendResult',
+    ],
+    [
+      'src/daemon/snapshot-runtime-binding.ts',
+      'packages/contracts/src/type-text-runtime.ts',
+      '@agent-device/contracts/type-text-runtime',
+      'TypeTextInput',
+    ],
+    [
+      'src/sdk/artifacts.ts',
+      'packages/platform-android/src/mechanics.ts',
+      '@agent-device/platform-android/mechanics',
+      'resolveAndroidArchivePackageName',
+    ],
+  ] as const;
+  const sources = new Map<string, string>();
+  const exports = new Map<string, string>();
+  for (const [index, [file, target, spec, symbol]] of cases.entries()) {
+    const query = file === 'src/sdk/artifacts.ts' ? 'typeof ' : '';
+    sources.set(
+      file,
+      `${sources.get(file) ?? ''}type Dependency${index} = ${query}import('${spec}').${symbol};\n`,
+    );
+    sources.set(target, `export type ${symbol} = unknown;`);
+    if (spec.startsWith('@')) exports.set(spec, target);
+  }
+  assert.deepEqual(
+    resolveImportEdges(sources, exports).map(({ file, target, dynamic, typeOnly, symbols }) => ({
+      file,
+      target,
+      dynamic,
+      typeOnly,
+      symbols,
+    })),
+    cases.map(([file, target, , symbol]) => ({
+      file,
+      target,
+      dynamic: false,
+      typeOnly: true,
+      symbols: [symbol],
+    })),
   );
-  const actual = [
-    ...new Set(
-      resolveImportEdges(sources, workspaceSpecifierTargets(process.cwd()))
-        .filter((edge) => !edge.dynamic && edge.typeOnly)
-        .map((edge) => `${edge.file}\0${edge.target}`)
-        .filter((pair) => expectedPairs.has(pair)),
-    ),
-  ].sort();
-
-  assert.deepEqual(actual, expected);
 });
 
 test('parseImports detects multiline dynamic imports', () => {

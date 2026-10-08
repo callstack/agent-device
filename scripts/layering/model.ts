@@ -168,7 +168,7 @@ function literalSpecifier(node: unknown): string | undefined {
   return undefined;
 }
 
-type LocatedImportEdge = { edge: ImportEdge; start: number; order: number };
+type LocatedImportEdge = { edge: ImportEdge; start: number };
 
 function importedName(node: unknown): string | undefined {
   if (node === null || typeof node !== 'object') return undefined;
@@ -228,9 +228,13 @@ function staticImportEdge(
 
 export function parseImports(source: string): ImportEdge[] {
   const parsed = parseSync('layering-imports.ts', source);
+  if (parsed.errors.length > 0) {
+    throw new SyntaxError(
+      `Cannot parse imports: ${parsed.errors.map(({ message }) => message).join('; ')}`,
+    );
+  }
   const destructured = destructuredDynamicImportBindings(parsed.program);
   const located: LocatedImportEdge[] = [];
-  let order = 0;
 
   visitAst(parsed.program, (node) => {
     const start = typeof node.start === 'number' ? node.start : 0;
@@ -240,7 +244,6 @@ export function parseImports(source: string): ImportEdge[] {
       const capture = destructured.get(start);
       located.push({
         start,
-        order: order++,
         edge: {
           spec,
           dynamic: true,
@@ -288,7 +291,7 @@ export function parseImports(source: string): ImportEdge[] {
         sourceName === undefined ? [] : [sourceName],
       );
     }
-    if (edge) located.push({ edge, start, order: order++ });
+    if (edge) located.push({ edge, start });
   });
 
   return located
@@ -296,8 +299,7 @@ export function parseImports(source: string): ImportEdge[] {
       (left, right) =>
         left.edge.line - right.edge.line ||
         Number(right.edge.dynamic) - Number(left.edge.dynamic) ||
-        left.start - right.start ||
-        left.order - right.order,
+        left.start - right.start,
     )
     .map(({ edge }) => edge);
 }
