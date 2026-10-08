@@ -23,6 +23,8 @@ because 0032 and 0033 exist on main.
    and this daemon's own are left to its session store.
 5. In one daemon, a per-app open conflicts only with sessions on the whole device or on the same
    app. A per-app session may reopen only its app on the `app` surface.
+6. Helper screenshots take a host-wide lock (`~/.agent-device/macos-helper/screen-capture.lock`)
+   for the length of one capture. It is the only action sessions on different apps serialize on.
 
 ## Context
 
@@ -30,7 +32,10 @@ The Mac is one device, so its one claim let a single session per Mac drive any m
 native backend acts on the session app alone: accessibility actions on its elements, key events
 posted to its process, window capture, and (rule 7 of ADR 0031) a background `open`. None of
 those moves the real pointer or changes the frontmost app, so two sessions on two apps cannot
-interfere, and no action needs a short whole-Mac input lock.
+interfere through focus or the pointer. One host resource is shared: ScreenCaptureKit. Two helper
+processes capturing two app windows at the same moment failed (`screenshot failed`, or both hung
+until the 30 s helper timeout) in each of four attempts on macOS 27, while each capture alone took
+about 0.5 s, so captures run one at a time.
 
 ## Decision details
 
@@ -50,7 +55,8 @@ per-app session can still reach them.
 ## Rejected alternatives
 
 - **An input lock around every action.** The native actions need neither focus nor the pointer
-  once `open` stops activating, so a lock would only serialize sessions for nothing.
+  once `open` stops activating, so a lock would only serialize sessions for nothing. Only the
+  capture, which contends on ScreenCaptureKit rather than on input, is serialized.
 - **A separate claims directory per app.** Two stores could not exclude each other under one
   lock, and every stale-claim path would need a second scan.
 

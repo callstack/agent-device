@@ -17,9 +17,11 @@ import {
 } from '@agent-device/host-kit/host-file';
 import {
   hostPlatform,
+  readCurrentOwnerIdentity,
   readHostEnvironmentVariable,
   writeHostStderr,
 } from '@agent-device/host-kit/process';
+import { acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 import {
   resolveExecutableOverridePath,
   runCmdBackground,
@@ -581,5 +583,29 @@ export async function runMacOsScreenshotAction(
 }> {
   const args = ['screenshot', '--out', outPath];
   appendMacOsHelperContextArgs(args, options);
-  return await runMacOsHelper(args, { signal: options.signal });
+  return await withMacOsScreenCaptureLock(
+    async () => await runMacOsHelper(args, { signal: options.signal }),
+  );
+}
+
+/**
+ * ScreenCaptureKit fails or hangs window captures that two processes start at the same time
+ * (measured on macOS 27 with two helpers capturing two apps), so every helper capture on this Mac
+ * runs alone, whichever daemon asks.
+ */
+async function withMacOsScreenCaptureLock<T>(task: () => Promise<T>): Promise<T> {
+  const lockRoot = path.dirname(MACOS_HELPER_INSTALL_ROOT);
+  await ensureHostDirectory(lockRoot);
+  return await withProcessLock({
+    acquire: async () => {
+      const owner = readCurrentOwnerIdentity();
+      return await acquireProcessLock({
+        lockDirPath: path.join(lockRoot, 'screen-capture.lock'),
+        owner: { pid: owner.pid, startTime: owner.startTime, acquiredAtMs: Date.now() },
+        timeoutMs: MACOS_HELPER_TIMEOUT_MS + 5_000,
+        description: 'the macOS screen capture lock',
+      });
+    },
+    task,
+  });
 }
