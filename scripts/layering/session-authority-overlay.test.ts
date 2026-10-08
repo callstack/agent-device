@@ -135,3 +135,23 @@ test('the end-to-end measurement feeds the ratchet: a new handler importer is re
   assert.equal(violations.length, 1);
   assert.equal(violations[0]!.file, 'src/daemon/handlers/new.ts');
 });
+
+test('R75 catches a new handler shape edge expressed as an import type', () => {
+  const base = {
+    'src/daemon/session-state.ts': STATE_STUB,
+    'src/daemon/session-store.ts': STORE_STUB,
+  };
+  const reference = handlerOwnedOverlay(overlayOf(base));
+  const measured = handlerOwnedOverlay(
+    overlayOf({
+      ...base,
+      'src/daemon/handlers/new.ts': "type State = import('../session-state.ts').SessionState;\n",
+    }),
+  );
+
+  const violations = checkSessionAuthorityOverlay(measured, reference);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]!.rule, SESSION_AUTHORITY_OVERLAY_RULE);
+  assert.equal(violations[0]!.file, 'src/daemon/handlers/new.ts');
+  assert.match(violations[0]!.message, /new handler-owned SessionState shape edge/);
+});

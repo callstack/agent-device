@@ -190,6 +190,13 @@ function namedSymbols(
   return [...new Set(symbols)];
 }
 
+function importTypeSourceName(qualifier: unknown): string | undefined {
+  if (qualifier === null || typeof qualifier !== 'object') return undefined;
+  const record = qualifier as Record<string, unknown>;
+  if (record.type === 'Identifier') return importedName(qualifier);
+  return record.type === 'TSQualifiedName' ? importTypeSourceName(record.left) : undefined;
+}
+
 function specifierTypeOnly(
   declaration: Record<string, unknown>,
   specifiers: readonly Record<string, unknown>[],
@@ -272,7 +279,14 @@ export function parseImports(source: string): ImportEdge[] {
     } else if (node.type === 'ExportAllDeclaration') {
       edge = staticImportEdge(source, node, node.source, node.exportKind === 'type', []);
     } else if (node.type === 'TSImportType') {
-      edge = staticImportEdge(source, node, node.source, true, []);
+      const sourceName = importTypeSourceName(node.qualifier);
+      edge = staticImportEdge(
+        source,
+        node,
+        node.source,
+        true,
+        sourceName === undefined ? [] : [sourceName],
+      );
     }
     if (edge) located.push({ edge, start, order: order++ });
   });
