@@ -474,6 +474,38 @@ test('resolveSimulatorRunnerScreenshotCandidatePaths handles empty runner path',
   assert.deepEqual(resolveSimulatorRunnerScreenshotCandidatePaths('/tmp/container', '   '), []);
 });
 
+// Production `simctl` answers an installed app that owns no data container with exit 0 and the
+// literal `(null)` on stdout. The runner container loop reads that as the tool's "no container"
+// answer — the same rule clear-app-state refuses on — and never hands the sentinel to the host
+// filesystem as a path. Without the shared classifier, the thrown wrap below carries a copy ENOENT
+// from a candidate path built on `(null)` instead.
+test('captureScreenshotViaRunner treats a (null) data-container answer as no container', async () => {
+  const tmpDir = await mkdtempForTest('agent-device-runner-null-container-');
+  const device = { ...IOS_TEST_SIMULATOR, id: 'sim-runner-null-container' };
+  mockRunAppleRunnerCommand.mockResolvedValue({ message: 'tmp/null.png' });
+  mockRunCmd.mockImplementation(async (_cmd, args) => {
+    if (args.includes('get_app_container')) {
+      return { exitCode: 0, stdout: '(null)\n', stderr: '' };
+    }
+    throw new Error(`Unexpected xcrun args: ${args.join(' ')}`);
+  });
+
+  try {
+    const outPath = path.join(tmpDir, 'out.png');
+    await assert.rejects(
+      () => captureScreenshotViaRunner(device, outPath),
+      (error: unknown) => {
+        assert.ok(error instanceof AppError);
+        assert.equal(error.code, 'COMMAND_FAILED');
+        assert.match(error.message, /returned no data container path/);
+        return true;
+      },
+    );
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
 test('captureScreenshotViaRunner reuses a verified simulator container path', async () => {
   const tmpDir = await mkdtempForTest('agent-device-runner-cache-');
   const containerPath = path.join(tmpDir, 'container');

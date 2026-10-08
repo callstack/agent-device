@@ -93,3 +93,22 @@ export function readSimctlDeviceState(stdout: string, udid: string): string | nu
     return null;
   }
 }
+
+/**
+ * The literal `simctl get_app_container` prints on stdout when the app is installed but owns no
+ * container in the requested domain — a system app has no `data` container — while still exiting 0.
+ * It is the tool's own "no container" answer, not a path, so callers must never treat it as one.
+ */
+const SIMCTL_NULL_CONTAINER_PATH = '(null)';
+
+/**
+ * The container path `simctl get_app_container` printed, or `undefined` when it answered that no
+ * container exists: an empty stdout or the `(null)` sentinel on an otherwise-successful exit. One
+ * reader for every caller that turns that stdout into a host path, so the sentinel cannot be
+ * mistaken for a directory at one site and handled at another.
+ */
+export function readSimctlContainerPath(stdout: string): string | undefined {
+  const trimmed = stdout.trim();
+  if (!trimmed || trimmed === SIMCTL_NULL_CONTAINER_PATH) return undefined;
+  return trimmed;
+}

@@ -25,10 +25,14 @@ const retryActual = await vi.importActual<typeof import('@agent-device/host-kit/
 );
 const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>('../simulator.ts');
 
-import { setIosSetting } from '../app-settings.ts';
+import { IOS_NO_DATA_CONTAINER_REASON, setIosSetting } from '../app-settings.ts';
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
 import { ensureBootedSimulator } from '../simulator.ts';
-import { AppError, PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  normalizeError,
+  PRE_DISPATCH_REFUSAL_REASONS,
+} from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { assertRejectsAppError } from '../../__tests__/app-error.ts';
@@ -349,6 +353,81 @@ test('setIosSetting appearance runs the simctl plan on the simulator udid and re
         ['simctl', 'ui', 'sim-1', 'appearance'],
         ['simctl', 'ui', 'sim-1', 'appearance', 'light'],
       ]);
+    },
+  );
+});
+
+// Production `simctl` answers an installed app with no data container (com.apple.Preferences on a
+// booted simulator, issue #3305) by exiting 0 and printing the literal `(null)`; the double carries
+// that exact answer so the old code reached readHostDirectory('(null)') and failed the way
+// production failed — an ENOENT crash instead of a refusal.
+test('setIosSetting clear-app-state refuses a system app whose simctl answer is (null) with the typed reason', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+
+  await withFakeAppleTool(
+    (args) => {
+      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
+      if (args.join(' ') === 'simctl terminate sim-1 com.apple.Preferences') return '';
+      if (args.join(' ') === 'simctl get_app_container sim-1 com.apple.Preferences data') {
+        return '(null)\n';
+      }
+      return unexpectedArgs(args);
+    },
+    async ({ calls }) => {
+      const thrown = await setIosSetting(
+        IOS_TEST_SIMULATOR,
+        'clear-app-state',
+        'clear',
+        'com.apple.Preferences',
+      ).catch((error: unknown) => error);
+      assert.ok(thrown instanceof AppError);
+      assert.equal(thrown.code, 'UNSUPPORTED_OPERATION');
+      // The refusal is keyed on the typed reason, not on prose a driver must not match.
+      assert.equal(thrown.details?.reason, IOS_NO_DATA_CONTAINER_REASON);
+      assert.equal(thrown.details?.appBundleId, 'com.apple.Preferences');
+      assert.equal(thrown.details?.deviceId, 'sim-1');
+      // Normalization keeps the reason, hint, and typed details intact through the wire shape.
+      const normalized = normalizeError(thrown);
+      assert.equal(normalized.code, 'UNSUPPORTED_OPERATION');
+      assert.match(normalized.message, /com\.apple\.Preferences has no data container to clear/);
+      assert.match(normalized.hint ?? '', /Clear the app under test instead/);
+      assert.equal(normalized.details?.reason, IOS_NO_DATA_CONTAINER_REASON);
+      assert.equal(normalized.details?.appBundleId, 'com.apple.Preferences');
+
+      const flat = calls.map((args) => args.join(' '));
+      assert.equal(
+        flat.includes('simctl get_app_container sim-1 com.apple.Preferences data'),
+        true,
+        flat.join('; '),
+      );
+    },
+  );
+});
+
+// The closest negative: the message cannot be the trigger. An empty answer is the same "no
+// container" fact from the tool and takes the same typed refusal, while a real path must still be
+// cleared rather than refused (pinned by the fresh-install layout test below).
+test('setIosSetting clear-app-state refuses an empty container answer with the same typed reason', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+
+  await withFakeAppleTool(
+    (args) => {
+      if (isSimctlListDevices(args)) return BOOTED_SIM_LIST_JSON;
+      if (args.join(' ') === 'simctl terminate sim-1 com.apple.Preferences') return '';
+      if (args.join(' ') === 'simctl get_app_container sim-1 com.apple.Preferences data') {
+        return '';
+      }
+      return unexpectedArgs(args);
+    },
+    async () => {
+      await assertRejectsAppError(
+        () =>
+          setIosSetting(IOS_TEST_SIMULATOR, 'clear-app-state', 'clear', 'com.apple.Preferences'),
+        {
+          code: 'UNSUPPORTED_OPERATION',
+          reason: IOS_NO_DATA_CONTAINER_REASON,
+        },
+      );
     },
   );
 });

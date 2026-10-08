@@ -34,7 +34,7 @@ import {
   type AppleDeviceDisplay,
 } from './display-inventory.ts';
 import { ensureBootedSimulator } from './simulator.ts';
-import { runSimctlForDevice } from './simctl.ts';
+import { readSimctlContainerPath, runSimctlForDevice } from './simctl.ts';
 import { appleToolFailureText, extractAppleToolErrorMeta } from './tool-diagnostics.ts';
 import { resolveIosPhysicalDeviceControl } from './physical-device-control.ts';
 
@@ -317,9 +317,9 @@ async function copyRunnerScreenshotFromSimulator(
       }
       continue;
     }
-    const containerPath = containerResult.stdout.trim();
-    if (!containerPath) {
-      lastError = 'simctl get_app_container returned empty output';
+    const containerPath = readSimctlContainerPath(containerResult.stdout);
+    if (containerPath === undefined) {
+      lastError = 'simctl get_app_container returned no data container path';
       continue;
     }
     const copy = await tryCopySimulatorRunnerScreenshot(containerPath, remoteFileName, outPath);

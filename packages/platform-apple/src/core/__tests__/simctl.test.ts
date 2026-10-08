@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildSimctlArgsForAddress,
   buildSimctlArgsForDevice,
+  readSimctlContainerPath,
   readSimctlDevicesByRuntime,
   readSimctlDeviceState,
   scopeSimctlArgsForDevice,
@@ -155,4 +156,14 @@ test('readSimctlDevicesByRuntime keys each device list by its runtime', () => {
   );
   assert.deepEqual(readSimctlDevicesByRuntime('{}'), {});
   assert.throws(() => readSimctlDevicesByRuntime('not json'), SyntaxError);
+});
+
+// Production prints these verbatim from `xcrun simctl get_app_container sim-1 <bundle> data`:
+// an app with no container exits 0 and prints the literal `(null)` or nothing at all.
+test('readSimctlContainerPath reads the printed path and rejects the no-container answers', () => {
+  assert.equal(readSimctlContainerPath('/containers/data/App/abc\n'), '/containers/data/App/abc');
+  assert.equal(readSimctlContainerPath('(null)\n'), undefined);
+  assert.equal(readSimctlContainerPath('  (null)  '), undefined);
+  assert.equal(readSimctlContainerPath(''), undefined);
+  assert.equal(readSimctlContainerPath(' \n'), undefined);
 });
