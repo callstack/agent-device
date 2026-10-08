@@ -11,6 +11,12 @@ export type AndroidTestImeOwnership = {
   rebindUnconfirmed: boolean;
 };
 
+// Per-device flush-settle windows left unfinished by an aborted close, keyed like the recovery
+// lock (`${stateDir}:${serial}`) and valued with the deadline the settle must reach. The owned
+// flag is dropped when a restore begins, so without this a cancelled close would let the next
+// close of the same emulator take the no-record fast path and kill inside the flush window.
+export const pendingTestImeFlushSettles = new Map<string, number>();
+
 // Per-daemon-process cache of devices with the test IME active; input-actions.ts reads this to
 // route text entry through the broadcast channel.
 export const activeTestImeDevices = new Map<string, AndroidTestImeOwnership>();
@@ -40,6 +46,7 @@ export function withAndroidTestImeRecoveryLock<T>(
  */
 export function resetAndroidTestImeActivationCacheForTests(): void {
   activeTestImeDevices.clear();
+  pendingTestImeFlushSettles.clear();
 }
 
 /**

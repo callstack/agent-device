@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 const sleep = vi.hoisted(() => vi.fn(async (_ms: number, _signal?: AbortSignal) => {}));
@@ -16,6 +16,7 @@ import {
 import {
   resetAndroidTestImeActivationCacheForTests,
   setAndroidTestImeActiveForTests,
+  pendingTestImeFlushSettles,
 } from './ime-state.ts';
 import { fakeImeDeviceAdb, type FakeImeDeviceState } from './ime-device.fixtures.ts';
 
@@ -145,10 +146,122 @@ test('a restore before an emulator shutdown waits out the settings-provider flus
   expect(result).toMatchObject({ restored: true, reason: 'ok' });
   expect(sleep).toHaveBeenCalledTimes(1);
   expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(2_000);
-  // A cancelled close never reaches the kill, so the settle must stop early with it.
+  // A cancelled close never reaches the kill, so the settle stops early with it (see the
+  // abort-mid-settle tests below for what an early stop must preserve).
   expect(sleep.mock.calls[0]?.[1]).toBe(signal);
   expect(markerDuringSettle).toEqual([[DEVICE.id]]);
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
+});
+
+describe('a close cancelled mid-settle', () => {
+  // The real sleep resolves early (never rejects) when its signal aborts; the mock has to behave
+  // the same or the abort branch is never exercised.
+  function abortAwareSleep(signal?: AbortSignal): Promise<void> {
+    return signal?.aborted ? Promise.resolve() : new Promise(() => {});
+  }
+
+  test('keeps the flush-settle deadline and the pending marker for the next close', async () => {
+    const host = bindAndroidAdbHostStub();
+    await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
+    setAndroidTestImeActiveForTests(DEVICE, true);
+    const controller = new AbortController();
+    sleep.mockImplementationOnce((_ms, signal) => {
+      controller.abort();
+      return abortAwareSleep(signal);
+    });
+
+    const result = await withAndroidAdbProvider(
+      { exec: fakeImeDeviceAdb(stuckDeviceState()) },
+      { serial: DEVICE.id },
+      async () =>
+        await restoreAndroidTestIme(DEVICE, {
+          stateDir: STATE_DIR,
+          shutdownTarget: true,
+          signal: controller.signal,
+        }),
+    );
+
+    // The keyboard really was restored, but an aborted settle is not a completed settle: the
+    // marker survives so a crash-recovery path still covers the unfinished flush window.
+    expect(result).toMatchObject({ restored: true, reason: 'ok' });
+    expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
+    expect([...pendingTestImeFlushSettles.keys()]).toEqual([`${STATE_DIR}:${DEVICE.id}`]);
+  });
+
+  test('a second close waits out the remaining window before it may return to the kill', async () => {
+    const host = bindAndroidAdbHostStub();
+    await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
+    setAndroidTestImeActiveForTests(DEVICE, true);
+    const first = new AbortController();
+    sleep.mockImplementationOnce((_ms, signal) => {
+      first.abort();
+      return abortAwareSleep(signal);
+    });
+    const deviceAdb = fakeImeDeviceAdb(stuckDeviceState());
+    await withAndroidAdbProvider(
+      { exec: deviceAdb },
+      { serial: DEVICE.id },
+      async () =>
+        await restoreAndroidTestIme(DEVICE, {
+          stateDir: STATE_DIR,
+          shutdownTarget: true,
+          signal: first.signal,
+        }),
+    );
+
+    // The owned flag is gone, so this close takes the no-record path — yet the kill it precedes
+    // must still wait for the window the aborted close left open.
+    sleep.mockClear();
+    const second = new AbortController();
+    const result = await withAndroidAdbProvider(
+      { exec: deviceAdb },
+      { serial: DEVICE.id },
+      async () =>
+        await restoreAndroidTestIme(DEVICE, {
+          stateDir: STATE_DIR,
+          shutdownTarget: true,
+          signal: second.signal,
+        }),
+    );
+
+    expect(result).toEqual({ restored: false, reason: 'no-record' });
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(0);
+    expect(sleep.mock.calls[0]?.[1]).toBe(second.signal);
+    expect([...pendingTestImeFlushSettles.keys()]).toEqual([]);
+    expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
+  });
+
+  test('a second close after the window already elapsed skips the wait', async () => {
+    bindAndroidAdbHostStub();
+    pendingTestImeFlushSettles.set(`${STATE_DIR}:${DEVICE.id}`, Date.now() - 1);
+
+    const result = await withAndroidAdbProvider(
+      { exec: fakeImeDeviceAdb(stuckDeviceState()) },
+      { serial: DEVICE.id },
+      async () =>
+        await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR, shutdownTarget: true }),
+    );
+
+    expect(result).toEqual({ restored: false, reason: 'no-record' });
+    expect(sleep).not.toHaveBeenCalled();
+    expect([...pendingTestImeFlushSettles.keys()]).toEqual([]);
+  });
+
+  test('an ordinary close never waits on a pending window it cannot race', async () => {
+    bindAndroidAdbHostStub();
+    pendingTestImeFlushSettles.set(`${STATE_DIR}:${DEVICE.id}`, Date.now() + 2_500);
+
+    const result = await withAndroidAdbProvider(
+      { exec: fakeImeDeviceAdb(stuckDeviceState()) },
+      { serial: DEVICE.id },
+      async () => await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR }),
+    );
+
+    expect(result).toEqual({ restored: false, reason: 'no-record' });
+    expect(sleep).not.toHaveBeenCalled();
+    expect([...pendingTestImeFlushSettles.keys()]).toEqual([`${STATE_DIR}:${DEVICE.id}`]);
+  });
 });
 
 test('an ordinary close restores without any flush wait', async () => {

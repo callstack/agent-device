@@ -15,7 +15,11 @@ import {
   readAndroidDefaultInputMethod,
   readAndroidTestImeDeviceRecord,
 } from './ime-settings-record.ts';
-import { activeTestImeDevices, withAndroidTestImeRecoveryLock } from './ime-state.ts';
+import {
+  activeTestImeDevices,
+  pendingTestImeFlushSettles,
+  withAndroidTestImeRecoveryLock,
+} from './ime-state.ts';
 
 // Restore and startup orphan recovery: undo the helper switch exactly when it is safe, keep
 // durable evidence until the device is observed clean.
@@ -41,29 +45,71 @@ export type AndroidTestImeRestoreResult = {
 // The provider exposes no shell flush; holding the kill past the cap is the owning fix.
 const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
 
+function flushSettleKey(stateDir: string, serial: string): string {
+  return `${stateDir}:${serial}`;
+}
+
+// Wait out a window left open by a previous aborted close. Returns false only when this call was
+// cancelled first, which keeps both the deadline and the pending marker in place for the next
+// close: an aborted settle is never a completed settle.
+async function awaitPendingFlushSettle(key: string, signal?: AbortSignal): Promise<boolean> {
+  const deadlineAtMs = pendingTestImeFlushSettles.get(key);
+  if (deadlineAtMs === undefined) return true;
+  const remainingMs = deadlineAtMs - Date.now();
+  if (remainingMs <= 0) {
+    pendingTestImeFlushSettles.delete(key);
+    return true;
+  }
+  await sleep(remainingMs, signal);
+  if (signal?.aborted) return false;
+  pendingTestImeFlushSettles.delete(key);
+  return true;
+}
+
+// Run the flush settle for the restore just confirmed on this device. A cancelled close resolves
+// the sleep early without reaching the deadline, so the deadline survives for the next close.
+async function settleTestImeFlushWindow(key: string, signal?: AbortSignal): Promise<boolean> {
+  const deadlineAtMs = Date.now() + SETTINGS_PROVIDER_FLUSH_SETTLE_MS;
+  pendingTestImeFlushSettles.set(key, deadlineAtMs);
+  await sleep(SETTINGS_PROVIDER_FLUSH_SETTLE_MS, signal);
+  if (signal?.aborted) return false;
+  pendingTestImeFlushSettles.delete(key);
+  return true;
+}
+
 export async function restoreAndroidTestIme(
   device: DeviceInfo,
   options: { stateDir: string; shutdownTarget?: boolean; signal?: AbortSignal },
 ): Promise<AndroidTestImeRestoreResult> {
   return await withAndroidTestImeRecoveryLock(options.stateDir, device.id, async () => {
     const deviceKey = getAndroidImeHelperDeviceKey(device);
-    // Skip devices this process never activated (orphans from another process are handled by
-    // restoreOrphanedAndroidTestImeOnDaemonStartup and the doctor check).
+    const settleKey = flushSettleKey(options.stateDir, device.id);
+    const killingTarget = options.shutdownTarget === true && device.kind === 'emulator';
+    // This call returns before the close finalizer may start the kill, so a window opened by an
+    // earlier aborted close is consumed here rather than outrunning this call's own restore.
+    // An ordinary close starts no kill, so it neither consumes the window nor needs it covered;
+    // the pending deadline stays for the next shutdown-bound close.
+    let flushWindowCovered = true;
+    if (killingTarget) {
+      flushWindowCovered = await awaitPendingFlushSettle(settleKey, options.signal);
+    }
+    let result: AndroidTestImeRestoreResult;
     if (!activeTestImeDevices.has(deviceKey)) {
-      return { restored: false, reason: 'no-record' };
+      // Skip devices this process never activated (orphans from another process are handled by
+      // restoreOrphanedAndroidTestImeOnDaemonStartup and the doctor check).
+      result = { restored: false, reason: 'no-record' };
+    } else {
+      // Drop the owned-flag first so restoreAndroidTestImeFor's "owned by a live session" guard
+      // does not skip this intentional close-time restore. The IME really is back on the previous
+      // keyboard, so text routing must stop preferring the helper channel even on an abort.
+      activeTestImeDevices.delete(deviceKey);
+      const adb = resolveAndroidAdbExecutor(device);
+      result = await restoreAndroidTestImeFor(adb, device);
+      if (result.restored && killingTarget) {
+        flushWindowCovered = await settleTestImeFlushWindow(settleKey, options.signal);
+      }
     }
-    // Drop the owned-flag first so restoreAndroidTestImeFor's "owned by a live session" guard does
-    // not skip this intentional close-time restore.
-    activeTestImeDevices.delete(deviceKey);
-    const adb = resolveAndroidAdbExecutor(device);
-    const result = await restoreAndroidTestImeFor(adb, device);
-    // The close finalizer starts the emulator kill only after this resolves, so the settle keeps
-    // the kill out of the flush window; the pending marker stays written through it as the
-    // crash-recovery fence. A cancelled close never reaches the kill, so the settle stops early.
-    if (result.restored && options.shutdownTarget && device.kind === 'emulator') {
-      await sleep(SETTINGS_PROVIDER_FLUSH_SETTLE_MS, options.signal);
-    }
-    if (isDeviceRecoveryComplete(result.reason)) {
+    if (flushWindowCovered && isDeviceRecoveryComplete(result.reason)) {
       await requireAndroidAdbHost().imeRecoveryMarkers.clear(options.stateDir, device.id);
     }
     return result;
