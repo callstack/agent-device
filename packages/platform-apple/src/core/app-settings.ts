@@ -197,12 +197,14 @@ const FRESH_INSTALL_DATA_DIRECTORIES = [
 /**
  * `details.reason` of a `clear-app-state` refused because the installed app owns no data container.
  * A driver branches on this rather than the prose: there is nothing to delete, so retrying cannot
- * help and only a reinstall resets such an app.
+ * help. The motivating case ships inside the simulator runtime and cannot be uninstalled, so the
+ * hint may only point at recoveries a caller actually has: reset the simulator, or uninstall an
+ * app they installed themselves.
  */
 export const IOS_NO_DATA_CONTAINER_REASON = 'app-no-data-container';
 
 const IOS_NO_DATA_CONTAINER_HINT =
-  'Clear the app under test instead. An app with no data container has no state for this command to remove; uninstall and reinstall it to reset it.';
+  'Clear the app under test instead. A runtime-shipped app keeps no data container, so this command has no app state to remove; to reset it, erase or recreate the simulator device, or uninstall and reinstall the app if you installed it yourself.';
 
 /** The agent-facing explanation for an app `simctl get_app_container` answers with no container for. */
 function iosNoDataContainerMessage(bundleId: string): string {
