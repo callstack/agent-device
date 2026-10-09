@@ -366,7 +366,15 @@ test('a failed start does not re-retain a runner a concurrent start already took
   ]);
 
   assert.equal(failed.status, 'rejected');
-  assert.equal(reused.status === 'fulfilled' && reused.value.sessionId, session.sessionId);
+  assert.equal(
+    (failed as PromiseRejectedResult).reason?.details?.reason,
+    'runner_session_ownership_changed',
+  );
+  assert.equal(reused.status, 'fulfilled');
+  assert.equal(
+    (reused as PromiseFulfilledResult<RunnerSession>).value.sessionId,
+    session.sessionId,
+  );
   assert.doesNotMatch(phases.join('\n'), /ios_runner_idle_stop_scheduled/);
 });
 
