@@ -53,31 +53,38 @@ export function registerTestImeRestore(serial: string): void {
 // window has elapsed — retiring the timestamp, since nothing older can still be unflushed — and
 // 'aborted' when cancelled first: the caller must then skip the kill, and the timestamp stays so
 // the next kill-bound path derives the same remaining wait.
-// One read, one sleep suffices: every registrar holds the same recovery lock this wait's
-// close-path callers take, and the standalone shutdown command is refused while a session owns
-// the device, so no restore can register (or extend) the window between this read and the kill
-// on any reachable path.
+// This re-reads the mark after every sleep rather than trusting one read: a restore can land
+// while this wait sleeps (the unlocked shutdown-command path racing a close finalization, or
+// startup-orphan recovery beside another session's close), and it is THIS caller that owns the
+// kill, so it must wait out the newer deadline — reporting 'covered' on an older mark would
+// release the kill inside the extension's window, which is #3318 again. Each iteration consumes
+// only the mark it observed: with no await between the read and the delete, the delete cannot
+// erase a mark this loop has not waited for, so an extension always survives to its own round.
 export async function awaitTestImeFlushWindow(
   serial: string,
   signal?: AbortSignal,
 ): Promise<TestImeFlushWait> {
   if (signal?.aborted) return 'aborted';
-  const restoredAtPerfMs = testImeLastRestoreAtPerfMs.get(serial);
-  if (restoredAtPerfMs === undefined) return 'idle';
-  const remainingMs = restoredAtPerfMs + SETTINGS_PROVIDER_FLUSH_SETTLE_MS - performance.now();
-  if (remainingMs <= 0) {
-    testImeLastRestoreAtPerfMs.delete(serial);
-    return 'covered';
+  for (;;) {
+    const restoredAtPerfMs = testImeLastRestoreAtPerfMs.get(serial);
+    if (restoredAtPerfMs === undefined) return 'idle';
+    const remainingMs = restoredAtPerfMs + SETTINGS_PROVIDER_FLUSH_SETTLE_MS - performance.now();
+    if (remainingMs <= 0) {
+      testImeLastRestoreAtPerfMs.delete(serial);
+      return 'covered';
+    }
+    await sleep(remainingMs, signal);
+    if (signal?.aborted) return 'aborted';
+    // A real sleep that returned un-aborted has elapsed THIS round's window, so consume only
+    // the mark this round waited for: unchanged or retired means covered, while a newer mark
+    // (registered while this sleep ran) loops to wait out the extension's deadline too.
+    const currentPerfMs = testImeLastRestoreAtPerfMs.get(serial);
+    if (currentPerfMs === undefined) return 'covered';
+    if (currentPerfMs === restoredAtPerfMs) {
+      testImeLastRestoreAtPerfMs.delete(serial);
+      return 'covered';
+    }
   }
-  await sleep(remainingMs, signal);
-  if (signal?.aborted) return 'aborted';
-  // Retire only the mark this wait actually covered: a restore that landed mid-wait (the
-  // unlocked shutdown-command path racing a close finalization) must keep its evidence for the
-  // next kill-bound caller rather than have its younger window erased by this older wait.
-  if (testImeLastRestoreAtPerfMs.get(serial) === restoredAtPerfMs) {
-    testImeLastRestoreAtPerfMs.delete(serial);
-  }
-  return 'covered';
 }
 
 // Per-daemon-process cache of devices with the test IME active; input-actions.ts reads this to

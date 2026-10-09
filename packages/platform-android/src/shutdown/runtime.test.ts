@@ -9,7 +9,7 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
   sleep,
 }));
 
-import { testImeLastRestoreAtPerfMs } from '../ime-state.ts';
+import { registerTestImeRestore, testImeLastRestoreAtPerfMs } from '../ime-state.ts';
 
 const run = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
 const commands: DeviceShutdownRuntimeDependencies['commands'] = {
@@ -20,7 +20,7 @@ const commands: DeviceShutdownRuntimeDependencies['commands'] = {
 beforeEach(() => {
   run.mockReset();
   run.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
-  sleep.mockClear();
+  sleep.mockReset();
   testImeLastRestoreAtPerfMs.clear();
 });
 
@@ -61,16 +61,66 @@ test('only Android emulators are available', () => {
 test('a kill waits out a registered test-IME flush window before running adb emu kill', async () => {
   const device = androidDevice();
   testImeLastRestoreAtPerfMs.set(device.id, performance.now());
+  // A deferred sleep, not an instantly-resolving one: the point of this hold is that `adb emu
+  // kill` does not run WHILE the wait is pending, so the test has to observe the middle of
+  // the wait, not just its endpoints.
+  const settling = deferred();
+  sleep.mockImplementationOnce(() => settling.promise);
 
-  await expect(
-    createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal()),
-  ).resolves.toEqual(success());
+  const pendingKill = createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
 
+  // The runtime suspends inside the flush wait before touching adb.
   expect(sleep).toHaveBeenCalledTimes(1);
   // The wait must cover the registered window, not merely be positive: the timestamp was set
   // milliseconds before the kill, so the remaining settle is the whole ~2.5 s budget minus that
   // gap. A regression sleeping a fixed unrelated amount would fail here.
   expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(2_000);
+  expect(run).not.toHaveBeenCalled();
+
+  settling.resolve();
+  await expect(pendingKill).resolves.toEqual(success());
+
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(run).toHaveBeenCalledWith(
+    expect.objectContaining({ args: ['-s', device.id, 'emu', 'kill'] }),
+    expect.any(AbortSignal),
+  );
+  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
+});
+
+// cubic P1: a restore landing mid-wait must EXTEND this very kill's wait, not just survive for
+// some hypothetical next caller — reporting 'covered' on the older mark would fire adb inside
+// the newer restore's window, which is #3318 again.
+test('a restore landing mid-wait extends the pending kill instead of releasing it', async () => {
+  const device = androidDevice();
+  // Known elapsed: the original mark is 1000 ms old, so the first wait derives ~1500.
+  testImeLastRestoreAtPerfMs.set(device.id, performance.now() - 1_000);
+  const firstSettling = deferred();
+  const secondSettling = deferred();
+  sleep
+    .mockImplementationOnce(() => firstSettling.promise)
+    .mockImplementationOnce(() => secondSettling.promise);
+
+  const pendingKill = createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
+
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(1_400);
+  expect(sleep.mock.calls[0]?.[0]).toBeLessThanOrEqual(1_500);
+
+  // A second confirmed restore lands while this kill sleeps — a newer write, a newer deadline.
+  registerTestImeRestore(device.id);
+  firstSettling.resolve();
+  await drainMicrotasks();
+
+  // The wait re-reads the mark and takes a SECOND sleep covering the newer window, still
+  // refusing adb. A one-read-one-sleep implementation returns 'covered' here and kills early.
+  expect(sleep).toHaveBeenCalledTimes(2);
+  expect(sleep.mock.calls[1]?.[0]).toBeGreaterThanOrEqual(2_400);
+  expect(sleep.mock.calls[1]?.[0]).toBeLessThanOrEqual(2_500);
+  expect(run).not.toHaveBeenCalled();
+
+  secondSettling.resolve();
+  await expect(pendingKill).resolves.toEqual(success());
+
   expect(run).toHaveBeenCalledTimes(1);
   expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
 });
@@ -146,6 +196,22 @@ test('a kill cancelled inside the flush window never reaches adb emu kill', asyn
 
 function signal(): AbortSignal {
   return new AbortController().signal;
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+// Let the awaited-sleep continuations run: the kill path resumes through promise callbacks, so
+// assertions about the middle of the wait need one macrotask boundary, not one microtask tick.
+function drainMicrotasks(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }
 
 function success() {
