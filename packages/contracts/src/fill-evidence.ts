@@ -17,11 +17,10 @@ export type FillVerificationTarget = {
 };
 
 /**
- * Target-bound evidence that a fill moved a field's content from `before` to `after` without raw
- * equality with `requested` being reachable, because app-owned formatting prevents it or the field's
- * accessibility value does not echo the typed text. Bound to the
- * {@link FillVerificationTarget} it was collected against so another field, or the same field after
- * it re-laid out, cannot borrow this evidence.
+ * Target-bound read-back evidence when a fill could not confirm the requested text. The observed
+ * value may reflect app-owned formatting or altered input; this evidence makes no correctness
+ * claim. Bound to the {@link FillVerificationTarget} it was collected against so a different
+ * field cannot borrow the observation.
  */
 export type FillUnconfirmedVerification = {
   verification: 'unconfirmed';

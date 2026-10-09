@@ -108,7 +108,10 @@ extension RunnerTests {
         ok: false,
         error: ErrorPayload(
           code: "TEXT_ENTRY_MISMATCH",
-          message: "text entry verification failed: expected \"\(expected)\", observed \"\(observed)\""
+          message: "text entry read-back did not match: expected \"\(expected)\", observed \"\(observed)\"",
+          hint: textEntryMode == .replacement
+            ? "The app may have formatted, filtered, or consumed the entry. Inspect the field or resulting screen before retrying. If it needs correction, retry fill with the full text and --delay-ms \(TextEntryTiming.recoveryDelayMilliseconds)."
+            : nil
         )
       )
     }

@@ -522,11 +522,8 @@ extension RunnerTests {
   /// `awaitSynthesizedReplacementCommit` binds the real XCUI reads). The budget defaults to the
   /// shipped one, so only a test that is asking about time has to name it.
   ///
-  /// Only an exact match settles. A value with a hole in the middle ("ada@example" -> "aexample")
-  /// is the corruption this wait exists to catch, and `.replacement` mode has no formatter or
-  /// autocomplete carve-out: `isRepairableTextEntryMismatch` (RunnerTests+TextTyping.swift) treats
-  /// every `.replacement` mismatch as repairable, because `fill` owns the whole field via
-  /// select-all. A settled non-match is therefore always the wait's failure case.
+  /// This route has no element-bound baseline for unconfirmed evidence. Only exact read-back
+  /// confirms a commit; prefix progress extends the bounded wait without confirming the value.
   static func awaitSynthesizedReplacementCommitOutcome(
     expectedText: String,
     placeholder: String?,

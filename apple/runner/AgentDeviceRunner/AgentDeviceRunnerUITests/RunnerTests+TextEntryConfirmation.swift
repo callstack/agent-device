@@ -1,6 +1,6 @@
 import XCTest
 
-// What a replacement's read-back can prove when the field's value does not echo the typed text.
+// Target-bound observations and the replacement read-back policy.
 // The wire shape mirrors the cross-platform `FillUnconfirmedVerification` in
 // packages/contracts/src/fill-evidence.ts.
 extension RunnerTests {
@@ -39,96 +39,37 @@ extension RunnerTests {
     let target: TextEntryElementIdentity
   }
 
-  /// Whether `observed` can be a degraded copy of the residual `baseline` plus the request: it is in
-  /// order inside baseline + request (dropped characters), or it contains the request in order and
-  /// the baseline did not already (residual text), or it contains baseline + request in order. A
-  /// value related to the entry in none of these ways, such as an OTP field announcing
-  /// "6 of 6 digits", is the app's own representation, so retyping cannot make it match.
-  ///
-  /// The two containment clauses keep one exception (#2634): a value the request plus inserted
-  /// formatting alone EXPLAINS — see `textValueCompletesRequest`, which owns the whole test
-  /// including the baseline — is not a degraded copy of anything, and the field that normalizes
-  /// its content shows exactly that after receiving the request. Completion is not correctness
-  /// (a cents-shifting mask passes it); it only stops the value from being refused the
-  /// unconfirmed outcome, and nothing but exact equality verifies.
-  static func textEntryValueEchoes(observed: String, expected: String, baseline: String) -> Bool {
-    let request = textEntryRequestWithoutSubmitKeys(expected)
-    let residualAndRequest = baseline + request
-    if isOrderedSubsequence(observed, of: residualAndRequest) {
-      return true
-    }
-    if textValueCompletesRequest(observed: observed, request: request, baseline: baseline) {
-      return false
-    }
-    return (isOrderedSubsequence(request, of: observed) && !isOrderedSubsequence(request, of: baseline))
-      || isOrderedSubsequence(residualAndRequest, of: observed)
-  }
-
-  /// Whether the request plus inserted formatting explains the WHOLE of `observed`: every request
-  /// character in order under the leftmost embedding, every unconsumed character explainable as
-  /// neither a character of the request (an ambiguous embedding may be a dropped-and-shifted
-  /// copy) nor of the post-clear `baseline` (any baseline character in the value is failed-clear
-  /// residual, wherever a mask relocated it), and at least one insertion strictly BETWEEN the
-  /// request's first and last characters — entry cannot insert between two characters the same
-  /// burst typed, so end-only insertions (`"old123456"` for `"123456"`) stay echoes. A doubled
-  /// entry (`"66"` for `"6"`) leaves its surplus at the ends; a mask inserting a request
-  /// character (`.` for a decimal value) falls back to the echo reading; a one-character request
-  /// has no between. Known limit: a mask that keeps its template through the clear shares
-  /// characters with the value it formats (`"$0.00"` for `"$10.00"`), so its fill keeps the echo
-  /// reading — text cannot tell surviving template from failed-clear residual.
-  static func textValueCompletesRequest(observed: String, request: String, baseline: String) -> Bool {
-    guard !request.isEmpty, request != observed, request.count > 1 else {
-      return false
-    }
-    // The leftmost embedding of the request into the observed value.
-    var consumedOffsets = IndexSet()
-    var cursor = observed.startIndex
-    for character in request {
-      guard let match = observed[cursor...].firstIndex(of: character) else {
-        return false
-      }
-      consumedOffsets.insert(observed.distance(from: observed.startIndex, to: match))
-      cursor = observed.index(after: match)
-    }
-    let first = consumedOffsets.first!
-    let last = consumedOffsets.last!
-    var sawInteriorInsertion = false
-    for (offset, character) in observed.enumerated() where !consumedOffsets.contains(offset) {
-      // A request character makes the embedding ambiguous; a baseline character may be residual
-      // a mask relocated into the span. Either way the request plus formatting does not explain
-      // the value.
-      if request.contains(character) || baseline.contains(character) {
-        return false
-      }
-      if offset > first && offset < last {
-        sawInteriorInsertion = true
-      }
-    }
-    return sawInteriorInsertion
-  }
-
-  /// Classifies a replacement whose read-back never matched. The entry is unconfirmed, not failed,
-  /// only when the same element's value moved off its pre-entry baseline to one that does not echo
-  /// the request; every other mismatch stays a failure.
-  static func unconfirmedTextEntryEvidence(
+  /// Literal read-back policy; a mismatch does not establish why the app changed the text.
+  static func replacementTextEntryResult(
     requested: String,
     baseline: TextEntryObservation?,
     observed: TextEntryObservation?
-  ) -> TextEntryUnconfirmedEvidence? {
-    guard !textEntryRequestWithoutSubmitKeys(requested).isEmpty,
-          let baseline,
-          let observed,
-          baseline.identity.isSameElement(as: observed.identity),
-          observed.value != baseline.value,
-          !textEntryValueEchoes(observed: observed.value, expected: requested, baseline: baseline.value)
-    else {
-      return nil
+  ) -> TextEntryResult {
+    func result(_ verified: Bool?) -> TextEntryResult {
+      TextEntryResult(verified: verified, repaired: false, expectedText: requested, observedText: observed?.value)
     }
-    return TextEntryUnconfirmedEvidence(
-      requested: requested,
-      before: baseline.value,
-      after: observed.value,
-      target: observed.identity
+    guard let observed else { return result(nil) }
+    if let baseline, !baseline.identity.isSameElement(as: observed.identity) {
+      return result(false)
+    }
+    let request = observed.identity.elementType == elementTypeNamesByRawValue[XCUIElement.ElementType.textView.rawValue]
+      ? requested : textEntryRequestWithoutSubmitKeys(requested)
+    if observed.value == requested || observed.value == request { return result(true) }
+    // A submit may consume or clear a single-line input; repeating it can send the action twice.
+    if request != requested { return result(nil) }
+    guard !request.isEmpty, let baseline else { return result(false) }
+    if isOrderedSubsequence(observed.value, of: baseline.value + request) { return result(false) }
+    return TextEntryResult(
+      verified: nil,
+      repaired: false,
+      expectedText: requested,
+      observedText: observed.value,
+      unconfirmed: TextEntryUnconfirmedEvidence(
+        requested: requested,
+        before: baseline.value,
+        after: observed.value,
+        target: observed.identity
+      )
     )
   }
 

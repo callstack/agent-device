@@ -302,7 +302,7 @@ export const INTERACTION_COMMAND_OUTPUT_SCHEMAS = {
   fill: {
     type: 'object',
     description:
-      'Fill response. Returns target-bound unconfirmed evidence when the exact field changed but its value cannot confirm the text: Android app-owned formatting, or an Apple field whose accessibility value does not echo the typed text.',
+      'Fill response. Target-bound unconfirmed evidence reports an observed value different from the requested text. It does not establish that formatting preserved the input; assert the expected value or resulting screen before continuing.',
     oneOf: [confirmedFillResponseSchema, unconfirmedFillResponseSchema],
   },
   longpress: interactionResponseDataSchema({

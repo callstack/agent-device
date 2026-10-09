@@ -342,13 +342,12 @@ extension RunnerTests {
       )
     }
     let verifyStartedAt = Date()
-    var result = verifyTextEntryWithRepairIfNeeded(
-      app: app,
-      target: activeTarget,
-      expectedText: expectedText,
-      repairMode: repairMode,
-      baseline: entryBaseline
-    )
+    var result: TextEntryResult
+    if repairMode == .replacement {
+      result = observeReplacementTextEntry(app: app, target: activeTarget, requested: text, baseline: entryBaseline)
+    } else {
+      result = verifyAppendTextEntryWithRepairIfNeeded(app: app, target: activeTarget, expectedText: expectedText)
+    }
     logTextEntryPhase(
       commandId: commandId,
       phase: "verify",
@@ -389,12 +388,50 @@ extension RunnerTests {
     }
   }
 
-  private func verifyTextEntryWithRepairIfNeeded(
+  private func observeReplacementTextEntry(
     app: XCUIApplication,
     target: TextEntryTarget,
-    expectedText: String?,
-    repairMode: TextTypingRepairMode,
+    requested: String,
     baseline: TextEntryObservation?
+  ) -> TextEntryResult {
+    let deadline = Date().addingTimeInterval(TextEntryTiming.replacementSettleCeiling)
+    var latest: TextEntryObservation?
+    var stableSince = Date()
+    while true {
+      guard let element = resolveTextEntryElement(app: app, target: target) else {
+        let failure: TextEntryFailure? = target.boundIdentity != nil && !boundTextEntryInputIsGone(app: app, target: target)
+          ? .commitNotObserved : nil
+        return TextEntryResult(verified: nil, repaired: false, expectedText: requested, observedText: nil, failure: failure)
+      }
+      guard let observed = textEntryObservation(for: element) else {
+        return TextEntryResult(verified: nil, repaired: false, expectedText: requested, observedText: nil)
+      }
+      let sampledAt = Date()
+      if latest.map({ observed.isSettled(with: $0) }) != true { stableSince = sampledAt }
+      latest = observed
+      let result = Self.replacementTextEntryResult(requested: requested, baseline: baseline, observed: observed)
+      let settled = sampledAt.timeIntervalSince(stableSince) >= TextEntryTiming.verificationStabilityWindow
+      let moved = baseline.map { !observed.isSettled(with: $0) } ?? true
+      if settled && (moved || result.verified != false || sampledAt >= deadline) {
+        if result.unconfirmed != nil {
+          NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_UNCONFIRMED expectedLength=%d observedLength=%d repaired=0", requested.count, observed.value.count)
+        }
+        return result
+      }
+      if sampledAt >= deadline {
+        return TextEntryResult(
+          verified: nil, repaired: false, expectedText: requested, observedText: observed.value,
+          failure: .commitNotObserved
+        )
+      }
+      sleepFor(TextEntryTiming.pollInterval)
+    }
+  }
+
+  private func verifyAppendTextEntryWithRepairIfNeeded(
+    app: XCUIApplication,
+    target: TextEntryTarget,
+    expectedText: String?
   ) -> TextEntryResult {
     if target.boundIdentity != nil, resolveTextEntryElement(app: app, target: target) == nil {
       guard boundTextEntryInputIsGone(app: app, target: target) else {
@@ -417,27 +454,16 @@ extension RunnerTests {
       expectedText: expectedText,
       repaired: false
     )
-    // Retyping cannot make a value that does not echo the entry match, and it would deliver the
-    // text twice to an app that already acted on it.
-    if let unconfirmed = settledUnconfirmedTextEntry(
-      app: app,
-      target: target,
-      result: initialResult,
-      baseline: baseline
-    ) {
-      return unconfirmed
-    }
 #if os(iOS)
     guard initialResult.verified == false,
           let expectedText = initialResult.expectedText
     else {
       return initialResult
     }
-    guard shouldRepairTextEntry(
+    guard shouldRepairAppendTextEntry(
       app: app,
       target: target,
-      expectedText: expectedText,
-      repairMode: repairMode
+      expectedText: expectedText
     ) else {
       return verifyTextEntry(
         app: app,
@@ -474,74 +500,10 @@ extension RunnerTests {
       expectedText: expectedText,
       repaired: true
     )
-    return settledUnconfirmedTextEntry(
-      app: app,
-      target: repairedTarget,
-      result: repairedResult,
-      baseline: baseline
-    ) ?? repairedResult
+    return repairedResult
 #else
     return initialResult
 #endif
-  }
-
-  /// Turns a failed replacement read-back into unconfirmed evidence once the same field's value has
-  /// settled on one that does not echo the request; nil leaves the failure standing.
-  private func settledUnconfirmedTextEntry(
-    app: XCUIApplication,
-    target: TextEntryTarget,
-    result: TextEntryResult,
-    baseline: TextEntryObservation?
-  ) -> TextEntryResult? {
-    guard result.verified == false, let requested = result.expectedText, let baseline else {
-      return nil
-    }
-    func observe() -> TextEntryObservation? {
-      textEntryObservation(for: resolveTextEntryElement(app: app, target: target))
-    }
-    func evidence(_ observed: TextEntryObservation?) -> TextEntryUnconfirmedEvidence? {
-      Self.unconfirmedTextEntryEvidence(requested: requested, baseline: baseline, observed: observed)
-    }
-    let moveDeadline = Date().addingTimeInterval(TextEntryTiming.unconfirmedSettleCeiling)
-    var latest = observe()
-    while let unmoved = latest, unmoved.isSettled(with: baseline), Date() < moveDeadline {
-      sleepFor(TextEntryTiming.pollInterval)
-      latest = observe()
-    }
-    guard evidence(latest) != nil else {
-      return nil
-    }
-    let ceiling = Date().addingTimeInterval(TextEntryTiming.unconfirmedSettleCeiling)
-    var stableSince = Date()
-    while Date().timeIntervalSince(stableSince) < TextEntryTiming.verificationStabilityWindow {
-      guard Date() < ceiling else {
-        return nil
-      }
-      sleepFor(TextEntryTiming.pollInterval)
-      let next = observe()
-      if let next, let settled = latest, next.isSettled(with: settled) {
-        latest = next
-        continue
-      }
-      latest = next
-      stableSince = Date()
-    }
-    guard let unconfirmed = evidence(latest) else {
-      return nil
-    }
-    NSLog(
-      "AGENT_DEVICE_RUNNER_TEXT_ENTRY_UNCONFIRMED expectedLength=%d observedLength=%d repaired=%d",
-      requested.count,
-      unconfirmed.after.count,
-      result.repaired ? 1 : 0
-    )
-    return TextEntryResult(
-      verified: nil,
-      repaired: result.repaired,
-      expectedText: requested,
-      observedText: unconfirmed.after,
-      unconfirmed: unconfirmed
-    )
   }
 
   private func verifyTextEntry(
@@ -631,11 +593,10 @@ extension RunnerTests {
     }
   }
 
-  private func shouldRepairTextEntry(
+  private func shouldRepairAppendTextEntry(
     app: XCUIApplication,
     target: TextEntryTarget,
-    expectedText: String,
-    repairMode: TextTypingRepairMode
+    expectedText: String
   ) -> Bool {
 #if os(iOS)
     var latestObservedText: String?
@@ -652,10 +613,9 @@ extension RunnerTests {
         return false
       }
       latestObservedText = observedText
-      if !isRepairableTextEntryMismatch(
+      if !isRepairableAppendTextEntryMismatch(
         observedText: observedText,
-        expectedText: expectedText,
-        repairMode: repairMode
+        expectedText: expectedText
       ) {
         return false
       }
@@ -672,26 +632,21 @@ extension RunnerTests {
     ) else {
       return false
     }
-    return isRepairableTextEntryMismatch(
+    return isRepairableAppendTextEntryMismatch(
       observedText: latestObservedText,
-      expectedText: expectedText,
-      repairMode: repairMode
+      expectedText: expectedText
     )
 #else
     return false
 #endif
   }
 
-  private func isRepairableTextEntryMismatch(
+  private func isRepairableAppendTextEntryMismatch(
     observedText: String,
-    expectedText: String,
-    repairMode: TextTypingRepairMode
+    expectedText: String
   ) -> Bool {
     guard observedText != expectedText else {
       return false
-    }
-    if repairMode == .replacement {
-      return true
     }
     return observedText.isEmpty || isLikelyDroppedCharacterTextEntryMismatch(
       observedText: observedText,
