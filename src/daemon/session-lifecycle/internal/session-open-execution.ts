@@ -131,9 +131,8 @@ function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim): string {
 async function readWarmRunnerLossNotice(
   device: DeviceInfo,
 ): Promise<RunnerWarmLossNotice | undefined> {
-  const { takeWarmRunnerLossNotice } = await import(
-    '../../../platform-runtime-warm-runner-notice.ts'
-  );
+  const { takeWarmRunnerLossNotice } =
+    await import('../../../platform-runtime-warm-runner-notice.ts');
   return await takeWarmRunnerLossNotice(device);
 }
 

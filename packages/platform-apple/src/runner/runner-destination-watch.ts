@@ -319,7 +319,10 @@ function rearmOnSameBoot(watch: DestinationWatch): void {
  * consumer can race this path. A `undefined` reason is silent lease cleanup for a runner
  * generation Xcode already buried.
  */
-function stopRetainedRunner(watch: DestinationWatch, noticeReason: RunnerWarmLossReason | undefined): void {
+function stopRetainedRunner(
+  watch: DestinationWatch,
+  noticeReason: RunnerWarmLossReason | undefined,
+): void {
   detachWatch(watch);
   if (noticeReason) {
     pendingWarmLossNotices.set(watch.device.id, {
@@ -359,9 +362,4 @@ export function takeRunnerWarmLossNotice(deviceId: string): RunnerWarmLossNotice
   const notice = pendingWarmLossNotices.get(deviceId);
   if (notice) pendingWarmLossNotices.delete(deviceId);
   return notice;
-}
-
-/** Test seam: whether a watcher currently holds a socket for the device. */
-export function hasRunnerDestinationWatch(deviceId: string): boolean {
-  return destinationWatches.has(deviceId);
 }
