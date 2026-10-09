@@ -52,7 +52,7 @@ export function readOpenWaitBudgetMs(req: DaemonRequest): number | undefined {
  */
 export function readOpenWaitAttempt(req: DaemonRequest): SessionRecoveryOptions {
   const waitedMs = req.internal?.openDeviceWait?.waitedMs;
-  return waitedMs === undefined ? {} : { waitedMs };
+  return waitedMs ? { waitedMs } : {};
 }
 
 /**
@@ -164,6 +164,7 @@ function createOpenDeviceWait(params: {
   let openDeferred = false;
   const holder = () => findSessionHoldingDevice({ sessionStore, deviceId, sessionName, opener });
   const internal = (req.internal ??= {});
+  const spend = (internal.openDeviceWait ??= { waitedMs: 0 });
   internal.reportOpenDeviceConflict = (openerApp) => {
     const firstLook = opener === undefined;
     opener = { app: openerApp };
@@ -204,7 +205,7 @@ function createOpenDeviceWait(params: {
             if (!deadline.isExpired()) return { ran: false };
             // The refusal this open is about to get can say the budget was spent, because under
             // these locks it is: nobody else can hand the device over any more.
-            recordOpenWaitSpend(req, deadline.elapsedMs());
+            spend.waitedMs = Math.max(0, deadline.elapsedMs());
           }
           openDeferred = false;
           const outcome = await task();
@@ -217,12 +218,6 @@ function createOpenDeviceWait(params: {
       }
     },
   };
-}
-
-function recordOpenWaitSpend(req: DaemonRequest, waitedMs: number): void {
-  if (waitedMs <= 0) return;
-  const internal = (req.internal ??= {});
-  internal.openDeviceWait = { waitedMs };
 }
 
 /**

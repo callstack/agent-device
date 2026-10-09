@@ -421,3 +421,30 @@ test('a whole-Mac opener whose budget runs out beside an app session reports the
   expect(await running).toBe('refused');
   expect(readOpenWaitAttempt(req).waitedMs).toBe(1000);
 });
+
+test('the wait spend is readable from the request a lease admission copied after the spend', async () => {
+  vi.useFakeTimers();
+  const req = openRequest({ waitMs: 1000 });
+  const store = storeWithAppHolder();
+  const wait = beginWait({
+    req,
+    sessionName: OPENER_ADDRESS,
+    sessionStore: store,
+    deviceId: HOST_MAC.id,
+  })!;
+  await wait.waitForDeviceOutsideLocks();
+
+  let admitted = req;
+  const running = wait.runWhenDeviceIsUnheld({
+    acquireLocks: lockTrace({}).acquireLocks,
+    task: async () => {
+      admitted = { ...admitted, internal: { ...admitted.internal } };
+      return await openClaiming(admitted, store)();
+    },
+  });
+  await vi.advanceTimersByTimeAsync(10_000);
+
+  expect(await running).toBe('refused');
+  expect(admitted).not.toBe(req);
+  expect(readOpenWaitAttempt(admitted).waitedMs).toBe(1000);
+});
