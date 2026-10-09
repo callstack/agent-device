@@ -43,13 +43,16 @@ import {
   getRunnerDeviceClaimAuthorityProbe,
   getRunnerLeaseOwnerStateDir,
 } from './runner-owner-state.ts';
-import { buildSimctlArgsForDevice, simulatorAddressFor } from './simctl.ts';
+import { buildSimctlArgsForDevice, readSimctlDeviceState, simulatorAddressFor } from './simctl.ts';
 import {
   hasScopedAppleToolProvider,
   readApplePlistJson,
   runAppleToolCommand,
   runXcrun,
 } from './tool-provider.ts';
+
+/** The state probe answers in tens of milliseconds and must not become the reason a stop waits. */
+const SIMULATOR_STATE_PROBE_TIMEOUT_MS = 2_000;
 
 /**
  * The real host capabilities for `@agent-device/platform-apple/runner`: the one place
@@ -109,6 +112,17 @@ export const appleRunnerHost: AppleRunnerHost = {
   visitXmlPlistEntries,
   leaseOwnerStateDir: getRunnerLeaseOwnerStateDir,
   hasDeviceClaimAuthority: (device) => getRunnerDeviceClaimAuthorityProbe()?.(device) ?? false,
+  observeSimulatorState: async (device) => {
+    try {
+      const result = await runXcrun(buildSimctlArgsForDevice(device, ['list', 'devices', '-j']), {
+        allowFailure: true,
+        timeoutMs: SIMULATOR_STATE_PROBE_TIMEOUT_MS,
+      });
+      return result.exitCode === 0 ? readSimctlDeviceState(result.stdout, device.id) : null;
+    } catch {
+      return null;
+    }
+  },
   observeSimulatorBootTimeMs: async (device) =>
     (await import('../simulator-boot.ts')).observeSimulatorBootTimeMs(device),
 };

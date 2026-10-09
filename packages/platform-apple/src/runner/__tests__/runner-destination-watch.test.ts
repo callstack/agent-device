@@ -75,6 +75,7 @@ function watchParams(port: number, overrides: { isArmed?: () => boolean } = {}) 
 function stubHost(options: {
   boots: Array<{ observed: true; bootedAtMs: number } | { observed: false; reason: 'unobserved' }>;
   processAlive?: boolean;
+  state?: string | null;
 }) {
   const observeSimulatorBootTimeMs = vi.fn(async () => {
     const next = options.boots.length > 1 ? options.boots.shift() : options.boots[0];
@@ -82,6 +83,7 @@ function stubHost(options: {
   });
   appleRunnerTestHost.update({
     observeSimulatorBootTimeMs,
+    observeSimulatorState: async () => (options.state === undefined ? 'Booted' : options.state),
     isProcessAlive: () => options.processAlive ?? true,
   });
   return observeSimulatorBootTimeMs;
@@ -127,6 +129,48 @@ test('a close on the boot the watch was armed on re-arms instead of stopping', a
   assert.equal(observe.mock.calls.length, 1);
   assert.equal(onStop.mock.calls.length, 0);
   assert.equal(takeRunnerWarmLossNotice(DEVICE.id), undefined);
+  replacement.destroy();
+});
+
+test('a device listed as shut down is a loss even while its old boot is still observable', async () => {
+  const listener = await listen();
+  const observe = stubHost({
+    boots: [{ observed: true, bootedAtMs: Date.now() - 60_000 }],
+    state: 'Shutdown',
+  });
+  const { params, onStop } = watchParams(listener.port);
+
+  attachRunnerDestinationWatch(params);
+  (await listener.nextConnection()).destroy();
+  await vi.waitFor(() => assert.equal(onStop.mock.calls.length, 1));
+
+  assert.equal(observe.mock.calls.length, 0);
+  assert.equal(takeRunnerWarmLossNotice(DEVICE.id)?.reason, 'runner_destination_lost');
+});
+
+test('a device that is still booting down is a loss, not a crash', async () => {
+  const listener = await listen();
+  stubHost({
+    boots: [{ observed: true, bootedAtMs: Date.now() - 60_000 }],
+    state: 'Shutting Down',
+  });
+  const { params, onStop } = watchParams(listener.port);
+
+  attachRunnerDestinationWatch(params);
+  (await listener.nextConnection()).destroy();
+  await vi.waitFor(() => assert.equal(onStop.mock.calls.length, 1));
+});
+
+test('an unreadable device state falls back to the boot witness', async () => {
+  const listener = await listen();
+  stubHost({ boots: [{ observed: true, bootedAtMs: Date.now() - 60_000 }], state: null });
+  const { params, onStop } = watchParams(listener.port);
+
+  attachRunnerDestinationWatch(params);
+  (await listener.nextConnection()).destroy();
+  const replacement = await listener.nextConnection();
+
+  assert.equal(onStop.mock.calls.length, 0);
   replacement.destroy();
 });
 
@@ -197,7 +241,8 @@ test('a refused attach whose runner process is gone is silent cleanup', async ()
 test('a refused attach retries inside its budget and watches the runner once it listens', async () => {
   vi.stubEnv('AGENT_DEVICE_IOS_RUNNER_DESTINATION_ATTACH_RETRY_MS', '5000');
   const port = await unusedPort();
-  stubHost({ boots: [{ observed: true, bootedAtMs: Date.now() + 60_000 }] });
+  // A reboot that began after the window opened but before the retries reached the runner.
+  stubHost({ boots: [{ observed: true, bootedAtMs: Date.now() + 20 }] });
   const { params, onStop } = watchParams(port);
 
   attachRunnerDestinationWatch(params);

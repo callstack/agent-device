@@ -1,6 +1,11 @@
 import net from 'node:net';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { emitDiagnostic, isProcessAlive, observeSimulatorBootTimeMs } from './host.ts';
+import {
+  emitDiagnostic,
+  isProcessAlive,
+  observeSimulatorBootTimeMs,
+  observeSimulatorState,
+} from './host.ts';
 
 /**
  * Why a runner retained after `close` was stopped before the session asked for it again.
@@ -57,6 +62,9 @@ const ATTACH_RETRY_BASE_DELAY_MS = 1_000;
 /** How long a connected-socket close waits before the boot identity is read (see below). */
 const DESTINATION_CONFIRM_DEFAULT_MS = 2_500;
 const DESTINATION_RECHECK_DEFAULT_MS = 1_000;
+
+/** `simctl list` name of a powered-on Simulator. */
+const SIMULATOR_BOOTED_STATE = 'Booted';
 
 type LossAction = 'stop' | 'rearm';
 
@@ -137,6 +145,8 @@ export type RunnerDestinationWatchParams = {
    * budget.
    */
   attachRetryBudgetMs?: number;
+  /** When the retention window began; re-attaches within one window carry it forward unchanged. */
+  armedAtMs?: number;
 };
 
 /**
@@ -160,7 +170,7 @@ export function attachRunnerDestinationWatch(params: RunnerDestinationWatchParam
     sessionId: params.sessionId,
     port: params.port,
     runnerPid: params.runnerPid,
-    armedAtMs: Date.now(),
+    armedAtMs: params.armedAtMs ?? Date.now(),
     isArmed: params.isArmed,
     onStop: params.onStop,
     socket: net.connect(params.port, '127.0.0.1'),
@@ -257,6 +267,7 @@ async function handleRefusedAttach(
       isArmed: watch.isArmed,
       onStop: watch.onStop,
       attachRetryBudgetMs: budgetMs - nextDelayMs,
+      armedAtMs: watch.armedAtMs,
     });
     return;
   }
@@ -272,7 +283,10 @@ async function handleRefusedAttach(
 /**
  * Reads whether the device behind the runner stopped being the device this session was armed on.
  * A dead destination process answers for itself before the probe: Xcode cannot reboot from a dead
- * process, so stopping is plain lease cleanup. A boot observed newer than the armed window is
+ * process, so stopping is plain lease cleanup. A device that is no longer `Booted` was shut down
+ * under the session (measured: its old `launchd_sim` stays listed for ~6s after `simctl shutdown`,
+ * so the boot witness alone would read the old boot and call it a crash). A boot observed newer than
+ * the armed window is
  * Xcode's reboot; a boot unobservable twice while the destination process is still alive is a
  * device that is down with a reboot promise that may already be in flight. Both are destination
  * loss, and stopping still pre-empts the reboot in the second case.
@@ -280,6 +294,10 @@ async function handleRefusedAttach(
 async function classifyConnectedLoss(watch: DestinationWatch): Promise<LossVerdict> {
   if (watch.runnerPid !== undefined && !isProcessAlive(watch.runnerPid)) {
     return { action: 'stop' };
+  }
+  const state = await observeSimulatorState(watch.device);
+  if (state !== null && state !== SIMULATOR_BOOTED_STATE) {
+    return { action: 'stop', noticeReason: 'runner_destination_lost' };
   }
   const boot = await observeSimulatorBootTimeMs(watch.device);
   if (boot.observed && boot.bootedAtMs <= watch.armedAtMs) {
@@ -308,10 +326,18 @@ function rearmOnSameBoot(watch: DestinationWatch): void {
     phase: 'ios_runner_destination_watch_rearmed',
     data: { deviceId: watch.device.id, sessionId: watch.sessionId },
   });
-  const { device, sessionId, port, runnerPid, isArmed, onStop } = watch;
+  const { device, sessionId, port, runnerPid, isArmed, onStop, armedAtMs } = watch;
   detachWatch(watch);
   if (!isArmed()) return;
-  attachRunnerDestinationWatch({ device, sessionId, port, runnerPid, isArmed, onStop });
+  attachRunnerDestinationWatch({
+    device,
+    sessionId,
+    port,
+    runnerPid,
+    isArmed,
+    onStop,
+    armedAtMs,
+  });
 }
 
 /**

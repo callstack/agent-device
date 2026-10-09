@@ -112,6 +112,12 @@ export type AppleRunnerHost = Pick<
      * sits outside the façade closures this port's eager budget holds flat.
      */
     observeSimulatorBootTimeMs: typeof AppleSimulatorBoot.observeSimulatorBootTimeMs;
+    /**
+     * The Simulator's listed power state (`Booted`, `Shutting Down`, `Shutdown`), or null when the
+     * listing is unavailable. A shut-down device can keep its old `launchd_sim` visible for several
+     * seconds, so the boot witness alone cannot tell a crash from an external shutdown (#3321).
+     */
+    observeSimulatorState: (device: DeviceInfo) => Promise<string | null>;
   };
 
 /** The runner's deadline type is the host's read side; the {@link Deadline} shim below builds them. */
@@ -205,6 +211,7 @@ export const resolveIosPhysicalDeviceControl = delegate('resolveIosPhysicalDevic
 export const leaseOwnerStateDir = delegate('leaseOwnerStateDir');
 export const hasDeviceClaimAuthority = delegate('hasDeviceClaimAuthority');
 export const observeSimulatorBootTimeMs = delegate('observeSimulatorBootTimeMs');
+export const observeSimulatorState = delegate('observeSimulatorState');
 
 /**
  * Deadline keeps its root call-site shape (`Deadline.fromTimeoutMs(...)`);

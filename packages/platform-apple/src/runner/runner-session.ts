@@ -715,7 +715,7 @@ async function armRunnerDestinationWatch(session: RunnerSession | undefined): Pr
     runnerPid: session.child.pid,
     isArmed: () => isRunnerIdleRetained(deviceId, session),
     onStop: async () => {
-      await stopIosRunnerSession(deviceId);
+      await invalidateRunnerSession(session, 'warm_runner_destination_lost');
     },
   });
 }
