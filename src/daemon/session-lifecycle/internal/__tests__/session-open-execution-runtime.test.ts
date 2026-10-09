@@ -83,6 +83,7 @@ import {
   noopInvoke,
 } from './session-open-runtime.fixtures.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { beginOpenDeviceWait, readOpenWaitBudgetMs } from '../../../open-device-contention-wait.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintValues);
@@ -759,6 +760,45 @@ test('a macOS app session that holds the whole Mac opens its app in front', asyn
   expect(await open('xctest', ['com.example.one'])).toMatchObject({ ok: true });
   expect(sessionStore.get('xctest')?.deviceClaim?.app).toBeUndefined();
   expect(lastOpenWasBackground()).toBe(false);
+
+  restoreMacOpener();
+});
+
+test('a whole-Mac open with a wait budget waits beside an app session and opens once it retires', async () => {
+  const sessionStore = makeSessionStore();
+  const open = nativeMacOpener(sessionStore);
+  expect(await open('one', ['com.example.one'])).toMatchObject({ ok: true });
+  const dispatchesBeforeWait = mockDispatch.mock.calls.length;
+
+  const req: DaemonRequest = {
+    token: 't',
+    session: 'whole',
+    command: 'open',
+    positionals: [],
+    flags: { platform: 'macos', waitMs: 5_000 },
+    meta: { requestId: 'req-whole-wait' },
+  };
+  const wait = beginOpenDeviceWait({
+    req,
+    budgetMs: readOpenWaitBudgetMs(req),
+    sessionName: 'whole',
+    sessionStore,
+    deviceId: HOST_MAC.id,
+  })!;
+  const holder = sessionStore.lookup('one')!;
+  setTimeout(() => sessionStore.retire(holder), 300);
+
+  const startedAtMs = Date.now();
+  const response = await wait.runWhenDeviceIsUnheld({
+    acquireLocks: async (task) => await task(),
+    task: async () =>
+      await open('whole', [], { flags: req.flags, internal: req.internal, meta: req.meta }),
+  });
+
+  expect(response).toMatchObject({ ok: true });
+  expect(Date.now() - startedAtMs).toBeGreaterThanOrEqual(250);
+  expect(mockDispatch.mock.calls.length).toBe(dispatchesBeforeWait + 1);
+  expect(sessionStore.get('whole')?.deviceClaim?.app).toBeUndefined();
 
   restoreMacOpener();
 });
