@@ -9,7 +9,7 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
   sleep,
 }));
 
-import { testImeLastRestoreAtMs } from '../ime-state.ts';
+import { testImeLastRestoreAtPerfMs } from '../ime-state.ts';
 
 const run = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
 const commands: DeviceShutdownRuntimeDependencies['commands'] = {
@@ -21,7 +21,7 @@ beforeEach(() => {
   run.mockReset();
   run.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
   sleep.mockClear();
-  testImeLastRestoreAtMs.clear();
+  testImeLastRestoreAtPerfMs.clear();
 });
 
 test('an already-stopped emulator succeeds without adb', async () => {
@@ -60,7 +60,7 @@ test('only Android emulators are available', () => {
 // caller) inherits it without knowing about the test IME.
 test('a kill waits out a registered test-IME flush window before running adb emu kill', async () => {
   const device = androidDevice();
-  testImeLastRestoreAtMs.set(device.id, performance.now());
+  testImeLastRestoreAtPerfMs.set(device.id, performance.now());
 
   await expect(
     createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal()),
@@ -72,14 +72,14 @@ test('a kill waits out a registered test-IME flush window before running adb emu
   // gap. A regression sleeping a fixed unrelated amount would fail here.
   expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(2_000);
   expect(run).toHaveBeenCalledTimes(1);
-  expect([...testImeLastRestoreAtMs.keys()]).toEqual([]);
+  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
 });
 
 test('a forward host wall-clock jump cannot shorten a registered flush window', async () => {
   // The window is timed on the process monotonic clock, so an NTP/VM-resume step of the wall
   // clock must leave the kill-side remaining wait at the full budget.
   const device = androidDevice();
-  testImeLastRestoreAtMs.set(device.id, performance.now());
+  testImeLastRestoreAtPerfMs.set(device.id, performance.now());
   const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Number.MAX_SAFE_INTEGER);
 
   try {
@@ -107,7 +107,9 @@ test('a kill skips the wait entirely when no flush window is open', async () => 
 
 test('a kill cancelled inside the flush window never reaches adb emu kill', async () => {
   const device = androidDevice();
-  testImeLastRestoreAtMs.set(device.id, performance.now());
+  // Known elapsed: the mark is 1000 ms old, so the derived remainder must be ~1500 — not the
+  // full budget, not a fixed constant. That makes both waits provably a function of the mark.
+  testImeLastRestoreAtPerfMs.set(device.id, performance.now() - 1_000);
   const controller = new AbortController();
   sleep.mockImplementationOnce((_ms, waitSignal) => {
     controller.abort();
@@ -119,8 +121,21 @@ test('a kill cancelled inside the flush window never reaches adb emu kill', asyn
   ).rejects.toBeDefined();
 
   expect(run).not.toHaveBeenCalled();
-  // The window stays registered so a retry still waits out the remainder.
-  expect([...testImeLastRestoreAtMs.keys()]).toEqual([device.id]);
+  const firstRemainingMs = sleep.mock.calls[0]?.[0] as number;
+  expect(firstRemainingMs).toBeGreaterThan(1_400);
+  expect(firstRemainingMs).toBeLessThanOrEqual(1_500);
+  // The window stays registered so a retry still waits out the remainder — and the retry
+  // re-derives the SAME remainder from the surviving mark: the monotonic-mark property the
+  // abort design rests on, pinned by number, not by shape.
+  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([device.id]);
+
+  const retry = await createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
+
+  expect(retry).toEqual(success());
+  expect(sleep).toHaveBeenCalledTimes(2);
+  const secondRemainingMs = sleep.mock.calls[1]?.[0] as number;
+  expect(secondRemainingMs).toBeGreaterThan(1_400);
+  expect(secondRemainingMs).toBeLessThanOrEqual(firstRemainingMs);
 });
 
 function signal(): AbortSignal {

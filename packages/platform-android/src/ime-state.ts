@@ -21,26 +21,30 @@ export type AndroidTestImeOwnership = {
 // margin past the cap only has to absorb the AtomicFile rename.
 const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
 
-// Per-device monotonic last-restore timestamps, keyed by serial and read from the process
-// monotonic clock (performance.now), never the wall clock: the flush window is a property of the
-// device's SettingsProvider, not of any host state dir or of the close that performed the
-// restore, and a wall-clock step (VM resume, NTP correction) must never be able to shrink the
-// remaining wait. Every restore only moves the timestamp forward, so it can never consume
-// evidence a later kill needs — the wait is always derived from the newest write, which is also
-// why windows coalesce into one wait rather than stacking. Every path that may `adb emu kill`
-// calls awaitTestImeFlushWindow first; the kill-bound close finalization also consumes the
-// outcome so the pending marker clears only under a completed (or never-owed) wait.
+// Per-device last-restore marks, keyed by serial, timed entirely on the PROCESS MONOTONIC
+// CLOCK (performance.now) — never the wall clock, as the name suffix encodes. sleep() is
+// timed on libuv's monotonic loop clock, so a wall-clock-derived remaining time would mix two
+// clocks by construction (the skew stable-capture.ts documents in prose), and a forward step
+// from NTP or VM resume could make remainingMs negative and release the kill inside the
+// window. One source for both registration and expiry means neither can drift against the
+// other. The flush window is a property of the device's SettingsProvider, not of any host
+// state dir or of the close that performed the restore. Every restore only moves the mark
+// forward, so it can never consume evidence a later kill needs — the wait is always derived
+// from the newest write, which is also why windows coalesce into one wait rather than
+// stacking. Every path that may `adb emu kill` calls awaitTestImeFlushWindow first; the
+// kill-bound close finalization also consumes the outcome so the pending marker clears only
+// under a completed (or never-owed) wait.
 // @internal the map is exported for tests; production touches it only through the helpers here.
-export const testImeLastRestoreAtMs = new Map<string, number>();
+export const testImeLastRestoreAtPerfMs = new Map<string, number>();
 
 export type TestImeFlushWait = 'idle' | 'covered' | 'aborted';
 
 // The write that earned the window calls this, on every confirmed emulator restore — close-time,
 // cross-session, or startup-orphan recovery.
 export function registerTestImeRestore(serial: string): void {
-  testImeLastRestoreAtMs.set(
+  testImeLastRestoreAtPerfMs.set(
     serial,
-    Math.max(testImeLastRestoreAtMs.get(serial) ?? 0, performance.now()),
+    Math.max(testImeLastRestoreAtPerfMs.get(serial) ?? 0, performance.now()),
   );
 }
 
@@ -58,20 +62,20 @@ export async function awaitTestImeFlushWindow(
   signal?: AbortSignal,
 ): Promise<TestImeFlushWait> {
   if (signal?.aborted) return 'aborted';
-  const restoredAtMs = testImeLastRestoreAtMs.get(serial);
-  if (restoredAtMs === undefined) return 'idle';
-  const remainingMs = restoredAtMs + SETTINGS_PROVIDER_FLUSH_SETTLE_MS - performance.now();
+  const restoredAtPerfMs = testImeLastRestoreAtPerfMs.get(serial);
+  if (restoredAtPerfMs === undefined) return 'idle';
+  const remainingMs = restoredAtPerfMs + SETTINGS_PROVIDER_FLUSH_SETTLE_MS - performance.now();
   if (remainingMs <= 0) {
-    testImeLastRestoreAtMs.delete(serial);
+    testImeLastRestoreAtPerfMs.delete(serial);
     return 'covered';
   }
   await sleep(remainingMs, signal);
   if (signal?.aborted) return 'aborted';
-  // Retire only the timestamp this wait actually covered: a restore that landed mid-wait (the
+  // Retire only the mark this wait actually covered: a restore that landed mid-wait (the
   // unlocked shutdown-command path racing a close finalization) must keep its evidence for the
   // next kill-bound caller rather than have its younger window erased by this older wait.
-  if (testImeLastRestoreAtMs.get(serial) === restoredAtMs) {
-    testImeLastRestoreAtMs.delete(serial);
+  if (testImeLastRestoreAtPerfMs.get(serial) === restoredAtPerfMs) {
+    testImeLastRestoreAtPerfMs.delete(serial);
   }
   return 'covered';
 }
@@ -105,7 +109,7 @@ export function withAndroidTestImeRecoveryLock<T>(
  */
 export function resetAndroidTestImeActivationCacheForTests(): void {
   activeTestImeDevices.clear();
-  testImeLastRestoreAtMs.clear();
+  testImeLastRestoreAtPerfMs.clear();
 }
 
 /**
