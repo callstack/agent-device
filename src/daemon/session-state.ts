@@ -142,6 +142,8 @@ export type SessionState = {
     ownerToken: string;
     ownerPid: number;
     ownerStartTime: string | null;
+    /** Present when the claim holds one app of the device rather than the whole device. */
+    app?: { bundleId: string };
   };
   device: DeviceInfo;
   createdAt: number;

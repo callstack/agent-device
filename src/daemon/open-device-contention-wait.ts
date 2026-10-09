@@ -5,9 +5,10 @@ import { Deadline, sleep } from '@agent-device/host-kit/retry';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionStore } from './session-store.ts';
-import type { SessionState } from './session-state.ts';
-import { canonicalLocalDeviceKey } from './device/device-claim-paths.ts';
-import { deviceClaimIdentity } from './device/device-claims.ts';
+import type { SessionRef, SessionState } from './session-state.ts';
+import type { DeviceClaimApp } from './device/device-claim-record.ts';
+import { parseMacOsAppLeaseKey } from './macos-app-lease.ts';
+import type { DeviceLease } from '@agent-device/contracts/device';
 import type { SessionRecoveryOptions } from './session-recovery-hints.ts';
 
 /**
@@ -90,6 +91,10 @@ export type OpenDeviceWait = {
    * lock this request holds. So either nobody holds the device for as long as `task` runs, or
    * this open gives the device back and spends the rest of its budget waiting again — which is
    * what lets several callers queue on one device instead of all but the fastest refusing early.
+   *
+   * Which sessions conflict depends on the claim the open would take, which it resolves only under
+   * the locks. When it reports a conflict through `reportOpenDeviceConflict` the first time, or
+   * while budget is left, the refusal `task` returns is dropped and the open waits again.
    */
   runWhenDeviceIsUnheld<T>(params: {
     acquireLocks: <TaskResult>(task: () => Promise<TaskResult>) => Promise<TaskResult>;
@@ -120,31 +125,28 @@ export function beginOpenDeviceWait(params: {
   return createOpenDeviceWait({ req, sessionName, sessionStore, deviceId, budgetMs });
 }
 
-/** The other session holding `deviceId`, or `undefined` when nothing stands between this open and
- * the device — including when this open's own session is what holds it. A session holding one app
- * of the device (ADR 0034) is not waited for: the open it would conflict with is the same app's,
- * which the claim refuses at once, and every other open runs beside it. */
-function findSessionHoldingDevice(
-  sessionStore: SessionStore,
-  deviceId: string,
-  sessionName: string,
-): ReturnType<SessionStore['findByDevice']> {
+/**
+ * The other session standing between this open and `deviceId`, or `undefined` when there is none,
+ * including when this open's own session is what holds the device. Until the open has resolved the
+ * claim it would take, only a session holding the whole device is certain to conflict with it.
+ */
+function findSessionHoldingDevice(params: {
+  sessionStore: SessionStore;
+  deviceId: string;
+  sessionName: string;
+  opener: { app: DeviceClaimApp | undefined } | undefined;
+}): SessionRef | undefined {
+  const { sessionStore, deviceId, sessionName, opener } = params;
   return sessionStore
     .listRefs()
     .find(
       (ref) =>
         ref.session.device.id === deviceId &&
         ref.address !== sessionName &&
-        !holdsAppScopedClaim(ref.session),
+        (opener
+          ? sessionConflictsWithOpen(ref.session, opener.app)
+          : sessionHeldApp(ref.session) === undefined),
     );
-}
-
-function holdsAppScopedClaim(session: SessionState): boolean {
-  const heldKey = session.deviceClaim?.deviceKey;
-  return (
-    heldKey !== undefined &&
-    heldKey !== canonicalLocalDeviceKey(deviceClaimIdentity(session.device))
-  );
 }
 
 type LockedAttempt<Outcome> = { ran: true; outcome: Outcome } | { ran: false };
@@ -158,7 +160,15 @@ function createOpenDeviceWait(params: {
 }): OpenDeviceWait {
   const { req, sessionName, sessionStore, deviceId, budgetMs } = params;
   const deadline = Deadline.fromTimeoutMs(budgetMs);
-  const holder = () => findSessionHoldingDevice(sessionStore, deviceId, sessionName);
+  let opener: { app: DeviceClaimApp | undefined } | undefined;
+  let openDeferred = false;
+  const holder = () => findSessionHoldingDevice({ sessionStore, deviceId, sessionName, opener });
+  const internal = (req.internal ??= {});
+  internal.reportOpenDeviceConflict = (openerApp) => {
+    const firstLook = opener === undefined;
+    opener = { app: openerApp };
+    openDeferred = firstLook || !deadline.isExpired();
+  };
 
   const waitForDeviceOutsideLocks = async (): Promise<void> => {
     for (;;) {
@@ -196,7 +206,9 @@ function createOpenDeviceWait(params: {
             // these locks it is: nobody else can hand the device over any more.
             recordOpenWaitSpend(req, deadline.elapsedMs());
           }
-          return { ran: true, outcome: await task() };
+          openDeferred = false;
+          const outcome = await task();
+          return openDeferred ? { ran: false } : { ran: true, outcome };
         });
         if (attempt.ran) return attempt.outcome;
         // The device was taken after the look that let this open reach the locks. Leaving them
@@ -211,4 +223,46 @@ function recordOpenWaitSpend(req: DaemonRequest, waitedMs: number): void {
   if (waitedMs <= 0) return;
   const internal = (req.internal ??= {});
   internal.openDeviceWait = { waitedMs };
+}
+
+/**
+ * The one app a session drives on its device, or `undefined` when it holds the whole device. An
+ * app claim (ADR 0034) and a `macos-app` lease (ADR 0007, which takes no claim) each scope a
+ * session to one app.
+ */
+export function sessionHeldApp(
+  session: Pick<SessionState, 'deviceClaim' | 'lease'>,
+): DeviceClaimApp | undefined {
+  if (session.lease?.leaseBackend === 'macos-app') return leasedApp(session.lease.deviceKey);
+  return session.deviceClaim?.app;
+}
+
+/** The app a request admitted under a `macos-app` lease drives. */
+export function admittedLeaseApp(
+  lease: Pick<DeviceLease, 'backend' | 'deviceKey'> | undefined,
+): DeviceClaimApp | undefined {
+  return lease?.backend === 'macos-app' ? leasedApp(lease.deviceKey) : undefined;
+}
+
+/**
+ * Whether a session on the device stands in the way of an open that would hold `openerApp`, or the
+ * whole device when `openerApp` is `undefined`. Two sessions on one device conflict unless each
+ * holds one app and the apps differ. The new-session conflict check and the `open --wait` that
+ * queues on it both decide with this.
+ */
+export function sessionConflictsWithOpen(
+  session: Pick<SessionState, 'deviceClaim' | 'lease'>,
+  openerApp: DeviceClaimApp | undefined,
+): boolean {
+  const heldApp = sessionHeldApp(session);
+  return !heldApp || !openerApp || isSameApp(heldApp, openerApp);
+}
+
+/** LaunchServices matches bundle ids without regard to case. */
+export function isSameApp(a: DeviceClaimApp, b: DeviceClaimApp): boolean {
+  return a.bundleId.toLowerCase() === b.bundleId.toLowerCase();
+}
+
+function leasedApp(deviceKey: string | undefined): DeviceClaimApp {
+  return { bundleId: parseMacOsAppLeaseKey(deviceKey).bundleId };
 }

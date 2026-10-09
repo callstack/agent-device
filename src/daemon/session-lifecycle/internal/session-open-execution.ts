@@ -42,14 +42,12 @@ import {
   buildDeviceInUseBySessionError,
   buildForeignWorkspaceSessionConflict,
 } from '../../session-recovery-hints.ts';
-import { describeOpenWaitForRefusal } from '../../open-device-contention-wait.ts';
 import { isImplicitSessionScopeConflict, resolvePublicSessionName } from '../../session-routing.ts';
 import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
 import {
   abandonDeviceClaim,
   acquireDeviceClaim,
   clearDeviceClaim,
-  deviceClaimIdentity,
   renewDeviceClaim,
   type DeviceClaimAcquireResult,
   type DeviceClaimSessionOwnership,
@@ -57,7 +55,12 @@ import {
 } from '../../device/device-claims.ts';
 import type { TakenOverDeviceClaim } from '../../device/device-claim-reboot.ts';
 import type { DeviceClaimApp } from '../../device/device-claim-record.ts';
-import { appScopedDeviceKey, canonicalLocalDeviceKey } from '../../device/device-claim-paths.ts';
+import {
+  admittedLeaseApp,
+  describeOpenWaitForRefusal,
+  isSameApp,
+  sessionConflictsWithOpen,
+} from '../../open-device-contention-wait.ts';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { readMacOsAppBackend } from '@agent-device/contracts/session';
 import { readHostEnvironmentVariable } from '@agent-device/host-kit/process';
@@ -379,37 +382,25 @@ async function prepareOpenDispatchSession(params: {
 }
 
 /**
- * A session admitted under a `macos-app` lease holds one app, not the host Mac (ADR 0007): other
- * app-leased sessions on the same Mac do not stand in its way.
- */
-function isMacOsAppLeaseOpen(req: DaemonRequest): boolean {
-  return req.internal?.admittedLease?.backend === 'macos-app';
-}
-
-/**
- * The refusal an open gets when another session already holds the device. The wait an expired
- * `--wait` budget spent is carried into the recovery text, because a caller that waited is not
- * helped by being told to wait.
+ * The refusal an open gets when another session already holds a conflicting part of the device.
+ * The wait an expired `--wait` budget spent is carried into the recovery text, because a caller
+ * that waited is not helped by being told to wait.
  */
 function findNewSessionDeviceConflict(params: {
   req: DaemonRequest;
   device: DeviceInfo;
   sessionStore: SessionStore;
-  appClaimKey: string | undefined;
+  openerApp: DeviceClaimApp | undefined;
 }): DaemonFailureResponse | undefined {
-  const { req, device, sessionStore, appClaimKey } = params;
-  const inUse =
-    isMacOsAppLeaseOpen(req) || appClaimKey !== undefined
-      ? sessionStore
-          .listRefs()
-          .find(
-            (ref) =>
-              ref.session.device.id === device.id &&
-              ref.session.lease?.leaseBackend !== 'macos-app' &&
-              !holdsAnotherAppClaim(ref.session, device, appClaimKey),
-          )
-      : sessionStore.findByDevice(device.id);
+  const { req, device, sessionStore, openerApp } = params;
+  const inUse = sessionStore
+    .listRefs()
+    .find(
+      (ref) =>
+        ref.session.device.id === device.id && sessionConflictsWithOpen(ref.session, openerApp),
+    );
   if (!inUse) return undefined;
+  req.internal?.reportOpenDeviceConflict?.(openerApp);
   // The wait the caller paid for belongs to `open` alone: an interaction that hits the same busy
   // device cannot wait for it, and would be sent off with a flag its own command rejects.
   const attempt = describeOpenWaitForRefusal(req);
@@ -417,21 +408,6 @@ function findNewSessionDeviceConflict(params: {
     return buildForeignWorkspaceSessionConflict(inUse, device, attempt);
   }
   return buildDeviceInUseBySessionError(inUse, device, attempt);
-}
-
-/** A session holding an app claim leaves every other app of the device to other sessions. */
-function holdsAnotherAppClaim(
-  session: SessionState,
-  device: DeviceInfo,
-  appClaimKey: string | undefined,
-): boolean {
-  const heldKey = session.deviceClaim?.deviceKey;
-  return (
-    appClaimKey !== undefined &&
-    heldKey !== undefined &&
-    heldKey !== appClaimKey &&
-    heldKey !== canonicalLocalDeviceKey(deviceClaimIdentity(device))
-  );
 }
 
 /**
@@ -476,31 +452,24 @@ export function reopenOutsideAppClaim(params: {
   appBundleId: string | undefined;
 }): DaemonResponse | undefined {
   const { session, surface, appBundleId } = params;
-  const heldKey = session.deviceClaim?.deviceKey;
-  const deviceKey = canonicalLocalDeviceKey(deviceClaimIdentity(session.device));
-  if (heldKey === undefined || heldKey === deviceKey) return undefined;
+  const heldApp = session.deviceClaim?.app;
+  if (!heldApp) return undefined;
   if (
     surface === 'app' &&
     appBundleId !== undefined &&
-    heldKey === appScopedDeviceKey(deviceKey, appBundleId)
+    isSameApp(heldApp, { bundleId: appBundleId })
   ) {
     return undefined;
   }
   return errorResponse(
     'INVALID_ARGS',
-    `Session "${session.name}" holds ${session.appBundleId ?? 'one app'} only, so it can reopen only that app on the app surface.`,
+    `Session "${session.name}" holds ${heldApp.bundleId} only, so it can reopen only that app on the app surface.`,
     {
       reason: 'app-claim-scope',
-      deviceKey: heldKey,
-      hint: `To open a link in this app, name the app: open ${session.appBundleId ?? '<app>'} <url>. For another app or surface, close this session or use a new --session.`,
+      deviceKey: session.deviceClaim?.deviceKey,
+      hint: `To open a link in this app, name the app: open ${heldApp.bundleId} <url>. For another app or surface, close this session or use a new --session.`,
     },
   );
-}
-
-function appClaimKeyFor(device: DeviceInfo, app: DeviceClaimApp | undefined): string | undefined {
-  return app
-    ? appScopedDeviceKey(canonicalLocalDeviceKey(deviceClaimIdentity(device)), app.bundleId)
-    : undefined;
 }
 
 /** The claim was taken for the app resolved before preparation; the open must launch that app. */
@@ -509,7 +478,7 @@ function openedOutsideAppClaim(
   resolved: string | undefined,
   openTarget: string | undefined,
 ): DaemonResponse | undefined {
-  if (!app || resolved?.toLowerCase() === app.bundleId.toLowerCase()) return undefined;
+  if (!app || (resolved !== undefined && isSameApp(app, { bundleId: resolved }))) return undefined;
   return errorResponse(
     'COMMAND_FAILED',
     `${openTarget ?? 'The app'} resolved to ${resolved ?? 'no app'} after its claim was taken for ${app.bundleId}.`,
@@ -588,7 +557,7 @@ async function claimNewSessionDevice(params: {
     req,
     device,
     sessionStore,
-    appClaimKey: appClaimKeyFor(device, app),
+    openerApp: admittedLeaseApp(req.internal?.admittedLease) ?? app,
   });
   if (conflict) return { response: conflict };
   const ownerClaim = await acquireDeviceClaimForOwner({ ...params, owner: lifecycle.owner, app });

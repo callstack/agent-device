@@ -652,45 +652,93 @@ for (const transition of ['rebuild', 'retire'] as const) {
   });
 }
 
-test('native macOS app sessions claim their app, so another app opens beside them', async () => {
+const HOST_MAC = {
+  platform: 'apple',
+  appleOs: 'macos',
+  id: 'host-macos-local',
+  name: 'Host Mac',
+  kind: 'device',
+  target: 'desktop',
+  booted: true,
+} as const;
+
+function nativeMacOpener(sessionStore: ReturnType<typeof makeSessionStore>) {
   vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', 'native');
   vi.mocked(resolveIosApp).mockImplementation(async (_device, app) => app);
-  mockResolveTargetDevice.mockResolvedValue({
-    platform: 'apple',
-    appleOs: 'macos',
-    id: 'host-macos-local',
-    name: 'Host Mac',
-    kind: 'device',
-    target: 'desktop',
-    booted: true,
-  });
-  const sessionStore = makeSessionStore();
-  const open = async (session: string, app: string) =>
+  mockResolveTargetDevice.mockResolvedValue(HOST_MAC);
+  return async (session: string, positionals: string[], extra: Partial<DaemonRequest> = {}) =>
     await handleSessionCommands({
       req: {
         token: 't',
         session,
         command: 'open',
-        positionals: [app],
+        positionals,
         flags: { platform: 'macos' },
+        ...extra,
       },
       sessionName: session,
       logPath: path.join(mkdtempForTestSync('agent-device-macos-app-claim-'), 'daemon.log'),
       sessionStore,
       invoke: noopInvoke,
     });
+}
+
+function restoreMacOpener(): void {
+  vi.unstubAllEnvs();
+  vi.mocked(resolveIosApp).mockImplementation(async () => 'com.example.demo');
+}
+
+test('native macOS app sessions claim their app, so another app opens beside them', async () => {
+  const sessionStore = makeSessionStore();
+  const open = nativeMacOpener(sessionStore);
   const refusedFor = { ok: false, error: { details: { reason: 'app-claim-scope' } } };
 
-  expect(await open('one', 'com.example.one')).toMatchObject({ ok: true });
-  expect(await open('two', 'com.example.two')).toMatchObject({ ok: true });
-  expect(await open('three', 'com.example.one')).toMatchObject({
+  expect(await open('one', ['com.example.one'])).toMatchObject({ ok: true });
+  expect(await open('two', ['com.example.two'])).toMatchObject({ ok: true });
+  expect(await open('three', ['com.example.one'])).toMatchObject({
     ok: false,
     error: { code: 'DEVICE_IN_USE' },
   });
-  expect(await open('one', 'com.example.two')).toMatchObject(refusedFor);
-  expect(await open('one', 'demo://route')).toMatchObject(refusedFor);
-  expect(await open('one', 'com.example.one')).toMatchObject({ ok: true });
+  expect(await open('one', ['com.example.two'])).toMatchObject(refusedFor);
+  expect(await open('one', ['demo://route'])).toMatchObject(refusedFor);
+  expect(await open('one', ['com.example.one'])).toMatchObject({ ok: true });
 
-  vi.unstubAllEnvs();
-  vi.mocked(resolveIosApp).mockImplementation(async () => 'com.example.demo');
+  restoreMacOpener();
+});
+
+test('a macos-app lease session and an app session of the same bundle conflict in both orders', async () => {
+  const lease = (bundleId: string) => ({
+    leaseId: `lease-${bundleId}`,
+    tenantId: 'tenant',
+    runId: 'run',
+    backend: 'macos-app' as const,
+    deviceKey: bundleId,
+    createdAt: Date.now(),
+    heartbeatAt: Date.now(),
+    expiresAt: Date.now() + 60_000,
+  });
+  const leasedOpen = (bundleId: string): Partial<DaemonRequest> => ({
+    internal: { admittedLease: lease(bundleId) },
+  });
+  const inUse = { ok: false, error: { code: 'DEVICE_IN_USE' } };
+
+  const leaseFirst = makeSessionStore();
+  const openBesideLease = nativeMacOpener(leaseFirst);
+  expect(
+    await openBesideLease('leased', ['com.example.one'], leasedOpen('com.example.one')),
+  ).toMatchObject({ ok: true });
+  expect(await openBesideLease('app', ['com.example.one'])).toMatchObject(inUse);
+  expect(await openBesideLease('other', ['com.example.two'])).toMatchObject({ ok: true });
+
+  const appFirst = makeSessionStore();
+  const openBesideApp = nativeMacOpener(appFirst);
+  expect(await openBesideApp('app', ['com.example.one'])).toMatchObject({ ok: true });
+  expect(
+    await openBesideApp('leased', ['com.example.one'], leasedOpen('com.example.one')),
+  ).toMatchObject(inUse);
+  expect(
+    await openBesideApp('leased-two', ['com.example.two'], leasedOpen('com.example.two')),
+  ).toMatchObject({ ok: true });
+
+  restoreMacOpener();
 });

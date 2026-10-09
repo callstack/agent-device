@@ -55,6 +55,8 @@ export type DeviceClaimSessionOwnership = {
   ownerToken: string;
   ownerPid: number;
   ownerStartTime: string | null;
+  /** The one app the claim holds; absent when it holds the whole device. */
+  app?: DeviceClaimApp;
 };
 
 /** The ownership token carried by a persisted claim record. */
@@ -64,6 +66,7 @@ export function ownershipFromClaim(claim: DeviceClaim): DeviceClaimSessionOwners
     ownerToken: claim.ownerToken,
     ownerPid: claim.ownerPid,
     ownerStartTime: claim.ownerStartTime,
+    ...(claim.app ? { app: claim.app } : {}),
   };
 }
 
