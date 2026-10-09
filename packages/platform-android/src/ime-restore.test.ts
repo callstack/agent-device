@@ -379,7 +379,11 @@ test('a shutdown of a physical device restores without any flush wait', async ()
   expect(sleep).not.toHaveBeenCalled();
 });
 
-test('a restore that did not switch the IME back skips the flush wait', async () => {
+test('a restore that did not switch the IME back still owes the flush wait it may have written', async () => {
+  // Round twelve: a readback mismatch cannot prove the provider never accepted the write, so
+  // the issued write owes the kill-bound hold like any other. This path waits ~the full window
+  // yet still keeps the record and marker (see the failed-restore tests) — the hold covers the
+  // possible half-written flush; the retained evidence covers the retry.
   bindAndroidAdbHostStub();
   setAndroidTestImeActiveForTests(DEVICE, true);
   const state = stuckDeviceState();
@@ -388,7 +392,9 @@ test('a restore that did not switch the IME back skips the flush wait', async ()
   const result = await restoreWith(state, { shutdownTarget: true });
 
   expect(result).toMatchObject({ restored: false, reason: 'set-failed' });
-  expect(sleep).not.toHaveBeenCalled();
+  expect(sleep).toHaveBeenCalledTimes(1);
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(SETTINGS_PROVIDER_FLUSH_SETTLE_MS * 0.8);
+  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
 });
 
 test('startup recovery never scans devices without a pending marker, and retains offline markers', async () => {

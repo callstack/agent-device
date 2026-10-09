@@ -168,12 +168,13 @@ async function restoreAndroidTestImeFor(
       });
       return { restored: false, previousIme, reason: 'set-failed' };
     }
-    // Confirmed back on the previous IME. The provider's flush window opened at this write, so
-    // register it here — before the record cleanup, before any caller can race a kill against
-    // it.
-    if (device.kind === 'emulator') {
-      registerTestImeRestore(device.id);
-    }
+    // Confirmed back on the previous IME — the only outcome that earns the durable-marker
+    // clear. The flush window, however, attaches to the ISSUED write, not to the confirmation:
+    // a `set-failed` readback mismatch cannot prove the provider never accepted the write (it
+    // can have been accepted and then re-resolved or overwritten), and a thrown transport
+    // failure after dispatch carries the same ambiguity. The mark therefore registers in the
+    // `finally` below for every issued emulator restore; this branch stays purely about
+    // recovery evidence.
     // Now it is safe to drop the recovery value.
     await clearPersistedPreviousIme(adb).catch(() => {});
     await clearPersistedRebindDisplacement(adb).catch(() => {});
@@ -183,6 +184,14 @@ async function restoreAndroidTestImeFor(
     });
     return { restored: true, previousIme, reason: 'ok' };
   } finally {
+    // One rule at one site: issuing an emulator restore write owes the kill-bound flush hold
+    // whatever the outcome (ok, set-failed, or throw), so the mark registers exactly where the
+    // pending entry closes, always before the close — a draining waiter can never observe
+    // "closed but unregistered". registerTestImeRestore takes the max, so this can only
+    // lengthen a window, never consume one another caller still owes.
+    if (device.kind === 'emulator') {
+      registerTestImeRestore(device.id);
+    }
     pendingWriteOpens();
   }
 }

@@ -148,15 +148,17 @@ test('a kill started while a restore write is in flight waits for it to register
   expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
 });
 
-test('an in-flight write that fails without registering releases the kill as idle', async () => {
+test('a pending write that closes with no registered mark releases the kill as idle', async () => {
+  // The registrar opens the pending entry for every restore but registers a window only for
+  // emulators (the flush hazard is the emulator's SettingsProvider), so a physical-device
+  // restore is the production shape of "closed, never registered". The drained wait must fall
+  // through to 'idle' — never strand the kill on an entry that will never gain a mark.
   const device = androidDevice();
   const closeInFlightWrite = beginTestImeRestoreWrite(device.id);
 
   const pendingKill = createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
   expect(run).not.toHaveBeenCalled();
 
-  // The set-failed path: the finally block closes the pending entry with no mark registered.
-  // The drained wait must fall through to 'idle' — never strand the kill on a dead write.
   closeInFlightWrite();
 
   await expect(pendingKill).resolves.toEqual(success());
