@@ -329,7 +329,7 @@ test('an ordinary close restores without any flush wait but registers the window
 });
 
 test("a kill-bound close after another close's restore waits out the registered window", async () => {
-  // The reviewer's cross-session hole: session A's ordinary close confirmed the restore and
+  // The cross-session hole: session A's ordinary close confirmed the restore and
   // dropped ownership; session B's close --shutdown must not kill inside A's flush window even
   // though its own call inspects nothing.
   const host = bindAndroidAdbHostStub();
@@ -380,11 +380,12 @@ test('a shutdown of a physical device restores without any flush wait', async ()
 });
 
 test('a restore that did not switch the IME back still owes the flush wait it may have written', async () => {
-  // Round twelve: a readback mismatch cannot prove the provider never accepted the write, so
-  // the issued write owes the kill-bound hold like any other. This path waits ~the full window
-  // yet still keeps the record and marker (see the failed-restore tests) — the hold covers the
-  // possible half-written flush; the retained evidence covers the retry.
-  bindAndroidAdbHostStub();
+  // A readback mismatch cannot prove the provider never accepted the write, so the issued
+  // write owes the kill-bound hold like any other — while the retained record and marker
+  // still cover the retry. The hold and the retained evidence are pinned together because
+  // this path is exactly where both mechanisms must agree.
+  const host = bindAndroidAdbHostStub();
+  await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
   setAndroidTestImeActiveForTests(DEVICE, true);
   const state = stuckDeviceState();
   state.imeSetFails = true;
@@ -395,6 +396,8 @@ test('a restore that did not switch the IME back still owes the flush wait it ma
   expect(sleep).toHaveBeenCalledTimes(1);
   expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(SETTINGS_PROVIDER_FLUSH_SETTLE_MS * 0.8);
   expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
+  expect(state.settings.has('agent_device_ime_helper_previous_ime')).toBe(true);
 });
 
 test('startup recovery never scans devices without a pending marker, and retains offline markers', async () => {

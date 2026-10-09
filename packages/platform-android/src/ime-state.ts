@@ -22,44 +22,27 @@ export type AndroidTestImeOwnership = {
 // seeded elapsed times and sleep bounds from the window itself, never from a copied number.
 export const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
 
-// Per-device last-restore marks, keyed by serial, timed entirely on the PROCESS MONOTONIC
-// CLOCK (performance.now) — never the wall clock, as the name suffix encodes. sleep() is
-// timed on libuv's monotonic loop clock, so a wall-clock-derived remaining time would mix two
-// clocks by construction (the skew stable-capture.ts documents in prose), and a forward step
-// from NTP or VM resume could make remainingMs negative and release the kill inside the
-// window. One source for both registration and expiry means neither can drift against the
-// other. The flush window is a property of the device's SettingsProvider, not of any host
-// state dir or of the close that performed the restore. Every restore only moves the mark
-// forward, so it can never consume evidence a later kill needs — the wait is always derived
-// from the newest write, which is also why windows coalesce into one wait rather than
-// stacking. Every path that may `adb emu kill` calls awaitTestImeFlushWindow first; the
-// kill-bound close finalization also consumes the outcome so the pending marker clears only
-// under a completed (or never-owed) wait.
-// Deliberate boundary (PR #3331 review, round ten): the window does NOT survive a daemon
-// restart. A write made by a dead process cannot be re-derived here, so a restart within the
-// window forfeits the remaining wait for that write — every restore shares this boundary, not
-// just startup recovery. Closing it would persist a deadline another process can read, which
-// must be wall-clock or boot-time based (reopening the clock-skew class this map's name exists
-// to exclude, plus restart detection and a marker-format change) and would thread a
-// state-dir file host through the shutdown-runtime contract, which today sees only `commands`.
-// The forfeit needs a daemon death, a restart, and a kill-bound close all inside 2.5 s of the
-// write. It is a residual the fix neither closes nor worsens: every reachable kill path gained
-// a window it never had, and this is the one state a restart can erase. Closing it needs
-// restart-durable evidence with an expiry rule and a clock that survives process death —
-// tracked as follow-up #3346; it is a boundary decision, not an oversight of this map.
+// Per-device last-restore marks, keyed by serial, timed on the PROCESS MONOTONIC CLOCK
+// (performance.now) — never the wall clock, as the name suffix encodes: sleep() runs on
+// libuv's monotonic loop clock, so a wall-clock-derived remaining time mixes two clocks, and
+// a forward NTP/VM-resume step could release the kill inside the window. Registration takes
+// the max, so a mark only moves forward and windows coalesce into one wait. Every path that
+// may `adb emu kill` calls awaitTestImeFlushWindow first, and the kill-bound close consumes
+// the outcome so the pending marker clears only under a completed (or never-owed) wait.
+// The window does NOT survive a daemon restart: a dead process's write cannot be re-derived
+// here. Restart-durable evidence needs a clock that outlives the process plus an expiry rule
+// — the forfeit and its alternatives are tracked as #3346.
 // @internal the map is exported for tests; production touches it only through the helpers here.
 export const testImeLastRestoreAtPerfMs = new Map<string, number>();
 
-// In-flight `ime set` writes, keyed by serial. The provider's flush window starts when the
-// device ACCEPTS the write, but a mark can only be registered once the shell call returns; a
-// kill-bound wait reading the map during that gap would see `idle` and fire adb mid-write —
-// the same loss as killing before the flush, with even less waiting (#3318, review round
-// eleven). The registrar opens this before issuing the write and closes it once the write's
-// mark is registered or the issue definitively failed, so the wait below always drains
-// in-flight writes before consulting marks. The sub-millisecond residue — a wait that had
-// already returned when a write opens — is decided by adb-server ordering and can only be
-// closed by a shared lock across kill and restore, which the shutdown contract cannot form
-// (see the round-eleven thread reply).
+// In-flight `ime set` writes, keyed by serial. The provider's window opens when the device
+// ACCEPTS the write, but a mark exists only after the shell call returns; a kill-bound wait
+// reading marks alone would see none and fire adb mid-write. The registrar opens an entry
+// before issuing the write and closes it only after the write's mark is registered (or the
+// issue definitively failed), so the flush wait always drains in-flight writes before
+// consulting marks. A wait that returned just before a write opens cannot be caught by
+// in-process state at all; closing that residue needs a lock spanning kill and restore,
+// which the shutdown-runtime contract (commands only, no stateDir) cannot form.
 // @internal exported for the registrar and for tests.
 export const testImePendingRestoreWrites = new Map<string, Set<Promise<void>>>();
 

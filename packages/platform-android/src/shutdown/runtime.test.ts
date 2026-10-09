@@ -109,9 +109,9 @@ test('a kill waits out a registered test-IME flush window before running adb emu
   expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
 });
 
-// cubic P1 (round eleven): the mark only exists after `ime set` returns and the readback
-// confirms it, but the provider's window opens when the device ACCEPTS the write. A kill
-// reading the map mid-write sees nothing and must not treat that as 'idle'.
+// The mark only exists after `ime set` returns and the readback confirms it, but the
+// provider's window opens when the device ACCEPTS the write. A kill reading the map
+// mid-write sees nothing registered and must not treat that as 'idle'.
 test('a kill started while a restore write is in flight waits for it to register', async () => {
   const device = androidDevice();
   // Exactly what restoreAndroidTestImeFor does between issuing `ime set` and registering.
@@ -166,9 +166,9 @@ test('a pending write that closes with no registered mark releases the kill as i
   expect(run).toHaveBeenCalledTimes(1);
 });
 
-// cubic P1: a restore landing mid-wait must EXTEND this very kill's wait, not just survive for
-// some hypothetical next caller — reporting 'covered' on the older mark would fire adb inside
-// the newer restore's window, which is #3318 again.
+// A restore landing mid-wait must EXTEND this very kill's wait, not just survive for some
+// hypothetical next caller — reporting 'covered' on the older mark would fire adb inside the
+// newer restore's window, which is #3318 again.
 test('a restore landing mid-wait extends the pending kill instead of releasing it', async () => {
   const device = androidDevice();
   // Known elapsed: the original mark is 40% of the window old, so the first wait must derive
