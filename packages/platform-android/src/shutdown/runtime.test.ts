@@ -9,7 +9,13 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
   sleep,
 }));
 
-import { registerTestImeRestore, testImeLastRestoreAtPerfMs } from '../ime-state.ts';
+import {
+  beginTestImeRestoreWrite,
+  registerTestImeRestore,
+  SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
+  testImeLastRestoreAtPerfMs,
+  testImePendingRestoreWrites,
+} from '../ime-state.ts';
 
 const run = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
 const commands: DeviceShutdownRuntimeDependencies['commands'] = {
@@ -17,11 +23,23 @@ const commands: DeviceShutdownRuntimeDependencies['commands'] = {
   run,
 };
 
+// Every expected sleep band is derived from the real window constant (proportional seeds and
+// tolerances), so changing SETTINGS_PROVIDER_FLUSH_SETTLE_MS shifts these tests' meaning
+// instead of turning them red for a confusing arithmetic reason.
+const WINDOW_TOLERANCE_MS = Math.round(SETTINGS_PROVIDER_FLUSH_SETTLE_MS / 10);
+// Lower bound for "the window had only just opened" waits.
+const nearlyFullWindowFloorMs = SETTINGS_PROVIDER_FLUSH_SETTLE_MS - WINDOW_TOLERANCE_MS;
+// The abort/coalescing tests seed a KNOWN elapsed fraction of the window (40%), so the
+// expected remainder is a known 60% — a fixed sleep anywhere else fails on the number.
+const seededElapsedMs = Math.round(SETTINGS_PROVIDER_FLUSH_SETTLE_MS * 0.4);
+const seededRemainderMs = SETTINGS_PROVIDER_FLUSH_SETTLE_MS - seededElapsedMs;
+
 beforeEach(() => {
   run.mockReset();
   run.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
   sleep.mockReset();
   testImeLastRestoreAtPerfMs.clear();
+  testImePendingRestoreWrites.clear();
 });
 
 test('an already-stopped emulator succeeds without adb', async () => {
@@ -72,9 +90,9 @@ test('a kill waits out a registered test-IME flush window before running adb emu
   // The runtime suspends inside the flush wait before touching adb.
   expect(sleep).toHaveBeenCalledTimes(1);
   // The wait must cover the registered window, not merely be positive: the timestamp was set
-  // milliseconds before the kill, so the remaining settle is the whole ~2.5 s budget minus that
-  // gap. A regression sleeping a fixed unrelated amount would fail here.
-  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(2_000);
+  // milliseconds before the kill, so the remaining settle is the whole budget minus that gap.
+  // A regression sleeping a fixed unrelated amount would fail here.
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(nearlyFullWindowFloorMs);
   expect(run).not.toHaveBeenCalled();
 
   settling.resolve();
@@ -88,13 +106,63 @@ test('a kill waits out a registered test-IME flush window before running adb emu
   expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
 });
 
+// cubic P1 (round eleven): the mark only exists after `ime set` returns and the readback
+// confirms it, but the provider's window opens when the device ACCEPTS the write. A kill
+// reading the map mid-write sees nothing and must not treat that as 'idle'.
+test('a kill started while a restore write is in flight waits for it to register', async () => {
+  const device = androidDevice();
+  // Exactly what restoreAndroidTestImeFor does between issuing `ime set` and registering.
+  const closeInFlightWrite = beginTestImeRestoreWrite(device.id);
+  const settling = deferred();
+  sleep.mockImplementationOnce(() => settling.promise);
+
+  const pendingKill = createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
+
+  // No mark exists yet, yet the in-flight write holds the kill: neither the window wait nor
+  // adb has started. A mark-only implementation takes 'idle' here and kills mid-write.
+  expect(sleep).not.toHaveBeenCalled();
+  expect(run).not.toHaveBeenCalled();
+
+  // The write lands and registers its window, closing the in-flight entry exactly as the
+  // registrar's finally block does.
+  registerTestImeRestore(device.id);
+  closeInFlightWrite();
+  await drainMicrotasks();
+
+  expect(sleep).toHaveBeenCalledTimes(1);
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(nearlyFullWindowFloorMs);
+  expect(run).not.toHaveBeenCalled();
+
+  settling.resolve();
+  await expect(pendingKill).resolves.toEqual(success());
+  expect(run).toHaveBeenCalledTimes(1);
+  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
+});
+
+test('an in-flight write that fails without registering releases the kill as idle', async () => {
+  const device = androidDevice();
+  const closeInFlightWrite = beginTestImeRestoreWrite(device.id);
+
+  const pendingKill = createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
+  expect(run).not.toHaveBeenCalled();
+
+  // The set-failed path: the finally block closes the pending entry with no mark registered.
+  // The drained wait must fall through to 'idle' — never strand the kill on a dead write.
+  closeInFlightWrite();
+
+  await expect(pendingKill).resolves.toEqual(success());
+  expect(sleep).not.toHaveBeenCalled();
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
 // cubic P1: a restore landing mid-wait must EXTEND this very kill's wait, not just survive for
 // some hypothetical next caller — reporting 'covered' on the older mark would fire adb inside
 // the newer restore's window, which is #3318 again.
 test('a restore landing mid-wait extends the pending kill instead of releasing it', async () => {
   const device = androidDevice();
-  // Known elapsed: the original mark is 1000 ms old, so the first wait derives ~1500.
-  testImeLastRestoreAtPerfMs.set(device.id, performance.now() - 1_000);
+  // Known elapsed: the original mark is 40% of the window old, so the first wait must derive
+  // the remaining 60% — proportional to the constant, not a fixed number.
+  testImeLastRestoreAtPerfMs.set(device.id, performance.now() - seededElapsedMs);
   const firstSettling = deferred();
   const secondSettling = deferred();
   sleep
@@ -103,8 +171,8 @@ test('a restore landing mid-wait extends the pending kill instead of releasing i
 
   const pendingKill = createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
 
-  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(1_400);
-  expect(sleep.mock.calls[0]?.[0]).toBeLessThanOrEqual(1_500);
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(seededRemainderMs - WINDOW_TOLERANCE_MS);
+  expect(sleep.mock.calls[0]?.[0]).toBeLessThanOrEqual(seededRemainderMs);
 
   // A second confirmed restore lands while this kill sleeps — a newer write, a newer deadline.
   registerTestImeRestore(device.id);
@@ -114,8 +182,8 @@ test('a restore landing mid-wait extends the pending kill instead of releasing i
   // The wait re-reads the mark and takes a SECOND sleep covering the newer window, still
   // refusing adb. A one-read-one-sleep implementation returns 'covered' here and kills early.
   expect(sleep).toHaveBeenCalledTimes(2);
-  expect(sleep.mock.calls[1]?.[0]).toBeGreaterThanOrEqual(2_400);
-  expect(sleep.mock.calls[1]?.[0]).toBeLessThanOrEqual(2_500);
+  expect(sleep.mock.calls[1]?.[0]).toBeGreaterThanOrEqual(nearlyFullWindowFloorMs);
+  expect(sleep.mock.calls[1]?.[0]).toBeLessThanOrEqual(SETTINGS_PROVIDER_FLUSH_SETTLE_MS);
   expect(run).not.toHaveBeenCalled();
 
   secondSettling.resolve();
@@ -141,7 +209,7 @@ test('a forward host wall-clock jump cannot shorten a registered flush window', 
   }
 
   expect(sleep).toHaveBeenCalledTimes(1);
-  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(2_000);
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(nearlyFullWindowFloorMs);
 });
 
 test('a kill skips the wait entirely when no flush window is open', async () => {
@@ -157,9 +225,10 @@ test('a kill skips the wait entirely when no flush window is open', async () => 
 
 test('a kill cancelled inside the flush window never reaches adb emu kill', async () => {
   const device = androidDevice();
-  // Known elapsed: the mark is 1000 ms old, so the derived remainder must be ~1500 — not the
-  // full budget, not a fixed constant. That makes both waits provably a function of the mark.
-  testImeLastRestoreAtPerfMs.set(device.id, performance.now() - 1_000);
+  // Known elapsed: the mark is 40% of the window old, so the derived remainder must be the
+  // known 60% — not the full budget, not a fixed constant. That makes both waits provably a
+  // function of the mark.
+  testImeLastRestoreAtPerfMs.set(device.id, performance.now() - seededElapsedMs);
   const controller = new AbortController();
   sleep.mockImplementationOnce((_ms, waitSignal) => {
     controller.abort();
@@ -178,8 +247,8 @@ test('a kill cancelled inside the flush window never reaches adb emu kill', asyn
 
   expect(run).not.toHaveBeenCalled();
   const firstRemainingMs = sleep.mock.calls[0]?.[0] as number;
-  expect(firstRemainingMs).toBeGreaterThan(1_400);
-  expect(firstRemainingMs).toBeLessThanOrEqual(1_500);
+  expect(firstRemainingMs).toBeGreaterThan(seededRemainderMs - WINDOW_TOLERANCE_MS);
+  expect(firstRemainingMs).toBeLessThanOrEqual(seededRemainderMs);
   // The window stays registered so a retry still waits out the remainder — and the retry
   // re-derives the SAME remainder from the surviving mark: the monotonic-mark property the
   // abort design rests on, pinned by number, not by shape.
@@ -190,7 +259,7 @@ test('a kill cancelled inside the flush window never reaches adb emu kill', asyn
   expect(retry).toEqual(success());
   expect(sleep).toHaveBeenCalledTimes(2);
   const secondRemainingMs = sleep.mock.calls[1]?.[0] as number;
-  expect(secondRemainingMs).toBeGreaterThan(1_400);
+  expect(secondRemainingMs).toBeGreaterThan(seededRemainderMs - WINDOW_TOLERANCE_MS);
   expect(secondRemainingMs).toBeLessThanOrEqual(firstRemainingMs);
 });
 

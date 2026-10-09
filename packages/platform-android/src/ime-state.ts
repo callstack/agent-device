@@ -18,8 +18,9 @@ export type AndroidTestImeOwnership = {
 // SettingsState.java, 2020ms cap). A device killed inside that window reboots from the stale
 // file, so a restore followed by an immediate `adb emu kill` loses the keyboard on restart.
 // The provider exposes no shell flush; holding the kill past the cap is the owning fix. The
-// margin past the cap only has to absorb the AtomicFile rename.
-const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
+// margin past the cap only has to absorb the AtomicFile rename. Exported so tests derive their
+// seeded elapsed times and sleep bounds from the window itself, never from a copied number.
+export const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
 
 // Per-device last-restore marks, keyed by serial, timed entirely on the PROCESS MONOTONIC
 // CLOCK (performance.now) — never the wall clock, as the name suffix encodes. sleep() is
@@ -48,6 +49,61 @@ const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
 // tracked as follow-up #3346; it is a boundary decision, not an oversight of this map.
 // @internal the map is exported for tests; production touches it only through the helpers here.
 export const testImeLastRestoreAtPerfMs = new Map<string, number>();
+
+// In-flight `ime set` writes, keyed by serial. The provider's flush window starts when the
+// device ACCEPTS the write, but a mark can only be registered once the shell call returns; a
+// kill-bound wait reading the map during that gap would see `idle` and fire adb mid-write —
+// the same loss as killing before the flush, with even less waiting (#3318, review round
+// eleven). The registrar opens this before issuing the write and closes it once the write's
+// mark is registered or the issue definitively failed, so the wait below always drains
+// in-flight writes before consulting marks. The sub-millisecond residue — a wait that had
+// already returned when a write opens — is decided by adb-server ordering and can only be
+// closed by a shared lock across kill and restore, which the shutdown contract cannot form
+// (see the round-eleven thread reply).
+// @internal exported for the registrar and for tests.
+export const testImePendingRestoreWrites = new Map<string, Set<Promise<void>>>();
+
+/** Opens in-flight tracking for one issued `ime set`; returns the closing function. */
+export function beginTestImeRestoreWrite(serial: string): () => void {
+  let writes = testImePendingRestoreWrites.get(serial);
+  if (!writes) {
+    writes = new Set();
+    testImePendingRestoreWrites.set(serial, writes);
+  }
+  let settle!: () => void;
+  const settled = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
+  writes.add(settled);
+  return () => {
+    writes.delete(settled);
+    if (writes.size === 0 && testImePendingRestoreWrites.get(serial) === writes) {
+      testImePendingRestoreWrites.delete(serial);
+    }
+    settle();
+  };
+}
+
+function pendingTestImeRestoreWrite(serial: string): Promise<void> | undefined {
+  const writes = testImePendingRestoreWrites.get(serial);
+  if (!writes || writes.size === 0) return undefined;
+  return Promise.allSettled([...writes]).then(() => undefined);
+}
+
+async function awaitUntilAborted(pending: Promise<void>, signal?: AbortSignal): Promise<void> {
+  if (!signal) {
+    await pending;
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    const finish = () => {
+      signal.removeEventListener('abort', finish);
+      resolve();
+    };
+    signal.addEventListener('abort', finish, { once: true });
+    void pending.then(finish, finish);
+  });
+}
 
 export type TestImeFlushWait = 'idle' | 'covered' | 'aborted';
 
@@ -78,7 +134,19 @@ export async function awaitTestImeFlushWindow(
 ): Promise<TestImeFlushWait> {
   if (signal?.aborted) return 'aborted';
   for (;;) {
+    // Drain writes this process has issued but not yet registered before deciding: an
+    // in-flight `ime set` has already (or is about to) start a flush window that no mark
+    // shows yet. If it fails without ever registering, this resolves and the mark check
+    // below proceeds; if it registers, the next round sees the mark and waits it out.
+    const pending = pendingTestImeRestoreWrite(serial);
+    if (pending) {
+      await awaitUntilAborted(pending, signal);
+      if (signal?.aborted) return 'aborted';
+    }
     const restoredAtPerfMs = testImeLastRestoreAtPerfMs.get(serial);
+    // An absent mark after the drain means no registered window: either the drained write
+    // failed without registering, or a concurrent kill-bound wait already retired a covered
+    // mark — both leave nothing younger to wait for.
     if (restoredAtPerfMs === undefined) return 'idle';
     const remainingMs = restoredAtPerfMs + SETTINGS_PROVIDER_FLUSH_SETTLE_MS - performance.now();
     if (remainingMs <= 0) {
@@ -87,6 +155,9 @@ export async function awaitTestImeFlushWindow(
     }
     await sleep(remainingMs, signal);
     if (signal?.aborted) return 'aborted';
+    // A write opened during this sleep starts a newer window no mark shows yet; loop back so
+    // the drain at the top of the next round waits it out instead of exiting on this mark.
+    if (pendingTestImeRestoreWrite(serial)) continue;
     // A real sleep that returned un-aborted has elapsed THIS round's window, so consume only
     // the mark this round waited for: unchanged or retired means covered, while a newer mark
     // (registered while this sleep ran) loops to wait out the extension's deadline too.
@@ -129,6 +200,7 @@ export function withAndroidTestImeRecoveryLock<T>(
 export function resetAndroidTestImeActivationCacheForTests(): void {
   activeTestImeDevices.clear();
   testImeLastRestoreAtPerfMs.clear();
+  testImePendingRestoreWrites.clear();
 }
 
 /**

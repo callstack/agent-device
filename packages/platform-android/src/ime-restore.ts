@@ -17,6 +17,7 @@ import {
 import {
   activeTestImeDevices,
   awaitTestImeFlushWindow,
+  beginTestImeRestoreWrite,
   registerTestImeRestore,
   withAndroidTestImeRecoveryLock,
   type TestImeFlushWait,
@@ -142,31 +143,48 @@ async function restoreAndroidTestImeFor(
     });
     return { restored: false, previousIme, reason: 'helper-not-active' };
   }
-  await runAdbShell(adb, ['ime', 'set', previousIme], { allowFailure: true, timeoutMs: 10_000 });
-  const afterIme = await readAndroidDefaultInputMethod(adb);
-  if (afterIme !== previousIme) {
-    // Restore did not take effect. Keep the persisted value so recovery can retry — clearing it
-    // now would permanently strand the user on the helper IME.
-    emitAndroidAdbDiagnostic({
-      level: 'warn',
-      phase: 'android_test_ime_restore_failed',
-      data: { device: deviceLabel, previousIme, afterIme },
+  // The provider's flush window starts when the device accepts this write, so the kill-side
+  // wait must see the write as in-flight from the moment it is ISSUED, not from the moment the
+  // readback confirms it — otherwise a kill-bound caller racing this call reads `idle` and
+  // fires adb in the gap between acceptance and registration. The close runs in `finally`,
+  // which lands AFTER `registerTestImeRestore` below (the finally of an awaited try runs when
+  // the return value is ready): a draining waiter therefore never observes "write closed, mark
+  // not yet present" on the success path, and a thrown shell/read failure still closes its
+  // pending entry instead of stranding every future kill-bound wait for this serial.
+  const pendingWriteOpens = beginTestImeRestoreWrite(device.id);
+  try {
+    await runAdbShell(adb, ['ime', 'set', previousIme], {
+      allowFailure: true,
+      timeoutMs: 10_000,
     });
-    return { restored: false, previousIme, reason: 'set-failed' };
+    const afterIme = await readAndroidDefaultInputMethod(adb);
+    if (afterIme !== previousIme) {
+      // Restore did not take effect. Keep the persisted value so recovery can retry — clearing
+      // it now would permanently strand the user on the helper IME.
+      emitAndroidAdbDiagnostic({
+        level: 'warn',
+        phase: 'android_test_ime_restore_failed',
+        data: { device: deviceLabel, previousIme, afterIme },
+      });
+      return { restored: false, previousIme, reason: 'set-failed' };
+    }
+    // Confirmed back on the previous IME. The provider's flush window opened at this write, so
+    // register it here — before the record cleanup, before any caller can race a kill against
+    // it.
+    if (device.kind === 'emulator') {
+      registerTestImeRestore(device.id);
+    }
+    // Now it is safe to drop the recovery value.
+    await clearPersistedPreviousIme(adb).catch(() => {});
+    await clearPersistedRebindDisplacement(adb).catch(() => {});
+    emitAndroidAdbDiagnostic({
+      phase: 'android_test_ime_restored',
+      data: { device: deviceLabel, previousIme },
+    });
+    return { restored: true, previousIme, reason: 'ok' };
+  } finally {
+    pendingWriteOpens();
   }
-  // Confirmed back on the previous IME. The provider's flush window opened at this write, so
-  // register it here — before the record cleanup, before any caller can race a kill against it.
-  if (device.kind === 'emulator') {
-    registerTestImeRestore(device.id);
-  }
-  // Now it is safe to drop the recovery value.
-  await clearPersistedPreviousIme(adb).catch(() => {});
-  await clearPersistedRebindDisplacement(adb).catch(() => {});
-  emitAndroidAdbDiagnostic({
-    phase: 'android_test_ime_restored',
-    data: { device: deviceLabel, previousIme },
-  });
-  return { restored: true, previousIme, reason: 'ok' };
 }
 
 // Best-effort: restore any test IME left active by a crashed daemon run. Gated on the device-scoped

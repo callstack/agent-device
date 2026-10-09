@@ -16,6 +16,7 @@ import {
 import {
   resetAndroidTestImeActivationCacheForTests,
   setAndroidTestImeActiveForTests,
+  SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
   testImeLastRestoreAtPerfMs,
 } from './ime-state.ts';
 import { fakeImeDeviceAdb, type FakeImeDeviceState } from './ime-device.fixtures.ts';
@@ -149,7 +150,9 @@ test('a restore before an emulator shutdown waits out the settings-provider flus
 
   expect(result).toMatchObject({ restored: true, reason: 'ok' });
   expect(sleep).toHaveBeenCalledTimes(1);
-  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(2_000);
+  // The window had barely opened at the wait, so the derived remainder is nearly the whole
+  // budget; derive both bounds from the constant so a changed window shifts the bound too.
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(SETTINGS_PROVIDER_FLUSH_SETTLE_MS - 500);
   // A cancelled close never reaches the kill, so the settle stops early with it (see the
   // abort-mid-settle tests below for what an early stop must preserve).
   expect(sleep.mock.calls[0]?.[1]).toBe(signal);
@@ -244,7 +247,10 @@ describe('a close cancelled mid-settle', () => {
     // A window from an earlier aborted close still has most of its budget left when this close's
     // own restore writes again. SettingsState rewrites the whole file, so one wait to the newer
     // write's window persists both writes — the timestamp takes the max, never a second entry.
-    testImeLastRestoreAtPerfMs.set(DEVICE.id, performance.now() - 100);
+    // The seeded elapsed (one twentieth of the window) and the expected sleep band are both
+    // derived from the window constant, so a changed window keeps this test's meaning.
+    const elapsedBeforeCloseMs = Math.round(SETTINGS_PROVIDER_FLUSH_SETTLE_MS / 20);
+    testImeLastRestoreAtPerfMs.set(DEVICE.id, performance.now() - elapsedBeforeCloseMs);
 
     const result = await withAndroidAdbProvider(
       { exec: fakeImeDeviceAdb(stuckDeviceState()) },
@@ -255,15 +261,21 @@ describe('a close cancelled mid-settle', () => {
 
     expect(result).toMatchObject({ restored: true, reason: 'ok' });
     expect(sleep).toHaveBeenCalledTimes(1);
-    expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(2_000);
+    // This close's OWN restore re-registers the mark at nearly the full window (the earlier
+    // mark was older), so the sleep is derived from the fresh write, not from the seeded one.
+    expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(SETTINGS_PROVIDER_FLUSH_SETTLE_MS - 500);
     expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
   });
 
   test('a second close after the window already elapsed skips the wait', async () => {
     const host = bindAndroidAdbHostStub();
     await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
-    // A restore whose whole flush window has already passed.
-    testImeLastRestoreAtPerfMs.set(DEVICE.id, performance.now() - 2_501);
+    // A restore whose whole flush window has already passed (the +1 keeps it elapsed for any
+    // constant, instead of the number that happened to be window+1 at writing time).
+    testImeLastRestoreAtPerfMs.set(
+      DEVICE.id,
+      performance.now() - SETTINGS_PROVIDER_FLUSH_SETTLE_MS - 1,
+    );
 
     const result = await withAndroidAdbProvider(
       { exec: fakeImeDeviceAdb(stuckDeviceState()) },
