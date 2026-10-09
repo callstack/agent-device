@@ -158,7 +158,6 @@ export class SessionStore {
     return entry ? this.captureRef(address, entry) : undefined;
   }
 
-  /** The session currently bound to `deviceId`, with its address, or `undefined` if none is. */
   /** Every live session with its address, for surfaces that must report what `--session` accepts. */
   listRefs(): SessionRef[] {
     return Array.from(this.sessions, ([address, entry]) => this.captureRef(address, entry));
