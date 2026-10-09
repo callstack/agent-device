@@ -102,6 +102,9 @@ export async function ensureRunnerSession(
 ): Promise<RunnerSession> {
   // Any runner use means the device is active again: a pending idle stop
   // from a retained-after-close runner no longer applies.
+  const retainedSession = runnerWarmRetainedDevices.has(device.id)
+    ? runnerSessions.get(device.id)
+    : undefined;
   cancelIosRunnerIdleStop(device.id);
   // This start's admission: the loop that owns the start across retries supplies one, and every
   // other start takes a token for itself. Both are taken synchronously, before the first await and
@@ -147,14 +150,23 @@ export async function ensureRunnerSession(
       releaseOwnerInterest();
     }
   });
-  const { raceRunnerStartAgainstCaller } = await import('./runner-start-budget.ts');
-  return await raceRunnerStartAgainstCaller(
-    // A start that minted its own token releases it; a loop-supplied token belongs to the loop,
-    // which finishes it when the loop itself is done retrying (#3220).
-    ownedAdmission ? start : start.finally(() => finishRunnerStartAdmission(startAdmission)),
-    startAdmission,
-    options.signal,
-  );
+  try {
+    const { raceRunnerStartAgainstCaller } = await import('./runner-start-budget.ts');
+    return await raceRunnerStartAgainstCaller(
+      // A start that minted its own token releases it; a loop-supplied token belongs to the loop,
+      // which finishes it when the loop itself is done retrying (#3220).
+      ownedAdmission ? start : start.finally(() => finishRunnerStartAdmission(startAdmission)),
+      startAdmission,
+      options.signal,
+    );
+  } catch (error) {
+    // A start that failed without using the retained runner leaves it exactly as idle as it was,
+    // so it goes back to the retention that carries both its idle stop and its destination watch.
+    if (retainedSession && runnerSessions.get(device.id) === retainedSession) {
+      await retainRunnerForReuse(device.id, retainedSession);
+    }
+    throw error;
+  }
 }
 
 /** How long the device-readiness probe may take, bounded by the startup budget it runs inside. */
@@ -696,6 +708,22 @@ function isRunnerIdleRetained(deviceId: string, session: RunnerSession | undefin
 }
 
 /**
+ * The one way a runner enters post-`close` retention: the idle-stop timer, the retention fact the
+ * destination watch reads, and the watch itself are set together, so no retained runner is left
+ * with one but not the others. Retention marks the device after the scheduler because the
+ * scheduler's own cancel step ends any window the previous retention left open.
+ */
+async function retainRunnerForReuse(
+  deviceId: string,
+  session: RunnerSession | undefined,
+): Promise<void> {
+  scheduleIosRunnerIdleStop(deviceId);
+  if (!session || !canWorkWithRunnerSession(session)) return;
+  runnerWarmRetainedDevices.add(deviceId);
+  await armRunnerDestinationWatch(session);
+}
+
+/**
  * Arms the #3321 push watcher over a runner this close retained. Reached through a function-scoped
  * import: the watcher module is needed only at the start of a retention window and must not join
  * the façade closures the eager-closure budget holds at merge-base size.
@@ -805,12 +833,8 @@ export async function releaseIosRunnerOnClose(
   options: { retain: boolean },
 ): Promise<void> {
   const session = runnerSessions.get(deviceId);
-  if (options.retain && session && !isRunnerMainThreadOccupied(session)) {
-    // The flag is set after the scheduler because the scheduler's own cancel step ends any
-    // retention the previous window left open, and marking first would erase this one.
-    scheduleIosRunnerIdleStop(deviceId);
-    runnerWarmRetainedDevices.add(deviceId);
-    await armRunnerDestinationWatch(session);
+  if (options.retain && !isRunnerMainThreadOccupied(session)) {
+    await retainRunnerForReuse(deviceId, session);
     return;
   }
   if (options.retain) {

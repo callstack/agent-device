@@ -90,6 +90,13 @@ type DestinationWatch = {
   socket: net.Socket;
   /** True once this connection was established: only then can its close mean runner death. */
   connected: boolean;
+  /**
+   * True when this attach follows a refusal or a same-boot re-arm, so what answers may be a new
+   * runner generation started after the device changed under the session.
+   */
+  replacement: boolean;
+  /** The in-flight loss decision, which a notice reader waits for while the window is still open. */
+  deciding: Promise<void> | undefined;
   detached: boolean;
 };
 
@@ -149,6 +156,8 @@ export type RunnerDestinationWatchParams = {
   attachRetryBudgetMs?: number;
   /** When the retention window began; re-attaches within one window carry it forward unchanged. */
   armedAtMs?: number;
+  /** Set by re-attaches within one window: the listener that answers may be a new generation. */
+  replacement?: boolean;
 };
 
 /**
@@ -177,11 +186,14 @@ export function attachRunnerDestinationWatch(params: RunnerDestinationWatchParam
     onStop: params.onStop,
     socket: net.connect(params.port, '127.0.0.1'),
     connected: false,
+    replacement: params.replacement ?? false,
+    deciding: undefined,
     detached: false,
   };
   watch.socket.unref();
   watch.socket.on('connect', () => {
     watch.connected = true;
+    if (watch.replacement) void decide(watch, () => confirmReplacementGeneration(watch));
   });
   watch.socket.on('close', () => {
     void handleSocketClosed(watch, params.attachRetryBudgetMs);
@@ -202,7 +214,8 @@ export function closeRunnerDestinationWatch(deviceId: string): void {
 
 function detachWatch(watch: DestinationWatch): void {
   watch.detached = true;
-  destinationWatches.delete(watch.device.id);
+  // A handler resuming after an await may belong to a watch a newer window has replaced.
+  if (destinationWatches.get(watch.device.id) === watch) destinationWatches.delete(watch.device.id);
   watch.socket.removeAllListeners('connect');
   watch.socket.removeAllListeners('close');
   watch.socket.removeAllListeners('error');
@@ -222,27 +235,56 @@ async function handleSocketClosed(
     await handleRefusedAttach(watch, attachRetryBudgetMs);
     return;
   }
-  await delay(resolveConfirmDelayMs());
-  if (watch.detached || !watch.isArmed()) {
-    detachWatch(watch);
-    return;
-  }
+  await decide(watch, async () => {
+    await delay(resolveConfirmDelayMs());
+    if (watch.detached || !watch.isArmed()) {
+      detachWatch(watch);
+      return;
+    }
+    const verdict = await classifyConnectedLoss(watch);
+    if (watch.detached || !watch.isArmed()) {
+      detachWatch(watch);
+      return;
+    }
+    if (verdict.action === 'rearm') {
+      rearmOnSameBoot(watch);
+      return;
+    }
+    stopRetainedRunner(watch, verdict.noticeReason);
+  });
+}
+
+/**
+ * A listener answered after the device may have been replaced: the refused attaches that preceded
+ * it span exactly the gap in which Xcode reboots a shut-down destination and restarts the runner
+ * app onto the same port, and a connection that reaches that new generation never closes on its
+ * own. One classification at the connect decides whether the window's boot is still the device's.
+ * A same-boot answer keeps this connection as the watch.
+ */
+async function confirmReplacementGeneration(watch: DestinationWatch): Promise<void> {
   const verdict = await classifyConnectedLoss(watch);
   if (watch.detached || !watch.isArmed()) {
     detachWatch(watch);
     return;
   }
-  if (verdict.action === 'rearm') {
-    rearmOnSameBoot(watch);
-    return;
+  if (verdict.action === 'stop') stopRetainedRunner(watch, verdict.noticeReason);
+}
+
+/** Runs one loss decision and publishes it, so {@link takeRunnerWarmLossNotice} can wait for it. */
+async function decide(watch: DestinationWatch, run: () => Promise<void>): Promise<void> {
+  const deciding = run();
+  watch.deciding = deciding;
+  try {
+    await deciding;
+  } finally {
+    if (watch.deciding === deciding) watch.deciding = undefined;
   }
-  stopRetainedRunner(watch, verdict.noticeReason);
 }
 
 /**
  * The attach never reached a listener. A rebooting destination is usually unreachable for a
- * couple of seconds while Xcode restarts the app onto the same port, so retry with a growing
- * delay inside a bounded budget. Only when the budget runs out is the retained runner called
+ * couple of seconds while Xcode restarts the app onto the same port, so retry at a flat one-second
+ * cadence inside a bounded budget; a retry that connects classifies the replacement generation. Only when the budget runs out is the retained runner called
  * what it has proven to be: unable to answer anything. By then the destination process's own
  * liveness decides whether this was a crash (Xcode gave up with it, the device lost its boot
  * owner) or a listener that died while Xcode kept the device — the latter is exactly the silent
@@ -270,6 +312,7 @@ async function handleRefusedAttach(
       onStop: watch.onStop,
       attachRetryBudgetMs: budgetMs - nextDelayMs,
       armedAtMs: watch.armedAtMs,
+      replacement: true,
     });
     return;
   }
@@ -285,20 +328,20 @@ async function handleRefusedAttach(
 /**
  * Reads whether the device behind the runner stopped being the device this session was armed on.
  * A dead destination process answers for itself before the probe: Xcode cannot reboot from a dead
- * process, so stopping is plain lease cleanup. A device that is no longer `Booted` was shut down
- * under the session (measured: its old `launchd_sim` stays listed for ~6s after `simctl shutdown`,
- * so the boot witness alone would read the old boot and call it a crash). A boot observed newer than
- * the armed window is
- * Xcode's reboot; a boot unobservable twice while the destination process is still alive is a
- * device that is down with a reboot promise that may already be in flight. Both are destination
- * loss, and stopping still pre-empts the reboot in the second case.
+ * process, so stopping is plain lease cleanup. Otherwise the device must be listed `Booted` on the
+ * boot the window began with, and anything else is destination loss: a shut-down device keeps its
+ * old `launchd_sim` listed for ~6s, so the boot witness alone would read the old boot and call it
+ * a crash, and an unreadable listing is no evidence of a healthy device. A boot newer than the
+ * window is Xcode's reboot; a boot unobservable twice is a device that is down with a reboot
+ * promise that may already be in flight. Stopping pre-empts that promise in every loss case.
  */
 async function classifyConnectedLoss(watch: DestinationWatch): Promise<LossVerdict> {
   if (watch.runnerPid !== undefined && !isProcessAlive(watch.runnerPid)) {
     return { action: 'stop' };
   }
-  const state = await observeSimulatorState(watch.device);
-  if (state !== null && state !== SIMULATOR_BOOTED_STATE) return DESTINATION_LOST;
+  if ((await observeSimulatorState(watch.device)) !== SIMULATOR_BOOTED_STATE) {
+    return DESTINATION_LOST;
+  }
   let boot = await readBootAgainstWindow(watch);
   if (boot === 'unobserved') {
     await delay(resolveRecheckDelayMs());
@@ -339,6 +382,7 @@ function rearmOnSameBoot(watch: DestinationWatch): void {
     isArmed,
     onStop,
     armedAtMs,
+    replacement: true,
   });
 }
 
@@ -384,9 +428,20 @@ function stopRetainedRunner(
 /**
  * Takes the destination-loss notice recorded for this device, once. A notice exists only when a
  * retained runner was stopped because the destination was replaced under it — the state the next
- * `open` must explain rather than leave the caller to infer from a cold start.
+ * `open` must explain rather than leave the caller to infer from a cold start. A decision still in
+ * flight for a window that is still open is waited for, so a notice cannot land after the open it
+ * belongs to has already read; once any use of the runner has ended the window nothing is waited
+ * for, because nothing can be recorded any more.
  */
-export function takeRunnerWarmLossNotice(deviceId: string): RunnerWarmLossNotice | undefined {
+export async function takeRunnerWarmLossNotice(
+  deviceId: string,
+): Promise<RunnerWarmLossNotice | undefined> {
+  for (let watch = destinationWatches.get(deviceId); watch?.deciding;) {
+    if (!watch.isArmed()) break;
+    await watch.deciding;
+    const next = destinationWatches.get(deviceId);
+    watch = next === watch ? undefined : next;
+  }
   const notice = pendingWarmLossNotices.get(deviceId);
   if (notice) pendingWarmLossNotices.delete(deviceId);
   return notice;

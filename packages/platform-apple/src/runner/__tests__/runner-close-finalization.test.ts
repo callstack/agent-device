@@ -262,12 +262,31 @@ test('a retained close with no runner in memory starts none and claims no lease 
   const events: string[] = [];
   const lifecycle = closeFinalizationLifecycle(device, events);
 
+  const phases: string[] = [];
+  appleRunnerTestHost.update({ emitDiagnostic: (event) => phases.push(event.phase) });
+
   await lifecycle.finalizeApplicationClose(closeInput(true));
 
   assert.deepEqual(events, ['release', 'released', 'alerts']);
+  assert.deepEqual(phases, []);
   assert.equal(readRunnerSessionLiveness(device.id), null);
   assert.equal(mockRunCmdBackground.mock.calls.length, 0);
   assert.equal(runnerLeaseExists(device.id), false);
+});
+
+test('a start that fails without using a retained runner leaves it retained', async () => {
+  const device = deviceNamed('close-finalize-failed-start-retention');
+  const session = await ensureRunnerSession(device, {});
+  await closeFinalizationLifecycle(device, []).finalizeApplicationClose(closeInput(true));
+
+  const diagnostics = await captureDiagnostics(async () => {
+    await assert.rejects(
+      ensureRunnerSession(device, { expectedRunnerSessionId: 'another-runner-session' }),
+    );
+  });
+
+  assert.match(diagnostics, /"phase":"ios_runner_idle_stop_scheduled"/);
+  assert.equal(readRunnerSessionLiveness(device.id)?.sessionId, session.sessionId);
 });
 
 test('a daemon-shutdown close never issues the ordinary close release (#2615)', async () => {

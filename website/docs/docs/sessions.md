@@ -116,7 +116,8 @@ agent-device close --shutdown
 
 Without `--shutdown`, `close` keeps the iOS runner warm for the next `open`. If you shut that simulator
 down yourself (`xcrun simctl shutdown`) while the runner is waiting, agent-device stops the runner so it
-doesn't boot the simulator again, and the next `open` returns a warning with `reason=runner_destination_lost`.
+doesn't boot the simulator again, and the next `open` returns a warning that ends in
+`reason=runner_destination_lost`, or `reason=runner_unreachable` when the runner stopped answering.
 
 ## Wait for a slow or busy device
 
