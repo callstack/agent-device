@@ -16,6 +16,7 @@ import {
   testImePendingRestoreWrites,
   testImeRestoreMarks,
 } from '../ime-state.ts';
+import { seedRestoreMark } from '../ime-device.fixtures.ts';
 
 const run = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
 const commands: DeviceShutdownRuntimeDependencies['commands'] = {
@@ -33,12 +34,6 @@ const nearlyFullWindowFloorMs = SETTINGS_PROVIDER_FLUSH_SETTLE_MS - WINDOW_TOLER
 // expected remainder is a known 60% — a fixed sleep anywhere else fails on the number.
 const seededElapsedMs = Math.round(SETTINGS_PROVIDER_FLUSH_SETTLE_MS * 0.4);
 const seededRemainderMs = SETTINGS_PROVIDER_FLUSH_SETTLE_MS - seededElapsedMs;
-
-// Seeded with confirmed provenance: these tests pin the WAIT's derivation and interleaving,
-// which reads only atPerfMs; provenance behavior is pinned in the restore-side tests.
-function seedRestoreMark(serial: string, ageMs: number, confirmed = true): void {
-  testImeRestoreMarks.set(serial, { atPerfMs: performance.now() - ageMs, confirmed });
-}
 
 beforeEach(() => {
   run.mockReset();

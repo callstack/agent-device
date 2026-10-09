@@ -19,7 +19,11 @@ import {
   SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
   testImeRestoreMarks,
 } from './ime-state.ts';
-import { fakeImeDeviceAdb, type FakeImeDeviceState } from './ime-device.fixtures.ts';
+import {
+  fakeImeDeviceAdb,
+  seedRestoreMark,
+  type FakeImeDeviceState,
+} from './ime-device.fixtures.ts';
 
 const DEVICE: DeviceInfo = {
   platform: 'android',
@@ -38,12 +42,6 @@ function stuckDeviceState(): FakeImeDeviceState {
       ['agent_device_ime_helper_previous_ime', 'com.samsung/.Keyboard'],
     ]),
   };
-}
-
-// Seeds a mark with explicit provenance: tests here pin when a covered window may retire the
-// durable marker, and provenance is exactly the fact the clear rule consumes.
-function seedRestoreMark(serial: string, ageMs: number, confirmed = true): void {
-  testImeRestoreMarks.set(serial, { atPerfMs: performance.now() - ageMs, confirmed });
 }
 
 async function restoreWith(state: FakeImeDeviceState, options: { shutdownTarget?: boolean } = {}) {
@@ -397,10 +395,11 @@ test('a not-activated shutdown covering an unconfirmed window kills but keeps th
 
   // Call two: it waited (the hold is owed regardless of provenance) and retired the mark, but
   // covering an ISSUED-only window does not earn the clear — the marker survives so startup
-  // recovery retries the restore a confirmed close would have completed.
+  // recovery retries the restore a confirmed close would have completed. Call two starts
+  // sub-ms after call one registered, so the derived remainder is nearly the whole window.
   expect(result).toEqual({ restored: false, reason: 'not-activated-here' });
   expect(sleep).toHaveBeenCalledTimes(1);
-  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(0);
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(SETTINGS_PROVIDER_FLUSH_SETTLE_MS * 0.8);
   expect([...testImeRestoreMarks.keys()]).toEqual([]);
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
 });
