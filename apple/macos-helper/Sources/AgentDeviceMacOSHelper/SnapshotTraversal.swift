@@ -19,20 +19,6 @@ struct RectResponse: Encodable {
   let y: Double
   let width: Double
   let height: Double
-
-  init(x: Double, y: Double, width: Double, height: Double) {
-    self.x = x
-    self.y = y
-    self.width = width
-    self.height = height
-  }
-
-  /// JSONEncoder throws on inf/NaN, which fails the whole snapshot. SwiftUI reports lazy
-  /// containers scrolled out of view as an AXOpaqueProviderGroup at (inf, inf, 0, 0).
-  init?(finiteX x: Double, y: Double, width: Double, height: Double) {
-    guard x.isFinite, y.isFinite, width.isFinite, height.isFinite else { return nil }
-    self.init(x: x, y: y, width: width, height: height)
-  }
 }
 
 struct SnapshotNodeResponse: Encodable {
@@ -809,12 +795,18 @@ func rectAttribute(_ element: AXUIElement) -> RectResponse? {
     return nil
   }
 
-  return RectResponse(
-    finiteX: Double(position.x),
-    y: Double(position.y),
-    width: Double(size.width),
-    height: Double(size.height)
-  )
+  return finiteRectResponse(position: position, size: size)
+}
+
+/// JSONEncoder throws on inf/NaN, which fails the whole snapshot. SwiftUI reports lazy
+/// containers scrolled out of view as an AXOpaqueProviderGroup at (inf, inf, 0, 0).
+func finiteRectResponse(position: CGPoint, size: CGSize) -> RectResponse? {
+  let x = Double(position.x)
+  let y = Double(position.y)
+  let width = Double(size.width)
+  let height = Double(size.height)
+  guard x.isFinite, y.isFinite, width.isFinite, height.isFinite else { return nil }
+  return RectResponse(x: x, y: y, width: width, height: height)
 }
 
 private func accessibilityAxValue(_ value: CFTypeRef?) -> AXValue? {

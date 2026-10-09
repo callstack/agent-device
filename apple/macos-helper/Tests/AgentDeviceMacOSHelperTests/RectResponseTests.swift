@@ -4,19 +4,18 @@ import XCTest
 
 final class RectResponseTests: XCTestCase {
   func testFiniteRectKeepsItsValues() throws {
-    let rect = try XCTUnwrap(RectResponse(finiteX: 1, y: 2, width: 3, height: 4))
+    let rect = try XCTUnwrap(
+      finiteRectResponse(position: CGPoint(x: 1, y: 2), size: CGSize(width: 3, height: 4)))
     XCTAssertEqual([rect.x, rect.y, rect.width, rect.height], [1, 2, 3, 4])
   }
 
   func testNonFiniteComponentYieldsNoRect() {
-    XCTAssertNil(RectResponse(finiteX: .infinity, y: .infinity, width: 0, height: 0))
-    XCTAssertNil(RectResponse(finiteX: 0, y: -.infinity, width: 0, height: 0))
-    XCTAssertNil(RectResponse(finiteX: 0, y: 0, width: .nan, height: 0))
-    XCTAssertNil(RectResponse(finiteX: 0, y: 0, width: 0, height: .infinity))
-  }
-
-  func testUnguardedInfiniteRectFailsEncoding() {
-    XCTAssertThrowsError(
-      try JSONEncoder().encode(RectResponse(x: .infinity, y: 0, width: 0, height: 0)))
+    let nonFinite: [CGFloat] = [.infinity, -.infinity, .nan]
+    for value in nonFinite {
+      XCTAssertNil(finiteRectResponse(position: CGPoint(x: value, y: 0), size: .zero))
+      XCTAssertNil(finiteRectResponse(position: CGPoint(x: 0, y: value), size: .zero))
+      XCTAssertNil(finiteRectResponse(position: .zero, size: CGSize(width: value, height: 0)))
+      XCTAssertNil(finiteRectResponse(position: .zero, size: CGSize(width: 0, height: value)))
+    }
   }
 }
