@@ -57,9 +57,9 @@ const FIND_ACTION_VALUES = [
 
 const interactionCommandDescriptions = {
   click:
-    'Activate a UI target by snapshot ref, selector, or coordinates. Prefer a ref or selector after a snapshot; use coordinates only when semantic targeting is unavailable. This can change app state. Success means the tap was dispatched, not that it landed: use settle or verify to confirm the result without a follow-up snapshot, or wait for the expected screen.',
+    'Activate a UI target by snapshot ref, selector, or coordinates. Prefer a ref or selector after a snapshot; use coordinates only when semantic targeting is unavailable. This can change app state. Success means the click was dispatched, not that it landed: use settle or verify to confirm the result without a follow-up snapshot, or wait for the expected screen.',
   press:
-    'Short-press a UI target by snapshot ref, selector, or coordinates. Use longpress instead when the target requires a context-menu or hold gesture. Success means the tap was dispatched, not that it landed: use settle or verify to confirm the result, or wait for the expected screen.',
+    'Short-press a UI target by snapshot ref, selector, or coordinates. Use longpress instead when the target requires a context-menu or hold gesture. Success means the press was dispatched, not that it landed: use settle or verify to confirm the result, or wait for the expected screen.',
   fill: 'Replace text in a UI input selected by snapshot ref, selector, or coordinates. Pass an empty text to clear the field. Inspect unconfirmed evidence and assert the expected value or resulting screen before continuing. Prefer refs or selectors after snapshot; use recordAs to keep sensitive text out of a recorded replay while sending it to the live app.',
   longpress:
     'Hold a UI target by snapshot ref, selector, or coordinates to open a context menu or perform another hold gesture. Set durationMs when the default hold duration is unsuitable.',
