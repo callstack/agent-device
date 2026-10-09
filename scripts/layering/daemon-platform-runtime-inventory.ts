@@ -192,6 +192,16 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
       'Apple and Android packages behind the neutral observation contract (#2538).',
   },
   {
+    file: 'src/daemon/session-lifecycle/internal/session-open-execution.ts',
+    target: 'src/platform-runtime-warm-runner-notice.ts',
+    symbols: ['RunnerWarmLossNotice', 'takeWarmRunnerLossNotice'],
+    classification: 'daemon-policy-essential',
+    rationale:
+      'daemon-owned open reports that a runner left warm by close was stopped because its ' +
+      'simulator was shut down externally (#3321); the watcher and the typed reason stay ' +
+      'Apple-owned behind the neutral notice read.',
+  },
+  {
     file: 'src/daemon/handlers/session-selector-dispatch.ts',
     target: 'src/platform-runtime-open-target.ts',
     symbols: ['resolveSessionAppBundleIdForTarget'],

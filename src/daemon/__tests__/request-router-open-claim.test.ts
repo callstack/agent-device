@@ -11,6 +11,9 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
 });
+const mockTakeRunnerWarmLossNotice = vi.hoisted(() =>
+  vi.fn(async (): Promise<RunnerWarmLossNotice | undefined> => undefined),
+);
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
@@ -20,6 +23,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
     notifyIosRunnerAppRelaunched: vi.fn(async () => {}),
     prewarmAppleRunnerCache: vi.fn(async () => {}),
     prewarmIosRunner: vi.fn(async () => {}),
+    prewarmIosRunnerSession: vi.fn(async () => {}),
     prepareIosRunner: vi.fn(async () => ({
       runner: { currentUptimeMs: 42 },
       connectMs: 0,
@@ -28,6 +32,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
     resolveRunnerAppBundleId: vi.fn(() => 'com.callstack.agentdevice.runner'),
     stopIosRunnerSession: vi.fn(async () => {}),
     stopAllIosRunnerSessions: vi.fn(async () => {}),
+    takeRunnerWarmLossNotice: mockTakeRunnerWarmLossNotice,
   };
 });
 vi.mock('@agent-device/platform-apple/app-lifecycle', async (importOriginal) => {
@@ -67,6 +72,7 @@ import {
 import { ensureDeviceReady } from '../device/device-ready.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceBootObservation } from '@agent-device/contracts/device-boot';
+import type { RunnerWarmLossNotice } from '@agent-device/platform-apple/runner/operations';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { inspectDeviceClaims } from '../device/device-claim-inspection.ts';
 import { makeIosDevice, openRequest, storedClaimUpdatedAt } from './request-router-open-harness.ts';
@@ -98,6 +104,8 @@ beforeEach(() => {
   mockEnsureDeviceReady.mockResolvedValue(undefined);
   mockAwaitFixtureReadiness.mockReset();
   mockAwaitFixtureReadiness.mockResolvedValue(undefined);
+  mockTakeRunnerWarmLossNotice.mockReset();
+  mockTakeRunnerWarmLossNotice.mockResolvedValue(undefined);
   mockObserveSimulatorBoot.mockReset();
   mockObserveSimulatorBoot.mockImplementation(async () => ({
     observed: false,
@@ -164,6 +172,44 @@ test('open takes a live foreign claim whose device rebooted after the claim was 
     else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
     fs.rmSync(claimsDir, { recursive: true, force: true });
     fs.rmSync(foreignStateDir, { recursive: true, force: true });
+  }
+});
+
+test('open warns with the typed reason when a warm runner was stopped for a lost destination', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-open-warm-loss-');
+  const device = makeIosDevice('SIM-WARM-LOSS');
+  mockResolveTargetDevice.mockResolvedValue(device);
+  mockTakeRunnerWarmLossNotice.mockResolvedValueOnce({
+    reason: 'runner_destination_lost',
+    deviceId: device.id,
+    sessionId: 'warm-loss',
+    atMs: Date.now(),
+  });
+  const claimsDir = mkdtempForTestSync('agent-device-router-open-warm-loss-claims-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+
+  try {
+    const opened = await createOpenHandler(sessionStore)(
+      openRequest('warm-loss', { platform: 'ios' }, 'req-open-warm-loss', {}, ['FixtureApp']),
+    );
+
+    expect(opened.ok).toBe(true);
+    if (!opened.ok) return;
+    expect(mockTakeRunnerWarmLossNotice).toHaveBeenCalledWith(device.id);
+    expect(opened.data?.warnings).toEqual([
+      expect.stringContaining('reason=runner_destination_lost'),
+    ]);
+
+    const reopened = await createOpenHandler(sessionStore)(
+      openRequest('warm-loss', { platform: 'ios' }, 'req-open-warm-loss-again', {}, ['FixtureApp']),
+    );
+    expect(reopened.ok).toBe(true);
+    if (reopened.ok) expect(reopened.data?.warnings).toBeUndefined();
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsDir, { recursive: true, force: true });
   }
 });
 
