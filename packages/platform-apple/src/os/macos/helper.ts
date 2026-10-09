@@ -21,7 +21,6 @@ import {
   readHostEnvironmentVariable,
   writeHostStderr,
 } from '@agent-device/host-kit/process';
-import { acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
 import {
   resolveExecutableOverridePath,
   runCmdBackground,
@@ -599,6 +598,7 @@ async function withMacOsScreenCaptureLock<T>(task: () => Promise<T>): Promise<T>
     readHostEnvironmentVariable('AGENT_DEVICE_CLAIMS_DIR')?.trim() ||
     path.join(hostHomeDirectory(), '.agent-device', 'device-claims');
   await ensureHostDirectory(lockRoot);
+  const { acquireProcessLock, withProcessLock } = await import('@agent-device/host-kit/file');
   return await withProcessLock({
     acquire: async () => {
       const owner = readCurrentOwnerIdentity();
