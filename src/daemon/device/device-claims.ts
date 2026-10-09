@@ -107,11 +107,29 @@ export async function acquireDeviceClaim(params: {
       if (held) return { status: 'conflict', conflict: held };
     }
     const appKey = appScopedDeviceKey(deviceKey, app.bundleId);
-    return await withDeviceClaimLock(
+    const acquired = await withDeviceClaimLock(
       appKey,
       async () => await claimHeldDevice({ ...params, deviceKey: appKey, identity, app }),
     );
+    if (acquired.status !== 'acquired') return acquired;
+    removeSupersededDeviceClaim(deviceKey);
+    const tookOver =
+      acquired.tookOver ?? (deviceClaim.status === 'available' ? deviceClaim.tookOver : undefined);
+    return tookOver ? { ...acquired, tookOver } : acquired;
   });
+}
+
+/**
+ * An app acquisition that found the device key available leaves no record there: what remains can
+ * only be this daemon's own abandoned whole-device claim, which would otherwise keep fencing every
+ * other daemon's apps. The caller holds the device key's lock.
+ */
+function removeSupersededDeviceClaim(deviceKey: string): void {
+  try {
+    fs.unlinkSync(resolveDeviceClaimPath(deviceKey));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
 }
 
 /**

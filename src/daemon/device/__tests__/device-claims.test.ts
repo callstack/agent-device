@@ -967,3 +967,39 @@ test('an app claim of a dead owner is released by release --stale like any claim
   );
   assert.equal(fs.existsSync(file), false);
 });
+
+test("an app claim taken over this daemon's abandoned whole-Mac claim leaves other daemons' apps free", async () => {
+  const root = useClaimsRoot();
+  const whole = await acquireDeviceClaim({
+    device: mac,
+    session: 'desktop',
+    workspace: '/desktop',
+    stateDir: root,
+  });
+  assert.equal(whole.status, 'acquired');
+  if (whole.status !== 'acquired') return;
+  assert.equal(await abandonDeviceClaim(whole.ownership), 'abandoned');
+
+  const app = await acquireDeviceClaim({
+    device: mac,
+    session: 'app',
+    workspace: '/app',
+    stateDir: root,
+    app: { bundleId: 'com.example.one' },
+  });
+  assert.equal(app.status, 'acquired');
+  if (app.status !== 'acquired') return;
+  assert.deepEqual(app.ownership.app, { bundleId: 'com.example.one' });
+  assert.equal(fs.existsSync(resolveDeviceClaimPath(canonicalLocalDeviceKey(mac))), false);
+
+  const foreignStateDir = path.join(root, 'foreign');
+  fs.mkdirSync(foreignStateDir);
+  const foreign = await acquireDeviceClaim({
+    device: mac,
+    session: 'foreign',
+    workspace: '/foreign',
+    stateDir: foreignStateDir,
+    app: { bundleId: 'com.example.two' },
+  });
+  assert.equal(foreign.status, 'acquired');
+});
