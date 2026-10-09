@@ -189,8 +189,9 @@ app for every request but `open` and the `batch` envelope, so a
 request naming no session cannot fall back to the host Mac. `open` requires the native app backend (ADR 0031), because XCTest
 posts screen events that can land outside the app's window. A pid-pinned lease is checked against the
 running process before each admitted request. A session opened under the lease holds its app, not
-the Mac: it takes no host device claim, and other app-leased sessions on the same Mac do not conflict
-with it, so one daemon serves several leased apps beside the host's own sessions.
+the Mac: it takes no host device claim, and sessions on other apps of the same Mac, leased or
+holding an app claim (ADR 0034), do not conflict with it, so one daemon serves several leased apps
+beside the host's own sessions. A session on the same app does.
 
 These rules bind a request that names the lease or runs in its session. A daemon policy
 `leases.require` (ADR 0029) refuses requests that name no lease. The proxy token is one credential

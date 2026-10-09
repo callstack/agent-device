@@ -21,14 +21,20 @@ because 0032 and 0033 exist on main.
    is a conflict. A whole-device acquisition on a macOS device scans the per-app claims of that
    device: dead or superseded owners are reconciled and removed, other foreign claims conflict,
    and this daemon's own are left to its session store.
-5. In one daemon, a per-app open conflicts only with sessions on the whole device or on the same
-   app. A per-app session may reopen only its app on the `app` surface; a link opens as
-   `open <app> <url>`, because a bare URL's handler is not known before launch.
+5. In one daemon, a session holds either one app (an app claim, or a `macos-app` lease, which
+   takes no claim) or the whole device. Two sessions on the device conflict unless each holds one
+   app and the apps differ. The new-session conflict check and the `open --wait` that queues on it
+   decide with this one predicate, so a whole-device opener and a same-app opener wait for an app
+   session and a different-app opener runs beside it. A per-app session may reopen only its app on
+   the `app` surface; a link opens as `open <app> <url>`, because a bare URL's handler is not known
+   before launch.
 6. Helper screenshots take a host-wide lock (`macos-screen-capture.lock` in the device claims
    directory) for the length of one capture. It is the only action sessions on different apps
    serialize on.
-7. App keys are lowercase, because LaunchServices matches bundle ids without regard to case.
-   An `open --wait` does not wait for a session that holds another app.
+7. App keys are lowercase, and the predicate of rule 5 compares bundle ids without regard to case,
+   because LaunchServices matches them that way. An `open --wait` resolves the claim it would take
+   under the device lock; until then it waits only for a whole-device session, and when the open
+   then finds a conflicting app session it releases the lock and waits for that session too.
 
 ## Context
 
@@ -57,10 +63,10 @@ Some commands still reach past the session app, as they did before this ADR: the
 appearance settings (host-global state), `close <other app>` (quits any app, including one another
 daemon's session holds), and `settings permission` (opens System Settings in front).
 
-**Background open applies to every native surface.** `open` cannot see the session surface, so
-under the native backend an `open <app> --surface frontmost-app` no longer brings the app forward
-and the session drives whatever is in front. Use `open --surface frontmost-app` without an app, or
-the `app` surface.
+**Background open follows the session's scope.** A session that holds one app opens it with
+`open -g`, because bringing it forward would move the frontmost app under every other session.
+A session that holds the whole Mac, including `open <app> --surface frontmost-app`, opens the app in
+front as before.
 
 ## Rejected alternatives
 
