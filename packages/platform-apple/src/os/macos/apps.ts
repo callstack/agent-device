@@ -9,7 +9,6 @@ import {
   type AppResolutionCacheScope,
 } from '@agent-device/provision-kit/app-resolution-cache';
 import { quitMacOsApp } from './helper.ts';
-import { hostMacOsAppBackend } from './app-backend.ts';
 import { resolveAppleToolProvider, type AppleMacOsHostProvider } from '../../core/tool-provider.ts';
 import type { IosAppInfo } from '../../core/app-info.ts';
 
@@ -61,9 +60,9 @@ export async function resolveMacOsApp(app: string): Promise<string> {
 export async function openMacOsApp(
   _device: DeviceInfo,
   app: string,
-  options?: { appBundleId?: string; url?: string },
+  options?: { appBundleId?: string; url?: string; background?: boolean },
 ): Promise<void> {
-  const openOptions = { background: hostMacOsAppBackend() === 'native' };
+  const openOptions = { background: options?.background === true };
   const explicitUrl = options?.url?.trim();
   if (explicitUrl) {
     if (!isDeepLinkTarget(explicitUrl)) {

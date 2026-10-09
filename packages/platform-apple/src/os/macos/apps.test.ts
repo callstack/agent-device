@@ -78,8 +78,8 @@ test('closeMacOsApp bounds termination confirmation', async () => {
   expect(mockQuitMacOsApp).toHaveBeenCalledTimes(20);
 });
 
-test('openMacOsApp leaves the frontmost app in front only under the native backend', async () => {
-  const opened = async (backend: string | undefined) => {
+test('openMacOsApp leaves the frontmost app in front only for a background open', async () => {
+  const opened = async (background: boolean | undefined) => {
     const calls: string[][] = [];
     const provider = createLocalAppleToolProvider({
       runCommand: async (cmd, args) => {
@@ -87,20 +87,15 @@ test('openMacOsApp leaves the frontmost app in front only under the native backe
         return { exitCode: 0, stdout: '', stderr: '' };
       },
     });
-    vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', backend ?? '');
-    try {
-      await withAppleToolProvider(provider, async () => {
-        await openMacOsApp(MACOS_DEVICE, 'com.example.demo');
-        await openMacOsApp(MACOS_DEVICE, 'com.example.demo', { url: 'demo://open' });
-        await openMacOsApp(MACOS_DEVICE, 'demo://open');
-      });
-    } finally {
-      vi.unstubAllEnvs();
-    }
+    await withAppleToolProvider(provider, async () => {
+      await openMacOsApp(MACOS_DEVICE, 'com.example.demo', { background });
+      await openMacOsApp(MACOS_DEVICE, 'com.example.demo', { url: 'demo://open', background });
+      await openMacOsApp(MACOS_DEVICE, 'demo://open', { background });
+    });
     return calls;
   };
 
-  expect(await opened('native')).toEqual([
+  expect(await opened(true)).toEqual([
     ['-g', '-b', 'com.example.demo'],
     ['-g', '-b', 'com.example.demo', 'demo://open'],
     ['-g', 'demo://open'],

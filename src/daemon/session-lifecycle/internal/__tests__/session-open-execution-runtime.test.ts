@@ -688,12 +688,18 @@ function restoreMacOpener(): void {
   vi.mocked(resolveIosApp).mockImplementation(async () => 'com.example.demo');
 }
 
+function lastOpenWasBackground(): boolean {
+  const context = mockDispatch.mock.calls.at(-1)?.[4] as { background?: boolean } | undefined;
+  return context?.background === true;
+}
+
 test('native macOS app sessions claim their app, so another app opens beside them', async () => {
   const sessionStore = makeSessionStore();
   const open = nativeMacOpener(sessionStore);
   const refusedFor = { ok: false, error: { details: { reason: 'app-claim-scope' } } };
 
   expect(await open('one', ['com.example.one'])).toMatchObject({ ok: true });
+  expect(lastOpenWasBackground()).toBe(true);
   expect(await open('two', ['com.example.two'])).toMatchObject({ ok: true });
   expect(await open('three', ['com.example.one'])).toMatchObject({
     ok: false,
@@ -702,6 +708,7 @@ test('native macOS app sessions claim their app, so another app opens beside the
   expect(await open('one', ['com.example.two'])).toMatchObject(refusedFor);
   expect(await open('one', ['demo://route'])).toMatchObject(refusedFor);
   expect(await open('one', ['com.example.one'])).toMatchObject({ ok: true });
+  expect(lastOpenWasBackground()).toBe(true);
 
   restoreMacOpener();
 });
@@ -727,6 +734,7 @@ test('a macos-app lease session and an app session of the same bundle conflict i
   expect(
     await openBesideLease('leased', ['com.example.one'], leasedOpen('com.example.one')),
   ).toMatchObject({ ok: true });
+  expect(lastOpenWasBackground()).toBe(true);
   expect(await openBesideLease('app', ['com.example.one'])).toMatchObject(inUse);
   expect(await openBesideLease('other', ['com.example.two'])).toMatchObject({ ok: true });
 
@@ -739,6 +747,18 @@ test('a macos-app lease session and an app session of the same bundle conflict i
   expect(
     await openBesideApp('leased-two', ['com.example.two'], leasedOpen('com.example.two')),
   ).toMatchObject({ ok: true });
+
+  restoreMacOpener();
+});
+
+test('a macOS app session that holds the whole Mac opens its app in front', async () => {
+  const sessionStore = makeSessionStore();
+  const open = nativeMacOpener(sessionStore);
+  vi.stubEnv('AGENT_DEVICE_MACOS_APP_BACKEND', 'xctest');
+
+  expect(await open('xctest', ['com.example.one'])).toMatchObject({ ok: true });
+  expect(sessionStore.get('xctest')?.deviceClaim?.app).toBeUndefined();
+  expect(lastOpenWasBackground()).toBe(false);
 
   restoreMacOpener();
 });

@@ -60,6 +60,7 @@ import {
   describeOpenWaitForRefusal,
   isSameApp,
   sessionConflictsWithOpen,
+  sessionHeldApp,
 } from '../../open-device-contention-wait.ts';
 import { isDeepLinkTarget } from '@agent-device/contracts/command';
 import { readMacOsAppBackend } from '@agent-device/contracts/session';
@@ -249,6 +250,7 @@ export async function completeOpenCommand(params: {
     runtimeLaunchUrl: runtimeHints?.launchUrl,
     appBundleId: sessionAppBundleId,
     surface,
+    ...(opensAppInBackground(req, existingSession, deviceClaim) ? { background: true } : {}),
     hasExistingSession: existingSession !== undefined,
     relaunch: shouldRelaunch,
     prewarmRunnerBeforeOpen: req.flags?.maestro?.prewarmRunnerBeforeOpen === true,
@@ -379,6 +381,21 @@ async function prepareOpenDispatchSession(params: {
     return { type: 'response', response: lifecycleResponse };
   requireOpenSessionAdmission(sessionStore, sessionName, ref);
   return { type: 'session', ref: sessionStore.refresh(ref) };
+}
+
+/**
+ * A session scoped to one app opens it without bringing it to the front, which leaves the
+ * frontmost app and every other session's app where they are (ADR 0034).
+ */
+function opensAppInBackground(
+  req: DaemonRequest,
+  existingSession: SessionState | undefined,
+  deviceClaim: DeviceClaimSessionOwnership | undefined,
+): boolean {
+  const heldApp = existingSession
+    ? sessionHeldApp(existingSession)
+    : (deviceClaim?.app ?? admittedLeaseApp(req.internal?.admittedLease));
+  return heldApp !== undefined;
 }
 
 /**

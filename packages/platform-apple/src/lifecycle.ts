@@ -223,6 +223,7 @@ async function dispatchAppleOpen(
     positionals: launch.positionals,
     appBundleId: input.appBundleId,
     execution: input.execution,
+    ...(input.background ? { background: true } : {}),
     ...(localIosSimulator && input.relaunch && !input.execution.clearAppState
       ? { terminateRunningApp: true }
       : {}),
@@ -264,6 +265,7 @@ async function openLaunchUrl(
     positionals: [url],
     appBundleId: input.appBundleId,
     execution,
+    ...(input.background ? { background: true } : {}),
   });
 }
 
