@@ -116,9 +116,14 @@ test('a kill cancelled inside the flush window never reaches adb emu kill', asyn
     return waitSignal?.aborted ? Promise.resolve() : new Promise(() => {});
   });
 
-  await expect(
-    createAndroidShutdownRuntime({ commands }).shutdownTarget(device, controller.signal),
-  ).rejects.toBeDefined();
+  // Pin the cancellation MECHANISM, not just a rejection: awaitTestImeFlushWindow returns
+  // 'aborted' and shutdownAndroidTarget cancels via signal.throwIfAborted(), which throws the
+  // signal's reason or a DOMException named 'AbortError'. A rejection from any other cause
+  // (e.g. a throw inside the flush wait) must fail this test, not stand in for cancellation.
+  const failure = await createAndroidShutdownRuntime({ commands })
+    .shutdownTarget(device, controller.signal)
+    .catch((error: unknown) => error);
+  expect((failure as Error).name).toBe('AbortError');
 
   expect(run).not.toHaveBeenCalled();
   const firstRemainingMs = sleep.mock.calls[0]?.[0] as number;
