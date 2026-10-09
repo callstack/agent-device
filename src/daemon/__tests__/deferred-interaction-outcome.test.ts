@@ -3,6 +3,7 @@ import { afterEach, test, vi } from 'vitest';
 import {
   isPostGestureStabilizationPending,
   markDeferredInteractionOutcome,
+  markPostOpenStabilization,
   resolveDeferredInteractionOutcome,
   stripInternalInteractionFlags,
   type DeferredOutcomeSnapshotAttempt,
@@ -96,6 +97,54 @@ test('freshness and stabilization eligibility read the action, not the outer com
 });
 
 // --- capture-side resolution ---
+
+test('an Apple open that could not observe its app marks stabilization without a baseline', () => {
+  const session = makeSession('ios');
+  session.snapshot = pickupSnapshot();
+
+  markPostOpenStabilization(session, 'unobservable');
+
+  assert.equal(isPostGestureStabilizationPending(session), true);
+  assert.equal(session.postGestureStabilization?.action, 'open');
+  assert.equal(session.postGestureStabilization?.baselineSignature, undefined);
+});
+
+test('only an open that saw the launch still in flight marks stabilization', () => {
+  const quiet = (
+    ['observable', 'probe-failed', 'app-unidentified', 'not-eligible', undefined] as const
+  ).map((observation) => {
+    const session = makeSession('ios');
+    markPostOpenStabilization(session, observation);
+    return isPostGestureStabilizationPending(session);
+  });
+  const android = makeSession('android');
+  markPostOpenStabilization(android, 'unobservable');
+
+  assert.deepEqual(quiet, [false, false, false, false, false]);
+  assert.equal(isPostGestureStabilizationPending(android), false);
+});
+
+test('the first capture after an unobserved open reads the list where it came to rest', async () => {
+  vi.useFakeTimers();
+  const session = makeSession('ios');
+  markPostOpenStabilization(session, 'unobservable');
+  const { capture, calls } = scriptedCapture([
+    pickupSnapshot(319),
+    pickupSnapshot(406),
+    pickupSnapshot(406),
+  ]);
+
+  const pendingResult = resolveDeferredInteractionOutcome(resolveParams(session, capture));
+  for (let step = 0; step < 10; step += 1) {
+    await vi.advanceTimersByTimeAsync(200);
+  }
+  const result = await pendingResult;
+
+  assert.equal(calls(), 3);
+  assert.equal(result?.snapshot.nodes[1]?.rect?.y, 406);
+  assert.equal(result?.snapshot.postGestureOutcome, undefined);
+  assert.equal(isPostGestureStabilizationPending(session), false);
+});
 
 test('nothing deferred resolves to undefined without capturing', async () => {
   const session = makeSession('ios');

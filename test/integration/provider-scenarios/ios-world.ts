@@ -40,6 +40,11 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       request: { command: 'uptime' },
       result: { uptimeMs: 42 },
     },
+    // The scripted simulator runs no app process, so every `open` observes it `unobservable` and
+    // the first capture after it settles over a quiet pair of reads: `capture settings snapshot`
+    // and `refresh snapshot after install` each take the extra read below.
+    runnerSnapshot(),
+    runnerSnapshot(),
     runnerSnapshot(),
     {
       command: 'ios.runner.tap',
@@ -269,17 +274,17 @@ type IosBottomTabsSnapshotWorld = {
 };
 
 export async function createIosBottomTabsSnapshotWorld(): Promise<IosBottomTabsSnapshotWorld> {
-  const runnerTranscript = createProviderTranscript([
-    {
-      command: 'ios.runner.snapshot',
-      deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'apple',
-      result: {
-        nodes: bottomTabsContactSnapshotNodes(),
-        truncated: false,
-      },
+  const bottomTabsSnapshot = {
+    command: 'ios.runner.snapshot',
+    deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+    platform: 'apple' as const,
+    result: {
+      nodes: bottomTabsContactSnapshotNodes(),
+      truncated: false,
     },
-  ]);
+  };
+  // The snapshot is the first capture after an `unobservable` open, so it settles over a quiet pair.
+  const runnerTranscript = createProviderTranscript([bottomTabsSnapshot, bottomTabsSnapshot]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
     runnerTranscript,
     'ios.runner',

@@ -75,7 +75,7 @@ export type InteractionSurfaceEntry = {
 export type PostGestureStabilization = {
   action: string;
   /** The gesture's own positionals — wording input for the #1600 no-effect
-   * warning; never re-dispatched. Always set by the only writer. */
+   * warning; never re-dispatched. Always set by every writer. */
   positionals: string[];
   markedAt: number;
   /**

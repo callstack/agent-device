@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import type {
   ApplicationLifecycleRuntimeOperations,
   OpenApplicationInput,
+  PostOpenObservation,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DaemonRequest } from '../../../daemon-request.ts';
 import {
@@ -77,6 +78,7 @@ import { resolveAndroidPackageForOpen } from '@agent-device/platform-android/mec
 import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
 import {
   makeAndroidEmulator,
+  makeAppleSimulator,
   makeSession,
   makeSessionStore,
   noopInvoke,
@@ -441,6 +443,58 @@ test('open reports the launch confirmation its platform answered', async () => {
 
   expect(response?.ok).toBe(true);
   if (response?.ok) expect(response.data?.launchConfirmation).toBe('accepted');
+});
+
+async function openReportingObservation(
+  sessionName: string,
+  postOpenObservation: PostOpenObservation,
+) {
+  const sessionStore = makeSessionStore();
+  mockResolveTargetDevice.mockResolvedValue(makeAppleSimulator());
+  const bindDefault = mockBindDeviceRuntime.getMockImplementation();
+  if (!bindDefault) throw new Error('the harness binds a default runtime');
+  mockBindDeviceRuntime.mockImplementationOnce(async (device, use) => {
+    const binding = await bindDefault(device, use);
+    const operations = binding.operations as ApplicationLifecycleRuntimeOperations;
+    return {
+      ...binding,
+      operations: {
+        ...binding.operations,
+        openApplication: async (input: OpenApplicationInput) => {
+          const outcome = await operations.openApplication(input);
+          return { ...outcome, timing: { ...outcome.timing, postOpenObservation } };
+        },
+      },
+    };
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'open',
+      positionals: ['Demo'],
+      flags: { platform: 'ios' },
+    },
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  expect(response?.ok).toBe(true);
+  return sessionStore.get(sessionName);
+}
+
+test('a fresh iOS open that could not observe its app leaves the next capture to settle', async () => {
+  const session = await openReportingObservation('unobserved-open', 'unobservable');
+
+  expect(session?.postGestureStabilization?.action).toBe('open');
+});
+
+test('a fresh iOS open that observed its app leaves nothing pending', async () => {
+  const session = await openReportingObservation('observed-open', 'observable');
+
+  expect(session?.postGestureStabilization).toBeUndefined();
 });
 
 function holdNativeOpen() {

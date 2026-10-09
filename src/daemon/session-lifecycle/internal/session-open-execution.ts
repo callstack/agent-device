@@ -9,6 +9,7 @@ import {
 } from '@agent-device/device-selection/device-selection-resolver';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
+import type { OpenApplicationTiming } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type { SessionRef, SessionState } from '../../session-state.ts';
@@ -32,7 +33,10 @@ import {
 import { STARTUP_SAMPLE_METHOD, type StartupPerfSample } from './session-startup-metrics.ts';
 import { buildOpenResult } from './session-open-surface.ts';
 import { publishOpenSession, requireOpenSessionAdmission } from './session-open-state.ts';
-import { markDeferredInteractionOutcome } from '../../deferred-interaction-outcome.ts';
+import {
+  markDeferredInteractionOutcome,
+  markPostOpenStabilization,
+} from '../../deferred-interaction-outcome.ts';
 import { emitDiagnostic, getDiagnosticsMeta } from '@agent-device/host-kit/diagnostics';
 import {
   prepareOpenCommandDetails,
@@ -69,18 +73,7 @@ export type SessionOpenResult =
   | Readonly<{ type: 'opened'; response: DaemonResponse; ref: SessionRef }>
   | Readonly<{ type: 'response'; response: DaemonResponse }>;
 
-type OpenTiming = {
-  totalDurationMs?: number;
-  relaunchCloseDurationMs?: number;
-  runtimeHintsDurationMs?: number;
-  runnerPrewarmKind?: 'session' | 'xctestrun';
-  runnerPrewarmScheduled?: boolean;
-  runnerPrewarmWaited?: boolean;
-  runnerPrewarmDurationMs?: number;
-  openDispatchDurationMs?: number;
-  launchUrlDurationMs?: number;
-  postOpenSettleDurationMs?: number;
-};
+type OpenTiming = OpenApplicationTiming & { totalDurationMs?: number };
 
 type NewSessionOpenEffects = { mayHaveStarted: boolean };
 
@@ -322,6 +315,7 @@ export async function completeOpenCommand(params: {
     deviceClaim,
   });
   const nextSession = sessionStore.requireCurrent(nextRef);
+  markPostOpenStabilization(nextSession, timing.postOpenObservation);
   if (req.runtime !== undefined)
     setSessionRuntimeHintsForOpen(sessionStore, sessionName, runtimeHints);
   applyOrdinaryScriptRecordingOpenOutcome({
