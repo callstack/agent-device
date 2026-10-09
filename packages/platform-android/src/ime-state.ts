@@ -34,6 +34,18 @@ const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
 // stacking. Every path that may `adb emu kill` calls awaitTestImeFlushWindow first; the
 // kill-bound close finalization also consumes the outcome so the pending marker clears only
 // under a completed (or never-owed) wait.
+// Deliberate boundary (PR #3331 review, round ten): the window does NOT survive a daemon
+// restart. A write made by a dead process cannot be re-derived here, so a restart within the
+// window forfeits the remaining wait for that write — every restore shares this boundary, not
+// just startup recovery. Closing it would persist a deadline another process can read, which
+// must be wall-clock or boot-time based (reopening the clock-skew class this map's name exists
+// to exclude, plus restart detection and a marker-format change) and would thread a
+// state-dir file host through the shutdown-runtime contract, which today sees only `commands`.
+// The forfeit needs a daemon death, a restart, and a kill-bound close all inside 2.5 s of the
+// write. It is a residual the fix neither closes nor worsens: every reachable kill path gained
+// a window it never had, and this is the one state a restart can erase. A human reviewer may
+// still choose to trade that cost (accepted over-wait on startup recovery is the cheapest
+// alternative); it is a boundary decision, not an oversight of this map.
 // @internal the map is exported for tests; production touches it only through the helpers here.
 export const testImeLastRestoreAtPerfMs = new Map<string, number>();
 
