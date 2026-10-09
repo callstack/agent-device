@@ -74,6 +74,8 @@ type LossVerdict = Readonly<{
   noticeReason?: RunnerWarmLossReason;
 }>;
 
+const DESTINATION_LOST: LossVerdict = { action: 'stop', noticeReason: 'runner_destination_lost' };
+
 type DestinationWatch = {
   device: DeviceInfo;
   sessionId: string;
@@ -296,21 +298,21 @@ async function classifyConnectedLoss(watch: DestinationWatch): Promise<LossVerdi
     return { action: 'stop' };
   }
   const state = await observeSimulatorState(watch.device);
-  if (state !== null && state !== SIMULATOR_BOOTED_STATE) {
-    return { action: 'stop', noticeReason: 'runner_destination_lost' };
-  }
-  const boot = await observeSimulatorBootTimeMs(watch.device);
-  if (boot.observed && boot.bootedAtMs <= watch.armedAtMs) {
-    return { action: 'rearm' };
-  }
-  if (!boot.observed) {
+  if (state !== null && state !== SIMULATOR_BOOTED_STATE) return DESTINATION_LOST;
+  let boot = await readBootAgainstWindow(watch);
+  if (boot === 'unobserved') {
     await delay(resolveRecheckDelayMs());
-    const recheck = await observeSimulatorBootTimeMs(watch.device);
-    if (recheck.observed && recheck.bootedAtMs <= watch.armedAtMs) {
-      return { action: 'rearm' };
-    }
+    boot = await readBootAgainstWindow(watch);
   }
-  return { action: 'stop', noticeReason: 'runner_destination_lost' };
+  return boot === 'same-boot' ? { action: 'rearm' } : DESTINATION_LOST;
+}
+
+async function readBootAgainstWindow(
+  watch: DestinationWatch,
+): Promise<'same-boot' | 'newer-boot' | 'unobserved'> {
+  const boot = await observeSimulatorBootTimeMs(watch.device);
+  if (!boot.observed) return 'unobserved';
+  return boot.bootedAtMs <= watch.armedAtMs ? 'same-boot' : 'newer-boot';
 }
 
 /**
