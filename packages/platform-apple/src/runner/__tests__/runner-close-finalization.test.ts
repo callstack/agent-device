@@ -353,6 +353,23 @@ test('a drain that lands after close is issued cannot return a busy runner to re
   assert.equal(readRunnerSessionLiveness(device.id), null);
 });
 
+test('a failed start does not re-retain a runner a concurrent start already took over', async () => {
+  const device = deviceNamed('close-finalize-concurrent-start');
+  const session = await ensureRunnerSession(device, {});
+  await closeFinalizationLifecycle(device, []).finalizeApplicationClose(closeInput(true));
+  const phases: string[] = [];
+  appleRunnerTestHost.update({ emitDiagnostic: (event) => phases.push(event.phase) });
+
+  const [failed, reused] = await Promise.allSettled([
+    ensureRunnerSession(device, { expectedRunnerSessionId: 'another-runner-session' }),
+    ensureRunnerSession(device, {}),
+  ]);
+
+  assert.equal(failed.status, 'rejected');
+  assert.equal(reused.status === 'fulfilled' && reused.value.sessionId, session.sessionId);
+  assert.doesNotMatch(phases.join('\n'), /ios_runner_idle_stop_scheduled/);
+});
+
 test('a destination lost during retention takes the retained runner and its lease down (#3321)', async () => {
   const device = deviceNamed('close-finalize-destination-lost');
   const connections: net.Socket[] = [];

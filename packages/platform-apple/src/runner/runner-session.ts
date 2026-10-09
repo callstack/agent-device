@@ -89,6 +89,12 @@ const runnerIdleStopTimers = new Map<string, NodeJS.Timeout>();
  * whole retain-until-daemon-exit behavior just the same.
  */
 const runnerWarmRetainedDevices = new Set<string>();
+/**
+ * Advances every time a device's retention state is ended, so "nothing has touched this device's
+ * retention since I released it" is a fact a caller can hold: a start that released a retained
+ * runner may put it back only while the epoch it released at is still current.
+ */
+const runnerRetentionEpochs = new Map<string, number>();
 const RUNNER_RETAINED_IDLE_STOP_DEFAULT_MS = 5 * 60_000;
 const RUNNER_STALE_BUNDLE_UNINSTALL_TIMEOUT_MS = 10_000;
 
@@ -102,10 +108,7 @@ export async function ensureRunnerSession(
 ): Promise<RunnerSession> {
   // Any runner use means the device is active again: a pending idle stop
   // from a retained-after-close runner no longer applies.
-  const retainedSession = runnerWarmRetainedDevices.has(device.id)
-    ? runnerSessions.get(device.id)
-    : undefined;
-  cancelIosRunnerIdleStop(device.id);
+  const released = releaseRetainedRunnerForUse(device.id);
   // This start's admission: the loop that owns the start across retries supplies one, and every
   // other start takes a token for itself. Both are taken synchronously, before the first await and
   // registered with the device, so a teardown beginning in this same turn closes it even while
@@ -162,9 +165,7 @@ export async function ensureRunnerSession(
   } catch (error) {
     // A start that failed without using the retained runner leaves it exactly as idle as it was,
     // so it goes back to the retention that carries both its idle stop and its destination watch.
-    if (retainedSession && runnerSessions.get(device.id) === retainedSession) {
-      await retainRunnerForReuse(device.id, retainedSession);
-    }
+    if (released) await restoreReleasedRunnerRetention(device.id, released);
     throw error;
   }
 }
@@ -671,6 +672,7 @@ export function scheduleIosRunnerIdleStop(deviceId: string): void {
 }
 
 export function cancelIosRunnerIdleStop(deviceId: string): void {
+  runnerRetentionEpochs.set(deviceId, (runnerRetentionEpochs.get(deviceId) ?? 0) + 1);
   endRunnerWarmRetention(deviceId);
   const timer = runnerIdleStopTimers.get(deviceId);
   if (!timer) return;
@@ -710,17 +712,46 @@ function isRunnerIdleRetained(deviceId: string, session: RunnerSession | undefin
 /**
  * The one way a runner enters post-`close` retention: the idle-stop timer, the retention fact the
  * destination watch reads, and the watch itself are set together, so no retained runner is left
- * with one but not the others. Retention marks the device after the scheduler because the
- * scheduler's own cancel step ends any window the previous retention left open.
+ * with one but not the others. A runner that cannot be retained changes nothing. Retention marks
+ * the device after the scheduler because the scheduler's own cancel step ends any window the
+ * previous retention left open.
  */
 async function retainRunnerForReuse(
   deviceId: string,
   session: RunnerSession | undefined,
 ): Promise<void> {
-  scheduleIosRunnerIdleStop(deviceId);
   if (!session || !canWorkWithRunnerSession(session)) return;
+  scheduleIosRunnerIdleStop(deviceId);
   runnerWarmRetainedDevices.add(deviceId);
   await armRunnerDestinationWatch(session);
+}
+
+type ReleasedRunnerRetention = Readonly<{ session: RunnerSession; epoch: number }>;
+
+/**
+ * A start is about to use the device's runner, which ends any retention window on it. Returns what
+ * was released, for {@link restoreReleasedRunnerRetention} to put back if the start fails.
+ */
+function releaseRetainedRunnerForUse(deviceId: string): ReleasedRunnerRetention | undefined {
+  const session = runnerWarmRetainedDevices.has(deviceId)
+    ? runnerSessions.get(deviceId)
+    : undefined;
+  cancelIosRunnerIdleStop(deviceId);
+  return session && { session, epoch: runnerRetentionEpochs.get(deviceId) ?? 0 };
+}
+
+/**
+ * Puts a released window back only while no one has touched the device's retention since the
+ * release: a later start that used the runner, a close that retained it anew, or a stop each end
+ * or replace the window, and a failed start must not re-arm a runner someone else now owns.
+ */
+async function restoreReleasedRunnerRetention(
+  deviceId: string,
+  released: ReleasedRunnerRetention,
+): Promise<void> {
+  if ((runnerRetentionEpochs.get(deviceId) ?? 0) !== released.epoch) return;
+  if (runnerSessions.get(deviceId) !== released.session) return;
+  await retainRunnerForReuse(deviceId, released.session);
 }
 
 /**
