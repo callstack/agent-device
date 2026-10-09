@@ -87,6 +87,9 @@ test('a kill waits out a registered test-IME flush window before running adb emu
 
   const pendingKill = createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
 
+  // One macrotask boundary: the wait drains (async) in-flight writes before its first sleep.
+  await drainMicrotasks();
+
   // The runtime suspends inside the flush wait before touching adb.
   expect(sleep).toHaveBeenCalledTimes(1);
   // The wait must cover the registered window, not merely be positive: the timestamp was set
@@ -118,8 +121,14 @@ test('a kill started while a restore write is in flight waits for it to register
 
   const pendingKill = createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
 
-  // No mark exists yet, yet the in-flight write holds the kill: neither the window wait nor
-  // adb has started. A mark-only implementation takes 'idle' here and kills mid-write.
+  // Advance one event-loop turn so the kill REALLY reaches the wait: asserting synchronously
+  // after starting the call would pass even if the wait took 'idle' straight through, because
+  // the kill would still be suspended at its first microtask. With a full turn drained and the
+  // write still in flight and unregistered, a mark-only implementation has already taken
+  // 'idle' and called adb — that is the #3318 mid-write kill this test names.
+  await drainMicrotasks();
+
+  // Neither the window wait nor adb has started: the in-flight write holds the kill.
   expect(sleep).not.toHaveBeenCalled();
   expect(run).not.toHaveBeenCalled();
 
@@ -170,6 +179,9 @@ test('a restore landing mid-wait extends the pending kill instead of releasing i
     .mockImplementationOnce(() => secondSettling.promise);
 
   const pendingKill = createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
+
+  // One macrotask boundary: the wait drains (async) in-flight writes before its first sleep.
+  await drainMicrotasks();
 
   expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(seededRemainderMs - WINDOW_TOLERANCE_MS);
   expect(sleep.mock.calls[0]?.[0]).toBeLessThanOrEqual(seededRemainderMs);

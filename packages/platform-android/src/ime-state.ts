@@ -87,7 +87,7 @@ export function beginTestImeRestoreWrite(serial: string): () => void {
 function pendingTestImeRestoreWrite(serial: string): Promise<void> | undefined {
   const writes = testImePendingRestoreWrites.get(serial);
   if (!writes || writes.size === 0) return undefined;
-  return Promise.allSettled([...writes]).then(() => undefined);
+  return Promise.allSettled(writes).then(() => undefined);
 }
 
 async function awaitUntilAborted(pending: Promise<void>, signal?: AbortSignal): Promise<void> {
@@ -121,53 +121,62 @@ export function registerTestImeRestore(serial: string): void {
 // window has elapsed — retiring the timestamp, since nothing older can still be unflushed — and
 // 'aborted' when cancelled first: the caller must then skip the kill, and the timestamp stays so
 // the next kill-bound path derives the same remaining wait.
-// This re-reads the mark after every sleep rather than trusting one read: a restore can land
-// while this wait sleeps (the unlocked shutdown-command path racing a close finalization, or
-// startup-orphan recovery beside another session's close), and it is THIS caller that owns the
-// kill, so it must wait out the newer deadline — reporting 'covered' on an older mark would
-// release the kill inside the extension's window, which is #3318 again. Each iteration consumes
-// only the mark it observed: with no await between the read and the delete, the delete cannot
-// erase a mark this loop has not waited for, so an extension always survives to its own round.
+// Rounds repeat until nothing newer appears: a restore landing (or even ISSUING a write) while
+// a round sleeps carries a newer deadline, and this caller owns the kill, so reporting 'covered'
+// on an older mark would release it inside the newer window — #3318 again.
 export async function awaitTestImeFlushWindow(
   serial: string,
   signal?: AbortSignal,
 ): Promise<TestImeFlushWait> {
   if (signal?.aborted) return 'aborted';
   for (;;) {
-    // Drain writes this process has issued but not yet registered before deciding: an
-    // in-flight `ime set` has already (or is about to) start a flush window that no mark
-    // shows yet. If it fails without ever registering, this resolves and the mark check
-    // below proceeds; if it registers, the next round sees the mark and waits it out.
-    const pending = pendingTestImeRestoreWrite(serial);
-    if (pending) {
-      await awaitUntilAborted(pending, signal);
-      if (signal?.aborted) return 'aborted';
-    }
-    const restoredAtPerfMs = testImeLastRestoreAtPerfMs.get(serial);
-    // An absent mark after the drain means no registered window: either the drained write
-    // failed without registering, or a concurrent kill-bound wait already retired a covered
-    // mark — both leave nothing younger to wait for.
-    if (restoredAtPerfMs === undefined) return 'idle';
-    const remainingMs = restoredAtPerfMs + SETTINGS_PROVIDER_FLUSH_SETTLE_MS - performance.now();
-    if (remainingMs <= 0) {
-      testImeLastRestoreAtPerfMs.delete(serial);
-      return 'covered';
-    }
+    const outcome = await runTestImeFlushRound(serial, signal);
+    if (outcome !== 'extended') return outcome;
+  }
+}
+
+// One round: drain in-flight writes, then sleep out the newest mark's remainder and consume
+// exactly that mark. 'extended' means a newer deadline appeared and another round must run.
+async function runTestImeFlushRound(
+  serial: string,
+  signal?: AbortSignal,
+): Promise<TestImeFlushWait | 'extended'> {
+  if (!(await quietTestImeRestoreWrites(serial, signal))) return 'aborted';
+  const restoredAtPerfMs = testImeLastRestoreAtPerfMs.get(serial);
+  if (restoredAtPerfMs === undefined) return 'idle';
+  const remainingMs = restoredAtPerfMs + SETTINGS_PROVIDER_FLUSH_SETTLE_MS - performance.now();
+  if (remainingMs > 0) {
     await sleep(remainingMs, signal);
     if (signal?.aborted) return 'aborted';
-    // A write opened during this sleep starts a newer window no mark shows yet; loop back so
-    // the drain at the top of the next round waits it out instead of exiting on this mark.
-    if (pendingTestImeRestoreWrite(serial)) continue;
-    // A real sleep that returned un-aborted has elapsed THIS round's window, so consume only
-    // the mark this round waited for: unchanged or retired means covered, while a newer mark
-    // (registered while this sleep ran) loops to wait out the extension's deadline too.
-    const currentPerfMs = testImeLastRestoreAtPerfMs.get(serial);
-    if (currentPerfMs === undefined) return 'covered';
-    if (currentPerfMs === restoredAtPerfMs) {
-      testImeLastRestoreAtPerfMs.delete(serial);
-      return 'covered';
-    }
   }
+  return consumeTestImeFlushMark(serial, restoredAtPerfMs);
+}
+
+// True once no `ime set` this process issued is still unregistered. The registrar closes its
+// pending entry only after registering the mark (or on a definitively failed write), so a
+// drained, mark-less state truly means no registered window is owed — including one a
+// concurrent waiter just retired, which the caller reports as the conservative 'idle'.
+async function quietTestImeRestoreWrites(serial: string, signal?: AbortSignal): Promise<boolean> {
+  const pending = pendingTestImeRestoreWrite(serial);
+  if (!pending) return true;
+  await awaitUntilAborted(pending, signal);
+  return !signal?.aborted;
+}
+
+// Consume the mark one round waited for: unchanged or already retired means covered, while a
+// newly opened write or a newer mark means a newer deadline exists and the caller must loop.
+// With no await between the read and the delete, the delete cannot erase a mark the round has
+// not waited for, so an extension always survives to its own round.
+function consumeTestImeFlushMark(
+  serial: string,
+  waitedAtPerfMs: number,
+): TestImeFlushWait | 'extended' {
+  if (pendingTestImeRestoreWrite(serial)) return 'extended';
+  const currentPerfMs = testImeLastRestoreAtPerfMs.get(serial);
+  if (currentPerfMs === undefined) return 'covered';
+  if (currentPerfMs !== waitedAtPerfMs) return 'extended';
+  testImeLastRestoreAtPerfMs.delete(serial);
+  return 'covered';
 }
 
 // Per-daemon-process cache of devices with the test IME active; input-actions.ts reads this to
