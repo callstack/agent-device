@@ -39,6 +39,43 @@ extension RunnerTests {
     let target: TextEntryElementIdentity
   }
 
+  struct ReplacementTextEntryConfirmation {
+    private let requested: String
+    private let baseline: TextEntryObservation?
+    private var deadline: Date
+    private var latest: TextEntryObservation?
+    private var stableSince: Date
+
+    init(requested: String, baseline: TextEntryObservation?, startedAt: Date) {
+      self.requested = requested
+      self.baseline = baseline
+      deadline = startedAt.addingTimeInterval(TextEntryTiming.replacementSettleCeiling)
+      stableSince = startedAt
+    }
+
+    mutating func observe(_ observed: TextEntryObservation, at sampledAt: Date) -> TextEntryResult? {
+      // A late first read still needs one stability window.
+      if latest == nil {
+        deadline = max(deadline, sampledAt.addingTimeInterval(TextEntryTiming.verificationStabilityWindow))
+      }
+      if latest.map({ observed.isSettled(with: $0) }) != true { stableSince = sampledAt }
+      latest = observed
+      let result = RunnerTests.replacementTextEntryResult(requested: requested, baseline: baseline, observed: observed)
+      let settled = sampledAt.timeIntervalSince(stableSince) >= TextEntryTiming.verificationStabilityWindow
+      let moved = baseline.map { !observed.isSettled(with: $0) } ?? true
+      if settled && (moved || result.verified != false || sampledAt >= deadline) {
+        return result
+      }
+      if sampledAt >= deadline {
+        return TextEntryResult(
+          verified: nil, repaired: false, expectedText: requested, observedText: observed.value,
+          failure: .commitNotObserved
+        )
+      }
+      return nil
+    }
+  }
+
   /// Literal read-back policy; a mismatch does not establish why the app changed the text.
   static func replacementTextEntryResult(
     requested: String,
@@ -55,7 +92,7 @@ extension RunnerTests {
     let request = observed.identity.elementType == elementTypeNamesByRawValue[XCUIElement.ElementType.textView.rawValue]
       ? requested : textEntryRequestWithoutSubmitKeys(requested)
     if observed.value == requested || observed.value == request { return result(true) }
-    // A submit may consume or clear a single-line input; repeating it can send the action twice.
+    // Any non-matching single-line submit result remains unverified, even a partial value.
     if request != requested { return result(nil) }
     guard !request.isEmpty, let baseline else { return result(false) }
     if isOrderedSubsequence(observed.value, of: baseline.value + request) { return result(false) }

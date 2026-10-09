@@ -85,13 +85,77 @@ extension RunnerTests {
     XCTAssertNil(unreadableAfter.unconfirmed)
   }
 
+  func testReplacementSlowFirstReadGetsOneStabilityWindow() throws {
+    let startedAt = Date(timeIntervalSinceReferenceDate: 100)
+    let otherField = TextEntryElementIdentity(identifier: "other-input", elementType: "TextField", frame: Self.otpFieldIdentity.frame)
+    let cases: [(String, TextEntryObservation, Bool?)] = [
+      ("123456", Self.otpObservation("123456"), true),
+      ("123456", Self.otpObservation("12 34 56"), nil),
+      ("123456", Self.otpObservation("12345"), false),
+      ("123456", Self.otpObservation("123456", identity: otherField), false),
+      ("hello\n", Self.otpObservation(""), nil),
+      ("hello\n", Self.otpObservation("hllo"), nil),
+    ]
+    for (requested, observed, verified) in cases {
+      var confirmation = ReplacementTextEntryConfirmation(requested: requested, baseline: Self.otpObservation(""), startedAt: startedAt)
+      XCTAssertNil(confirmation.observe(observed, at: startedAt.addingTimeInterval(1.1)))
+      XCTAssertNil(confirmation.observe(observed, at: startedAt.addingTimeInterval(1.15)))
+      let result = try XCTUnwrap(confirmation.observe(observed, at: startedAt.addingTimeInterval(1.31)))
+      XCTAssertEqual(result.verified, verified)
+      XCTAssertNil(result.failure)
+      XCTAssertEqual(result.unconfirmed?.after, observed.value == "12 34 56" ? observed.value : nil)
+      XCTAssertFalse(result.repaired)
+    }
+  }
+
+  func testReplacementSlowFirstReadDoesNotExtendForLaterChanges() throws {
+    let startedAt = Date(timeIntervalSinceReferenceDate: 100)
+    for after in ["123456", "12 34 56"] {
+      var confirmation = ReplacementTextEntryConfirmation(requested: "123456", baseline: Self.otpObservation(""), startedAt: startedAt)
+      XCTAssertNil(confirmation.observe(Self.otpObservation("123"), at: startedAt.addingTimeInterval(1.1)))
+      let result = try XCTUnwrap(confirmation.observe(Self.otpObservation(after), at: startedAt.addingTimeInterval(1.31)))
+      XCTAssertNil(result.verified)
+      XCTAssertEqual(result.failure, .commitNotObserved)
+      XCTAssertNil(result.unconfirmed)
+      XCTAssertFalse(result.repaired)
+    }
+  }
+
+  func testReplacementReadBackWaitsForSettlingBeforeDeadline() throws {
+    let startedAt = Date(timeIntervalSinceReferenceDate: 100)
+    for after in ["123456", "12 34 56"] {
+      var confirmation = ReplacementTextEntryConfirmation(requested: "123456", baseline: Self.otpObservation(""), startedAt: startedAt)
+      let observed = Self.otpObservation(after)
+      XCTAssertNil(confirmation.observe(observed, at: startedAt.addingTimeInterval(0.1)))
+      let result = try XCTUnwrap(confirmation.observe(observed, at: startedAt.addingTimeInterval(0.31)))
+      XCTAssertEqual(result.verified, after == "123456" ? true : nil)
+      XCTAssertEqual(result.unconfirmed?.after, after == "123456" ? nil : after)
+      XCTAssertNil(result.failure)
+    }
+  }
+
+  func testReplacementUnchangedValueWaitsForTheDeadline() throws {
+    let startedAt = Date(timeIntervalSinceReferenceDate: 100)
+    let observed = Self.otpObservation("")
+    var confirmation = ReplacementTextEntryConfirmation(requested: "123456", baseline: observed, startedAt: startedAt)
+    XCTAssertNil(confirmation.observe(observed, at: startedAt.addingTimeInterval(0.1)))
+    XCTAssertNil(confirmation.observe(observed, at: startedAt.addingTimeInterval(0.31)))
+    let result = try XCTUnwrap(confirmation.observe(observed, at: startedAt.addingTimeInterval(1.1)))
+    XCTAssertEqual(result.verified, false)
+    XCTAssertNil(result.failure)
+    XCTAssertFalse(result.repaired)
+  }
+
   func testReplacementSubmitDoesNotTreatMultilineContentAsASubmitKey() {
-    let submitted = Self.replacementTextEntryResult(
-      requested: "hello\n", baseline: Self.otpObservation(""), observed: Self.otpObservation("")
-    )
-    XCTAssertNil(submitted.verified)
-    XCTAssertNil(submitted.unconfirmed)
-    XCTAssertFalse(submitted.repaired)
+    for after in ["", "hllo", "submitted"] {
+      let submitted = Self.replacementTextEntryResult(
+        requested: "hello\n", baseline: Self.otpObservation(""), observed: Self.otpObservation(after)
+      )
+      XCTAssertNil(submitted.verified)
+      XCTAssertNil(submitted.unconfirmed)
+      XCTAssertNil(submitted.failure)
+      XCTAssertFalse(submitted.repaired)
+    }
     let textView = TextEntryElementIdentity(identifier: "message", elementType: elementTypeName(.textView), frame: Self.otpFieldIdentity.frame)
     for (after, expected) in [("hello", false), ("hello\n", true)] {
       let result = Self.replacementTextEntryResult(

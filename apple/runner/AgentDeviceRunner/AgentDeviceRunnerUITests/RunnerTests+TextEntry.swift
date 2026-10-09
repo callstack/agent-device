@@ -63,7 +63,7 @@ extension RunnerTests {
     static let pollInterval: TimeInterval = 0.02
     static let warmupValueTimeout: TimeInterval = 0.4
     static let verificationStabilityWindow: TimeInterval = 0.2
-    /// Total observation budget after replacement; late-rendered values must settle within it.
+    /// Initial replacement observation budget; a late first read gets one stability window.
     static let replacementSettleCeiling: TimeInterval = 1.0
     /// How long the commit wait tolerates seeing NO further progress toward the expected value.
     /// Numerically the flat deadline this replaced, so a pipeline that delivers nothing is

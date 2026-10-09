@@ -394,35 +394,24 @@ extension RunnerTests {
     requested: String,
     baseline: TextEntryObservation?
   ) -> TextEntryResult {
-    let deadline = Date().addingTimeInterval(TextEntryTiming.replacementSettleCeiling)
-    var latest: TextEntryObservation?
-    var stableSince = Date()
+    var confirmation = ReplacementTextEntryConfirmation(requested: requested, baseline: baseline, startedAt: Date())
     while true {
       guard let element = resolveTextEntryElement(app: app, target: target) else {
         let failure: TextEntryFailure? = target.boundIdentity != nil && !boundTextEntryInputIsGone(app: app, target: target)
           ? .commitNotObserved : nil
+        if target.boundIdentity != nil && failure == nil {
+          NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_INPUT_REMOVED_AFTER_DELIVERY")
+        }
         return TextEntryResult(verified: nil, repaired: false, expectedText: requested, observedText: nil, failure: failure)
       }
       guard let observed = textEntryObservation(for: element) else {
         return TextEntryResult(verified: nil, repaired: false, expectedText: requested, observedText: nil)
       }
-      let sampledAt = Date()
-      if latest.map({ observed.isSettled(with: $0) }) != true { stableSince = sampledAt }
-      latest = observed
-      let result = Self.replacementTextEntryResult(requested: requested, baseline: baseline, observed: observed)
-      let settled = sampledAt.timeIntervalSince(stableSince) >= TextEntryTiming.verificationStabilityWindow
-      let moved = baseline.map { !observed.isSettled(with: $0) } ?? true
-      if settled && (moved || result.verified != false || sampledAt >= deadline) {
+      if let result = confirmation.observe(observed, at: Date()) {
         if result.unconfirmed != nil {
           NSLog("AGENT_DEVICE_RUNNER_TEXT_ENTRY_UNCONFIRMED expectedLength=%d observedLength=%d repaired=0", requested.count, observed.value.count)
         }
         return result
-      }
-      if sampledAt >= deadline {
-        return TextEntryResult(
-          verified: nil, repaired: false, expectedText: requested, observedText: observed.value,
-          failure: .commitNotObserved
-        )
       }
       sleepFor(TextEntryTiming.pollInterval)
     }
