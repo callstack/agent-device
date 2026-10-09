@@ -150,6 +150,7 @@ export type InteractionPathContract = {
 
 const GAPS_UMBRELLA_ISSUE = 'https://github.com/callstack/agent-device/issues/1081';
 const PARENT_OWNED_TOUCH_POINT_GAP_ISSUE = 'https://github.com/callstack/agent-device/issues/1718';
+const TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE = 'https://github.com/callstack/agent-device/issues/3335';
 
 // Every path shares the SAME cell by construction: response payloads have one
 // construction site (ADR 0011 Layer 2), and the hand-rolled-literal guard test
@@ -166,7 +167,7 @@ const TAP_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
   kind: 'waived',
   reason:
     'gap: the response reports the dispatch only; only opt-in --verify/--settle capture post-action evidence into it. The deferred marks set after dispatch (Android snapshot freshness after press/click, post-gesture stabilization when the request sets postGestureStabilization) are judged by the next capture, never in this response, and the iOS ambiguous-failure corroboration reconsiders only a thrown runner error.',
-  trackingIssue: GAPS_UMBRELLA_ISSUE,
+  trackingIssue: TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE,
 };
 
 // Both Maestro-compatible fast paths (src/daemon/interaction/internal/interaction-touch-direct-ios.ts)
@@ -190,7 +191,7 @@ const DIRECT_IOS_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
   kind: 'waived',
   reason:
     "gap: this replay-only route observes no outcome beyond the runner's own report; --verify/--settle do not apply here (see the inapplicable cells on this row), and the shared ambiguous-failure corroboration only reconsiders a thrown error, never a successful dispatch.",
-  trackingIssue: GAPS_UMBRELLA_ISSUE,
+  trackingIssue: TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE,
 };
 
 // The two runtime tree paths (selector and ref resolution) run the SAME shared

@@ -464,6 +464,7 @@ agent-device gesture transform 200 420 80 -40 2 35 700 # combined pan, zoom, and
 ```
 
 `fill` clears then types. `type` does not clear.
+A successful `click` or `press` means the tap was sent to where the target was when the command found it. It does not confirm that the tap landed on that element or changed the screen. When your next step depends on the tap, add `--verify` to learn whether the screen changed (`changedFromBefore`), add `--settle` to get the diff once the UI goes quiet, or follow with `wait <selector>` for the screen you expect.
 When an interaction fails, see [Retry after a failed command](#retry-after-a-failed-command) before you retry.
 `type` accepts text only. Do not pass `@ref` to `type`; use `fill @ref "text"` to target a field directly, or `press @ref` then `type "text"` to append in the focused field.
 If `type` reports `TEXT_INPUT_NOT_FOCUSED`, focus a visible text input and retry; when accessibility does not expose the input, use a coordinate focus command before typing.
