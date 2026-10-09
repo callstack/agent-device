@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import type { AppleApplicationTools } from '@agent-device/contracts/application-lifecycle-runtime';
@@ -18,6 +19,7 @@ import {
   RUNNER_CACHE_KEY_FIXTURE,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
+import { takeRunnerWarmLossNotice } from '../runner-destination-watch.ts';
 import { bindAppleApplicationLifecycle } from '../../lifecycle.ts';
 import { platformRuntimeHostFixture } from '../../runtime.fixtures.ts';
 import { runnerOwnerToken, writeRunnerLease } from '../runner-lease.ts';
@@ -349,6 +351,39 @@ test('a drain that lands after close is issued cannot return a busy runner to re
   assert.match(diagnostics, /"phase":"ios_runner_retain_skipped_busy"/);
   assert.doesNotMatch(diagnostics, /"phase":"ios_runner_idle_stop_scheduled"/);
   assert.equal(readRunnerSessionLiveness(device.id), null);
+});
+
+test('a destination lost during retention takes the retained runner and its lease down (#3321)', async () => {
+  const device = deviceNamed('close-finalize-destination-lost');
+  const connections: net.Socket[] = [];
+  const destination = net.createServer((socket) => {
+    socket.on('error', () => {});
+    connections.push(socket);
+  });
+  await new Promise<void>((resolve) => destination.listen(0, '127.0.0.1', resolve));
+  mockGetFreePort.mockResolvedValue((destination.address() as net.AddressInfo).port);
+  vi.stubEnv('AGENT_DEVICE_IOS_RUNNER_DESTINATION_CONFIRM_MS', '5');
+  appleRunnerTestHost.update({
+    observeSimulatorState: async () => 'Shutdown',
+    observeSimulatorBootTimeMs: async () => ({ observed: true, bootedAtMs: 1 }),
+  });
+  try {
+    const session = await ensureRunnerSession(device, {});
+    await closeFinalizationLifecycle(device, []).finalizeApplicationClose(closeInput(true));
+    await vi.waitFor(() => assert.equal(connections.length, 1));
+
+    for (const socket of connections) socket.destroy();
+
+    await vi.waitFor(() => assert.equal(readRunnerSessionLiveness(device.id), null), {
+      timeout: 5000,
+    });
+    assert.equal(runnerLeaseExists(device.id), false);
+    assert.equal(session.state, 'stopped');
+    assert.equal((await takeRunnerWarmLossNotice(device.id))?.reason, 'runner_destination_lost');
+  } finally {
+    vi.unstubAllEnvs();
+    await new Promise<void>((resolve) => destination.close(() => resolve()));
+  }
 });
 
 /** The close path's Apple tools, composed exactly as the root's lazy tools compose them. */
