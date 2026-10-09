@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-3356/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-3356/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-3356/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-3356/static/js/index.5ca831c5b8.js"></script>
+<script defer src="/agent-device/pr-preview/pr-3356/static/js/index.b2487aed37.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -94,7 +94,7 @@ output, for every command. Four commands declare their stdout to be the value a 
 <li>Android: <code>shutdown --platform android --device &lt;avd-name&gt;</code> stops a running emulator.</li>
 <li><code>open [app|url] [url]</code> boots and activates the selected target when needed.</li>
 <li><code>open &lt;app&gt; --wait &lt;ms&gt;</code> waits up to that budget for a device another session is holding instead of failing at once, then fails with <code>DEVICE_IN_USE</code> if the budget runs out. Only session contention is waited for: a device claim held by another workspace&#x27;s daemon is never retriable and returns its recovery command immediately. The wait extends the command&#x27;s timeout envelope, so a long budget does not need a longer <code>--timeout</code>. See <a href="/agent-device/pr-preview/pr-3356/docs/sessions#wait-for-a-slow-or-busy-device" class="rp-link">Sessions</a> for queuing behavior.</li>
-<li>On iOS, when <code>open</code> could not read the launched app before it returned, the next command that reads the screen keeps reading until two reads in a row agree, within a short bounded wait, before it acts. A <code>click</code> right after such an open then targets where the element comes to rest, not where it was mid-launch. If the screen is still moving after that wait, the command proceeds and its response warns that the surface was still changing after <code>open</code>.</li>
+<li>On an iOS Simulator, <code>open</code> watches the launch for a bounded time. When the app was still unreadable when that watch ended (<code>timing.postOpenObservation: &quot;unobservable&quot;</code> in the open response), the next command that reads the screen keeps reading until two reads in a row agree, within a short bounded wait, before it acts. A <code>click</code> right after such an open then targets where the element comes to rest, not where it was mid-launch. If the screen is still moving after that wait, the command proceeds and its response warns that the surface was still changing after <code>open</code>. Any other <code>postOpenObservation</code> value, including <code>probe-failed</code>, leaves the next command reading the screen once.</li>
 <li><code>open &lt;url&gt;</code> deep links are supported on Android and iOS.</li>
 <li>On an iOS Simulator, handing the URL to the device is one bounded <code>simctl openurl</code>: when CoreSimulator never answers it, the open fails within 20 seconds with <code>details.reason: ios-simulator-openurl-timeout</code> and kills the child, instead of the request being cancelled around a still-running <code>openurl</code>. The Simulator may still have received the URL, so retry the open or answer the prompt with <code>alert accept</code>.</li>
 <li><code>open &lt;app&gt; &lt;url&gt;</code> opens a deep link on iOS.</li>
