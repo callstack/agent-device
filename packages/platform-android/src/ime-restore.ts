@@ -43,17 +43,20 @@ export type AndroidTestImeRestoreResult = {
 
 // One marker-clear rule, owned here and used by both callers of the inner restore. A reason
 // from an inspected device proves recovery complete once this call's flush wait is not
-// abandoned: a kill-bound close must reach 'covered' (an aborted wait is never a completed
-// settle), while an ordinary close or the startup scan owe no wait at all — neither kills, and
-// the device's window stays open in the timestamp for the next kill-bound path to wait out. A
-// nothing-inspected `not-activated-here` close earns the clear only by covering a window a
-// confirmed restore registered — its own call inspected nothing and earns nothing alone.
+// abandoned: a kill-bound close must reach a covered outcome (an aborted wait is never a
+// completed settle), while an ordinary close or the startup scan owe no wait at all — neither
+// kills, and the device's window stays registered for the next kill-bound path to wait out. A
+// nothing-inspected `not-activated-here` close earns the clear only on 'covered-confirmed':
+// it saw no device, so the sole evidence that retrying is safe is that the covered window
+// belonged to a write that confirmed. An issued-but-unconfirmed write leaves the helper
+// possibly displaced and its persisted target intact, and the marker must survive for the
+// startup scan to retry.
 function isRecoveryMarkerClearEarned(
   reason: AndroidTestImeRestoreReason,
   settleOutcome: TestImeFlushWait,
 ): boolean {
   if (isDeviceRecoveryComplete(reason)) return settleOutcome !== 'aborted';
-  return reason === 'not-activated-here' && settleOutcome === 'covered';
+  return reason === 'not-activated-here' && settleOutcome === 'covered-confirmed';
 }
 
 export async function restoreAndroidTestIme(
@@ -148,6 +151,7 @@ async function restoreAndroidTestImeFor(
   // marks and never reads the gap as "nothing owed". A `finally` close runs after the try
   // body's registration, so a waiter never sees the entry closed while its mark is absent.
   const pendingWriteOpens = beginTestImeRestoreWrite(device.id);
+  let writeConfirmed = false;
   try {
     await runAdbShell(adb, ['ime', 'set', previousIme], {
       allowFailure: true,
@@ -165,8 +169,9 @@ async function restoreAndroidTestImeFor(
       return { restored: false, previousIme, reason: 'set-failed' };
     }
     // Confirmed back on the previous IME — the only outcome that earns clearing the persisted
-    // record. The flush window attaches to the ISSUED write, not the confirmation (see the
-    // `finally`), so this branch stays purely about recovery evidence.
+    // record and the only mark provenance that may justify clearing another close's marker.
+    // The flush hold attaches to the ISSUED write regardless (see the `finally`).
+    writeConfirmed = true;
     // Now it is safe to drop the recovery value.
     await clearPersistedPreviousIme(adb).catch(() => {});
     await clearPersistedRebindDisplacement(adb).catch(() => {});
@@ -179,9 +184,10 @@ async function restoreAndroidTestImeFor(
     // An issued emulator restore owes the kill-bound flush hold whatever the outcome: a
     // readback mismatch or post-dispatch throw cannot prove the provider never accepted the
     // write. Registering here, before the pending entry closes, keeps "a drained waiter never
-    // sees closed-but-unregistered" a property of this one site.
+    // sees closed-but-unregistered" a property of this one site; the mark carries whether
+    // this write confirmed, which is the only fact that may retire retry evidence.
     if (device.kind === 'emulator') {
-      registerTestImeRestore(device.id);
+      registerTestImeRestore(device.id, writeConfirmed);
     }
     pendingWriteOpens();
   }

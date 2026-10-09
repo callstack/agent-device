@@ -13,8 +13,8 @@ import {
   beginTestImeRestoreWrite,
   registerTestImeRestore,
   SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
-  testImeLastRestoreAtPerfMs,
   testImePendingRestoreWrites,
+  testImeRestoreMarks,
 } from '../ime-state.ts';
 
 const run = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
@@ -34,11 +34,17 @@ const nearlyFullWindowFloorMs = SETTINGS_PROVIDER_FLUSH_SETTLE_MS - WINDOW_TOLER
 const seededElapsedMs = Math.round(SETTINGS_PROVIDER_FLUSH_SETTLE_MS * 0.4);
 const seededRemainderMs = SETTINGS_PROVIDER_FLUSH_SETTLE_MS - seededElapsedMs;
 
+// Seeded with confirmed provenance: these tests pin the WAIT's derivation and interleaving,
+// which reads only atPerfMs; provenance behavior is pinned in the restore-side tests.
+function seedRestoreMark(serial: string, ageMs: number, confirmed = true): void {
+  testImeRestoreMarks.set(serial, { atPerfMs: performance.now() - ageMs, confirmed });
+}
+
 beforeEach(() => {
   run.mockReset();
   run.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
   sleep.mockReset();
-  testImeLastRestoreAtPerfMs.clear();
+  testImeRestoreMarks.clear();
   testImePendingRestoreWrites.clear();
 });
 
@@ -78,7 +84,7 @@ test('only Android emulators are available', () => {
 // caller) inherits it without knowing about the test IME.
 test('a kill waits out a registered test-IME flush window before running adb emu kill', async () => {
   const device = androidDevice();
-  testImeLastRestoreAtPerfMs.set(device.id, performance.now());
+  seedRestoreMark(device.id, 0);
   // A deferred sleep, not an instantly-resolving one: the point of this hold is that `adb emu
   // kill` does not run WHILE the wait is pending, so the test has to observe the middle of
   // the wait, not just its endpoints.
@@ -106,7 +112,7 @@ test('a kill waits out a registered test-IME flush window before running adb emu
     expect.objectContaining({ args: ['-s', device.id, 'emu', 'kill'] }),
     expect.any(AbortSignal),
   );
-  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
+  expect([...testImeRestoreMarks.keys()]).toEqual([]);
 });
 
 // The mark only exists after `ime set` returns and the readback confirms it, but the
@@ -134,7 +140,7 @@ test('a kill started while a restore write is in flight waits for it to register
 
   // The write lands and registers its window, closing the in-flight entry exactly as the
   // registrar's finally block does.
-  registerTestImeRestore(device.id);
+  registerTestImeRestore(device.id, true);
   closeInFlightWrite();
   await drainMicrotasks();
 
@@ -145,7 +151,7 @@ test('a kill started while a restore write is in flight waits for it to register
   settling.resolve();
   await expect(pendingKill).resolves.toEqual(success());
   expect(run).toHaveBeenCalledTimes(1);
-  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
+  expect([...testImeRestoreMarks.keys()]).toEqual([]);
 });
 
 test('a pending write that closes with no registered mark releases the kill as idle', async () => {
@@ -173,7 +179,7 @@ test('a restore landing mid-wait extends the pending kill instead of releasing i
   const device = androidDevice();
   // Known elapsed: the original mark is 40% of the window old, so the first wait must derive
   // the remaining 60% — proportional to the constant, not a fixed number.
-  testImeLastRestoreAtPerfMs.set(device.id, performance.now() - seededElapsedMs);
+  seedRestoreMark(device.id, seededElapsedMs);
   const firstSettling = deferred();
   const secondSettling = deferred();
   sleep
@@ -189,7 +195,7 @@ test('a restore landing mid-wait extends the pending kill instead of releasing i
   expect(sleep.mock.calls[0]?.[0]).toBeLessThanOrEqual(seededRemainderMs);
 
   // A second confirmed restore lands while this kill sleeps — a newer write, a newer deadline.
-  registerTestImeRestore(device.id);
+  registerTestImeRestore(device.id, true);
   firstSettling.resolve();
   await drainMicrotasks();
 
@@ -204,14 +210,14 @@ test('a restore landing mid-wait extends the pending kill instead of releasing i
   await expect(pendingKill).resolves.toEqual(success());
 
   expect(run).toHaveBeenCalledTimes(1);
-  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
+  expect([...testImeRestoreMarks.keys()]).toEqual([]);
 });
 
 test('a forward host wall-clock jump cannot shorten a registered flush window', async () => {
   // The window is timed on the process monotonic clock, so an NTP/VM-resume step of the wall
   // clock must leave the kill-side remaining wait at the full budget.
   const device = androidDevice();
-  testImeLastRestoreAtPerfMs.set(device.id, performance.now());
+  seedRestoreMark(device.id, 0);
   const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Number.MAX_SAFE_INTEGER);
 
   try {
@@ -242,7 +248,7 @@ test('a kill cancelled inside the flush window never reaches adb emu kill', asyn
   // Known elapsed: the mark is 40% of the window old, so the derived remainder must be the
   // known 60% — not the full budget, not a fixed constant. That makes both waits provably a
   // function of the mark.
-  testImeLastRestoreAtPerfMs.set(device.id, performance.now() - seededElapsedMs);
+  seedRestoreMark(device.id, seededElapsedMs);
   const controller = new AbortController();
   sleep.mockImplementationOnce((_ms, waitSignal) => {
     controller.abort();
@@ -266,7 +272,7 @@ test('a kill cancelled inside the flush window never reaches adb emu kill', asyn
   // The window stays registered so a retry still waits out the remainder — and the retry
   // re-derives the SAME remainder from the surviving mark: the monotonic-mark property the
   // abort design rests on, pinned by number, not by shape.
-  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([device.id]);
+  expect([...testImeRestoreMarks.keys()]).toEqual([device.id]);
 
   const retry = await createAndroidShutdownRuntime({ commands }).shutdownTarget(device, signal());
 

@@ -17,7 +17,7 @@ import {
   resetAndroidTestImeActivationCacheForTests,
   setAndroidTestImeActiveForTests,
   SETTINGS_PROVIDER_FLUSH_SETTLE_MS,
-  testImeLastRestoreAtPerfMs,
+  testImeRestoreMarks,
 } from './ime-state.ts';
 import { fakeImeDeviceAdb, type FakeImeDeviceState } from './ime-device.fixtures.ts';
 
@@ -38,6 +38,12 @@ function stuckDeviceState(): FakeImeDeviceState {
       ['agent_device_ime_helper_previous_ime', 'com.samsung/.Keyboard'],
     ]),
   };
+}
+
+// Seeds a mark with explicit provenance: tests here pin when a covered window may retire the
+// durable marker, and provenance is exactly the fact the clear rule consumes.
+function seedRestoreMark(serial: string, ageMs: number, confirmed = true): void {
+  testImeRestoreMarks.set(serial, { atPerfMs: performance.now() - ageMs, confirmed });
 }
 
 async function restoreWith(state: FakeImeDeviceState, options: { shutdownTarget?: boolean } = {}) {
@@ -193,7 +199,7 @@ describe('a close cancelled mid-settle', () => {
     // monotonic timestamp keeps the remaining wait derivable for the next kill-bound caller.
     expect(result).toMatchObject({ restored: true, reason: 'ok' });
     expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
-    expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([DEVICE.id]);
+    expect([...testImeRestoreMarks.keys()]).toEqual([DEVICE.id]);
   });
 
   test('a second close waits out the remaining window before it may return to the kill', async () => {
@@ -237,7 +243,7 @@ describe('a close cancelled mid-settle', () => {
     expect(sleep).toHaveBeenCalledTimes(1);
     expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(0);
     expect(sleep.mock.calls[0]?.[1]).toBe(second.signal);
-    expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
+    expect([...testImeRestoreMarks.keys()]).toEqual([]);
     expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
   });
 
@@ -250,7 +256,7 @@ describe('a close cancelled mid-settle', () => {
     // The seeded elapsed (one twentieth of the window) and the expected sleep band are both
     // derived from the window constant, so a changed window keeps this test's meaning.
     const elapsedBeforeCloseMs = Math.round(SETTINGS_PROVIDER_FLUSH_SETTLE_MS / 20);
-    testImeLastRestoreAtPerfMs.set(DEVICE.id, performance.now() - elapsedBeforeCloseMs);
+    seedRestoreMark(DEVICE.id, elapsedBeforeCloseMs);
 
     const result = await withAndroidAdbProvider(
       { exec: fakeImeDeviceAdb(stuckDeviceState()) },
@@ -264,7 +270,7 @@ describe('a close cancelled mid-settle', () => {
     // This close's OWN restore re-registers the mark at nearly the full window (the earlier
     // mark was older), so the sleep is derived from the fresh write, not from the seeded one.
     expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(SETTINGS_PROVIDER_FLUSH_SETTLE_MS * 0.8);
-    expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
+    expect([...testImeRestoreMarks.keys()]).toEqual([]);
   });
 
   test('a second close after the window already elapsed skips the wait', async () => {
@@ -272,10 +278,7 @@ describe('a close cancelled mid-settle', () => {
     await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
     // A restore whose whole flush window has already passed (the +1 keeps it elapsed for any
     // constant, instead of the number that happened to be window+1 at writing time).
-    testImeLastRestoreAtPerfMs.set(
-      DEVICE.id,
-      performance.now() - SETTINGS_PROVIDER_FLUSH_SETTLE_MS - 1,
-    );
+    seedRestoreMark(DEVICE.id, SETTINGS_PROVIDER_FLUSH_SETTLE_MS + 1, true);
 
     const result = await withAndroidAdbProvider(
       { exec: fakeImeDeviceAdb(stuckDeviceState()) },
@@ -286,7 +289,7 @@ describe('a close cancelled mid-settle', () => {
 
     expect(result).toEqual({ restored: false, reason: 'not-activated-here' });
     expect(sleep).not.toHaveBeenCalled();
-    expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
+    expect([...testImeRestoreMarks.keys()]).toEqual([]);
     // Load-bearing on this close: it inspected nothing (not-activated-here), and covering the
     // window a confirmed restore had opened is the only thing that earns clearing this marker.
     expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
@@ -295,7 +298,7 @@ describe('a close cancelled mid-settle', () => {
   test('an ordinary close never waits on a pending window it cannot race', async () => {
     const host = bindAndroidAdbHostStub();
     await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
-    testImeLastRestoreAtPerfMs.set(DEVICE.id, performance.now());
+    seedRestoreMark(DEVICE.id, 0);
 
     const result = await withAndroidAdbProvider(
       { exec: fakeImeDeviceAdb(stuckDeviceState()) },
@@ -306,7 +309,7 @@ describe('a close cancelled mid-settle', () => {
     expect(result).toEqual({ restored: false, reason: 'not-activated-here' });
     expect(sleep).not.toHaveBeenCalled();
     // An ordinary close consumes nothing and inspects nothing: both stay for the next caller.
-    expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([DEVICE.id]);
+    expect([...testImeRestoreMarks.keys()]).toEqual([DEVICE.id]);
     expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
   });
 });
@@ -325,7 +328,7 @@ test('an ordinary close restores without any flush wait but registers the window
   expect(sleep).not.toHaveBeenCalled();
   // Registration is what lets a later kill-bound close — including another session's — see the
   // window this restore opened.
-  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([DEVICE.id]);
+  expect([...testImeRestoreMarks.keys()]).toEqual([DEVICE.id]);
 });
 
 test("a kill-bound close after another close's restore waits out the registered window", async () => {
@@ -347,7 +350,7 @@ test("a kill-bound close after another close's restore waits out the registered 
   // 'ok' with no wait owed — is what this asserts; the clear-not-earned branches live in the
   // cancelled-mid-settle suite, where the first close leaves the marker in place.)
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([]);
-  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([DEVICE.id]);
+  expect([...testImeRestoreMarks.keys()]).toEqual([DEVICE.id]);
 
   sleep.mockClear();
   const result = await withAndroidAdbProvider(
@@ -361,7 +364,45 @@ test("a kill-bound close after another close's restore waits out the registered 
   expect(result).toEqual({ restored: false, reason: 'not-activated-here' });
   expect(sleep).toHaveBeenCalledTimes(1);
   expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(0);
-  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
+  expect([...testImeRestoreMarks.keys()]).toEqual([]);
+});
+
+test('a not-activated shutdown covering an unconfirmed window kills but keeps the marker', async () => {
+  // A failed restore still owes the kill-bound hold — the provider may have accepted the
+  // write — but its mark proves only issuance, not recovery. An uninspected kill-bound close
+  // must therefore wait the window out AND leave the durable marker for the startup scan to
+  // retry: the helper may still be active and the persisted target intact.
+  const host = bindAndroidAdbHostStub();
+  await host.imeRecoveryMarkers.write(STATE_DIR, DEVICE.id);
+  setAndroidTestImeActiveForTests(DEVICE, true);
+  const failingState = stuckDeviceState();
+  failingState.imeSetFails = true;
+  const deviceAdb = fakeImeDeviceAdb(failingState);
+
+  await withAndroidAdbProvider(
+    { exec: deviceAdb },
+    { serial: DEVICE.id },
+    async () => await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR, shutdownTarget: false }),
+  );
+  // Call one: set-failed retained the marker and registered an unconfirmed window.
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
+  expect(testImeRestoreMarks.get(DEVICE.id)?.confirmed).toBe(false);
+
+  sleep.mockClear();
+  const result = await withAndroidAdbProvider(
+    { exec: deviceAdb },
+    { serial: DEVICE.id },
+    async () => await restoreAndroidTestIme(DEVICE, { stateDir: STATE_DIR, shutdownTarget: true }),
+  );
+
+  // Call two: it waited (the hold is owed regardless of provenance) and retired the mark, but
+  // covering an ISSUED-only window does not earn the clear — the marker survives so startup
+  // recovery retries the restore a confirmed close would have completed.
+  expect(result).toEqual({ restored: false, reason: 'not-activated-here' });
+  expect(sleep).toHaveBeenCalledTimes(1);
+  expect(sleep.mock.calls[0]?.[0]).toBeGreaterThan(0);
+  expect([...testImeRestoreMarks.keys()]).toEqual([]);
+  expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
 });
 
 test('a shutdown of a physical device restores without any flush wait', async () => {
@@ -395,7 +436,7 @@ test('a restore that did not switch the IME back still owes the flush wait it ma
   expect(result).toMatchObject({ restored: false, reason: 'set-failed' });
   expect(sleep).toHaveBeenCalledTimes(1);
   expect(sleep.mock.calls[0]?.[0]).toBeGreaterThanOrEqual(SETTINGS_PROVIDER_FLUSH_SETTLE_MS * 0.8);
-  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([]);
+  expect([...testImeRestoreMarks.keys()]).toEqual([]);
   expect([...(host.markerStore.get(STATE_DIR) ?? [])]).toEqual([DEVICE.id]);
   expect(state.settings.has('agent_device_ime_helper_previous_ime')).toBe(true);
 });
@@ -444,7 +485,7 @@ test.each([false, true])('startup recovers a stuck orphan with displaced=%s', as
   // The startup path writes `ime set` like any other restore, so it owes the same flush window:
   // a later kill-bound path (close --shutdown or the shutdown runtime) must not land inside it.
   // Registration is synchronous — daemon boot never pays a sleep for the window.
-  expect([...testImeLastRestoreAtPerfMs.keys()]).toEqual([DEVICE.id]);
+  expect([...testImeRestoreMarks.keys()]).toEqual([DEVICE.id]);
   expect(sleep).not.toHaveBeenCalled();
   expect(host.diagnostics).toContainEqual({
     phase: 'android_test_ime_orphan_restored',
