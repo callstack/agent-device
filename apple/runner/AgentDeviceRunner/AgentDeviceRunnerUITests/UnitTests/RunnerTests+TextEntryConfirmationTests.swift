@@ -88,22 +88,22 @@ extension RunnerTests {
   func testReplacementSlowFirstReadGetsOneStabilityWindow() throws {
     let startedAt = Date(timeIntervalSinceReferenceDate: 100)
     let otherField = TextEntryElementIdentity(identifier: "other-input", elementType: "TextField", frame: Self.otpFieldIdentity.frame)
-    let cases: [(String, TextEntryObservation, Bool?)] = [
-      ("123456", Self.otpObservation("123456"), true),
-      ("123456", Self.otpObservation("12 34 56"), nil),
-      ("123456", Self.otpObservation("12345"), false),
-      ("123456", Self.otpObservation("123456", identity: otherField), false),
-      ("hello\n", Self.otpObservation(""), nil),
-      ("hello\n", Self.otpObservation("hllo"), nil),
+    let cases: [(String, TextEntryObservation, Bool?, String?)] = [
+      ("123456", Self.otpObservation("123456"), true, nil),
+      ("123456", Self.otpObservation("12 34 56"), nil, "12 34 56"),
+      ("123456", Self.otpObservation("12345"), false, nil),
+      ("123456", Self.otpObservation("123456", identity: otherField), false, nil),
+      ("hello\n", Self.otpObservation(""), nil, nil),
+      ("hello\n", Self.otpObservation("hllo"), nil, nil),
     ]
-    for (requested, observed, verified) in cases {
+    for (requested, observed, verified, unconfirmedAfter) in cases {
       var confirmation = ReplacementTextEntryConfirmation(requested: requested, baseline: Self.otpObservation(""), startedAt: startedAt)
       XCTAssertNil(confirmation.observe(observed, at: startedAt.addingTimeInterval(1.1)))
       XCTAssertNil(confirmation.observe(observed, at: startedAt.addingTimeInterval(1.15)))
       let result = try XCTUnwrap(confirmation.observe(observed, at: startedAt.addingTimeInterval(1.31)))
       XCTAssertEqual(result.verified, verified)
       XCTAssertNil(result.failure)
-      XCTAssertEqual(result.unconfirmed?.after, observed.value == "12 34 56" ? observed.value : nil)
+      XCTAssertEqual(result.unconfirmed?.after, unconfirmedAfter)
       XCTAssertFalse(result.repaired)
     }
   }
