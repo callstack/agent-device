@@ -97,6 +97,15 @@ agent-device replay ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --s
   For a step without an annotation, `error.details.reason` is `selector_not_found`, as for a live
   command. If the app shows an empty accessibility tree during that wait, `error.details.reason`
   is `capture_sparse` instead; take a snapshot to see where the app is.
+- A step whose read names one element (`is` with a predicate other than `exists`/`absent`, or
+  `get attrs`) that reaches dispatch with an ambiguous selector fails with `AMBIGUOUS_MATCH` as
+  the divergence cause — the same code the live command reports, so an ambiguous recorded
+  screen is not replayed as a missing one. An annotated step can also stop earlier, before the
+  command runs: when pre-dispatch target binding cannot confirm the recorded identity (its
+  identity set has more than one member with no sibling or viewport signal isolating one, or no
+  fresh snapshot can be captured to verify against), the divergence cause is
+  `IDENTITY_UNVERIFIABLE` instead. Both codes say the recorded screen changed; only
+  `AMBIGUOUS_MATCH` proves your selector matched more than one element.
 
 ## Run Maestro compatibility flows
 

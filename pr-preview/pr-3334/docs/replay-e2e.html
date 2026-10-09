@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-3334/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-3334/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-3334/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-3334/static/js/index.efbcf3b554.js"></script>
+<script defer src="/agent-device/pr-preview/pr-3334/static/js/index.e7f3343365.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -98,6 +98,17 @@ line above it), <code>error.details.divergence.kind</code> is <code>selector-mis
 For a step without an annotation, <code>error.details.reason</code> is <code>selector_not_found</code>, as for a live
 command. If the app shows an empty accessibility tree during that wait, <code>error.details.reason</code>
 is <code>capture_sparse</code> instead; take a snapshot to see where the app is.</p>
+</li>
+<li>
+<p>A step whose read names one element (<code>is</code> with a predicate other than <code>exists</code>/<code>absent</code>, or
+<code>get attrs</code>) that reaches dispatch with an ambiguous selector fails with <code>AMBIGUOUS_MATCH</code> as
+the divergence cause — the same code the live command reports, so an ambiguous recorded
+screen is not replayed as a missing one. An annotated step can also stop earlier, before the
+command runs: when pre-dispatch target binding cannot confirm the recorded identity (its
+identity set has more than one member with no sibling or viewport signal isolating one, or no
+fresh snapshot can be captured to verify against), the divergence cause is
+<code>IDENTITY_UNVERIFIABLE</code> instead. Both codes say the recorded screen changed; only
+<code>AMBIGUOUS_MATCH</code> proves your selector matched more than one element.</p>
 </li>
 </ul>
 <h2 class="rp-toc-include" id="run-maestro-compatibility-flows"><a href="#run-maestro-compatibility-flows" class="rp-header-anchor rp-link" aria-hidden="true">#</a>Run Maestro compatibility flows</h2>
