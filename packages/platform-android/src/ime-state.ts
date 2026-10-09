@@ -43,9 +43,9 @@ const SETTINGS_PROVIDER_FLUSH_SETTLE_MS = 2_500;
 // state-dir file host through the shutdown-runtime contract, which today sees only `commands`.
 // The forfeit needs a daemon death, a restart, and a kill-bound close all inside 2.5 s of the
 // write. It is a residual the fix neither closes nor worsens: every reachable kill path gained
-// a window it never had, and this is the one state a restart can erase. A human reviewer may
-// still choose to trade that cost (accepted over-wait on startup recovery is the cheapest
-// alternative); it is a boundary decision, not an oversight of this map.
+// a window it never had, and this is the one state a restart can erase. Closing it needs
+// restart-durable evidence with an expiry rule and a clock that survives process death —
+// tracked as follow-up #3346; it is a boundary decision, not an oversight of this map.
 // @internal the map is exported for tests; production touches it only through the helpers here.
 export const testImeLastRestoreAtPerfMs = new Map<string, number>();
 
