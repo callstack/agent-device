@@ -11,7 +11,11 @@ export {
   openVerifiedFileForRead,
   openVerifiedFileForTruncate,
 } from './internal/verified-file.ts';
-export { expandUserHomePath, resolveUserPath } from './internal/path-resolution.ts';
+export {
+  expandUserHomePath,
+  resolveUserConfigPath,
+  resolveUserPath,
+} from './internal/path-resolution.ts';
 export {
   acquireProcessLock,
   acquireProcessLockAcquisition,

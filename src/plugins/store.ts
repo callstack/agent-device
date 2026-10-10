@@ -4,9 +4,12 @@ import path from 'node:path';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
 import { runCmd } from '@agent-device/host-kit/command';
-import { acquireProcessLock, publishFileSync } from '@agent-device/host-kit/file';
+import {
+  acquireProcessLock,
+  publishFileSync,
+  resolveUserConfigPath,
+} from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { resolveUserConfigPath } from '../commands/schema/cli-config.ts';
 import {
   readPluginManifest,
   assertUniquePluginProviders,
