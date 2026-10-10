@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../../platform-services.ts';
 import {
   closeApplicationRuntimeUse,
   closeApplicationWithRuntimeHintClearUse,
@@ -33,6 +34,7 @@ export async function admitCloseRuntime(params: {
   device: DeviceInfo;
   clearRuntimeHints: boolean;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<CloseRuntimeAdmission> {
   const use = params.clearRuntimeHints

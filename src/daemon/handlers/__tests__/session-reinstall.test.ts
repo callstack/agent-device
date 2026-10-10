@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -48,6 +49,7 @@ beforeEach(() => {
 
 test('reinstall requires active session or explicit device selector', async () => {
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -82,6 +84,7 @@ test('reinstall validates required args before runtime admission', async () => {
     }),
   );
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -118,6 +121,7 @@ test('install binds the deployment use exactly once after one facts admission', 
   });
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,
@@ -181,6 +185,7 @@ test('install fails closed before binding when its provider owner lacks deployme
   };
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,
@@ -225,6 +230,7 @@ test('reinstall cleans an uploaded artifact after the request-scoped operation',
   vi.mocked(resolveTargetDevice).mockResolvedValue(session.device);
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,
@@ -259,6 +265,7 @@ test('HarmonyOS reinstall updates the active session identity from the runtime r
   mockDeployAppRuntime.mockResolvedValue({ packageName: 'com.example.application' });
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,
@@ -308,6 +315,7 @@ test.each(['rebuild', 'retire'] as const)(
       return { packageName: 'com.example.updated' };
     });
     const running = handleSessionCommands({
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: 'default',

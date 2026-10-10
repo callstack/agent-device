@@ -124,6 +124,7 @@ export async function resolveBoundScrollRuntime(
     command: 'scroll',
     device: params.device,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   };
   switch (plan.kind) {

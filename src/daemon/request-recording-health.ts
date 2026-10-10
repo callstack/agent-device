@@ -1,9 +1,13 @@
 import { isIosFamily } from '@agent-device/kernel/device';
-import { appleSessionObservation } from '../platform-runtime-apple-resources.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
 import type { SessionStore } from './session-store.ts';
+import type { DaemonPlatformServices } from './platform-services.ts';
 
-export async function refreshRecordingHealth(store: SessionStore, ref: SessionRef): Promise<void> {
+export async function refreshRecordingHealth(
+  store: SessionStore,
+  ref: SessionRef,
+  platformServices: DaemonPlatformServices,
+): Promise<void> {
   const session = store.requireCurrent(ref);
   if (!recordingRequiresRunnerHealth(session)) {
     return;
@@ -11,7 +15,9 @@ export async function refreshRecordingHealth(store: SessionStore, ref: SessionRe
   const resource = session.screenRecording!;
   const recording = resource.handle;
 
-  const snapshot = await appleSessionObservation.observeRunnerSession(session.device.id);
+  const snapshot = await platformServices.appleSessionObservation.observeRunnerSession(
+    session.device.id,
+  );
   if (store.resolveCurrent(ref)?.screenRecording !== resource) return;
   const state = recording.inspect();
   if (!state.runnerSessionId) {

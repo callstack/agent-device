@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../../platform-services.ts';
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { dispatchSnapshotViaRuntime } from '../../snapshot-runtime.ts';
 import type { SessionRef } from '../../session-state.ts';
@@ -108,6 +109,7 @@ export async function composeOpenWithInitialSnapshot(params: {
   sessionStore: SessionStore;
   openResponse: DaemonResponse;
   inspectFacts: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const { req, ref, logPath, sessionStore, openResponse } = params;
@@ -129,6 +131,7 @@ export async function composeOpenWithInitialSnapshot(params: {
       logPath,
       sessionStore,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     });
     if (!snapshotResponse.ok)

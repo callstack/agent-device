@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -109,6 +110,7 @@ test('an ambiguous is issues its printed candidates so press acts on the listed 
 
   const fixture = selectorCaptureFixture({ snapshot: () => ambiguousFullCapture() });
   const response = await dispatchIsViaRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     req: isRequest(sessionName, ['visible', 'label="Deploy"']),
     sessionName,
     sessionStore,
@@ -153,6 +155,7 @@ test('a plain candidate ref from the ambiguity refusal is refused, not silently 
 
   const fixture = selectorCaptureFixture({ snapshot: () => ambiguousFullCapture() });
   const response = await dispatchIsViaRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     req: isRequest(sessionName, ['visible', 'label="Deploy"']),
     sessionName,
     sessionStore,
@@ -215,6 +218,7 @@ test('an ambiguous is on a sparse capture prints no candidates and issues nothin
   });
   const fixture = selectorCaptureFixture({ snapshot: sparseCapture });
   const response = await dispatchIsViaRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     req: isRequest(sessionName, ['visible', 'label="Deploy"']),
     sessionName,
     sessionStore,

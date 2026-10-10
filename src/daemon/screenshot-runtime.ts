@@ -75,6 +75,7 @@ export async function resolveScreenshotGenericExecution(
     overlayRefs: req.flags?.overlayRefs === true,
     cropOn,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (!resolved.ok) return resolved;

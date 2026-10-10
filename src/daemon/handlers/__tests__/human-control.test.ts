@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { test } from 'vitest';
 import { createRequestExecutionScope } from '../../request-execution-scope.ts';
 import {
@@ -31,6 +32,7 @@ test('lease-owner takeover uses the production admission gate, preserves the ses
   assert.equal(release.ok, true);
   assert.deepEqual(registry.listHumanControlHolds({ kind: 'host' }), []);
   const scope = await createRequestExecutionScope({
+    platformServices: daemonPlatformServicesFixture(),
     req: humanControlRequest(lease, 'click', []),
     sessionStore,
     leaseRegistry: registry,
@@ -82,7 +84,12 @@ test('admitted tenants cannot retarget takeover or release provider-host holds',
 test('a fresh-session mutation without an advisory device lock still drains before host activation', async () => {
   const { registry, lease, sessionStore } = createHumanControlHarness();
   const req = { ...humanControlRequest(lease, 'click', []), session: 'fresh-session' };
-  const scope = await createRequestExecutionScope({ req, sessionStore, leaseRegistry: registry });
+  const scope = await createRequestExecutionScope({
+    req,
+    sessionStore,
+    leaseRegistry: registry,
+    platformServices: daemonPlatformServicesFixture(),
+  });
   const started = createControlLatch();
   const finish = createControlLatch();
   const mutation = scope.runLocked(async () => {
@@ -99,6 +106,7 @@ test('a fresh-session mutation without an advisory device lock still drains befo
   await Promise.resolve();
   assert.equal(active, false);
   const later = await createRequestExecutionScope({
+    platformServices: daemonPlatformServicesFixture(),
     req: { ...req, session: 'another-fresh-session' },
     sessionStore,
     leaseRegistry: registry,
@@ -116,13 +124,19 @@ test('a fresh-session mutation without an advisory device lock still drains befo
 test('a nested mutation is stopped when takeover begins during its parent request', async () => {
   const { registry, lease, sessionStore } = createHumanControlHarness();
   const req = humanControlRequest(lease, 'replay', []);
-  const scope = await createRequestExecutionScope({ req, sessionStore, leaseRegistry: registry });
+  const scope = await createRequestExecutionScope({
+    req,
+    sessionStore,
+    leaseRegistry: registry,
+    platformServices: daemonPlatformServicesFixture(),
+  });
   let activation: Promise<unknown> | undefined;
   await scope.runLocked(async () => {
     activation = registry.putHumanControlHold({ kind: 'host' }, 'host', {
       scope: HUMAN_CONTROL_SCOPE,
     });
     const nested = await createRequestExecutionScope({
+      platformServices: daemonPlatformServicesFixture(),
       req: humanControlRequest(lease, 'click', []),
       sessionStore,
       leaseRegistry: registry,

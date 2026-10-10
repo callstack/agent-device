@@ -4,12 +4,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 
 import path from 'node:path';
 
-vi.mock('../../platform-runtime-apple-resources.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../platform-runtime-apple-resources.ts')>()),
-  appleSessionObservation: { observeRunnerSession: vi.fn() },
-}));
-
-import { appleSessionObservation } from '../../platform-runtime-apple-resources.ts';
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import {
   createRequestHandler,
   gestureDeviceRuntimeGateway,
@@ -21,7 +16,15 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
-const mockObserveRunnerSession = vi.mocked(appleSessionObservation.observeRunnerSession);
+// The observation spy hangs off the port the router composes with (ADR 0019 section 11), not off
+// the platform module behind it.
+const mockObserveRunnerSession = vi.fn();
+const platformServices = daemonPlatformServicesFixture({
+  appleSessionObservation: {
+    observeRunnerSession: mockObserveRunnerSession,
+    resolveSoleForegroundApp: async () => undefined,
+  },
+});
 
 beforeEach(() => {
   legacyDispatchCapture.mockReset();
@@ -62,6 +65,7 @@ test('router blocks non-record commands when recording was invalidated', async (
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
+    platformServices,
   });
 
   const response = await handler({
@@ -117,6 +121,7 @@ test('router allows canonical iOS simulator gestures during overlay recording af
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
     deviceRuntimeGateway: gestureDeviceRuntimeGateway,
+    platformServices,
   });
 
   const response = await handler({

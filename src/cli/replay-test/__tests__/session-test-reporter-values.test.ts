@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../daemon/__tests__/platform-services-fixture.ts';
 // Characterization of the shipped reporter contract across the scheduler seam (#1478 P3).
 //
 // P3 moves the scheduler into `packages/replay-test` and makes attempt identity
@@ -102,6 +103,7 @@ async function runSuiteThroughReporter(params: {
       (event) => runReplayTestReporterProgress(reporters, event, reporterContext),
       async () =>
         await handleSessionCommands({
+          platformServices: daemonPlatformServicesFixture(),
           req: {
             token: 't',
             session: 'default',

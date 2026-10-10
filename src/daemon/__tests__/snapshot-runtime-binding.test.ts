@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
 import { resolveSnapshotRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
@@ -42,6 +43,7 @@ test('the owning interface binds exactly the session device the facts were admit
 
   const resolved = await resolveBoundSnapshotCaptureRuntime(
     {
+      platformServices: daemonPlatformServicesFixture(),
       req,
       sessionName: 'bind-test',
       logPath: '/tmp/bind-test.log',
@@ -69,6 +71,7 @@ test('sessionless capture readiness follows runtime binding', async () => {
   };
 
   const resolved = await admitAndBindSnapshotCapture({
+    platformServices: daemonPlatformServicesFixture(),
     command: 'snapshot',
     device: IOS_SIMULATOR,
     session: undefined,

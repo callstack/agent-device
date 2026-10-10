@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
@@ -56,6 +57,7 @@ async function dispatch(
   internalObservation = false,
 ) {
   const response = await dispatchSnapshotViaRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       command: 'snapshot',
       positionals: [],

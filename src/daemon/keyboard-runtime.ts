@@ -225,7 +225,7 @@ export async function resolveBoundKeyboardRuntime(
   } & RuntimeAdmissionBindings & { positionals: readonly string[] },
 ): Promise<ResolvedKeyboardExecution> {
   const action = readKeyboardAction(params.positionals);
-  const { device, inspectFacts, bindDevice, readiness } = params;
+  const { device, inspectFacts, bindDevice, platformServices, readiness } = params;
   if (action === 'status') {
     return await admitKeyboardAction(
       {
@@ -234,6 +234,7 @@ export async function resolveBoundKeyboardRuntime(
         use: keyboardStatusUse,
         inspectFacts,
         bindDevice,
+        platformServices,
         readiness,
       },
       (runtime, context) => executeKeyboardStatus(runtime, context),
@@ -247,6 +248,7 @@ export async function resolveBoundKeyboardRuntime(
         use: keyboardDismissUse,
         inspectFacts,
         bindDevice,
+        platformServices,
         readiness,
       },
       (runtime, context) => executeKeyboardDismiss(runtime, context),
@@ -259,6 +261,7 @@ export async function resolveBoundKeyboardRuntime(
       use: keyboardEnterUse,
       inspectFacts,
       bindDevice,
+      platformServices,
       readiness,
     },
     (runtime, context) => executeKeyboardEnter(runtime, context),

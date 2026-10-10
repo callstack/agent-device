@@ -1,6 +1,6 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
-import { appleSessionObservation } from '../platform-runtime-apple-resources.ts';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
+import type { DaemonPlatformServices } from './platform-services.ts';
 
 /**
  * Enriches the generic "Run open first" SESSION_NOT_FOUND hint with the exact
@@ -14,10 +14,13 @@ import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 // comfortably under it and falls back rather than risk truncation.
 const MAX_HINT_LENGTH = 350;
 
-export async function buildIosOpenCommandHint(device: DeviceInfo): Promise<string | undefined> {
+export async function buildIosOpenCommandHint(
+  device: DeviceInfo,
+  platformServices: DaemonPlatformServices,
+): Promise<string | undefined> {
   if (!isIosFamily(device) || device.kind !== 'simulator') return undefined;
 
-  const resolved = await appleSessionObservation.resolveSoleForegroundApp({
+  const resolved = await platformServices.appleSessionObservation.resolveSoleForegroundApp({
     simulatorSetPath: device.simulatorSetPath,
   });
   if (!resolved) return undefined;

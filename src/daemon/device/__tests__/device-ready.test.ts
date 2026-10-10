@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -32,6 +33,9 @@ import { DEVICE_READY_CACHE_TTL_MS, ensureDeviceReady } from '../device-ready.ts
 const mockRunCmd = vi.mocked(runCmd);
 const mockEnsureBootedSimulator = vi.mocked(ensureBootedSimulator);
 const mockWaitForAndroidBoot = vi.mocked(waitForAndroidBoot);
+// Readiness mechanics stay the real ones: the fixture delegates to the root adapter, so the
+// platform-leaf mocks above still own what the port actually calls.
+const platformServices = daemonPlatformServicesFixture();
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -50,8 +54,8 @@ afterEach(() => {
 test('ensureDeviceReady caches successful simulator readiness checks', async () => {
   const device: DeviceInfo = { ...IOS_SIMULATOR, simulatorSetPath: '/tmp/simset-a' };
 
-  await ensureDeviceReady(device);
-  await ensureDeviceReady({ ...device });
+  await ensureDeviceReady(device, platformServices);
+  await ensureDeviceReady({ ...device }, platformServices);
 
   expect(mockEnsureBootedSimulator).toHaveBeenCalledTimes(1);
   expect(mockEnsureBootedSimulator).toHaveBeenCalledWith(device);
@@ -73,25 +77,34 @@ test('ensureDeviceReady caches successful iOS physical device readiness checks',
     return { stdout: '', stderr: '', exitCode: 0 };
   });
 
-  await ensureDeviceReady(IOS_DEVICE);
-  await ensureDeviceReady({ ...IOS_DEVICE, simulatorSetPath: '/ignored-for-physical-device' });
+  await ensureDeviceReady(IOS_DEVICE, platformServices);
+  await ensureDeviceReady(
+    { ...IOS_DEVICE, simulatorSetPath: '/ignored-for-physical-device' },
+    platformServices,
+  );
 
   expect(mockRunCmd).toHaveBeenCalledTimes(1);
 });
 
 test('ensureDeviceReady includes simulator set path in the cache key', async () => {
-  await ensureDeviceReady({ ...IOS_SIMULATOR, simulatorSetPath: '/tmp/simset-a' });
-  await ensureDeviceReady({ ...IOS_SIMULATOR, simulatorSetPath: '/tmp/simset-b' });
+  await ensureDeviceReady(
+    { ...IOS_SIMULATOR, simulatorSetPath: '/tmp/simset-a' },
+    platformServices,
+  );
+  await ensureDeviceReady(
+    { ...IOS_SIMULATOR, simulatorSetPath: '/tmp/simset-b' },
+    platformServices,
+  );
 
   expect(mockEnsureBootedSimulator).toHaveBeenCalledTimes(2);
 });
 
 test('ensureDeviceReady expires cached readiness checks after the ttl', async () => {
-  await ensureDeviceReady(ANDROID_EMULATOR);
+  await ensureDeviceReady(ANDROID_EMULATOR, platformServices);
   vi.setSystemTime(new Date(Date.now() + DEVICE_READY_CACHE_TTL_MS - 1));
-  await ensureDeviceReady({ ...ANDROID_EMULATOR });
+  await ensureDeviceReady({ ...ANDROID_EMULATOR }, platformServices);
   vi.setSystemTime(new Date(Date.now() + 1));
-  await ensureDeviceReady({ ...ANDROID_EMULATOR });
+  await ensureDeviceReady({ ...ANDROID_EMULATOR }, platformServices);
 
   expect(mockWaitForAndroidBoot).toHaveBeenCalledTimes(2);
 });
@@ -99,8 +112,8 @@ test('ensureDeviceReady expires cached readiness checks after the ttl', async ()
 test('ensureDeviceReady does not cache failed readiness checks', async () => {
   mockEnsureBootedSimulator.mockRejectedValueOnce(new Error('boot failed'));
 
-  await expect(ensureDeviceReady(IOS_SIMULATOR)).rejects.toThrow('boot failed');
-  await ensureDeviceReady(IOS_SIMULATOR);
+  await expect(ensureDeviceReady(IOS_SIMULATOR, platformServices)).rejects.toThrow('boot failed');
+  await ensureDeviceReady(IOS_SIMULATOR, platformServices);
 
   expect(mockEnsureBootedSimulator).toHaveBeenCalledTimes(2);
 });

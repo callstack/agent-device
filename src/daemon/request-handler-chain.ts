@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from './platform-services.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
 import { AppError } from '@agent-device/kernel/errors';
@@ -50,6 +51,7 @@ type RequestHandlerChainParams = {
   androidObservation?: AndroidObservationAdapter;
   platformResourceCleanup?: PlatformResourceCleanup;
   bindDevice: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
   inspectFacts: InspectDeviceRuntimeFacts;
   bindExactDevice: BindExactDeviceRuntime;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
@@ -178,6 +180,7 @@ async function runSessionHandler(
       invokeReplayAction: params.invokeReplayAction,
       androidAdbExecutor: params.providerScope.androidAdbExecutor,
       bindDevice: params.bindDevice,
+      platformServices: params.platformServices,
       inspectFacts: params.inspectFacts,
       bindExactDevice: params.bindExactDevice,
       reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
@@ -207,6 +210,7 @@ async function runSnapshotHandler(
       logPath: params.logPath,
       sessionStore: params.sessionStore,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
       platformResourceCleanup: params.platformResourceCleanup,
     }),
@@ -230,6 +234,7 @@ async function runReactNativeHandler(
       // to pass the request's bindings through. Before R61 this leg reached the device through the
       // retired dispatcher and needed none, which is why the arm had no bindings to forward.
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     }),
   );
@@ -248,6 +253,7 @@ async function runRecordTraceHandler(
       sessionStore: params.sessionStore,
       logPath: params.logPath,
       bindDevice: params.bindDevice,
+      platformServices: params.platformServices,
       bindExactDevice: params.bindExactDevice,
       admissionLedger: params.screenRecordingAdmissionLedger,
       requestScope: params.requestScope,
@@ -271,6 +277,7 @@ async function runFindHandler(
       sessionStore: params.sessionStore,
       invoke: params.invoke,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     }),
   );
@@ -290,6 +297,7 @@ async function runInteractionHandler(
       sessionStore: params.sessionStore,
       contextFromFlags: params.contextFromFlags,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
       androidObservation: params.androidObservation,
     }),

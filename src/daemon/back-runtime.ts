@@ -34,6 +34,7 @@ export async function resolveBoundBackRuntime(
       device: params.device,
       use: backRuntimeUse,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     },
     executeBack,

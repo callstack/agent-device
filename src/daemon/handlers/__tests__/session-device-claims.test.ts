@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -145,6 +146,7 @@ test('failed local open before device setup rolls its device claim back', async 
   await assert.rejects(
     async () =>
       handleOpenCommand({
+        platformServices: daemonPlatformServicesFixture(),
         req: {
           command: 'open',
           token: 'test',
@@ -172,6 +174,7 @@ test('failed local open after dispatch retains its device claim for recovery', a
   await assert.rejects(
     async () =>
       handleOpenCommand({
+        platformServices: daemonPlatformServicesFixture(),
         req: {
           command: 'open',
           token: 'test',
@@ -202,6 +205,7 @@ test('failed local runtime-hint setup retains its device claim before open dispa
   await assert.rejects(
     async () =>
       handleOpenCommand({
+        platformServices: daemonPlatformServicesFixture(),
         req: {
           command: 'open',
           token: 'test',
@@ -228,6 +232,7 @@ test('failed local open response rolls its device claim back', async () => {
   mockResolveTargetDevice.mockResolvedValue(android);
 
   const response = await handleOpenCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       command: 'open',
       token: 'test',
@@ -254,6 +259,7 @@ test('cancellation after local device setup retains the device claim for recover
 
   try {
     const response = await handleOpenCommand({
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         command: 'open',
         token: 'test',
@@ -285,6 +291,7 @@ test('a canceled attempt lets the next attempt of the same suite open the device
   markRequestCanceled(requestId);
   try {
     const timedOut = await handleOpenCommand({
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         command: 'open',
         token: 'test',
@@ -304,6 +311,7 @@ test('a canceled attempt lets the next attempt of the same suite open the device
   assert.equal(store.get('suite:1-gesture-pan-duration:attempt-1'), undefined);
 
   const retry = await handleOpenCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       command: 'open',
       token: 'test',
@@ -332,6 +340,7 @@ test('provider-owned open creates no host-local device claim from its selected o
   mockDispatch.mockResolvedValue(undefined);
 
   const response = await handleOpenCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       command: 'open',
       token: 'test',
@@ -368,6 +377,7 @@ test('a foreign live claim rejects open before platform preparation or mutation'
   if (acquired.status !== 'acquired') return;
 
   const response = await handleOpenCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       command: 'open',
       token: 'test',
@@ -422,6 +432,7 @@ test('local close clears its matching device claim after teardown', async () => 
   mockDispatch.mockResolvedValue(undefined);
 
   const response = await handleCloseCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: { command: 'close', token: 'test', session: 'close-claim', positionals: [], flags: {} },
     sessionName: 'close-claim',
     logPath: path.join(stateDir, 'daemon.log'),
@@ -466,6 +477,7 @@ test('#1391: a close-time script save failure still clears the device claim and 
   let thrown: unknown;
   try {
     await handleCloseCommand({
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         command: 'close',
         token: 'test',
@@ -539,6 +551,7 @@ test('an open under a macos-app lease holds only its app, beside other claims on
   });
 
   const response = await handleOpenCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       command: 'open',
       token: 'test',

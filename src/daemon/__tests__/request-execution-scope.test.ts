@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { afterAll, test, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -42,7 +43,7 @@ test('createRequestExecutionScope applies tenant scoping and locked lease admiss
     deviceKey: 'ios:sim-1',
   });
 
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({
       session: 'default',
       command: 'snapshot',
@@ -73,21 +74,21 @@ test('createRequestExecutionScope is the single defaulting authority for the app
   const sessionStore = makeSessionStore('agent-device-request-scope-defaults-');
   const leaseRegistry = new LeaseRegistry();
 
-  const defaulted = await createRequestExecutionScope({
+  const defaulted = await createTestRequestScope({
     req: makeRequest({ command: 'apps' }),
     sessionStore,
     leaseRegistry,
   });
   expect(defaulted.req.flags?.appsFilter).toBe('user-installed');
 
-  const overridden = await createRequestExecutionScope({
+  const overridden = await createTestRequestScope({
     req: makeRequest({ command: 'apps', flags: { appsFilter: 'all' } }),
     sessionStore,
     leaseRegistry,
   });
   expect(overridden.req.flags?.appsFilter).toBe('all');
 
-  const untouched = await createRequestExecutionScope({
+  const untouched = await createTestRequestScope({
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -103,7 +104,7 @@ test('createRequestExecutionScope resolves session-scoped request and runner log
   const scope = await withDiagnosticsScope(
     { command: 'snapshot', requestId: 'request-logs-1', logPath: LOG_PATH },
     async () =>
-      await createRequestExecutionScope({
+      await createTestRequestScope({
         req: makeRequest({ meta: { cwd, requestId: 'request-logs-1' } }),
         sessionStore,
         leaseRegistry: new LeaseRegistry(),
@@ -124,7 +125,7 @@ test('a relative session name is rejected before any session artifact path is wr
 
   await withDiagnosticsScope({ command: 'snapshot', requestId, logPath: LOG_PATH }, async () => {
     await expect(
-      createRequestExecutionScope({
+      createTestRequestScope({
         req: makeRequest({ session: '..', meta: { requestId } }),
         sessionStore,
         leaseRegistry: new LeaseRegistry(),
@@ -148,7 +149,7 @@ test('request diagnostics flush into the effective session request log', async (
   const result = await withDiagnosticsScope(
     { command: 'snapshot', requestId: 'request-diag-1', logPath: LOG_PATH },
     async () => {
-      const scope = await createRequestExecutionScope({
+      const scope = await createTestRequestScope({
         req: makeRequest({ meta: { cwd, requestId: 'request-diag-1' } }),
         sessionStore,
         leaseRegistry: new LeaseRegistry(),
@@ -165,7 +166,7 @@ test('request diagnostics flush into the effective session request log', async (
 });
 
 test('runLocked rejects tenant requests without an active lease', async () => {
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({
       session: 'default',
       command: 'snapshot',
@@ -211,7 +212,7 @@ test('leased session admission uses stored lease metadata and heartbeats', async
   );
   now = 2_000;
 
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -253,12 +254,12 @@ test('leased session heartbeat is serialized with the request execution lock', a
     }),
   );
 
-  const first = await createRequestExecutionScope({
+  const first = await createTestRequestScope({
     req: makeRequest({ command: 'click' }),
     sessionStore,
     leaseRegistry,
   });
-  const second = await createRequestExecutionScope({
+  const second = await createTestRequestScope({
     req: makeRequest({ command: 'click' }),
     sessionStore,
     leaseRegistry,
@@ -295,12 +296,12 @@ test('a later external command cannot interleave with replay observation finaliz
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   sessionStore.publish('default', makeIosSession('default'));
   const leaseRegistry = new LeaseRegistry();
-  const replay = await createRequestExecutionScope({
+  const replay = await createTestRequestScope({
     req: makeRequest({ command: 'replay' }),
     sessionStore,
     leaseRegistry,
   });
-  const laterSnapshot = await createRequestExecutionScope({
+  const laterSnapshot = await createTestRequestScope({
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -336,7 +337,7 @@ test('a later external command cannot interleave with replay observation finaliz
 test('a fresh replay keeps its session lock after a nested open binds the device', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const leaseRegistry = new LeaseRegistry();
-  const replay = await createRequestExecutionScope({
+  const replay = await createTestRequestScope({
     req: makeRequest({ command: 'replay' }),
     sessionStore,
     leaseRegistry,
@@ -357,7 +358,7 @@ test('a fresh replay keeps its session lock after a nested open binds the device
   );
   await sessionOpenedPromise;
 
-  const laterSnapshot = await createRequestExecutionScope({
+  const laterSnapshot = await createTestRequestScope({
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -391,7 +392,7 @@ test('leased session rejects mismatched lease id before dispatch', async () => {
     }),
   );
 
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({ command: 'snapshot', meta: { leaseId: '1'.repeat(32) } }),
     sessionStore,
     leaseRegistry,
@@ -425,7 +426,7 @@ test.each([
     }),
   );
 
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({ command: 'snapshot', meta }),
     sessionStore,
     leaseRegistry,
@@ -440,7 +441,7 @@ test('local unleased session admission still succeeds', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   sessionStore.publish('default', makeIosSession('default'));
 
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -452,7 +453,7 @@ test('local unleased session admission still succeeds', async () => {
 test('local unleased session ignores stale lease id without tenant scope', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   sessionStore.publish('default', makeIosSession('default'));
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({
       command: 'snapshot',
       meta: { leaseId: '1'.repeat(32) },
@@ -486,7 +487,7 @@ test('provider lease admission succeeds without a device key', async () => {
     }),
   );
 
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -522,7 +523,7 @@ test('an admitted request that outlives the lease TTL keeps its lease and sessio
     }),
   );
 
-  const slow = await createRequestExecutionScope({
+  const slow = await createTestRequestScope({
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -531,7 +532,7 @@ test('an admitted request that outlives the lease TTL keeps its lease and sessio
   // page-source read does on a screen that never goes idle.
   expect(await slow.runLocked(async () => (now = 1_011))).toBe(1_011);
 
-  const next = await createRequestExecutionScope({
+  const next = await createTestRequestScope({
     req: makeRequest({ command: 'screenshot' }),
     sessionStore,
     leaseRegistry,
@@ -562,12 +563,12 @@ test('expired leased session cleanup waits for the request execution lock', asyn
       },
     }),
   );
-  const first = await createRequestExecutionScope({
+  const first = await createTestRequestScope({
     req: makeRequest({ command: 'click', meta: { requestId } }),
     sessionStore,
     leaseRegistry,
   });
-  const second = await createRequestExecutionScope({
+  const second = await createTestRequestScope({
     req: makeRequest({ command: 'click' }),
     sessionStore,
     leaseRegistry,
@@ -612,7 +613,7 @@ test('tenant lease rejection flushes diagnostics into the effective session requ
   let flushedPath: string | null = null;
 
   await withDiagnosticsScope({ command: 'snapshot', requestId, logPath: LOG_PATH }, async () => {
-    const scope = await createRequestExecutionScope({
+    const scope = await createTestRequestScope({
       req: makeRequest({
         session: 'default',
         command: 'snapshot',
@@ -642,7 +643,7 @@ test('tenant lease rejection flushes diagnostics into the effective session requ
 test('prepareLockedRequestScope preserves existing-session selector validation', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   sessionStore.publish('default', makeAndroidSession('default'));
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({
       command: 'snapshot',
       flags: {
@@ -673,7 +674,7 @@ test('prepareLockedRequestScope blocks commands for invalidated recordings befor
     invalidatedReason: 'iOS runner session restarted during recording',
   });
   sessionStore.publish('default', session);
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -701,7 +702,7 @@ test('prepareLockedRequestScope blocks commands for invalidated recordings befor
 test('prepareLockedRequestScope passes the session runner log path into handler context', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   sessionStore.publish('default', makeIosSession('default'));
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -729,7 +730,7 @@ test('prepareLockedRequestScope streams ordinary diagnostics into the active tra
       trace: { outPath: tracePath, startedAt: Date.now() },
     }),
   );
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
@@ -750,7 +751,7 @@ test('prepareLockedRequestScope streams ordinary diagnostics into the active tra
 
 test('runLocked rejects a canceled request before executing work', async () => {
   const requestId = 'request-scope-canceled-before-lock';
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({ meta: { requestId } }),
     sessionStore: makeSessionStore('agent-device-request-scope-'),
     leaseRegistry: new LeaseRegistry(),
@@ -769,12 +770,12 @@ test('runLocked rejects a request canceled while waiting for its execution lock'
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   sessionStore.publish('default', makeIosSession('default'));
   const leaseRegistry = new LeaseRegistry();
-  const first = await createRequestExecutionScope({
+  const first = await createTestRequestScope({
     req: makeRequest({ command: 'click' }),
     sessionStore,
     leaseRegistry,
   });
-  const second = await createRequestExecutionScope({
+  const second = await createTestRequestScope({
     req: makeRequest({ command: 'click', meta: { requestId } }),
     sessionStore,
     leaseRegistry,
@@ -808,7 +809,7 @@ test('router: deferred tenant connect with no daemon session closes as SESSION_N
   const leaseRegistry = new LeaseRegistry();
   const release = vi.fn(async () => ({}));
 
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({
       session: 'default',
       command: 'close',
@@ -821,6 +822,7 @@ test('router: deferred tenant connect with no daemon session closes as SESSION_N
 
   const response = await scope.runLocked(async () =>
     handleSessionCloseCommands({
+      platformServices: daemonPlatformServicesFixture(),
       req: scope.req,
       sessionName: scope.sessionName,
       logPath: scope.requestLogPath,
@@ -845,7 +847,7 @@ test('router: deferred tenant connect still refuses an app-target close before d
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const leaseRegistry = new LeaseRegistry();
 
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({
       session: 'default',
       command: 'close',
@@ -870,7 +872,7 @@ test('router: an existing lease-less session under tenant isolation still refuse
   sessionStore.publish('tenant-a:default', makeIosSession('tenant-a:default'));
   const leaseRegistry = new LeaseRegistry();
 
-  const scope = await createRequestExecutionScope({
+  const scope = await createTestRequestScope({
     req: makeRequest({
       session: 'default',
       command: 'close',
@@ -885,6 +887,15 @@ test('router: an existing lease-less session under tenant isolation still refuse
     /tenant isolation requires lease id/,
   );
 });
+
+function createTestRequestScope(
+  params: Omit<Parameters<typeof createRequestExecutionScope>[0], 'platformServices'>,
+) {
+  return createRequestExecutionScope({
+    ...params,
+    platformServices: daemonPlatformServicesFixture(),
+  });
+}
 
 function makeRequest(overrides: Partial<DaemonRequest> = {}): DaemonRequest {
   return {
@@ -914,7 +925,7 @@ async function createScopeAcrossTwoImplicitWorkspaceSessions(command: string) {
     `cwd:${scope.id}:android`,
     makeAndroidSession('default', { sessionScope: { kind: 'cwd', id: scope.id } }),
   );
-  return await createRequestExecutionScope({
+  return await createTestRequestScope({
     req: makeRequest({ command, meta: { cwd: root, requestId: `ambiguity-${command}` } }),
     sessionStore,
     leaseRegistry: new LeaseRegistry(),

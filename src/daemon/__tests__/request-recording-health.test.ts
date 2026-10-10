@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../session-state.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -8,15 +9,17 @@ import {
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 
-vi.mock('../../platform-runtime-apple-resources.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../platform-runtime-apple-resources.ts')>()),
-  appleSessionObservation: { observeRunnerSession: vi.fn() },
-}));
-
-import { appleSessionObservation } from '../../platform-runtime-apple-resources.ts';
 import { refreshRecordingHealth } from '../request-recording-health.ts';
 
-const mockObserveRunnerSession = vi.mocked(appleSessionObservation.observeRunnerSession);
+// The observation spy hangs off the port, not the platform module behind it
+// (ADR 0019 section 11): the fixture's appleSessionObservation member is replaced wholesale.
+const mockObserveRunnerSession = vi.fn();
+const platformServices = daemonPlatformServicesFixture({
+  appleSessionObservation: {
+    observeRunnerSession: mockObserveRunnerSession,
+    resolveSoleForegroundApp: async () => undefined,
+  },
+});
 
 beforeEach(() => {
   mockObserveRunnerSession.mockReset();
@@ -62,7 +65,7 @@ test('runner-backed iOS recordings still invalidate on runner restarts', async (
 
   const store = makeSessionStore();
   const ref = store.publish(session.name, session);
-  await refreshRecordingHealth(store, ref);
+  await refreshRecordingHealth(store, ref, platformServices);
 
   expect(mockObserveRunnerSession).toHaveBeenCalledWith('sim-1');
   expect(session.screenRecording?.handle.inspect().invalidatedReason).toBe(
@@ -88,7 +91,7 @@ test.each([
 
   const store = makeSessionStore();
   const ref = store.publish(session.name, session);
-  await refreshRecordingHealth(store, ref);
+  await refreshRecordingHealth(store, ref, platformServices);
 
   expect(session.screenRecording.handle.inspect().invalidatedReason).toBe(reason);
 });
@@ -103,7 +106,7 @@ test('a recording without a runner identity adopts the first live observation', 
 
   const store = makeSessionStore();
   const ref = store.publish(session.name, session);
-  await refreshRecordingHealth(store, ref);
+  await refreshRecordingHealth(store, ref, platformServices);
 
   const recording = session.screenRecording.handle.inspect();
   expect(recording.runnerSessionId).toBe('runner-first');
@@ -129,7 +132,7 @@ test.each(['rebuild', 'retire', 'handle', 'token', 'generation'] as const)(
           finish = resolve;
         }),
     );
-    const observation = refreshRecordingHealth(store, ref);
+    const observation = refreshRecordingHealth(store, ref, platformServices);
     expect(mockObserveRunnerSession).toHaveBeenCalledWith('sim-1');
     if (change === 'rebuild') {
       store.update(ref, { appName: 'Intervening app' });
@@ -196,6 +199,9 @@ test.each(['rebuild', 'retire'] as const)(
       req: { token: 'token', session: 'default', command: 'snapshot', positionals: [] },
       sessionStore: store,
       leaseRegistry: new LeaseRegistry(),
+      // Locked preparation refreshes recording health through the port, so the scope carries
+      // the fixture whose observation member is the test's spy.
+      platformServices: platformServices,
     });
     const prepared = scope.runLocked(() =>
       prepareLockedRequestScope({

@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { recordActionEntry } from '../session-action-recorder.ts';
 import { expect, test, vi } from 'vitest';
 
@@ -103,6 +104,7 @@ test('resolves one admitted binding and reports the pose the owner read back', a
   );
 
   const resolved = await resolveBoundFoldRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: testDevice,
     positionals: ['unfolded'],
     inspectFacts: harness.inspectFacts,
@@ -126,6 +128,7 @@ test('resolves one admitted binding and reports the pose the owner read back', a
 test('reports a pose without a panel reading when the owner could not name the lit panel', async () => {
   const harness = runtimeHarness();
   const resolved = await resolveBoundFoldRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: testDevice,
     positionals: ['open'],
     inspectFacts: harness.inspectFacts,
@@ -145,6 +148,7 @@ test('rejects an invalid pose before inspection or binding', async () => {
   const harness = runtimeHarness();
   await expect(
     resolveBoundFoldRuntime({
+      platformServices: daemonPlatformServicesFixture(),
       device: testDevice,
       positionals: ['sideways'],
       inspectFacts: harness.inspectFacts,
@@ -177,6 +181,7 @@ test('refuses a scoped simulator set on the route with the typed reason, never b
   const harness = runtimeHarness(scopeRefusal, vi.fn(), scopedDevice);
 
   const resolved = await resolveBoundFoldRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: scopedDevice,
     positionals: ['half-open'],
     inspectFacts: harness.inspectFacts,
@@ -206,6 +211,7 @@ test('passes the validated timed intent to the admitted fold owner', async () =>
     { atMs: 5000, angle: 100 },
   ];
   const resolved = await resolveBoundFoldRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: testDevice,
     positionals: [],
     keyframes: JSON.stringify(keyframes),

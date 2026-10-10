@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import {
@@ -61,6 +62,7 @@ function makeDragSession(sessionName: string) {
 
 async function runDrag(sessionStore: ReturnType<typeof makeSessionStore>, sessionName: string) {
   return await handleInteractionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,

@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
@@ -186,6 +187,7 @@ async function dispatchGeneric(params: {
     ...(params.flags ? { flags: params.flags } : {}),
   };
   return await dispatchGenericCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req,
     ref: params.sessionStore.lookup(params.sessionName)!,
     sessionName: params.sessionName,
@@ -558,6 +560,7 @@ test('an ended generic lifetime is refused before dispatch or settle constructio
   mockCommandDispatch([AFTER_NODES]);
   await expect(
     dispatchGenericCommand({
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,

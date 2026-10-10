@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import {
   sessionCloseShutdownFixture,
@@ -41,6 +42,7 @@ test('close finalizes an active iOS simulator recording before deleting the sess
   sessionStore.publish(sessionName, session);
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -79,6 +81,7 @@ test('close surfaces a recording finalization failure through the cleanup-failur
 
   await expect(
     handleSessionCommands({
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,

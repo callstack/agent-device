@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import fs from 'node:fs';
 import type { AppDeploymentResult } from '@agent-device/contracts/app-deployment-runtime';
@@ -49,6 +50,7 @@ export async function handleAppDeploymentCommand(params: {
   sessionName: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const { req, command, sessionName, sessionStore } = params;
@@ -69,7 +71,11 @@ export async function handleAppDeploymentCommand(params: {
       return errorResponse('INVALID_ARGS', `App binary not found: ${appPath}`);
     }
 
-    const device = await resolveCommandDevice({ session, flags });
+    const device = await resolveCommandDevice({
+      session,
+      flags,
+      platformServices: params.platformServices,
+    });
     const facts = await requireRuntimeFacts(params.inspectFacts)(device);
     const unsupported = unavailableRuntimeOperationResponse(command, facts.operations.deployApp);
     if (unsupported) return unsupported;
@@ -115,7 +121,11 @@ export async function handlePushNotificationCommand(
     );
   }
   const payload = await readNotificationPayload(resolvePushPayload(payloadArg, req.meta?.cwd));
-  const device = await resolveCommandDevice({ session, flags });
+  const device = await resolveCommandDevice({
+    session,
+    flags,
+    platformServices: params.platformServices,
+  });
   const facts = await requireRuntimeFacts(params.inspectFacts)(device);
   const unsupported =
     unavailableRuntimeOperationResponse('push', facts.operations.ensureReady) ??

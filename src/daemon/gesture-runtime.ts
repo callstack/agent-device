@@ -65,6 +65,7 @@ export async function resolveBoundGestureViewportRuntime(
     device: params.device,
     use: gestureViewportRuntimeUse,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (admission.type === 'response') return { ok: false, response: admission.response };
@@ -93,6 +94,7 @@ export async function resolveBoundGestureRuntime(
     device: params.device,
     required: plan.use.required,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
     // The retired admission THREW an `AppError`, which the gesture handler's catch normalized —
     // so the refusal is built the same way here. Going through `errorResponse` instead would

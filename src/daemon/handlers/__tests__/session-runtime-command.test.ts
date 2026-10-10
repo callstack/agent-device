@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 
 import path from 'node:path';
@@ -30,6 +31,7 @@ test('runtime set/show/clear manages session-scoped runtime hints before open', 
   } satisfies Pick<DaemonRequest, 'token' | 'session'>;
 
   const setResponse = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       ...baseRequest,
       command: 'runtime',
@@ -49,6 +51,7 @@ test('runtime set/show/clear manages session-scoped runtime hints before open', 
   expect(setResponse?.ok).toBe(true);
 
   const showResponse = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       ...baseRequest,
       command: 'runtime',
@@ -73,6 +76,7 @@ test('runtime set/show/clear manages session-scoped runtime hints before open', 
   }
 
   const clearResponse = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       ...baseRequest,
       command: 'runtime',
@@ -108,6 +112,7 @@ test('runtime clear removes applied transport hints for the active app', async (
   });
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -157,6 +162,7 @@ test('runtime clear expires the ref frame at the admitted hint mutation boundary
   });
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -210,6 +216,7 @@ test('runtime clear rejects a false runtime-hints fact before its one implementa
   });
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -260,6 +267,7 @@ test('runtime gesture-viewport admits and binds the exact viewport operation onc
   gestureRuntimeSpies.gestureViewport.mockClear();
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -328,6 +336,7 @@ for (const phase of ['admission', 'effect'] as const) {
     }
     await expect(
       handleSessionCommands({
+        platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
           session: 'default',
@@ -369,6 +378,7 @@ test('runtime clear expires and uses the latest matching record after admission'
     return lifecycleRuntimeFacts(target);
   });
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: ref.address,

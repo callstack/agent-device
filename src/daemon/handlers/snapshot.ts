@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { SessionStore } from '../session-store.ts';
 import { handleAlertCommand } from './snapshot-alert.ts';
@@ -16,6 +17,7 @@ type SnapshotCommandParams = {
   logPath: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   platformResourceCleanup?: PlatformResourceCleanup;
 };
@@ -30,6 +32,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     sessionStore,
     inspectFacts,
     bindDevice,
+    platformServices,
     platformResourceCleanup,
   }) =>
     await dispatchSnapshotViaRuntime({
@@ -39,6 +42,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       sessionStore,
       inspectFacts,
       bindDevice,
+      platformServices,
       platformResourceCleanup,
     }),
   diff: async ({
@@ -48,6 +52,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     sessionStore,
     inspectFacts,
     bindDevice,
+    platformServices,
     platformResourceCleanup,
   }) => {
     if (req.positionals?.[0] !== 'snapshot') {
@@ -60,6 +65,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       sessionStore,
       inspectFacts,
       bindDevice,
+      platformServices,
       platformResourceCleanup,
     });
   },
@@ -70,6 +76,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     sessionStore,
     inspectFacts,
     bindDevice,
+    platformServices,
     platformResourceCleanup,
   }) =>
     await dispatchWaitViaRuntime({
@@ -79,6 +86,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       sessionStore,
       inspectFacts,
       bindDevice,
+      platformServices,
       platformResourceCleanup,
     }),
   alert: async ({
@@ -88,6 +96,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     sessionStore,
     inspectFacts,
     bindDevice,
+    platformServices,
     platformResourceCleanup,
   }) => {
     const { ref, session, device } = await resolveSessionDevice(
@@ -107,6 +116,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
           device,
           inspectFacts,
           bindDevice,
+          platformServices,
         });
       },
       platformResourceCleanup,
@@ -119,6 +129,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     sessionStore,
     inspectFacts,
     bindDevice,
+    platformServices,
     platformResourceCleanup,
   }) => {
     const parsedSettings = parseSettingsArgs(req);
@@ -141,6 +152,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
           parsed: parsedSettings.parsed,
           inspectFacts,
           bindDevice,
+          platformServices,
         });
       },
       platformResourceCleanup,

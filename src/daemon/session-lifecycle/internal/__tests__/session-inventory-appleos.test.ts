@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 
 // The `devices` handler resolves its inventory through listDeviceInventory; mocking it
@@ -43,6 +44,7 @@ async function runDevices(): Promise<DaemonResponse | null> {
     flags: {},
   };
   return handleSessionInventoryCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: 'default',
     sessionStore: makeSessionStore('agent-device-inventory-appleos-'),

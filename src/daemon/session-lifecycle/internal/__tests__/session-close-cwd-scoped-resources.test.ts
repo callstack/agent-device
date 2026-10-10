@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
 import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
@@ -51,6 +52,7 @@ const IOS_SIM: SessionState['device'] = {
 
 async function closeAtAddress(sessionStore: ReturnType<typeof makeSessionStore>) {
   return await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: ADDRESS, command: 'close', positionals: [], flags: {} },
     sessionName: ADDRESS,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

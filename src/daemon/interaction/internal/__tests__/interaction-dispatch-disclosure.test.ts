@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
@@ -191,6 +192,7 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
   const session = makeSession('dispatch-disclosure-swipe');
   sessionStore.publish(session.name, session);
   const response = await routeInteraction({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,
@@ -223,6 +225,7 @@ async function gestureDragRefusedBeforeDispatch(): Promise<unknown> {
   expireRefFrame(session);
   sessionStore.publish(session.name, session);
   const response = await routeInteraction({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,
@@ -280,6 +283,7 @@ async function refRefusedAfterAndroidRecovery(command: 'press' | 'gesture'): Pro
     openApp,
   };
   const response = await routeInteraction({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,

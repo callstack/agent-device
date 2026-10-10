@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import type {
   AppDeploymentResult,
   MaterializedAppSource,
@@ -48,6 +49,7 @@ export async function handleInstallFromSourceDeploymentCommand(params: {
   sessionName: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
@@ -59,7 +61,7 @@ export async function handleInstallFromSourceDeploymentCommand(params: {
   try {
     resolvedSource = resolveInstallSource(req);
     const retention = resolveRetention(req);
-    const device = await resolveInstallDevice(session, req.flags);
+    const device = await resolveInstallDevice(session, req.flags, params.platformServices);
     const facts = await requireRuntimeFacts(params.inspectFacts)(device);
     const unsupported =
       unavailableRuntimeOperationResponse('install_from_source', facts.operations.ensureReady) ??
@@ -130,6 +132,7 @@ export async function handleReleaseMaterializedPathsCommand(params: {
 async function resolveInstallDevice(
   session: SessionState | undefined,
   flags: DaemonRequest['flags'] | undefined,
+  platformServices: DaemonPlatformServices,
 ): Promise<SessionState['device']> {
   const requestedPlatform = normalizePlatform(flags?.platform);
   if (session && requestedPlatform && !matchesPlatformSelector(session.device, requestedPlatform)) {
@@ -150,7 +153,7 @@ async function resolveInstallDevice(
   if (session) {
     return session.device;
   }
-  return await resolveCommandDevice({ session, flags });
+  return await resolveCommandDevice({ session, flags, platformServices });
 }
 
 function normalizePlatform(

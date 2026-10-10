@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../../platform-services.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device/contracts/device';
@@ -47,6 +48,7 @@ export type SessionCloseCommandInput = Readonly<{
   leaseRegistry: LeaseRegistry;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   platformResourceCleanup?: PlatformResourceCleanup;
 }>;
@@ -200,6 +202,7 @@ export async function handleSessionCloseCommands(
       req,
       logPath,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     });
   }
@@ -223,6 +226,7 @@ export async function handleSessionCloseCommands(
       Boolean(session.appBundleId) &&
       hasRuntimeTransportHints(sessionStore.getRuntimeHints(sessionName)),
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (admission.type === 'response') return admission.response;
@@ -416,20 +420,23 @@ async function closeWithoutSession(params: {
   req: DaemonRequest;
   logPath: string;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
-  const { req, logPath, inspectFacts, bindDevice } = params;
+  const { req, logPath, inspectFacts, bindDevice, platformServices } = params;
   if (!req.positionals || req.positionals.length === 0)
     return errorResponse('SESSION_NOT_FOUND', 'No active session');
   const device = await resolveCommandDevice({
     session: undefined,
     flags: req.flags,
+    platformServices,
   });
   const admission = await admitCloseRuntime({
     device,
     clearRuntimeHints: false,
     inspectFacts,
     bindDevice,
+    platformServices,
   });
   if (admission.type === 'response') return admission.response;
   await admission.runtime.operations.closeApplication({

@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import {
   localRuntimeOwner,
@@ -86,6 +87,7 @@ test('resolves one admitted binding and presses one remote button', async () => 
   const harness = runtimeHarness(tvRemoteRuntimeOperationFacts({ tvRemote: available }).tvRemote);
 
   const resolved = await resolveBoundTvRemoteRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: vegaVvd,
     positionals: ['down'],
     inspectFacts: harness.inspectFacts,
@@ -109,6 +111,7 @@ test('forwards a validated duration and reports it in the response', async () =>
   const harness = runtimeHarness();
 
   const resolved = await resolveBoundTvRemoteRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: vegaVvd,
     positionals: ['select'],
     durationMs: 500,
@@ -133,6 +136,7 @@ test('rejects an out-of-range duration before inspection or binding', async () =
 
   await expect(
     resolveBoundTvRemoteRuntime({
+      platformServices: daemonPlatformServicesFixture(),
       device: vegaVvd,
       positionals: ['down'],
       durationMs: 50_000,
@@ -148,6 +152,7 @@ test('rejects a missing button before inspection or binding', async () => {
 
   await expect(
     resolveBoundTvRemoteRuntime({
+      platformServices: daemonPlatformServicesFixture(),
       device: vegaVvd,
       positionals: [],
       inspectFacts: harness.inspectFacts,

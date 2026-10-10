@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 /**
  * ADR 0012 decision 6 "repair transaction" lifecycle fixes (Q1/Q2a/Q2b/Q2c):
@@ -190,6 +191,7 @@ test('end-to-end repair transaction: cold divergence stays alive, corrective res
   // --- The agent finalizes: `close --save-script` (the real handler, not a
   // direct writer call) commits the now-COMPLETE healed `.ad`. ---
   const closeResponse = await handleCloseCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -254,6 +256,7 @@ test('end-to-end repair transaction: cold divergence stays alive, corrective res
   // The agent walks away: a plain `close` (no --save-script) reaches the
   // still repair-armed session — Fix 1/2's "abort/discard", not a commit.
   const abandonedCloseResponse = await handleCloseCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: abandoned.sessionName,
@@ -434,6 +437,7 @@ test('BLOCKER 2b/2c: a close whose commit FAILS (no-clobber) keeps the session f
   const before = fs.readFileSync(path.join(root, 'flow.healed.ad'), 'utf8');
 
   const closeResponse = await handleCloseCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
     sessionName,
     logPath,
@@ -467,6 +471,7 @@ test('BLOCKER 2b/2c: a close whose commit FAILS (no-clobber) keeps the session f
   // Retry with an explicit path commits cleanly — exactly ONE terminal close.
   const retryPath = path.join(root, 'flow.promoted.ad');
   const retry = await handleCloseCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,

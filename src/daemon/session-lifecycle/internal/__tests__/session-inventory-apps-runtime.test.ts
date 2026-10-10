@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonRequest } from '../../../daemon-request.ts';
 import { makeSession, makeSessionStore } from '../../../handlers/__tests__/session-test-harness.ts';
@@ -114,6 +115,7 @@ test('macOS apps consumes generic readiness and app inventory through one runtim
   };
 
   const response = await handleSessionInventoryCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName,
     sessionStore,
@@ -143,6 +145,7 @@ test('deferred provider apps returns uploaded assets without resolving a device'
   };
 
   const response = await handleSessionInventoryCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: req.session,
     sessionStore,
@@ -190,6 +193,7 @@ test('deferred provider apps forwards request cancellation to the catalog', asyn
 
   try {
     const response = handleSessionInventoryCommands({
+      platformServices: daemonPlatformServicesFixture(),
       req,
       sessionName: req.session,
       sessionStore: makeSessionStore(),
@@ -217,6 +221,7 @@ test('deferred provider apps forwards public daemon access to the catalog', asyn
   };
 
   await handleSessionInventoryCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: req.session,
     sessionStore: makeSessionStore(),

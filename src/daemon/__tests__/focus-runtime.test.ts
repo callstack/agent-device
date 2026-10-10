@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { focusRuntimeOperationFacts } from '@agent-device/contracts/focus-runtime';
 import {
@@ -86,6 +87,7 @@ test('resolves one admitted binding and exposes one point focus', async () => {
   const harness = runtimeHarness(focusRuntimeOperationFacts({ focus: available }).focusPoint);
 
   const resolved = await resolveBoundFocusRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: appleDevice,
     positionals: ['40', '90'],
     inspectFacts: harness.inspectFacts,
@@ -123,6 +125,7 @@ test('forwards the request context the retired leaf passed through its runner co
   const harness = runtimeHarness();
 
   const resolved = await resolveBoundFocusRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: appleDevice,
     positionals: ['40', '90'],
     inspectFacts: harness.inspectFacts,
@@ -159,6 +162,7 @@ test('rejects a missing coordinate before inspection or binding', async () => {
 
   await expect(
     resolveBoundFocusRuntime({
+      platformServices: daemonPlatformServicesFixture(),
       device: appleDevice,
       positionals: ['40'],
       inspectFacts: harness.inspectFacts,

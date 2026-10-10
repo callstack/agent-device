@@ -25,6 +25,7 @@ export async function prepareTouchDispatch(
     command,
     requiresCapture,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (!bound.ok) return { ok: false, response: refusedBeforeDispatch(bound.response) };

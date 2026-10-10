@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import {
   isApplePlatform,
   isHandheldAppleSimulator,
@@ -70,6 +71,7 @@ type HandleSettingsCommandParams = {
   device: SessionState['device'];
   parsed: ParsedSettingsRequest;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 };
 
@@ -221,7 +223,8 @@ async function executeSettingsRead(
   params: HandleSettingsCommandParams,
   setting: ReadableSetting,
 ): Promise<DaemonResponse> {
-  const { req, logPath, sessionStore, ref, device, inspectFacts, bindDevice } = params;
+  const { req, logPath, sessionStore, ref, device, inspectFacts, bindDevice, platformServices } =
+    params;
   let session = ref ? sessionStore.requireCurrent(ref) : undefined;
   const refusal = settingsRequestRefusal(device, setting);
   if (refusal !== undefined) return refusal;
@@ -231,6 +234,7 @@ async function executeSettingsRead(
     use: settingReadUse,
     inspectFacts,
     bindDevice,
+    platformServices,
     readiness: !session,
   });
   if (admission.type === 'response') return admission.response;
@@ -264,7 +268,8 @@ async function executeSettingsWrite(
   params: HandleSettingsCommandParams,
   parsed: ParsedSettingsArgs,
 ): Promise<DaemonResponse> {
-  const { req, logPath, sessionStore, ref, device, inspectFacts, bindDevice } = params;
+  const { req, logPath, sessionStore, ref, device, inspectFacts, bindDevice, platformServices } =
+    params;
   let session = ref ? sessionStore.requireCurrent(ref) : undefined;
   const { setting, state } = parsed;
   const refusal = settingsRequestRefusal(device, setting);
@@ -277,6 +282,7 @@ async function executeSettingsWrite(
     use: settingsRuntimeUse,
     inspectFacts,
     bindDevice,
+    platformServices,
     readiness: !session,
   });
   if (admission.type === 'response') return admission.response;

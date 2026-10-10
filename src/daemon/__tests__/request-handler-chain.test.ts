@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -47,6 +48,7 @@ function makeChainParams(req: DaemonRequest) {
     logPath: '/tmp/agent-device-request-chain.log',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
+    platformServices: daemonPlatformServicesFixture(),
     invoke: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
     providerScope: {},
     bindDevice: unavailableBindDevice,
@@ -310,6 +312,7 @@ test('duration-less public coordinate swipe retains Linux drag behavior', async 
     provider,
     async () =>
       await handleInteractionCommands({
+        platformServices: daemonPlatformServicesFixture(),
         inspectFacts: bindings.inspectFacts,
         bindDevice: bindings.bindDevice,
         req: {

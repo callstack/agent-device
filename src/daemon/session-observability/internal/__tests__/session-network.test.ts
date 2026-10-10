@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
@@ -12,6 +13,7 @@ test('network requires an active session before requesting a runtime binding', a
   const sessionStore = makeSessionStore();
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'missing',
@@ -45,6 +47,7 @@ test('network validates the legacy limit after runtime-fact admission', async ()
   );
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,

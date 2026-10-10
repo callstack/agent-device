@@ -62,13 +62,14 @@ export async function resolveBoundAppEventRuntime(
   }> &
     RuntimeAdmissionBindings,
 ): Promise<ResolvedAppEventExecution> {
-  const { device, positionals, inspectFacts, bindDevice, readiness } = params;
+  const { device, positionals, inspectFacts, bindDevice, platformServices, readiness } = params;
   const admission = await admitRuntimeUse({
     command: 'trigger-app-event',
     device,
     use: appEventRuntimeUse,
     inspectFacts,
     bindDevice,
+    platformServices,
     readiness,
   });
   if (admission.type === 'response') return { ok: false, response: admission.response };

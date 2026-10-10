@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../../platform-services.ts';
 import path from 'node:path';
 import { normalizeError } from '@agent-device/kernel/errors';
 import {
@@ -29,6 +30,7 @@ type AudioParams = {
   sessionName: string;
   sessionStore: SessionStore;
   inspectFacts: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice: BindDeviceRuntime;
   audioProbeAdmissionLedger: AudioProbeAdmissionLedger;
   throwIfCanceled(): void;

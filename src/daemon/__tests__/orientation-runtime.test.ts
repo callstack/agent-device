@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 
 // `orientation` carries `androidBlockingDialogGuard: true` (like every other generic-route leaf
@@ -126,6 +127,7 @@ test('resolves one admitted binding and reports the owner-observed rotation', as
   );
 
   const resolved = await resolveBoundOrientationRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: testDevice,
     positionals: ['landscape-left'],
     inspectFacts: harness.inspectFacts,
@@ -146,6 +148,7 @@ test('keeps the requested rotation but discloses that the owner reported nothing
   const harness = runtimeHarness();
 
   const resolved = await resolveBoundOrientationRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: testDevice,
     positionals: ['portrait'],
     inspectFacts: harness.inspectFacts,
@@ -168,6 +171,7 @@ test('rejects an invalid rotation before inspection or binding', async () => {
 
   await expect(
     resolveBoundOrientationRuntime({
+      platformServices: daemonPlatformServicesFixture(),
       device: testDevice,
       positionals: ['sideways'],
       inspectFacts: harness.inspectFacts,

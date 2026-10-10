@@ -11,6 +11,7 @@ import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtim
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { OpenApplicationTiming } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DaemonPlatformServices } from '../../platform-services.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type { SessionRef, SessionState } from '../../session-state.ts';
 import {
@@ -59,7 +60,6 @@ import {
   type DeviceClaimReconciler,
 } from '../../device/device-claims.ts';
 import type { TakenOverDeviceClaim } from '../../device/device-claim-reboot.ts';
-import { deviceBootObservation } from '../../../platform-runtime-device-boot.ts';
 import { appendResponseWarning } from './session-open-warnings.ts';
 import { buildDeviceClaimConflictError } from '../../device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../device/device-claim-rule.ts';
@@ -406,8 +406,17 @@ async function acquireDeviceClaimForOwner(params: {
   sessionName: string;
   sessionStore: SessionStore;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+  platformServices: DaemonPlatformServices;
 }): Promise<DeviceClaimAcquireResult | { status: 'not-required' }> {
-  const { req, device, owner, sessionName, sessionStore, reconcileOrphanedDeviceClaim } = params;
+  const {
+    req,
+    device,
+    owner,
+    sessionName,
+    sessionStore,
+    reconcileOrphanedDeviceClaim,
+    platformServices,
+  } = params;
   switch (deviceClaimRuleForOwner(owner, req.internal?.admittedLease)) {
     case 'none':
       return { status: 'not-required' };
@@ -418,7 +427,7 @@ async function acquireDeviceClaimForOwner(params: {
         workspace: req.meta?.cwd ?? process.cwd(),
         stateDir: sessionStore.resolveDaemonStateDir(),
         reconcileOrphanedDeviceClaim,
-        observeDeviceBoot: deviceBootObservation,
+        observeDeviceBoot: platformServices.deviceBootObservation,
       });
   }
 }
@@ -437,6 +446,7 @@ export async function openNewSessionWithDeviceClaim(params: {
   clearRuntimeHints?: RuntimeHintClearOperation;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   selection?: DeviceSelectionResult;
+  platformServices: DaemonPlatformServices;
 }): Promise<SessionOpenResult> {
   const {
     req,
@@ -452,6 +462,7 @@ export async function openNewSessionWithDeviceClaim(params: {
     clearRuntimeHints,
     reconcileOrphanedDeviceClaim,
     selection,
+    platformServices,
   } = params;
   requireOpenSessionAdmission(sessionStore, sessionName, undefined);
   const conflict = findNewSessionDeviceConflict({ req, device, sessionStore });
@@ -464,6 +475,7 @@ export async function openNewSessionWithDeviceClaim(params: {
     sessionName,
     sessionStore,
     reconcileOrphanedDeviceClaim,
+    platformServices,
   });
   if (ownerClaim.status === 'conflict')
     return {

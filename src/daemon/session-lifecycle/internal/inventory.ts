@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../../platform-services.ts';
 import {
   commandRuntimeUseRequirements,
   listRuntimeFactCommands,
@@ -59,6 +60,7 @@ export type SessionInventoryCommandInput = Readonly<{
   sessionName: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   providerAppCatalog?: ProviderAppCatalog;
 }>;
@@ -78,6 +80,7 @@ export async function handleSessionInventoryCommands(
         sessionName,
         sessionStore,
         inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
       });
     case 'apps':
       return await handleAppsInventory({
@@ -85,6 +88,7 @@ export async function handleSessionInventoryCommands(
         sessionName,
         sessionStore,
         bindDevice: params.bindDevice,
+        platformServices: params.platformServices,
         inspectFacts: params.inspectFacts,
         providerAppCatalog: params.providerAppCatalog,
       });
@@ -238,6 +242,7 @@ async function capabilitiesInventoryResponse(params: {
   sessionName: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
 }): Promise<DaemonResponse> {
   const resolution = await resolveInventoryCommandDevice({
     ...params,
@@ -330,10 +335,11 @@ async function handleAppsInventory(params: {
   sessionName: string;
   sessionStore: SessionStore;
   bindDevice?: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
   providerAppCatalog?: ProviderAppCatalog;
   inspectFacts?: InspectDeviceRuntimeFacts;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore, bindDevice, inspectFacts } = params;
+  const { req, sessionName, sessionStore, bindDevice, inspectFacts, platformServices } = params;
   const providerCatalogResponse = await resolveProviderAppCatalogResponse(
     req,
     params.providerAppCatalog,
@@ -344,6 +350,7 @@ async function handleAppsInventory(params: {
     sessionName,
     sessionStore,
     androidAvdSelection: 'include-stopped',
+    platformServices,
   });
   if ('response' in resolution) return resolution.response;
   const { device } = resolution;
@@ -352,7 +359,12 @@ async function handleAppsInventory(params: {
   const resolvedAndroidSerialAllowlist = resolveAndroidSerialAllowlist(
     req.flags?.androidDeviceAllowlist,
   );
-  const runtimeResolution = await resolveAppsRuntime({ device, inspectFacts, bindDevice });
+  const runtimeResolution = await resolveAppsRuntime({
+    device,
+    inspectFacts,
+    bindDevice,
+    platformServices,
+  });
   if ('response' in runtimeResolution) return runtimeResolution.response;
   const runtime = runtimeResolution.runtime;
   const readyDevice = await ensureAppsRuntimeReady(runtime, {
@@ -407,6 +419,7 @@ async function inspectCapabilityFacts(
 async function resolveAppsRuntime(params: {
   device: DeviceInfo;
   inspectFacts: InspectDeviceRuntimeFacts | undefined;
+  platformServices: DaemonPlatformServices;
   bindDevice: BindDeviceRuntime | undefined;
 }): Promise<{ response: DaemonResponse } | { runtime: BoundDeviceRuntime<typeof appsRuntimeUse> }> {
   const facts = await requireRuntimeFacts(params.inspectFacts)(params.device);
@@ -444,8 +457,9 @@ async function resolveInventoryCommandDevice(params: {
   sessionName: string;
   sessionStore: SessionStore;
   androidAvdSelection?: 'running-only' | 'include-stopped';
+  platformServices: DaemonPlatformServices;
 }): Promise<{ device: DeviceInfo } | { response: DaemonResponse }> {
-  const { req, sessionName, sessionStore, androidAvdSelection } = params;
+  const { req, sessionName, sessionStore, androidAvdSelection, platformServices } = params;
   const session = sessionStore.get(sessionName);
   const flags = req.flags ?? {};
   const response = requireSessionOrExplicitSelector(req.command, session, flags);
@@ -455,6 +469,7 @@ async function resolveInventoryCommandDevice(params: {
     device: await resolveCommandDevice({
       session,
       flags,
+      platformServices,
       androidAvdSelection,
     }),
   };

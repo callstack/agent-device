@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { test, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -39,6 +40,7 @@ async function runDevices(
     { local: async () => inventory },
     async () =>
       await handleSessionInventoryCommands({
+        platformServices: daemonPlatformServicesFixture(),
         req: { token: 't', session: 'default', command: 'devices', positionals: [], flags },
         sessionName: 'default',
         sessionStore: makeSessionStore('agent-device-devices-batch-runtime-'),
@@ -387,6 +389,7 @@ test('close clears retained materialized install paths bound to the session', as
   mockCleanupRetainedMaterializedPaths.mockImplementation(realCleanup);
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
     sessionName,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

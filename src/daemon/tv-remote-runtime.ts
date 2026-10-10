@@ -56,6 +56,7 @@ export async function resolveBoundTvRemoteRuntime(
       device: params.device,
       use: tvRemoteRuntimeUse,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     },
     (runtime, context) => executeTvRemote(runtime, button, durationMs, context),

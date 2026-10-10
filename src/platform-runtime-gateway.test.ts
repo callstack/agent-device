@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './daemon/__tests__/platform-services-fixture.ts';
 import {
   type DeviceBinding,
   localRuntimeOwner,
@@ -344,6 +345,7 @@ describe('composed platform runtime gateway', () => {
         { local: async () => [staleDevice] },
         async () =>
           await handleSessionStateCommands({
+            platformServices: daemonPlatformServicesFixture(),
             req: {
               token: 't',
               session: 'default',

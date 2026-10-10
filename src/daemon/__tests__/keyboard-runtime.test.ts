@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import {
   keyboardRuntimeOperationFacts,
@@ -113,6 +114,7 @@ test('android status admits keyboardStatusUse and reports the platform-shaped st
   });
 
   const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: androidDevice,
     positionals: ['status'],
     inspectFacts: harness.inspectFacts,
@@ -144,6 +146,7 @@ test('`get` is an alias for `status`', async () => {
   });
 
   const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: androidDevice,
     positionals: ['get'],
     inspectFacts: harness.inspectFacts,
@@ -163,6 +166,7 @@ test('`return` is an alias for `enter`', async () => {
   });
 
   const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: androidDevice,
     positionals: ['return'],
     inspectFacts: harness.inspectFacts,
@@ -181,6 +185,7 @@ test('android status is refused on iOS with the retired in-handler hint', async 
   });
 
   const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: iosDevice,
     positionals: ['status'],
     inspectFacts: harness.inspectFacts,
@@ -217,6 +222,7 @@ test('iOS dismiss reports the mechanism disclosure and its own message', async (
   });
 
   const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: iosDevice,
     positionals: ['dismiss'],
     inspectFacts: harness.inspectFacts,
@@ -254,6 +260,7 @@ test('iOS dismiss degrades an unrecognized mechanism to the bare message', async
   });
 
   const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: iosDevice,
     positionals: ['dismiss'],
     inspectFacts: harness.inspectFacts,
@@ -279,6 +286,7 @@ test('iOS dismiss omits a message mechanism claim when every mechanism failed', 
   });
 
   const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: iosDevice,
     positionals: ['dismiss'],
     inspectFacts: harness.inspectFacts,
@@ -308,6 +316,7 @@ test('iOS dismiss omits a mechanism claim when the keyboard was never visible', 
   });
 
   const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: iosDevice,
     positionals: ['dismiss'],
     inspectFacts: harness.inspectFacts,
@@ -332,6 +341,7 @@ test('harmonyos dismiss reports success with no structured fields beyond the mes
   harness.keyboardDismiss.mockResolvedValue({ kind: 'acknowledged' });
 
   const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: harmonyDevice,
     positionals: ['dismiss'],
     inspectFacts: harness.inspectFacts,
@@ -368,6 +378,7 @@ test('android dismiss reports the full IME probe evidence', async () => {
   });
 
   const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: androidDevice,
     positionals: ['dismiss'],
     inspectFacts: harness.inspectFacts,
@@ -403,6 +414,7 @@ test('iOS enter reports visibility evidence; android enter reports only success'
     wasVisible: true,
   });
   const iosResolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: iosDevice,
     positionals: ['enter'],
     inspectFacts: iosHarness.inspectFacts,
@@ -426,6 +438,7 @@ test('iOS enter reports visibility evidence; android enter reports only success'
     enter: available,
   });
   const androidResolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: androidDevice,
     positionals: ['enter'],
     inspectFacts: androidHarness.inspectFacts,
@@ -450,6 +463,7 @@ test('harmonyos enter reports only success, distinctly from android despite an i
   harness.keyboardEnter.mockResolvedValue({ kind: 'harmonyos-acknowledged' });
 
   const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: harmonyDevice,
     positionals: ['enter'],
     inspectFacts: harness.inspectFacts,
@@ -474,6 +488,7 @@ test('rejects an unknown subcommand before inspection or binding', async () => {
 
   await expect(
     resolveBoundKeyboardRuntime({
+      platformServices: daemonPlatformServicesFixture(),
       device: androidDevice,
       positionals: ['sideways'],
       inspectFacts: harness.inspectFacts,
@@ -494,6 +509,7 @@ test('rejects more than one subcommand argument', async () => {
 
   await expect(
     resolveBoundKeyboardRuntime({
+      platformServices: daemonPlatformServicesFixture(),
       device: androidDevice,
       positionals: ['dismiss', 'extra'],
       inspectFacts: harness.inspectFacts,
@@ -511,6 +527,7 @@ test('defaults to status with no positional', async () => {
   });
 
   const resolved = await resolveBoundKeyboardRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: androidDevice,
     positionals: [],
     inspectFacts: harness.inspectFacts,

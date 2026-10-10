@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 const { dispatchSnapshotDiffViaRuntime, dispatchSnapshotViaRuntime } = vi.hoisted(() => ({
@@ -35,7 +36,9 @@ test('snapshot route forwards the request runtime facts and binding seams exactl
     token: 'test-token',
   };
 
+  const platformServices = daemonPlatformServicesFixture();
   await handleSnapshotCommands({
+    platformServices,
     req,
     sessionName: 'snapshot-route',
     logPath: '/tmp/snapshot-route.log',
@@ -52,6 +55,7 @@ test('snapshot route forwards the request runtime facts and binding seams exactl
     sessionStore,
     inspectFacts,
     bindDevice,
+    platformServices,
   });
   expect(dispatchSnapshotDiffViaRuntime).not.toHaveBeenCalled();
 });
@@ -67,7 +71,9 @@ test('diff route forwards the request runtime facts and binding seams exactly on
     token: 'test-token',
   };
 
+  const platformServices = daemonPlatformServicesFixture();
   await handleSnapshotCommands({
+    platformServices,
     req,
     sessionName: 'diff-route',
     logPath: '/tmp/diff-route.log',
@@ -84,6 +90,7 @@ test('diff route forwards the request runtime facts and binding seams exactly on
     sessionStore,
     inspectFacts,
     bindDevice,
+    platformServices,
   });
   expect(dispatchSnapshotViaRuntime).not.toHaveBeenCalled();
 });

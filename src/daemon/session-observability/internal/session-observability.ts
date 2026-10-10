@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../../platform-services.ts';
 import type { LogBackend } from '@agent-device/contracts/observability';
 import type {
   AppLogFailure,
@@ -43,6 +44,7 @@ export type SessionObservabilityCommandInput = {
   sessionName: string;
   sessionStore: SessionStore;
   bindDevice?: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
   inspectFacts?: InspectDeviceRuntimeFacts;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   audioProbeAdmissionLedger?: AudioProbeAdmissionLedger;
@@ -54,6 +56,7 @@ type LogsHandlerParams = Omit<ObservabilityInput, 'bindDevice' | 'appLogAdmissio
   session: SessionState;
   ref: SessionRef;
   bindDevice: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
   appLogAdmissionLedger: AppLogAdmissionLedger;
 };
 type ExecutableLogsRuntimePlan =
@@ -410,6 +413,7 @@ function requireAudioSeams(params: ObservabilityInput): Parameters<typeof handle
     sessionName: params.sessionName,
     sessionStore: params.sessionStore,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
     audioProbeAdmissionLedger: params.audioProbeAdmissionLedger,
     throwIfCanceled: params.throwIfCanceled ?? (() => {}),
@@ -432,6 +436,7 @@ function requireLogsHandlerParams(
   return {
     ...params,
     bindDevice: params.bindDevice,
+    platformServices: params.platformServices,
     appLogAdmissionLedger: params.appLogAdmissionLedger,
   };
 }

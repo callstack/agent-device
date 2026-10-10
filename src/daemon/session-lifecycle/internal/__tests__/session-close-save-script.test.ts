@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test } from 'vitest';
 import { sessionCloseShutdownFixture } from './session-close-shutdown.fixtures.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
@@ -36,6 +37,7 @@ test('close --save-script on a never-armed session is rejected before teardown, 
 
   await expect(
     handleSessionCommands({
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -70,6 +72,7 @@ test('close --save-script on a never-armed session is rejected before teardown, 
   // A plain close (no --save-script) still closes the same session cleanly afterward, and now
   // teardown genuinely does run: the recorder is signaled and the session deleted.
   const plainClose = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -109,6 +112,7 @@ test('close --save-script on a session with an active .ad repair transaction is 
   sessionStore.publish(sessionName, session);
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,

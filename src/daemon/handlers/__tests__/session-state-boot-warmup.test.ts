@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import {
   makeSessionStore,
   mockPrewarmAppleRunnerCache,
@@ -19,6 +20,7 @@ test('boot leaves Apple keep-hot policy inside the platform runtime', async () =
   });
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

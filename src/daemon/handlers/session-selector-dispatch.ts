@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
@@ -13,7 +14,6 @@ import { resolveBoundAppEventRuntime } from '../app-event-runtime.ts';
 import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';
 import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
 import { expireRefFrame } from '../ref-frame.ts';
-import { resolveSessionAppBundleIdForTarget } from '../../platform-runtime-open-target.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { DaemonCommandContext } from '../context.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
@@ -51,6 +51,7 @@ async function runSessionOrSelectorDispatch(params: {
     device: DeviceInfo,
     ref: SessionRef | undefined,
   ) => Promise<SessionCommandPrepareOutcome>;
+  platformServices: DaemonPlatformServices;
 }): Promise<DaemonResponse> {
   const {
     req,
@@ -71,6 +72,7 @@ async function runSessionOrSelectorDispatch(params: {
   const device = await resolveCommandDevice({
     session,
     flags,
+    platformServices: params.platformServices,
   });
   if (ref) sessionStore.requireCurrent(ref);
   const prepared = await prepare(device, ref);
@@ -122,6 +124,7 @@ type SessionRouteHandlerParams = Readonly<{
   logPath: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }>;
 
@@ -131,6 +134,7 @@ type SessionRouteRuntimeResolver = (
     positionals: string[];
     readiness?: boolean;
     inspectFacts?: InspectDeviceRuntimeFacts;
+    platformServices: DaemonPlatformServices;
     bindDevice?: BindDeviceRuntime;
   }>,
 ) => Promise<
@@ -161,7 +165,8 @@ async function runBoundSessionRoute(
       updateSession?: Parameters<typeof runSessionOrSelectorDispatch>[0]['updateSession'];
     }>,
 ): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore, inspectFacts, bindDevice } = params;
+  const { req, sessionName, logPath, sessionStore, inspectFacts, bindDevice, platformServices } =
+    params;
   const positionals = req.positionals ?? [];
   return await runSessionOrSelectorDispatch({
     req,
@@ -169,6 +174,7 @@ async function runBoundSessionRoute(
     sessionStore,
     command: params.command,
     positionals,
+    platformServices,
     ...(params.updateSession ? { updateSession: params.updateSession } : {}),
     prepare: async (device, ref) => {
       const bound = await params.resolveRuntime({
@@ -177,6 +183,7 @@ async function runBoundSessionRoute(
         readiness: true,
         inspectFacts,
         bindDevice,
+        platformServices,
       });
       if (!bound.ok) return { ok: false, response: bound.response };
       const session = ref ? sessionStore.requireCurrent(ref) : undefined;
@@ -216,7 +223,7 @@ export async function handleAppEventCommand(
       const eventUrl = typeof result?.eventUrl === 'string' ? result.eventUrl : undefined;
       if (!eventUrl) return;
       const session = params.sessionStore.requireCurrent(ref);
-      const appBundleId = await resolveSessionAppBundleIdForTarget(
+      const appBundleId = await params.platformServices.resolveSessionAppBundleIdForTarget(
         session.device,
         eventUrl,
         session.appBundleId,

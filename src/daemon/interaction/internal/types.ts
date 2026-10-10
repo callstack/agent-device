@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../../platform-services.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { Rect, SnapshotPreferredBackend, SnapshotState } from '@agent-device/kernel/snapshot';
@@ -30,6 +31,7 @@ export type InteractionRouteInput = {
   captureSnapshotForSession?: CaptureSnapshotForSession;
   contextFromFlags: BoundContextFromFlags;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   androidObservation?: AndroidObservationAdapter;
   /**
@@ -46,6 +48,7 @@ export type FindRouteInput = {
   sessionStore: SessionStore;
   invoke: DaemonInvokeFn;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 };
 

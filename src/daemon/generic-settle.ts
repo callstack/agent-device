@@ -12,6 +12,7 @@ import {
   settleFlagGuardResponse,
 } from './interaction/index.ts';
 import type { BoundContextFromFlags } from './context.ts';
+import type { DaemonPlatformServices } from './platform-services.ts';
 import { issueSettleRefs } from './session-snapshot.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
@@ -62,6 +63,7 @@ type GenericSettleContext = {
   logPath: string;
   sessionStore: SessionStore;
   contextFromFlags: BoundContextFromFlags;
+  platformServices: DaemonPlatformServices;
 };
 
 /**
@@ -127,6 +129,7 @@ function createGenericSettleRuntime(
       logPath: context.logPath,
       sessionStore: context.sessionStore,
       contextFromFlags: context.contextFromFlags,
+      platformServices: context.platformServices,
       captureSnapshotForSession,
     });
   } catch {

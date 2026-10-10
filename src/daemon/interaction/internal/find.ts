@@ -101,6 +101,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     logPath,
     sessionStore,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (runtimeResponse) return runtimeResponse;
@@ -123,6 +124,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
       intent: findRuntimeIntent(action),
     }),
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (!boundSelector.ok) return boundSelector.response;

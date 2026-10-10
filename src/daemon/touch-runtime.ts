@@ -82,6 +82,7 @@ export async function resolveBoundTouchRuntime(
   const shared = {
     device: params.device,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   };
   const plan = resolveTouchRuntimePlan(params.command, params.requiresCapture);

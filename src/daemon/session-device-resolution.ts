@@ -1,7 +1,7 @@
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, sessionOrDeviceSelectorRequiredDetails } from '@agent-device/kernel/errors';
 import { isActiveProviderDevice } from './provider-device-admission.ts';
-import { appleSessionObservation } from '../platform-runtime-apple-resources.ts';
+import type { DaemonPlatformServices } from './platform-services.ts';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
@@ -35,6 +35,7 @@ export async function resolveCommandDevice(params: {
   session: SessionState | undefined;
   flags: DaemonRequest['flags'] | undefined;
   androidAvdSelection?: 'running-only' | 'include-stopped';
+  platformServices: DaemonPlatformServices;
 }): Promise<DeviceInfo> {
   const shouldUseExplicitIdentity = hasExplicitDeviceSelector(params.flags);
   const device =
@@ -42,11 +43,14 @@ export async function resolveCommandDevice(params: {
       ? await resolveTargetDevice(params.flags ?? {}, {
           androidAvdSelection: params.androidAvdSelection,
         })
-      : await refreshSessionDeviceIfNeeded(params.session.device);
+      : await refreshSessionDeviceIfNeeded(params.session.device, params.platformServices);
   return device;
 }
 
-export async function refreshSessionDeviceIfNeeded(device: DeviceInfo): Promise<DeviceInfo> {
+export async function refreshSessionDeviceIfNeeded(
+  device: DeviceInfo,
+  platformServices: DaemonPlatformServices,
+): Promise<DeviceInfo> {
   if (isActiveProviderDevice(device)) {
     return device;
   }
@@ -59,7 +63,7 @@ export async function refreshSessionDeviceIfNeeded(device: DeviceInfo): Promise<
   // A live XCUITest runner session is attached to this exact UDID, which
   // proves the simulator still exists and is booted — the two facts the
   // ~0.7s re-resolve inventory listing exists to establish.
-  if ((await appleSessionObservation.observeRunnerSession(device.id))?.alive) {
+  if ((await platformServices.appleSessionObservation.observeRunnerSession(device.id))?.alive) {
     return { ...device, booted: true };
   }
 

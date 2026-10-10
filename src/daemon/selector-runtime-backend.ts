@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from './platform-services.ts';
 import type {
   AgentDeviceBackend,
   BackendCommandContext,
@@ -45,6 +46,7 @@ export type SelectorRuntimeParams = {
   captureProof?: RequestCaptureProof;
   signal?: AbortSignal;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   androidObservation?: AndroidObservationAdapter;
   platformResourceCleanup?: PlatformResourceCleanup;
@@ -136,6 +138,7 @@ export async function createBoundSelectorRuntime(
     device: resolved.device,
     session: resolved.session,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (!bound.ok) return { ok: false, response: bound.response };

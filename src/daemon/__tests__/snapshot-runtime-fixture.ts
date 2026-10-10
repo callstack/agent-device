@@ -5,6 +5,8 @@ import {
   providerRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import {
   type AlertRuntimeInput,
@@ -80,6 +82,7 @@ export function resetSnapshotRuntimeFixture(): void {
 export function snapshotRuntimeFixture(requestId?: string): Readonly<{
   inspectFacts: InspectDeviceRuntimeFacts;
   bindDevice: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
 }> {
   const requestSignal = getRequestSignal(requestId) ?? new AbortController().signal;
 
@@ -147,7 +150,7 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
     );
   };
 
-  return { inspectFacts, bindDevice };
+  return { inspectFacts, bindDevice, platformServices: daemonPlatformServicesFixture() };
 }
 
 /** A physical Apple device that is not the macOS host: the one settings refusal these suites use. */

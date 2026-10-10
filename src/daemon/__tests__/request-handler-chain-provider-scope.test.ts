@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 // Proves the exact androidAdbExecutor reference reaches the session handler
 // through the neutral providerScope, and that an empty scope forwards none.
 import assert from 'node:assert/strict';
@@ -75,6 +76,7 @@ test('the android adb executor from the generic provider scope reaches the sessi
   });
 
   await runRequestHandlerChain({
+    platformServices: daemonPlatformServicesFixture(),
     ...baseChainParams('provider-scope-test'),
     providerScope: { androidAdbExecutor },
   });
@@ -90,6 +92,7 @@ test('an empty provider scope forwards no android adb executor to the session ha
   handleSessionCommandsMock.mockClear();
 
   await runRequestHandlerChain({
+    platformServices: daemonPlatformServicesFixture(),
     ...baseChainParams('provider-scope-empty'),
     providerScope: {},
   });

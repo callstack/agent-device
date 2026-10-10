@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import fs from 'node:fs';
 
 import path from 'node:path';
@@ -14,6 +15,7 @@ test('test --fail-fast continues after passing scripts', async () => {
 
   const invokedPaths: string[] = [];
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
@@ -71,6 +72,7 @@ async function runWithNetworkFlag(publicNetworkOnly: boolean | undefined) {
   // the asserted path: dropping it in the handler must fail this test, since an
   // unset field reads as trusted and a remote flow would run evalScript.
   const response = await handleReplayCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: 'default',
     logPath: path.join(root, 'daemon.log'),

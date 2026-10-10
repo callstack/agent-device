@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -67,6 +68,7 @@ async function runStateCommand(
     sessionStore: store,
     leaseRegistry: new LeaseRegistry(),
     deviceRuntimeGateway: readinessDeviceRuntimeGateway,
+    platformServices: daemonPlatformServicesFixture(),
     platformRequestScope: {
       signal: new AbortController().signal,
       diagnostics: { emit: () => {} },
@@ -75,6 +77,7 @@ async function runStateCommand(
   });
   try {
     return await handleSessionStateCommands({
+      platformServices: daemonPlatformServicesFixture(),
       req,
       sessionName: 'default',
       sessionStore: store,

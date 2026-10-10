@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../src/daemon/__tests__/platform-services-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { vi } from 'vitest';
@@ -81,6 +82,7 @@ export async function inspectProviderDeploymentAdmission(params: {
       device: params.device,
     });
     const response = await handleAppDeploymentCommand({
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 'test',
         session: 'default',

@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from './platform-services.ts';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import {
   type ScreenshotRuntimePlan,
@@ -27,6 +28,7 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 
 export type ScreenshotRuntimeBindings = Readonly<{
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }>;
 

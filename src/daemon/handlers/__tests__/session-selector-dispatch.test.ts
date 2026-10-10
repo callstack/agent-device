@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { test, expect, vi } from 'vitest';
 import * as path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
@@ -75,6 +76,7 @@ test.each(['rebuild', 'retire'] as const)(
         [Symbol.asyncDispose]: async () => {},
       };
       const running = handleSessionCommands({
+        platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
           session: 'default',
@@ -175,6 +177,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   // dismiss mutates the device → frame expires.
   const dismissRef = sessionStore.publish(sessionName, makeSession(sessionName, device));
   await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -195,6 +198,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   sessionStore.retire(dismissRef);
   sessionStore.publish(sessionName, makeSession(sessionName, device));
   await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -238,6 +242,7 @@ test('keyboard dismiss expires the frame before the invocation runs, even when i
   sessionStore.publish(sessionName, makeSession(sessionName, device));
   await expect(
     handleSessionCommands({
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -259,6 +264,7 @@ test('keyboard dismiss expires the frame before the invocation runs, even when i
 test('keyboard requires an active session or explicit device selector', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -286,6 +292,7 @@ test('keyboard dismiss requires active iOS session for explicit selectors', asyn
   const sessionStore = makeSessionStore();
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

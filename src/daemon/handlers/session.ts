@@ -41,6 +41,7 @@ const handleSessionOpenCommandGroup: SessionCommandHandler = (params) =>
     logPath: params.logPath,
     sessionStore: params.sessionStore,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
     reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
   } satisfies SessionOpenCommandInput);
@@ -54,6 +55,7 @@ const handleSessionCloseCommandGroup: SessionCommandHandler = (params) =>
     leaseRegistry: params.leaseRegistry,
     leaseLifecycleProvider: params.leaseLifecycleProvider,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
     platformResourceCleanup: params.platformResourceCleanup,
   } satisfies SessionCloseCommandInput);
@@ -64,6 +66,7 @@ const handleSessionStateCommandGroup: SessionCommandHandler = async ({
   sessionStore,
   inspectFacts,
   bindDevice,
+  platformServices,
 }) =>
   await handleSessionStateCommands({
     req,
@@ -71,6 +74,7 @@ const handleSessionStateCommandGroup: SessionCommandHandler = async ({
     sessionStore,
     inspectFacts,
     bindDevice,
+    platformServices,
   });
 
 const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
@@ -78,6 +82,7 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
   sessionName,
   sessionStore,
   bindDevice,
+  platformServices,
   inspectFacts,
   appLogAdmissionLedger,
   audioProbeAdmissionLedger,
@@ -89,6 +94,7 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
     sessionName,
     sessionStore,
     bindDevice,
+    platformServices,
     inspectFacts,
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
@@ -134,7 +140,15 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
   appstate: handleSessionStateCommandGroup,
   session_save_script: async ({ req, sessionName, sessionStore }) =>
     handleSessionScriptPublication({ req, sessionName, sessionStore }),
-  runtime: async ({ req, sessionName, logPath, sessionStore, inspectFacts, bindDevice }) =>
+  runtime: async ({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+    platformServices,
+  }) =>
     await handleRuntimeCommand({
       req,
       sessionName,
@@ -142,8 +156,17 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
       sessionStore,
       inspectFacts,
       bindDevice,
+      platformServices,
     }),
-  clipboard: async ({ req, sessionName, logPath, sessionStore, inspectFacts, bindDevice }) =>
+  clipboard: async ({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+    platformServices,
+  }) =>
     await handleSessionClipboardCommand({
       req,
       sessionName,
@@ -151,6 +174,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
       sessionStore,
       inspectFacts,
       bindDevice,
+      platformServices,
     }),
   keyboard: handleKeyboardCommand,
   perf: handleSessionObservabilityCommandGroup,
@@ -158,7 +182,15 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
   events: handleSessionObservabilityCommandGroup,
   network: handleSessionObservabilityCommandGroup,
   audio: handleSessionObservabilityCommandGroup,
-  prepare: async ({ req, sessionName, logPath, sessionStore, inspectFacts, bindDevice }) =>
+  prepare: async ({
+    req,
+    sessionName,
+    logPath,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+    platformServices,
+  }) =>
     await handlePrepareCommand({
       req,
       sessionName,
@@ -166,6 +198,7 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
       sessionStore,
       inspectFacts,
       bindDevice,
+      platformServices,
     }),
   install: handleSessionAppDeploymentCommand,
   reinstall: handleSessionAppDeploymentCommand,
@@ -197,6 +230,7 @@ export async function handleSessionCommands(
     androidAdbExecutor,
     inspectFacts,
     bindDevice,
+    platformServices,
     bindExactDevice,
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
@@ -227,6 +261,7 @@ export async function handleSessionCommands(
     androidAdbExecutor,
     inspectFacts,
     bindDevice,
+    platformServices,
     bindExactDevice,
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,

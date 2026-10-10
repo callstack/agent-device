@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 
@@ -21,6 +22,7 @@ test('test --json marks a typed live device claim as infrastructure without retr
 
   let attempts = 0;
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -68,6 +70,7 @@ test('test --json retries DEVICE_IN_USE without typed device-claim provenance', 
 
   let attempts = 0;
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

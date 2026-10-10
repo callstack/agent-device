@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import type {
   ClipboardReadInput,
   ClipboardWriteInput,
@@ -107,7 +108,7 @@ async function resolveBoundClipboardRuntime(
   }> &
     RuntimeAdmissionBindings,
 ): Promise<ResolvedClipboardExecution> {
-  const { device, action, positionals, inspectFacts, bindDevice } = params;
+  const { device, action, positionals, inspectFacts, bindDevice, platformServices } = params;
   if (action === 'read') {
     const admission = await admitRuntimeUse({
       command: 'clipboard',
@@ -115,6 +116,7 @@ async function resolveBoundClipboardRuntime(
       use: clipboardReadUse,
       inspectFacts,
       bindDevice,
+      platformServices,
       readiness: true,
     });
     if (admission.type === 'response') return { ok: false, response: admission.response };
@@ -127,6 +129,7 @@ async function resolveBoundClipboardRuntime(
     use: clipboardWriteUse,
     inspectFacts,
     bindDevice,
+    platformServices,
     readiness: true,
   });
   if (admission.type === 'response') return { ok: false, response: admission.response };
@@ -140,9 +143,11 @@ export async function handleSessionClipboardCommand(params: {
   logPath: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore, inspectFacts, bindDevice } = params;
+  const { req, sessionName, logPath, sessionStore, inspectFacts, bindDevice, platformServices } =
+    params;
   const ref = sessionStore.lookup(sessionName);
   const session = ref?.session;
   const flags = req.flags ?? {};
@@ -155,7 +160,7 @@ export async function handleSessionClipboardCommand(params: {
     return errorResponse('INVALID_ARGS', 'clipboard requires a subcommand: read or write');
   }
 
-  const device = await resolveCommandDevice({ session, flags });
+  const device = await resolveCommandDevice({ session, flags, platformServices });
   if (ref) sessionStore.requireCurrent(ref);
   const bound = await resolveBoundClipboardRuntime({
     device,
@@ -163,6 +168,7 @@ export async function handleSessionClipboardCommand(params: {
     positionals,
     inspectFacts,
     bindDevice,
+    platformServices,
   });
   if (!bound.ok) return bound.response;
   const current = ref ? sessionStore.requireCurrent(ref) : undefined;

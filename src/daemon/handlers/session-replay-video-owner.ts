@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import { handleRecordCommand } from './record-runtime.ts';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
 import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
@@ -11,6 +12,7 @@ type ReplayRecordVideoRequest = Parameters<ReplayTestVideoOwner['record']>[0];
 export type ReplayTestVideoOwnerParams = Readonly<{
   sessionStore: SessionStore;
   bindDevice?: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
   bindExactDevice?: BindExactDeviceRuntime;
   screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
   requestScope?: PlatformRequestScope;
@@ -24,6 +26,7 @@ export function createReplayTestVideoOwner(
   const {
     sessionStore,
     bindDevice,
+    platformServices,
     bindExactDevice,
     screenRecordingAdmissionLedger,
     requestScope,
@@ -46,6 +49,7 @@ export function createReplayTestVideoOwner(
       sessionName: request.sessionName,
       sessionStore,
       bindDevice,
+      platformServices,
       bindExactDevice,
       admissionLedger: screenRecordingAdmissionLedger,
       requestScope,

@@ -1,4 +1,5 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { makeIosAppSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { buildSessionLeaseFromRequest } from '../lease-context.ts';
@@ -22,6 +23,7 @@ export function createHumanControlHarness() {
   );
   const handleRequest = createRequestHandler({
     logPath: '/tmp/agent-device-human-control.log',
+    platformServices: daemonPlatformServicesFixture(),
     token: 'test-token',
     sessionStore,
     leaseRegistry: registry,

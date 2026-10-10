@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -88,6 +89,7 @@ test('install_source materializes and deploys through one admitted runtime bindi
   const runtime = createSourceRuntime(session.device, materialize, deploy);
 
   const response = await handleInstallFromSourceDeploymentCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: makeRequest({ kind: 'url', url: 'https://example.com/app.zip', headers: {} }),
     sessionName: session.name,
     sessionStore: store,
@@ -133,6 +135,7 @@ test('install_source rejects unavailable facts before binding or materializing',
   });
 
   const response = await handleInstallFromSourceDeploymentCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: makeRequest({ kind: 'url', url: 'https://example.com/app.zip' }),
     sessionName: session.name,
     sessionStore: store,
@@ -170,6 +173,7 @@ test('install_source fails closed when a provider owner does not expose readines
   });
 
   const response = await handleInstallFromSourceDeploymentCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: makeRequest({ kind: 'url', url: 'https://example.com/app.zip' }),
     sessionName: session.name,
     sessionStore: store,
@@ -226,6 +230,7 @@ test('install_source cleans materialized paths when deployment fails after admis
   );
 
   const response = await handleInstallFromSourceDeploymentCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: makeRequest({ kind: 'url', url: 'https://example.com/app.zip' }),
     sessionName: session.name,
     sessionStore: store,
@@ -257,6 +262,7 @@ test('install_source preserves the Android identity failure when its runtime can
   );
 
   const response = await handleInstallFromSourceDeploymentCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: makeRequest({ kind: 'url', url: 'https://example.com/app.zip' }),
     sessionName: session.name,
     sessionStore: store,
@@ -292,6 +298,7 @@ test('install_source returns the typed iOS artifact identity supplied by its run
   );
 
   const response = await handleInstallFromSourceDeploymentCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: makeRequest({ kind: 'path', path: '/tmp/AgentDeviceTester.app' }),
     sessionName: session.name,
     sessionStore: store,
@@ -338,6 +345,7 @@ test('install_source accepts the public leaf selector of an Apple session it is 
   );
 
   const response = await handleInstallFromSourceDeploymentCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: makeRequest({ kind: 'path', path: '/tmp/App.app' }, { platform: 'ios' }),
     sessionName: session.name,
     sessionStore: store,
@@ -366,6 +374,7 @@ test('install_source still refuses a leaf selector that names a different platfo
   );
 
   const response = await handleInstallFromSourceDeploymentCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: makeRequest({ kind: 'path', path: '/tmp/App.app' }, { platform: 'android' }),
     sessionName: session.name,
     sessionStore: store,
