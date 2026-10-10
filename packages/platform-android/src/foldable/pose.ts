@@ -27,8 +27,12 @@ const EMULATOR_POSTURES = Object.freeze({
 /** Reads until the guest commits the posture's device state; `attempts × poll` is the settle budget. */
 export const ANDROID_FOLD_SETTLE_ATTEMPTS = 60;
 const ANDROID_FOLD_SETTLE_POLL_MS = 250;
-/** The lock screen can arrive after the device state did, so it must stay away for this many reads. */
-const LOCK_SCREEN_CLEAR_READS = 2;
+/**
+ * The lock screen can land after the device state did, so every read waits a poll first and the
+ * keyguard must stay away for this many consecutive reads (about 750 ms of quiet) before the fold
+ * is done.
+ */
+const LOCK_SCREEN_CLEAR_READS = 3;
 
 const FOLDABLE_REQUIRED_HINT =
   'fold poses the hinge of a foldable emulator such as the Pixel 9 Pro Fold; this emulator lists no CLOSED, HALF_OPENED, or OPENED device state, so it has no hinge to pose.';
@@ -192,7 +196,7 @@ async function dismissFoldLockScreen(
   let clearReads = 0;
   let dismissed = false;
   for (let attempt = 1; attempt <= ANDROID_FOLD_SETTLE_ATTEMPTS; attempt += 1) {
-    signal?.throwIfAborted();
+    await sleep(ANDROID_FOLD_SETTLE_POLL_MS, signal);
     if (await isKeyguardShowing(device, signal)) {
       clearReads = 0;
       dismissed = true;
@@ -201,7 +205,6 @@ async function dismissFoldLockScreen(
       clearReads += 1;
       if (clearReads >= LOCK_SCREEN_CLEAR_READS) break;
     }
-    await sleep(ANDROID_FOLD_SETTLE_POLL_MS, signal);
   }
   if (clearReads < LOCK_SCREEN_CLEAR_READS) {
     throw new AppError('COMMAND_FAILED', `${device.name} stays locked after the fold`, {

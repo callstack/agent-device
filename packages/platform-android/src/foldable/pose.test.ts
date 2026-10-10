@@ -101,8 +101,8 @@ beforeEach(() => {
 
 test('sets the console posture, waits for the device state, and dismisses the lock screen the fold raised', async () => {
   // The first state read still sees the open posture; the lock screen shows once and is gone
-  // for two reads after the dismissal.
-  stubEmulator({ stateReads: ['2', '0'], keyguardReads: [true, false, false] });
+  // for three reads after the dismissal.
+  stubEmulator({ stateReads: ['2', '0'], keyguardReads: [true, false, false, false] });
 
   await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'closed' })).resolves.toEqual({
     pose: 'closed',
@@ -118,7 +118,21 @@ test('sets the console posture, waits for the device state, and dismisses the lo
     'wm dismiss-keyguard',
     'dumpsys window',
     'dumpsys window',
+    'dumpsys window',
   ]);
+});
+
+test('waits before the first lock-screen read, so a keyguard landing after the state is still caught', async () => {
+  // The keyguard is absent at the moment the state commits and shows up on the next read.
+  stubEmulator({ stateReads: ['0'], keyguardReads: [false, true, false, false, false] });
+
+  await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'closed' })).resolves.toEqual({
+    pose: 'closed',
+    hingeAngleDegrees: 0,
+  });
+  expect(shellCommands().filter((command) => command === 'wm dismiss-keyguard')).toHaveLength(1);
+  // One poll precedes every keyguard read: five reads, five sleeps, none from the state settle.
+  expect(mockSleep).toHaveBeenCalledTimes(5);
 });
 
 test('looks the device state up by name, so a profile numbered from 1 verifies the same pose', async () => {
