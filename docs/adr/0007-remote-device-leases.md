@@ -196,16 +196,3 @@ These rules bind a request that names the lease or runs in its session. A daemon
 `leases.require` (ADR 0029) refuses requests that name no lease. The proxy token is one credential
 for every client, so a host serving several clients through one proxy authenticates each client and
 sets its tenant, session isolation, and lease on every request it forwards.
-
-## Host managed-device durability amendment
-
-ADR 0021 adds a narrow durability exception for Host leases backed by a managed-device allocator.
-Before allocator acquisition, the daemon persists a non-authoritative allocation operation record;
-Host adds its asserted principal, Host lease id, and run/client attribution. After grant, it records
-the allocator outcome and Host-to-managed-device lease mapping before publishing the Host grant.
-
-This record tracks Host publication and cleanup; it never mirrors allocator lifecycle state or
-becomes a second source of device truth. It exists to reconcile an uncertain allocator outcome and
-prevent duplicate or unattributed local ownership. It does not make the ordinary `LeaseRegistry`,
-proxy leases, or human-control holds durable. Rehydration requires the same authorized Host user
-and revalidates the allocator lease before device operations resume.

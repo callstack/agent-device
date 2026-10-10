@@ -5,6 +5,11 @@ Status: accepted. Decision pass over the 48 candidate files listed in umbrella i
 for detected communities). One row per candidate: `move`, `merge`, or `keep`, with the reason.
 Moves land as `refactor(move)` PRs; batch 1 is the companion PR to this decision.
 
+2026-10-10: `packages/managed-allocation` was removed with the withdrawn allocator design
+([ADR 0021](0021-host-simlock-managed-device-allocation.md)). Rows that refuse a move into it, or
+cite its capture-kit dependency as a cycle, no longer bind; re-evaluate those files on their
+remaining edges.
+
 ## Rules at a glance
 
 - A `keep` row is a decision, not a punt: the reason names the direction that was checked and why

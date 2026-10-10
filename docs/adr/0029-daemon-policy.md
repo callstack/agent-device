@@ -132,7 +132,7 @@ means a running daemon has exactly one policy, and its digest identifies it.
 ## Rejected alternatives
 
 - **Policy in the HTTP auth hook or the proxy.** Both see only top-level RPCs; see Context.
-- **Per-request or per-tenant policy.** Needs authenticated identity first; ADR 0021 Host can layer
-  per-user rules on top of this per-daemon floor.
+- **Per-request or per-tenant policy.** Needs authenticated identity first; an authenticating front end
+  can layer per-user rules on top of this per-daemon floor.
 - **A programmatic policy module.** Deferred. If added, it must decide at the same three points, not
   at the HTTP edge.

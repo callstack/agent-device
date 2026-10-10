@@ -26,13 +26,8 @@ The platform-neutral boundary that reports runtime facts and binds an admitted d
 runtime owner.
 
 **Runtime owner**:
-The one local platform module, managed local owner, or provider runtime selected to execute
+The one local platform module or provider runtime selected to execute
 behavior for an ownership-qualified device.
-
-**Managed local owner**:
-The exact-only runtime owner for an allocator-managed local device; it delegates automation
-to the device's platform module while lifecycle stays with the allocator.
-_Avoid_: Managed provider, provider runtime
 
 **Request binding**:
 A request-lived attachment of cancellation, diagnostics, progress, and admitted context to a
@@ -75,33 +70,15 @@ A mutual-exclusion guard for a platform helper process. It is not remote client 
 _Avoid_: Device lease, process lease
 
 **Device claim**:
-Host-global exclusive ownership of one local device by an open session, a sessionless mutating
-command, or an allocator-held claim for a managed identity.
-
-**Allocator-held claim**:
-A device claim whose principal is an installation and an allocator identity incarnation rather than
-a process; sessions and commands execute under it, and only the allocator's removal proof clears it.
-_Avoid_: Stale claim, session claim, synthetic session
+Host-global exclusive ownership of one local device by an open session or a sessionless mutating
+command.
 
 **Device-claim policy**:
 A command's observation, ownership, or exclusive-mutation rule.
 
 **Device-claim rule**:
-The per-owner-kind decision at the claim gate: ordinary, allocator-held, or none.
+The per-owner-kind decision at the claim gate: ordinary or none.
 _Avoid_: Claim policy, device-claim policy
-
-**Managed binding fence**:
-The ownership fence of one managed binding: requester and identity incarnation as its token,
-request generation as its generation.
-
-**Request generation**:
-The per-requester monotonic number of one allocation attempt on a lane; never shared across
-requesters.
-
-**Identity incarnation**:
-The allocator-issued id of one creation of a managed device, stable for that identity's lifetime
-and distinct from its transport address or the request generation.
-_Avoid_: Request generation
 
 **Human-control hold**:
 A device-scoped pause on agent mutations during human operation.
@@ -306,11 +283,6 @@ Compatibility-engine evidence since the most recent mutation; mutation invalidat
 
 **Provider**:
 An external adapter that owns a device runtime or contributes transport to a platform module.
-
-**Managed device allocator port**:
-The daemon-owned interface to a managed-device allocator: obtain, hold, and give back a managed
-device.
-_Avoid_: Simlock client, lease provider
 
 **Cloud WebDriver runtime**:
 A provider runtime mapping a cloud-owned Appium or WebDriver session into agent-device inventory,
