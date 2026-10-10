@@ -154,6 +154,9 @@ importers:
       jpeg-js:
         specifier: ^0.4.4
         version: 0.4.4
+      mdast-util-from-markdown:
+        specifier: ^2.0.3
+        version: 2.0.3(supports-color@7.2.0)
       oxc-parser:
         specifier: ^0.146.0
         version: 0.146.0
