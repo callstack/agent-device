@@ -51,8 +51,8 @@ import {
   runXcrun,
 } from './tool-provider.ts';
 
-/** The state probe answers in tens of milliseconds and must not become the reason a stop waits. */
-const SIMULATOR_STATE_PROBE_TIMEOUT_MS = 2_000;
+/** `simctl list` takes ~0.7s per spawn on an idle host; an unanswered probe reads as a lost device, so the budget leaves room for a loaded one. */
+const SIMULATOR_STATE_PROBE_TIMEOUT_MS = 5_000;
 
 /**
  * The real host capabilities for `@agent-device/platform-apple/runner`: the one place

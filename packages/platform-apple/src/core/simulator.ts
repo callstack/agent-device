@@ -205,7 +205,13 @@ export async function ensureBootedSimulator(
   await openIosSimulatorApp({ signal: options.signal });
 }
 
-/** The listed power state of one Simulator (`Booted`, `Shutting Down`, `Shutdown`), or null when unreadable. */
+/**
+ * The listed power state of one Simulator (`Booted`, `Shutting Down`, `Shutdown`), or null when the
+ * listing exits non-zero or omits the device. A listing that exceeds `timeoutMs` rejects. This
+ * runs through the global tool provider; the readiness and shutdown runtimes read the same listing
+ * through their injected `AppleToolHost` in `simulator-state.ts`, which is a different execution
+ * seam and not interchangeable with this one.
+ */
 export async function getSimulatorState(
   device: DeviceInfo,
   options: { signal?: AbortSignal; timeoutMs?: number } = {},

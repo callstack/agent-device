@@ -110,9 +110,10 @@ const pendingWarmLossNotices = new Map<string, RunnerWarmLossNotice>();
  * sample of a quiet runner) lets that churn settle so a mid-shutdown read cannot misclassify a
  * crash. A stop that lands after the reboot has finished still powers the device back off.
  *
- * The confirm delay, the recheck delay and the attach-retry budget are fixed in production; whole
- * milliseconds in `AGENT_DEVICE_IOS_RUNNER_DESTINATION_CONFIRM_MS`, `..._RECHECK_MS` and
- * `..._ATTACH_RETRY_MS` shorten them so tests do not wait production time.
+ *  * The confirm delay, the recheck delay and the attach-retry budget have production defaults; a
+ * non-negative millisecond value in `AGENT_DEVICE_IOS_RUNNER_DESTINATION_CONFIRM_MS`,
+ * `..._RECHECK_MS` or `..._ATTACH_RETRY_MS` replaces one. Only tests set them, to avoid waiting
+ * production time.
  */
 function resolveConfirmDelayMs(): number {
   return readDurationEnvMs(
@@ -135,7 +136,7 @@ function resolveAttachRetryBudgetMs(): number {
   );
 }
 
-/** A non-negative whole-millisecond override; anything else keeps the default. */
+/** A non-negative millisecond override, fractions floored; anything else keeps the default. */
 function readDurationEnvMs(key: string, fallbackMs: number): number {
   const raw = process.env[key]?.trim();
   const parsed = raw ? Number(raw) : Number.NaN;
