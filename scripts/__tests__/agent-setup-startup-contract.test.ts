@@ -35,8 +35,8 @@ function readCanonicalRule(content: string): string {
 
 function assertOpenFirstSetup(content: string): void {
   assert.ok(
-    readCanonicalRule(content).includes(OPEN_FIRST),
-    'canonical agent rule must start normal work with open',
+    readCanonicalRule(content).split('\n')[1]?.startsWith(OPEN_FIRST),
+    'canonical agent rule must start normal work with open right after its scope line',
   );
   const openFirstRules = content.split(OPEN_FIRST).length - 1;
   assert.equal(openFirstRules, 1, 'client setup must reference the canonical rule, not copy it');
@@ -62,3 +62,17 @@ for (const probe of MANDATORY_STARTUP_PROBES) {
     );
   });
 }
+
+test('agent setup contract rejects a rule that defers the open-first instruction', async () => {
+  const content = await readFile(AGENT_SETUP, 'utf8');
+  const openFirstLine = content.split('\n').find((line) => line.startsWith(OPEN_FIRST));
+  assert.ok(openFirstLine);
+  const deferred = content
+    .replace(`${openFirstLine}\n`, '')
+    .replace(
+      'Keep mutating commands against one session serial.\n',
+      `Keep mutating commands against one session serial.\n${openFirstLine}\n`,
+    );
+  assert.notEqual(deferred, content);
+  assert.throws(() => assertOpenFirstSetup(deferred), /right after its scope line/);
+});
