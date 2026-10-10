@@ -159,6 +159,7 @@ function detachRunnerSessionForShutdown(session: RunnerSession): RunnerDetachOut
   // the runner's log: until that write lands the session is still owned, and an owned session that
   // stopped following its runner's output is worse off than one that never handed anything off.
   // The runner holds its own descriptor, so this cannot disturb it either way (#2681).
+  session.listenerWatch?.close();
   session.endOutputObservation?.();
   advanceRunnerSessionState(session, 'stopped');
   return { detached: true, lane };

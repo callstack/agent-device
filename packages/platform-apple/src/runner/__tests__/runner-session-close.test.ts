@@ -288,38 +288,14 @@ test('a served non-busy error clears a stale busy report so close keeps a draine
   assert.equal(session.runnerMainThreadBusy, false);
 });
 
-test('releaseIosRunnerOnClose retains an idle runner, disposes a busy one, and the reopen boots fresh (#2552)', async () => {
+test('close stops an unready generation and the next use starts fresh', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-session-release-on-close-sim' };
   const session = await ensureRunnerSession(device, {});
-
-  // Idle + retain: warm reuse, same session comes back for the next open.
-  await releaseIosRunnerOnClose(device.id, { retain: true });
-  assert.ok(readRunnerSessionLiveness(device.id));
-  assert.equal((await ensureRunnerSession(device, {})).sessionId, session.sessionId);
-
-  // Busy + retain: a command that stalls answers MAIN_THREAD_TIMEOUT, so the stalled runner is
-  // disposed and the next open boots a clean one.
-  // The session has not served a command yet, so the read-only snapshot answers over the startup
-  // transport with no preflight.
-  mockWaitForRunner.mockResolvedValueOnce(
-    runnerError({ code: 'MAIN_THREAD_TIMEOUT', message: 'main thread execution timed out' }),
-  );
-  await assert.rejects(() =>
-    executeRunnerCommandWithSession(
-      device,
-      session,
-      { command: 'snapshot', appBundleId: 'com.example.demo' },
-      '/tmp/runner.log',
-      30_000,
-    ),
-  );
   await releaseIosRunnerOnClose(device.id, { retain: true });
   assert.equal(readRunnerSessionLiveness(device.id), null);
+  assert.equal(session.state, 'stopped');
+  assert.equal(mockWaitForRunner.mock.calls.length, 0);
   assert.notEqual((await ensureRunnerSession(device, {})).sessionId, session.sessionId);
-
-  // Non-retained close: stops regardless of occupancy.
-  await releaseIosRunnerOnClose(device.id, { retain: false });
-  assert.equal(readRunnerSessionLiveness(device.id), null);
 });
 
 /**

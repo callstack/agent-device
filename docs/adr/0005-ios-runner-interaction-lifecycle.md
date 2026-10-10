@@ -117,7 +117,11 @@ fresh xcodebuild runner startup, not a stale transport stall.
 
 A `close` then `open` on a runner still draining abandoned main-thread work now pays a fresh runner boot
 instead of inheriting the stalled one, so the wedge no longer survives the close/open cycle. Runners
-that were never reported busy keep the existing warm-reuse path unchanged.
+that are ready, have no unanswered exchanges, and have an observed live Simulator listener can
+remain warm after close. Close retires unfinished startup and its recovery authority. The retained
+generation owns its idle timer and listener observation; successful reuse ends retention, listener
+loss or idle expiry disposes that generation, and daemon shutdown stops idle retained generations
+before their observation ends. Active ready generations retain the existing handoff policy.
 
 The daemon no longer models a generic "recent success" cache as a runner-health signal. A proven
 healthy mutating response for the same app — recorded only after the `runnerFatal` check and only

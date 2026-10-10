@@ -56,7 +56,6 @@ import {
 } from '../../device/device-claims.ts';
 import type { TakenOverDeviceClaim } from '../../device/device-claim-reboot.ts';
 import { deviceBootObservation } from '../../../platform-runtime-device-boot.ts';
-import type { RunnerWarmLossNotice } from '../../../platform-runtime-warm-runner-notice.ts';
 import { appendResponseWarning } from './session-open-warnings.ts';
 import {
   buildAllocatorHeldRefusal,
@@ -119,33 +118,6 @@ function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim): string {
   return (
     `Took the device from session "${tookOver.session}" in workspace "${tookOver.workspace}": ` +
     'that device rebooted after its claim was taken, so its app and runner were already gone.'
-  );
-}
-
-/**
- * Reads and consumes the warm-runner loss notice #3321's destination watcher recorded for this
- * device. Reached through the root's platform-runtime seam by function-scoped import: the notice
- * exists only on iOS simulators, and only when a retained runner was stopped, so the common open
- * must not pay for the platform module's evaluation.
- */
-async function readWarmRunnerLossNotice(
-  device: DeviceInfo,
-): Promise<RunnerWarmLossNotice | undefined> {
-  const { takeWarmRunnerLossNotice } =
-    await import('../../../platform-runtime-warm-runner-notice.ts');
-  return await takeWarmRunnerLossNotice(device);
-}
-
-/**
- * What the caller's `open` output says when the runner this session left warm after `close` was
- * stopped because its connection closed while it was retained (#3321), typically a Simulator shut
- * down externally. The reason is named so automation can key on it without parsing prose.
- */
-function warmRunnerLossWarning(notice: RunnerWarmLossNotice): string {
-  return (
-    `The warm iOS runner left by a previous close was stopped at ${new Date(notice.atMs).toISOString()} ` +
-    'because its connection closed while it was retained, typically because the simulator was shut ' +
-    'down externally; stopping it keeps Xcode from rebooting the simulator. reason=runner_connection_lost'
   );
 }
 
@@ -337,10 +309,6 @@ export async function completeOpenCommand(params: {
   });
   if (tookOverDeviceClaim) {
     appendResponseWarning(openResult, deviceClaimTakeoverWarning(tookOverDeviceClaim));
-  }
-  const warmLossNotice = await readWarmRunnerLossNotice(device);
-  if (warmLossNotice) {
-    appendResponseWarning(openResult, warmRunnerLossWarning(warmLossNotice));
   }
   const nextRef = publishOpenSession({
     req,

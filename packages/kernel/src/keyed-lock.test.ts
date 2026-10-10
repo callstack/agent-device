@@ -64,3 +64,44 @@ test('withKeyedLock allows reentrant work for the same key while holding the out
 
   assert.deepEqual(order, ['outer-start', 'inner', 'outer-end', 'competing']);
 });
+
+test('a deferred descendant of a released lock queues behind its current owner', async () => {
+  const locks = new Map<string, Promise<unknown>>();
+  const order: string[] = [];
+  let timerAttempted!: () => void;
+  const attempted = new Promise<void>((resolve) => {
+    timerAttempted = resolve;
+  });
+  let descendant!: Promise<void>;
+  await withKeyedLock(locks, 'device-a', async () => {
+    descendant = new Promise<void>((resolve, reject) => {
+      setTimeout(() => {
+        timerAttempted();
+        withKeyedLock(locks, 'device-a', async () => {
+          order.push('descendant');
+        }).then(resolve, reject);
+      }, 0);
+    });
+  });
+  let releaseOwner!: () => void;
+  const ownerGate = new Promise<void>((resolve) => {
+    releaseOwner = resolve;
+  });
+  let ownerStarted!: () => void;
+  const started = new Promise<void>((resolve) => {
+    ownerStarted = resolve;
+  });
+  const owner = withKeyedLock(locks, 'device-a', async () => {
+    order.push('owner');
+    ownerStarted();
+    await ownerGate;
+    order.push('released');
+  });
+  await started;
+  await attempted;
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(order, ['owner']);
+  releaseOwner();
+  await Promise.all([owner, descendant]);
+  assert.deepEqual(order, ['owner', 'released', 'descendant']);
+});

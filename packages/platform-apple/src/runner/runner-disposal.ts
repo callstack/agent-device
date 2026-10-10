@@ -65,6 +65,8 @@ export async function disposeRunnerSession(
 ): Promise<void> {
   // From here the session is going away: it still owns the lease and the process is still up, so
   // it can answer a request, and it must not be chosen for new work while it is being taken down.
+  session.retention?.cancel();
+  session.listenerWatch?.close();
   advanceRunnerSessionState(session, 'draining');
   let processExitHandled = false;
   if (options.graceful !== false) {
@@ -97,6 +99,8 @@ export async function abortRunnerSessionsAndPrepProcesses(
   const macOsSessions = activeSessions.filter((session) => isMacOs(session.device));
   const otherSessions = activeSessions.filter((session) => !isMacOs(session.device));
   for (const session of activeSessions) {
+    session.retention?.cancel();
+    session.listenerWatch?.close();
     advanceRunnerSessionState(session, 'draining');
   }
   await signalRunnerSessions(otherSessions, 'SIGINT');

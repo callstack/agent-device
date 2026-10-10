@@ -1,3 +1,4 @@
+import type { RunnerListenerWatch, RunnerRetention } from './runner-retention.ts';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -79,6 +80,8 @@ export type RunnerSession = {
   readLogTail?: (maxBytes: number) => string;
   /** Moves only through {@link advanceRunnerSessionState}. */
   state: RunnerSessionState;
+  listenerWatch?: RunnerListenerWatch;
+  retention?: RunnerRetention;
   /** Wakes one startup retry when the listener becomes ready or its process exits. */
   startupRetryWake?: AbortSignal;
   /**
@@ -174,6 +177,8 @@ export function isRunnerMainThreadOccupied(
 export type RunnerDetachRefusal =
   /** The runner never answered a command, so nothing proves it serves requests (#2681). */
   | 'runner_never_served_a_command'
+  /** Idle retention depends on this daemon's timer and listener observation. */
+  | 'retained_idle'
   /** A command is still owed a response, so the runner is busy whatever its last report says (#2681). */
   | 'command_in_flight'
   /** The runner reported main-thread work still draining as of its last exchange. */
@@ -319,11 +324,12 @@ function normalizeRunnerChargeId(commandId: string | undefined): string {
  * command the next daemon sends it.
  */
 export function resolveRunnerDetachDecision(
-  session: Pick<RunnerSession, 'state' | 'runnerMainThreadBusy' | 'commandCharges'>,
+  session: Pick<RunnerSession, 'state' | 'runnerMainThreadBusy' | 'commandCharges' | 'retention'>,
 ): RunnerDetachDecision {
   if (session.state !== 'ready') {
     return { detach: false, reason: 'runner_never_served_a_command' };
   }
+  if (session.retention) return { detach: false, reason: 'retained_idle' };
   if (session.commandCharges.hasOutstandingCharges) {
     return { detach: false, reason: 'command_in_flight' };
   }

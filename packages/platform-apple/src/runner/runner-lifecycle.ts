@@ -44,6 +44,7 @@ import type {
   AppleRunnerPrepareResult,
 } from './runner-provider.ts';
 import {
+  assertRunnerStartAdmitsPreparation,
   finishRunnerStartAdmission,
   markRunnerXctestrunArtifactBadForRun,
   openRunnerStartLoopAdmission,
@@ -156,6 +157,7 @@ async function handlePrepareHealthFailure(params: {
   error: unknown;
 }): Promise<PrepareAttemptResult> {
   const { device, session, command, options, signal, attempt, error } = params;
+  assertRunnerStartAdmitsPreparation(device.id, options.startAdmission);
   const appErr = asAppError(error, 'COMMAND_FAILED');
   if (isRequestCanceledError(appErr)) {
     // The owning request was canceled mid-startup (client disconnect): stop the

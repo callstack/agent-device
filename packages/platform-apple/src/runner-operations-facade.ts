@@ -26,11 +26,9 @@ export {
   runAppleRunnerCommand,
   stopAllIosRunnerSessions,
   stopIosRunnerSession,
-  takeRunnerWarmLossNotice,
   verifyLeaseRunnerPidIdentity,
   writeRunnerCacheMetadataForArtifacts,
 } from './core/runner-client.ts';
-export type { RunnerWarmLossNotice } from './runner/runner-destination-watch.ts';
 export { queryAppleRunnerSelector } from './core/runner-selector-query.ts';
 
 export async function cleanupRunnerLeasesForOwner(

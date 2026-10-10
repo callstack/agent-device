@@ -117,9 +117,7 @@ vi.mock('../runner-xctestrun.ts', async () => {
 
 import {
   abortAllIosRunnerSessions,
-  cancelIosRunnerIdleStop,
   ensureRunnerSession,
-  scheduleIosRunnerIdleStop,
   executeRunnerCommandWithSession,
   readRunnerSessionLiveness,
   invalidateRunnerSession,
@@ -402,58 +400,6 @@ test('runner session does not require Apple developer mode for iOS simulators', 
   assert.equal(mockEnsureXctestrunArtifact.mock.calls.length, 1);
   assert.equal(mockRunCmdBackground.mock.calls.length, 1);
   assert.equal(mockRunAppleToolCommand.mock.calls.some(isDevToolsSecurityStatusCall), false);
-});
-
-test('idle stop tears down a retained runner after the idle window', async () => {
-  const device = { ...IOS_SIMULATOR, id: 'runner-session-idle-stop-sim' };
-  const previousIdleMs = process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS;
-  process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = '40';
-  try {
-    await ensureRunnerSession(device, {});
-    scheduleIosRunnerIdleStop(device.id);
-
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    assert.equal(readRunnerSessionLiveness(device.id), null);
-  } finally {
-    cancelIosRunnerIdleStop(device.id);
-    if (previousIdleMs === undefined) delete process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS;
-    else process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = previousIdleMs;
-  }
-});
-
-test('any runner use cancels a pending idle stop', async () => {
-  const device = { ...IOS_SIMULATOR, id: 'runner-session-idle-cancel-sim' };
-  const previousIdleMs = process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS;
-  process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = '40';
-  try {
-    await ensureRunnerSession(device, {});
-    scheduleIosRunnerIdleStop(device.id);
-    await ensureRunnerSession(device, {});
-
-    await new Promise((resolve) => setTimeout(resolve, 150));
-    assert.ok(readRunnerSessionLiveness(device.id));
-  } finally {
-    cancelIosRunnerIdleStop(device.id);
-    if (previousIdleMs === undefined) delete process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS;
-    else process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = previousIdleMs;
-  }
-});
-
-test('idle stop is disabled when the window is zero', async () => {
-  const device = { ...IOS_SIMULATOR, id: 'runner-session-idle-disabled-sim' };
-  const previousIdleMs = process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS;
-  process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = '0';
-  try {
-    await ensureRunnerSession(device, {});
-    scheduleIosRunnerIdleStop(device.id);
-
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    assert.ok(readRunnerSessionLiveness(device.id));
-  } finally {
-    cancelIosRunnerIdleStop(device.id);
-    if (previousIdleMs === undefined) delete process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS;
-    else process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = previousIdleMs;
-  }
 });
 
 test('runner session startup kills legacy ownerless xcodebuild before launching a new runner', async () => {

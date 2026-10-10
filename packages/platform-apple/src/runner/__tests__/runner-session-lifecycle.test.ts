@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
+import { retainRunnerSession } from '../runner-retention.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
@@ -136,7 +137,6 @@ import {
   executeRunnerCommandWithSession,
   invalidateRunnerSession,
   readRunnerSessionLiveness,
-  scheduleIosRunnerIdleStop,
   stopIosRunnerSession,
 } from '../runner-session.ts';
 
@@ -244,7 +244,13 @@ test('an idle stop moves a ready session through disposal to stopped', async () 
     30_000,
   );
 
-  scheduleIosRunnerIdleStop(device.id);
+  session.listenerWatch?.close();
+  session.listenerWatch = {
+    lost: false,
+    ready: Promise.resolve(true),
+    close() {},
+  };
+  await retainRunnerSession(session, async () => stopIosRunnerSession(device.id));
   await vi.waitFor(() => assert.equal(session.state, 'stopped'));
 
   assert.equal(

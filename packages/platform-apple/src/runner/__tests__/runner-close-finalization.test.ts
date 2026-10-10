@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
+import { AsyncResource } from 'node:async_hooks';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { beforeEach, test, vi } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import type { AppleApplicationTools } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -13,23 +14,27 @@ import {
   makeClassifyOwnerLivenessViaMocks,
   makeBackgroundRunner,
   makeRunnerLease,
+  runnerConnectFailure,
   runnerError,
   runnerResponse,
   RUNNER_CACHE_METADATA_FIXTURE,
   RUNNER_CACHE_KEY_FIXTURE,
 } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
-import { takeRunnerWarmLossNotice } from '../runner-destination-watch.ts';
 import { bindAppleApplicationLifecycle } from '../../lifecycle.ts';
+import { createRequestCanceledError } from '@agent-device/kernel/errors';
+import { prewarmIosRunnerSession } from '../runner-client.ts';
 import { platformRuntimeHostFixture } from '../../runtime.fixtures.ts';
 import { runnerOwnerToken, writeRunnerLease } from '../runner-lease.ts';
 import {
   abortAllIosRunnerSessions,
+  detachIosRunnerSessionsForShutdown,
   ensureRunnerSession,
   executeRunnerCommandWithSession,
   readRunnerSessionLiveness,
   releaseIosRunnerOnClose,
   stopIosRunnerSession,
+  stopAllIosRunnerSessions,
   type RunnerSession,
 } from '../runner-session.ts';
 
@@ -127,6 +132,14 @@ vi.mock('../runner-xctestrun.ts', async () => {
 const IDLE_WINDOW_OUTLIVES_RUN_MS = '600000';
 
 let stateDir: string;
+let destination: net.Server;
+let destinationConnections: net.Socket[];
+
+afterEach(async () => {
+  await abortAllIosRunnerSessions();
+  for (const socket of destinationConnections) socket.destroy();
+  await new Promise<void>((resolve) => destination.close(() => resolve()));
+});
 
 beforeEach(async () => {
   appleRunnerTestHost.update({
@@ -162,7 +175,10 @@ beforeEach(async () => {
     buildMs: 12,
     xctestrunPathSource: 'build',
   });
-  mockGetFreePort.mockResolvedValue(8123);
+  destinationConnections = [];
+  destination = net.createServer((socket) => destinationConnections.push(socket));
+  await new Promise<void>((resolve) => destination.listen(0, '127.0.0.1', resolve));
+  mockGetFreePort.mockResolvedValue((destination.address() as net.AddressInfo).port);
   mockPrepareXctestrunWithEnv.mockResolvedValue({
     xctestrunPath: '/tmp/session-runner.xctestrun',
     jsonPath: '/tmp/session-runner.json',
@@ -184,7 +200,7 @@ beforeEach(async () => {
 
 test('a retained close over an idle runner keeps that runner warm for the next open (#2615)', async () => {
   const device = deviceNamed('close-finalize-warm-reuse');
-  const session = await ensureRunnerSession(device, {});
+  const session = await ensureReadyRunner(device);
   const events: string[] = [];
   const lifecycle = closeFinalizationLifecycle(device, events);
 
@@ -204,7 +220,7 @@ test('a retained close over an idle runner keeps that runner warm for the next o
 
 test('a retained close disposes a runner still draining so the next open boots a clean one (#2552, #2615)', async () => {
   const device = deviceNamed('close-finalize-busy-dispose');
-  const session = await ensureRunnerSession(device, {});
+  const session = await ensureReadyRunner(device);
   await refuseWithRunnerBusy(device, session);
   const events: string[] = [];
   const lifecycle = closeFinalizationLifecycle(device, events);
@@ -224,7 +240,7 @@ test('a retained close disposes a runner still draining so the next open boots a
 
 test('a non-retained close stops the runner and cancels the idle stop a retained close armed (#2615)', async () => {
   const device = deviceNamed('close-finalize-cancel-idle');
-  await ensureRunnerSession(device, {});
+  await ensureReadyRunner(device);
   const lifecycle = closeFinalizationLifecycle(device, []);
   process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = '40';
 
@@ -276,24 +292,160 @@ test('a retained close with no runner in memory starts none and claims no lease 
   assert.equal(runnerLeaseExists(device.id), false);
 });
 
+test('close retires a pending prewarm before its health failure can launch a replacement (#3359)', async () => {
+  const device = deviceNamed('close-finalize-pending-prewarm');
+  let rejectHealth!: (error: Error) => void;
+  mockWaitForRunner.mockImplementationOnce(
+    () =>
+      new Promise<Response>((_resolve, reject) => {
+        rejectHealth = reject;
+      }),
+  );
+  const prewarm = prewarmIosRunnerSession(device);
+  await vi.waitFor(() => assert.equal(mockWaitForRunner.mock.calls.length, 1));
+
+  await closeFinalizationLifecycle(device, []).finalizeApplicationClose(closeInput(true));
+  rejectHealth(runnerConnectFailure('runner_connect_refused'));
+  await prewarm;
+
+  assert.equal(mockRunCmdBackground.mock.calls.length, 1);
+  assert.equal(readRunnerSessionLiveness(device.id), null);
+  assert.equal(runnerLeaseExists(device.id), false);
+  assert.equal(
+    mockRunXcrun.mock.calls.some(([args]) => args.includes('bootstatus')),
+    false,
+  );
+});
+
+test.each(['transport', 'restored_artifact', 'canceled'] as const)(
+  'a retired prewarm cannot invalidate a retained ready generation after %s failure',
+  async (failure) => {
+    const device = deviceNamed('close-finalize-ready-prewarm');
+    const connections: net.Socket[] = [];
+    const listener = net.createServer((socket) => connections.push(socket));
+    await new Promise<void>((resolve) => listener.listen(0, '127.0.0.1', resolve));
+    mockGetFreePort.mockResolvedValue((listener.address() as net.AddressInfo).port);
+    if (failure === 'restored_artifact') {
+      mockEnsureXctestrunArtifact.mockResolvedValue({
+        xctestrunPath: '/tmp/base-runner.xctestrun',
+        derived: '/tmp/derived',
+        cacheKey: RUNNER_CACHE_KEY_FIXTURE,
+        cache: 'exact',
+        artifact: 'valid',
+        buildMs: 0,
+        xctestrunPathSource: 'build',
+      });
+    }
+    let rejectHealth!: (error: Error) => void;
+    mockWaitForRunner.mockImplementationOnce(
+      () =>
+        new Promise<Response>((_resolve, reject) => {
+          rejectHealth = reject;
+        }),
+    );
+    try {
+      const prewarm = prewarmIosRunnerSession(device);
+      await vi.waitFor(() => assert.equal(mockWaitForRunner.mock.calls.length, 1));
+      const session = await ensureRunnerSession(device, {});
+      await executeRunnerCommandWithSession(
+        device,
+        session,
+        { command: 'uptime' },
+        undefined,
+        1_000,
+      );
+      await closeFinalizationLifecycle(device, []).finalizeApplicationClose(closeInput(true));
+      await vi.waitFor(() => assert.equal(connections.length, 1));
+      rejectHealth(
+        failure === 'canceled'
+          ? createRequestCanceledError()
+          : runnerConnectFailure('runner_connect_refused'),
+      );
+      await prewarm;
+
+      assert.equal(mockRunCmdBackground.mock.calls.length, 1);
+      assert.equal(readRunnerSessionLiveness(device.id)?.sessionId, session.sessionId);
+      assert.equal(mockSignalPidsBestEffort.mock.calls.length, 0);
+    } finally {
+      await stopIosRunnerSession(device.id);
+      for (const socket of connections) socket.destroy();
+      await new Promise<void>((resolve) => listener.close(() => resolve()));
+    }
+  },
+);
+
+test('graceful shutdown stops idle retained generations and hands off active ready generations', async () => {
+  const idleDevice = deviceNamed('close-finalize-idle-handoff');
+  const activeDevice = deviceNamed('close-finalize-active-handoff');
+  const idle = await ensureReadyRunner(idleDevice);
+  const active = await ensureReadyRunner(activeDevice);
+  await closeFinalizationLifecycle(idleDevice, []).finalizeApplicationClose(closeInput(true));
+
+  assert.equal(await detachIosRunnerSessionsForShutdown(), 1);
+  assert.equal(active.state, 'stopped');
+  assert.equal(idle.state, 'ready');
+  await stopAllIosRunnerSessions();
+  assert.equal(idle.state, 'stopped');
+  assert.equal(runnerLeaseExists(idleDevice.id), false);
+  assert.equal(runnerLeaseExists(activeDevice.id), true);
+});
+
+test('an idle expiry disposes its retained generation and releases its lease', async () => {
+  const device = deviceNamed('close-finalize-idle-expiry');
+  const session = await ensureReadyRunner(device);
+  vi.useFakeTimers();
+  try {
+    process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = '40';
+    await closeFinalizationLifecycle(device, []).finalizeApplicationClose(closeInput(true));
+    await vi.advanceTimersByTimeAsync(40);
+    assert.equal(readRunnerSessionLiveness(device.id), null);
+    assert.equal(session.state, 'stopped');
+    assert.equal(runnerLeaseExists(device.id), false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('an idle expiry queued during reuse cannot stop the generation that was just claimed', async () => {
+  const device = deviceNamed('close-finalize-expiry-during-reuse');
+  const session = await ensureReadyRunner(device);
+  vi.useFakeTimers();
+  try {
+    process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = '40';
+    await closeFinalizationLifecycle(device, []).finalizeApplicationClose(closeInput(true));
+    const expire = AsyncResource.bind(() => vi.advanceTimersByTime(40));
+    appleRunnerTestHost.update({
+      emitDiagnostic: (event) => {
+        if (event.phase === 'ios_runner_session_reuse') expire();
+      },
+    });
+    assert.equal(await ensureRunnerSession(device, {}), session);
+    await vi.runAllTimersAsync();
+    assert.equal(readRunnerSessionLiveness(device.id)?.sessionId, session.sessionId);
+    assert.equal(session.retention, undefined);
+    assert.equal(mockRunCmdBackground.mock.calls.length, 1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('a start that fails without using a retained runner leaves it retained', async () => {
   const device = deviceNamed('close-finalize-failed-start-retention');
-  const session = await ensureRunnerSession(device, {});
+  const session = await ensureReadyRunner(device);
   await closeFinalizationLifecycle(device, []).finalizeApplicationClose(closeInput(true));
 
-  const diagnostics = await captureDiagnostics(async () => {
-    await assert.rejects(
-      ensureRunnerSession(device, { expectedRunnerSessionId: 'another-runner-session' }),
-    );
-  });
-
-  assert.match(diagnostics, /"phase":"ios_runner_idle_stop_scheduled"/);
+  const retention = session.retention;
+  await assert.rejects(
+    ensureRunnerSession(device, { expectedRunnerSessionId: 'another-runner-session' }),
+  );
+  assert.equal(session.retention, retention);
+  assert.ok(session.retention);
   assert.equal(readRunnerSessionLiveness(device.id)?.sessionId, session.sessionId);
 });
 
 test('a daemon-shutdown close never issues the ordinary close release (#2615)', async () => {
   const device = deviceNamed('close-finalize-daemon-shutdown');
-  const session = await ensureRunnerSession(device, {});
+  const session = await ensureReadyRunner(device);
   const events: string[] = [];
   const lifecycle = closeFinalizationLifecycle(device, events);
 
@@ -324,7 +476,7 @@ test('a runner disposal failure propagates out of close before close alerts run 
 
 test('a drain that lands after close is issued cannot return a busy runner to reuse (#2615)', async () => {
   const device = deviceNamed('close-finalize-queued-drain');
-  const session = await ensureRunnerSession(device, {});
+  const session = await ensureReadyRunner(device);
   await refuseWithRunnerBusy(device, session);
   // Hold the disposal open so a served reply that clears occupancy lands while close is in
   // flight, rather than counting microtasks around the check.
@@ -355,7 +507,7 @@ test('a drain that lands after close is issued cannot return a busy runner to re
 
 test('a failed start does not re-retain a runner a concurrent start already took over', async () => {
   const device = deviceNamed('close-finalize-concurrent-start');
-  const session = await ensureRunnerSession(device, {});
+  const session = await ensureReadyRunner(device);
   await closeFinalizationLifecycle(device, []).finalizeApplicationClose(closeInput(true));
   const phases: string[] = [];
   appleRunnerTestHost.update({ emitDiagnostic: (event) => phases.push(event.phase) });
@@ -388,7 +540,7 @@ test('a runner connection lost during retention takes the retained runner and it
   await new Promise<void>((resolve) => destination.listen(0, '127.0.0.1', resolve));
   mockGetFreePort.mockResolvedValue((destination.address() as net.AddressInfo).port);
   try {
-    const session = await ensureRunnerSession(device, {});
+    const session = await ensureReadyRunner(device);
     await closeFinalizationLifecycle(device, []).finalizeApplicationClose(closeInput(true));
     await vi.waitFor(() => assert.equal(connections.length, 1));
 
@@ -399,7 +551,7 @@ test('a runner connection lost during retention takes the retained runner and it
     });
     assert.equal(runnerLeaseExists(device.id), false);
     assert.equal(session.state, 'stopped');
-    assert.ok(takeRunnerWarmLossNotice(device.id));
+    assert.equal(session.retention, undefined);
   } finally {
     await new Promise<void>((resolve) => destination.close(() => resolve()));
   }
@@ -478,4 +630,11 @@ function runnerLeaseExists(deviceId: string): boolean {
   return fs.existsSync(
     path.join(process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR ?? '', `${deviceId}.json`),
   );
+}
+
+async function ensureReadyRunner(device: DeviceInfo): Promise<RunnerSession> {
+  const session = await ensureRunnerSession(device, {});
+  await executeRunnerCommandWithSession(device, session, { command: 'uptime' }, undefined, 1_000);
+  await session.listenerWatch?.ready;
+  return session;
 }

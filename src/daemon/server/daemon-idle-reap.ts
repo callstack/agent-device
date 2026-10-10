@@ -11,13 +11,9 @@ import { isUncommittedRepairSession } from '../session-replay-transaction.ts';
 // way also keeps holding its iOS runner lease, which blocks a fresh daemon for
 // the same device (see runner-lease.ts stale-lease takeover).
 //
-// The window mirrors the iOS runner idle-stop default
-// (AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS, 5 minutes, see runner-session.ts):
-// graceful daemon shutdown already hands off a healthy retained runner -
-// simulator or physical iOS - for the next daemon to adopt
-// (detachIosRunnerSessionsForShutdown), so reaping the daemon process itself on
-// the same timescale does not force a runner rebuild in the common case - it
-// only pays the cheap daemon bootstrap (socket/HTTP listen) on the next command.
+// The window mirrors the runner idle-stop default. Idle retained runners stop with their daemon:
+// their timer and listener observation cannot survive a handoff. Active eligible runners retain
+// the graceful-shutdown adoption policy.
 const DAEMON_IDLE_REAP_DEFAULT_MS = 5 * 60_000;
 
 // AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS overrides the window; 0 disables idle

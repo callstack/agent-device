@@ -114,10 +114,10 @@ in CI and on shared hosts so devices don't keep running after the run:
 agent-device close --shutdown
 ```
 
-Without `--shutdown`, `close` keeps the iOS runner warm for the next `open`. If you shut that simulator
-down yourself (`xcrun simctl shutdown`) while the runner is waiting, agent-device stops the runner so it
-doesn't boot the simulator again, and the next `open` returns a warning that ends in
-`reason=runner_connection_lost`.
+Without `--shutdown`, `close` keeps a ready iOS simulator runner warm for the next `open`.
+Unfinished runner startup is stopped. If you shut that simulator down yourself while the runner is
+retained, losing its listener connection stops the retained runner. Idle retained runners also stop
+when their daemon exits.
 
 ## Wait for a slow or busy device
 
