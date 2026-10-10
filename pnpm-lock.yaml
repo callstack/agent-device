@@ -5,7 +5,6 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  undici@7: 7.29.1
   brace-expansion@5: ^5.0.12
   fast-uri: 3.1.7
   postcss: 8.5.23
@@ -102,8 +101,8 @@ importers:
         specifier: ^0.0.4
         version: 0.0.4
       '@limrun/api':
-        specifier: ^0.59.0
-        version: 0.59.0(supports-color@7.2.0)
+        specifier: ^0.60.0
+        version: 0.60.0(supports-color@7.2.0)
       '@nkzw/eslint-plugin':
         specifier: ^2.0.0
         version: 2.0.0(eslint@10.9.1(supports-color@7.2.0))
@@ -476,8 +475,8 @@ importers:
         version: link:../platform-android
     devDependencies:
       '@limrun/api':
-        specifier: ^0.59.0
-        version: 0.59.0(supports-color@7.2.0)
+        specifier: ^0.60.0
+        version: 0.60.0(supports-color@7.2.0)
 
   packages/provider-testmu:
     devDependencies:
@@ -1141,8 +1140,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@limrun/api@0.59.0':
-    resolution: {integrity: sha512-CipjJnvfLq8cTYP58vUneFyJlGvPmr+PspBuuGST1/krYi0QoVOpdNXGqOexio1N6ltnAG5GoQcU40ViDEUTbQ==}
+  '@limrun/api@0.60.0':
+    resolution: {integrity: sha512-w7A0PiqNF5XHBU6xUzvAsi1BEnJeBhzYKckuVETp/Nkehv5QF28u2q90LgkjifdFEJkULus7IzeCqnqTnynJCA==}
 
   '@limrun/xdelta3-wasm@0.2.0':
     resolution: {integrity: sha512-mEohO7CYj4Gdc0v1Gr/AjlBhfbXQnIz6+2wmMhRfwz8hXZrsIC/yqYQhfoDhu1ysqQwBnU5lDDLPUGdUu+8hPQ==}
@@ -4774,7 +4773,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@limrun/api@0.59.0(supports-color@7.2.0)':
+  '@limrun/api@0.60.0(supports-color@7.2.0)':
     dependencies:
       '@limrun/xdelta3-wasm': 0.2.0
       '@types/har-format': 1.2.16
