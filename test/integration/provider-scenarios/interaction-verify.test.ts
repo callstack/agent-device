@@ -57,7 +57,8 @@ function snapshotEntry(nodes: unknown[]): ProviderScenarioProviderEntry {
 
 test('Provider-backed integration press --verify returns post-action evidence digest', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i to obtain refs
+    // snapshot -i to obtain refs; the first capture after open settles: one extra read
+    snapshotEntry(BEFORE_NODES),
     snapshotEntry(BEFORE_NODES),
     {
       command: 'ios.runner.tap',

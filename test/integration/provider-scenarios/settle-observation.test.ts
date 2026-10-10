@@ -174,7 +174,8 @@ function tapEntry(x: number, y: number): ProviderScenarioProviderEntry {
 
 test('Provider-backed integration press --settle returns the settled diff and fresh refs', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i: issues refs
+    // snapshot -i: issues refs; the first capture after open settles: one extra read
+    snapshotEntry(BEFORE_NODES),
     snapshotEntry(BEFORE_NODES),
     // press label=Continue --settle: resolution capture, tap, settle captures
     snapshotEntry(BEFORE_NODES),
@@ -296,8 +297,9 @@ test('Provider-backed integration never-settled press --settle does not issue di
     },
   ];
   const runnerTranscript = createProviderTranscript([
-    // press label=Continue --settle: resolution capture, tap, then a settle
-    // stream that never repeats itself, so the loop can only ever time out.
+    // press label=Continue --settle: resolution capture (the first capture after open settles: one extra read),
+    // tap, then a settle stream that never repeats itself, so the loop can only ever time out.
+    snapshotEntry(BEFORE_NODES),
     snapshotEntry(BEFORE_NODES),
     tapEntry(200, 322),
     changingSnapshotEntry(loadingNodes),
@@ -356,7 +358,8 @@ test('Provider-backed integration never-settled press --settle does not issue di
 
 test('Provider-backed integration modal-dismiss press --settle attaches the unchanged interactive tail', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i: issues refs
+    // snapshot -i: issues refs; the first capture after open settles: one extra read
+    snapshotEntry(MODAL_BEFORE_NODES),
     snapshotEntry(MODAL_BEFORE_NODES),
     // press label=Cancel --settle: resolution capture, tap, settle captures.
     // The dialog closes leaving Continue in place — a removals-only diff with
@@ -691,7 +694,8 @@ const FILL_SETTLED_NODES = [
 
 test('Provider-backed integration fill --settle summoning the keyboard still attaches the unchanged interactive tail', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i: issues refs
+    // snapshot -i: issues refs; the first capture after open settles: one extra read
+    snapshotEntry(FILL_BEFORE_NODES),
     snapshotEntry(FILL_BEFORE_NODES),
     // fill @e6 'hello' --settle: the ref resolves on the stored tree (no
     // fresh capture), the runner types, then the settle loop captures. The
