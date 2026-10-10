@@ -354,7 +354,7 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--activity <component>',
     usageDescription:
-      'Android launch activity (package/Class or .Class) or HarmonyOS ability name; not for URL opens',
+      'Android launch activity (package/Class, .Class, or Class) or HarmonyOS ability name; not for URL opens',
     projectConfig: true,
     recorded: false,
   },

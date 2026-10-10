@@ -1,7 +1,11 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AndroidAdbExecutor } from './adb-executor.ts';
 import { runAdbShell } from './adb-executor.ts';
-import { isAmStartError, parseAndroidLaunchComponent } from './app-lifecycle.ts';
+import {
+  androidActivityComponent,
+  isAmStartError,
+  parseAndroidLaunchComponent,
+} from './app-lifecycle.ts';
 
 const ANDROID_LAUNCHER_CATEGORY = 'android.intent.category.LAUNCHER';
 const ANDROID_DEFAULT_CATEGORY = 'android.intent.category.DEFAULT';
@@ -52,7 +56,7 @@ export async function openAndroidAppWithAdb(
   options: AndroidOpenAppWithAdbOptions = {},
 ): Promise<void> {
   const category = options.category ?? ANDROID_LAUNCHER_CATEGORY;
-  if (options.activity) {
+  if (options.activity !== undefined) {
     await runAdbShell(adb, [
       'am',
       'start',
@@ -64,7 +68,7 @@ export async function openAndroidAppWithAdb(
       '-c',
       category,
       '-n',
-      normalizeAndroidComponent(packageName, options.activity),
+      androidActivityComponent(packageName, options.activity),
     ]);
     return;
   }
@@ -117,9 +121,4 @@ export async function openAndroidAppWithAdb(
     '-n',
     component,
   ]);
-}
-
-function normalizeAndroidComponent(packageName: string, activity: string): string {
-  if (activity.includes('/')) return activity;
-  return `${packageName}/${activity.startsWith('.') ? activity : `.${activity}`}`;
 }

@@ -589,6 +589,9 @@ test('openAndroidApp refuses an activity outside the component grammar before an
     "com.example.app/.Main' -e x y",
     'com.example.app/.Main\nreboot',
     'com.example.app//.Main',
+    'com..example/.Main',
+    '9com.example/.Main',
+    '',
   ]) {
     await withAndroidAdbProvider(
       {

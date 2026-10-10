@@ -160,7 +160,7 @@ test('HarmonyOS lifecycle commands use HDC bundle and ability primitives', async
 });
 
 test('openHarmonyApp refuses an ability name outside the module grammar before any hdc call', async () => {
-  for (const activity of ['Entry$(id)', 'Entry;reboot', 'Entry Ability', '1Entry', 'Entry"x']) {
+  for (const activity of ['Entry$(id)', 'Entry;reboot', 'Entry Ability', '1Entry', 'Entry"x', '']) {
     await assert.rejects(
       () => openHarmonyApp(DEVICE, 'com.example.application', { activity }),
       (error: unknown) =>

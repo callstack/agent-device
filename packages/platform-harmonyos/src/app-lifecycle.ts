@@ -216,7 +216,7 @@ export async function openHarmonyApp(
   bundleId: string,
   options?: { activity?: string; signal?: AbortSignal },
 ): Promise<void> {
-  if (options?.activity) requireHarmonyAbilityName(options.activity);
+  if (options?.activity !== undefined) requireHarmonyAbilityName(options.activity);
   const launchTarget = options?.activity
     ? { ability: options.activity }
     : parseHarmonyLaunchTarget(
