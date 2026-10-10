@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { test } from 'vitest';
-import { assertFlatToolCall } from './assertions.ts';
+import { assertFlatToolCall, assertRpcOk } from './assertions.ts';
 import {
   createIosBottomTabsSnapshotWorld,
   createIosPhysicalReinstallWorld,
   createIosSettingsWorld,
+  createIosSettledClickWorld,
+  IOS_SETTLED_CLICK_TAP,
 } from './ios-world.ts';
 import { runProviderScenario } from './scenario.ts';
 import {
@@ -328,6 +330,31 @@ test(
         assert.equal(
           nodes.find((node: { label?: string }) => node.label === 'Contacts')?.hiddenContentBelow,
           true,
+        );
+        runnerTranscript.assertComplete();
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
+
+test(
+  'Provider-backed integration iOS click right after an unobservable open taps the settled point',
+  async () => {
+    await withProviderScenarioResource(
+      createIosSettledClickWorld,
+      async ({ daemon, runnerTranscript }) => {
+        const flags = { platform: 'ios', udid: PROVIDER_SCENARIO_IOS_SIMULATOR.id } as const;
+        const open = assertRpcOk<{ timing?: { postOpenObservation?: string } }>(
+          await daemon.callCommand('open', ['com.apple.Preferences'], flags),
+        );
+        assert.equal(open.timing?.postOpenObservation, 'unobservable');
+
+        assertRpcOk(await daemon.callCommand('click', ['label="General"'], flags));
+        const taps = runnerTranscript.calls.filter((call) => call.command === 'ios.runner.tap');
+        assert.deepEqual(
+          taps.map((call) => call.request),
+          [IOS_SETTLED_CLICK_TAP],
         );
         runnerTranscript.assertComplete();
       },

@@ -319,6 +319,69 @@ export async function createIosBottomTabsSnapshotWorld(): Promise<IosBottomTabsS
   };
 }
 
+type IosSettledClickWorld = {
+  daemon: ProviderScenarioHarness;
+  runnerTranscript: ProviderScenarioTranscript;
+  close: () => Promise<void>;
+};
+
+// Centre of the settled `General` cell (y=406, height 44): the point the click must tap.
+export const IOS_SETTLED_CLICK_TAP = {
+  command: 'tap',
+  x: 201,
+  y: 428,
+  synthesized: true,
+  appBundleId: 'com.apple.Preferences',
+} as const;
+
+export async function createIosSettledClickWorld(): Promise<IosSettledClickWorld> {
+  // The list is still sliding in on the first read after open and rests 87 points lower on the
+  // next two. The quiet-window loop must consume all three before the click resolves its target.
+  const runnerTranscript = createProviderTranscript([
+    generalCellSnapshot({ y: 319 }),
+    generalCellSnapshot({ y: 406 }),
+    generalCellSnapshot({ y: 406 }),
+    {
+      command: 'ios.runner.tap',
+      deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+      platform: 'apple',
+      result: { tapped: true },
+    },
+  ]);
+  const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
+    runnerTranscript,
+    'ios.runner',
+  );
+  const appleTool = createRecordingAppleToolProvider({
+    simctl: async (args) => {
+      const listDevices = simctlListDevicesResult(
+        args,
+        'com.apple.CoreSimulator.SimRuntime.iOS-18-0',
+        [{ name: 'iPhone 15', udid: 'sim-1' }],
+      );
+      if (listDevices) {
+        return listDevices;
+      }
+      return { stdout: '', stderr: '', exitCode: 0 };
+    },
+  });
+  const daemon = await createProviderScenarioHarness({
+    appleRunnerProvider: () => appleRunnerProvider,
+    appleToolProvider: () => appleTool.provider,
+    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
+  });
+  let closed = false;
+  return {
+    daemon,
+    runnerTranscript,
+    close: async () => {
+      if (closed) return;
+      closed = true;
+      await daemon.close();
+    },
+  };
+}
+
 export async function createIosPhysicalReinstallWorld(): Promise<IosPhysicalReinstallWorld> {
   const appleTool = createRecordingAppleToolProvider({
     devicectl: async (args) => {
@@ -384,6 +447,37 @@ function runnerSnapshot() {
           label: 'Settings',
           identifier: 'com.apple.Preferences',
           rect: IOS_SETTINGS_VIEWPORT,
+          enabled: true,
+          hittable: true,
+        },
+      ],
+      truncated: false,
+    },
+  };
+}
+
+function generalCellSnapshot(options: { y: number }) {
+  return {
+    command: 'ios.runner.snapshot',
+    deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+    platform: 'apple' as const,
+    result: {
+      nodes: [
+        {
+          index: 0,
+          type: 'XCUIElementTypeApplication',
+          label: 'Settings',
+          identifier: 'com.apple.Preferences',
+          rect: IOS_SETTINGS_VIEWPORT,
+          enabled: true,
+          hittable: true,
+        },
+        {
+          index: 1,
+          type: 'XCUIElementTypeCell',
+          label: 'General',
+          identifier: 'General',
+          rect: { x: 16, y: options.y, width: 370, height: 44 },
           enabled: true,
           hittable: true,
         },
