@@ -56,3 +56,18 @@ test('--record alone is accepted (rejected only by the pairing, not the flag its
   if (response.ok) return;
   expect(response.error.message).not.toMatch(/mutually exclusive/);
 });
+
+test('--text-stdin on a command other than fill is rejected before any command runs', async () => {
+  const handler = createHandler();
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'type',
+    positionals: ['hello'],
+    flags: { textStdin: true },
+  });
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toBe('--text-stdin is supported only by fill.');
+});

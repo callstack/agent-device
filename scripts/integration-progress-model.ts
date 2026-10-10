@@ -328,6 +328,7 @@ function summarizeProviderScenarioFlagExclusions() {
         'shardSplit',
         'searchPath',
         'stepsFile',
+        'textStdin',
         'proxyHost',
         'proxyPort',
         'stale',

@@ -1,4 +1,6 @@
+import { registerDiagnosticSensitiveValue } from '@agent-device/host-kit/diagnostics';
 import type { AgentDeviceClient, CommandRequestResult } from '../agent-device-client.ts';
+import { readFillTextFromStdin } from './interaction/fill-text-stdin.ts';
 import { formatCliOutput } from './cli-output.ts';
 import { readInputFromCli } from './cli-grammar.ts';
 import { runCommand, type CommandName } from './command-surface.ts';
@@ -23,6 +25,11 @@ export async function runCliCommandWithOutput(options: CliRunOptions): Promise<{
   cliOutput?: CliOutput;
 }> {
   const input = readInputFromCli(options.command, options.positionals, options.flags);
+  if (options.flags.textStdin) {
+    const text = await readFillTextFromStdin(process.stdin);
+    registerDiagnosticSensitiveValue(text);
+    input.text = text;
+  }
   const result = (await runCommand(options.client, options.command, input)) as CommandRequestResult;
   return {
     result,

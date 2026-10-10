@@ -132,6 +132,15 @@ const fillFields = {
   recordAs: stringField(
     'When script recording is armed, send text to the live app but publish it as ${VAR}. Use an uppercase replay variable name such as PASSWORD.',
   ),
+  textStdin: operatorField(
+    booleanField(
+      "Operator-only: text was read from the CLI's stdin, so it is kept out of diagnostics and recorded actions.",
+    ),
+    {
+      operatorPath:
+        'Pass --text-stdin on the CLI and pipe the text in; it is not exposed to model-facing tools.',
+    },
+  ),
   ...selectorSnapshotFields(),
   ...postActionObservationFields('fill'),
 };

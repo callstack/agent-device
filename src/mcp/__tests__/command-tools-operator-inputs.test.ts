@@ -239,3 +239,28 @@ test('MCP still resolves operator env values outside the model-writable surface'
   assert.equal(calls[0]?.input.daemonAuthToken, 'operator-env-token');
   assert.equal(createdConfigs[0]?.stateDir, '/operator/state-dir');
 });
+
+test('MCP neither advertises nor admits the CLI-only fill textStdin marker', async () => {
+  for (const tool of listCommandTools()) {
+    const properties = tool.inputSchema.properties ?? {};
+    assert.equal('textStdin' in properties, false, `${tool.name} advertises it`);
+  }
+  const calls: unknown[] = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      calls.push({ name, input });
+      return {};
+    },
+  });
+
+  const result = await executor.execute('fill', {
+    target: { kind: 'ref', ref: '@e3' },
+    text: 'secret',
+    textStdin: true,
+  });
+
+  assert.equal(result.isError, true);
+  assert.match(result.content[0]?.text ?? '', /textStdin is not accepted as a tool argument/);
+  assert.deepEqual(calls, [], 'a refused operator input must never reach the command route');
+});

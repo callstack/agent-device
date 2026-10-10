@@ -1,5 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
 import { resolveCliOptions } from './resolve-cli-options.ts';
 
@@ -74,4 +75,37 @@ test('the same env default keeps filling doctor, which reads a configured app wi
   });
 
   assert.equal(parsed.flags.targetApp, 'com.example.configured');
+});
+
+// #3260: --text-stdin makes fill block on stdin, so only a typed flag may turn it on.
+test('fill --text-stdin has no environment default', () => {
+  const parsed = resolveCliOptions(['fill', '@e3', 'typed text'], {
+    cwd: process.cwd(),
+    env: isolatedEnv({ AGENT_DEVICE_TEXT_STDIN: '1' }),
+  });
+
+  assert.equal(parsed.flags.textStdin, undefined);
+});
+
+test('a config file cannot set fill --text-stdin', () => {
+  const configPath = `${mkdtempForTestSync('agent-device-cli-config-')}/config.json`;
+  fs.writeFileSync(configPath, JSON.stringify({ textStdin: true }));
+
+  assert.throws(
+    () =>
+      resolveCliOptions(['fill', '@e3', 'typed text', '--config', configPath], {
+        cwd: process.cwd(),
+        env: isolatedEnv({}),
+      }),
+    /Config key "textStdin" is not allowed/,
+  );
+});
+
+test('a typed --text-stdin reaches fill', () => {
+  const parsed = resolveCliOptions(['fill', '@e3', '--text-stdin'], {
+    cwd: process.cwd(),
+    env: isolatedEnv({}),
+  });
+
+  assert.equal(parsed.flags.textStdin, true);
 });

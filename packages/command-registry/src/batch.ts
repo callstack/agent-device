@@ -222,6 +222,7 @@ export function validateAndNormalizeBatchSteps(
     if (step.flags !== undefined && !isRecord(step.flags)) {
       throw new AppError('INVALID_ARGS', `Batch step ${index + 1} flags must be an object.`);
     }
+    assertNoTextStdinStep(step.flags as Record<string, unknown> | undefined, index + 1);
     if (step.input !== undefined && !isRecord(step.input)) {
       throw new AppError('INVALID_ARGS', `Batch step ${index + 1} input must be an object.`);
     }
@@ -234,6 +235,23 @@ export function validateAndNormalizeBatchSteps(
     });
   }
   return normalized;
+}
+
+/**
+ * A batch step has no stdin of its own, and a failed step reports its positionals. The CLI refuses
+ * `textStdin: true` on a step before reading stdin; this refuses it for every other daemon client.
+ * `false` is the ordinary argv path, and a value of another type is refused per step by the router.
+ */
+function assertNoTextStdinStep(
+  flags: Record<string, unknown> | undefined,
+  stepNumber: number,
+): void {
+  if (flags?.textStdin !== true) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Batch step ${stepNumber}: fill textStdin is not supported because batch steps have no stdin of their own.`,
+    { reason: 'fill_text_stdin_in_batch' },
+  );
 }
 
 function buildBatchStepFlags(

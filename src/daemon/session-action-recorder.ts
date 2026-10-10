@@ -9,6 +9,7 @@ import { repairSessionBoundary } from './session-replay-transaction.ts';
 import type { MultiTargetAnnotationV1, TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import {
   inferFillText,
+  isSensitiveFillText,
   recordedInputPlaceholder,
   validateRecordedInputVariableName,
 } from '@agent-device/ad-script';
@@ -59,6 +60,8 @@ export function recordActionEntry(
   entry: RecordActionEntry,
 ): SessionAction | undefined {
   if (entry.flags?.noRecord) return undefined;
+  // Sensitive fill text stays out of session actions unless `--record-as` parameterizes it.
+  if (isSensitiveFillText(entry.flags) && entry.flags.recordAs === undefined) return undefined;
   if (isExcludedRepairSegmentObservation(session, entry)) return undefined;
   if (entry.flags) applyRecordedSaveScriptFlags(session, entry.flags);
   const fillLiteral = readRecordedFillLiteral(entry);

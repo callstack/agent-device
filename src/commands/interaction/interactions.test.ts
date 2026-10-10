@@ -73,6 +73,54 @@ test('fill projects an empty text as its own positional', () => {
   expect(request.positionals).toEqual(['@e57', '']);
 });
 
+test('fill --text-stdin reads only the target and leaves the text to stdin', () => {
+  const flags = { ...BASE_FLAGS, textStdin: true };
+
+  for (const positionals of [['@e57'], ['id="password"'], ['10', '20']]) {
+    const input = interactionCliReaders.fill(positionals, flags);
+    expect(input.text, positionals.join(' ')).toBeUndefined();
+    expect(input.textStdin, positionals.join(' ')).toBe(true);
+  }
+});
+
+test('fill --text-stdin refuses an unreadable target without echoing it', () => {
+  for (const positionals of [['stray-secret'], ['e3stray'], ['stray secret words']]) {
+    let caught: unknown;
+    try {
+      interactionCliReaders.fill(positionals, { ...BASE_FLAGS, textStdin: true });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught, positionals.join(' ')).toBeInstanceOf(AppError);
+    const error = caught as AppError;
+    expect(error.details?.reason).toBe('fill_text_stdin_target_invalid');
+    expect(JSON.stringify({ message: error.message, details: error.details })).not.toMatch(/stray/);
+  }
+});
+
+test('fill --text-stdin refuses a text argument without echoing it', () => {
+  for (const positionals of [
+    ['@e57', 'argv-secret'],
+    ['@e57', ''],
+    ['id="password"', 'argv-secret'],
+    ['10', '20', 'argv-secret'],
+  ]) {
+    let caught: unknown;
+    try {
+      interactionCliReaders.fill(positionals, { ...BASE_FLAGS, textStdin: true });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught, positionals.join(' ')).toBeInstanceOf(AppError);
+    const error = caught as AppError;
+    expect(error.code).toBe('INVALID_ARGS');
+    expect(error.details?.reason).toBe('fill_text_source_conflict');
+    expect(JSON.stringify({ message: error.message, details: error.details })).not.toMatch(
+      /argv-secret/,
+    );
+  }
+});
+
 // `find <q> fill ""` is the same clear request through the find grammar (#2063): the empty
 // value reaches the typed options, while a missing value is refused at the reader so the typed
 // `value: string` contract stays intact.

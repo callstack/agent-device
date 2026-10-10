@@ -178,6 +178,9 @@ Reusable open-to-destination scripts:
     export AD_VAR_PASSWORD='<secret>'
     agent-device fill 'id="password"' "$AD_VAR_PASSWORD" --record-as PASSWORD
   The live app receives the value; recording state and the published script contain only \${PASSWORD}. Reuse the same name for repeated values; --record-as is fill-only, requires an armed recording, and is mutually exclusive with --no-record. Replay with AD_VAR_PASSWORD still set, or pass --env PASSWORD=<value>. Do not record passwords/tokens without --record-as; their literal text is written to the .ad target.
+  To keep the value out of the CLI's argv as well, pipe it in with --text-stdin instead of a text argument:
+    printf %s "$AD_VAR_PASSWORD" | agent-device fill 'id="password"' --text-stdin --record-as PASSWORD
+  --text-stdin reads at most 64 KiB, removes exactly one trailing newline, and refuses a terminal, empty input, invalid UTF-8, or an extra text argument. While recording is armed, --record-as publishes \${VAR} and --no-record leaves the step out; passing neither is an error. Without an armed recording the step is not recorded. It is not available inside batch steps.
 
 Replay divergence and repair:
   A failing replay/test step returns REPLAY_DIVERGENCE with a bounded report (screen digest, ranked selector suggestions, resume). Fix app state, then resume with replay --from <n> --plan-digest <sha256> (both from the report's resume field) to continue without re-running earlier steps; resume never re-executes skipped steps, so app state there is the caller's responsibility. --from is replay-only; test rejects it. The digest binds the script, includes, effective --platform/--target, and per-action runtime/identity; native .ad interpolation is late-bound so changing only its values keeps the digest, while Maestro environment substitution can change it.

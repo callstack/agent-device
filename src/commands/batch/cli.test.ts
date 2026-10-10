@@ -436,3 +436,27 @@ test('batch human output renders per-step results', async () => {
   assert.match(result.stdout, /1\. OK Opened: Settings \(7ms\)/);
   assert.match(result.stdout, /2\. OK Typed 5 chars \(8ms\)/);
 });
+
+test('batch rejects a fill step that asks for stdin text before daemon dispatch', async () => {
+  const result = await runCliCapture([
+    'batch',
+    '--steps',
+    '[{"command":"fill","input":{"target":{"kind":"ref","ref":"@e3"},"text":"x","textStdin":true}}]',
+  ]);
+
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stderr, /Batch step 1: fill textStdin is not supported/);
+});
+
+test('batch passes an explicit fill textStdin false through to dispatch', async () => {
+  const result = await runCliCapture([
+    'batch',
+    '--steps',
+    '[{"command":"fill","input":{"target":{"kind":"ref","ref":"@e3"},"text":"x","textStdin":false}}]',
+  ]);
+
+  assert.equal(result.calls.length, 1);
+  assert.equal((result.calls[0]?.flags?.batchSteps ?? [])[0]?.flags?.textStdin, false);
+  assert.doesNotMatch(result.stderr, /textStdin is not supported/);
+});

@@ -1,3 +1,4 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SessionAction } from '@agent-device/contracts/session';
 import { AppError } from '@agent-device/kernel/errors';
 import { REPLAY_VAR_KEY_RE } from './script.ts';
@@ -18,6 +19,26 @@ export function validateRecordedInputVariableName(raw: string): string {
     );
   }
   return raw;
+}
+
+/**
+ * A fill's text is sensitive when the caller marked it: `--record-as` names it for the script, or
+ * `--text-stdin` kept it out of argv. Sensitive text never appears as a literal on any surface:
+ * response data, result, recorded action or diagnostics.
+ */
+export function isSensitiveFillText<TFlags extends Pick<CommandFlags, 'recordAs' | 'textStdin'>>(
+  flags: TFlags | undefined,
+): flags is TFlags {
+  return typeof flags?.recordAs === 'string' || flags?.textStdin === true;
+}
+
+/** What sensitive fill text reads as on any response: its `--record-as` placeholder, else `[REDACTED]`. */
+export function sensitiveFillPlaceholder(
+  flags: Pick<CommandFlags, 'recordAs'> | undefined,
+): string {
+  return typeof flags?.recordAs === 'string'
+    ? recordedInputPlaceholder(flags.recordAs)
+    : '[REDACTED]';
 }
 
 export function recordedInputPlaceholder(variableName: string): string {

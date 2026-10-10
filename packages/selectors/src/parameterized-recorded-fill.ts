@@ -362,22 +362,65 @@ function filterSensitiveSelectorCandidates(
   return value.filter((candidate) => !carries(candidate));
 }
 
-function parameterizeSensitiveString(value: string, literal: string, placeholder: string): string {
+export function parameterizeSensitiveString(
+  value: string,
+  literal: string,
+  placeholder: string,
+): string {
   // The empty literal (`fill <target> "" --record-as VAR`, #2063) matches inside every string:
   // it reveals nothing if echoed, so it redacts nothing. Only the fill's own semantic `text`
   // field is force-parameterized, by `parameterizeRecordedFillPayload`, not here.
   if (!literal) return value;
 
   const unparameterizedSegments = placeholder ? value.split(placeholder) : [value];
-  if (unparameterizedSegments.every((segment) => !segment.includes(literal))) return value;
+  if (unparameterizedSegments.every((segment) => !segment.includes(literal))) {
+    return collapseIfLiteralRemains(value, literal, placeholder);
+  }
 
   // Replacing whitespace inline would make every ordinary separator look like
   // authored secret data. Collapse the whole untrusted string/key instead.
   if (!literal.trim()) return placeholder;
 
-  return unparameterizedSegments
-    .map((segment) => segment.replaceAll(literal, placeholder))
-    .join(placeholder);
+  return collapseIfLiteralRemains(
+    unparameterizedSegments
+      .map((segment) => segment.replaceAll(literal, placeholder))
+      .join(placeholder),
+    literal,
+    placeholder,
+  );
+}
+
+/**
+ * The output never carries the literal outside a placeholder. A literal that contains the
+ * placeholder (`abc[REDACTED]xyz`, or `${VAR}` inside a `--record-as VAR` value) or crosses one
+ * spans the segments split on it, so the segment-wise replace above leaves it whole; the whole
+ * string collapses to the placeholder instead. A literal found only inside placeholders (`$` in
+ * `${DOLLAR}`) reveals nothing and stays.
+ */
+function collapseIfLiteralRemains(value: string, literal: string, placeholder: string): string {
+  const placeholderStarts: number[] = [];
+  if (placeholder) {
+    for (
+      let at = value.indexOf(placeholder);
+      at !== -1;
+      at = value.indexOf(placeholder, at + placeholder.length)
+    ) {
+      placeholderStarts.push(at);
+    }
+  }
+  // Placeholders do not overlap, so the first one ending at or after an occurrence of the
+  // literal is the only one that can cover it, and that index only moves forward.
+  let next = 0;
+  for (let at = value.indexOf(literal); at !== -1; at = value.indexOf(literal, at + 1)) {
+    while (
+      next < placeholderStarts.length &&
+      placeholderStarts[next]! + placeholder.length < at + literal.length
+    ) {
+      next += 1;
+    }
+    if (next === placeholderStarts.length || placeholderStarts[next]! > at) return placeholder;
+  }
+  return value;
 }
 
 /**

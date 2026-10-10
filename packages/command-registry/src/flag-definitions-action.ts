@@ -109,6 +109,16 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     recorded: false,
   },
   {
+    key: 'textStdin',
+    names: ['--text-stdin'],
+    type: 'boolean',
+    usageLabel: '--text-stdin',
+    usageDescription:
+      'Fill: read the text from stdin (max 64 KiB, one trailing newline removed) instead of argv',
+    projectConfig: false,
+    recorded: false,
+  },
+  {
     key: 'durationMs',
     names: ['--duration-ms'],
     type: 'int',

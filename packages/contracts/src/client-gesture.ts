@@ -134,6 +134,8 @@ export type FillOptions = DeviceCommandBaseOptions &
     delayMs?: number;
     /** Publish this fill value as `${VAR}` when script recording is armed. */
     recordAs?: string;
+    /** The text came from the CLI's stdin; keep it out of diagnostics and recorded actions. */
+    textStdin?: boolean;
     verify?: boolean;
   };
 

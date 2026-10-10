@@ -774,3 +774,33 @@ test('#1398: ordinary recordings with no --record-as fill are completely unaffec
     verification: 'verified',
   });
 });
+
+test('a stdin fill without --record-as never enters recording state', () => {
+  const session = makeIosSession('default');
+  const secret = 'stdin-secret-3260';
+  const action = recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="password"', secret],
+    flags: { textStdin: true },
+    result: { text: secret },
+  });
+
+  expect(action).toBeUndefined();
+  expect(session.actions).toHaveLength(0);
+  expect(session.recordedFillLiterals).toBeUndefined();
+});
+
+test('a stdin fill with --record-as is recorded as its ${VAR} placeholder', () => {
+  const session = makeIosSession('default');
+  const secret = 'stdin-secret-3260';
+  recordActionEntry(session, {
+    command: 'fill',
+    positionals: ['id="password"', secret],
+    flags: { textStdin: true, recordAs: 'PASSWORD' },
+    result: { text: secret },
+  });
+
+  expect(session.actions).toHaveLength(1);
+  expect(session.actions[0]?.positionals).toEqual(['id="password"', '${PASSWORD}']);
+  expect(JSON.stringify(session.actions)).not.toContain(secret);
+});

@@ -66,8 +66,10 @@ export {
 
 export {
   inferFillText,
+  isSensitiveFillText,
   readRecordedInputVariableName,
   recordedInputPlaceholder,
+  sensitiveFillPlaceholder,
   validateRecordedInputVariableName,
 } from './internal/recorded-input.ts';
 

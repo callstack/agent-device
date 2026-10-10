@@ -84,7 +84,9 @@ export const interactionCliReaders = {
     delayMs: flags.delayMs,
   }),
   fill: (positionals, flags) => {
-    const decoded = readFillTargetFromPositionals(positionals);
+    const decoded = flags.textStdin
+      ? readStdinFillTarget(positionals)
+      : readFillTargetFromPositionals(positionals);
     return {
       ...commonInputFromFlags(flags),
       ...selectorSnapshotInputFromFlags(flags),
@@ -92,6 +94,7 @@ export const interactionCliReaders = {
       text: decoded.text,
       delayMs: flags.delayMs,
       recordAs: flags.recordAs,
+      textStdin: flags.textStdin,
       verify: flags.verify,
     };
   },
@@ -153,6 +156,36 @@ export const interactionDaemonWriters = {
     ...elementTargetPositionals(input as ElementTarget),
   ]),
 } satisfies Record<string, DaemonWriter>;
+
+/**
+ * Reads only the target for `fill --text-stdin`. A stray positional may be the secret itself
+ * (`fill --text-stdin "$PASSWORD"`), so neither a parse failure nor the conflict echoes any of them.
+ */
+function readStdinFillTarget(
+  positionals: string[],
+): ReturnType<typeof readFillTargetFromPositionals> {
+  let decoded: ReturnType<typeof readFillTargetFromPositionals>;
+  try {
+    decoded = readFillTargetFromPositionals(positionals);
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+    throw new AppError('INVALID_ARGS', 'fill --text-stdin could not read the target.', {
+      reason: 'fill_text_stdin_target_invalid',
+      hint: 'Pass only the target: an @ref, a quoted selector, or x y coordinates. The text itself goes to stdin.',
+    });
+  }
+  if (decoded.text !== undefined) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'fill --text-stdin reads the text from stdin, so it cannot also take a text argument.',
+      {
+        reason: 'fill_text_source_conflict',
+        hint: 'Pass only the target, for example: printf %s "$PASSWORD" | agent-device fill @e3 --text-stdin. Quote a multi-word selector so no part of it is read as text.',
+      },
+    );
+  }
+  return decoded;
+}
 
 function readLongPressTargetFromPositionals(positionals: string[]): LongPressOptions {
   const targetPositionals = readLongPressTargetPositionals(positionals);

@@ -443,6 +443,7 @@ agent-device click @e1 --button secondary   # macOS secondary click / context me
 agent-device focus @e2
 agent-device fill @e2 "text"          # Clear then type
 agent-device fill @e2 "search" --delay-ms 80
+printf %s "$PASSWORD" | agent-device fill @e2 --text-stdin   # Text from stdin, kept out of argv
 agent-device type "text"              # Type into focused field without clearing
 agent-device type "query" --delay-ms 80
 agent-device press 300 500
@@ -466,6 +467,7 @@ agent-device gesture transform 200 420 80 -40 2 35 700 # combined pan, zoom, and
 ```
 
 `fill` clears then types. `type` does not clear.
+`fill --text-stdin` reads the text from stdin instead of a text argument, so a secret never appears in the CLI's process arguments. Pipe the value with `printf %s`, which sends it verbatim. It reads at most 64 KiB, removes exactly one trailing newline (`\n` or `\r\n`), and refuses a terminal, empty input, invalid UTF-8, or an additional text argument. The value is registered as sensitive for diagnostics, and command output shows it as `${VAR}` with `--record-as` and as `[REDACTED]` otherwise, in success data and in an error's message, hint, cause and details; daemon-owned fields such as `logPath` and `diagnosticId` are left unchanged. While script recording is armed, combine it with `--record-as <VAR>` to publish `${VAR}`, or `--no-record` to leave the step out; passing neither is an error. Without an armed recording the step is not recorded. Batch steps do not accept it.
 A successful `click` or `press` means the action was sent to the target where the command found it, whether that is a tap, a mouse click, or an accessibility action. It does not confirm that the action reached that element or changed the screen. When your next step depends on it, add `--verify` to learn whether the screen changed (`changedFromBefore`), add `--settle` to get the diff once the UI goes quiet, or follow with `wait <selector>` for the screen you expect.
 When an interaction fails, see [Retry after a failed command](#retry-after-a-failed-command) before you retry.
 `type` accepts text only. Do not pass `@ref` to `type`; use `fill @ref "text"` to target a field directly, or `press @ref` then `type "text"` to append in the focused field.

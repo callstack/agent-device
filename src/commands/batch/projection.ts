@@ -65,6 +65,7 @@ async function readBatchDaemonStep(
   const record = readBatchStepRecord(step, stepNumber);
   const command = readBatchStepCommand(record, stepNumber);
   const input = readBatchStepInputObject(record, stepNumber) as CommandInput;
+  assertNoStdinFillStep(command, input, stepNumber);
   const runtime = parseBatchStepRuntime(record.runtime, stepNumber);
   const prepared = await prepareDaemonCommandRequest(command, input, stepNumber);
   return {
@@ -74,6 +75,19 @@ async function readBatchDaemonStep(
     flags: buildRequestFlags(prepared.options, prepared.metadataFlags),
     runtime: runtime ?? prepared.options.runtime,
   };
+}
+
+function assertNoStdinFillStep(
+  command: BatchCommandName,
+  input: CommandInput,
+  stepNumber: number,
+): void {
+  if (command !== PUBLIC_COMMANDS.fill || input.textStdin !== true) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Batch step ${stepNumber}: fill textStdin is not supported because batch steps have no stdin of their own. Run that fill on its own with --text-stdin.`,
+    { reason: 'fill_text_stdin_in_batch' },
+  );
 }
 
 function readBatchStepCommand(
