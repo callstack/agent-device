@@ -86,7 +86,7 @@ const MUTATIONS: readonly WireMutation[] = [
   },
   {
     breakClass: 'response serialization: the RPC envelope stops being newline-framed',
-    file: 'src/request-progress-protocol.ts',
+    file: 'packages/daemon-contracts/src/request-progress-protocol.ts',
     name: 'serializeDaemonRpcResponseEnvelope',
     from: '}\\n`',
     to: '}`',
@@ -156,7 +156,7 @@ const MUTATIONS: readonly WireMutation[] = [
   },
   {
     breakClass: 'progress framing: the envelope discriminant is renamed',
-    file: 'src/request-progress-protocol.ts',
+    file: 'packages/daemon-contracts/src/request-progress-protocol.ts',
     name: 'DaemonProgressEnvelope',
     from: "type: 'progress';",
     to: "kind: 'progress';",
