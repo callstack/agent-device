@@ -2,7 +2,11 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 import {
   iosDevice,
   iosSimulator,
@@ -220,4 +224,32 @@ test('falls back to the tunnel when usbmux loses the device mid-connect', async 
 
   assert.equal(response.status, 200);
   assert.equal(vi.mocked(fetch).mock.calls[0]?.[0], 'http://[fd00::123]:8100/command');
+});
+
+test('a cancellation during route resolution discloses that the command was never sent', async () => {
+  mockUsbmuxPostCommand.mockRejectedValue(usbmuxDeviceUnattachedError());
+  stubSuccessfulFetch();
+  const controller = new AbortController();
+  const lookupTunnelIp = makeTunnelIpLookup('fd00::123');
+  mockRunCmd.mockImplementation(async (cmd: string, args: string[]) => {
+    controller.abort(createRequestCanceledError());
+    return await lookupTunnelIp(cmd, args);
+  });
+
+  await assert.rejects(
+    () =>
+      sendRunnerCommandOnce(
+        iosDevice,
+        8100,
+        { command: 'tap', x: 1, y: 1 },
+        5_000,
+        controller.signal,
+      ),
+    (error: unknown) => {
+      assert.ok(isRequestCanceledError(error));
+      assert.equal((error as AppError).details?.dispatched, 'no');
+      return true;
+    },
+  );
+  assert.equal(vi.mocked(fetch).mock.calls.length, 0);
 });

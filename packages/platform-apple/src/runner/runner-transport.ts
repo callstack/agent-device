@@ -15,9 +15,7 @@ export async function sendRunnerCommandOnce(
   timeoutMs: number = RUNNER_COMMAND_TIMEOUT_MS,
   signal?: AbortSignal,
 ): Promise<Response> {
-  if (signal?.aborted) {
-    throw createRequestCanceledError();
-  }
+  throwIfCanceledBeforeSend(signal);
   const deadline = Deadline.fromTimeoutMs(timeoutMs);
   const resolver = createRunnerCommandRouteResolver(device, port);
   let route = await resolver.resolveRoute(deadline.remainingMs());
@@ -30,6 +28,7 @@ export async function sendRunnerCommandOnce(
       route = await resolver.resolveRoute(deadline.remainingMs());
     }
   }
+  throwIfCanceledBeforeSend(signal);
   const remainingMs = deadline.remainingMs();
   if (remainingMs <= 0) {
     throw new AppError('COMMAND_FAILED', 'Runner command deadline exceeded', { timeoutMs });
@@ -51,6 +50,11 @@ export async function sendRunnerCommandOnce(
     remainingMs,
     signal,
   );
+}
+
+/** A cancellation that lands before the POST is issued proves the runner received nothing. */
+export function throwIfCanceledBeforeSend(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw createRequestCanceledError({ dispatched: 'no' });
 }
 
 async function postUsbmuxRunnerCommand(

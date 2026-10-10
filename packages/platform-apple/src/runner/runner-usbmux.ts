@@ -54,7 +54,7 @@ async function postRunnerHttpCommand(
   signal?: AbortSignal,
 ): Promise<Response> {
   requireTimeRemaining(timeoutMs);
-  if (signal?.aborted) throw createRequestCanceledError();
+  if (signal?.aborted) throw createRequestCanceledError({ dispatched: 'no' });
   const body = Buffer.from(JSON.stringify(command), 'utf8');
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;

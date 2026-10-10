@@ -237,6 +237,19 @@ describe('RunnerCommandAccounting abandonment', () => {
   });
 });
 
+describe('RunnerCommandAccounting unsent sends', () => {
+  test('withdraws only the charge of the send that wrote nothing', () => {
+    const charges = new RunnerCommandAccounting();
+    charges.charge('cmd-a');
+    charges.markAbandoned('cmd-a');
+    charges.charge('cmd-b');
+    charges.withdrawUnsent('cmd-b');
+
+    expect(charges.outstandingChargeCount).toBe(1);
+    expect(charges.hasAbandonedCharges).toBe(true);
+  });
+});
+
 describe('RunnerCommandAccounting terminal evidence', () => {
   test('discharges the abandoned charge it names', () => {
     const charges = new RunnerCommandAccounting();
