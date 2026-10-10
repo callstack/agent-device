@@ -2,6 +2,7 @@ import { daemonPlatformServicesFixture } from '../../../__tests__/platform-servi
 import { test, expect, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 vi.mock('../../../materialized-path-registry.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../materialized-path-registry.ts')>();
@@ -389,7 +390,8 @@ test('close clears retained materialized install paths bound to the session', as
   mockCleanupRetainedMaterializedPaths.mockImplementation(realCleanup);
 
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
     sessionName,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

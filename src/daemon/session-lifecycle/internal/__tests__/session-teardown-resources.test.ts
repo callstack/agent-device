@@ -6,6 +6,7 @@ import {
 } from './session-close-shutdown.fixtures.ts';
 import { installFakeManagedAgentBrowser } from '../../../../__tests__/test-utils/web-managed-agent-browser.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 const {
   AppError,
@@ -42,7 +43,8 @@ test('close finalizes an active iOS simulator recording before deleting the sess
   sessionStore.publish(sessionName, session);
 
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -81,7 +83,8 @@ test('close surfaces a recording finalization failure through the cleanup-failur
 
   await expect(
     handleSessionCommands({
-      platformServices: daemonPlatformServicesFixture(),
+      
+      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,

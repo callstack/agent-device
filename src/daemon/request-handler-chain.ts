@@ -24,6 +24,7 @@ import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { RequestPlatformProviderScope } from '@agent-device/contracts/platform-providers';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import type { DaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
 
@@ -49,6 +50,7 @@ type RequestHandlerChainParams = {
    */
   providerScope: RequestPlatformProviderScope;
   androidObservation?: AndroidObservationAdapter;
+  createCommandSurface: CreateDaemonCommandSurface;
   platformResourceCleanup?: PlatformResourceCleanup;
   bindDevice: BindDeviceRuntime;
   platformServices: DaemonPlatformServices;
@@ -173,6 +175,7 @@ async function runSessionHandler(
       sessionName: params.sessionName,
       logPath: params.logPath,
       sessionStore: params.sessionStore,
+      createCommandSurface: params.createCommandSurface,
       leaseRegistry: params.leaseRegistry,
       leaseLifecycleProvider: params.leaseLifecycleProvider,
       providerAppCatalog: params.providerAppCatalog,
@@ -209,6 +212,7 @@ async function runSnapshotHandler(
       sessionName: params.sessionName,
       logPath: params.logPath,
       sessionStore: params.sessionStore,
+      createCommandSurface: params.createCommandSurface,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
       bindDevice: params.bindDevice,
@@ -226,6 +230,7 @@ async function runReactNativeHandler(
     'react-native',
     await handleReactNativeCommands({
       req: params.req,
+      createCommandSurface: params.createCommandSurface,
       sessionName: params.sessionName,
       logPath: params.logPath,
       sessionStore: params.sessionStore,
@@ -275,6 +280,7 @@ async function runFindHandler(
       sessionName: params.sessionName,
       logPath: params.logPath,
       sessionStore: params.sessionStore,
+      createCommandSurface: params.createCommandSurface,
       invoke: params.invoke,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
@@ -295,6 +301,7 @@ async function runInteractionHandler(
       sessionName: params.sessionName,
       logPath: params.logPath,
       sessionStore: params.sessionStore,
+      createCommandSurface: params.createCommandSurface,
       contextFromFlags: params.contextFromFlags,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,

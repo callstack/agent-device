@@ -5,7 +5,7 @@ import type {
   BackendSnapshotResult,
 } from '@agent-device/contracts/backend';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
-import { createCommandSurfaceAgentDevice } from '../command-runtime/runtime-command-surface.ts';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
@@ -34,6 +34,8 @@ import { checkIsArgs } from '@agent-device/selectors';
 import { noActiveSessionError } from '@agent-device/kernel/contracts';
 
 export type SelectorRuntimeParams = {
+  /** Builds the command surface this request's selector runtime executes through. */
+  createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
   sessionName: string;
   logPath?: string;
@@ -83,7 +85,7 @@ type ResolvedSelectorDevice =
   | { ok: false; response: DaemonResponse };
 
 export function createSelectorRuntimeForDevice(params: SelectorRuntimeDeviceParams) {
-  return createCommandSurfaceAgentDevice({
+  return params.createCommandSurface({
     backend: createSelectorBackend(params),
     ...createDaemonRuntimePolicy('selector commands', { plural: true }),
     sessions: createDaemonRuntimeSessionStore({

@@ -2,6 +2,7 @@ import { daemonPlatformServicesFixture } from '../../__tests__/platform-services
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 vi.mock('../index.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../index.ts')>();
@@ -32,7 +33,8 @@ function request(command: DaemonRequest['command']): DaemonRequest {
 
 async function run(command: DaemonRequest['command']): Promise<DaemonResponse | null> {
   return await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: request(command),
     sessionName: 'default',
     logPath: '/tmp/agent-device-session-observability-route.log',

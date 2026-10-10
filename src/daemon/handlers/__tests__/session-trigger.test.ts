@@ -4,6 +4,7 @@ import { test, expect } from 'vitest';
 import { handleSessionCommands } from './session-command-harness.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 const invoke = async (_req: DaemonRequest): Promise<DaemonResponse> => {
   return {
@@ -15,7 +16,8 @@ const invoke = async (_req: DaemonRequest): Promise<DaemonResponse> => {
 test('trigger-app-event requires active session or explicit device selector', async () => {
   const sessionStore = makeSessionStore('agent-device-session-trigger-');
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

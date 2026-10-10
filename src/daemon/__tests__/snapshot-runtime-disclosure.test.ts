@@ -11,6 +11,7 @@ import { SessionStore } from '../session-store.ts';
 import { handleSnapshotCommands } from '../handlers/snapshot.ts';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 vi.mock('../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('./legacy-snapshot-capture-fixture.ts');
@@ -168,6 +169,7 @@ async function dispatchSnapshot(
   flags: Record<string, unknown> = {},
 ) {
   const response = await handleSnapshotCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       command: 'snapshot',
       positionals: [],

@@ -2,6 +2,7 @@ import type { SessionStore } from '../../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { handleFindCommands } from '../find.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 /**
  * One `handleFindCommands` invocation shape.
@@ -19,6 +20,7 @@ export function invokeFindHandler(params: {
 }) {
   const { sessionName, sessionStore, positionals, flags } = params;
   return handleFindCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: { token: 't', session: sessionName, command: 'find', positionals, flags: flags ?? {} },
     sessionName,
     logPath: '/tmp/test.log',

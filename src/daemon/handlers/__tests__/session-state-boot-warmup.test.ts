@@ -7,6 +7,7 @@ import {
 } from './session-test-harness.ts';
 import { expect, test } from 'vitest';
 import { handleSessionCommands } from './session-command-harness.ts';
+import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 test('boot leaves Apple keep-hot policy inside the platform runtime', async () => {
   mockResolveTargetDevice.mockResolvedValue({
@@ -20,7 +21,8 @@ test('boot leaves Apple keep-hot policy inside the platform runtime', async () =
   });
 
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

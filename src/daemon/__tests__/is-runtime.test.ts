@@ -16,6 +16,7 @@ import type { DaemonRequest } from '../daemon-request.ts';
 import { selectorCaptureFixture } from './selector-capture-fixture.ts';
 import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({ mockRunAppleRunnerCommand: vi.fn() }));
 
@@ -81,7 +82,8 @@ test('an admitted is inspects once, binds once, and answers through the bound ca
   );
 
   const response = await dispatchIsViaRuntime({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-bound', ['visible', 'id=auth_continue']),
     sessionName: 'is-bound',
     sessionStore,
@@ -103,7 +105,8 @@ test('is absent uses the bound readAny capture for selector-first input without 
   sessionStore.publish('is-absent', makeIosAppSession('is-absent'));
 
   const response = await dispatchIsViaRuntime({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-absent', ['label="Removed row"', 'absent']),
     sessionName: 'is-absent',
     sessionStore,
@@ -145,7 +148,8 @@ test('is absent bypasses a cached no-match snapshot before evaluating the bound 
   );
 
   const response = await dispatchIsViaRuntime({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-absent-fresh', ['absent', 'label="Removed row"']),
     sessionName: 'is-absent-fresh',
     sessionStore,
@@ -178,7 +182,8 @@ test('is absent fails closed for a quality-less legacy iOS root-only capture', a
   sessionStore.publish('is-legacy-sparse', makeIosAppSession('is-legacy-sparse'));
 
   const response = await dispatchIsViaRuntime({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-legacy-sparse', ['absent', 'label="Removed row"']),
     sessionName: 'is-legacy-sparse',
     sessionStore,
@@ -215,7 +220,8 @@ test('is absent rejects depth and scope before binding with typed invalid argume
     ['snapshotDepth', 2],
   ] as const) {
     const response = await dispatchIsViaRuntime({
-      platformServices: daemonPlatformServicesFixture(),
+      
+      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
       req: isRequest('is-absent-flags', ['absent', 'label="Gone"'], { [flag]: value }),
       sessionName: 'is-absent-flags',
       sessionStore,
@@ -245,7 +251,8 @@ test('an unavailable capture fact refuses before any bind', async () => {
   sessionStore.publish('is-refused', makeAndroidSession('is-refused', { appBundleId: 'com.a' }));
 
   const response = await dispatchIsViaRuntime({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-refused', ['visible', 'id=auth_continue']),
     sessionName: 'is-refused',
     sessionStore,
@@ -278,7 +285,8 @@ test('an iOS session with no tracked app is refused with the open hint, not answ
     {},
     async () =>
       await dispatchIsViaRuntime({
-        platformServices: daemonPlatformServicesFixture(),
+        
+        createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
         req: isRequest('is-no-app', ['visible', 'id=auth_continue']),
         sessionName: 'is-no-app',
         sessionStore,
@@ -305,7 +313,8 @@ test('an iOS session WITH a tracked app still answers, so the refusal is the pla
   sessionStore.publish('is-with-app', makeIosAppSession('is-with-app'));
 
   const response = await dispatchIsViaRuntime({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-with-app', ['visible', 'label=Continue']),
     sessionName: 'is-with-app',
     sessionStore,
@@ -323,7 +332,8 @@ test('an Android session with no tracked app proceeds, because the owner adverti
   sessionStore.publish('is-android-no-app', makeAndroidSession('is-android-no-app'));
 
   const response = await dispatchIsViaRuntime({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-android-no-app', ['visible', 'id=auth_continue']),
     sessionName: 'is-android-no-app',
     sessionStore,
@@ -360,7 +370,8 @@ test('a refused request reaches the device by no route at all', async () => {
   });
 
   const response = await dispatchIsViaRuntime({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-direct-refused', ['selected', 'id="shipping-pickup"']),
     sessionName: 'is-direct-refused',
     sessionStore,
@@ -421,7 +432,8 @@ test('a failing predicate answers COMMAND_FAILED from the bound capture', async 
   });
 
   const response = await dispatchIsViaRuntime({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-direct-false', ['text', 'id=account_row', 'Wrong Expected Text']),
     sessionName: 'is-direct-false',
     sessionStore,
@@ -462,7 +474,8 @@ test('a miss on a surface that never settled carries the unsettled fact, and the
   sessionStore.publish('is-unsettled', session);
   const isVisible = () =>
     dispatchIsViaRuntime({
-      platformServices: daemonPlatformServicesFixture(),
+      
+      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
       req: isRequest('is-unsettled', ['visible', 'id=target']),
       sessionName: 'is-unsettled',
       sessionStore,
@@ -505,7 +518,8 @@ test('a read after a scroll that moved nothing carries the no-effect outcome, an
   sessionStore.publish('is-no-effect', session);
   const isVisible = () =>
     dispatchIsViaRuntime({
-      platformServices: daemonPlatformServicesFixture(),
+      
+      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
       req: isRequest('is-no-effect', ['visible', 'id=row']),
       sessionName: 'is-no-effect',
       sessionStore,

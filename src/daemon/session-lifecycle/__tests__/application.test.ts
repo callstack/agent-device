@@ -3,6 +3,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { sessionOrDeviceSelectorRequiredDetails } from '@agent-device/kernel/errors';
+import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 vi.mock('@agent-device/device-selection/device-inventory-context', async (importOriginal) => {
   const actual =
@@ -51,7 +52,8 @@ function request(command: DaemonRequest['command']): DaemonRequest {
 
 async function run(command: DaemonRequest['command']): Promise<DaemonResponse | null> {
   return await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: request(command),
     sessionName: 'default',
     logPath: '/tmp/agent-device-session-lifecycle-route.log',
@@ -109,6 +111,7 @@ test('open routes only its lifecycle input through the public facade', async () 
   expect(Object.keys(forwarded ?? {}).sort()).toEqual(
     [
       'bindDevice',
+      'createCommandSurface',
       'inspectFacts',
       'logPath',
       'platformServices',

@@ -17,6 +17,7 @@ import {
   mockInspectDeviceRuntimeFacts,
   mockPushNotificationRuntime,
 } from './session-command-harness.ts';
+import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 const invoke = async (_req: DaemonRequest): Promise<DaemonResponse> => {
   return {
@@ -28,7 +29,8 @@ const invoke = async (_req: DaemonRequest): Promise<DaemonResponse> => {
 test('push requires active session or explicit device selector', async () => {
   const sessionStore = makeSessionStore('agent-device-session-push-');
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -66,7 +68,8 @@ test('push validates payload before runtime facts admission', async () => {
 
   await expect(
     handleSessionCommands({
-      platformServices: daemonPlatformServicesFixture(),
+      
+      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: 'default',
@@ -107,7 +110,8 @@ test('push runs readiness and notification through one admitted runtime binding'
   });
 
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -173,7 +177,8 @@ test('push treats an existing brace-prefixed payload as a file before inline JSO
 
   try {
     const response = await handleSessionCommands({
-      platformServices: daemonPlatformServicesFixture(),
+      
+      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: 'default',
@@ -212,7 +217,8 @@ test('push stops at unavailable facts without binding', async () => {
   });
 
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -267,7 +273,8 @@ test('push fails closed before binding when a provider owner lacks readiness', a
   };
 
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

@@ -17,6 +17,7 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeAuthoringSession, makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 import { replayScriptSourceBundleFor } from '../../__tests__/test-utils/replay-script-source.ts';
 import {
   createPlatformRuntimeGateway,
@@ -62,6 +63,7 @@ function sendToWebSession(
   };
   const dir = mkdtempForTestSync('agent-device-router-fill-text-stdin-runtime-');
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(dir, 'daemon.log'),
     token: 'test-token',
     sessionStore,

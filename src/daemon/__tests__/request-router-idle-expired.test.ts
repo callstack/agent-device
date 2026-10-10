@@ -15,10 +15,12 @@ import type { DaemonRequest } from '../daemon-request.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 function makeHandler(prefix: string) {
   const sessionStore = makeSessionStore(prefix);
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

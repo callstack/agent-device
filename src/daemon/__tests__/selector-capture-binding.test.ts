@@ -10,6 +10,7 @@ import { withTestDeviceInventory } from '../../__tests__/test-utils/device-inven
 import { resolveBoundSelectorCapture } from '../selector-capture-binding.ts';
 import { createBoundSelectorRuntime } from '../selector-runtime-backend.ts';
 import { selectorCaptureFixture } from './selector-capture-fixture.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 // The seam every selector unit consumes. `find` landed it; `get`, `is`, and `wait` migrate by
 // naming their command, so these are the guarantees they inherit rather than re-derive.
@@ -146,7 +147,8 @@ test('the bound construction path admits and binds before it builds a runtime', 
 
   const resolved = await createBoundSelectorRuntime(
     {
-      platformServices: daemonPlatformServicesFixture(),
+      
+      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
       req: { token: 't', session: 'bound', command: 'get', positionals: [], flags: {} },
       sessionName: 'bound',
       logPath: '/tmp/bound.log',
@@ -171,7 +173,8 @@ test('the bound construction path refuses an unavailable operation without build
 
   const resolved = await createBoundSelectorRuntime(
     {
-      platformServices: daemonPlatformServicesFixture(),
+      
+      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
       req: { token: 't', session: 'bound', command: 'is', positionals: [], flags: {} },
       sessionName: 'bound',
       logPath: '/tmp/bound.log',

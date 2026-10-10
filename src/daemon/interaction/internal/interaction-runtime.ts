@@ -6,7 +6,6 @@ import type {
   BackendActionResult,
   BackendSnapshotResult,
 } from '@agent-device/contracts/backend';
-import { createCommandSurfaceAgentDevice } from '../../../command-runtime/runtime-command-surface.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { DaemonCommandContext } from '../../context.ts';
@@ -54,6 +53,7 @@ export function createInteractionRuntimeForRoute(
   if (!ref) throw new KernelAppError('SESSION_NOT_FOUND', NO_ACTIVE_SESSION_MESSAGE);
   const session = params.sessionStore.requireCurrent(ref);
   return createInteractionAgentDevice({
+    createCommandSurface: params.createCommandSurface,
     requestId: params.req.meta?.requestId,
     flags: params.req.flags,
     session,
@@ -127,7 +127,7 @@ export function finalizeTouchInteraction(params: FinalizeTouchInteractionInput):
 }
 
 function createInteractionAgentDevice(params: InteractionRuntimeInput) {
-  return createCommandSurfaceAgentDevice({
+  return params.createCommandSurface({
     backend: createInteractionBackend(params),
     ...createDaemonRuntimePolicy('interaction commands', { plural: true }),
     sessions: params.runtimeSessions,

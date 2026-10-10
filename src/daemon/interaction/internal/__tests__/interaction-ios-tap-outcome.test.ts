@@ -34,6 +34,7 @@ import {
 import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 import { corroborateIosTapFailure } from '../interaction-ios-tap-outcome.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 vi.mock('../../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../../__tests__/legacy-snapshot-capture-fixture.ts');
@@ -73,6 +74,7 @@ async function runClick(
     });
   }
   return await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 'test',
       session: sessionName,
@@ -472,6 +474,7 @@ test('corroborates a tap when the request carries no flags and the baseline used
   // mirrors the raw daemon/JSON-RPC production boundary, which can omit the
   // key entirely. CLI and batch paths always materialize a flags object.
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 'test',
       session: sessionName,
@@ -730,6 +733,7 @@ test('corroborated runtime taps retain target evidence through save and replay',
     sessionStore: replayStore,
     invoke: async (req) => {
       const response = await handleInteractionCommands({
+        createCommandSurface: testCreateCommandSurface,
         req,
         sessionName: replaySessionName,
         sessionStore: replayStore,
@@ -763,6 +767,7 @@ test('a tap corroborates against its admitted snapshot after a same-lifetime rec
     return {};
   });
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: { token: 'test', session: name, command: 'click', positionals: ['104', '222'], flags: {} },
     sessionName: name,
     sessionRef: ref,

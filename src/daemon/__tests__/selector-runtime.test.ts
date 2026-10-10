@@ -19,6 +19,7 @@ import { createUnavailableRuntimeFactsForTest } from '../../__tests__/test-utils
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeSession as makeStoredSession } from '../../__tests__/test-utils/session-factories.ts';
 import { dispatchGetViaRuntime } from '../selector-runtime.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
@@ -102,7 +103,8 @@ test.each(['rebuild', 'retire'] as const)(
       [Symbol.asyncDispose]: async () => {},
     };
     const running = dispatchGetViaRuntime({
-      platformServices: daemonPlatformServicesFixture(),
+      
+      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: 'default',

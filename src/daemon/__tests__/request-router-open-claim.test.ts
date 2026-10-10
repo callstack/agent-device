@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
@@ -82,6 +83,7 @@ function createOpenHandler(
   leaseRegistry = new LeaseRegistry(),
 ) {
   return createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

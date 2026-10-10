@@ -6,10 +6,12 @@ import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 test.sequential('a request spawns its commands with its own DEVELOPER_DIR, else the daemon one', async () => {
   const seen: string[] = [];
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('agent-device-router-developer-dir-'), 'daemon.log'),
     token: 'test-token',
     sessionStore: makeSessionStore('agent-device-router-developer-dir-store-'),

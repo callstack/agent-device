@@ -43,6 +43,7 @@ export async function dispatchSnapshotViaRuntime(
       );
       const session = getSession();
       const fallbackScreenshot = await captureSparseFallbackScreenshot({
+        createCommandSurface: params.createCommandSurface,
         req: request,
         session,
         sessionName: resolvedSessionName,

@@ -16,6 +16,7 @@ import {
 } from './session-close-shutdown.fixtures.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
 import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 const {
   handleSessionCommands,
@@ -52,7 +53,8 @@ const IOS_SIM: SessionState['device'] = {
 
 async function closeAtAddress(sessionStore: ReturnType<typeof makeSessionStore>) {
   return await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: ADDRESS, command: 'close', positionals: [], flags: {} },
     sessionName: ADDRESS,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

@@ -4,6 +4,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 
 import path from 'node:path';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 // `scroll` still executes through legacy platform dispatch; screenshot and click bind their fake
 // at the facts/bind seam below instead (ADR 0019).
@@ -78,6 +79,7 @@ function screenshotRouter(
   sessionStore.publish(session.name, session);
   const runtime = screenshotRuntimeFixture(options);
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
@@ -236,6 +238,7 @@ test('router serializes concurrent commands for the same device across sessions'
   });
 
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

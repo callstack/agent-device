@@ -1,6 +1,7 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import * as path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 vi.mock('node:timers/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:timers/promises')>();
@@ -102,6 +103,7 @@ function createHandler(
   deviceRuntimeGateway = lifecycleDeviceRuntimeGateway,
 ) {
   return createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

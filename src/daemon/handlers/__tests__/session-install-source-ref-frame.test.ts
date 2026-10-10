@@ -12,6 +12,7 @@ import {
   mockMaterializeAppSourceRuntime,
 } from './session-command-harness.ts';
 import { activateCompleteRefFrame, refFrameState } from '../../ref-frame.ts';
+import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 const invoke = async (): Promise<never> => {
   throw new Error('install_source ref-frame tests must stay on the runtime route');
@@ -115,7 +116,8 @@ async function dispatchInstallSource(params: {
     meta: { installSource: { kind: 'path', path: '/tmp/App.apk' } },
   };
   return await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: 'default',
     logPath: '/tmp/daemon.log',

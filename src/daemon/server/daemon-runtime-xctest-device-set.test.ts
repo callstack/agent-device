@@ -3,6 +3,7 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { withMockedPlatform } from '../../__tests__/test-utils/host-execution.ts';
+import { testCreateCommandSurface } from '../__tests__/command-surface-fixture.ts';
 
 const legacyRedirect = vi.hoisted(() => ({
   xctestDeviceSetPath: '',
@@ -74,6 +75,7 @@ function loggedEvents(logPath: string): Array<{ phase: string; data?: Record<str
 function startDarwinDaemon(stateDir: string) {
   return withMockedPlatform('darwin', () =>
     startDaemonRuntime({
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,

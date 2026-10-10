@@ -12,10 +12,12 @@ import { handleReplayTestCommand } from '../session-replay-command.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { makeSessionStore } from './session-test-harness.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 test('replay test handler threads the complete video owner into the application command', async () => {
   const root = mkdtempForTestSync('agent-device-replay-handler-video-');
   const params: SessionCommandParams = {
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 'token',
       session: 'default',

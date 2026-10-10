@@ -9,6 +9,7 @@ import {
   resetGetRuntimeFixture,
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { contextFromFlags, makeAndroidSession } from './interaction-touch-fixtures.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 // The Android device state a dispatch has to survive: an escape to launcher or
 // Settings fails the press, a permission prompt warns instead, and
@@ -110,6 +111,7 @@ test('press @ref fails when Android tap escapes to launcher', async () => {
 
   await expect(
     handleInteractionCommands({
+      createCommandSurface: testCreateCommandSurface,
       req: {
         token: 't',
         session: sessionName,
@@ -158,6 +160,7 @@ test('press @ref fails when Android tap escapes to Settings', async () => {
 
   await expect(
     handleInteractionCommands({
+      createCommandSurface: testCreateCommandSurface,
       req: {
         token: 't',
         session: sessionName,
@@ -212,6 +215,7 @@ test.each(ANDROID_PERMISSION_PROMPT_PACKAGES)(
     });
 
     const response = await handleInteractionCommands({
+      createCommandSurface: testCreateCommandSurface,
       req: {
         token: 't',
         session: sessionName,
@@ -271,6 +275,7 @@ test('a ref action aborts with the shared ref_frame_expired rejection after Andr
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: { token: 't', session: sessionName, command: 'press', positionals: ['@e1'], flags: {} },
     sessionName,
     sessionStore,

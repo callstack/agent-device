@@ -27,6 +27,7 @@ import {
   installTestScreenRecording,
   makeSession,
 } from './interaction-touch-fixtures.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 // The identity extras the one response site composes: --verify evidence rides
 // the interactionResultExtra allowlist on every branch, and no branch invents
@@ -141,6 +142,7 @@ test.each([false, true])('selector-touch observation after retirement=%s', async
   }
   const payloads = await buildTargetedTouchResponsePayloads({
     params: {
+      createCommandSurface: testCreateCommandSurface,
       req: { token: 't', command: 'press', positionals: ['@e1'], session: 'default' },
       sessionName: address,
       sessionRef: ref,
@@ -211,6 +213,7 @@ test.each([
       async () => {
         const payloads = await buildTargetedTouchResponsePayloads({
           params: {
+            createCommandSurface: testCreateCommandSurface,
             req: {
               token: 't',
               command: 'press',
@@ -327,6 +330,7 @@ test('press @ref --verify surfaces evidence through the interactionResultExtra a
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -385,6 +389,7 @@ test('press @ref without --verify never includes an evidence field', async () =>
   mockTapPoint.mockResolvedValue({ pressed: true });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -443,6 +448,7 @@ test('fill selector --verify surfaces evidence through the interactionResultExtr
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -512,6 +518,7 @@ test('fill @ref --verify surfaces evidence in the ref response branch', async ()
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -558,6 +565,7 @@ test('fill @ref without --verify never includes an evidence field', async () => 
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -608,6 +616,7 @@ test('fill @ref preserves fallback coordinates for recording when platform resul
 
   mockFillPoint.mockResolvedValue({ filled: true });
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -650,6 +659,7 @@ test('an already retired coordinate touch skips its frame probe without a warnin
     async () => {
       const payloads = await buildTargetedTouchResponsePayloads({
         params: {
+          createCommandSurface: testCreateCommandSurface,
           req: { token: 't', command: 'click', positionals: ['1', '2'], session: ref.address },
           sessionName: ref.address,
           sessionRef: ref,

@@ -7,12 +7,14 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { replayScriptSourceBundleFor } from '../../__tests__/test-utils/replay-script-source.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 function createHarness() {
   const root = mkdtempForTestSync('agent-device-router-replay-env-');
   return {
     root,
     handler: createRequestHandler({
+      createCommandSurface: testCreateCommandSurface,
       logPath: path.join(root, 'daemon.log'),
       token: 'test-token',
       sessionStore: makeSessionStore('agent-device-router-replay-env-store-'),

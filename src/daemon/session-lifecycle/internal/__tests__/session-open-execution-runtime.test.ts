@@ -15,6 +15,7 @@ import {
   clearRequestAbortRegistration,
 } from '@agent-device/host-kit/request';
 import { AppError } from '@agent-device/kernel/errors';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
 
@@ -131,7 +132,8 @@ test('open runtime payload replaces stored session runtime atomically', async ()
   });
 
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -211,7 +213,8 @@ test('open runtime payload clears stale applied transport hints before launch', 
   });
 
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -263,7 +266,8 @@ test('open runtime payload rejects invalid metro port before app launch', async 
   });
 
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'runtime-open-invalid-port',
@@ -304,7 +308,8 @@ test('open runtime payload rejects malformed runtime objects without mutating se
   mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator());
 
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -348,7 +353,8 @@ test('open runtime payload does not persist replacement when launch fails', asyn
 
   await expect(
     handleSessionCommands({
-      platformServices: daemonPlatformServicesFixture(),
+      
+      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -390,7 +396,8 @@ test('a first open keeps both positionals so the deep link still reaches the app
   });
 
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'deep-link-open',
@@ -435,7 +442,8 @@ test('open reports the launch confirmation its platform answered', async () => {
   });
 
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'launch-confirmation-open',
@@ -477,7 +485,8 @@ async function openReportingObservation(
   });
 
   const response = await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -546,7 +555,8 @@ function invokeHeldOpen(
   req?: Partial<DaemonRequest>,
 ) {
   return handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       command: 'open',

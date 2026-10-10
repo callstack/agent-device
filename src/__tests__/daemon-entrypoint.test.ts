@@ -24,6 +24,7 @@ import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen
 
 import { closeLoopbackServer, listenOnLoopback, waitForHttpOk } from './test-utils/loopback.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from '../daemon/__tests__/command-surface-fixture.ts';
 
 type DaemonInfoFile = {
   httpPort?: number;
@@ -87,6 +88,7 @@ test('daemon runtime starts HTTP transport in-process and shuts down cleanly', a
 
   try {
     const runtime = await startDaemonRuntime({
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -146,6 +148,7 @@ test('daemon runtime publishes dual transport metadata', async () => {
 
   try {
     const runtime = await startDaemonRuntime({
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -196,6 +199,7 @@ test('daemon rejects unowned cloud artifacts over RPC', async () => {
 
   try {
     runtime = await startDaemonRuntime({
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -326,6 +330,7 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
     );
 
     const runtime = await startDaemonRuntime({
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -451,6 +456,7 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
     );
 
     runtime = await startDaemonRuntime({
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: daemonStateDir,

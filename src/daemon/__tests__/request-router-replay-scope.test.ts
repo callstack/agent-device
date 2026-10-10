@@ -5,6 +5,7 @@ import fs from 'node:fs';
 
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
@@ -71,6 +72,7 @@ test('replay runs active-session actions inside the parent request provider scop
   const appleRunnerProvider = vi.fn(() => undefined);
 
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
@@ -109,6 +111,7 @@ test('replay routes session-changing actions through the full request path', asy
   const appleRunnerProvider = vi.fn(() => undefined);
 
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
@@ -144,6 +147,7 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
   const sessionStore = makeSessionStore('agent-device-replay-open-scope-');
 
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
@@ -210,6 +214,7 @@ test('fresh replay retains a dynamically selected device through finalization', 
   });
 
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

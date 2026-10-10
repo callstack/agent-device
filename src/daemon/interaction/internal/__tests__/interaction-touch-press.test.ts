@@ -18,6 +18,7 @@ import {
   readPressPoint,
   runFindInternalClick,
 } from './interaction-touch-fixtures.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 // Which node an admitted press/click acts on: hittable-ancestor promotion, the
 // macOS menubar wrapper, button projection, and a mutating find's pre-resolved
@@ -110,6 +111,7 @@ test('click on a macOS menubar wrapper ref promotes to the same-rect menu bar it
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -169,6 +171,7 @@ test('press @ref promotes a non-hittable node to its hittable ancestor before ta
   mockTapPoint.mockResolvedValue({ pressed: true });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -231,6 +234,7 @@ test('press @ref does not promote to a full-screen hittable ancestor', async () 
   mockTapPoint.mockResolvedValue({ pressed: true });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -290,6 +294,7 @@ test('click --button secondary on @ref dispatches a secondary press on macOS and
   mockTapPoint.mockResolvedValue({ button: 'secondary' });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -431,6 +436,7 @@ test('a read right after a press captures the post-tap screen instead of reusing
     .mockResolvedValue(screen('Step 2'));
   const run = async (command: string, positionals: string[]) =>
     await handleInteractionCommands({
+      createCommandSurface: testCreateCommandSurface,
       req: { token: 't', session: sessionName, command, positionals, flags: {} },
       sessionName,
       sessionStore,

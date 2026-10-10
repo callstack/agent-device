@@ -96,6 +96,7 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     );
   }
   const runtimeResponse = await dispatchFindReadOnlyViaRuntime({
+    createCommandSurface: params.createCommandSurface,
     req,
     sessionName,
     logPath,

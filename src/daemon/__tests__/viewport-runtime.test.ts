@@ -24,6 +24,7 @@ import type { GenericPlatformExecutionParams } from '../generic-leaf-execution.t
 import { resolveBoundViewportRuntime } from '../viewport-runtime.ts';
 import { expectRefusesUnavailableExactOwnerFact } from './runtime-binding-conformance.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const webDevice = {
   id: 'web',
@@ -170,6 +171,7 @@ test('request router joins viewport admission to execution, recording, and ref i
   activateCompleteRefFrame(session);
   sessionStore.publish(session.name, session);
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: '/tmp/daemon.log',
     token: 't',
     sessionStore,

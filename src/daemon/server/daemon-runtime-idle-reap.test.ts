@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
+import { testCreateCommandSurface } from '../__tests__/command-surface-fixture.ts';
 
 const leaseProbe = vi.hoisted(() => ({
   registries: [] as import('../lease-registry.ts').LeaseRegistry[],
@@ -37,6 +38,7 @@ test('daemon runtime self-reaps after the idle window when nothing ever uses it'
 
   try {
     const runtime = await startDaemonRuntime({
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -76,6 +78,7 @@ test('daemon runtime never self-reaps when AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS i
 
   try {
     const runtime = await startDaemonRuntime({
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -113,6 +116,7 @@ test('only a retained lease keeps the daemon runtime from self-reaping', async (
 
   try {
     const runtime = await startDaemonRuntime({
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,

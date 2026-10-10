@@ -4,6 +4,7 @@ import { test, expect, vi } from 'vitest';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 let snapshotCalls = 0;
 let snapshotMode: 'blocking-dialog' | 'throws' = 'blocking-dialog';
@@ -156,6 +157,7 @@ test('generic Android gesture commands dismiss blocking system dialogs during re
   const { openAndroidApp } = await import('@agent-device/platform-android/mechanics');
 
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
@@ -208,6 +210,7 @@ test('generic Android gesture commands continue when recording dialog inspection
   vi.mocked(openAndroidApp).mockClear();
 
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
@@ -267,6 +270,7 @@ test('generic Android gesture commands skip local dialog recovery for provider d
   const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
 
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

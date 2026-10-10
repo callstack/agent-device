@@ -18,6 +18,7 @@ import {
   makeVisibleButtonSnapshot,
   runInteraction,
 } from './interaction-touch-fixtures.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 // Non-touch interaction routing: the `get` and `is` reads the public handler
 // owns. Touch commands live in the interaction-touch* test files.
@@ -99,6 +100,7 @@ test('get text prefers underlying value for text surfaces and avoids recording g
   );
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -150,6 +152,7 @@ test('get text uses backend read expansion when the resolved node has a rect', a
   );
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -196,6 +199,7 @@ test('get text answers from the captured tree when the bound owner advertises no
   elementReadFixtureState.readTextAtPointAvailable = false;
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -238,6 +242,7 @@ test('an eligible direct iOS selector cannot operate before admission', async ()
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -297,6 +302,7 @@ test('get text simple iOS id selector resolves through the bound capture, not a 
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -376,6 +382,7 @@ test('get text iOS label selector uses snapshot disambiguation instead of runner
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -434,6 +441,7 @@ test('is visible preserves CLI snapshot flags during runtime snapshot capture', 
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -469,6 +477,7 @@ test('is visible reuses fresh cached iOS snapshots with rects', async () => {
   legacyDispatchCapture.mockRejectedValue(new Error('unexpected fresh snapshot'));
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -508,6 +517,7 @@ test('is visible recaptures web snapshots when cached nodes may lack rects', asy
   );
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -557,6 +567,7 @@ test('a failing is predicate is COMMAND_FAILED, never a zero-exit pass', async (
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -610,6 +621,7 @@ test('is visible passes for list text that inherits viewport visibility from an 
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -657,6 +669,7 @@ test('is visible fails for nodes outside the current viewport', async () => {
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -696,6 +709,7 @@ test('is reports Android permission dialog blocker when app content assertion fa
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,

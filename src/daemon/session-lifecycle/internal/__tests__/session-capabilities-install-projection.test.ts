@@ -12,6 +12,7 @@ import type {
 import { createCapabilitiesAdmissionRuntime } from './session-capabilities.fixtures.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 test('capabilities projects the install family from exactly one facts inspection', async () => {
   const { sessionName, sessionStore } = createAndroidCapabilitiesSession('install-family');
@@ -154,7 +155,8 @@ async function dispatchCapabilities(params: {
   inspectFacts: InspectDeviceRuntimeFacts;
 }) {
   return await handleSessionCommands({
-    platformServices: daemonPlatformServicesFixture(),
+    
+    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: params.sessionName,

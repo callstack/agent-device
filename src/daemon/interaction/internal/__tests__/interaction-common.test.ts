@@ -15,6 +15,7 @@ import {
   mockFillPoint,
   resetGetRuntimeFixture,
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 const contextFromFlags = (_flags: CommandFlags | undefined) => ({});
 
@@ -161,6 +162,7 @@ test('parameterized fill scrubs concatenated backend values and object keys thro
   );
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -218,6 +220,7 @@ test('parameterized fill collapses whitespace-only backend echoes through the ha
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,

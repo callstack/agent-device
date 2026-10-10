@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
@@ -124,6 +125,7 @@ async function route(
   const sessionStore = makeSessionStore('agent-device-dispatch-route-');
   sessionStore.publish(SESSION, session);
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

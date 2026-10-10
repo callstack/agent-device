@@ -90,6 +90,7 @@ import { resolveGenericRuntimeExecution } from './generic-runtime-execution.ts';
 import { discloseRequestDispatch, refusedBeforeDispatch } from './request-dispatch-disclosure.ts';
 import { recordNestedRequests } from './request-dispatch-ledger.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import type { DaemonPlatformServices } from './platform-services.ts';
 import type { DaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
@@ -132,6 +133,8 @@ export type RequestRouterDeps = {
   cloudArtifactProvider?: CloudArtifactProvider;
   providerAppCatalog?: ProviderAppCatalog;
   androidObservation?: AndroidObservationAdapter;
+  /** Builds the per-request command surface the device-facing runtimes execute through. */
+  createCommandSurface: CreateDaemonCommandSurface;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
   /** ADR 0029: the daemon policy every admitted request, including nested steps, obeys. */
@@ -192,6 +195,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     cloudArtifactProvider,
     providerAppCatalog,
     androidObservation = unavailableAndroidObservation,
+    createCommandSurface,
     platformResourceCleanup = unavailablePlatformResourceCleanup,
     providerDeviceRuntimeScope,
     trackDownloadableArtifact,
@@ -383,6 +387,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         : undefined,
       providerScope,
       androidObservation,
+      createCommandSurface,
       platformResourceCleanup,
       bindDevice: lockedScope.bindDevice,
       platformServices: lockedScope.platformServices,
@@ -409,6 +414,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       logPath: lockedScope.logPath,
       sessionStore,
       androidObservation,
+      createCommandSurface,
     });
   }
 
@@ -603,8 +609,9 @@ async function dispatchGenericForLockedScope(params: {
   logPath: string;
   sessionStore: SessionStore;
   androidObservation: AndroidObservationAdapter;
+  createCommandSurface: CreateDaemonCommandSurface;
 }): Promise<DaemonResponse> {
-  const { lockedScope, logPath, sessionStore, androidObservation } = params;
+  const { lockedScope, logPath, sessionStore, androidObservation, createCommandSurface } = params;
   const ref = sessionStore.lookup(lockedScope.sessionName);
   if (!ref) {
     return noActiveSessionError();
@@ -624,6 +631,7 @@ async function dispatchGenericForLockedScope(params: {
     inspectFacts: lockedScope.inspectFacts,
     platformServices: lockedScope.platformServices,
     bindDevice: lockedScope.bindDevice,
+    createCommandSurface,
   });
   if (!runtimeExecution.ok) return refusedBeforeDispatch(runtimeExecution.response);
 
@@ -638,6 +646,7 @@ async function dispatchGenericForLockedScope(params: {
     platformServices: lockedScope.platformServices,
     executePlatformCommand: runtimeExecution.execute,
     androidObservation,
+    createCommandSurface,
     ...(runtimeExecution.recorded ? { recordedRequest: runtimeExecution.recorded } : {}),
   });
   return dispatchResponse;

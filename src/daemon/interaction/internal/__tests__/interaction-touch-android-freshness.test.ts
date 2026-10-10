@@ -8,6 +8,7 @@ import {
   resetGetRuntimeFixture,
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { contextFromFlags, makeAndroidSession } from './interaction-touch-fixtures.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 // The Android ref-refresh capture a @ref mutation takes before dispatch: when
 // it runs, what it may not retarget, and the comparison-safe baseline it hands
@@ -105,6 +106,7 @@ test('press @ref refreshes Android snapshot when freshness tracking is active', 
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -179,6 +181,7 @@ test('ADR 0014: Android freshness cannot retarget an admitted ref by positional 
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -229,6 +232,7 @@ test('press @ref falls back to cached Android ref when freshness refresh fails',
   mockCaptureSnapshotForSession.mockRejectedValueOnce(new Error('uiautomator timeout'));
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -296,6 +300,7 @@ test('coordinate press preserves Android route freshness from last comparable sn
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,

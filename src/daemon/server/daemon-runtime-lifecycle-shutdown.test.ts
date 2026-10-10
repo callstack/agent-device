@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from '../__tests__/command-surface-fixture.ts';
 
 const lifecycleEvents = vi.hoisted(() => [] as string[]);
 
@@ -154,6 +155,7 @@ test('daemon shutdown detaches before session teardown and force-finalizes only 
   const startupErrors: string[] = [];
   try {
     const runtime = await startDaemonRuntime({
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -182,6 +184,7 @@ test('a SIGTERM shutdown gives the handoff a diagnostics scope to write its reas
   const stateDir = mkdtempForTestSync('agent-device-daemon-detach-diagnostics-');
   try {
     const runtime = await startDaemonRuntime({
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -210,6 +213,7 @@ const claimStores = isolatedDeviceClaimStores('daemon-drain-admission-');
 test('shutdown includes drain publications, releases their claims and refuses post-snapshot publication', async () => {
   const { stateDir } = claimStores();
   const runtime = await startDaemonRuntime({
+    createCommandSurface: testCreateCommandSurface,
     env: {
       ...process.env,
       AGENT_DEVICE_STATE_DIR: stateDir,
@@ -264,6 +268,7 @@ test('shutdown includes drain publications, releases their claims and refuses po
 test('shutdown joins dispatch completion after force-closing the client before taking its snapshot', async () => {
   const { stateDir } = claimStores();
   const runtime = await startDaemonRuntime({
+    createCommandSurface: testCreateCommandSurface,
     env: {
       ...process.env,
       AGENT_DEVICE_STATE_DIR: stateDir,
@@ -402,6 +407,7 @@ test.each([false, true])(
 test('daemon shutdown releases a session lease whose session teardown rejects', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-session-lease-shutdown-');
   const runtime = await startDaemonRuntime({
+    createCommandSurface: testCreateCommandSurface,
     env: {
       ...process.env,
       AGENT_DEVICE_STATE_DIR: stateDir,
@@ -436,6 +442,7 @@ test('daemon shutdown releases a retainOnClose lease that no session holds', asy
   const stateDir = mkdtempForTestSync('agent-device-daemon-retained-lease-shutdown-');
   try {
     const runtime = await startDaemonRuntime({
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,

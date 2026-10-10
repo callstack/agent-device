@@ -1,5 +1,6 @@
 import type { DaemonPlatformServices } from '../../platform-services.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { Rect, SnapshotPreferredBackend, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { RequestCaptureProof } from '../../capture-disclosure.ts';
@@ -23,6 +24,8 @@ import type {
 export type { BoundContextFromFlags } from '../../context.ts';
 
 export type InteractionRouteInput = {
+  /** Builds the command surface this request's interaction runtime executes through. */
+  createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
   sessionName: string;
   logPath?: string;
@@ -42,6 +45,7 @@ export type InteractionRouteInput = {
 };
 
 export type FindRouteInput = {
+  createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -86,6 +90,7 @@ export type InteractionCaptureOperation = (
 ) => Promise<SnapshotState>;
 
 export type InteractionRuntimeInput = {
+  createCommandSurface: CreateDaemonCommandSurface;
   requestId?: string;
   flags: CommandFlags | undefined;
   session: InteractionSessionView;
