@@ -40,6 +40,10 @@
       "types": "./src/diagnostics.ts",
       "default": "./src/diagnostics.ts"
     },
+    "./doctor-lines": {
+      "types": "./src/doctor-lines.ts",
+      "default": "./src/doctor-lines.ts"
+    },
     "./file": {
       "types": "./src/file.ts",
       "default": "./src/file.ts"
@@ -47,6 +51,10 @@
     "./host-file": {
       "types": "./src/host-file.ts",
       "default": "./src/host-file.ts"
+    },
+    "./interaction-outcome": {
+      "types": "./src/interaction-outcome.ts",
+      "default": "./src/interaction-outcome.ts"
     },
     "./process": {
       "types": "./src/process.ts",
@@ -71,6 +79,10 @@
     "./session-paths": {
       "types": "./src/session-paths.ts",
       "default": "./src/session-paths.ts"
+    },
+    "./status-markers": {
+      "types": "./src/status-markers.ts",
+      "default": "./src/status-markers.ts"
     },
     "./transport": {
       "types": "./src/transport.ts",

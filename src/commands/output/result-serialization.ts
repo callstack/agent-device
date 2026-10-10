@@ -15,7 +15,7 @@ import { successText, withSuccessText } from '@agent-device/kernel/success-text'
 import {
   resolveDeployResultTarget,
   resolveInstallFromSourceResultTarget,
-} from '../../core/deploy-result-target.ts';
+} from '@agent-device/contracts/deploy-result-target';
 
 function serializeSessionDevice(
   device: AgentDeviceSessionDevice,

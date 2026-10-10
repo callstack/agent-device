@@ -14,7 +14,7 @@ import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionRef, SessionState } from '../session-state.ts';
 import { resolvePayloadInput } from '../payload-input.ts';
-import { resolveDeployResultTarget } from '../../core/deploy-result-target.ts';
+import { resolveDeployResultTarget } from '@agent-device/contracts/deploy-result-target';
 import { withSuccessText } from '@agent-device/kernel/success-text';
 import { recordSessionAction } from '../session-action-recorder.ts';
 import {

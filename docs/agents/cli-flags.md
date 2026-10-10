@@ -28,7 +28,7 @@ Thread a flag only through the layers that consume it:
    interface exposes it.
 6. `src/client/client-normalizers.ts`: update daemon flag normalization only when the request still
    needs a public-to-internal translation.
-7. `src/daemon/context.ts` and `src/core/dispatch-context.ts`: add the field only when it flows into
+7. `src/daemon/context.ts` and `src/daemon/dispatch-context.ts`: add the field only when it flows into
    platform dispatch.
 8. Handler/platform modules: thread the option only after the command surface, grammar, and
    projection prove it belongs there.

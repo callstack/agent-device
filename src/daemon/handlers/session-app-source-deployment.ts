@@ -21,7 +21,7 @@ import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-ru
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
-import { resolveInstallFromSourceResultTarget } from '../../core/deploy-result-target.ts';
+import { resolveInstallFromSourceResultTarget } from '@agent-device/contracts/deploy-result-target';
 import { withSuccessText } from '@agent-device/kernel/success-text';
 import { recordSessionAction } from '../session-action-recorder.ts';
 import { resolveCommandDevice } from '../session-device-resolution.ts';
