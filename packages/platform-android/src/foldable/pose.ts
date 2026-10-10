@@ -9,19 +9,19 @@ import { runAndroidAdb, runAndroidShell } from '../adb.ts';
 
 /**
  * The emulator console's posture ids (`adb emu posture <id>`) and the device state Android
- * derives from each. The console moves the hinge sensor to the posture's own angle (0°, 90°,
- * 180°), and `DeviceStateManager` commits the matching state once the guest has seen it. The
- * state *ids* differ per device profile (the Pixel folds number `CLOSED` 0, the generic foldables
- * 1), so they are looked up by name.
+ * derives from each. The console moves the hinge sensor to the angle the AVD profile defines for
+ * the posture (0°, 90°, 180° on the Pixel folds; 15°, 90°, 165° on the generic "7.6in Foldable",
+ * the midpoints of its posture ranges), and `DeviceStateManager` commits the matching state once
+ * the guest has seen it. The state *ids* differ per profile too (the Pixel folds number `CLOSED`
+ * 0, the generic foldables 1), so they are looked up by name, and the committed state, which is
+ * what `WindowManager`'s `FoldingFeature` derives from, is the verification; the angle is reported
+ * as the sensor reads it.
  */
 const EMULATOR_POSTURES = Object.freeze({
-  closed: { id: '1', state: 'CLOSED', angle: 0 },
-  'half-open': { id: '2', state: 'HALF_OPENED', angle: 90 },
-  open: { id: '3', state: 'OPENED', angle: 180 },
+  closed: { id: '1', state: 'CLOSED' },
+  'half-open': { id: '2', state: 'HALF_OPENED' },
+  open: { id: '3', state: 'OPENED' },
 } as const);
-
-/** The posture angle is a fixed point, so the sensor has to read it back within this much. */
-const ANDROID_FOLD_ANGLE_TOLERANCE_DEGREES = 0.5;
 /** Reads until the guest commits the posture's device state; `attempts × poll` is the settle budget. */
 const ANDROID_FOLD_SETTLE_ATTEMPTS = 60;
 const ANDROID_FOLD_SETTLE_POLL_MS = 250;
@@ -70,22 +70,7 @@ export async function setAndroidFoldPose(
 
   await awaitDeviceState(device, pose, expectedState, states, signal);
   if (pose === 'closed' && !lockedBefore) await dismissFoldLockScreen(device, signal);
-  const hingeAngleDegrees = await readHingeAngle(device, signal);
-  if (Math.abs(hingeAngleDegrees - posture.angle) > ANDROID_FOLD_ANGLE_TOLERANCE_DEGREES) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `${device.name} committed the ${pose} device state but its hinge sensor reads ${hingeAngleDegrees}°, not the posture's ${posture.angle}°`,
-      {
-        deviceId: device.id,
-        requestedPose: pose,
-        expectedHingeAngleDegrees: posture.angle,
-        hingeAngleDegrees,
-        reason: 'fold-pose-unverified',
-        hint: POSE_UNVERIFIED_HINT,
-      },
-    );
-  }
-  return { pose, hingeAngleDegrees };
+  return { pose, hingeAngleDegrees: await readHingeAngle(device, signal) };
 }
 
 /**

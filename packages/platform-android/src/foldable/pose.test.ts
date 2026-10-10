@@ -224,16 +224,18 @@ test('fails as fold-pose-unverified when the guest never commits the device stat
   expect(mockSleep).toHaveBeenCalledTimes(stateReads.length);
 });
 
-test("fails as fold-pose-unverified when a half-open sensor angle is not the posture's 90°", async () => {
-  stubEmulator({ stateReads: ['1'], hinge: 'hinge-angle0 = 120\nOK\n' });
+test('reports the angle the profile defines for the posture without judging it', async () => {
+  // The generic "7.6in Foldable" parks closed at 15° and open at 165°, the midpoints of its
+  // posture ranges; the committed device state is the pose, the angle is what the sensor reads.
+  stubEmulator({
+    states: GENERIC_FOLDABLE_STATES,
+    stateReads: ['1'],
+    hinge: 'hinge-angle0 = 15\nOK\n',
+  });
 
-  await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'half-open' })).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: {
-      reason: 'fold-pose-unverified',
-      expectedHingeAngleDegrees: 90,
-      hingeAngleDegrees: 120,
-    },
+  await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'closed' })).resolves.toEqual({
+    pose: 'closed',
+    hingeAngleDegrees: 15,
   });
 });
 
@@ -246,15 +248,6 @@ test('leaves a keyguard that was already showing before the fold alone', async (
   });
   expect(shellCommands()).not.toContain('wm dismiss-keyguard');
   expect(shellCommands().filter((command) => command === 'dumpsys window')).toHaveLength(1);
-});
-
-test('fails as fold-pose-unverified when the hinge sensor disagrees with the device state', async () => {
-  stubEmulator({ stateReads: ['0'], hinge: 'hinge-angle0 = 180\nOK\n' });
-
-  await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'closed' })).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-    details: { reason: 'fold-pose-unverified', hingeAngleDegrees: 180 },
-  });
 });
 
 test('fails when the lock screen the fold raised keeps coming back', async () => {

@@ -541,10 +541,12 @@ incorrect viewport, not an inner-panel delivery prohibition.
 
 The same `fold` command poses a foldable Android emulator, with the two facts of this ADR kept
 apart in the same way. There is no host display authority to consult: the emulator console's
-`posture <id>` moves the hinge sensor to a fixed angle (0°, 90°, 180°), and the pose is verified by
-polling `cmd device_state print-state` until the guest commits the posture's own device state
-(`CLOSED`, `HALF_OPENED`, `OPENED`); the hinge sensor is read back for the reported angle. A
-`half-open` Android pose is therefore 90°, the emulator's definition, where the Duo's is 130°.
+`posture <id>` moves the hinge sensor to the angle the AVD profile defines for the posture (0°, 90°,
+180° on the Pixel folds; 15°, 90°, 165° on the generic "7.6in Foldable"), and the pose is verified
+by polling `cmd device_state print-state` until the guest commits the posture's own device state
+(`CLOSED`, `HALF_OPENED`, `OPENED`), which is what `WindowManager`'s `FoldingFeature` derives from;
+the hinge sensor is read back for the reported angle, not judged. A `half-open` Android pose is
+therefore 90° on every profile seen so far, where the Duo's is 130°.
 
 Folding to the cover display can raise the keyguard (Android's "continue using apps on fold"
 setting, which emulator images do not honour); `fold` dismisses it, because every later capture
