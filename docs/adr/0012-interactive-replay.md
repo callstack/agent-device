@@ -1002,7 +1002,7 @@ The tombstone itself expires after its bounded window, after which the key is fu
 > Provenance travels as `internal.replayPlanStep`, stamped by `invokeResolvedReplayAction`
 > (`src/daemon/handlers/session-replay-action-runtime.ts`) — the single point every plan step is
 > dispatched, so the marker covers annotated and unannotated steps alike. `internal` is a daemon-only
-> channel (`toDaemonRequest`, `src/daemon/server/http-server.ts`, never copies it off the wire), so
+> channel (`toDaemonRequest`, `src/daemon/server/http-rpc-methods.ts`, never copies it off the wire), so
 > authored provenance cannot be spoofed by a client; this is the same channel `replayTargetGuard` and
 > `findResolvedTarget` already use. The rule is written once, in `isInteractiveObservation`
 > (`src/daemon/session-action-recorder.ts`), and both recording call sites consume it.
