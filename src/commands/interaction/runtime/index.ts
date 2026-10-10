@@ -1,4 +1,4 @@
-import type { AgentDeviceRuntime } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime } from '@agent-device/contracts/runtime-contract';
 import type { BoundRuntimeCommand, RuntimeCommand } from '../../runtime-types.ts';
 import {
   clickCommand,

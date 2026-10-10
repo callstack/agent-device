@@ -2,7 +2,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { DaemonCommandContext } from '../../context.ts';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
-import { snapshotOptionsToFlags } from '../../../backend-snapshot-options.ts';
+import { snapshotOptionsToFlags } from '@agent-device/contracts/backend-snapshot-options';
 import type {
   BoundContextFromFlags,
   InteractionSessionView,

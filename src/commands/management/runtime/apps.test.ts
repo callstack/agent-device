@@ -5,11 +5,14 @@ import type {
   BackendAppEvent,
   BackendOpenTarget,
   BackendPushInput,
-} from '../../../backend.ts';
+} from '@agent-device/contracts/backend';
 import type { JsonObject } from '@agent-device/contracts/client';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
-import { restrictedCommandPolicy } from '../../../command-runtime/runtime-factory.ts';
+import { createAgentDevice } from '../../../runtime.ts';
+import {
+  localCommandPolicy,
+  restrictedCommandPolicy,
+} from '@agent-device/contracts/command-policy';
 
 test('runtime app commands call typed backend lifecycle primitives', async () => {
   const calls: unknown[] = [];

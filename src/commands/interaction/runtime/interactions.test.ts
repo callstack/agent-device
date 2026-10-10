@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AgentDeviceBackend } from '../../../backend.ts';
+import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import { ref, selector } from './selector-read-utils.ts';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
+import { createAgentDevice } from '../../../runtime.ts';
+import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import type { Point, SnapshotState } from '@agent-device/kernel/snapshot';
 import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';

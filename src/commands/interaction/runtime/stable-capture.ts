@@ -4,7 +4,7 @@ import type {
   SnapshotQualityVerdict,
 } from '@agent-device/kernel/snapshot';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { now, sleep } from '../../runtime-common.ts';
 import {
   captureSelectorSnapshot,

@@ -1,4 +1,7 @@
-import type { CommandSessionRecord, CommandSessionStore } from '../runtime-contract.ts';
+import type {
+  CommandSessionRecord,
+  CommandSessionStore,
+} from '@agent-device/contracts/runtime-contract';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { refFrameTree } from './ref-frame.ts';
 import type { SessionRef, SessionState } from './session-state.ts';

@@ -7,7 +7,7 @@ import type {
   ScreenshotCommandOptions,
   SnapshotCommandOptions,
 } from '../../runtime-types.ts';
-import type { AgentDeviceRuntime } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime } from '@agent-device/contracts/runtime-contract';
 import {
   diffScreenshotCommand,
   type DiffScreenshotCommandOptions,

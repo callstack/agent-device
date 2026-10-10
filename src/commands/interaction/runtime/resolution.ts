@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import type { SelectorResolution } from '@agent-device/selectors';
 import { readinessScheduleFor } from '@agent-device/selectors/selector-pipeline-policy';
 import {

@@ -5,10 +5,10 @@ import type {
   BackendCommandContext,
   BackendOpenTarget,
   BackendPushInput,
-} from '../../../backend.ts';
+} from '@agent-device/contracts/backend';
 import type { JsonObject } from '@agent-device/contracts/client';
-import type { FileInputRef } from '../../../io.ts';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import type { FileInputRef } from '@agent-device/contracts/artifact-adapter';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { assertResolvedAppsFilter } from '../app-inventory-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';

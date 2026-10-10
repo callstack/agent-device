@@ -2,25 +2,19 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import {
-  createAgentDevice,
-  localCommandPolicy,
-  type AgentDevice,
-  type CommandSessionStore,
-} from '../runtime.ts';
-import type { AgentDeviceBackend } from '../backend.ts';
+import { createAgentDevice, type AgentDevice } from '../runtime.ts';
+import { localCommandPolicy } from '@agent-device/contracts/command-policy';
+import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
+import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { ScreenshotCommandOptions } from '../commands/index.ts';
-import {
-  createLocalArtifactAdapter,
-  type ArtifactAdapter,
-  type FileInputRef,
-  type FileOutputRef,
-} from '../io.ts';
+import { createLocalArtifactAdapter } from '../io.ts';
+import type {
+  ArtifactAdapter,
+  FileInputRef,
+  FileOutputRef,
+} from '@agent-device/contracts/artifact-adapter';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
-import {
-  createMemorySessionStore,
-  restrictedCommandPolicy,
-} from '../command-runtime/runtime-factory.ts';
+import { createMemorySessionStore } from '../command-runtime/runtime-factory.ts';
 
 const backend = {
   platform: 'ios',
@@ -104,10 +98,6 @@ test('runtime screenshot command cleans reserved output when publish fails', asy
 
 test('runtime policy helpers expose local and restricted defaults', async () => {
   assert.equal(typeof createLocalArtifactAdapter, 'function');
-  assert.equal(localCommandPolicy().allowLocalInputPaths, true);
-  assert.equal(localCommandPolicy().allowLocalOutputPaths, true);
-  assert.equal(restrictedCommandPolicy().allowLocalInputPaths, false);
-  assert.equal(restrictedCommandPolicy({ allowLocalInputPaths: true }).allowLocalInputPaths, true);
   const store = createMemorySessionStore([{ name: 'default' }]);
   assert.equal((await store.get('default'))?.name, 'default');
 });

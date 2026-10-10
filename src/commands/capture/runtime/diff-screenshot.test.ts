@@ -7,13 +7,11 @@ import type {
   AgentDeviceBackend,
   BackendScreenshotOptions,
   BackendScreenshotResult,
-} from '../../../backend.ts';
+} from '@agent-device/contracts/backend';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import {
-  createAgentDevice,
-  localCommandPolicy,
-  type CommandSessionStore,
-} from '../../../runtime.ts';
+import { createAgentDevice } from '../../../runtime.ts';
+import { localCommandPolicy } from '@agent-device/contracts/command-policy';
+import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 const sessions = {

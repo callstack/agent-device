@@ -17,8 +17,11 @@ import type {
   SnapshotViewportSize,
   SnapshotVisibility,
 } from '@agent-device/kernel/snapshot';
-import type { BackendSnapshotResult } from '../../../backend.ts';
-import type { AgentDeviceRuntime, CommandSessionRecord } from '../../../runtime-contract.ts';
+import type { BackendSnapshotResult } from '@agent-device/contracts/backend';
+import type {
+  AgentDeviceRuntime,
+  CommandSessionRecord,
+} from '@agent-device/contracts/runtime-contract';
 import {
   buildSnapshotDiff,
   countSnapshotComparableLines,

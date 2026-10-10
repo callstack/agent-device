@@ -5,7 +5,7 @@ import type {
   AgentDeviceBackend,
   BackendActionResult,
   BackendSnapshotResult,
-} from '../../../backend.ts';
+} from '@agent-device/contracts/backend';
 import { createCommandSurfaceAgentDevice } from '../../../command-runtime/runtime-command-surface.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';

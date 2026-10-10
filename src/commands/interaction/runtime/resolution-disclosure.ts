@@ -1,5 +1,5 @@
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
-import type { AgentDeviceRuntime } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime } from '@agent-device/contracts/runtime-contract';
 import { type SelectorResolution, buildSelectorChainForNode } from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '@agent-device/selectors/press-retarget';
 import { resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';

@@ -1,5 +1,5 @@
-import type { BackendCommandContext } from '../backend.ts';
-import type { AgentDeviceRuntime, CommandContext } from '../runtime-contract.ts';
+import type { BackendCommandContext } from '@agent-device/contracts/backend';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 
 export function toBackendContext(
   runtime: Pick<AgentDeviceRuntime, 'signal'>,
