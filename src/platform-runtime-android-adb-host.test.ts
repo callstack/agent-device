@@ -129,10 +129,13 @@ test.skipIf(process.platform === 'win32')(
           'process.stdout.write(JSON.stringify(call));',
         ].join('\n'),
         async () => {
-          const provider = createLocalAndroidAdbProvider(ANDROID_EMULATOR, {
-            serverPort: 15_037,
-          });
-          const adb = provider.exec;
+          const local = createLocalAndroidAdbProvider(ANDROID_EMULATOR);
+          const serverPort = 15_037;
+          const adb: typeof local.exec = async (args, options) =>
+            await local.exec(args, { ...options, serverPort });
+          const provider = {
+            spawn: (args: readonly string[]) => local.spawn?.(args, { serverPort }),
+          };
           const serial = JSON.parse(
             (await adb(deviceShellArgv('adb', 'shell', ['id']))).stdout,
           ) as {

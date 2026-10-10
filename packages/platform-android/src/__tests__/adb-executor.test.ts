@@ -238,28 +238,25 @@ test('createLocalAndroidAdbProvider exposes local pull and install capabilities'
   ]);
 });
 
-test('createLocalAndroidAdbProvider carries a private server port through every adb capability', async () => {
+test('createLocalAndroidAdbProvider carries a per-call server port through every adb capability', async () => {
   mockRunCmd.mockClear();
   mockRunCmdBackground.mockClear();
-  const provider = createLocalAndroidAdbProvider(
-    {
-      platform: 'android',
-      id: 'emulator-5554',
-      name: 'Pixel Emulator',
-      kind: 'emulator',
-      booted: true,
-    },
-    { serverPort: 15_037 },
-  );
+  const provider = createLocalAndroidAdbProvider({
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel Emulator',
+    kind: 'emulator',
+    booted: true,
+  });
+  const serverPort = 15_037;
 
-  await provider.exec(deviceShellArgv('adb', 'shell', ['echo', 'ok']));
-  provider.spawn?.(['logcat']);
-  await provider.reverse?.ensure({ local: 'tcp:8081', remote: 'tcp:8081' });
-  await provider.pull?.('/sdcard/video.mp4', '/tmp/video.mp4');
-  await provider.install?.('/tmp/app.apk');
+  await provider.exec(deviceShellArgv('adb', 'shell', ['echo', 'ok']), { serverPort });
+  provider.spawn?.(['logcat'], { serverPort });
+  await provider.pull?.('/sdcard/video.mp4', '/tmp/video.mp4', { serverPort });
+  await provider.install?.('/tmp/app.apk', { serverPort });
 
   assert.equal(readServerPortArgv(mockRunCmdBackground.mock.calls[0]?.[1]), 15_037);
-  assert.equal(mockRunCmd.mock.calls.length, 4);
+  assert.equal(mockRunCmd.mock.calls.length, 3);
   for (const call of mockRunCmd.mock.calls) assert.equal(readServerPortArgv(call[1]), 15_037);
 });
 
