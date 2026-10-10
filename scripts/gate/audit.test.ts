@@ -58,7 +58,7 @@ test('raw shell text cannot declare ownership', () => {
   assert.ok(!audit(model).some((failure) => /not-a-real-check/.test(failure.message)));
 });
 
-test('reusable workflows fail closed because their action declarations are hidden', () => {
+test('a reusable workflow the loader cannot open fails closed', () => {
   const model = plant(`name: Planted
 on:
   pull_request:
