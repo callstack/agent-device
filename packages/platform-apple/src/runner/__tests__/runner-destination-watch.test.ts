@@ -172,7 +172,10 @@ test('an unreadable device state stops the runner without claiming a shutdown', 
   (await listener.nextConnection()).destroy();
   await vi.waitFor(() => assert.equal(onStop.mock.calls.length, 1));
 
-  assert.equal((await takeRunnerWarmLossNotice(DEVICE.id))?.reason, 'runner_unreachable');
+  assert.equal(
+    (await takeRunnerWarmLossNotice(DEVICE.id))?.reason,
+    'runner_destination_unverified',
+  );
 });
 
 test('a boot unobservable on both reads while the destination process lives is a loss', async () => {

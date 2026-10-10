@@ -141,14 +141,18 @@ async function readWarmRunnerLossNotice(
  * be stopped because the Simulator was shut down externally while it was retained (#3321). Names
  * the typed reason so automation can key on it without parsing prose.
  */
+const WARM_RUNNER_LOSS_CAUSE: Record<RunnerWarmLossNotice['reason'], string> = {
+  runner_destination_lost:
+    'the simulator was shut down externally while it was retained, so the runner was stopped before it could boot the simulator again',
+  runner_unreachable: 'it stopped answering while it was retained',
+  runner_destination_unverified:
+    "its connection closed while it was retained and the simulator's state could not be read, so the runner was stopped as a precaution",
+};
+
 function warmRunnerLossWarning(notice: RunnerWarmLossNotice): string {
-  const cause =
-    notice.reason === 'runner_destination_lost'
-      ? 'the simulator was shut down externally while it was retained, so the runner was stopped before it could boot the simulator again'
-      : 'it stopped answering while it was retained';
   return (
-    `The warm iOS runner left by a previous close was stopped at ${new Date(notice.atMs).toISOString()}: ${cause}. ` +
-    `reason=${notice.reason}`
+    `The warm iOS runner left by a previous close was stopped at ${new Date(notice.atMs).toISOString()}: ` +
+    `${WARM_RUNNER_LOSS_CAUSE[notice.reason]}. reason=${notice.reason}`
   );
 }
 

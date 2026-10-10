@@ -213,6 +213,49 @@ test('open warns with the typed reason when a warm runner was stopped for a lost
   }
 });
 
+test('open warns with its own typed reason when a warm runner was stopped on an unverifiable state', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-open-warm-unverified-');
+  const device = makeIosDevice('SIM-WARM-UNVERIFIED');
+  mockResolveTargetDevice.mockResolvedValue(device);
+  mockTakeRunnerWarmLossNotice.mockResolvedValueOnce({
+    reason: 'runner_destination_unverified',
+    deviceId: device.id,
+    sessionId: 'warm-unverified',
+    atMs: Date.now(),
+  });
+  const claimsDir = mkdtempForTestSync('agent-device-router-open-warm-unverified-claims-');
+  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+
+  try {
+    const opened = await createOpenHandler(sessionStore)(
+      openRequest('warm-unverified', { platform: 'ios' }, 'req-open-warm-unverified', {}, [
+        'FixtureApp',
+      ]),
+    );
+
+    expect(opened.ok).toBe(true);
+    if (!opened.ok) return;
+    expect(mockTakeRunnerWarmLossNotice).toHaveBeenCalledWith(device.id);
+    expect(opened.data?.warnings).toEqual([
+      expect.stringContaining('reason=runner_destination_unverified'),
+    ]);
+    expect(String(opened.data?.warnings)).not.toContain('stopped answering');
+
+    const reopened = await createOpenHandler(sessionStore)(
+      openRequest('warm-unverified', { platform: 'ios' }, 'req-open-warm-unverified-again', {}, [
+        'FixtureApp',
+      ]),
+    );
+    expect(reopened.ok).toBe(true);
+    if (reopened.ok) expect(reopened.data?.warnings).toBeUndefined();
+  } finally {
+    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+    fs.rmSync(claimsDir, { recursive: true, force: true });
+  }
+});
+
 // The production reopen path never re-acquires the claim, so renewal has to ride the successful
 // existing-session open itself: without it, an owner that came back after a reboot still carries a
 // pre-reboot stamp and loses the device to the next caller that asks.

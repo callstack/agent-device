@@ -11,7 +11,10 @@ import {
  * Why a runner retained after `close` was stopped before the session asked for it again.
  * Keyed behavior: consumers branch on these values, never on prose.
  */
-export type RunnerWarmLossReason = 'runner_destination_lost' | 'runner_unreachable';
+export type RunnerWarmLossReason =
+  | 'runner_destination_lost'
+  | 'runner_unreachable'
+  | 'runner_destination_unverified';
 
 /**
  * What a retained runner's owner records when the watcher stops it: the typed reason, the session
@@ -80,7 +83,10 @@ const DESTINATION_LOST: LossVerdict = { action: 'stop', noticeReason: 'runner_de
  * The listing timed out or was unreadable, so nothing proves the device changed. Stopping is still
  * the safe side, but the notice must not claim a shutdown nobody observed.
  */
-const STATE_UNVERIFIABLE: LossVerdict = { action: 'stop', noticeReason: 'runner_unreachable' };
+const STATE_UNVERIFIABLE: LossVerdict = {
+  action: 'stop',
+  noticeReason: 'runner_destination_unverified',
+};
 
 type DestinationWatch = {
   device: DeviceInfo;
@@ -342,7 +348,7 @@ async function handleRefusedAttach(
  * boot the window began with, and anything else is destination loss: a shut-down device keeps its
  * old `launchd_sim` listed for ~6s, so the boot witness alone would read the old boot and call it
  * a crash. A listing that timed out or was unreadable is no evidence of a healthy device, so it
- * stops the runner too, but as `runner_unreachable`: it cannot support a claim about the device. A boot newer than the
+ * stops the runner too, but as `runner_destination_unverified`: it cannot support a claim about the device. A boot newer than the
  * window is Xcode's reboot; a boot unobservable twice is a device that is down with a reboot
  * promise that may already be in flight. Stopping pre-empts that promise in every loss case.
  */
