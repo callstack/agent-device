@@ -4,7 +4,7 @@
 
 Accepted (2026-09-20; the pose-settle rule amended 2026-09-21 under #2730; the touch-overlay
 export diagnosis corrected 2026-09-22 under #2707; the Android emulator pose added 2026-10-10). Covers iPhone Duo (iOS 27.1, `iPhone19,4`) and
-any Apple device that reports more than one integrated CoreDevice display.
+any Apple device that reports more than one integrated CoreDevice display, and, through the amendment below, foldable Android emulators.
 
 An iPhone Duo carries two integrated panels — Apple's **outer display** and **inner display** —
 and lights one of them at a time. Which one is lit is the device pose. Two independent facts

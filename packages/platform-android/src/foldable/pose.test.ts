@@ -14,7 +14,7 @@ import { sleep } from '@agent-device/host-kit/retry';
 
 import { runAndroidAdb, runAndroidShell } from '../adb.ts';
 import { ANDROID_EMULATOR } from '../runtime.fixtures.ts';
-import { ANDROID_FOLD_SETTLE_ATTEMPTS, setAndroidFoldPose } from './pose.ts';
+import { setAndroidFoldPose } from './pose.ts';
 
 const mockAdb = vi.mocked(runAndroidAdb);
 const mockShell = vi.mocked(runAndroidShell);
@@ -100,9 +100,9 @@ beforeEach(() => {
 });
 
 test('sets the console posture, waits for the device state, and dismisses the lock screen the fold raised', async () => {
-  // The first state read still sees the open posture; the lock screen shows once and is gone
-  // for three reads after the dismissal.
-  stubEmulator({ stateReads: ['2', '0'], keyguardReads: [true, false, false, false] });
+  // No keyguard before the fold; the first state read still sees the open posture; the lock
+  // screen shows once and is gone for three reads after the dismissal.
+  stubEmulator({ stateReads: ['2', '0'], keyguardReads: [false, true, false, false, false] });
 
   await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'closed' })).resolves.toEqual({
     pose: 'closed',
@@ -112,6 +112,7 @@ test('sets the console posture, waits for the device state, and dismisses the lo
   expect(adbCommands()).toEqual(['emu posture 1', 'emu sensor get hinge-angle0']);
   expect(shellCommands()).toEqual([
     'cmd device_state print-states',
+    'dumpsys window',
     'cmd device_state print-state',
     'cmd device_state print-state',
     'dumpsys window',
@@ -123,8 +124,8 @@ test('sets the console posture, waits for the device state, and dismisses the lo
 });
 
 test('waits before the first lock-screen read, so a keyguard landing after the state is still caught', async () => {
-  // The keyguard is absent at the moment the state commits and shows up on the next read.
-  stubEmulator({ stateReads: ['0'], keyguardReads: [false, true, false, false, false] });
+  // No keyguard before the fold or at the moment the state commits; it shows up on the next read.
+  stubEmulator({ stateReads: ['0'], keyguardReads: [false, false, true, false, false, false] });
 
   await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'closed' })).resolves.toEqual({
     pose: 'closed',
@@ -194,7 +195,36 @@ test('fails as fold-pose-unverified when the guest never commits the device stat
     code: 'COMMAND_FAILED',
     details: { reason: 'fold-pose-unverified', observedDeviceState: 'OPENED' },
   });
-  expect(mockSleep).toHaveBeenCalledTimes(ANDROID_FOLD_SETTLE_ATTEMPTS);
+  // The settle is bounded: it ended, and every state read after the first was preceded by a poll.
+  const stateReads = shellCommands().filter(
+    (command) => command === 'cmd device_state print-state',
+  );
+  expect(stateReads.length).toBeGreaterThan(1);
+  expect(mockSleep).toHaveBeenCalledTimes(stateReads.length);
+});
+
+test("fails as fold-pose-unverified when a half-open sensor angle is not the posture's 90°", async () => {
+  stubEmulator({ stateReads: ['1'], hinge: 'hinge-angle0 = 120\nOK\n' });
+
+  await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'half-open' })).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: {
+      reason: 'fold-pose-unverified',
+      expectedHingeAngleDegrees: 90,
+      hingeAngleDegrees: 120,
+    },
+  });
+});
+
+test('leaves a keyguard that was already showing before the fold alone', async () => {
+  stubEmulator({ stateReads: ['0'], keyguardReads: [true] });
+
+  await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'closed' })).resolves.toEqual({
+    pose: 'closed',
+    hingeAngleDegrees: 0,
+  });
+  expect(shellCommands()).not.toContain('wm dismiss-keyguard');
+  expect(shellCommands().filter((command) => command === 'dumpsys window')).toHaveLength(1);
 });
 
 test('fails as fold-pose-unverified when the hinge sensor disagrees with the device state', async () => {
@@ -206,8 +236,8 @@ test('fails as fold-pose-unverified when the hinge sensor disagrees with the dev
   });
 });
 
-test('fails when the lock screen keeps coming back', async () => {
-  stubEmulator({ stateReads: ['0'], keyguardReads: [true] });
+test('fails when the lock screen the fold raised keeps coming back', async () => {
+  stubEmulator({ stateReads: ['0'], keyguardReads: [false, true] });
 
   await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'closed' })).rejects.toMatchObject({
     code: 'COMMAND_FAILED',

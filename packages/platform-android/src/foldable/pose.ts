@@ -1,8 +1,4 @@
-import {
-  type FoldPose,
-  type SetFoldPoseInput,
-  foldPoseForHingeAngle,
-} from '@agent-device/contracts/device';
+import type { FoldPose, SetFoldPoseInput } from '@agent-device/contracts/device';
 import type { SetFoldPoseResult } from '@agent-device/contracts/fold-runtime';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -19,13 +15,15 @@ import { runAndroidAdb, runAndroidShell } from '../adb.ts';
  * 1), so they are looked up by name.
  */
 const EMULATOR_POSTURES = Object.freeze({
-  closed: { id: '1', state: 'CLOSED' },
-  'half-open': { id: '2', state: 'HALF_OPENED' },
-  open: { id: '3', state: 'OPENED' },
+  closed: { id: '1', state: 'CLOSED', angle: 0 },
+  'half-open': { id: '2', state: 'HALF_OPENED', angle: 90 },
+  open: { id: '3', state: 'OPENED', angle: 180 },
 } as const);
 
+/** The posture angle is a fixed point, so the sensor has to read it back within this much. */
+const ANDROID_FOLD_ANGLE_TOLERANCE_DEGREES = 0.5;
 /** Reads until the guest commits the posture's device state; `attempts × poll` is the settle budget. */
-export const ANDROID_FOLD_SETTLE_ATTEMPTS = 60;
+const ANDROID_FOLD_SETTLE_ATTEMPTS = 60;
 const ANDROID_FOLD_SETTLE_POLL_MS = 250;
 /**
  * The lock screen can land after the device state did, so every read waits a poll first and the
@@ -67,6 +65,8 @@ export async function setAndroidFoldPose(
     );
   }
 
+  // A keyguard already showing is not the fold's to clear; only one the fold raises is dismissed.
+  const lockedBefore = await isKeyguardShowing(device, signal);
   await sendEmulatorPosture(device, pose, posture.id, signal);
   emitDiagnostic({
     level: 'info',
@@ -75,16 +75,16 @@ export async function setAndroidFoldPose(
   });
 
   await awaitDeviceState(device, pose, expectedState, states, signal);
-  await dismissFoldLockScreen(device, signal);
+  if (!lockedBefore) await dismissFoldLockScreen(device, signal);
   const hingeAngleDegrees = await readHingeAngle(device, signal);
-  if (foldPoseForHingeAngle(hingeAngleDegrees) !== pose) {
+  if (Math.abs(hingeAngleDegrees - posture.angle) > ANDROID_FOLD_ANGLE_TOLERANCE_DEGREES) {
     throw new AppError(
       'COMMAND_FAILED',
-      `${device.name} committed the ${pose} device state but its hinge sensor reads ${hingeAngleDegrees}°`,
+      `${device.name} committed the ${pose} device state but its hinge sensor reads ${hingeAngleDegrees}°, not the posture's ${posture.angle}°`,
       {
         deviceId: device.id,
         requestedPose: pose,
-        observedPose: foldPoseForHingeAngle(hingeAngleDegrees),
+        expectedHingeAngleDegrees: posture.angle,
         hingeAngleDegrees,
         reason: 'fold-pose-unverified',
         hint: POSE_UNVERIFIED_HINT,
@@ -187,7 +187,8 @@ async function readDeviceState(
  * Android's continue-using-apps-on-fold setting, which the emulator images do not honour. Left
  * alone, every later capture reads the lock screen instead of the app, so it is dismissed the
  * way the swipe would. The keyguard can land after the device state did, so it has to stay away
- * for consecutive reads before the fold is done.
+ * for consecutive reads before the fold is done. Runs only when the keyguard was not showing
+ * before the fold.
  */
 async function dismissFoldLockScreen(
   device: DeviceInfo,
