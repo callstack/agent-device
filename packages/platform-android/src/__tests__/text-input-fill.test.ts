@@ -802,3 +802,38 @@ function maskBullets(value: string): string {
     .map(() => '&#8226;')
     .join('');
 }
+// The provider-native clear is a device-side key sequence; if it silently did nothing,
+// `fill ""` must still report failure, not exit 0 (#3358 review).
+test('fillAndroid with an empty text fails, not unconfirmed, when a provider fill leaves the old value', async () => {
+  const value = 'old value';
+  await withAndroidAdbProvider(
+    {
+      snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+      exec: createAndroidSnapshotHelperExecutor({
+        exec: async (args) => {
+          throw new Error(`unexpected adb call: ${args.join(' ')}`);
+        },
+        captureXml: () => androidInputXml({ text: value }),
+      }),
+      text: async () => {
+        // The instance keys cleared nothing: the field still holds its old value.
+      },
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await assert.rejects(
+        () => fillAndroid(ANDROID_EMULATOR, 100, 50, ''),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'COMMAND_FAILED');
+          // The failure must be the verification reading the stale field back, not an earlier
+          // dispatch refusal: the mismatch names the empty expectation and the old value.
+          assert.equal(error.details?.failureReason, 'text_mismatch');
+          assert.equal(error.details?.expected, '');
+          assert.equal(error.details?.actual, value);
+          return true;
+        },
+      );
+    },
+  );
+});

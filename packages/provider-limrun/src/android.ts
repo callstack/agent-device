@@ -80,7 +80,9 @@ export async function createLimrunAndroidSession(
   const adbProvider: LimrunAdbProvider = {
     exec: async (args, execOptions) => await runLimrunAndroidAdb(session, args, execOptions),
     text: async (request) => {
-      await client.setText(request.target, request.text);
+      // Loaded on the text-entry path to keep this provider's declared import-time closure budget.
+      const { createLimrunAndroidTextInjector } = await import('./android-text-entry.ts');
+      await createLimrunAndroidTextInjector(client)(request);
     },
   };
   adbProvider.reverse = await dependencies.android.createPortReverse(adbProvider.exec, {
