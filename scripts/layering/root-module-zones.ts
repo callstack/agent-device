@@ -46,7 +46,6 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
   // The platform composition the daemon, CLI and SDK import eagerly. It shares the zone with its
   // private `src/platform-runtime/` submodule.
   'platform-runtime': [
-    'src/managed-device-reachability.ts',
     'src/platform-runtime-android-mechanics.ts',
     'src/platform-runtime-android-observation-host.ts',
     'src/platform-runtime-apple-resources.ts',
@@ -90,7 +89,6 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/platform-runtime-host-device-shell.ts',
     'src/platform-runtime-host.ts',
     'src/platform-runtime-local-application-interactors.ts',
-    'src/platform-runtime-managed-owner.ts',
     'src/platform-runtime-network-host.ts',
     'src/platform-runtime-network-web-transport.ts',
     'src/platform-runtime-operation-host.ts',

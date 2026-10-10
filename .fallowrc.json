@@ -391,22 +391,6 @@
       "exports": ["collectedRecordingPath"]
     },
     {
-      // Staged managed-local lease foundations (ADR 0021, #2284/#2308): src/daemon/request-runtime-binding.ts enters request admission for managed-local owners, but the allocator activation unit that would construct these journals, stores, claims and admissions never landed. Remove with the feature, not export by export: its owner kind is part of persisted device-claim and durable-resource records.
-      "file": "{packages/managed-allocation/src/{journal,record,store}.ts,src/daemon/device/device-claim-allocator.ts,src/daemon/managed-device-allocation/lease-admission.ts,src/managed-device-reachability.ts}",
-      "exports": [
-        "createAllocationOperationJournal",
-        "ALLOCATION_OPERATION_SCHEMA_VERSION",
-        "newAllocationOperation",
-        "decodeAllocationOperationRecord",
-        "bindingFenceFor",
-        "createAllocationOperationStore",
-        "acquireAllocatorHeldDeviceClaim",
-        "releaseAllocatorHeldClaim",
-        "createManagedLeaseAdmission",
-        "createManagedLeaseReachability"
-      ]
-    },
-    {
       // Android mechanics facet: the package exports the complete named implementation seam for root/core/SDK consumers and package-owned tests; Fallow's production graph does not follow workspace subpath imports through the package exports map.
       "file": "packages/platform-android/src/mechanics.ts",
       "exports": ["*"]
