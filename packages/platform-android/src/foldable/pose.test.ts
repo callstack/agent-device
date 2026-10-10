@@ -172,6 +172,24 @@ test('refuses a posture the profile cannot commit with its own reason, not as si
   expect(mockAdb).not.toHaveBeenCalled();
 });
 
+test('a failed print-states read is an adb failure, never an empty state list read as a phone', async () => {
+  // The managed scoped transport hands back a nonzero result instead of throwing.
+  mockShell.mockResolvedValue({
+    stdout: '',
+    stderr: "cmd: Can't find service: device_state",
+    exitCode: 1,
+  });
+
+  await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'closed' })).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { exitCode: 1, processExitError: true },
+  });
+  await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'closed' })).rejects.not.toMatchObject({
+    details: { reason: 'single-panel-device' },
+  });
+  expect(mockAdb).not.toHaveBeenCalled();
+});
+
 test('refuses a phone profile as single-panel-device before touching the console', async () => {
   stubEmulator({ states: PHONE_STATES, stateReads: ['0'] });
 

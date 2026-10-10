@@ -6,6 +6,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 
 import { runAndroidAdb, runAndroidShell } from '../adb.ts';
+import { androidAdbResultError } from '../adb-failure.ts';
+import type { AndroidAdbExecutorResult } from '../adb-transport.ts';
 
 /**
  * The emulator console's posture ids (`adb emu posture <id>`) and the device state Android
@@ -126,9 +128,7 @@ async function readDeviceStates(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
 ): Promise<Map<string, string>> {
-  const { stdout } = await runAndroidShell(device, ['cmd', 'device_state', 'print-states'], {
-    signal,
-  });
+  const { stdout } = await shell(device, ['cmd', 'device_state', 'print-states'], signal);
   const states = new Map<string, string>();
   for (const match of stdout.matchAll(/identifier=(\d+), name='([A-Z_]+)'/g)) {
     states.set(match[2]!, match[1]!);
@@ -143,7 +143,7 @@ async function sendEmulatorPosture(
   postureId: string,
   signal: AbortSignal | undefined,
 ): Promise<void> {
-  const sent = await runAndroidAdb(device, ['emu', 'posture', postureId], { signal });
+  const sent = await emulatorConsole(device, ['emu', 'posture', postureId], signal);
   if (/^KO\b/m.test(sent.stdout)) {
     throw new AppError('COMMAND_FAILED', `Unable to set the emulator posture for ${pose}`, {
       deviceId: device.id,
@@ -191,9 +191,7 @@ async function readDeviceState(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
 ): Promise<string | undefined> {
-  const { stdout } = await runAndroidShell(device, ['cmd', 'device_state', 'print-state'], {
-    signal,
-  });
+  const { stdout } = await shell(device, ['cmd', 'device_state', 'print-state'], signal);
   return /\d+/.exec(stdout)?.[0];
 }
 
@@ -217,7 +215,7 @@ async function dismissFoldLockScreen(
     if (await isKeyguardShowing(device, signal)) {
       clearReads = 0;
       dismissed = true;
-      await runAndroidShell(device, ['wm', 'dismiss-keyguard'], { signal });
+      await shell(device, ['wm', 'dismiss-keyguard'], signal);
     } else {
       clearReads += 1;
       if (clearReads >= LOCK_SCREEN_CLEAR_READS) break;
@@ -243,7 +241,7 @@ async function isKeyguardShowing(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
 ): Promise<boolean> {
-  const { stdout } = await runAndroidShell(device, ['dumpsys', 'window'], { signal });
+  const { stdout } = await shell(device, ['dumpsys', 'window'], signal);
   return stdout.includes('isKeyguardShowing=true');
 }
 
@@ -252,9 +250,11 @@ async function readHingeAngle(
   device: DeviceInfo,
   signal: AbortSignal | undefined,
 ): Promise<number> {
-  const { stdout } = await runAndroidAdb(device, ['emu', 'sensor', 'get', 'hinge-angle0'], {
+  const { stdout } = await emulatorConsole(
+    device,
+    ['emu', 'sensor', 'get', 'hinge-angle0'],
     signal,
-  });
+  );
   const match = /hinge-angle0\s*=\s*(-?\d+(?:\.\d+)?)/.exec(stdout);
   if (!match) {
     throw new AppError('COMMAND_FAILED', `${device.name} reports no hinge angle`, {
@@ -265,4 +265,44 @@ async function readHingeAngle(
     });
   }
   return Number(match[1]);
+}
+
+/**
+ * An executor may hand back a failed result instead of throwing (the managed scoped transport
+ * does), so every read checks the exit code itself before trusting stdout: a failed
+ * `print-states` must be an adb failure, never an empty state list read as a phone.
+ */
+async function shell(
+  device: DeviceInfo,
+  words: readonly string[],
+  signal: AbortSignal | undefined,
+): Promise<AndroidAdbExecutorResult> {
+  const result = await runAndroidShell(device, words, { signal, allowFailure: true });
+  if (result.exitCode !== 0) {
+    throw androidAdbResultError(
+      `adb shell ${words.join(' ')} exited with code ${result.exitCode}`,
+      result,
+      { deviceId: device.id },
+    );
+  }
+  return result;
+}
+
+/** The emulator console through adb, with the same exit-code check as {@link shell}. */
+async function emulatorConsole(
+  device: DeviceInfo,
+  args: readonly string[],
+  signal: AbortSignal | undefined,
+): Promise<AndroidAdbExecutorResult> {
+  const result = await runAndroidAdb(device, args, { signal, allowFailure: true });
+  if (result.exitCode !== 0) {
+    throw androidAdbResultError(
+      `adb ${args.join(' ')} exited with code ${result.exitCode}`,
+      result,
+      {
+        deviceId: device.id,
+      },
+    );
+  }
+  return result;
 }
