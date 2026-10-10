@@ -407,6 +407,7 @@ export async function withAndroidAdbProvider<T>(
 function createAndroidCommandExecutorOverride(
   scope: AndroidAdbProviderScope,
 ): AndroidAdbCommandExecutorOverride {
+  const exec = guardDeviceShell(scope.provider.exec);
   return (cmd, args, options) => {
     if (!isAdbCommand(cmd)) return undefined;
     if (scope.serverPort === undefined && cmd !== 'adb') return undefined;
@@ -427,7 +428,7 @@ function createAndroidCommandExecutorOverride(
       const payload = androidAdbPayloadWithoutSerial(args, scope.serial);
       if (payload === undefined) return undefined;
       return requireAndroidAdbHost().withoutAdbCommandExecutorOverride(
-        async () => await scope.provider.exec(payload, options),
+        async () => await exec(payload, options),
       );
     }
     const port = scope.serverPort;

@@ -160,6 +160,22 @@ export type OpenAndroidAppOptions = {
   url?: string;
 };
 
+/**
+ * `am start -n` takes `<package>/<class>`. Package segments are Java identifiers joined by `.`;
+ * a class name may also carry `$` for a nested class. A bare class (`.Main` or `Main`) is resolved
+ * against the launched package.
+ */
+const ANDROID_ACTIVITY_COMPONENT = /^(?:[A-Za-z0-9_.]+\/)?[A-Za-z0-9_.$]+$/;
+
+function requireAndroidActivityComponent(activity: string): void {
+  if (ANDROID_ACTIVITY_COMPONENT.test(activity)) return;
+  throw new AppError('INVALID_ARGS', `Invalid Android activity component: ${activity}`, {
+    reason: 'invalid-android-activity-component',
+    activity,
+    hint: 'Pass --activity as <package>/<Class>, .<Class>, or <Class>, using letters, digits, `_`, `.`, and `$`.',
+  });
+}
+
 function androidLaunchArgs(options: OpenAndroidAppOptions): string[] {
   return options.launchArgs ?? [];
 }
@@ -169,11 +185,12 @@ export async function openAndroidApp(
   app: string,
   optionsOrActivity?: OpenAndroidAppOptions | string,
 ): Promise<void> {
+  const options = normalizeOpenAndroidAppOptions(optionsOrActivity);
+  const activity = options.activity;
+  if (activity) requireAndroidActivityComponent(activity);
   if (!device.booted) {
     await waitForAndroidBoot(device.id);
   }
-  const options = normalizeOpenAndroidAppOptions(optionsOrActivity);
-  const activity = options.activity;
   const deepLinkTarget = app.trim();
   if (isDeepLinkTarget(deepLinkTarget)) {
     await openAndroidDeepLink(device, deepLinkTarget, options);

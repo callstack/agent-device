@@ -199,11 +199,24 @@ function combineHarmonySignals(
   return definedSignals.length === 1 ? definedSignals[0] : AbortSignal.any(definedSignals);
 }
 
+/** A module.json5 ability name: a letter, then letters, digits, `_`, or `.`. */
+const HARMONY_ABILITY_NAME = /^[A-Za-z][A-Za-z0-9_.]*$/;
+
+function requireHarmonyAbilityName(ability: string): void {
+  if (HARMONY_ABILITY_NAME.test(ability)) return;
+  throw new AppError('INVALID_ARGS', `Invalid HarmonyOS ability name: ${ability}`, {
+    reason: 'invalid-harmony-ability-name',
+    ability,
+    hint: 'Pass --activity as the ability name from module.json5, such as EntryAbility.',
+  });
+}
+
 export async function openHarmonyApp(
   device: DeviceInfo,
   bundleId: string,
   options?: { activity?: string; signal?: AbortSignal },
 ): Promise<void> {
+  if (options?.activity) requireHarmonyAbilityName(options.activity);
   const launchTarget = options?.activity
     ? { ability: options.activity }
     : parseHarmonyLaunchTarget(

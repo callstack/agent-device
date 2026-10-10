@@ -4,6 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import './test-utils/android-host-test-setup.ts';
 import { runCmd } from '@agent-device/host-kit/command';
+import { deviceShellArgv } from '@agent-device/kernel/device-shell';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
@@ -29,13 +30,33 @@ test('withAndroidAdbProvider intercepts adb commands for the scoped serial', asy
     },
     { serial: device.id },
     async () =>
-      await runCmd('adb', ['-s', 'emulator-5554', 'shell', 'echo', 'ok'], {
+      await runCmd('adb', deviceShellArgv('adb', 'shell', ['echo', 'ok'], ['-s', device.id]), {
         allowFailure: true,
       }),
   );
 
   assert.equal(result.stdout, 'allowed');
   assert.deepEqual(calls, [['shell', 'echo', 'ok']]);
+});
+
+test('withAndroidAdbProvider refuses an unminted device-shell argv for the scoped serial', async () => {
+  const calls: (readonly string[])[] = [];
+
+  await assert.rejects(
+    withAndroidAdbProvider(
+      async (args) => {
+        calls.push(args);
+        return { stdout: '', stderr: '', exitCode: 0 };
+      },
+      { serial: device.id },
+      async () =>
+        await runCmd('adb', ['-s', device.id, 'shell', ['am start -n', "'x;id'"].join(' ')], {
+          allowFailure: true,
+        }),
+    ),
+    { code: 'INVALID_ARGS', details: { reason: 'unguarded-device-shell-argv' } },
+  );
+  assert.deepEqual(calls, []);
 });
 
 test('withAndroidAdbProvider ignores adb commands for another serial', async () => {

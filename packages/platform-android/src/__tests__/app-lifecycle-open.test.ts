@@ -578,6 +578,45 @@ test('openAndroidApp appends launchArgs to am start when activity override is se
   });
 });
 
+test('openAndroidApp refuses an activity outside the component grammar before any adb call', async () => {
+  const calls: (readonly string[])[] = [];
+  const device: DeviceInfo = { ...ANDROID_EMULATOR, booted: false };
+
+  for (const activity of [
+    '.Main;id',
+    '.Main $(id)',
+    'com.example.app/.Main`id`',
+    "com.example.app/.Main' -e x y",
+    'com.example.app/.Main\nreboot',
+    'com.example.app//.Main',
+  ]) {
+    await withAndroidAdbProvider(
+      {
+        exec: async (args) => {
+          calls.push(args);
+          return { stdout: '', stderr: '', exitCode: 0 };
+        },
+      },
+      { serial: device.id },
+      async () =>
+        await assertRejectsAppError(() => openAndroidApp(device, 'com.example.app', { activity }), {
+          code: 'INVALID_ARGS',
+          reason: 'invalid-android-activity-component',
+        }),
+    );
+  }
+  assert.deepEqual(calls, []);
+});
+
+test('openAndroidApp accepts a fully qualified nested-class activity component', async () => {
+  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
+    await openAndroidApp(device, 'com.example.app', {
+      activity: 'com.example.app/com.example.app.Outer$Inner_2',
+    });
+    assert.equal(calls.at(-1)?.at(-1), `'com.example.app/com.example.app.Outer$Inner_2'`);
+  });
+});
+
 test('openAndroidApp appends launchArgs to am start for deep link URL opens', async () => {
   await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
     await openAndroidApp(device, 'myapp://item/42', {
