@@ -1,8 +1,4 @@
-import {
-  AppError,
-  createRequestCanceledError,
-  isRequestCanceledError,
-} from '@agent-device/kernel/errors';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { Deadline, emitDiagnostic, withDiagnosticTimer } from './host.ts';
 import {
@@ -10,7 +6,7 @@ import {
   RUNNER_STARTUP_TIMEOUT_MS,
   type RunnerConnectionSession,
 } from './runner-startup-transport.ts';
-import { sendRunnerCommandOnce } from './runner-transport.ts';
+import { sendRunnerCommandOnce, throwIfCanceledBeforeSend } from './runner-transport.ts';
 import {
   buildRunnerResponseError,
   decodeRunnerResponseBody,
@@ -21,6 +17,7 @@ import {
 } from './runner-contract.ts';
 import {
   resolveRunnerFatalErrorReason,
+  isRunnerCommandProvablyUnwritten,
   isRunnerMainThreadOccupiedError,
   isStructuredRunnerFailure,
 } from './runner-error-classification.ts';
@@ -262,7 +259,7 @@ async function sendRunnerCommandAfterPreflight(params: {
       }
     : { command: runnerCommand.command, commandId: runnerCommand.commandId };
 
-  if (signal?.aborted) throw createRequestCanceledError();
+  throwIfCanceledBeforeSend(signal);
   // From here the runner holds our request, and a shutdown that hands it off would orphan a command
   // nobody is waiting for any more. A readiness probe is charged no more than the preflight's own
   // probe is: the runner serves it inline, so its reply says nothing about the queued work a charge
@@ -296,23 +293,31 @@ async function sendRunnerCommandAfterPreflight(params: {
       diagnosticData,
     );
   } catch (error) {
-    if (charged) await abandonRunnerExchange({ device, session, runnerCommand, deadline, signal });
+    if (charged) {
+      await settleFailedRunnerSend({ device, session, runnerCommand, deadline, signal, error });
+    }
     throw error;
   }
 }
 
 /**
- * This process stopped waiting on a sent command, so its charge stays as abandoned. A canceled
- * request also waits out the command's execution before it settles (#3383).
+ * A send that provably wrote nothing withdraws its charge. Otherwise this process stopped waiting on
+ * a command the runner may hold, so the charge stays as abandoned, and a canceled request also waits
+ * out the command's execution before it settles (#3383).
  */
-async function abandonRunnerExchange(params: {
+async function settleFailedRunnerSend(params: {
   device: DeviceInfo;
   session: RunnerExchangeSession;
   runnerCommand: RunnerCommand;
   deadline: Deadline;
   signal: AbortSignal | undefined;
+  error: unknown;
 }): Promise<void> {
-  const { session, runnerCommand, signal } = params;
+  const { session, runnerCommand, signal, error } = params;
+  if (isRunnerCommandProvablyUnwritten(error)) {
+    session.commandCharges.withdrawUnsent(runnerCommand.commandId);
+    return;
+  }
   session.commandCharges.markAbandoned(runnerCommand.commandId);
   if (!isRequestCanceledError(signal?.reason) || session.state !== 'ready') return;
   await drainCanceledRunnerCommand(params);

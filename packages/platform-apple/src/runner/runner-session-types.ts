@@ -259,6 +259,12 @@ export class RunnerCommandAccounting {
     if (index !== -1) this.charges[index]!.abandoned = true;
   }
 
+  /** Withdraw the charge of a send that provably wrote nothing: the runner holds no such command. */
+  withdrawUnsent(commandId: string | undefined): void {
+    const index = this.findChargeIndex(commandId);
+    if (index !== -1) this.charges.splice(index, 1);
+  }
+
   /**
    * Discharge an answered exchange, then forgive one abandoned charge sent before it — the serial
    * queue makes this answer evidence that the queued handling ahead of it finished, and any work still

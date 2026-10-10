@@ -2,7 +2,16 @@ import assert from 'node:assert/strict';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
+
+const { mockSendRunnerCommandOnce } = vi.hoisted(() => ({ mockSendRunnerCommandOnce: vi.fn() }));
+
+vi.mock('../runner-transport.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../runner-transport.ts')>();
+  mockSendRunnerCommandOnce.mockImplementation(actual.sendRunnerCommandOnce);
+  return { ...actual, sendRunnerCommandOnce: mockSendRunnerCommandOnce };
+});
+
 import { executeRunnerExchange } from '../runner-exchange.ts';
 import { RunnerCommandAccounting, type RunnerSession } from '../runner-session-types.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
@@ -209,7 +218,11 @@ async function abortOnceReceived(
   controller: AbortController,
   reason: unknown = createRequestCanceledError(),
 ): Promise<void> {
+  const giveUpAtMs = Date.now() + 2_000;
   while (!runner.requests.some((request) => request.command === command)) {
+    if (Date.now() >= giveUpAtMs) {
+      throw new Error(`The fake runner never received "${command}"; nothing to abort.`);
+    }
     await new Promise<void>((resolve) => setTimeout(resolve, 1));
   }
   controller.abort(reason);
@@ -292,6 +305,33 @@ test('a request canceled before its command is sent releases without reading the
   session.lastHealthyMutation = { atMs: Date.now(), appBundleId: LONG_PRESS.appBundleId };
   const controller = new AbortController();
   controller.abort(createRequestCanceledError());
+
+  await assert.rejects(
+    executeRunnerExchange(
+      IOS_SIMULATOR,
+      session,
+      LONG_PRESS,
+      undefined,
+      10_000,
+      async () => {},
+      controller.signal,
+    ),
+    isRequestCanceledError,
+  );
+
+  assert.deepEqual(server.requests, []);
+  assert.equal(session.commandCharges.hasOutstandingCharges, false);
+});
+
+test('a cancellation the transport proves unsent withdraws the charge without reading the journal', async () => {
+  server = await startFakeRunnerServer({ status: [journalState('started')] });
+  const session = sessionFor(server.port);
+  session.lastHealthyMutation = { atMs: Date.now(), appBundleId: LONG_PRESS.appBundleId };
+  const controller = new AbortController();
+  mockSendRunnerCommandOnce.mockImplementationOnce(async () => {
+    controller.abort(createRequestCanceledError());
+    throw createRequestCanceledError({ dispatched: 'no' });
+  });
 
   await assert.rejects(
     executeRunnerExchange(
