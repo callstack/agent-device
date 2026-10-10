@@ -258,6 +258,7 @@ test('Limrun iOS settings evaluate the Apple simctl plan module on the first set
     setting: 'permission',
     state: 'grant',
     appBundleId: 'com.example.app',
+    resolveApp: async (app: string) => app,
     options: { permissionTarget: 'photos', permissionMode: 'limited' },
   } as const;
 

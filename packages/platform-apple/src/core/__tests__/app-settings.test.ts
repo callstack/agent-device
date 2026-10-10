@@ -553,3 +553,65 @@ test('setIosSetting permission runs the simctl plan on the simulator udid and su
     },
   );
 });
+
+const INSTALLED_APPS_JSON = JSON.stringify({
+  'com.apple.Maps': { CFBundleDisplayName: 'Maps' },
+  'com.example.app': { CFBundleDisplayName: 'Example' },
+});
+
+function installedAppsTool(args: string[]): FakeAppleToolResponse {
+  if (args.join(' ') === 'simctl listapps sim-1') return INSTALLED_APPS_JSON;
+  if (args[0] === 'simctl' && args[1] === 'privacy') return '';
+  return unexpectedArgs(args);
+}
+
+test('setIosSetting permission grants the bundle id a display name resolves to', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+
+  await withFakeAppleTool(installedAppsTool, async ({ calls }) => {
+    await setIosSetting(IOS_TEST_SIMULATOR, 'permission', 'grant', 'Maps', {
+      permissionTarget: 'photos',
+    });
+    assert.deepEqual(calls, [
+      ['simctl', 'listapps', 'sim-1'],
+      ['simctl', 'privacy', 'sim-1', 'grant', 'photos', 'com.apple.Maps'],
+    ]);
+  });
+});
+
+test('setIosSetting location passes a bundle id through without listing apps', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+
+  await withFakeAppleTool(installedAppsTool, async ({ calls }) => {
+    await setIosSetting(IOS_TEST_SIMULATOR, 'location', 'on', 'com.example.app');
+    assert.deepEqual(calls, [
+      ['simctl', 'privacy', 'sim-1', 'grant', 'location', 'com.example.app'],
+    ]);
+  });
+});
+
+test.for([
+  { setting: 'permission', state: 'grant' },
+  { setting: 'location', state: 'off' },
+  { setting: 'clear-app-state', state: 'clear' },
+] as const)(
+  'setIosSetting $setting refuses an app that resolves to nothing before changing anything',
+  async ({ setting, state }) => {
+    mockEnsureBootedSimulator.mockResolvedValue(undefined);
+
+    await withFakeAppleTool(installedAppsTool, async ({ calls }) => {
+      await assertRejectsAppError(
+        () =>
+          setIosSetting(IOS_TEST_SIMULATOR, setting, state, 'Nowhere', {
+            permissionTarget: 'photos',
+          }),
+        {
+          code: 'APP_NOT_INSTALLED',
+          reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled,
+          dispatched: 'no',
+        },
+      );
+      assert.deepEqual(calls, [['simctl', 'listapps', 'sim-1']]);
+    });
+  },
+);

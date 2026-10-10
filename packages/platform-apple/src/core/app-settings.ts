@@ -3,6 +3,7 @@ import {
   getUnsupportedMacOsSettingMessage,
   parsePermissionAction,
   parseSettingState,
+  resolveSettingsApp,
   type ReadableSetting,
   type ReadSettingResult,
   type SettingOptions,
@@ -150,6 +151,7 @@ export async function setIosSetting(
         setting: normalized,
         state,
         appBundleId,
+        resolveApp: (app) => resolveIosSettingsApp(device, app),
         options,
       });
     default:
@@ -211,6 +213,11 @@ function iosNoDataContainerMessage(bundleId: string): string {
   return `${bundleId} has no data container to clear. Apps shipped in the simulator runtime, such as system apps, own no data container, so there is no app state here to remove.`;
 }
 
+/** The bundle id an app-scoped setting lands on: an id passes through, a display name resolves. */
+async function resolveIosSettingsApp(device: DeviceInfo, app: string): Promise<string> {
+  return await resolveSettingsApp(app, (target) => resolveIosApp(device, target));
+}
+
 async function clearIosSimulatorAppState(
   device: DeviceInfo,
   app: string,
@@ -222,7 +229,7 @@ async function clearIosSimulatorAppState(
     );
   }
 
-  const bundleId = await resolveIosApp(device, app);
+  const bundleId = await resolveIosSettingsApp(device, app);
   await ensureBootedSimulator(device);
   await closeIosApp(device, bundleId);
 

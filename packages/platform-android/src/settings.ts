@@ -11,6 +11,7 @@ import {
   parseAppearanceAction,
   parseSettingState,
   parseTextSizeCategory,
+  resolveSettingsApp,
   textSizeSettingPayload,
   TEXT_SIZE_CATEGORIES,
   type ReadableSetting,
@@ -128,17 +129,11 @@ export async function setAndroidSetting(
           sessionAppRequiredDetails(),
         );
       }
-      const resolved = await resolveAndroidApp(device, appPackage);
-      if (resolved.type === 'intent') {
-        throw new AppError(
-          'INVALID_ARGS',
-          'settings clear-app-state requires a package name, not an intent.',
-        );
-      }
-      await runAndroidShell(device, ['am', 'force-stop', resolved.value], {
+      const packageName = await resolveAndroidSettingsPackage(device, normalized, appPackage);
+      await runAndroidShell(device, ['am', 'force-stop', packageName], {
         allowFailure: true,
       });
-      const result = await runAndroidShell(device, ['pm', 'clear', resolved.value], {
+      const result = await runAndroidShell(device, ['pm', 'clear', packageName], {
         allowFailure: true,
       });
       if (result.exitCode !== 0 || !/\bSuccess\b/i.test(result.stdout)) {
@@ -146,16 +141,16 @@ export async function setAndroidSetting(
         // guard also covers that non-exit failure mode.
         throw new AppError(
           'COMMAND_FAILED',
-          `Failed to clear Android app data for ${resolved.value}`,
+          `Failed to clear Android app data for ${packageName}`,
           {
-            package: resolved.value,
+            package: packageName,
             stdout: result.stdout,
             stderr: result.stderr,
             exitCode: result.exitCode,
           },
         );
       }
-      return { package: resolved.value, cleared: true };
+      return { package: packageName, cleared: true };
     }
     case 'fingerprint': {
       const action = parseAndroidFingerprintAction(state);
@@ -170,7 +165,12 @@ export async function setAndroidSetting(
           sessionAppRequiredDetails(),
         );
       }
-      return await setAndroidPermission(device, appPackage, state, options);
+      return await setAndroidPermission(
+        device,
+        await resolveAndroidSettingsPackage(device, normalized, appPackage),
+        state,
+        options,
+      );
     }
     case 'text-size': {
       return await setAndroidTextSize(device, state);
@@ -178,6 +178,26 @@ export async function setAndroidSetting(
     default:
       throw new AppError('INVALID_ARGS', `Unsupported setting: ${setting}`);
   }
+}
+
+/** The package an app-scoped setting lands on: a package passes through, a display name resolves. */
+async function resolveAndroidSettingsPackage(
+  device: DeviceInfo,
+  setting: string,
+  app: string,
+): Promise<string> {
+  const resolved = await resolveSettingsApp(app, (target) => resolveAndroidApp(device, target));
+  if (resolved.type === 'intent') {
+    throw new AppError(
+      'INVALID_ARGS',
+      `settings ${setting} requires a package name, not an intent.`,
+      {
+        app,
+        dispatched: 'no',
+      },
+    );
+  }
+  return resolved.value;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, appNotInstalledDetails, discloseDispatch } from '@agent-device/kernel/errors';
 
 /**
  * The `settings permission` vocabulary, declared once. These collections are what the parsers
@@ -172,6 +172,8 @@ export type SimctlSettingRequest = {
   setting: SimctlSetting;
   state: string;
   appBundleId?: string;
+  /** Resolves the app a privacy change names to the bundle id `simctl privacy` writes. */
+  resolveApp: (app: string) => Promise<string>;
   options?: SettingOptions;
 };
 
@@ -279,6 +281,27 @@ export function settingsAppNotConsumedRefusal(
     },
     hint: `Drop the --app option and run \`settings ${described}\`, or aim the app at an app-scoped setting such as \`settings permission grant location --app ${app}\`.`,
   };
+}
+
+/**
+ * Resolves the app an app-scoped mutation lands on through the owner's own app resolution, ahead of
+ * anything that reaches the device. A failed resolution therefore dispatched nothing, and an app that
+ * resolves to no installed app answers `app_not_installed` rather than reaching the device as a
+ * literal id.
+ */
+export async function resolveSettingsApp<Resolved>(
+  app: string,
+  resolve: (app: string) => Promise<Resolved>,
+): Promise<Resolved> {
+  try {
+    return await resolve(app);
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+    if (error.code === 'APP_NOT_INSTALLED') {
+      error.details = { ...error.details, ...appNotInstalledDetails(), app };
+    }
+    throw discloseDispatch(error, 'no');
+  }
 }
 
 const SETTINGS_WIFI_USAGE = '<wifi|airplane|location> <on|off>';

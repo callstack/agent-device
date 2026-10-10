@@ -22,6 +22,7 @@ function request(
     deviceId: 'SIM-1',
     setting: 'appearance',
     state: 'dark',
+    resolveApp: async (app) => app,
     ...overrides,
   };
 }
@@ -286,5 +287,51 @@ test('a permission mode on a target other than photos refuses before running sim
     code: 'INVALID_ARGS',
     message: 'Permission mode is only supported for photos. Received: limited.',
   });
+  expect(runSimctl).not.toHaveBeenCalled();
+});
+
+test.for([
+  { setting: 'permission', state: 'grant', service: 'camera' },
+  { setting: 'location', state: 'on', service: 'location' },
+] as const)(
+  '$setting $state writes the bundle id the runner resolves the named app to',
+  async ({ setting, state, service }) => {
+    const runSimctl = recordingRunner();
+    const resolveApp = vi.fn(async (app: string) => (app === 'Maps' ? 'com.apple.Maps' : app));
+
+    await applySimctlSetting(
+      request(runSimctl, {
+        setting,
+        state,
+        appBundleId: 'Maps',
+        resolveApp,
+        options: { permissionTarget: 'camera' },
+      }),
+    );
+
+    expect(resolveApp).toHaveBeenCalledWith('Maps');
+    expect(argvs(runSimctl)).toEqual([['privacy', 'SIM-1', 'grant', service, 'com.apple.Maps']]);
+  },
+);
+
+test('an app the runner cannot resolve refuses before running simctl', async () => {
+  const runSimctl = recordingRunner();
+  const refusal = new AppError('APP_NOT_INSTALLED', 'No app found matching "Nope"');
+
+  const error = await appErrorFrom(
+    applySimctlSetting(
+      request(runSimctl, {
+        setting: 'permission',
+        state: 'grant',
+        appBundleId: 'Nope',
+        resolveApp: async () => {
+          throw refusal;
+        },
+        options: { permissionTarget: 'photos' },
+      }),
+    ),
+  );
+
+  expect(error).toBe(refusal);
   expect(runSimctl).not.toHaveBeenCalled();
 });
