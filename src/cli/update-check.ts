@@ -42,7 +42,7 @@ export function maybeRunUpgradeNotifier(options: UpgradeNotifierOptions): void {
   if (shouldShowUpgradeNotice(cache, options.currentVersion)) {
     process.stderr.write(
       `Update available: ${PACKAGE_NAME} ${options.currentVersion} -> ${cache.latestVersion}. ` +
-        `Run \`npm install -g ${PACKAGE_NAME}@latest\` to upgrade the CLI.\n`,
+        `Run \`npm install -g ${PACKAGE_NAME}@${distTagFor(options.currentVersion)}\` to upgrade the CLI.\n`,
     );
     writeUpdateCheckCache(cachePath, {
       ...cache,
@@ -60,7 +60,8 @@ export async function runUpdateCheckWorker(options: UpdateCheckWorkerOptions): P
   const cache = readUpdateCheckCache(options.cachePath);
 
   try {
-    const latestVersion = (await fetchLatestPackageVersion()) ?? undefined;
+    const latestVersion =
+      (await fetchLatestPackageVersion(distTagFor(options.currentVersion))) ?? undefined;
     if (!latestVersion || compareVersions(latestVersion, options.currentVersion) <= 0) {
       writeUpdateCheckCache(options.cachePath, { checkedAt: new Date(now).toISOString() });
       return;
@@ -150,8 +151,13 @@ function spawnBackgroundUpdateCheck(cachePath: string, currentVersion: string): 
   ]);
 }
 
-async function fetchLatestPackageVersion(): Promise<string | undefined> {
-  const response = await fetch(`https://registry.npmjs.org/${PACKAGE_NAME}/latest`, {
+/** A nightly build follows the `nightly` dist-tag; every other build follows `latest`. */
+function distTagFor(version: string): 'latest' | 'nightly' {
+  return version.includes('-nightly.') ? 'nightly' : 'latest';
+}
+
+async function fetchLatestPackageVersion(distTag: string): Promise<string | undefined> {
+  const response = await fetch(`https://registry.npmjs.org/${PACKAGE_NAME}/${distTag}`, {
     signal: AbortSignal.timeout(UPDATE_CHECK_TIMEOUT_MS),
     headers: { accept: 'application/json' },
   });

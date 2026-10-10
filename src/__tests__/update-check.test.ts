@@ -188,3 +188,33 @@ test('worker resets prompted state when it discovers a newer version', async () 
   assert.equal(cache.latestVersion, '0.13.0');
   assert.equal(cache.prompted, false);
 });
+
+test('a nightly build checks and recommends the nightly dist-tag', async () => {
+  const stateDir = makeTempStateDir();
+  cleanupPaths.push(stateDir);
+  const cachePath = path.join(stateDir, 'update-check.json');
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ version: '0.12.0-nightly.20261011.8' }),
+  });
+  vi.stubGlobal('fetch', fetchMock);
+
+  await runUpdateCheckWorker({ cachePath, currentVersion: '0.12.0-nightly.20261010.7' });
+
+  assert.equal(fetchMock.mock.calls[0]?.[0], 'https://registry.npmjs.org/agent-device/nightly');
+  let stderr = '';
+  vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
+    stderr += String(chunk);
+    return true;
+  }) as typeof process.stderr.write);
+  maybeRunUpgradeNotifier({
+    command: 'devices',
+    currentVersion: '0.12.0-nightly.20261010.7',
+    stateDir,
+    flags: {},
+  });
+  assert.match(
+    stderr,
+    /-> 0\.12\.0-nightly\.20261011\.8\. Run `npm install -g agent-device@nightly`/,
+  );
+});
