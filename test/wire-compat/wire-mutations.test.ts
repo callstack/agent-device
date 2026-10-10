@@ -72,14 +72,14 @@ const MUTATIONS: readonly WireMutation[] = [
   },
   {
     breakClass: 'method naming: a released client keeps sending the old method name',
-    file: 'src/daemon/server/http-server.ts',
+    file: 'src/daemon/server/http-rpc-methods.ts',
     name: 'COMMAND_RPC_METHODS',
     from: "'agent-device.command'",
     to: "'agent-device.cmd'",
   },
   {
     breakClass: 'method naming: the lease method table drops a released alias',
-    file: 'src/daemon/server/http-server.ts',
+    file: 'src/daemon/server/http-rpc-methods.ts',
     name: 'LEASE_RPC_METHOD_TO_COMMAND',
     from: "'agent-device.lease.allocate': 'lease_allocate',",
     to: '',
@@ -100,7 +100,7 @@ const MUTATIONS: readonly WireMutation[] = [
   },
   {
     breakClass: 'auth projection: the header a released client authenticates with is dropped',
-    file: 'src/daemon/server/http-server.ts',
+    file: 'src/daemon/server/http-authorization.ts',
     name: 'resolveToken',
     from: "typeof headers['x-agent-device-token'] === 'string'",
     to: 'false',
