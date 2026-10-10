@@ -1333,7 +1333,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
   [C.fold]: {
     androidEmulator: androidEmulator.contract(
       ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE,
-      'the Android runtime fact refuses a foldable hinge pose on every kind',
+      'the Android emulator advertises the hinge pose and binds it; a phone profile is refused by the operation itself, a physical device by the fact',
     ),
     iosSimulator: iosSimulator.contract(
       'packages/platform-apple/src/runtime.test.ts',
