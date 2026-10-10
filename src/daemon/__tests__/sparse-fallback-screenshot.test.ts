@@ -13,6 +13,7 @@ import {
   type ScreenshotRuntimeFixture,
   type ScreenshotRuntimeFixtureOptions,
 } from './screenshot-runtime-fixture.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const SPARSE: SnapshotQualityVerdict = {
   state: 'sparse',
@@ -56,6 +57,7 @@ async function dispatch(
   internalObservation = false,
 ) {
   const response = await dispatchSnapshotViaRuntime({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       command: 'snapshot',
       positionals: [],

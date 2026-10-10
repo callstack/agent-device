@@ -9,6 +9,7 @@ import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-f
 import { handleFindCommands } from '../../index.ts';
 import { markDeferredInteractionOutcome } from '../../../deferred-interaction-outcome.ts';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 vi.mock('../../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../../__tests__/legacy-snapshot-capture-fixture.ts');
@@ -90,6 +91,7 @@ async function findClick(captures: Record<string, unknown>[] | CaptureScript, af
   );
 
   const response = await handleFindCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',

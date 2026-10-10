@@ -3,6 +3,7 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { publishDaemonRegistration } from '../../__tests__/test-utils/device-claim-store.ts';
+import { testCreateCommandSurface } from '../__tests__/command-surface-fixture.ts';
 
 const lifecycleEvents = vi.hoisted(() => [] as string[]);
 const startupFailure = vi.hoisted(() => ({ active: false }));
@@ -68,6 +69,7 @@ const SUCCESSOR_PID = 999_999_999;
 
 function startRuntime(stateDir: string, exit: (code: number) => void) {
   return startDaemonRuntime({
+    createCommandSurface: testCreateCommandSurface,
     env: {
       ...process.env,
       AGENT_DEVICE_STATE_DIR: stateDir,

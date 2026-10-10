@@ -1,6 +1,7 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 
 import path from 'node:path';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
 
@@ -123,6 +124,7 @@ test('open applies stored runtime launchUrl and reports runtime hints', async ()
   });
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'runtime-open',
@@ -186,6 +188,7 @@ test('open rejects a false runtime-hints fact before its one implementation bind
   });
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'runtime-open-false-fact',
@@ -237,6 +240,7 @@ test('open applies launch-only flags only to the direct app launch before runtim
   });
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'launch-console-runtime',
@@ -279,6 +283,7 @@ test('open --metro-port alone defaults the host to 10.0.2.2 on an Android emulat
   });
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -310,6 +315,7 @@ test('open --metro-port alone defaults the host to 127.0.0.1 on an iOS simulator
   });
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -341,6 +347,7 @@ test('open --metro-port alone stays host-ambiguous on a physical Android device'
   });
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -372,6 +379,7 @@ test('open --relaunch allows Android package names ending with apk-like suffix',
   });
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',

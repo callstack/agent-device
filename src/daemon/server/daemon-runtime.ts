@@ -12,6 +12,7 @@ import {
 import { installProviderDeviceAdmission } from '../provider-device-admission.ts';
 import { assertDaemonPolicyAllowsCapability } from '../daemon-policy.ts';
 import { loadDaemonPolicy, type DaemonPolicy } from '../../daemon-policy-file.ts';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { getInteractor } from '../../core/interactors.ts';
 import { installInteractorResolution } from '../interactor-resolution.ts';
 import {
@@ -205,6 +206,8 @@ export type DaemonRuntimeOptions = {
   stderr?: WritableOutput;
   exit?: (code: number) => void;
   registerProcessHandlers?: boolean;
+  /** The command-surface factory the request handler builds per-request runtimes from. */
+  createCommandSurface: CreateDaemonCommandSurface;
 };
 
 export type DaemonRuntimeController = {
@@ -313,7 +316,7 @@ function armDaemonMetadataLossWatch(
 }
 
 export async function startDaemonRuntime(
-  options: DaemonRuntimeOptions = {},
+  options: DaemonRuntimeOptions,
 ): Promise<DaemonRuntimeController | null> {
   const env = options.env ?? process.env;
   const stdout = options.stdout ?? process.stdout;
@@ -436,6 +439,7 @@ export async function startDaemonRuntime(
     providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,
     trackDownloadableArtifact,
     daemonPolicy,
+    createCommandSurface: options.createCommandSurface,
   });
 
   let stopMetadataLossWatch: () => void = () => {};

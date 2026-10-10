@@ -12,6 +12,7 @@ import type { SessionState } from '../../../session-state.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 /**
  * Shared factories for the interaction touch handler tests. Named pure
@@ -127,6 +128,7 @@ export async function runInteraction(
   flags: Record<string, unknown> = {},
 ) {
   return await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: { token: 't', session: sessionName, command, positionals, flags },
     sessionName,
     sessionStore,
@@ -168,6 +170,7 @@ export async function runFindInternalClick(
   internal: Record<string, unknown>,
 ) {
   return await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,

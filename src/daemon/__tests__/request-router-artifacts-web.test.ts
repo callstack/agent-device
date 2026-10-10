@@ -12,6 +12,7 @@ import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/device-fixtures.t
 
 import { cleanupDownloadableArtifact, trackDownloadableArtifact } from '../artifact-tracking.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 // #1900: `artifacts` (`handlers/lease.ts`) lists daemon-tracked artifacts by tenant scope with no
 // device or platform involvement at all — `listArtifactsForRequest` never reads `device.platform`.
@@ -31,6 +32,7 @@ test('artifacts lists a daemon-tracked artifact produced during a web session', 
 
   try {
     const handler = createRequestHandler({
+      createCommandSurface: testCreateCommandSurface,
       logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',
       sessionStore,

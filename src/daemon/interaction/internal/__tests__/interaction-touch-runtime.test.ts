@@ -9,6 +9,7 @@ import {
   resetGetRuntimeFixture,
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 // What the shared runtime dispatch does with the resolved target: refuse
 // unusable frame evidence rather than recapture positionally (ADR 0014), refuse
@@ -85,6 +86,7 @@ test('press @ref taps the resolved point once and records the ref', async () => 
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -130,6 +132,7 @@ test('press @ref fails closed when the authorized ref has no usable bounds (ADR 
   );
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -187,6 +190,7 @@ test('press @ref fails closed when stored ref bounds are invalid (ADR 0014)', as
   );
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -240,6 +244,7 @@ test('press @ref fails fast when the target is off-screen', async () => {
 
   const response = await withRunner(() =>
     handleInteractionCommands({
+      createCommandSurface: testCreateCommandSurface,
       req: {
         token: 't',
         session: sessionName,
@@ -315,6 +320,7 @@ test('press @ref with a trailing label recovers within the authorized frame (no 
   mockTapPoint.mockResolvedValue({ pressed: true });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,

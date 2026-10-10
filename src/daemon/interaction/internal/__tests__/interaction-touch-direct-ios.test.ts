@@ -24,6 +24,7 @@ import {
 } from './interaction-touch-fixtures.ts';
 import { refFrameState } from '../../../ref-frame.ts';
 import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
@@ -59,6 +60,7 @@ test.each([
     mockTapElementSelector.mockRejectedValue(new AppError(code, message));
 
     const response = await handleInteractionCommands({
+      createCommandSurface: testCreateCommandSurface,
       req: {
         token: 't',
         session: sessionName,

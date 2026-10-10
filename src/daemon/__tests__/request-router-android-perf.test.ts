@@ -12,6 +12,7 @@ import {
   createPlatformRuntimeGateway,
   createRequestPlatformProviders,
 } from '../../platform-runtime.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 function makeAndroidSessionStore(name: string): SessionStore {
   const sessionStore = new SessionStore(`/tmp/${name}`);
@@ -40,6 +41,7 @@ function makeHandler(sessionStore: SessionStore, androidAdbProvider: () => Andro
     }),
   });
   return createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: '/tmp/daemon.log',
     token: 'token',
     sessionStore,

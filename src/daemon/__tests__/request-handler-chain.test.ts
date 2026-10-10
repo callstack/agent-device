@@ -26,6 +26,7 @@ import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { eagerClosureOf } from '../../__tests__/eager-import-closure.fixtures.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
   return {
@@ -42,6 +43,7 @@ function makeChainParams(req: DaemonRequest) {
   const sessionStore = makeSessionStore('agent-device-request-chain-');
   sessionStore.publish('chain-test', makeIosSession('chain-test'));
   return {
+    createCommandSurface: testCreateCommandSurface,
     req,
     sessionName: 'chain-test',
     logPath: '/tmp/agent-device-request-chain.log',
@@ -310,6 +312,7 @@ test('duration-less public coordinate swipe retains Linux drag behavior', async 
     provider,
     async () =>
       await handleInteractionCommands({
+        createCommandSurface: testCreateCommandSurface,
         inspectFacts: bindings.inspectFacts,
         bindDevice: bindings.bindDevice,
         req: {

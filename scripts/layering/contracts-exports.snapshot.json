@@ -39,6 +39,7 @@
   "@agent-device/contracts/command",
   "@agent-device/contracts/command-platform-execution",
   "@agent-device/contracts/command-policy",
+  "@agent-device/contracts/daemon-command-surface",
   "@agent-device/contracts/daemon-http",
   "@agent-device/contracts/device",
   "@agent-device/contracts/device-boot",

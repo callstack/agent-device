@@ -11,6 +11,7 @@ import fs from 'node:fs';
 
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
@@ -62,6 +63,7 @@ async function runAndroidFlowReplay(session: string, flags: Record<string, unkno
   const replayPath = path.join(root, 'flow.ad');
   fs.writeFileSync(replayPath, 'open com.example.demo\n');
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore: makeSessionStore('agent-device-replay-test-ime-'),

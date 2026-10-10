@@ -8,9 +8,11 @@ import { dispatchWaitViaRuntime } from '../wait-runtime.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from '../snapshot-session.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { PlatformResourceCleanup } from '../platform-resource-cleanup.ts';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 type SnapshotCommandParams = {
+  createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -25,6 +27,7 @@ type SnapshotCommandHandler = (params: SnapshotCommandParams) => Promise<DaemonR
 const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
   snapshot: async ({
     req,
+    createCommandSurface,
     sessionName,
     logPath,
     sessionStore,
@@ -33,6 +36,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     platformResourceCleanup,
   }) =>
     await dispatchSnapshotViaRuntime({
+      createCommandSurface,
       req,
       sessionName,
       logPath,
@@ -43,6 +47,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     }),
   diff: async ({
     req,
+    createCommandSurface,
     sessionName,
     logPath,
     sessionStore,
@@ -54,6 +59,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
       return errorResponse('INVALID_ARGS', 'diff currently supports only: diff snapshot');
     }
     return await dispatchSnapshotDiffViaRuntime({
+      createCommandSurface,
       req,
       sessionName,
       logPath,
@@ -65,6 +71,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
   },
   wait: async ({
     req,
+    createCommandSurface,
     sessionName,
     logPath,
     sessionStore,
@@ -73,6 +80,7 @@ const SNAPSHOT_COMMAND_HANDLER_IMPLS = {
     platformResourceCleanup,
   }) =>
     await dispatchWaitViaRuntime({
+      createCommandSurface,
       req,
       sessionName,
       logPath,

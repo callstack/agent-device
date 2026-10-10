@@ -23,6 +23,7 @@ import {
 import { isActiveProviderDevice } from './provider-device-admission.ts';
 import { buildActionEventResult } from '@agent-device/session-journal/session-event-action-presentation';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { GenericPlatformExecution, RecordedGenericRequest } from './generic-leaf-execution.ts';
 
 export async function dispatchGenericCommand(params: {
@@ -37,6 +38,7 @@ export async function dispatchGenericCommand(params: {
     traceLogPath?: string,
   ) => DaemonCommandContext;
   executePlatformCommand: GenericPlatformExecution;
+  createCommandSurface: CreateDaemonCommandSurface;
   recordedRequest?: RecordedGenericRequest;
   androidObservation?: AndroidObservationAdapter;
 }): Promise<DaemonResponse> {
@@ -62,6 +64,7 @@ export async function dispatchGenericCommand(params: {
     contextFromFlags,
     command: platformCommand,
     flags: req.flags,
+    createCommandSurface: params.createCommandSurface,
   });
   if ('response' in settlePlan) return settlePlan.response;
   const preflightReadiness = await ensureNoAndroidBlockingDialogReady(
@@ -203,6 +206,7 @@ function withReadinessWarnings(
  * without settle, and every non-settle generic leaf, load nothing.
  */
 async function planGenericSettleObservation(params: {
+  createCommandSurface: CreateDaemonCommandSurface;
   sessionRef: SessionRef | undefined;
   req: DaemonRequest;
   session: SessionState;

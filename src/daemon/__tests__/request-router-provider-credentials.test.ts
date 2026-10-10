@@ -9,6 +9,7 @@ import {
 } from '../../provider-credential-fingerprint.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const DAEMON_ENV = { LIMRUN_API_KEY: 'lim-key' };
 
@@ -21,6 +22,7 @@ test.for([
     const stateDir = mkdtempForTestSync('agent-device-router-provider-credentials-');
     let allocated = 0;
     const handler = createRequestHandler({
+      createCommandSurface: testCreateCommandSurface,
       logPath: path.join(stateDir, 'daemon.log'),
       token: 'test-token',
       sessionStore: makeSessionStore('agent-device-router-provider-credentials-store-'),

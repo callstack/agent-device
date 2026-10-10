@@ -17,6 +17,7 @@ import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const DEVICE: DeviceInfo = {
   platform: 'android',
@@ -41,6 +42,7 @@ test('fresh default-device recording starts serialize before durable admission',
   const runtime = makeRecordingGateway(firstStartBlocked);
   const sessionStore = makeSessionStore('request-router-record-runtime-lock-');
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: '/tmp/daemon.log',
     token: 'token',
     sessionStore,
@@ -91,6 +93,7 @@ test.each([
     });
     const bind = vi.fn(async (request) => await gateway.bind(request));
     const handler = createRequestHandler({
+      createCommandSurface: testCreateCommandSurface,
       logPath: '/tmp/daemon.log',
       token: 'token',
       sessionStore,

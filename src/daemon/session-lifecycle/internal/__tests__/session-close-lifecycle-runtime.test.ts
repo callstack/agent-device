@@ -9,6 +9,7 @@ import {
   readSessionRuntimeRevision,
   refFrameState,
 } from '../../../ref-frame.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 const runtimeHintsModule = vi.hoisted(() => ({
   evaluated: false,
@@ -63,6 +64,7 @@ async function close(params: {
   internal?: DaemonRequest['internal'];
 }) {
   return await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: closeRequest(params.sessionName, params.positionals ?? [], params.internal),
     sessionName: params.sessionName,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

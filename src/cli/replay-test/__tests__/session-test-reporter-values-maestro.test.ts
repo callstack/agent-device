@@ -19,6 +19,7 @@
 // Maestro replay resolves a target device through core/dispatch. Gesture viewport reads re-enter
 // the admitted internal runtime command; the invoke fixture below returns its typed viewport.
 import { expect, test, vi } from 'vitest';
+import { testCreateCommandSurface } from '../../../daemon/__tests__/command-surface-fixture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -112,6 +113,7 @@ async function runMaestroSuiteThroughReporter(params: {
     (event) => runReplayTestReporterProgress(reporters, event, reporterContext),
     async () =>
       await handleSessionCommands({
+        createCommandSurface: testCreateCommandSurface,
         req: {
           token: 't',
           session: 'default',

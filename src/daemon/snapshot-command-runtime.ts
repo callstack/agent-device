@@ -9,7 +9,7 @@ import { publicPlatformString } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/contracts/backend';
 import type { CommandSessionRecord } from '@agent-device/contracts/runtime-contract';
-import { createCommandSurfaceAgentDevice } from '../command-runtime/runtime-command-surface.ts';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
@@ -67,6 +67,7 @@ export async function dispatchSnapshotRuntimeCommand(
       const sessionName = ref?.address ?? params.sessionName;
       const capturedQuality: CapturedSnapshotQuality = {};
       const { runtime, sessions } = createSnapshotRuntime({
+        createCommandSurface: params.createCommandSurface,
         req,
         sessionName,
         logPath,
@@ -122,6 +123,7 @@ export async function dispatchSnapshotRuntimeCommand(
 }
 
 function createSnapshotRuntime(params: {
+  createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
@@ -175,7 +177,7 @@ function createSnapshotRuntime(params: {
       return ref ?? sessionStore.publish(sessionName, nextSession);
     },
   });
-  const runtime = createCommandSurfaceAgentDevice({
+  const runtime = params.createCommandSurface({
     backend: createDaemonSnapshotBackend({
       req,
       logPath,

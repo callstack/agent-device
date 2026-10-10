@@ -8,6 +8,7 @@ import { handleInteractionCommands } from '../../index.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { getInteractor } from '../../../../core/interactors.ts';
 import { installInteractorResolution } from '../../../interactor-resolution.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 // Root composition hands the daemon its interactor resolution; this test drives the real
 // settle capture, so it composes the real lookup the way the process root does.
@@ -74,6 +75,7 @@ test('daemon press --settle pins private-ax on emitted snapshot runner requests'
 
   const response = await withAppleRunnerProvider(mockRunnerCommand, { deviceId: 'sim-1' }, () =>
     handleInteractionCommands({
+      createCommandSurface: testCreateCommandSurface,
       req: {
         token: 't',
         session: sessionName,

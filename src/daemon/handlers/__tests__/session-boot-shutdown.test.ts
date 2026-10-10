@@ -18,10 +18,12 @@ import {
   mockShutdownTargetRuntime,
 } from './session-command-harness.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 test('boot requires session or explicit selector', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',
@@ -64,6 +66,7 @@ test('boot prefers explicit device selector over active session device', async (
   mockResolveTargetDevice.mockResolvedValue(selectedDevice);
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -108,6 +111,7 @@ test('boot --timeout forwards a startup deadline to bootTarget (#3004)', async (
 
   const beforeMs = Date.now();
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',
@@ -141,6 +145,7 @@ test('boot without --timeout leaves the startup deadline unset', async () => {
   mockResolveTargetDevice.mockResolvedValue(selectedDevice);
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',
@@ -176,6 +181,7 @@ test('boot --headless admits a stopped Android emulator through facts and binds 
     booted: true,
   });
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',
@@ -220,6 +226,7 @@ test('boot rejects the macOS host boot cell after one facts inspection and befor
   mockResolveTargetDevice.mockResolvedValue(device);
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',
@@ -256,6 +263,7 @@ test('boot admits a stopped Android emulator through normal readiness', async ()
     booted: true,
   });
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',
@@ -293,6 +301,7 @@ test('boot forwards Android serial admission policy to readiness', async () => {
   });
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',
@@ -327,6 +336,7 @@ test('boot --headless requires avd selector when device cannot be resolved', asy
   const sessionStore = makeSessionStore();
   mockResolveTargetDevice.mockRejectedValue(new AppError('DEVICE_NOT_FOUND', 'No device found'));
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',
@@ -362,6 +372,7 @@ test('boot --headless rejects non-Android selectors', async () => {
     booted: false,
   });
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',
@@ -395,6 +406,7 @@ test('boot keeps --target validation before facts inspection', async () => {
     booted: false,
   });
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',
@@ -431,6 +443,7 @@ test('shutdown turns off selected iOS simulator', async () => {
   mockResolveTargetDevice.mockResolvedValue(selectedDevice);
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',
@@ -477,6 +490,7 @@ test('shutdown rejects active session device and points to close --shutdown', as
   mockResolveTargetDevice.mockResolvedValue(selectedDevice);
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -516,6 +530,7 @@ test('shutdown turns off selected Android emulator', async () => {
   });
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',
@@ -563,6 +578,7 @@ test('shutdown rejects unsupported physical devices', async () => {
   });
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',
@@ -606,6 +622,7 @@ test('shutdown returns an error response when selected target shutdown fails', a
   });
 
   const response = await handleSessionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: 'default',

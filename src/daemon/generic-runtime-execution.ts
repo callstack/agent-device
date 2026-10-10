@@ -3,6 +3,7 @@ import { resolveBoundFocusRuntime } from './focus-runtime.ts';
 import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
 import { resolveBoundScrollRuntime } from './scroll-runtime.ts';
 import type { ScreenshotRuntimeBindings } from './screenshot-runtime-binding.ts';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { DaemonCommandContext } from './context.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
@@ -30,6 +31,7 @@ export async function resolveGenericRuntimeExecution(
     req: DaemonRequest;
     session: SessionState;
     context: DaemonCommandContext;
+    createCommandSurface: CreateDaemonCommandSurface;
   }> &
     ScreenshotRuntimeBindings,
 ): Promise<ResolvedGenericExecution> {

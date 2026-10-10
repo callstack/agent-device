@@ -13,6 +13,7 @@ import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';
 import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { markDeferredInteractionOutcome } from '../../../deferred-interaction-outcome.ts';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 vi.mock('../../../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('../../../__tests__/legacy-snapshot-capture-fixture.ts');
@@ -57,6 +58,7 @@ async function pressSelector(params: {
   const sessionStore = makeSessionStore();
   sessionStore.publish(params.sessionName, makeSession(params.sessionName));
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: params.sessionName,
@@ -109,6 +111,7 @@ test('a press that consumes no capture is not disclosed against an older tree', 
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -168,6 +171,7 @@ async function pressAfterUnsettledScroll(selector: string) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   let done = false;
   const pending = handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: { token: 't', session: 'default', command: 'press', positionals: [selector], flags: {} },
     sessionName: 'default',
     sessionStore,

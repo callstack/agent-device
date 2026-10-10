@@ -18,6 +18,7 @@ import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-ru
 import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
 import { expectRefusesUnavailableExactOwnerFact } from './runtime-binding-conformance.ts';
 import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const available = Object.freeze({ available: true } as const);
 const unavailable = Object.freeze({
@@ -126,6 +127,7 @@ test.each([
     });
 
     const response = await dispatchSnapshotDiffViaRuntime({
+      createCommandSurface: testCreateCommandSurface,
       req: {
         command: 'diff',
         positionals: ['snapshot'],
@@ -185,6 +187,7 @@ test('preserves initialized, unchanged, and changed diff results through one bou
 
   const run = async () =>
     await dispatchSnapshotDiffViaRuntime({
+      createCommandSurface: testCreateCommandSurface,
       req: {
         command: 'diff',
         positionals: ['snapshot'],
@@ -233,6 +236,7 @@ test('a sparse internal diff capture returns no screenshot fallback artifact', a
   sessionStore.publish('diff-runtime', { ...harness.session, appBundleId: 'com.example.app' });
 
   const response = await dispatchSnapshotDiffViaRuntime({
+    createCommandSurface: testCreateCommandSurface,
     req: { command: 'diff', positionals: ['snapshot'], token: 't', session: 'diff-runtime' },
     sessionName: 'diff-runtime',
     logPath: '/tmp/diff-runtime.log',

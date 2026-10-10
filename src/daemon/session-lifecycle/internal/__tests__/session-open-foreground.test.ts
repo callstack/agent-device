@@ -1,4 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 const dispatchSnapshotViaRuntime = vi.hoisted(() => vi.fn());
 
@@ -150,6 +151,7 @@ const failedOpenResponse: DaemonResponse = {
 
 test('passes a failed open response through untouched', async () => {
   const result = await composeOpenWithInitialSnapshot({
+    createCommandSurface: testCreateCommandSurface,
     req: baseRequest({ flags: { foreground: true } }),
     ref,
     logPath: '/tmp/daemon.log',
@@ -165,6 +167,7 @@ test('passes a failed open response through untouched', async () => {
 
 test('leaves a successful open response untouched when --foreground was not requested', async () => {
   const result = await composeOpenWithInitialSnapshot({
+    createCommandSurface: testCreateCommandSurface,
     req: baseRequest(),
     ref,
     logPath: '/tmp/daemon.log',
@@ -183,6 +186,7 @@ test('attaches the initial INTERACTIVE snapshot by delegating to the existing sn
 
   const req = baseRequest({ flags: { foreground: true }, positionals: ['xyz.blueskyweb.app'] });
   const result = await composeOpenWithInitialSnapshot({
+    createCommandSurface: testCreateCommandSurface,
     req,
     ref,
     logPath: '/tmp/daemon.log',
@@ -195,6 +199,7 @@ test('attaches the initial INTERACTIVE snapshot by delegating to the existing sn
   // #1670 P1: the composed dispatch must BE the `snapshot -i` path — the CLI
   // maps `-i` to snapshotInteractiveOnly, the key the snapshot runtime reads.
   expect(dispatchSnapshotViaRuntime).toHaveBeenCalledWith({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       ...req,
       command: 'snapshot',
@@ -233,6 +238,7 @@ test('a snapshot-capture failure never masks the successful open', async () => {
   dispatchSnapshotViaRuntime.mockResolvedValue(snapshotFailure);
 
   const result = await composeOpenWithInitialSnapshot({
+    createCommandSurface: testCreateCommandSurface,
     req: baseRequest({ flags: { foreground: true } }),
     ref,
     logPath: '/tmp/daemon.log',
@@ -275,6 +281,7 @@ test('a THROWN snapshot-capture failure never masks the successful open either',
   );
 
   const result = await composeOpenWithInitialSnapshot({
+    createCommandSurface: testCreateCommandSurface,
     req: baseRequest({ flags: { foreground: true } }),
     ref,
     logPath: '/tmp/daemon.log',

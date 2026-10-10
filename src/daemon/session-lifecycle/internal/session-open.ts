@@ -46,8 +46,10 @@ import {
 } from './session-open-execution.ts';
 import { requireOpenSessionAdmission } from './session-open-state.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 
 export type SessionOpenCommandInput = Readonly<{
+  createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
   sessionName: string;
   logPath: string;

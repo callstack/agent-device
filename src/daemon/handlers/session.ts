@@ -37,6 +37,7 @@ const handleSessionInventoryCommandGroup: SessionCommandHandler = (
 const handleSessionOpenCommandGroup: SessionCommandHandler = (params) =>
   handleSessionOpenCommands({
     req: params.req,
+    createCommandSurface: params.createCommandSurface,
     sessionName: params.sessionName,
     logPath: params.logPath,
     sessionStore: params.sessionStore,
@@ -216,6 +217,7 @@ export async function handleSessionCommands(
 
   return await handler({
     req,
+    createCommandSurface: params.createCommandSurface,
     sessionName,
     logPath,
     sessionStore,

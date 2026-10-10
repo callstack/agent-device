@@ -1,4 +1,5 @@
 import { normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { dispatchSnapshotViaRuntime } from '../../snapshot-runtime.ts';
 import type { SessionRef } from '../../session-state.ts';
 import type { SessionStore } from '../../session-store.ts';
@@ -102,6 +103,7 @@ export async function resolveForegroundOpenRequest(params: {
  * telling the caller the session IS open and how to capture manually.
  */
 export async function composeOpenWithInitialSnapshot(params: {
+  createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
   ref: SessionRef;
   logPath: string;
@@ -115,6 +117,7 @@ export async function composeOpenWithInitialSnapshot(params: {
 
   try {
     const snapshotResponse = await dispatchSnapshotViaRuntime({
+      createCommandSurface: params.createCommandSurface,
       req: {
         ...req,
         command: 'snapshot',

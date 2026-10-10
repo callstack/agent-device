@@ -15,6 +15,7 @@ import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionRef, SessionState } from '../session-state.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 // #1638 `--settle` on the GENERIC daemon route (scroll/back): the settled diff,
 // its refs, and the ref-frame/generation dance are the same contract the touch
@@ -186,6 +187,7 @@ async function dispatchGeneric(params: {
     ...(params.flags ? { flags: params.flags } : {}),
   };
   return await dispatchGenericCommand({
+    createCommandSurface: testCreateCommandSurface,
     req,
     ref: params.sessionStore.lookup(params.sessionName)!,
     sessionName: params.sessionName,
@@ -558,6 +560,7 @@ test('an ended generic lifetime is refused before dispatch or settle constructio
   mockCommandDispatch([AFTER_NODES]);
   await expect(
     dispatchGenericCommand({
+      createCommandSurface: testCreateCommandSurface,
       req: {
         token: 't',
         session: sessionName,

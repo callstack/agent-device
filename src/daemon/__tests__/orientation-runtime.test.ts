@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 // `orientation` carries `androidBlockingDialogGuard: true` (like every other generic-route leaf
 // in this migration), so this file's Android device reaching the real request router below hits
@@ -197,6 +198,7 @@ test('request router joins orientation admission to execution and ref invalidati
   activateCompleteRefFrame(session);
   sessionStore.publish(session.name, session);
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: '/tmp/daemon.log',
     token: 't',
     sessionStore,

@@ -6,6 +6,7 @@ import {
   setActiveProviderDeviceRuntimes,
 } from '../../../provider-device-runtime.ts';
 import { installProviderDeviceAdmission } from '../../provider-device-admission.ts';
+import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 // The daemon reads provider ownership through its own typed admission seam; production
 // installs it from root composition, and these tests compose it the same way.
@@ -84,6 +85,7 @@ async function runWaitCommand(
   const sessionStore = makeSessionStore();
   sessionStore.publish(sessionName, makeSession(sessionName, device, appAttach(device)));
   return await handleSnapshotCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: snapshotRequest(sessionName, 'wait', { positionals }),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -195,6 +197,7 @@ test('wait text on Android uses freshness-aware capture instead of one-shot snap
 
   // The wait budget includes Android's 250 ms freshness retry delay.
   const response = await handleSnapshotCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: snapshotRequest(sessionName, 'wait', { positionals: ['Create document', '500'] }),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -371,6 +374,7 @@ test('wait selector bypasses a fresh matching session snapshot', async () => {
   });
 
   const response = await handleSnapshotCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: snapshotRequest(sessionName, 'wait', { positionals: ['label="Ready"', '5000'] }),
     sessionName,
     logPath: '/tmp/daemon.log',

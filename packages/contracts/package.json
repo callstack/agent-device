@@ -168,6 +168,10 @@
       "types": "./src/command-policy.ts",
       "default": "./src/command-policy.ts"
     },
+    "./daemon-command-surface": {
+      "types": "./src/daemon-command-surface.ts",
+      "default": "./src/daemon-command-surface.ts"
+    },
     "./daemon-http": {
       "types": "./src/daemon-http.ts",
       "default": "./src/daemon-http.ts"

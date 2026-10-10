@@ -9,6 +9,7 @@ import { SessionStore } from './session-store.ts';
 import type { SessionState } from './session-state.ts';
 import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
+import { testCreateCommandSurface } from './__tests__/command-surface-fixture.ts';
 
 const device: SessionState['device'] = {
   platform: 'apple',
@@ -52,6 +53,7 @@ test('wait text passes its poll deadline signal to the Apple runner fast path', 
       }),
   );
   const runtime = createSelectorRuntimeForDevice({
+    createCommandSurface: testCreateCommandSurface,
     ref: sessionStore.lookup(sessionName),
     req: {
       token: 't',
@@ -113,6 +115,7 @@ test('daemon wait stable pins private-ax on emitted snapshot runner requests', a
     },
   }));
   const runtime = createSelectorRuntimeForDevice({
+    createCommandSurface: testCreateCommandSurface,
     ref: sessionStore.lookup(sessionName),
     req: {
       token: 't',
