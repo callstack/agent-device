@@ -8,9 +8,11 @@ import {
   isRootPlatformRuntimeTarget,
 } from './daemon-platform-runtime-inventory.ts';
 
-const DEVICE_READY_TARGET = 'src/platform-runtime-device-ready.ts';
-const DEVICE_READY_STUB =
-  'export async function ensureLocalPlatformDeviceReady(device: unknown) { return false; }\n';
+// The classified pair these fixtures plant is the claim-recovery gateway factory: the composition
+// edge this port introduced, and the shortest one whose symbols the rule still classifies.
+const CLASSIFIED_TARGET = 'src/platform-runtime-claim-recovery.ts';
+const CLASSIFIED_STUB = 'export const createClaimRecoveryGateway = () => ({});\n';
+const CLASSIFIED_IMPORTER = 'src/daemon/server/daemon-runtime.ts';
 
 function violations(sources: Record<string, string>): LayeringViolation[] {
   return checkDaemonPlatformRuntimeInventory(resolveImportEdges(new Map(Object.entries(sources))));
@@ -22,12 +24,12 @@ function edgeViolations(sources: Record<string, string>, file: string): Layering
 
 test('R76 accepts a classified edge with the exact recorded symbols', () => {
   const sources = {
-    [DEVICE_READY_TARGET]: DEVICE_READY_STUB,
-    'src/daemon/device/device-ready.ts':
-      "import { ensureLocalPlatformDeviceReady } from '../../platform-runtime-device-ready.ts';\n" +
-      'void ensureLocalPlatformDeviceReady;\n',
+    [CLASSIFIED_TARGET]: CLASSIFIED_STUB,
+    [CLASSIFIED_IMPORTER]:
+      "import { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';\n" +
+      'void createClaimRecoveryGateway;\n',
   };
-  assert.deepEqual(edgeViolations(sources, 'src/daemon/device/device-ready.ts'), []);
+  assert.deepEqual(edgeViolations(sources, CLASSIFIED_IMPORTER), []);
 });
 
 for (const [file, target, symbol] of [
@@ -50,20 +52,18 @@ for (const [file, target, symbol] of [
 
 test('R76 reports every classified edge missing from the tree as stale, not the other way around', () => {
   const sources = {
-    [DEVICE_READY_TARGET]: DEVICE_READY_STUB,
-    'src/daemon/device/device-ready.ts':
-      "import { ensureLocalPlatformDeviceReady } from '../../platform-runtime-device-ready.ts';\n" +
-      'void ensureLocalPlatformDeviceReady;\n',
+    [CLASSIFIED_TARGET]: CLASSIFIED_STUB,
+    [CLASSIFIED_IMPORTER]:
+      "import { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';\n" +
+      'void createClaimRecoveryGateway;\n',
   };
   const stale = violations(sources).filter(
     (violation) => violation.file === 'scripts/layering/daemon-platform-runtime-inventory.ts',
   );
   assert.equal(stale.length, DAEMON_PLATFORM_RUNTIME_EDGES.length - 1);
   assert.ok(stale.every((violation) => violation.message.includes('stale classified edge')));
-  const deviceReadyStale = stale.find((violation) =>
-    violation.message.includes(DEVICE_READY_TARGET),
-  );
-  assert.equal(deviceReadyStale, undefined);
+  const classifiedStale = stale.find((violation) => violation.message.includes(CLASSIFIED_TARGET));
+  assert.equal(classifiedStale, undefined);
 });
 
 test('R76 rejects an unclassified edge with the pair and its line', () => {
@@ -86,35 +86,32 @@ test('R76 rejects an unclassified edge with the pair and its line', () => {
 
 test('R76 rejects new symbols on a classified edge', () => {
   const sources = {
-    [DEVICE_READY_TARGET]: DEVICE_READY_STUB + 'export function extraReadiness() {}\n',
-    'src/daemon/device/device-ready.ts':
-      "import { ensureLocalPlatformDeviceReady, extraReadiness } from '../../platform-runtime-device-ready.ts';\n" +
-      'void [ensureLocalPlatformDeviceReady, extraReadiness];\n',
+    [CLASSIFIED_TARGET]: CLASSIFIED_STUB + 'export function extraGatewayKnob() {}\n',
+    [CLASSIFIED_IMPORTER]:
+      "import { createClaimRecoveryGateway, extraGatewayKnob } from '../../platform-runtime-claim-recovery.ts';\n" +
+      'void [createClaimRecoveryGateway, extraGatewayKnob];\n',
   };
-  const found = edgeViolations(sources, 'src/daemon/device/device-ready.ts');
+  const found = edgeViolations(sources, CLASSIFIED_IMPORTER);
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
   assert.match(found[0]!.message, /classified symbols drifted/);
-  assert.match(found[0]!.message, /ensureLocalPlatformDeviceReady, extraReadiness/);
+  assert.match(found[0]!.message, /createClaimRecoveryGateway, extraGatewayKnob/);
 });
 
-test('R76 rejects a reintroduced Android-mechanics import on the selector-dispatch edge', () => {
+test('R76 rejects a gateway assembled from an expanded recovery edge', () => {
   const sources = {
-    'src/platform-runtime-open-target.ts':
-      'export async function resolveSessionAppBundleIdForTarget() { return undefined; }\n' +
-      'export async function resolveAndroidPackageForOpen() { return undefined; }\n',
-    'src/daemon/handlers/session-selector-dispatch.ts':
-      "import { resolveAndroidPackageForOpen, resolveSessionAppBundleIdForTarget } from '../../platform-runtime-open-target.ts';\n" +
-      'void [resolveAndroidPackageForOpen, resolveSessionAppBundleIdForTarget];\n',
+    'src/platform-runtime-claim-recovery.ts':
+      'export const createClaimRecoveryGateway = () => ({});\n' +
+      'export const createProviderRecoveryGateway = () => ({});\n',
+    'src/daemon/server/daemon-runtime.ts':
+      "import {\n  createClaimRecoveryGateway,\n  createProviderRecoveryGateway,\n} from '../../platform-runtime-claim-recovery.ts';\n" +
+      'void [createClaimRecoveryGateway, createProviderRecoveryGateway];\n',
   };
-  const found = edgeViolations(sources, 'src/daemon/handlers/session-selector-dispatch.ts');
+  const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
   assert.match(found[0]!.message, /classified symbols drifted/);
-  assert.match(
-    found[0]!.message,
-    /resolveAndroidPackageForOpen, resolveSessionAppBundleIdForTarget/,
-  );
+  assert.match(found[0]!.message, /createClaimRecoveryGateway, createProviderRecoveryGateway/);
 });
 
 test('R76 matches a destructured dynamic import by target with the recorded bindings', () => {
@@ -211,13 +208,13 @@ test('R76 rejects a namespace import alongside the recorded named binding on the
 
 test('R76 treats the import and re-export of one classified pair as one entry', () => {
   const sources = {
-    [DEVICE_READY_TARGET]: DEVICE_READY_STUB,
-    'src/daemon/device/device-ready.ts':
-      "import { ensureLocalPlatformDeviceReady } from '../../platform-runtime-device-ready.ts';\n" +
-      "export { ensureLocalPlatformDeviceReady } from '../../platform-runtime-device-ready.ts';\n" +
-      'void ensureLocalPlatformDeviceReady;\n',
+    [CLASSIFIED_TARGET]: CLASSIFIED_STUB,
+    [CLASSIFIED_IMPORTER]:
+      "import { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';\n" +
+      "export { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';\n" +
+      'void createClaimRecoveryGateway;\n',
   };
-  assert.deepEqual(edgeViolations(sources, 'src/daemon/device/device-ready.ts'), []);
+  assert.deepEqual(edgeViolations(sources, CLASSIFIED_IMPORTER), []);
 });
 
 test('R76 ignores test-shaped and non-daemon importers', () => {
