@@ -224,6 +224,7 @@ test('Android admits the fold fact on emulators and refuses every other kind', a
   expect(emulator.operations.setFoldPose).toEqual(expect.any(Function));
   for (const runtimeDevice of [
     { ...ANDROID_EMULATOR, kind: 'device' as const },
+    { ...ANDROID_EMULATOR, kind: 'simulator' as const },
     UNKNOWN_KIND_DEVICE,
   ]) {
     const binding = await bindOrdinary(

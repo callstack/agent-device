@@ -50,12 +50,10 @@ beforeEach(() => {
   mockPose.mockReset();
 });
 
-test('an emulator admits setFoldPose and binds the pose operation', async () => {
+test('an emulator admits setFoldPose and binds the pose operation to the bound signal', async () => {
   expect(androidFoldableFacts(ANDROID_EMULATOR).setFoldPose).toEqual({ available: true });
-  const operations = createAndroidFoldableOperations({
-    device: ANDROID_EMULATOR,
-    signal: new AbortController().signal,
-  });
+  const { signal } = new AbortController();
+  const operations = createAndroidFoldableOperations({ device: ANDROID_EMULATOR, signal });
   expect(operations).toHaveProperty('setFoldPose', expect.any(Function));
 
   mockPose.mockResolvedValueOnce({ pose: 'closed', hingeAngleDegrees: 0 });
@@ -63,11 +61,7 @@ test('an emulator admits setFoldPose and binds the pose operation', async () => 
     pose: 'closed',
     hingeAngleDegrees: 0,
   });
-  expect(mockPose).toHaveBeenCalledWith(
-    ANDROID_EMULATOR,
-    { pose: 'closed' },
-    { signal: expect.any(AbortSignal) },
-  );
+  expect(mockPose).toHaveBeenCalledWith(ANDROID_EMULATOR, { pose: 'closed' }, { signal });
 });
 
 test('a physical device and an unknown kind refuse setFoldPose with the typed kind fact', () => {

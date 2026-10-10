@@ -38,6 +38,8 @@ const POSTURE_DISPATCH_HINT =
   'The emulator console refused the posture. Check that the AVD is a foldable profile (hw.sensor.hinge=yes), then retry.';
 const POSE_UNVERIFIED_HINT =
   'The emulator console accepted the posture, but the guest did not commit the matching device state. Read it directly with `adb shell cmd device_state print-state` to see which state the emulator holds.';
+const HINGE_ANGLE_HINT =
+  'The emulator console answered the posture but exposes no hinge-angle0 sensor to read back; check that the AVD is a foldable profile (hw.sensor.hinge=yes) and that the emulator build supports `sensor get hinge-angle0`.';
 const LOCK_SCREEN_HINT =
   'The fold lit a panel Android keeps locked and `wm dismiss-keyguard` did not clear it; a keyguard with a PIN or password has to be unlocked by hand.';
 
@@ -150,7 +152,7 @@ async function awaitDeviceState(
     signal?.throwIfAborted();
     observed = await readDeviceState(device, signal);
     if (observed === expectedState) return;
-    await sleep(ANDROID_FOLD_SETTLE_POLL_MS);
+    await sleep(ANDROID_FOLD_SETTLE_POLL_MS, signal);
   }
   const observedName = [...states].find(([, id]) => id === observed)?.[0];
   throw new AppError(
@@ -199,7 +201,7 @@ async function dismissFoldLockScreen(
       clearReads += 1;
       if (clearReads >= LOCK_SCREEN_CLEAR_READS) break;
     }
-    await sleep(ANDROID_FOLD_SETTLE_POLL_MS);
+    await sleep(ANDROID_FOLD_SETTLE_POLL_MS, signal);
   }
   if (clearReads < LOCK_SCREEN_CLEAR_READS) {
     throw new AppError('COMMAND_FAILED', `${device.name} stays locked after the fold`, {
@@ -239,7 +241,7 @@ async function readHingeAngle(
       deviceId: device.id,
       reason: 'fold-hinge-angle-unreadable',
       stdout: stdout.trim(),
-      hint: POSTURE_DISPATCH_HINT,
+      hint: HINGE_ANGLE_HINT,
     });
   }
   return Number(match[1]);
