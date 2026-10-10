@@ -181,67 +181,60 @@ beforeEach(async () => {
   );
 });
 
-test.each([false, true])(
-  'close (retain=%s) during a cold build leaves no replacement build',
-  async (retain) => {
-    const device = IOS_ADMISSION_SIMULATOR;
-    // Park close inside its prep stop: the kill is attempted, but the stop has not returned, so
-    // close provably has not reached the session lock yet (the start holds it) and no later fence
-    // could have run. That is the moment the device must already be fenced.
-    let releasePrepStop: () => void = () => {};
-    const prepStopParked = new Promise<void>((resolve) => {
-      releasePrepStop = resolve;
-    });
-    let signalAttempted = () => {};
-    const killAttempted = new Promise<void>((resolve) => {
-      signalAttempted = resolve;
-    });
-    mockRunAppleToolCommand.mockImplementation(async (tool: string, args: string[]) => {
-      // `killRunnerProcessTree` is the only pkill that signals by parent pid (`-P`); the lease
-      // cleanup's stale-launch sweep matches argv (`-f`), so only the prep tree-kill parks.
-      if (tool === 'pkill' && args.includes('-P')) {
-        signalAttempted();
-        await prepStopParked;
-      }
-      return { exitCode: 0, stdout: '', stderr: '' };
-    });
+test.each([false, true])('cold close (retain=%s) fences replacement builds', async (retain) => {
+  const device = IOS_ADMISSION_SIMULATOR;
+  // Park close inside its prep stop: the kill is attempted, but the stop has not returned, so
+  // close provably has not reached the session lock yet (the start holds it) and no later fence
+  // could have run. That is the moment the device must already be fenced.
+  let releasePrepStop: () => void = () => {};
+  const prepStopParked = new Promise<void>((resolve) => {
+    releasePrepStop = resolve;
+  });
+  let signalAttempted = () => {};
+  const killAttempted = new Promise<void>((resolve) => {
+    signalAttempted = resolve;
+  });
+  mockRunAppleToolCommand.mockImplementation(async (tool: string, args: string[]) => {
+    // `killRunnerProcessTree` is the only pkill that signals by parent pid (`-P`); the lease
+    // cleanup's stale-launch sweep matches argv (`-f`), so only the prep tree-kill parks.
+    if (tool === 'pkill' && args.includes('-P')) {
+      signalAttempted();
+      await prepStopParked;
+    }
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
 
-    // A cold start: holds the session lock for the whole build, as a real one does.
-    const firstStart = ensureRunnerSession(device, {}).catch((error: unknown) => error);
-    await vi.waitFor(() => assert.equal(builds.length, 1));
-    assert.equal(runnerPrepProcessChildren(device.id).length, 1, 'the build is on the prep ledger');
+  // A cold start: holds the session lock for the whole build, as a real one does.
+  const firstStart = ensureRunnerSession(device, {}).catch((error: unknown) => error);
+  await vi.waitFor(() => assert.equal(builds.length, 1));
+  assert.equal(runnerPrepProcessChildren(device.id).length, 1, 'the build is on the prep ledger');
 
-    const closing = releaseIosRunnerOnClose(device.id, { retain });
-    await killAttempted;
-    assert.equal(
-      runnerStartTeardownPending(device.id),
-      true,
-      'the device was fenced before the prep stop finished',
-    );
+  const closing = releaseIosRunnerOnClose(device.id, { retain });
+  await killAttempted;
+  assert.equal(
+    runnerStartTeardownPending(device.id),
+    true,
+    'the device was fenced before the prep stop finished',
+  );
 
-    // The prewarm health retry of the incident: the same caller starts over while close waits.
-    const retriedStart = ensureRunnerSession(device, {}).catch((error: unknown) => error);
-    releasePrepStop();
-    builds[0]!.kill();
+  // The prewarm health retry of the incident: the same caller starts over while close waits.
+  const retriedStart = ensureRunnerSession(device, {}).catch((error: unknown) => error);
+  releasePrepStop();
+  builds[0]!.kill();
 
-    const [first, retried] = await Promise.all([firstStart, retriedStart, closing]);
+  const [first, retried] = await Promise.all([firstStart, retriedStart, closing]);
 
-    assert.ok(first instanceof Error, 'the start whose build was killed failed');
-    assert.ok(isRequestCanceledError(retried), 'the retry is refused as a canceled start');
-    assert.equal(
-      (retried as { details?: { runnerStartRetirementReason?: unknown } }).details
-        ?.runnerStartRetirementReason,
-      'device_teardown',
-      'the refusal carries the typed retirement reason, not just a cancellation',
-    );
-    assert.equal(mockBuildForTesting.mock.calls.length, 1, 'no replacement build was ever spawned');
-    assert.equal(
-      runnerPrepProcessChildren(device.id).length,
-      0,
-      'the killed build left the ledger',
-    );
-  },
-);
+  assert.ok(first instanceof Error, 'the start whose build was killed failed');
+  assert.ok(isRequestCanceledError(retried), 'the retry is refused as a canceled start');
+  assert.equal(
+    (retried as { details?: { runnerStartRetirementReason?: unknown } }).details
+      ?.runnerStartRetirementReason,
+    'device_teardown',
+    'the refusal carries the typed retirement reason, not just a cancellation',
+  );
+  assert.equal(mockBuildForTesting.mock.calls.length, 1, 'no replacement build was ever spawned');
+  assert.equal(runnerPrepProcessChildren(device.id).length, 0, 'the killed build left the ledger');
+});
 
 /**
  * The reviewer's counter-case to the fence: a caller that merely QUEUED behind the close — it

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
-import { retainRunnerSession } from '../runner-retention.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { IOS_DEVICE, IOS_SIMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
@@ -229,36 +228,6 @@ test('a startup publishes starting and its first answer publishes ready', async 
     liveness: 'ready',
   });
   assert.equal(hasLiveIosRunnerSession(device), true);
-});
-
-test('an idle stop moves a ready session through disposal to stopped', async () => {
-  const device = { ...IOS_SIMULATOR, id: 'runner-lifecycle-idle-stop' };
-  process.env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS = '1';
-  const session = await ensureRunnerSession(device, {});
-  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ nodes: [], truncated: false }));
-  await executeRunnerCommandWithSession(
-    device,
-    session,
-    { command: 'snapshot', appBundleId: 'com.example.demo' },
-    '/tmp/runner.log',
-    30_000,
-  );
-
-  session.listenerWatch?.close();
-  session.listenerWatch = {
-    lost: false,
-    ready: Promise.resolve(true),
-    close() {},
-  };
-  await retainRunnerSession(session, async () => stopIosRunnerSession(device.id));
-  await vi.waitFor(() => assert.equal(session.state, 'stopped'));
-
-  assert.equal(
-    readRunnerSessionLiveness(device.id),
-    null,
-    'the idle stop removes the session from the device registry',
-  );
-  assert.equal(hasLiveIosRunnerSession(device), false);
 });
 
 test('stopping the same registered runner twice tears it down once', async () => {

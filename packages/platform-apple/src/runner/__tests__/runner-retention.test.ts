@@ -46,7 +46,9 @@ test('one generation has one listener watch, and loss before close prevents rete
   const session = await servingSession();
   const onLost = vi.fn();
   await observe(session, onLost);
+  const watch = session.listenerWatch;
   observeRunnerListener(session, onLost);
+  assert.equal(session.listenerWatch, watch);
   assert.equal(connections.length, 1);
   connections[0]!.destroy();
   await vi.waitFor(() => assert.equal(onLost.mock.calls.length, 1));
@@ -119,4 +121,17 @@ test('zero disables only the idle timer, and unready or occupied generations can
   session.runnerMainThreadBusy = false;
   session.commandCharges.charge('still-in-flight');
   assert.equal(await retainRunnerSession(session, stop), false);
+});
+
+test('an overflowing idle duration does not become an immediate stop', async () => {
+  const session = await servingSession();
+  await observe(session);
+  vi.useFakeTimers();
+  vi.stubEnv('AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS', '2147483648');
+  const stop = vi.fn(async () => {});
+  await retainRunnerSession(session, stop);
+  await vi.advanceTimersByTimeAsync(1);
+  assert.equal(stop.mock.calls.length, 0);
+  await vi.advanceTimersByTimeAsync(2147483646);
+  assert.deepEqual(stop.mock.calls, [[session.retention, 'idle_timeout']]);
 });

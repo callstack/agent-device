@@ -1,18 +1,16 @@
 import net from 'node:net';
 import { isIosFamily } from '@agent-device/kernel/device';
 import { emitDiagnostic } from './host.ts';
-import { isRunnerMainThreadOccupied, type RunnerSession } from './runner-session-types.ts';
+import {
+  isRunnerMainThreadOccupied,
+  type RunnerSession,
+  type RunnerListenerWatch,
+  type RunnerRetention,
+} from './runner-session-types.ts';
 
 const LISTENER_CONNECT_TIMEOUT_MS = 500;
 const RETAINED_IDLE_STOP_DEFAULT_MS = 5 * 60_000;
 
-export type RunnerListenerWatch = {
-  lost: boolean;
-  ready: Promise<boolean>;
-  close(): void;
-};
-
-export type RunnerRetention = { cancel(): void };
 type StopRetainedRunner = (
   retention: RunnerRetention,
   reason: 'idle_timeout' | 'listener_lost',
@@ -123,7 +121,7 @@ function resolveRunnerIdleStopMs(env: NodeJS.ProcessEnv = process.env): number {
   const raw = env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS?.trim();
   if (raw) {
     const parsed = Number(raw);
-    if (Number.isFinite(parsed) && parsed >= 0) return Math.floor(parsed);
+    if (Number.isFinite(parsed) && parsed >= 0) return Math.min(Math.floor(parsed), 2 ** 31 - 1);
   }
   return RETAINED_IDLE_STOP_DEFAULT_MS;
 }

@@ -105,3 +105,51 @@ test('a deferred descendant of a released lock queues behind its current owner',
   await Promise.all([owner, descendant]);
   assert.deepEqual(order, ['owner', 'released', 'descendant']);
 });
+
+test.each([false, true])(
+  'reentrant descendants settle before the next owner (reject=%s)',
+  async (reject) => {
+    const locks = new Map<string, Promise<unknown>>();
+    const order: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    let descendant!: Promise<void>;
+    const owner = withKeyedLock(locks, 'device-a', async () => {
+      queueMicrotask(() => {
+        descendant = withKeyedLock(locks, 'device-a', async () => {
+          order.push('descendant');
+          markStarted();
+          await gate;
+          order.push('finished');
+          void withKeyedLock(locks, 'device-a', async () => {
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            order.push('nested');
+          });
+          if (reject) throw new Error('descendant failed');
+        });
+        void descendant.catch(() => {});
+      });
+    });
+    const competing = withKeyedLock(locks, 'device-a', async () => {
+      order.push('competing');
+    });
+    await started;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const beforeRelease = [...order];
+    release();
+    const [, outcome] = await Promise.all([
+      owner,
+      descendant.catch((error: Error) => error),
+      competing,
+    ]);
+    assert.equal(outcome instanceof Error, reject);
+    assert.deepEqual(beforeRelease, ['descendant']);
+    assert.deepEqual(order, ['descendant', 'finished', 'nested', 'competing']);
+  },
+);

@@ -1,4 +1,3 @@
-import type { RunnerListenerWatch, RunnerRetention } from './runner-retention.ts';
 import type { RunnerLogicalLeaseContext } from '@agent-device/contracts/runner-lease-context';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -50,6 +49,14 @@ export type RunnerProcessHandle = {
   pid?: number | undefined;
   exitCode: number | null;
 };
+
+export type RunnerListenerWatch = {
+  lost: boolean;
+  ready: Promise<boolean>;
+  close(): void;
+};
+
+export type RunnerRetention = { cancel(): void };
 
 export type RunnerSession = {
   sessionId: string;
