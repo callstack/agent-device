@@ -50,6 +50,7 @@ import { getInteractor } from '../../../src/core/interactors.ts';
 import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/test-device-runtime-gateway.ts';
 
 import { openWebSessionNames } from '../../../src/daemon/web-session-names.ts';
+import { testCreateCommandSurface } from '../../../src/daemon/__tests__/command-surface-fixture.ts';
 
 // Match daemon composition (src/daemon/server/daemon-runtime.ts): the daemon decides on provider
 // ownership through its own admission seam, which root composition installs.
@@ -165,6 +166,7 @@ export async function createProviderScenarioHarness(
         })
       : unavailableDeviceRuntimeGateway);
   const requestHandler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(os.tmpdir(), 'agent-device-provider-scenario-daemon.log'),
     token: PROVIDER_SCENARIO_TOKEN,
     sessionStore,

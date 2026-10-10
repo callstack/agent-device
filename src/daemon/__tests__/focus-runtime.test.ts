@@ -23,6 +23,7 @@ import type { GenericPlatformExecutionParams } from '../generic-leaf-execution.t
 import { readFocusPoint, resolveBoundFocusRuntime } from '../focus-runtime.ts';
 import { expectRefusesUnavailableExactOwnerFact } from './runtime-binding-conformance.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const appleDevice = {
   id: 'ios-simulator',
@@ -191,6 +192,7 @@ test('request router joins focus admission to execution, recording, and ref inva
   activateCompleteRefFrame(session);
   sessionStore.publish(session.name, session);
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: '/tmp/daemon.log',
     token: 't',
     sessionStore,

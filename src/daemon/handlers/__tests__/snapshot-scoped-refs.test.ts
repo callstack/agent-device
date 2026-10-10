@@ -6,6 +6,7 @@ import { makeAndroidSession } from '../../../__tests__/test-utils/session-factor
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { expireRefFrame } from '../../ref-frame.ts';
 import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';
+import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 const ANDROID_SCRIPT_ERROR = 'Unable to load script. Make sure you are running Metro.';
 
@@ -97,6 +98,7 @@ function requestScopedSnapshot(
 ) {
   const runtime = snapshotRuntimeFixture();
   return handleProductionSnapshotCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,

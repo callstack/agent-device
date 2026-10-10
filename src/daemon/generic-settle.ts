@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type {
   SettleObservation,
   SettleParams,
@@ -55,6 +56,7 @@ export type GenericSettleObserver = () => Promise<SettleObservation | undefined>
 export type GenericSettlePlan = { response: DaemonResponse } | { observe?: GenericSettleObserver };
 
 type GenericSettleContext = {
+  createCommandSurface: CreateDaemonCommandSurface;
   sessionRef: SessionRef | undefined;
   req: DaemonRequest;
   session: SessionState;
@@ -121,6 +123,7 @@ function createGenericSettleRuntime(
 ): ReturnType<typeof createInteractionRuntime> | undefined {
   try {
     return createInteractionRuntime({
+      createCommandSurface: context.createCommandSurface,
       req: context.req,
       sessionName: context.sessionName,
       sessionRef: context.sessionRef,

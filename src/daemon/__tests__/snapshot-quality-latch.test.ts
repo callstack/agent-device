@@ -17,6 +17,7 @@ import type { SessionState } from '../session-state.ts';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 vi.mock('../snapshot-interactor-capture.ts', async () => {
   const fixture = await import('./legacy-snapshot-capture-fixture.ts');
@@ -214,6 +215,7 @@ function seedCapture(verdict: SnapshotQualityVerdict, label = 'Continue') {
 
 async function dispatchPublicSnapshot(input: ReturnType<typeof scenario>) {
   return await dispatchSnapshotViaRuntime({
+    createCommandSurface: testCreateCommandSurface,
     req: { command: 'snapshot', positionals: [], token: 't', session: input.sessionName },
     sessionName: input.sessionName,
     logPath: input.logPath,
@@ -241,6 +243,7 @@ test('an internally armed penalty warns once on the first public deferred snapsh
   // resolution) rendered nothing; without the latch the deferred suppression
   // would hide the warning from the user entirely.
   const internal = await dispatchSnapshotViaRuntime({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       command: 'snapshot',
       positionals: [],
@@ -312,6 +315,7 @@ test('an empty ref-scoped diff latches on the captured verdict, not the retained
   });
 
   const diff = await dispatchSnapshotDiffViaRuntime({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       command: 'diff',
       positionals: [],

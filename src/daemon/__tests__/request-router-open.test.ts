@@ -7,6 +7,7 @@ import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
 
 import { replayScriptSourceBundleFor } from '../../__tests__/test-utils/replay-script-source.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
@@ -116,6 +117,7 @@ function createOpenHandler(
   leaseRegistry = new LeaseRegistry(),
 ) {
   return createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
@@ -488,6 +490,7 @@ test('close fails synchronously when root composition omits platform resource cl
     actions: [],
   });
   const handler = createProductionRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

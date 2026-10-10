@@ -4,6 +4,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 
 import path from 'node:path';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
@@ -64,6 +65,7 @@ function makeHandler(sessionStore = makeSessionStore('agent-device-router-typed-
   return {
     sessionStore,
     handler: createRequestHandler({
+      createCommandSurface: testCreateCommandSurface,
       logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',
       sessionStore,

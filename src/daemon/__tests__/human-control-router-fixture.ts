@@ -8,6 +8,7 @@ import { readDaemonProviderCredentials } from '../../provider-credential-fingerp
 import { tenantScopedSessionName } from '../session-tenant-scope.ts';
 import { lifecycleDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
 import { HUMAN_CONTROL_LEASE_REQUEST, humanControlRequest } from './human-control-fixtures.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 export function createHumanControlHarness() {
   const registry = new LeaseRegistry();
@@ -21,6 +22,7 @@ export function createHumanControlHarness() {
     }),
   );
   const handleRequest = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: '/tmp/agent-device-human-control.log',
     token: 'test-token',
     sessionStore,

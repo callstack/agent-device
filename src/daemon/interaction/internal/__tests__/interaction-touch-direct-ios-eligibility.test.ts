@@ -11,6 +11,7 @@ import {
   resetGetRuntimeFixture,
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { contextFromFlags } from './interaction-touch-fixtures.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 // Ordinary selectors stay capture-backed. Only the explicit Maestro
 // non-hittable fallback may use the direct iOS selector route.
@@ -92,6 +93,7 @@ test('ordinary click uses canonical capture even when the owner binds selector t
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -149,6 +151,7 @@ test('fill simple iOS id selector resolves runtime text input evidence before co
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -196,6 +199,7 @@ test('click simple iOS selector forwards Maestro non-hittable coordinate fallbac
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -256,6 +260,7 @@ test('click simple iOS id selector waits for snapshot path after pending gesture
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,

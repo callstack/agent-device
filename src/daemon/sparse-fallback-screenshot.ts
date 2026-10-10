@@ -1,4 +1,5 @@
 import type { DeviceRotation } from '@agent-device/contracts/device';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { contextFromFlags } from './context.ts';
@@ -35,6 +36,7 @@ export type SparseFallbackScreenshot = {
  */
 export async function captureSparseFallbackScreenshot(
   params: {
+    createCommandSurface: CreateDaemonCommandSurface;
     req: DaemonRequest;
     session: SessionState | undefined;
     sessionName: string;
@@ -64,6 +66,7 @@ export async function captureSparseFallbackScreenshot(
 
 async function captureFallbackScreenshot(
   params: {
+    createCommandSurface: CreateDaemonCommandSurface;
     req: DaemonRequest;
     session: SessionState;
     sessionName: string;
@@ -82,6 +85,7 @@ async function captureFallbackScreenshot(
     // warning still carries the manual remedy.
     if (!capture.ok) return undefined;
     const data = await captureScreenshotArtifact({
+      createCommandSurface: params.createCommandSurface,
       session,
       sessionName: params.sessionName,
       // No caller-supplied destination: the screenshot artifact adapter mints a temp

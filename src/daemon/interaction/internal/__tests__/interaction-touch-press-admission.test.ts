@@ -20,6 +20,7 @@ import {
   runFindInternalClick,
   runInteraction,
 } from './interaction-touch-fixtures.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 // Whether a targeted touch may act, and on what: click-option and positional
 // validation, and the ADR 0014 @ref rules (staleness, pins, frame expiry,
@@ -92,6 +93,7 @@ test('click --button middle on macOS fails with an explicit unsupported-operatio
   );
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -119,6 +121,7 @@ test('press coordinates does not treat extra trailing args as selector', async (
   sessionStore.publish(sessionName, makeSession(sessionName));
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,

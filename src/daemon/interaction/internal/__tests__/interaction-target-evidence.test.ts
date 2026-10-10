@@ -14,6 +14,7 @@ import {
 import { SessionScriptWriter } from '../../../session-script-writer.ts';
 import type { SessionState } from '../../../session-state.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 // ADR 0012 decision 3, daemon-routed recording: target-v1 evidence is
 // computed only while the session is being recorded, lands on the recorded
@@ -90,6 +91,7 @@ async function runCommand(
   flags: CommandFlags = {},
 ) {
   return await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: { token: 't', session: sessionName, command, positionals, flags },
     sessionName,
     sessionStore,

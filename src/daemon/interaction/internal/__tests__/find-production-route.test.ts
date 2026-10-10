@@ -4,6 +4,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { makeIosSession as makeSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
@@ -115,6 +116,7 @@ async function runFindThroughLeaf(options: {
       // The real leaf, not a stub.
       return (
         (await handleInteractionCommands({
+          createCommandSurface: testCreateCommandSurface,
           req,
           sessionName,
           sessionStore,

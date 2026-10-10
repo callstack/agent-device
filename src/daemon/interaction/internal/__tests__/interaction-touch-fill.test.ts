@@ -16,6 +16,7 @@ import {
   makeStaleRefSession,
   runInteraction,
 } from './interaction-touch-fixtures.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 // How fill is admitted and projected: its @ref admission and pins, the editable
 // node it keeps, and the guards that refuse before typing.
@@ -100,6 +101,7 @@ test('fill @ref fails fast when the target is off-screen', async () => {
 
   const response = await withRunner(() =>
     handleInteractionCommands({
+      createCommandSurface: testCreateCommandSurface,
       req: {
         token: 't',
         session: sessionName,
@@ -160,6 +162,7 @@ test('fill @ref fails closed when stored ref bounds are invalid (ADR 0014)', asy
   );
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -306,6 +309,7 @@ test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame 
   const findNodes = session.snapshot.nodes;
   const findNode = findNodes[0]!;
   const internal = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -360,6 +364,7 @@ test('fill @ref keeps the original editable node when its parent is the hittable
   mockFillPoint.mockResolvedValue({ filled: true });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,

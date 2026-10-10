@@ -18,6 +18,7 @@ import {
   makeMacOsMenubarSession,
   makeSession,
 } from './interaction-touch-fixtures.ts';
+import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 // Router ownership: one representative per touch command proves
 // handleInteractionCommands claims press/click/longpress/hover/fill.
@@ -77,6 +78,7 @@ test('press coordinates dispatches press and records as press', async () => {
   sessionStore.publish(sessionName, storedSession);
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -119,6 +121,7 @@ test.each([
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: { token: 't', session: sessionName, command, positionals: [...positionals], flags: {} },
     sessionName,
     sessionStore,
@@ -137,6 +140,7 @@ test('click rejects macOS desktop surface interactions until helper routing exis
   sessionStore.publish(sessionName, makeMacOsDesktopSession(sessionName));
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -163,6 +167,7 @@ test('fill rejects macOS menubar surface interactions until helper routing exist
   sessionStore.publish(sessionName, makeMacOsMenubarSession(sessionName));
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -204,6 +209,7 @@ test('longpress @ref resolves the target and dispatches coordinate longpress', a
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -249,6 +255,7 @@ test('hover @ref on web dispatches through the provider hoverRef route, not coor
   };
   sessionStore.publish(sessionName, session);
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -292,6 +299,7 @@ test('hover selector on web resolves the target and dispatches coordinate hover'
   });
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -318,6 +326,7 @@ test('hover is refused by capability on touch platforms before any dispatch', as
   sessionStore.publish(sessionName, makeSession(sessionName));
 
   const response = await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,

@@ -3,6 +3,7 @@ import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 
 import path from 'node:path';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 vi.mock('../../platform-runtime-apple-resources.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../platform-runtime-apple-resources.ts')>()),
@@ -56,6 +57,7 @@ test('router blocks non-record commands when recording was invalidated', async (
   sessionStore.publish('default', session);
 
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
@@ -110,6 +112,7 @@ test('router allows canonical iOS simulator gestures during overlay recording af
     sessionId: 'runner-after',
   });
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

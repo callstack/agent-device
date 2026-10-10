@@ -22,6 +22,7 @@ import {
 } from '@agent-device/contracts/platform-runtime-operations';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 function snapshotDeviceRuntimeGateway(): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   const runtime = snapshotRuntimeFixture();
@@ -50,6 +51,7 @@ function handlerForDevice(device: DeviceInfo) {
     appBundleId: 'com.example.app',
   } as SessionState);
   return createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

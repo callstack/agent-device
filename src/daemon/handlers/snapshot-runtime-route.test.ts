@@ -1,4 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import { testCreateCommandSurface } from '../__tests__/command-surface-fixture.ts';
 
 const { dispatchSnapshotDiffViaRuntime, dispatchSnapshotViaRuntime } = vi.hoisted(() => ({
   dispatchSnapshotDiffViaRuntime: vi.fn(),
@@ -36,6 +37,7 @@ test('snapshot route forwards the request runtime facts and binding seams exactl
   };
 
   await handleSnapshotCommands({
+    createCommandSurface: testCreateCommandSurface,
     req,
     sessionName: 'snapshot-route',
     logPath: '/tmp/snapshot-route.log',
@@ -46,6 +48,7 @@ test('snapshot route forwards the request runtime facts and binding seams exactl
 
   expect(dispatchSnapshotViaRuntime).toHaveBeenCalledOnce();
   expect(dispatchSnapshotViaRuntime).toHaveBeenCalledWith({
+    createCommandSurface: testCreateCommandSurface,
     req,
     sessionName: 'snapshot-route',
     logPath: '/tmp/snapshot-route.log',
@@ -68,6 +71,7 @@ test('diff route forwards the request runtime facts and binding seams exactly on
   };
 
   await handleSnapshotCommands({
+    createCommandSurface: testCreateCommandSurface,
     req,
     sessionName: 'diff-route',
     logPath: '/tmp/diff-route.log',
@@ -78,6 +82,7 @@ test('diff route forwards the request runtime facts and binding seams exactly on
 
   expect(dispatchSnapshotDiffViaRuntime).toHaveBeenCalledOnce();
   expect(dispatchSnapshotDiffViaRuntime).toHaveBeenCalledWith({
+    createCommandSurface: testCreateCommandSurface,
     req,
     sessionName: 'diff-route',
     logPath: '/tmp/diff-route.log',

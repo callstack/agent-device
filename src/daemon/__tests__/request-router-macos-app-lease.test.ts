@@ -9,6 +9,7 @@ import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { screenshotRuntimeFixture } from './screenshot-runtime-fixture.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const BUNDLE_ID = 'com.example.leased';
 const LEASE_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
@@ -52,6 +53,7 @@ function leasedRouter() {
   });
   const runtime = screenshotRuntimeFixture();
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
@@ -119,6 +121,7 @@ test('a leased snapshot carries the app tree and nothing about the host', async 
 test('a request without a macos-app lease keeps its log locators', async () => {
   const sessionStore = makeSessionStore('agent-device-router-unleased-');
   const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

@@ -16,7 +16,7 @@ import path from 'node:path';
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { ArtifactAdapter } from '@agent-device/contracts/artifact-adapter';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
-import { createCommandSurfaceAgentDevice } from '../command-runtime/runtime-command-surface.ts';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import {
   assertSupportedScreenshotPixelDensity,
   readScreenshotResultMetadata,
@@ -48,6 +48,7 @@ export async function resolveScreenshotGenericExecution(
   params: Readonly<{
     req: DaemonRequest;
     session: SessionState;
+    createCommandSurface: CreateDaemonCommandSurface;
   }> &
     ScreenshotRuntimeBindings,
 ): Promise<ResolvedGenericExecution> {
@@ -81,11 +82,13 @@ export async function resolveScreenshotGenericExecution(
 
   const runtime = resolved.runtime;
   const cropRun: ScreenshotCropRun = { warnings: [] };
+  const { createCommandSurface } = params;
   return {
     ok: true,
     recorded: request.recorded,
     execute: async (execution) =>
       await executeScreenshot({
+        createCommandSurface,
         session: execution.session,
         sessionName: execution.sessionName,
         logPath: execution.logPath,
@@ -106,6 +109,7 @@ export async function resolveScreenshotGenericExecution(
  */
 export async function captureScreenshotArtifact(
   params: Readonly<{
+    createCommandSurface: CreateDaemonCommandSurface;
     session: SessionState;
     sessionName: string;
     outPath?: string;
@@ -115,7 +119,7 @@ export async function captureScreenshotArtifact(
   }>,
 ): Promise<CapturedScreenshot> {
   const { session, sessionName, outPath, dispatchContext } = params;
-  const runtime = createCommandSurfaceAgentDevice({
+  const runtime = params.createCommandSurface({
     backend: createBoundScreenshotBackend(params),
     artifacts: createDaemonScreenshotArtifactAdapter(),
     sessions: createReadonlyRuntimeSessionStore(sessionName, session),
@@ -171,6 +175,7 @@ export function screenshotExecutionFromContext(
 
 async function executeScreenshot(
   params: Readonly<{
+    createCommandSurface: CreateDaemonCommandSurface;
     session: SessionState;
     sessionName: string;
     logPath: string;
@@ -190,6 +195,7 @@ async function executeScreenshot(
     logPath: params.logPath,
   });
   const captured = await captureScreenshotArtifact({
+    createCommandSurface: params.createCommandSurface,
     session,
     sessionName: params.sessionName,
     outPath: params.outPath,

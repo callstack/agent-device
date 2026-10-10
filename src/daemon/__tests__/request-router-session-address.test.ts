@@ -4,6 +4,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
@@ -61,6 +62,7 @@ function makeIosDevice(id: string): DeviceInfo {
 
 function createHandler(sessionStore: ReturnType<typeof makeSessionStore>) {
   return createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

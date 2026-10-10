@@ -1,4 +1,5 @@
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import {
   type SelectorCaptureRuntimePlan,
   type SnapshotRuntimePlan,
@@ -41,6 +42,8 @@ import { AppError } from '@agent-device/kernel/errors';
 import { isHandheldAppleDevice } from '@agent-device/kernel/device';
 
 export type SnapshotRuntimeRouteParams = {
+  /** Builds the command surface this request's snapshot runtime executes through. */
+  createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
   sessionName: string;
   sessionRef?: SessionRef;

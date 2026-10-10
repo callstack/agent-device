@@ -19,6 +19,7 @@ import {
 } from '../../handlers/session-replay-command.ts';
 import type { SessionCommandParams } from '../../handlers/session-command-input.ts';
 import * as maestro from '@agent-device/maestro';
+import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 const spy = vi.spyOn(maestro, 'executeMaestroFlow');
 
@@ -71,6 +72,7 @@ async function runWithNetworkFlag(publicNetworkOnly: boolean | undefined) {
   // the asserted path: dropping it in the handler must fail this test, since an
   // unset field reads as trusted and a remote flow would run evalScript.
   const response = await handleReplayCommand({
+    createCommandSurface: testCreateCommandSurface,
     req,
     sessionName: 'default',
     logPath: path.join(root, 'daemon.log'),

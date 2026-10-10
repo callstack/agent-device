@@ -28,6 +28,7 @@ import { handleSnapshotCommands } from '../handlers/snapshot.ts';
 import { resolveBoundSelectorCapture } from '../selector-capture-binding.ts';
 import { dispatchGetViaRuntime } from '../selector-runtime.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const webDevice = {
   id: 'web',
@@ -158,6 +159,7 @@ test.each(['rebuild', 'retire'] as const)(
       const address = 'cwd:sleep-wait:default';
       const ref = sessionStore.publish(address, makeSession('default', { device: harness.device }));
       const running = handleSnapshotCommands({
+        createCommandSurface: testCreateCommandSurface,
         req: waitRequest(['100']),
         sessionName: address,
         logPath: '/tmp/daemon.log',
@@ -212,6 +214,7 @@ async function runWait(
   }
   sessionStore.publish(session.name, session);
   const response = await handleSnapshotCommands({
+    createCommandSurface: testCreateCommandSurface,
     req: waitRequest(positionals, flags),
     sessionName: session.name,
     logPath: '/tmp/daemon.log',
@@ -465,6 +468,7 @@ test('a read after a natively satisfied text wait captures instead of reusing th
   expect(harness.captureSnapshot).toHaveBeenCalledOnce();
 
   const read = await dispatchGetViaRuntime({
+    createCommandSurface: testCreateCommandSurface,
     req: {
       command: 'get',
       positionals: ['text', 'label="cold.start"'],

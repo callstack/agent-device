@@ -2,6 +2,7 @@ import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/c
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import type { PlatformResourceCleanup } from '../platform-resource-cleanup.ts';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { AppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { type AudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
@@ -40,6 +41,7 @@ export type SessionCommandInput = {
   retainDeviceExecutionLock?: (deviceId: string) => Promise<void>;
   throwIfCanceled?: () => void;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+  createCommandSurface: CreateDaemonCommandSurface;
   platformResourceCleanup?: PlatformResourceCleanup;
 };
 
