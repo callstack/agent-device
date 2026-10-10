@@ -94,7 +94,9 @@ function openOnUncontendedDevice(
   releaseAfterMs?: number,
 ): Promise<OpenOutcome> {
   return scope.runLocked(async () => {
-    const currentOwner = sessionStore.findByDevice(CONTESTED_DEVICE.id);
+    const currentOwner = sessionStore
+      .listRefs()
+      .find((ref) => ref.session.device.id === CONTESTED_DEVICE.id);
     if (currentOwner && currentOwner.address !== scope.sessionName) {
       return `refused:${currentOwner.address}`;
     }

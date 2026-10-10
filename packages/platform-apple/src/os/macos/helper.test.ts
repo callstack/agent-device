@@ -241,6 +241,32 @@ test('macOS helper screenshot argv carries only --out and --surface', async () =
   assert.deepEqual(receivedArgs, ['screenshot', '--out', '/tmp/out.png', '--surface', 'desktop']);
 });
 
+test('macOS helper screenshots never run two captures at once', async () => {
+  let active = 0;
+  let maxActive = 0;
+  const provider = createLocalAppleToolProvider({
+    macosHelper: {
+      run: async () => {
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        active -= 1;
+        return helperReturn({ path: '/tmp/out.png', surface: 'app' });
+      },
+    },
+  });
+  const app = macOsHelperSurface('app', 'native')!;
+
+  await withAppleToolProvider(provider, async () => {
+    await Promise.all([
+      runMacOsScreenshotAction('/tmp/one.png', { surface: app, bundleId: 'com.example.one' }),
+      runMacOsScreenshotAction('/tmp/two.png', { surface: app, bundleId: 'com.example.two' }),
+    ]);
+  });
+
+  assert.equal(maxActive, 1);
+});
+
 test('helper entry points accept only an owner-routed surface', () => {
   // Never invoked: each directive fails typecheck once its entry point widens back to an
   // unbranded or optional surface.

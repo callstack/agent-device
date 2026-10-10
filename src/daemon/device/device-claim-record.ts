@@ -10,7 +10,7 @@ import {
   type RuntimeOwnerRef,
 } from '@agent-device/contracts/platform-runtime';
 
-import { canonicalLocalDeviceKey } from './device-claim-paths.ts';
+import { appScopedDeviceKey, canonicalLocalDeviceKey } from './device-claim-paths.ts';
 
 /** Schema version of a process-owned claim record; v1 records migrate to it on read. */
 export const DEVICE_CLAIM_SCHEMA_VERSION = 2;
@@ -30,6 +30,8 @@ export type DeviceClaim = {
   schemaVersion: 2;
   deviceKey: string;
   device: DeviceIdentity & { name: string };
+  /** Present when the claim holds one app of the device rather than the whole device. */
+  app?: DeviceClaimApp;
   session: string;
   workspace: string;
   stateDir: string;
@@ -42,6 +44,8 @@ export type DeviceClaim = {
   abandonedAtMs?: number;
 };
 
+export type DeviceClaimApp = { bundleId: string };
+
 /**
  * The ownership token a claim grants its holder: everything a clearing surface must match to let
  * that holder release, abandon, or keep fencing the claim, and nothing else.
@@ -51,6 +55,8 @@ export type DeviceClaimSessionOwnership = {
   ownerToken: string;
   ownerPid: number;
   ownerStartTime: string | null;
+  /** The one app the claim holds; absent when it holds the whole device. */
+  app?: DeviceClaimApp;
 };
 
 /** The ownership token carried by a persisted claim record. */
@@ -60,6 +66,7 @@ export function ownershipFromClaim(claim: DeviceClaim): DeviceClaimSessionOwners
     ownerToken: claim.ownerToken,
     ownerPid: claim.ownerPid,
     ownerStartTime: claim.ownerStartTime,
+    ...(claim.app ? { app: claim.app } : {}),
   };
 }
 
@@ -223,15 +230,27 @@ function buildDecodedClaim(
   const location = decodeClaimLocation(raw);
   const owner = decodeClaimOwner(raw);
   const timestamps = decodeClaimTimestamps(raw);
-  if (!location || !owner || !timestamps) return null;
-  if (location.deviceKey !== canonicalLocalDeviceKey(identity)) return null;
+  const app = decodeClaimApp(raw.app);
+  if (!location || !owner || !timestamps || app === null) return null;
+  const deviceKey = canonicalLocalDeviceKey(identity);
+  const expectedKey = app ? appScopedDeviceKey(deviceKey, app.bundleId) : deviceKey;
+  if (location.deviceKey !== expectedKey) return null;
   return {
     schemaVersion: DEVICE_CLAIM_SCHEMA_VERSION,
     ...location,
     device: { ...identity, name },
+    ...(app ? { app } : {}),
     ...owner,
     ...timestamps,
   };
+}
+
+/** `undefined` for a whole-device claim, `null` for an `app` field that does not decode. */
+function decodeClaimApp(value: unknown): DeviceClaimApp | undefined | null {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return null;
+  const bundleId = readNonEmptyString(value.bundleId);
+  return bundleId ? { bundleId } : null;
 }
 
 function decodeClaimLocation(

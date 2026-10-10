@@ -317,7 +317,7 @@ function isSessionRefValue(
   return (
     node.type === 'CallExpression' &&
     callee?.type === 'MemberExpression' &&
-    ['lookup', 'publish', 'findByDevice', 'refresh'].includes(memberName(callee) ?? '') &&
+    ['lookup', 'publish', 'refresh'].includes(memberName(callee) ?? '') &&
     isSessionStoreReceiver(callee.object, storeBindings)
   );
 }

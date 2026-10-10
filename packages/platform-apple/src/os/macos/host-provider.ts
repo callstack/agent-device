@@ -8,6 +8,7 @@ import type { IosAppInfo } from '../../core/app-info.ts';
 import type {
   AppleMacOsHostProvider,
   AppleToolCommandExecutor,
+  MacOsOpenOptions,
 } from '../../core/tool-provider-types.ts';
 
 type ApplePlistJsonReader = (plistPath: string) => Promise<Record<string, unknown> | null>;
@@ -17,11 +18,14 @@ export function createLocalAppleMacOsHostProvider(
   readPlistJson: ApplePlistJsonReader,
 ): AppleMacOsHostProvider {
   return {
-    openBundle: async (bundleId, url) => {
-      await runCommand('open', buildMacOpenArgs(bundleId, url));
+    openBundle: async (bundleId, url, options) => {
+      await runCommand('open', [
+        ...openActivationArgs(options),
+        ...buildMacOpenArgs(bundleId, url),
+      ]);
     },
-    openTarget: async (target) => {
-      await runCommand('open', [target]);
+    openTarget: async (target, options) => {
+      await runCommand('open', [...openActivationArgs(options), target]);
     },
     readClipboard: async () => {
       const result = requireExecSuccess(
@@ -63,6 +67,10 @@ export function createLocalAppleMacOsHostProvider(
     },
     listApps: async (filter) => await listLocalMacApps(runCommand, readPlistJson, filter),
   };
+}
+
+function openActivationArgs(options: MacOsOpenOptions | undefined): string[] {
+  return options?.background ? ['-g'] : [];
 }
 
 function buildMacOpenArgs(bundleId: string, url?: string): string[] {

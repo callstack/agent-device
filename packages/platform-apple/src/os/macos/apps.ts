@@ -60,26 +60,27 @@ export async function resolveMacOsApp(app: string): Promise<string> {
 export async function openMacOsApp(
   _device: DeviceInfo,
   app: string,
-  options?: { appBundleId?: string; url?: string },
+  options?: { appBundleId?: string; url?: string; background?: boolean },
 ): Promise<void> {
+  const openOptions = { background: options?.background === true };
   const explicitUrl = options?.url?.trim();
   if (explicitUrl) {
     if (!isDeepLinkTarget(explicitUrl)) {
       throw new AppError('INVALID_ARGS', 'open <app> <url> requires a valid URL target');
     }
     const appId = options?.appBundleId ?? (await resolveMacOsApp(app));
-    await resolveMacOsHostProvider().openBundle(appId, explicitUrl);
+    await resolveMacOsHostProvider().openBundle(appId, explicitUrl, openOptions);
     return;
   }
 
   const target = app.trim();
   if (isDeepLinkTarget(target)) {
-    await resolveMacOsHostProvider().openTarget(target);
+    await resolveMacOsHostProvider().openTarget(target, openOptions);
     return;
   }
 
   const bundleId = options?.appBundleId ?? (await resolveMacOsApp(target));
-  await resolveMacOsHostProvider().openBundle(bundleId);
+  await resolveMacOsHostProvider().openBundle(bundleId, undefined, openOptions);
 }
 
 export async function closeMacOsApp(_device: DeviceInfo, app: string): Promise<void> {

@@ -295,6 +295,8 @@ export type Interactor = {
       launchArgs?: string[];
       terminateRunningApp?: boolean;
       url?: string;
+      /** macOS: launch or reopen without bringing the app to the front. */
+      background?: boolean;
     },
   ): Promise<void>;
   openDevice(): Promise<void>;

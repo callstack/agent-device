@@ -9,7 +9,7 @@ import {
 } from '@agent-device/device-selection/device-selection-resolver';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type { SessionRef, SessionState } from '../../session-state.ts';
 import {
@@ -42,7 +42,6 @@ import {
   buildDeviceInUseBySessionError,
   buildForeignWorkspaceSessionConflict,
 } from '../../session-recovery-hints.ts';
-import { describeOpenWaitForRefusal } from '../../open-device-contention-wait.ts';
 import { isImplicitSessionScopeConflict, resolvePublicSessionName } from '../../session-routing.ts';
 import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
 import {
@@ -55,6 +54,17 @@ import {
   type DeviceClaimReconciler,
 } from '../../device/device-claims.ts';
 import type { TakenOverDeviceClaim } from '../../device/device-claim-reboot.ts';
+import type { DeviceClaimApp } from '../../device/device-claim-record.ts';
+import {
+  admittedLeaseApp,
+  describeOpenWaitForRefusal,
+  isSameApp,
+  sessionConflictsWithOpen,
+  sessionHeldApp,
+} from '../../open-device-contention-wait.ts';
+import { isDeepLinkTarget } from '@agent-device/contracts/command';
+import { readMacOsAppBackend } from '@agent-device/contracts/session';
+import { readHostEnvironmentVariable } from '@agent-device/host-kit/process';
 import { deviceBootObservation } from '../../../platform-runtime-device-boot.ts';
 import { appendResponseWarning } from './session-open-warnings.ts';
 import {
@@ -240,6 +250,7 @@ export async function completeOpenCommand(params: {
     runtimeLaunchUrl: runtimeHints?.launchUrl,
     appBundleId: sessionAppBundleId,
     surface,
+    ...(opensAppInBackground(req, existingSession, deviceClaim) ? { background: true } : {}),
     hasExistingSession: existingSession !== undefined,
     relaunch: shouldRelaunch,
     prewarmRunnerBeforeOpen: req.flags?.maestro?.prewarmRunnerBeforeOpen === true,
@@ -373,33 +384,40 @@ async function prepareOpenDispatchSession(params: {
 }
 
 /**
- * A session admitted under a `macos-app` lease holds one app, not the host Mac (ADR 0007): other
- * app-leased sessions on the same Mac do not stand in its way.
+ * A session scoped to one app opens it without bringing it to the front, which leaves the
+ * frontmost app and every other session's app where they are (ADR 0034).
  */
-function isMacOsAppLeaseOpen(req: DaemonRequest): boolean {
-  return req.internal?.admittedLease?.backend === 'macos-app';
+function opensAppInBackground(
+  req: DaemonRequest,
+  existingSession: SessionState | undefined,
+  deviceClaim: DeviceClaimSessionOwnership | undefined,
+): boolean {
+  const heldApp = existingSession
+    ? sessionHeldApp(existingSession)
+    : (deviceClaim?.app ?? admittedLeaseApp(req.internal?.admittedLease));
+  return heldApp !== undefined;
 }
 
 /**
- * The refusal an open gets when another session already holds the device. The wait an expired
- * `--wait` budget spent is carried into the recovery text, because a caller that waited is not
- * helped by being told to wait.
+ * The refusal an open gets when another session already holds a conflicting part of the device.
+ * The wait an expired `--wait` budget spent is carried into the recovery text, because a caller
+ * that waited is not helped by being told to wait.
  */
 function findNewSessionDeviceConflict(params: {
   req: DaemonRequest;
   device: DeviceInfo;
   sessionStore: SessionStore;
+  openerApp: DeviceClaimApp | undefined;
 }): DaemonFailureResponse | undefined {
-  const { req, device, sessionStore } = params;
-  const inUse = isMacOsAppLeaseOpen(req)
-    ? sessionStore
-        .listRefs()
-        .find(
-          (ref) =>
-            ref.session.device.id === device.id && ref.session.lease?.leaseBackend !== 'macos-app',
-        )
-    : sessionStore.findByDevice(device.id);
+  const { req, device, sessionStore, openerApp } = params;
+  const inUse = sessionStore
+    .listRefs()
+    .find(
+      (ref) =>
+        ref.session.device.id === device.id && sessionConflictsWithOpen(ref.session, openerApp),
+    );
   if (!inUse) return undefined;
+  req.internal?.reportOpenDeviceConflict?.(openerApp);
   // The wait the caller paid for belongs to `open` alone: an interaction that hits the same busy
   // device cannot wait for it, and would be sent off with a flag its own command rejects.
   const attempt = describeOpenWaitForRefusal(req);
@@ -409,6 +427,82 @@ function findNewSessionDeviceConflict(params: {
   return buildDeviceInUseBySessionError(inUse, device, attempt);
 }
 
+/**
+ * The app a native macOS app session claims instead of the whole Mac (ADR 0034). The native
+ * backend acts on the session app alone, so another session may drive another app. Every other
+ * macOS session, an open whose app is not known before launch, and a `macos-app` lease (which
+ * takes no claim) get no app claim.
+ */
+async function resolveAppClaim(params: {
+  req: DaemonRequest;
+  device: DeviceInfo;
+  surface: SessionSurface;
+  openTarget: string | undefined;
+  lifecycle: OpenApplicationRuntime;
+}): Promise<DeviceClaimApp | undefined> {
+  const { req, device, surface, openTarget, lifecycle } = params;
+  if (
+    !isMacOs(device) ||
+    surface !== 'app' ||
+    !openTarget ||
+    isDeepLinkTarget(openTarget) ||
+    deviceClaimRuleForOwner(lifecycle.owner, req.internal?.admittedLease) !== 'ordinary' ||
+    readMacOsAppBackend(readHostEnvironmentVariable) !== 'native'
+  ) {
+    return undefined;
+  }
+  const { appBundleId } = await lifecycle.operations.resolveOpenTarget({
+    target: openTarget,
+    surface,
+    foreground: false,
+  });
+  return appBundleId ? { bundleId: appBundleId } : undefined;
+}
+
+/**
+ * A session that holds an app claim may reopen only that app on the app surface: anything else
+ * would drive what its claim does not cover.
+ */
+export function reopenOutsideAppClaim(params: {
+  session: SessionState;
+  surface: SessionSurface;
+  appBundleId: string | undefined;
+}): DaemonResponse | undefined {
+  const { session, surface, appBundleId } = params;
+  const heldApp = session.deviceClaim?.app;
+  if (!heldApp) return undefined;
+  if (
+    surface === 'app' &&
+    appBundleId !== undefined &&
+    isSameApp(heldApp, { bundleId: appBundleId })
+  ) {
+    return undefined;
+  }
+  return errorResponse(
+    'INVALID_ARGS',
+    `Session "${session.name}" holds ${heldApp.bundleId} only, so it can reopen only that app on the app surface.`,
+    {
+      reason: 'app-claim-scope',
+      deviceKey: session.deviceClaim?.deviceKey,
+      hint: `To open a link in this app, name the app: open ${heldApp.bundleId} <url>. For another app or surface, close this session or use a new --session.`,
+    },
+  );
+}
+
+/** The claim was taken for the app resolved before preparation; the open must launch that app. */
+function openedOutsideAppClaim(
+  app: DeviceClaimApp | undefined,
+  resolved: string | undefined,
+  openTarget: string | undefined,
+): DaemonResponse | undefined {
+  if (!app || (resolved !== undefined && isSameApp(app, { bundleId: resolved }))) return undefined;
+  return errorResponse(
+    'COMMAND_FAILED',
+    `${openTarget ?? 'The app'} resolved to ${resolved ?? 'no app'} after its claim was taken for ${app.bundleId}.`,
+    { reason: 'app-claim-scope', hint: 'Run the same open again.' },
+  );
+}
+
 async function acquireDeviceClaimForOwner(params: {
   req: DaemonRequest;
   device: DeviceInfo;
@@ -416,12 +510,14 @@ async function acquireDeviceClaimForOwner(params: {
   sessionName: string;
   sessionStore: SessionStore;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+  app: DeviceClaimApp | undefined;
 }): Promise<
   | DeviceClaimAcquireResult
   | { status: 'not-required' }
   | { status: 'refused'; response: DaemonResponse }
 > {
-  const { req, device, owner, sessionName, sessionStore, reconcileOrphanedDeviceClaim } = params;
+  const { req, device, owner, sessionName, sessionStore, reconcileOrphanedDeviceClaim, app } =
+    params;
   switch (deviceClaimRuleForOwner(owner, req.internal?.admittedLease)) {
     case 'none':
       return { status: 'not-required' };
@@ -449,8 +545,46 @@ async function acquireDeviceClaimForOwner(params: {
         stateDir: sessionStore.resolveDaemonStateDir(),
         reconcileOrphanedDeviceClaim,
         observeDeviceBoot: deviceBootObservation,
+        ...(app ? { app } : {}),
       });
   }
+}
+
+/** Takes the claim a new session needs: its app's, or the whole device's. */
+async function claimNewSessionDevice(params: {
+  req: DaemonRequest;
+  device: DeviceInfo;
+  surface: SessionSurface;
+  openTarget: string | undefined;
+  lifecycle: OpenApplicationRuntime;
+  sessionName: string;
+  sessionStore: SessionStore;
+  reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+}): Promise<
+  | { response: DaemonResponse }
+  | {
+      app: DeviceClaimApp | undefined;
+      deviceClaim: DeviceClaimSessionOwnership | undefined;
+      tookOverDeviceClaim: TakenOverDeviceClaim | undefined;
+    }
+> {
+  const { req, device, lifecycle, sessionStore } = params;
+  const app = await resolveAppClaim(params);
+  const conflict = findNewSessionDeviceConflict({
+    req,
+    device,
+    sessionStore,
+    openerApp: admittedLeaseApp(req.internal?.admittedLease) ?? app,
+  });
+  if (conflict) return { response: conflict };
+  const ownerClaim = await acquireDeviceClaimForOwner({ ...params, owner: lifecycle.owner, app });
+  if (ownerClaim.status === 'conflict') {
+    return { response: buildDeviceClaimConflictError(device, ownerClaim.conflict) };
+  }
+  if (ownerClaim.status === 'refused') return { response: ownerClaim.response };
+  return ownerClaim.status === 'acquired'
+    ? { app, deviceClaim: ownerClaim.ownership, tookOverDeviceClaim: ownerClaim.tookOver }
+    : { app, deviceClaim: undefined, tookOverDeviceClaim: undefined };
 }
 
 export async function openNewSessionWithDeviceClaim(params: {
@@ -484,25 +618,18 @@ export async function openNewSessionWithDeviceClaim(params: {
     selection,
   } = params;
   requireOpenSessionAdmission(sessionStore, sessionName, undefined);
-  const conflict = findNewSessionDeviceConflict({ req, device, sessionStore });
-  if (conflict) return { type: 'response', response: conflict };
-
-  const ownerClaim = await acquireDeviceClaimForOwner({
+  const claimed = await claimNewSessionDevice({
     req,
     device,
-    owner: lifecycle.owner,
+    surface,
+    openTarget,
+    lifecycle,
     sessionName,
     sessionStore,
     reconcileOrphanedDeviceClaim,
   });
-  if (ownerClaim.status === 'conflict')
-    return {
-      type: 'response',
-      response: buildDeviceClaimConflictError(device, ownerClaim.conflict),
-    };
-  if (ownerClaim.status === 'refused') return { type: 'response', response: ownerClaim.response };
-  const deviceClaim = ownerClaim.status === 'acquired' ? ownerClaim.ownership : undefined;
-  const tookOverDeviceClaim = ownerClaim.status === 'acquired' ? ownerClaim.tookOver : undefined;
+  if ('response' in claimed) return { type: 'response', response: claimed.response };
+  const { app, deviceClaim, tookOverDeviceClaim } = claimed;
   const effects: NewSessionOpenEffects = { mayHaveStarted: false };
   const rollbackClaim = async () =>
     await rollbackNewSessionClaim({
@@ -526,6 +653,11 @@ export async function openNewSessionWithDeviceClaim(params: {
     if (details.type === 'response') {
       await rollbackClaim();
       return { type: 'response', response: details.response };
+    }
+    const outsideClaim = openedOutsideAppClaim(app, details.details.appBundleId, openTarget);
+    if (outsideClaim) {
+      await rollbackClaim();
+      return { type: 'response', response: outsideClaim };
     }
     // Preparation can boot the device or warm caches, but it cannot establish session ownership.
     // Stamping here is what covers a boot preparation caused for this very open; from

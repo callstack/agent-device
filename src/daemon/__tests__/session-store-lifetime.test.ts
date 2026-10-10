@@ -23,8 +23,7 @@ test('refs capture records while resolving rebuilds from the same lifetime', () 
   const initial = store.publish(ADDRESS, session);
   const lookup = store.lookup(ADDRESS)!;
   const listed = store.listRefs()[0]!;
-  const byDevice = store.findByDevice(session.device.id)!;
-  for (const ref of [lookup, listed, byDevice]) {
+  for (const ref of [lookup, listed]) {
     assert.notEqual(ref, initial);
     assert.equal(ref.lifetime, initial.lifetime);
     assert.equal(ref.session, session);
@@ -33,7 +32,7 @@ test('refs capture records while resolving rebuilds from the same lifetime', () 
   const rebuilt = store.update(initial, { appName: 'Reopened' });
   assert.equal(initial.session, session);
   assert.equal(initial.session.appName, undefined);
-  for (const ref of [initial, lookup, listed, byDevice]) {
+  for (const ref of [initial, lookup, listed]) {
     assert.equal(store.resolveCurrent(ref), rebuilt);
   }
   assert.equal(store.lookup(ADDRESS)?.session, rebuilt);

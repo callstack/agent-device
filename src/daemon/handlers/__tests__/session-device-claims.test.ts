@@ -565,7 +565,13 @@ test('an open under a macos-app lease holds only its app, beside other claims on
     name: 'other-app',
     device: MACOS_DEVICE,
     appBundleId: 'com.example.other',
-    lease: { leaseId: 'b'.repeat(32), tenantId: 't2', runId: 'r2', leaseBackend: 'macos-app' },
+    lease: {
+      leaseId: 'b'.repeat(32),
+      tenantId: 't2',
+      runId: 'r2',
+      leaseBackend: 'macos-app',
+      deviceKey: 'com.example.other',
+    },
     createdAt: Date.now(),
     actions: [],
   });

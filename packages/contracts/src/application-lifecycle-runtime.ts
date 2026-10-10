@@ -97,6 +97,8 @@ export type OpenApplicationInput = Readonly<{
   runtimeLaunchUrl?: string;
   appBundleId?: string;
   surface: SessionSurface;
+  /** Launch or reopen without bringing the app to the front: the session holds this app alone. */
+  background?: boolean;
   hasExistingSession: boolean;
   relaunch: boolean;
   prewarmRunnerBeforeOpen: boolean;

@@ -9,6 +9,7 @@ import type {
 } from '@agent-device/kernel/contracts';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { RequestDispatchLedger } from './request-dispatch-ledger.ts';
+import type { DeviceClaimApp } from './device/device-claim-record.ts';
 
 /**
  * The daemon's own request and response vocabulary: the wire shape from `@agent-device/contracts/command` (`DaemonWireRequest`)
@@ -29,9 +30,16 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
    * What an `open` spent from its `--wait` budget while it waited for this device outside the
    * device execution lock. The refusal the open ends with has to say the budget was spent, and
    * only the daemon that spent it can know that; `internal` never crosses the transport, so no
-   * client can claim a wait it did not perform.
+   * client can claim a wait it did not perform. The wait creates the object and updates it in
+   * place, so every copy of `internal` that lease admission makes reads the same spend.
    */
   openDeviceWait?: { waitedMs: number };
+  /**
+   * Present on an `open` with a `--wait` budget. The open calls it under the device lock when a
+   * session holds a claim that conflicts with the one it would take (`undefined`: the whole
+   * device), then returns its refusal; the wait decides whether to drop that refusal and wait.
+   */
+  reportOpenDeviceConflict?: (openerApp: DeviceClaimApp | undefined) => void;
   publicNetworkOnly?: true;
   /**
    * The steps a batch still has ahead of this one. The open seam derives platform readiness

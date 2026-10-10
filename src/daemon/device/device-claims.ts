@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   deviceIdentity,
   isApplePlatform,
+  isMacOs,
   resolveDeviceAppleOs,
   type DeviceIdentity,
   type DeviceInfo,
@@ -22,6 +23,7 @@ import {
 } from './device-claim-inspection.ts';
 import type { TakenOverDeviceClaim } from './device-claim-reboot.ts';
 import {
+  appScopedDeviceKey,
   canonicalLocalDeviceKey,
   resolveDeviceClaimPath,
   resolveDeviceClaimRoot,
@@ -31,6 +33,7 @@ import {
   ownershipFromClaim,
   type AllocatorClaimIdentity,
   type DeviceClaim,
+  type DeviceClaimApp,
   type DeviceClaimSessionOwnership,
 } from './device-claim-record.ts';
 import {
@@ -83,13 +86,50 @@ export async function acquireDeviceClaim(params: {
    * that outlives a live owner. Callers that have no answer to give omit it and keep the conflict.
    */
   observeDeviceBoot?: DeviceBootObservationService;
+  /** Claims only this app of the device; other apps stay available to other sessions. */
+  app?: DeviceClaimApp;
 }): Promise<DeviceClaimAcquireResult> {
   const identity = deviceClaimIdentity(params.device);
   const deviceKey = canonicalLocalDeviceKey(identity);
-  return await withDeviceClaimLock(
-    deviceKey,
-    async () => await claimHeldDevice({ ...params, deviceKey, identity }),
-  );
+  const { app } = params;
+  // Lock order is device key, then app key: every acquisition on the device holds the device
+  // key's lock, so a whole-device claim and an app claim are never written past each other.
+  return await withDeviceClaimLock(deviceKey, async () => {
+    if (!app) return await claimHeldDevice({ ...params, deviceKey, identity });
+    const deviceClaim = await resolveExistingClaim({
+      ...params,
+      deviceKey,
+      owner: readCurrentOwnerIdentity(),
+    });
+    if (deviceClaim.status === 'conflict') return deviceClaim;
+    if (deviceClaim.status === 'held') {
+      const held = inspectDeviceClaimFile(resolveDeviceClaimPath(deviceKey));
+      if (held) return { status: 'conflict', conflict: held };
+    }
+    const appKey = appScopedDeviceKey(deviceKey, app.bundleId);
+    const acquired = await withDeviceClaimLock(
+      appKey,
+      async () => await claimHeldDevice({ ...params, deviceKey: appKey, identity, app }),
+    );
+    if (acquired.status !== 'acquired') return acquired;
+    removeSupersededDeviceClaim(deviceKey);
+    const tookOver =
+      acquired.tookOver ?? (deviceClaim.status === 'available' ? deviceClaim.tookOver : undefined);
+    return tookOver ? { ...acquired, tookOver } : acquired;
+  });
+}
+
+/**
+ * An app acquisition that found the device key available leaves no record there: what remains can
+ * only be this daemon's own abandoned whole-device claim, which would otherwise keep fencing every
+ * other daemon's apps. The caller holds the device key's lock.
+ */
+function removeSupersededDeviceClaim(deviceKey: string): void {
+  try {
+    fs.unlinkSync(resolveDeviceClaimPath(deviceKey));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
 }
 
 /**
@@ -141,9 +181,14 @@ async function claimHeldDevice(params: {
   stateDir: string;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
   observeDeviceBoot?: DeviceBootObservationService;
+  app?: DeviceClaimApp;
 }): Promise<DeviceClaimAcquireResult> {
   const { deviceKey, identity } = params;
   const owner = readCurrentOwnerIdentity();
+  if (!params.app && isMacOs(params.device)) {
+    const appConflict = await settleForeignAppClaims(deviceKey, params);
+    if (appConflict) return { status: 'conflict', conflict: appConflict };
+  }
   const existing = await resolveExistingClaim({
     ...params,
     owner,
@@ -158,6 +203,7 @@ async function claimHeldDevice(params: {
       ...identity,
       name: params.device.name,
     },
+    ...(params.app ? { app: params.app } : {}),
     session: params.session,
     workspace: params.workspace,
     stateDir: params.stateDir,
@@ -173,6 +219,40 @@ async function claimHeldDevice(params: {
     ownership: ownershipFromClaim(claim),
     ...(existing.tookOver ? { tookOver: existing.tookOver } : {}),
   };
+}
+
+/**
+ * A whole-device claim excludes every app claim on the device held by another daemon. Runs under the
+ * device key's lock, which every app claim acquisition also holds, so no app claim appears behind
+ * the scan. An app claim whose owner provably cannot release it is settled like any stale claim;
+ * any other foreign app claim is the conflict. This daemon's own app claims are its session
+ * store's business, and a transient command is covered by them.
+ */
+async function settleForeignAppClaims(
+  deviceKey: string,
+  params: { stateDir: string; reconcileOrphanedDeviceClaim: DeviceClaimReconciler },
+): Promise<InspectedDeviceClaim | undefined> {
+  const appKeyPrefix = appScopedDeviceKey(deviceKey, '');
+  const owner = readCurrentOwnerIdentity();
+  for (const entry of inspectDeviceClaims({})) {
+    const scanned = entry.claim;
+    if (!scanned?.app || !scanned.deviceKey.startsWith(appKeyPrefix)) continue;
+    if (isClaimOwnedByThisDaemon(scanned, params.stateDir, owner)) continue;
+    const conflict = await withDeviceClaimLock(scanned.deviceKey, async () => {
+      const current = inspectDeviceClaimFile(resolveDeviceClaimPath(scanned.deviceKey));
+      if (!current) return undefined;
+      if (!current.claim) return current;
+      if (isClaimOwnedByThisDaemon(current.claim, params.stateDir, owner)) return undefined;
+      if (!deviceClaimOwnerCannotRelease(current.classification)) return current;
+      const settled = await settleVerifiedOrphanedClaim(
+        current.claim,
+        params.reconcileOrphanedDeviceClaim,
+      );
+      return settled.status === 'retained' ? current : undefined;
+    });
+    if (conflict) return conflict;
+  }
+  return undefined;
 }
 
 /**

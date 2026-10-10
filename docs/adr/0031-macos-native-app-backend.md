@@ -36,6 +36,8 @@ window fields are unmeasured.
    assistive client. The app surface walks up to 48 levels deep and reports a deeper tree as
    truncated; other helper surfaces keep 12.
 6. Screenshots capture the session app's front window by itself through ScreenCaptureKit.
+7. An app session claims only its app, and `open` launches or reopens that app with `open -g`,
+   leaving the frontmost app in front ([ADR 0034](0034-macos-per-app-claims.md)).
 
 ## Context
 

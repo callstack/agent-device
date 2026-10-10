@@ -567,15 +567,7 @@
       "exports": ["CommandPolicy", "CommandSessionRecord"]
     }
   ],
-  "usedClassMembers": [
-    "name",
-    "listActiveLeases",
-    "delete",
-    "values",
-    "elapsedMs",
-    "isExpired",
-    "findByDevice"
-  ],
+  "usedClassMembers": ["name", "listActiveLeases", "delete", "values", "elapsedMs", "isExpired"],
   "rules": {
     "unused-types": "error",
     "duplicate-exports": "off"
