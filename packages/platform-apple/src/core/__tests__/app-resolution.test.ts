@@ -11,8 +11,10 @@ vi.mock('../simctl.ts', async (importOriginal) => ({
 import {
   detectSoleRunningIosSimulatorApp,
   findIosSimulatorInstalledApp,
+  resolveIosApp,
 } from '../app-resolution.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 
 const bootedSimulator: DeviceInfo = {
   platform: 'apple',
@@ -28,8 +30,30 @@ beforeEach(() => {
     stdout: JSON.stringify({
       'com.example.demo': { CFBundleDisplayName: 'Demo' },
       'com.apple.Preferences': { CFBundleDisplayName: 'Settings' },
+      'com.booking.app': { CFBundleDisplayName: 'Booking.com' },
     }),
   });
+});
+
+test('resolveIosApp passes a dotted target through without listing apps by default', async () => {
+  assert.equal(await resolveIosApp(bootedSimulator, 'Booking.com'), 'Booking.com');
+  assert.equal(mockRunSimctl.mock.calls.length, 0);
+});
+
+test('resolveIosApp installedOnly matches installed bundle ids, then display names, else refuses', async () => {
+  const installedOnly = { installedOnly: true } as const;
+  assert.equal(
+    await resolveIosApp(bootedSimulator, 'com.example.demo', installedOnly),
+    'com.example.demo',
+  );
+  assert.equal(
+    await resolveIosApp(bootedSimulator, 'Booking.com', installedOnly),
+    'com.booking.app',
+  );
+  await assert.rejects(
+    () => resolveIosApp(bootedSimulator, 'com.example.missing', installedOnly),
+    (error: unknown) => error instanceof AppError && error.code === 'APP_NOT_INSTALLED',
+  );
 });
 
 test('findIosSimulatorInstalledApp verifies exact bundle ids and app-name aliases', async () => {

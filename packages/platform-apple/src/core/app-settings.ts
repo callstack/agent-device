@@ -213,9 +213,11 @@ function iosNoDataContainerMessage(bundleId: string): string {
   return `${bundleId} has no data container to clear. Apps shipped in the simulator runtime, such as system apps, own no data container, so there is no app state here to remove.`;
 }
 
-/** The bundle id an app-scoped setting lands on: an id passes through, a display name resolves. */
+/** The installed app an app-scoped setting lands on, by bundle id or display name. */
 async function resolveIosSettingsApp(device: DeviceInfo, app: string): Promise<string> {
-  return await resolveSettingsApp(app, (target) => resolveIosApp(device, target));
+  return await resolveSettingsApp(app, (target) =>
+    resolveIosApp(device, target, { installedOnly: true }),
+  );
 }
 
 async function clearIosSimulatorAppState(

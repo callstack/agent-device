@@ -81,6 +81,10 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
       if (args.join(' ') === 'help') {
         return { stdout: 'simctl help\n', stderr: '', exitCode: 0 };
       }
+      if (args.join(' ') === 'listapps sim-1') {
+        const installed = { 'com.apple.Preferences': { CFBundleDisplayName: 'Settings' } };
+        return { stdout: JSON.stringify(installed), stderr: '', exitCode: 0 };
+      }
       return { stdout: '', stderr: '', exitCode: 0 };
     },
   });

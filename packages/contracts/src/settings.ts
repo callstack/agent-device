@@ -283,6 +283,15 @@ export function settingsAppNotConsumedRefusal(
   };
 }
 
+const SETTINGS_APP_NOT_INSTALLED_HINT =
+  'Run apps --all for the exact bundle id or package name, or install the app, then retry with that id in --app.';
+
+/**
+ * The reason an Android app-scoped mutation refuses an app that resolves to an intent rather than a
+ * package: a permission or app-data change needs a package, so the recovery is naming one.
+ */
+export const SETTINGS_APP_NOT_PACKAGE_REASON = 'setting_app_not_package';
+
 /**
  * Resolves the app an app-scoped mutation lands on through the owner's own app resolution, ahead of
  * anything that reaches the device. A failed resolution therefore dispatched nothing, and an app that
@@ -298,7 +307,12 @@ export async function resolveSettingsApp<Resolved>(
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
     if (error.code === 'APP_NOT_INSTALLED') {
-      error.details = { ...error.details, ...appNotInstalledDetails(), app };
+      error.details = {
+        ...error.details,
+        ...appNotInstalledDetails(),
+        app,
+        hint: SETTINGS_APP_NOT_INSTALLED_HINT,
+      };
     }
     throw discloseDispatch(error, 'no');
   }
