@@ -156,6 +156,10 @@
       "types": "./src/daemon-http.ts",
       "default": "./src/daemon-http.ts"
     },
+    "./deploy-result-target": {
+      "types": "./src/deploy-result-target.ts",
+      "default": "./src/deploy-result-target.ts"
+    },
     "./device": {
       "types": "./src/facades/device.ts",
       "default": "./src/facades/device.ts"

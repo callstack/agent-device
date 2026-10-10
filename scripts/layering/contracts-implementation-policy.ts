@@ -47,7 +47,7 @@ export function contractsImplementationAuthorityViolations(
         violation(
           file.path,
           1,
-          'contracts may not own mutable interaction-outcome lifecycle; that WeakMap identity map belongs in src/core',
+          'contracts may not own mutable interaction-outcome lifecycle; that WeakMap identity map lives in @agent-device/host-kit/interaction-outcome',
         ),
       );
     }
