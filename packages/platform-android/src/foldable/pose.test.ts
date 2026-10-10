@@ -167,7 +167,12 @@ test('refuses a posture the profile cannot commit with its own reason, not as si
 
   await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'half-open' })).rejects.toMatchObject({
     code: 'UNSUPPORTED_OPERATION',
-    details: { reason: 'fold-posture-unsupported', deviceStates: ['CLOSED', 'OPENED'] },
+    details: {
+      reason: 'fold-posture-unsupported',
+      supportedPoses: ['closed', 'open'],
+      deviceStates: ['CLOSED', 'OPENED'],
+      hint: 'This profile poses only closed and open; request one of those.',
+    },
   });
   expect(mockAdb).not.toHaveBeenCalled();
 });
@@ -234,26 +239,29 @@ test('fails as fold-pose-unverified when the guest never commits the device stat
     code: 'COMMAND_FAILED',
     details: { reason: 'fold-pose-unverified', observedDeviceState: 'OPENED' },
   });
-  // The settle is bounded: it ended, and every state read after the first was preceded by a poll.
+  // The settle is bounded: it ended, every retry was preceded by one poll, and the budget ended
+  // with a read rather than an unobserved interval.
   const stateReads = shellCommands().filter(
     (command) => command === 'cmd device_state print-state',
   );
   expect(stateReads.length).toBeGreaterThan(1);
-  expect(mockSleep).toHaveBeenCalledTimes(stateReads.length);
+  expect(mockSleep).toHaveBeenCalledTimes(stateReads.length - 1);
+  expect(shellCommands().at(-1)).toBe('cmd device_state print-state');
 });
 
-test('reports the angle the profile defines for the posture without judging it', async () => {
-  // The generic "7.6in Foldable" parks closed at 15° and open at 165°, the midpoints of its
-  // posture ranges; the committed device state is the pose, the angle is what the sensor reads.
+test('reports the sensor angle as read, without judging it against the pose', async () => {
+  // Profiles park the hinge at their own angles (the generic "7.6in Foldable" closes at 15°,
+  // the midpoint of its range), so the committed device state is the pose and the angle is
+  // information: even one no profile would give for closed is reported, not refused.
   stubEmulator({
     states: GENERIC_FOLDABLE_STATES,
     stateReads: ['1'],
-    hinge: 'hinge-angle0 = 15\nOK\n',
+    hinge: 'hinge-angle0 = 77\nOK\n',
   });
 
   await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'closed' })).resolves.toEqual({
     pose: 'closed',
-    hingeAngleDegrees: 15,
+    hingeAngleDegrees: 77,
   });
 });
 
