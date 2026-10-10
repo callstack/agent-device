@@ -8,7 +8,7 @@ title: Run Maestro flows
 
 - Only the commands and fields in [Supported subset](#supported-subset) run. Anything else fails with source context instead of being skipped.
 - Flows run on iOS and Android only.
-- `runScript`, `evalScript`, and JavaScript conditions execute flow code on your machine without a security sandbox. Run only flows you trust.
+- `runScript`, `evalScript`, and JavaScript conditions execute flow code on the machine running the agent-device daemon, without a security sandbox. Run only flows you trust to run there.
 
 For recording and replaying native `.ad` scripts, see [Replay & E2E testing](/docs/replay-e2e).
 
