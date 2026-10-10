@@ -1,0 +1,55 @@
+{
+  "name": "@agent-device/daemon-contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "On-disk and wire contracts a daemon process shares with its clients (#2559): state-dir and transport resolution, registration and ownership, process liveness, shutdown reports, the repair tombstone, progress-envelope framing, the diagnostics scope, and owner-cleanup vocabulary. Internal workspace package bundled into the published agent-device artifact.",
+  "dependencies": {
+    "@agent-device/command-registry": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    "./daemon-diagnostics-scope": {
+      "types": "./src/daemon-diagnostics-scope.ts",
+      "default": "./src/daemon-diagnostics-scope.ts"
+    },
+    "./daemon-owner-cleanup": {
+      "types": "./src/daemon-owner-cleanup.ts",
+      "default": "./src/daemon-owner-cleanup.ts"
+    },
+    "./daemon-policy-file": {
+      "types": "./src/daemon-policy-file.ts",
+      "default": "./src/daemon-policy-file.ts"
+    },
+    "./daemon-process": {
+      "types": "./src/daemon-process.ts",
+      "default": "./src/daemon-process.ts"
+    },
+    "./daemon-registration": {
+      "types": "./src/daemon-registration.ts",
+      "default": "./src/daemon-registration.ts"
+    },
+    "./daemon-registration-owner": {
+      "types": "./src/daemon-registration-owner.ts",
+      "default": "./src/daemon-registration-owner.ts"
+    },
+    "./daemon-resolution": {
+      "types": "./src/daemon-resolution.ts",
+      "default": "./src/daemon-resolution.ts"
+    },
+    "./daemon-shutdown-report": {
+      "types": "./src/daemon-shutdown-report.ts",
+      "default": "./src/daemon-shutdown-report.ts"
+    },
+    "./request-progress-protocol": {
+      "types": "./src/request-progress-protocol.ts",
+      "default": "./src/request-progress-protocol.ts"
+    },
+    "./session-repair-tombstone": {
+      "types": "./src/session-repair-tombstone.ts",
+      "default": "./src/session-repair-tombstone.ts"
+    }
+  }
+}

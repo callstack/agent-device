@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 import {
   findUnrecoveredRepairCommitFailure,
   readRepairTombstoneFile,

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
-import { stopDaemonProcess } from '../../src/daemon-process.ts';
+import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
 import { isProcessAlive } from '@agent-device/host-kit/process';
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';

@@ -5,9 +5,9 @@ import { vi } from 'vitest';
 import type { runCmdDetachedMonitored, ExecDetachedExit } from '@agent-device/host-kit/command';
 import { readDaemonInfo, type DaemonInfo } from '../../daemon-client/daemon-client-metadata.ts';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
-import { stopDaemonProcess } from '../../daemon-process.ts';
-import type { DaemonPaths } from '../../daemon-resolution.ts';
-import type { DaemonRegistrationFields } from '../../daemon-registration-owner.ts';
+import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
+import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import type { DaemonRegistrationFields } from '@agent-device/daemon-contracts/daemon-registration-owner';
 
 const actualCommand = await vi.importActual<typeof import('@agent-device/host-kit/command')>(
   '@agent-device/host-kit/command',
@@ -26,7 +26,10 @@ export function registeredDaemonFixtureArgs(
   const entry = path.join(paths.baseDir, 'dist', 'src', 'internal', 'daemon.js');
   fs.mkdirSync(path.dirname(entry), { recursive: true });
   fs.writeFileSync(path.join(paths.baseDir, 'package.json'), '{"type":"module"}');
-  const registrationUrl = new URL('../../daemon-registration-owner.ts', import.meta.url).href;
+  const registrationUrl = new URL(
+    '../../../packages/daemon-contracts/src/daemon-registration-owner.ts',
+    import.meta.url,
+  ).href;
   fs.writeFileSync(
     entry,
     `import fs from 'node:fs';

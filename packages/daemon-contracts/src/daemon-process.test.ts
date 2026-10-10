@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { isAgentDeviceDaemonCommand } from '../daemon-process.ts';
+import { isAgentDeviceDaemonCommand } from './daemon-process.ts';
 
 test('isAgentDeviceDaemonCommand matches expected daemon command', () => {
   assert.equal(isAgentDeviceDaemonCommand('node /tmp/agent-device/dist/src/daemon.js'), true);

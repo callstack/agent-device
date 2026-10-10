@@ -1,10 +1,13 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonRetirementResult } from '../daemon-registration-owner.ts';
+import type { DaemonRetirementResult } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import type { OwnerIdentity } from '@agent-device/host-kit/process';
 
-import type { DaemonPaths } from '../daemon-resolution.ts';
-import { readRegisteredDaemonIdentity } from '../daemon-registration.ts';
-import type { DeviceClaimRecord, ProviderReleaseRecord } from '../daemon-shutdown-report.ts';
+import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { readRegisteredDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
+import type {
+  DeviceClaimRecord,
+  ProviderReleaseRecord,
+} from '@agent-device/daemon-contracts/daemon-shutdown-report';
 
 const DAEMON_STOP_GRACE_TIMEOUT_MS = 10_000;
 const DAEMON_STOP_KILL_TIMEOUT_MS = 2_000;
@@ -43,7 +46,8 @@ export async function stopDaemon(params: {
 }): Promise<DaemonStopResult> {
   const info = readRegisteredDaemonIdentity(params.paths.infoPath);
   if (!info) return notRunningResult();
-  const { stopAndRetireDaemon } = await import('../daemon-registration-owner.ts');
+  const { stopAndRetireDaemon } =
+    await import('@agent-device/daemon-contracts/daemon-registration-owner');
   const retirement = await stopAndRetireDaemon({
     paths: params.paths,
     observed: info,

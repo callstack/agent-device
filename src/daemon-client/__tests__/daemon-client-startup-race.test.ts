@@ -20,10 +20,13 @@ import {
   currentDaemonCodeSignature,
 } from '../../__tests__/test-utils/daemon-http-fixture.ts';
 import { closeLoopbackServer, supportsLoopbackBind } from '../../__tests__/test-utils/loopback.ts';
-import { resolveDaemonPaths, type DaemonPaths } from '../../daemon-resolution.ts';
+import {
+  resolveDaemonPaths,
+  type DaemonPaths,
+} from '@agent-device/daemon-contracts/daemon-resolution';
 import { sendToDaemon } from '../daemon-client.ts';
 import * as lifecycle from '../daemon-client-lifecycle.ts';
-import { DAEMON_STARTUP_EXIT_CODES } from '../../daemon-registration-owner.ts';
+import { DAEMON_STARTUP_EXIT_CODES } from '@agent-device/daemon-contracts/daemon-registration-owner';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),

@@ -13,10 +13,13 @@ import {
   launchDaemonProcess,
   type DaemonRetirementResult,
   type OwnedReplayStateDir,
-} from '../daemon-registration-owner.ts';
-import { resolveDaemonPaths, type DaemonPaths } from '../daemon-resolution.ts';
-import { readRegisteredDaemonOwnership } from '../daemon-registration.ts';
-import { readDaemonShutdownReport } from '../daemon-shutdown-report.ts';
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
+import {
+  resolveDaemonPaths,
+  type DaemonPaths,
+} from '@agent-device/daemon-contracts/daemon-resolution';
+import { readRegisteredDaemonOwnership } from '@agent-device/daemon-contracts/daemon-registration';
+import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 import {
   registeredDaemonFixtureArgs,
@@ -28,7 +31,7 @@ import { ensureDaemon, resolveClientSettings } from '../daemon-client/daemon-cli
 import { inspectProcessLock } from '@agent-device/host-kit/file';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
-import { stopDaemonProcess } from '../daemon-process.ts';
+import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
 import { stopDaemon } from '../daemon/daemon-stop.ts';
 
 const fields = {

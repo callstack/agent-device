@@ -32,7 +32,7 @@ import { tryHandleHostAdminHttpRoute } from '../host-lease-http.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
 import { refuseStaleDaemonInstance } from './http-instance-precondition.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
-import { shouldStreamRequestProgress } from '../../request-progress-protocol.ts';
+import { shouldStreamRequestProgress } from '@agent-device/daemon-contracts/request-progress-protocol';
 import {
   createRpcError,
   jsonRpcCodeForNormalizedError,

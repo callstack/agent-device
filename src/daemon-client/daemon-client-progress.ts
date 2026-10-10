@@ -10,7 +10,7 @@ import {
   isDaemonProgressEnvelope,
   isDaemonResponseEnvelope,
   shouldStreamRequestProgress,
-} from '../request-progress-protocol.ts';
+} from '@agent-device/daemon-contracts/request-progress-protocol';
 
 type ProgressLineReader = {
   handleLine(line: string): boolean;

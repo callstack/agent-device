@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { parseIntegerEnv } from '../../../src/daemon/server/server-lifecycle.ts';
-import { tryAcquireDaemonRegistration } from '../../../src/daemon-registration-owner.ts';
-import { resolveDaemonPaths } from '../../../src/daemon-resolution.ts';
+import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { mkdtempForTestSync } from '../../../src/__tests__/test-utils/tmp-dir.ts';
 
 test('Provider-backed integration daemon lifecycle writes metadata and protects acquisitions', async () => {

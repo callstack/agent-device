@@ -58,7 +58,7 @@ vi.mock('../../platform-runtime-daemon-lifecycle.ts', () => ({
 }));
 
 import { startDaemonRuntime } from './daemon-runtime.ts';
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
 type DaemonPaths = ReturnType<typeof resolveDaemonPaths>;
 

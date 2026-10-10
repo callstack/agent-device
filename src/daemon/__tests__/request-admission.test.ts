@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { makeIosSession, makeMacOsSession } from '../../__tests__/test-utils/session-factories.ts';
-import { parseDaemonPolicy } from '../../daemon-policy-file.ts';
+import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { assertRequestLeaseAdmission } from '../request-admission.ts';
 import type { DaemonRequest } from '../daemon-request.ts';

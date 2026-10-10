@@ -1,9 +1,9 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type { DaemonRetirementResult } from '../daemon-registration-owner.ts';
+import type { DaemonRetirementResult } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
-import type { DaemonPaths } from '../daemon-resolution.ts';
+import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { PlatformSelector } from '@agent-device/kernel/device';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 
@@ -53,7 +53,8 @@ export async function handleRequestTimeout(
   const unresponsive = probeAnswered === false;
   let retirement: DaemonRetirementResult | undefined;
   if (unresponsive) {
-    const { stopAndRetireDaemon } = await import('../daemon-registration-owner.ts');
+    const { stopAndRetireDaemon } =
+      await import('@agent-device/daemon-contracts/daemon-registration-owner');
     retirement = await stopAndRetireDaemon({
       paths: statePaths,
       observed: { pid: info.pid, startTime: info.processStartTime ?? null },

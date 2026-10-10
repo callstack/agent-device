@@ -1,6 +1,6 @@
 import { attachActiveSessionAddressHint } from './daemon-client-address-hints.ts';
 import fs from 'node:fs';
-import { processLockHoldsDaemonIdentity } from '../daemon-registration.ts';
+import { processLockHoldsDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import net from 'node:net';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
@@ -12,7 +12,7 @@ import { isProcessAlive } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 import { inspectProcessLock, type ProcessLockInspection } from '@agent-device/host-kit/file';
 
-import type { findUnrecoveredRepairCommitFailure } from '../session-repair-tombstone.ts';
+import type { findUnrecoveredRepairCommitFailure } from '@agent-device/daemon-contracts/session-repair-tombstone';
 import {
   DAEMON_STARTUP_EXIT_CODES,
   createOwnedReplayStateDir,
@@ -22,7 +22,7 @@ import {
   stopAndRetireDaemon,
   type OwnedReplayStateDir,
   type DaemonStartupLaunch,
-} from '../daemon-registration-owner.ts';
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
 import {
   resolveDaemonPaths,
   resolveDaemonServerMode,
@@ -30,7 +30,7 @@ import {
   type DaemonPaths,
   type DaemonServerMode,
   type DaemonTransportPreference,
-} from '../daemon-resolution.ts';
+} from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   resolveDaemonLaunchSpec,
   resolveDaemonTakeover,
@@ -305,7 +305,7 @@ async function canReachReusableDaemon(
  */
 async function assertDaemonPolicyMatches(existing: DaemonInfo, stateDir: string): Promise<void> {
   if (!process.env.AGENT_DEVICE_DAEMON_POLICY?.trim()) return;
-  const { loadDaemonPolicy } = await import('../daemon-policy-file.ts');
+  const { loadDaemonPolicy } = await import('@agent-device/daemon-contracts/daemon-policy-file');
   const expected = loadDaemonPolicy(process.env)?.digest;
   if (expected === existing.policyDigest) return;
   throw new AppError(

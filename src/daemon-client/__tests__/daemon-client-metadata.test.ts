@@ -4,9 +4,9 @@ import path from 'node:path';
 import { test } from 'vitest';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { tryAcquireDaemonRegistration } from '../../daemon-registration-owner.ts';
+import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { readDaemonInfo, type DaemonInfo } from '../daemon-client-metadata.ts';
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
 // The reuse decision is only as good as the identity that survives the round trip
 // through `daemon.json`: a client cannot compare what the file lost (#2458).

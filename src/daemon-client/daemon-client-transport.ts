@@ -4,7 +4,10 @@ import { AppError, createRequestCanceledError } from '@agent-device/kernel/error
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
 import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type { DaemonPaths, DaemonTransportPreference } from '../daemon-resolution.ts';
+import type {
+  DaemonPaths,
+  DaemonTransportPreference,
+} from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   readDaemonHttpProgressResponse,
   readDaemonSocketProgressResponse,

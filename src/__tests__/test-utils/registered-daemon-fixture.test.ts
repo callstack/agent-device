@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
-import { stopDaemonProcess } from '../../daemon-process.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 import {
   spawnRegisteredDaemonFixture,

@@ -4,7 +4,7 @@ import net from 'node:net';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
 import { sendToDaemon } from '../daemon-client.ts';
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   currentDaemonCodeSignature,
   startHttpDaemonFixture,

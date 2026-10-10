@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { stopDaemonProcess, waitForDaemonExit } from '../daemon-process.ts';
+import {
+  stopDaemonProcess,
+  waitForDaemonExit,
+} from '@agent-device/daemon-contracts/daemon-process';
 
 const DAEMON_COMMAND = '/opt/checkout/dist/src/internal/daemon.js';
 const OURS = 'Mon Aug 24 10:00:00 2026';

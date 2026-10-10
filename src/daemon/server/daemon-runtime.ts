@@ -2,7 +2,10 @@ import crypto from 'node:crypto';
 import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../session-store.ts';
 import { resolveSessionRequestLogPath } from '../session-artifact-paths.ts';
-import { resolveDaemonPaths, resolveDaemonServerMode } from '../../daemon-resolution.ts';
+import {
+  resolveDaemonPaths,
+  resolveDaemonServerMode,
+} from '@agent-device/daemon-contracts/daemon-resolution';
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
 import {
@@ -11,7 +14,10 @@ import {
 } from '../../provider-device-runtime.ts';
 import { installProviderDeviceAdmission } from '../provider-device-admission.ts';
 import { assertDaemonPolicyAllowsCapability } from '../daemon-policy.ts';
-import { loadDaemonPolicy, type DaemonPolicy } from '../../daemon-policy-file.ts';
+import {
+  loadDaemonPolicy,
+  type DaemonPolicy,
+} from '@agent-device/daemon-contracts/daemon-policy-file';
 import { getInteractor } from '../../core/interactors.ts';
 import { installInteractorResolution } from '../interactor-resolution.ts';
 import {
@@ -39,7 +45,7 @@ import type { DaemonInvokeFn } from '../daemon-request.ts';
 import type { SessionRef, SessionState } from '../session-state.ts';
 import type { RuntimeHintValues } from '@agent-device/contracts/application-lifecycle-runtime';
 import { createDaemonIdleReap } from './daemon-idle-reap.ts';
-import { withDaemonDiagnosticsScope } from '../../daemon-contracts/daemon-diagnostics-scope.ts';
+import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemon-diagnostics-scope';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
 import { finalizeDaemonLeases } from './daemon-lease-finalizer.ts';
@@ -73,7 +79,7 @@ import {
   tryAcquireDaemonRegistration,
   DAEMON_STARTUP_EXIT_CODES,
   type DaemonRegistrationOwner,
-} from '../../daemon-registration-owner.ts';
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { watchDaemonMetadataLoss, type DaemonMetadataLoss } from './daemon-metadata-loss.ts';
 import {
   createSocketServer,

@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { readDaemonShutdownReport, buildDaemonShutdownReport } from '../daemon-shutdown-report.ts';
-import { LeaseRegistry } from '../daemon/lease-registry.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import type { DeviceLease } from '@agent-device/contracts/device';
+import { readDaemonShutdownReport, buildDaemonShutdownReport } from './daemon-shutdown-report.ts';
+import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 const claim = {
   deviceKey: 'local:android:none:emulator-5554',
@@ -14,11 +14,16 @@ const claim = {
 
 test('round-trips provider release and device claim records without lease credentials', () => {
   const stateDir = mkdtempForTestSync('agent-device-shutdown-report-');
-  const lease = new LeaseRegistry().allocateLease({
+  const lease: DeviceLease = {
+    leaseId: 'lease-1',
     tenantId: 'tenant-a',
     runId: 'run-1',
+    backend: 'android-instance',
     leaseProvider: 'limrun',
-  });
+    createdAt: 0,
+    heartbeatAt: 0,
+    expiresAt: 0,
+  };
 
   try {
     const report = buildDaemonShutdownReport({

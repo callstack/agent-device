@@ -15,7 +15,7 @@ import {
   clearRepairTombstoneFile,
   resolveRepairTombstonePath,
   type RepairSessionTombstone,
-} from '../session-repair-tombstone.ts';
+} from '@agent-device/daemon-contracts/session-repair-tombstone';
 import {
   readIdleSessionTombstoneFile,
   resolveIdleSessionTombstonePath,

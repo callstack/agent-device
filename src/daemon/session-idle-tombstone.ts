@@ -7,7 +7,7 @@ import path from 'node:path';
  * session is gone and its device released, instead of the bare "Run open first" that reads like the
  * agent never opened anything.
  *
- * Same shape and lifetime as the repair tombstone (`src/session-repair-tombstone.ts`): keyed by the
+ * Same shape and lifetime as the repair tombstone (`@agent-device/daemon-contracts/session-repair-tombstone`): keyed by the
  * session's own store key, and bounded by `expiresAt` so an old marker never shadows an unrelated
  * future session that happens to reuse the name.
  */

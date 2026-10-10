@@ -18,8 +18,8 @@ import {
 } from '../../__tests__/test-utils/daemon-http-fixture.ts';
 import { closeLoopbackServer, supportsLoopbackBind } from '../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { loadDaemonPolicy } from '../../daemon-policy-file.ts';
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { loadDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { sendToDaemon } from '../daemon-client.ts';
 
 // ADR 0029: a caller that names a daemon policy must not use a daemon that enforces another one.

@@ -6,7 +6,7 @@ import type { JsonRpcId, JsonRpcRequestEnvelope } from '@agent-device/kernel/con
 import {
   serializeDaemonProgressEnvelope,
   serializeDaemonRpcResponseEnvelope,
-} from '../../request-progress-protocol.ts';
+} from '@agent-device/daemon-contracts/request-progress-protocol';
 import { statusCodeForNormalizedError } from '../http-errors.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;

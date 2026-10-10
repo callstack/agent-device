@@ -133,7 +133,7 @@ import {
   retainOrphanedDeviceClaims,
 } from '../../__tests__/test-utils/device-claim-store.ts';
 import { sendRequest } from '../../daemon-client/daemon-client-transport.ts';
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { startDaemonRuntime, teardownDaemonSessionForShutdown } from './daemon-runtime.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

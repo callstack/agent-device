@@ -7,8 +7,8 @@ import path from 'node:path';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
-import { stopAndRetireDaemon } from '../../src/daemon-registration-owner.ts';
-import { resolveDaemonPaths } from '../../src/daemon-resolution.ts';
+import { stopAndRetireDaemon } from '@agent-device/daemon-contracts/daemon-registration-owner';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';

@@ -1,4 +1,4 @@
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { AppError } from '@agent-device/kernel/errors';
 import { loginWithDeviceAuth, removeCliSession, summarizeCliSession } from '../auth-session.ts';
 import { writeCommandOutput } from './shared.ts';

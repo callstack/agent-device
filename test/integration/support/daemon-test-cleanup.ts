@@ -6,12 +6,12 @@ import {
   ownerIdentityMatches,
   type OwnerIdentity,
 } from '@agent-device/host-kit/process';
-import { stopDaemonProcess } from '../../../src/daemon-process.ts';
-import { resolveDaemonPaths } from '../../../src/daemon-resolution.ts';
+import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   readRegisteredDaemonIdentity,
   readRegisteredDaemonOwnership,
-} from '../../../src/daemon-registration.ts';
+} from '@agent-device/daemon-contracts/daemon-registration';
 
 type TestDaemonIdentity = { pid: number; processStartTime?: string };
 

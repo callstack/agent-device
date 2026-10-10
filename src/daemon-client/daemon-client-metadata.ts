@@ -7,7 +7,7 @@ import {
   resolveDaemonPaths,
   type DaemonPaths,
   type DaemonServerMode,
-} from '../daemon-resolution.ts';
+} from '@agent-device/daemon-contracts/daemon-resolution';
 
 export type DaemonInfo = {
   port?: number;

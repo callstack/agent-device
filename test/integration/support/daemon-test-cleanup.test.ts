@@ -6,8 +6,8 @@ import {
   readHostProcessIdentityObservations,
 } from '@agent-device/host-kit/process';
 import { cleanupDaemonTestState } from './daemon-test-cleanup.ts';
-import { resolveDaemonPaths } from '../../../src/daemon-resolution.ts';
-import { stopDaemonProcess } from '../../../src/daemon-process.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
 import { mkdtempForTestSync } from '../../../src/__tests__/test-utils/tmp-dir.ts';
 import {
   spawnRegisteredDaemonFixture,

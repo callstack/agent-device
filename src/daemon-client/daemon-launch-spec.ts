@@ -170,7 +170,7 @@ export async function resolveDaemonTakeover(
  * directory one takeover after an upgrade.
  *
  * The two trees rarely meet: a checkout keeps its daemon in a worktree-scoped state
- * directory and an installed client in the shared one (`src/daemon-resolution.ts`, same
+ * directory and an installed client in the shared one (`@agent-device/daemon-contracts/daemon-resolution`, same
  * test). An explicit `--state-dir` is what puts them together, and that is where this
  * pair has to hold.
  */

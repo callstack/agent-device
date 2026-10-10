@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { readDaemonInfo } from '../../../src/daemon-client/daemon-client-metadata.ts';
-import { resolveDaemonPaths } from '../../../src/daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   collectPagedEventTimeline,
   type EventTimelinePage,

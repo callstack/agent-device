@@ -1,6 +1,6 @@
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
 import type { DeviceClaimReconciler } from './device-claims.ts';
 import type { ClaimRecoveryGatewayFactory } from './claim-recovery-gateway.ts';
