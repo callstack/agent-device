@@ -12,7 +12,9 @@ import {
 // #1478 P3b: the daemon adapter's inspection capability. #1802 moved expansion and file reading
 // to the caller, so what is left here is exactly format routing plus per-engine manifest
 // inspection over the script sources the request carried — traversal order is pinned beside the
-// caller-side discovery, scheduler filtering policy in the replay-test package.
+// caller-side discovery, scheduler filtering policy in the replay-test package. #3377: the
+// backend-formatted half reaches the engine through the backend registry, so the builder resolves
+// that backend once before the discovery thunk runs.
 async function inspect(files: string[], replayBackend?: string) {
   const bundles = await Promise.all(
     files.map(async (filePath) =>
@@ -21,7 +23,7 @@ async function inspect(files: string[], replayBackend?: string) {
         : replayScriptSourceBundleFor(filePath),
     ),
   );
-  return buildReplayTestSourceDiscovery(bundles, replayBackend)();
+  return (await buildReplayTestSourceDiscovery(bundles, replayBackend))();
 }
 
 test('replay-test source inspection tags a Maestro flow caller-bound and carries its name', async () => {

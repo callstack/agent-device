@@ -1,10 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { exportReplayActionsToMaestro, MAESTRO_SELECTOR_PROJECTION } from '@agent-device/maestro';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
-import { projectSelectorExpression } from '@agent-device/selectors';
 import { resolveUserPath } from '@agent-device/host-kit/file';
+import type { ReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
@@ -41,11 +40,15 @@ async function handleReplayExportCommand({
   const sourcePath = resolveUserPath(inputPath);
   const script = fs.readFileSync(sourcePath, 'utf8');
   const parsed = parseReplayScriptDetailed(script);
-  const result = exportReplayActionsToMaestro(parsed.actions, {
+  // `replay export` exports to Maestro, so the conversion goes through that backend's registry
+  // entry rather than naming the engine package from the CLI (#3377). This handler is loaded
+  // lazily by the router, and the engine sits one further thunk behind the backend.
+  const backend: ReplayBackend = await (
+    await import('@agent-device/replay-port/replay-backend-registry')
+  ).getReplayBackend('maestro');
+  const result = backend.exportReplayScript(parsed.actions, {
     actionLines: parsed.actionLines,
     metadata: readReplayScriptMetadata(script),
-    resolveSelector: (expression) =>
-      projectSelectorExpression(expression, MAESTRO_SELECTOR_PROJECTION),
   });
   const outputPath = typeof flags.out === 'string' ? resolveUserPath(flags.out) : undefined;
   if (outputPath) {
@@ -59,7 +62,7 @@ async function handleReplayExportCommand({
   await writeCommandOutput(
     flags,
     {
-      format: 'maestro',
+      format: backend.id,
       sourcePath,
       ...(outputPath ? { path: outputPath } : { yaml: result.yaml }),
       warnings: result.warnings,

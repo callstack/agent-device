@@ -1,12 +1,16 @@
-import { inspectMaestroFlow } from '@agent-device/maestro';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
-import { readReplayScriptMetadata, resolveReplayFormat } from '@agent-device/ad-script';
+import {
+  isReplayBackendId,
+  readReplayScriptMetadata,
+  resolveReplayFormat,
+} from '@agent-device/ad-script';
 import { readReplayScriptSourceFile } from '@agent-device/replay-port/script-source';
 import type {
   ReplayTestDiscoverSources,
   ReplayTestManifest,
   ReplayTestSource,
 } from '@agent-device/replay-test';
+import { getReplayBackend, type ReplayBackend } from './replay-backend-registry.ts';
 
 /**
  * The daemon adapter's source-inspection capability (#1478 P3b).
@@ -19,35 +23,43 @@ import type {
  * source bundle per discovered source; this capability inspects those bundles in the order they
  * arrived and opens nothing.
  *
- * This is the one place that knows a source can be `.ad` or Maestro. That knowledge converts
- * into the manifest's platform tag and then disappears: `caller-bound` is what Maestro looks
- * like from the scheduler's side, and nothing downstream can recover the format from it.
+ * #3377: a backend-formatted source is inspected through the backend registry, not by naming the
+ * engine package. The backend resolves once for the whole suite — the flag is suite-wide, so a
+ * run whose sources are all native never loads one.
+ *
+ * This is the one place that knows a source can be `.ad` or a backend format. That knowledge
+ * converts into the manifest's platform tag and then disappears: `caller-bound` is what a backend
+ * flow looks like from the scheduler's side, and nothing downstream can recover the format from it.
  */
-export function buildReplayTestSourceDiscovery(
+export async function buildReplayTestSourceDiscovery(
   sources: readonly ReplayScriptSourceBundle[],
   replayBackend: string | undefined,
-): ReplayTestDiscoverSources {
-  return () => sources.map((bundle) => inspectReplayTestSource(bundle, replayBackend));
+): Promise<ReplayTestDiscoverSources> {
+  const backend: ReplayBackend | undefined = isReplayBackendId(replayBackend)
+    ? await getReplayBackend(replayBackend)
+    : undefined;
+  return () => sources.map((bundle) => inspectReplayTestSource(bundle, replayBackend, backend));
 }
 
 function inspectReplayTestSource(
   bundle: ReplayScriptSourceBundle,
   replayBackend: string | undefined,
+  backend: ReplayBackend | undefined,
 ): ReplayTestSource {
   const filePath = bundle.entry;
   const script = readReplayScriptSourceFile(bundle, filePath);
-  const isMaestro = resolveReplayFormat(filePath, replayBackend) === 'maestro';
+  const isBackendSource = resolveReplayFormat(filePath, replayBackend) !== 'ad';
   const metadata = readReplayScriptMetadata(script);
   const manifest: ReplayTestManifest = {
-    ...(isMaestro ? { title: inspectMaestroFlow(script, filePath).name } : {}),
+    ...(isBackendSource ? { title: backend?.inspectSource(script, filePath).title } : {}),
     device: {
-      // A declared platform wins for either format. Without one, Maestro takes its platform
-      // from the invocation (`caller-bound`) while a native source has simply declared none
-      // (`unspecified`) — which is exactly the distinction the old
+      // A declared platform wins for either format. Without one, a backend flow takes its
+      // platform from the invocation (`caller-bound`) while a native source has simply declared
+      // none (`unspecified`) — which is exactly the distinction the old
       // `resolveReplayFormat(...) === 'maestro'` branch was making inside the filter.
       platform: metadata.platform
         ? { kind: 'declared', value: metadata.platform }
-        : isMaestro
+        : isBackendSource
           ? { kind: 'caller-bound' }
           : { kind: 'unspecified' },
       ...(metadata.target !== undefined ? { target: metadata.target } : {}),

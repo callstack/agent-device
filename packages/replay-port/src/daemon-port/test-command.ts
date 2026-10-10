@@ -282,7 +282,7 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
         }),
       );
     },
-    discoverSources: buildReplayTestSourceDiscovery(sourceBundles, req.flags?.replayBackend),
+    discoverSources: await buildReplayTestSourceDiscovery(sourceBundles, req.flags?.replayBackend),
     resolveShardTargets: buildReplayTestShardTargetResolver(req.flags),
     cleanupSession,
   });

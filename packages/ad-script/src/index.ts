@@ -60,8 +60,11 @@ export {
 
 export {
   isMaestroYamlPath,
+  isReplayBackendId,
   maestroBackendRequiredMessage,
   resolveReplayFormat,
+  unsupportedReplayBackendMessage,
+  type ReplayBackendId,
 } from './internal/format.ts';
 
 export {

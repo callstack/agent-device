@@ -16,33 +16,35 @@ import {
 } from '@agent-device/ad-replay';
 import {
   collectReplayShellEnv,
+  isReplayBackendId,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
   resolveReplayFormat,
+  unsupportedReplayBackendMessage,
   type ReplayScriptMetadata,
 } from '@agent-device/ad-script';
+import { getReplayBackend } from './replay-backend-registry.ts';
 import { buildReplayBuiltinVars } from '@agent-device/replay-port/session-replay-vars';
-import { runTypedMaestroReplay } from './session-replay-maestro-runtime.ts';
 import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contracts';
 
 /**
  * #1555 P5 (decomposition): `runReplayCommand`'s (`native-command.ts`) plan-side
  * helpers — everything that inspects the script, resolves its `--from`/`--plan-digest` entry
- * point, and routes a Maestro-format request, before any session-mutating work begins. Extracted
+ * point, and routes a backend-format request, before any session-mutating work begins. Extracted
  * verbatim; `buildReplayMetadataFlags` (below) was already here from the #1555 review pass — see
  * its own comment for why it, alone among the digest/resume math, stayed daemon-side.
  */
 
 /**
- * Routes a Maestro-format request to the typed Maestro engine, rejecting
- * `--keep-session` (native-`.ad`-only lifecycle) and an active `.ad`
- * `--save-script` repair boundary first. Returns `undefined` for a non-Maestro
- * request so the replay command continues down the native `.ad` path —
- * extracted from the replay command itself (fallow complexity) rather than
- * split further, since every branch here is this one routing decision.
+ * Routes a backend-format request to its registered engine (#3377), rejecting `--keep-session`
+ * (native-`.ad`-only lifecycle) and an active `.ad` `--save-script` repair boundary first. Both
+ * rejections are host policy that a backend has no say in, so they run before the backend loads.
+ * Returns `undefined` for a native request so the replay command continues down the `.ad` path —
+ * extracted from the replay command itself (fallow complexity) rather than split further, since
+ * every branch here is this one routing decision.
  */
-export async function routeMaestroReplay(params: {
+export async function routeReplayBackend(params: {
   resolved: string;
   keepSession: boolean;
   coordinator: ReplayCoordinator;
@@ -50,7 +52,8 @@ export async function routeMaestroReplay(params: {
 }): Promise<DaemonResponse | undefined> {
   const { resolved, keepSession, coordinator, command } = params;
   const { request: req } = command;
-  if (resolveReplayFormat(resolved, req.flags?.replayBackend) !== 'maestro') return undefined;
+  const backendId = resolveReplayFormat(resolved, req.flags?.replayBackend);
+  if (backendId === 'ad') return undefined;
   if (keepSession) {
     return errorResponse(
       'INVALID_ARGS',
@@ -63,7 +66,9 @@ export async function routeMaestroReplay(params: {
       'This session has an active .ad --save-script repair run; finish it with replay --from or close before running Maestro YAML.',
     );
   }
-  return await runTypedMaestroReplay(command);
+  // This module is loaded lazily by the replay handler, so the backend (and the engine one
+  // thunk behind it) stays out of the daemon/CLI startup closures (#3377, cli-startup pins).
+  return await (await getReplayBackend(backendId)).runReplay(command);
 }
 
 export type PreparedReplayPlan = {
@@ -138,19 +143,17 @@ export function prepareReplayPlan(params: {
  * #1555 P1: the authoritative rejection for an unrecognized --replay-backend
  * value. Extraction moved `.ad` inspection to `inspectAdReplay`, which never
  * receives flags — restoring the check here (the one caller of
- * `inspectAdReplay` that reaches this point with a non-Maestro request)
- * matches `parseReplayInput` exactly, byte for
- * byte, before any plan/session work begins. `replayBackend: 'maestro'` still
- * passes here because `runReplayCommand` has already routed a real
- * Maestro-format request to `runTypedMaestroReplay` above; only a
- * stray/unknown value reaches this branch.
+ * `inspectAdReplay` that reaches this point with a native request) matches
+ * `parseReplayInput` exactly, byte for byte, before any plan/session work
+ * begins. A registered backend id still passes here because `runReplayCommand`
+ * has already routed a real backend-format request to its engine above (#3377:
+ * the registry, not a literal, decides what is registered); only a stray or
+ * unregistered value reaches this branch.
  */
 function validateReplayBackendFlag(req: DaemonWireRequest): DaemonResponse | undefined {
-  if (req.flags?.replayBackend && req.flags.replayBackend !== 'maestro') {
-    return errorResponse(
-      'INVALID_ARGS',
-      `Unsupported replay backend "${req.flags.replayBackend}".`,
-    );
+  const backend = req.flags?.replayBackend;
+  if (backend && !isReplayBackendId(backend)) {
+    return errorResponse('INVALID_ARGS', unsupportedReplayBackendMessage(backend));
   }
   return undefined;
 }
