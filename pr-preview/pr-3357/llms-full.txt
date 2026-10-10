@@ -4993,10 +4993,11 @@ in CI and on shared hosts so devices don't keep running after the run:
 agent-device close --shutdown
 ```
 
-Without `--shutdown`, `close` keeps a ready iOS simulator runner warm for the next `open`.
+Without `--shutdown`, `close` can keep a ready, idle iOS simulator runner warm for the next `open`
+when its listener connection is still live and the session has no screen recording or device lease.
 Unfinished runner startup is stopped. If you shut that simulator down yourself while the runner is
 retained, losing its listener connection stops the retained runner. Idle retained runners also stop
-when their daemon exits.
+when their daemon shuts down gracefully.
 
 ## Wait for a slow or busy device
 
