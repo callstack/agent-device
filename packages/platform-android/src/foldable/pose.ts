@@ -88,9 +88,10 @@ function requirePostureState(
   const posture = EMULATOR_POSTURES[pose];
   const expectedState = states.get(posture.state);
   if (expectedState !== undefined) return expectedState;
-  const listed = Object.values(EMULATOR_POSTURES)
-    .map((candidate) => candidate.state)
-    .filter((state) => states.has(state));
+  const supportedPoses = (Object.keys(EMULATOR_POSTURES) as FoldPose[]).filter((candidate) =>
+    states.has(EMULATOR_POSTURES[candidate].state),
+  );
+  const listed = supportedPoses.map((candidate) => EMULATOR_POSTURES[candidate].state);
   if (listed.length === 0) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
@@ -105,8 +106,9 @@ function requirePostureState(
       deviceId: device.id,
       reason: 'fold-posture-unsupported',
       requestedPose: pose,
+      supportedPoses,
       deviceStates: listed,
-      hint: `This profile poses only ${listed.join(' and ')}; request one of those poses.`,
+      hint: `This profile poses only ${supportedPoses.join(' and ')}; request one of those.`,
     },
   );
 }
@@ -167,11 +169,13 @@ async function awaitDeviceState(
   signal: AbortSignal | undefined,
 ): Promise<void> {
   let observed: string | undefined;
+  // The poll precedes each retry, so the budget ends with a read and a guest that commits in
+  // the last interval is still seen.
   for (let attempt = 1; attempt <= ANDROID_FOLD_SETTLE_ATTEMPTS; attempt += 1) {
     signal?.throwIfAborted();
+    if (attempt > 1) await sleep(ANDROID_FOLD_SETTLE_POLL_MS, signal);
     observed = await readDeviceState(device, signal);
     if (observed === expectedState) return;
-    await sleep(ANDROID_FOLD_SETTLE_POLL_MS, signal);
   }
   const observedName = [...states].find(([, id]) => id === observed)?.[0];
   throw new AppError(
