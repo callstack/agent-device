@@ -338,29 +338,14 @@
       ]
     },
     {
-      // resolveVitestMaxWorkers is consumed by vitest.config.ts — a tool config outside --production analysis.
-      "file": "scripts/lib/vitest-concurrency.ts",
-      "exports": ["resolveVitestMaxWorkers"]
-    },
-    {
-      // Mutation-lane seam: readTestScope is consumed by vitest.mutation.config.ts, a tool config outside --production analysis.
-      "file": "scripts/mutation/test-scope.ts",
-      "exports": ["readTestScope"]
-    },
-    {
-      // Mutation-lane completeness gate: ownedTestFiles enumerates the whole derived ownership map, which only the assertion in ownership.test.ts consumes — a production consumer would defeat the point.
-      "file": "scripts/mutation/ownership.ts",
-      "exports": ["ownedTestFiles"]
-    },
-    {
       // ADR 0010 shared-hint pin: the facade re-export's only consumer is src/__tests__/is-argument-surface-parity.test.ts, which asserts the daemon and CLI `is` surfaces raise the SAME hint text. The constant is live inside the package (predicates.ts raises it); a production consumer of the re-export would defeat the point, since it exists so neither surface copies the string.
       "file": "packages/selectors/src/index.ts",
       "exports": ["IS_PREDICATE_USAGE_HINT"]
     },
     {
-      // Help-benchmark conformance seams: helpTopicIds feeds the topic-coverage gate, and the *_SAMPLE constants feed the bench sample producers (scripts/__tests__/help-conformance-sample-producers.ts); every consumer is a test-tree file outside --production analysis.
-      "file": "{src/cli/parser/cli-help.ts,scripts/help-conformance-sample-outputs.mjs}",
-      "exports": ["helpTopicIds", "PRIVATE_AX_RECOVERY_SAMPLE", "DEVICE_CLAIM_IN_USE_SAMPLE"]
+      // Help-benchmark conformance seam: helpTopicIds feeds the topic-coverage gate, whose consumer is a test-tree file outside --production analysis.
+      "file": "src/cli/parser/cli-help.ts",
+      "exports": ["helpTopicIds"]
     },
     {
       // #1458: getSessionCommandKind's former production consumer (the session.ts if-chain) was replaced by SESSION_COMMAND_HANDLER_IMPLS, which encodes command-kind groupings directly via shared handler references instead of a kind lookup. The accessor and its SessionCommandKind classification remain covered by daemon-command-registry.test.ts, a test-tree file outside --production analysis.
