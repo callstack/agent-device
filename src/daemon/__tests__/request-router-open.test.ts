@@ -1,5 +1,8 @@
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import {
+  daemonPlatformServicesFixture,
+  daemonClaimRecoveryGatewayFixture,
+} from './platform-services-fixture.ts';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
@@ -491,6 +494,7 @@ test('close fails synchronously when root composition omits platform resource cl
   const handler = createProductionRequestHandler({
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),

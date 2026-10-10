@@ -61,6 +61,7 @@ import {
   type DeviceClaimAdmission,
 } from './device/device-claim-admission.ts';
 import { createOwnerScopedDeviceClaimReconciler } from './device/device-claim-owner-recovery.ts';
+import type { ClaimRecoveryGatewayFactory } from './device/claim-recovery-gateway.ts';
 import {
   applyCommandDefaults,
   resolveCommandDeviceClaimPolicy,
@@ -144,6 +145,7 @@ export async function createRequestExecutionScope(params: {
   leaseRegistry: LeaseRegistry;
   deviceRuntimeGateway?: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   platformServices: DaemonPlatformServices;
+  claimRecoveryGateway: ClaimRecoveryGatewayFactory;
   platformRequestScope?: PlatformRequestScope;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerAppCatalog?: ProviderAppCatalog;
@@ -236,6 +238,7 @@ export async function createRequestExecutionScope(params: {
       deviceRuntimeGateway: params.deviceRuntimeGateway,
       platformRequestScope: params.platformRequestScope,
       daemonPolicy: params.daemonPolicy,
+      claimRecoveryGateway: params.claimRecoveryGateway,
     });
 
     const scope: RequestExecutionScope = {
@@ -369,6 +372,7 @@ function createRequestDeviceAccess(params: {
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> | undefined;
   platformRequestScope: PlatformRequestScope | undefined;
   daemonPolicy: DaemonPolicy | undefined;
+  claimRecoveryGateway: ClaimRecoveryGatewayFactory;
 }): {
   claimAdmission: DeviceClaimAdmission | undefined;
   runtimeBindings: RequestRuntimeBindings | undefined;
@@ -382,7 +386,10 @@ function createRequestDeviceAccess(params: {
     command: params.command,
     workspace: params.workspace,
     stateDir: params.stateDir,
-    reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler(platformRequestScope),
+    reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({
+      scope: platformRequestScope,
+      composeGateway: params.claimRecoveryGateway,
+    }),
   });
   return {
     claimAdmission,

@@ -1,5 +1,8 @@
 import { afterAll, test, expect, vi } from 'vitest';
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import {
+  daemonPlatformServicesFixture,
+  daemonClaimRecoveryGatewayFixture,
+} from './platform-services-fixture.ts';
 import fs from 'node:fs';
 import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
 import type { CommandFlags } from '@agent-device/contracts/command';
@@ -117,12 +120,14 @@ test('an open that lost the race to a free device re-waits and opens rather than
 
   const first = await createRequestExecutionScope({
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: openRequest('first-opener'),
     sessionStore,
     leaseRegistry,
   });
   const second = await createRequestExecutionScope({
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: openRequest('second-opener'),
     sessionStore,
     leaseRegistry,
@@ -156,6 +161,7 @@ test('a close that frees the device mid-wait gets through while the open is wait
 
   const opened = createRequestExecutionScope({
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: openRequest('waiter'),
     sessionStore,
     leaseRegistry,
@@ -169,6 +175,7 @@ test('a close that frees the device mid-wait gets through while the open is wait
   await sleep(50);
   const closer = await createRequestExecutionScope({
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: closeRequest('holder'),
     sessionStore,
     leaseRegistry,
@@ -201,6 +208,7 @@ test('an out-of-range wait budget is refused before resolving the target device'
   await expect(
     createRequestExecutionScope({
       platformServices: daemonPlatformServicesFixture(),
+      claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
       req: openRequest('unbounded-opener', max + 1, 'request-unbounded'),
       sessionStore: makeSessionStore('agent-device-open-wait-bounds-'),
       leaseRegistry: new LeaseRegistry(),

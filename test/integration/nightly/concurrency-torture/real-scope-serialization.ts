@@ -1,5 +1,8 @@
 // Real-scope same-device serialization guard for the concurrency torture lane
-import { daemonPlatformServicesFixture } from '../../../../src/daemon/__tests__/platform-services-fixture.ts';
+import {
+  daemonPlatformServicesFixture,
+  daemonClaimRecoveryGatewayFixture,
+} from '../../../../src/daemon/__tests__/platform-services-fixture.ts';
 // (#1416). The seeded sweep models the mutex GRANT (a seed cannot reproduce
 // `withKeyedLock`'s native microtask hand-off), so on its own it could stay
 // green if the PRODUCTION lock APPLICATION path regressed. This guard closes
@@ -67,6 +70,7 @@ export async function measureRealScopeMaxOverlap(concurrency: number): Promise<n
           Array.from({ length: concurrency }, (_, i) =>
             createRequestExecutionScope({
               platformServices: daemonPlatformServicesFixture(),
+              claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
               req: openRequest(`real-${i}`, device.id),
               sessionStore,
               leaseRegistry,

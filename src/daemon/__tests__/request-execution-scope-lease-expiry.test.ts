@@ -1,5 +1,8 @@
 import { expect, test, vi } from 'vitest';
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import {
+  daemonPlatformServicesFixture,
+  daemonClaimRecoveryGatewayFixture,
+} from './platform-services-fixture.ts';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { LINUX_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -47,6 +50,7 @@ test('expired leases remove owned sessions before the next command and free capa
 
   const scope = await createRequestExecutionScope({
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: makeRequest({ command: 'snapshot' }),
     sessionStore,
     leaseRegistry,
@@ -101,6 +105,7 @@ test.each(['rebuild', 'retire'] as const)(
     now = 1_011;
     const scope = await createRequestExecutionScope({
       platformServices: daemonPlatformServicesFixture(),
+      claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
       req: makeRequest({ session: address, flags: { session: address } }),
       sessionStore: store,
       leaseRegistry: leases,

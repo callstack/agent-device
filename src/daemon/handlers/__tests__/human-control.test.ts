@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
+import {
+  daemonPlatformServicesFixture,
+  daemonClaimRecoveryGatewayFixture,
+} from '../../__tests__/platform-services-fixture.ts';
 import { test } from 'vitest';
 import { createRequestExecutionScope } from '../../request-execution-scope.ts';
 import {
@@ -33,6 +36,7 @@ test('lease-owner takeover uses the production admission gate, preserves the ses
   assert.deepEqual(registry.listHumanControlHolds({ kind: 'host' }), []);
   const scope = await createRequestExecutionScope({
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: humanControlRequest(lease, 'click', []),
     sessionStore,
     leaseRegistry: registry,
@@ -89,6 +93,7 @@ test('a fresh-session mutation without an advisory device lock still drains befo
     sessionStore,
     leaseRegistry: registry,
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
   });
   const started = createControlLatch();
   const finish = createControlLatch();
@@ -107,6 +112,7 @@ test('a fresh-session mutation without an advisory device lock still drains befo
   assert.equal(active, false);
   const later = await createRequestExecutionScope({
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: { ...req, session: 'another-fresh-session' },
     sessionStore,
     leaseRegistry: registry,
@@ -129,6 +135,7 @@ test('a nested mutation is stopped when takeover begins during its parent reques
     sessionStore,
     leaseRegistry: registry,
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
   });
   let activation: Promise<unknown> | undefined;
   await scope.runLocked(async () => {
@@ -137,6 +144,7 @@ test('a nested mutation is stopped when takeover begins during its parent reques
     });
     const nested = await createRequestExecutionScope({
       platformServices: daemonPlatformServicesFixture(),
+      claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
       req: humanControlRequest(lease, 'click', []),
       sessionStore,
       leaseRegistry: registry,

@@ -827,6 +827,7 @@ matching the layering scanner's scope) to `src/platforms/**` and concrete
 `@agent-device/platform-*` packages. R13 governs concrete package imports across the whole tree,
 while `retired-platforms-zone` prevents the old root seam from being recreated; platform freedom is
 therefore structurally enforced rather than periodically measured.
+
 ### 11. The platform-services port carries host asks that bind no device
 
 Some request-path work asks the host machine something without ever taking a device runtime:
@@ -834,7 +835,10 @@ concrete local readiness, boot-time and runner-session observation, and open-tar
 classification. Those asks now cross the daemon boundary as one required dependency,
 `DaemonPlatformServices` (`src/daemon/platform-services.ts`), composed by the root in
 `src/platform-runtime-daemon-services.ts` and threaded root → `RequestRouterDeps` → the request
-execution scope → the handlers and consumers.
+execution scope → the handlers and consumers. Stale-claim reconciliation gets the same treatment
+for the one act it may not perform itself: the root supplies a `ClaimRecoveryGatewayFactory`
+(`src/daemon/device/claim-recovery-gateway.ts`), and the daemon keeps the transaction — what to
+rebuild from (the dead owner's recorded state dir), in what order, and when to dispose it.
 
 The port is not a raw escape hatch back into platform mechanics. Every member is an
 already-published neutral contract type from `@agent-device/contracts` (or the readiness boolean),

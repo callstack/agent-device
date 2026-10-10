@@ -1,4 +1,7 @@
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import {
+  daemonPlatformServicesFixture,
+  daemonClaimRecoveryGatewayFixture,
+} from './platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../session-state.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -200,6 +203,7 @@ test.each(['rebuild', 'retire'] as const)(
       // Locked preparation refreshes recording health through the port, so the scope has to carry
       // the composed services the mocked observation spy is hanging off.
       platformServices: daemonPlatformServicesFixture(),
+      claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     });
     const prepared = scope.runLocked(() =>
       prepareLockedRequestScope({

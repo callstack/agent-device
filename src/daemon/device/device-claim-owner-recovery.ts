@@ -1,9 +1,9 @@
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
-import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
 import { resolveDaemonPaths } from '../../daemon-resolution.ts';
 import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
 import type { DeviceClaimReconciler } from './device-claims.ts';
+import type { ClaimRecoveryGatewayFactory } from './claim-recovery-gateway.ts';
 import {
   resolveSessionDir,
   resolveSessionAppLogPath,
@@ -20,18 +20,29 @@ export type OwnerScopedClaimRecoveryComposer = (stateDir: string) => OwnerScoped
 /**
  * The production entry for stale-claim reconciliation (#2168): every recovery
  * transaction is composed from the stale claim's own recorded state dir and
- * disposed afterwards. The owned-process record store and session artifact
- * paths must be the dead owner's, never the reconciling process's — recording
- * cleanup clears records by bare session id through the composed store, and
- * one caller-scoped store would let a foreign claim's recovery clear a
- * same-named live session's records.
+ * disposed afterwards. The owned-process record store, session artifact paths,
+ * and runtime gateway must be the dead owner's, never the reconciling
+ * process's — recording cleanup clears records by bare session id through the
+ * composed store, and one caller-scoped store would let a foreign claim's
+ * recovery clear a same-named live session's records.
+ *
+ * The gateway itself arrives through `composeGateway`, which root composition
+ * supplies: assembling a runtime gateway is the process root's act, and this
+ * module keeps only the transaction — what to rebuild from, in what order, and
+ * when to dispose it.
  */
 export function createOwnerScopedDeviceClaimReconciler(
-  scope: PlatformRequestScope,
-  composeRecovery?: OwnerScopedClaimRecoveryComposer,
+  params: Readonly<{
+    scope: PlatformRequestScope;
+    /** Root composition's per-transaction recovery gateway; required unless a composer overrides it. */
+    composeGateway: ClaimRecoveryGatewayFactory;
+    /** Test seam replacing the whole per-claim composition, gateway included. */
+    composeRecovery?: OwnerScopedClaimRecoveryComposer;
+  }>,
 ): DeviceClaimReconciler {
   const compose =
-    composeRecovery ?? ((stateDir) => composeOwnerScopedClaimRecovery(stateDir, scope));
+    params.composeRecovery ??
+    ((stateDir) => composeOwnerScopedClaimRecovery(stateDir, params.scope, params.composeGateway));
   return async (claim) => {
     const recovery = compose(claim.stateDir);
     try {
@@ -51,9 +62,11 @@ export function createOwnerScopedDeviceClaimReconciler(
 function composeOwnerScopedClaimRecovery(
   stateDir: string,
   scope: PlatformRequestScope,
+  composeGateway: ClaimRecoveryGatewayFactory,
 ): OwnerScopedClaimRecovery {
   const daemonPaths = resolveDaemonPaths(stateDir);
-  const gateway = createPlatformRuntimeGateway({
+  const gateway = composeGateway({
+    stateDir,
     sessionsDir: daemonPaths.sessionsDir,
     ownedProcesses: createOwnedProcessRecordStore({
       stateDir: daemonPaths.baseDir,
