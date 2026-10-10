@@ -109,19 +109,10 @@ function markPostGestureStabilization(
 }
 
 /**
- * The one post-open verdict that observed the launch still in flight: the bridge kept answering with
- * a launch-transition failure until its window closed, and the open returned on a fixed settle.
- * `observable` read the app; `probe-failed`, `app-unidentified`, and `not-eligible` learned nothing
- * about the layout, so they keep the fixed settle alone.
- */
-const POST_OPEN_IN_FLIGHT_OBSERVATION: PostOpenObservation = 'unobservable';
-
-/**
- * Open-side marking, called once an app open has published its session. An Apple app open whose
- * observation could not read the launched app returns before anything proved its layout at rest, so
- * the session's next capture runs the same quiet-window loop a scroll's does: a selector resolved
- * from a list still sliding into place taps where its target used to be (#3354). No baseline is
- * recorded: the pre-open tree is a different surface, so the loop never claims the open had no effect.
+ * Called once an app open has published its session. `unobservable` means the launch was still in
+ * flight or no app process was found when the open returned, so the next capture runs the
+ * quiet-window loop before a selector resolves against a layout that may still be moving (#3354). No baseline: the pre-open tree is a
+ * different surface, so the open is never reported as having no effect.
  */
 export function markPostOpenStabilization(
   session: SessionState,
@@ -129,7 +120,7 @@ export function markPostOpenStabilization(
 ): void {
   if (!isApplePlatform(session.device.platform)) return;
   if (!supportsPostGestureStabilization(session.device)) return;
-  if (observation !== POST_OPEN_IN_FLIGHT_OBSERVATION) return;
+  if (observation !== 'unobservable') return;
   session.postGestureStabilization = { action: 'open', positionals: [], markedAt: Date.now() };
 }
 

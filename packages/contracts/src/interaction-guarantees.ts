@@ -166,7 +166,7 @@ const SHARED_RESPONSE_CONSTRUCTION: GuaranteeEnforcement = {
 const TAP_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
   kind: 'waived',
   reason:
-    'gap: the response reports the dispatch only; only opt-in --verify/--settle capture post-action evidence into it. The deferred marks set after dispatch (Android snapshot freshness after press/click, post-gesture stabilization when the request sets postGestureStabilization) are judged by the next capture, never in this response, and the iOS ambiguous-failure corroboration reconsiders only a thrown runner error.',
+    'gap: the response reports the dispatch only; only opt-in --verify/--settle capture post-action evidence into it. The deferred marks set after dispatch (Android snapshot freshness after press/click, post-gesture stabilization when the request sets postGestureStabilization) are judged by the next capture, never in this response. An iOS Simulator open whose launch watch ended unobservable marks the next capture in that session to wait for a quiet surface (markPostOpenStabilization); that steadies where a target is resolved, not whether the tap landed. The iOS ambiguous-failure corroboration reconsiders only a thrown runner error.',
   trackingIssue: TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE,
 };
 
