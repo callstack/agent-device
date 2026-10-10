@@ -171,10 +171,15 @@ export default defineConfig({
             // Parse-only guard on the checked-in registry entry: the npm package must declare
             // the fixed mcp subcommand, or registry-format launchers run the bare CLI.
             'scripts/__tests__/mcp-metadata.test.ts',
+            // Release channel versions: nightly naming, promotion lookup, and main's -dev advance.
+            'scripts/__tests__/release-version.test.ts',
+            'scripts/__tests__/release-plan.test.ts',
             'scripts/ios-snapshot-benchmark/*.test.ts',
             // Parses CI configuration only, so this action guard needs no device or subprocess lane.
             'test/ci/upload-agent-device-artifacts.test.ts',
             'test/ci/upload-artifact-hidden-paths.test.ts',
+            // npm trusts release.yml, so its token boundary is asserted on the parsed workflow.
+            'test/ci/release-workflow.test.ts',
             // The size reporter is preserved across a base checkout; its entrypoint and imported
             // modules must move as one directory or the Bundle Size lane fails before measuring.
             'test/ci/size-workflow.test.ts',
