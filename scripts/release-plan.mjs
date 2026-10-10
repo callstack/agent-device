@@ -13,8 +13,7 @@ import {
 /**
  * Decides what one `.github/workflows/release.yml` run does, from the event that started it:
  *   pull_request              dry-run: build and verify every package, publish nothing
- *   schedule / nightly        nightly: publish main's HEAD under the `nightly` dist-tag
- *   dispatch stable on main   promote: tag the latest nightly's commit and start its stable run
+ *   schedule / dispatch       nightly: publish main's HEAD under the `nightly` dist-tag
  *   vX.Y.Z tag                stable: publish that commit under the `latest` dist-tag
  * `tags` maps remote tag names to commits; `ciConclusion` and `onMain` describe `sha`.
  */
@@ -26,7 +25,7 @@ export function planRelease(run) {
   if (run.ref !== 'refs/heads/main') {
     throw new Error(`Releases run from main or a vX.Y.Z tag, not ${run.ref}.`);
   }
-  return run.channel === 'stable' ? planPromotion(run) : planNightly(run);
+  return planNightly(run);
 }
 
 function planNightly(run) {
@@ -48,16 +47,6 @@ function planNightly(run) {
   return { mode: 'nightly', version, distTag: 'nightly', commit: run.sha };
 }
 
-function planPromotion(run) {
-  const nightly = latestNightlyTag([...run.tags.keys()]);
-  if (!nightly) throw new Error('No nightly has been published to promote.');
-  const version = run.requestedVersion || nightlyBase(nightly.slice(1));
-  if (!isReleaseVersion(version)) throw new Error(`${version} is not an X.Y.Z release version.`);
-  if (run.tags.has(`v${version}`)) throw new Error(`v${version} is already tagged.`);
-  assertAheadOfStable(run, version);
-  return { mode: 'promote', version, commit: run.tags.get(nightly), nightly };
-}
-
 function planStable(run, tag) {
   const version = tag.slice(1);
   if (!tag.startsWith('v') || !isReleaseVersion(version)) {
@@ -68,6 +57,11 @@ function planStable(run, tag) {
     throw new Error(`${version} is older than the published ${run.latestStable}.`);
   }
   if (!run.onMain) throw new Error(`${tag} is not on main.`);
+  if (run.ciConclusion !== 'success') {
+    throw new Error(
+      `CI on ${run.sha} is ${run.ciConclusion}. Once it passes, run Release on ${tag} to publish it.`,
+    );
+  }
   const previousTag = previousReleaseTag([...run.tags.keys()], version) ?? '';
   return { mode: 'stable', version, distTag: 'latest', commit: run.sha, previousTag };
 }
@@ -84,10 +78,12 @@ function assertAheadOfStable(run, version) {
   }
 }
 
-/** Remote tags by name, resolved to the commit each one points at. */
+/** Remote release and nightly tags by name, resolved to the commit each one points at. */
 function remoteTags() {
   const tags = new Map();
-  const output = execFileSync('git', ['ls-remote', '--tags', 'origin', 'v*'], { encoding: 'utf8' });
+  const output = execFileSync('git', ['ls-remote', '--tags', 'origin', 'v*', 'nightly/*'], {
+    encoding: 'utf8',
+  });
   for (const line of output.split('\n').filter(Boolean)) {
     const [commit, name] = line.split('\t');
     const tag = name.replace(/^refs\/tags\//, '');
@@ -138,14 +134,12 @@ async function readRun(env) {
     event,
     ref,
     sha: env.GITHUB_SHA,
-    channel: env.RELEASE_CHANNEL || 'nightly',
-    requestedVersion: env.RELEASE_VERSION,
     rootVersion: JSON.parse(fs.readFileSync('package.json', 'utf8')).version,
     today: new Date().toISOString().slice(0, 10).replaceAll('-', ''),
     runNumber: env.GITHUB_RUN_NUMBER,
     tags: event === 'pull_request' ? new Map() : remoteTags(),
     latestStable: onBranch || onTag ? await latestStable() : null,
-    ciConclusion: onBranch ? await ciConclusion(env) : undefined,
+    ciConclusion: onBranch || onTag ? await ciConclusion(env) : undefined,
     onMain: onTag ? await isOnMain(env) : undefined,
   };
 }

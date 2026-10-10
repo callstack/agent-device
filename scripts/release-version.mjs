@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 
 // Version strings across the release channels. `main` carries `X.Y.Z-dev`, naming the release
 // it is building towards; a nightly publishes that base as `X.Y.Z-nightly.<YYYYMMDD>.<run>`; a
-// stable release promotes a nightly's commit to `X.Y.Z`. Registry scanners diff the tool surface
+// stable release publishes a tagged commit on `main` as `X.Y.Z`. Registry scanners diff the tool surface
 // per version string, so neither `main` nor a nightly may ever carry a published stable version.
 const RELEASE = /^(\d+)\.(\d+)\.(\d+)$/;
 const DEVELOPMENT = /^(\d+)\.(\d+)\.(\d+)-dev$/;
@@ -31,18 +31,25 @@ export function nightlyVersion(developmentVersion, date, runNumber) {
   return `${match.slice(1, 4).join('.')}-nightly.${date}.${runNumber}`;
 }
 
-/** The `X.Y.Z` a nightly previews: the version its promotion publishes by default. */
+/** The `X.Y.Z` release a nightly previews. */
 export function nightlyBase(version) {
   const match = NIGHTLY.exec(version);
   if (!match) throw new Error(`${version} is not a nightly version.`);
   return match.slice(1, 4).join('.');
 }
 
-/** The newest `vX.Y.Z-nightly.<date>.<run>` tag, ordered by base, then date, then run. */
+/**
+ * Nightly tags live outside `v*`, which only repository admins may create: the release workflow
+ * tags each nightly itself, and no nightly tag ref may deploy to the npm-publish environment.
+ */
+const NIGHTLY_TAG_PREFIX = 'nightly/v';
+
+/** The newest `nightly/vX.Y.Z-nightly.<date>.<run>` tag, ordered by base, then date, then run. */
 export function latestNightlyTag(tags) {
   const nightlies = tags
-    .map((tag) => ({ tag, match: NIGHTLY.exec(tag.replace(/^v/, '')) }))
-    .filter((entry) => entry.tag.startsWith('v') && entry.match);
+    .filter((tag) => tag.startsWith(NIGHTLY_TAG_PREFIX))
+    .map((tag) => ({ tag, match: NIGHTLY.exec(tag.slice(NIGHTLY_TAG_PREFIX.length)) }))
+    .filter((entry) => entry.match);
   nightlies.sort((a, b) => {
     const [left, right] = [a.match, b.match].map((match) => match.slice(1).map(Number));
     return right.reduce((order, part, index) => order || part - left[index], 0);
