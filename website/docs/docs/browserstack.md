@@ -30,7 +30,7 @@ agent-device connect browserstack \
 
 `connect` verifies the BrowserStack credentials and the exact device/OS pair. It checks a `bs://` reference against recent uploads, and confirms that a local app file exists before saving its absolute path. A public URL is saved as-is; BrowserStack validates it when the session starts. `open` takes the app's installed package or bundle identifier, not its upload name.
 
-A running daemon keeps the BrowserStack credentials it started with. If your shell holds different ones, the first command that allocates a lease, such as `open`, refuses before it creates a session. Run `agent-device daemon stop` (with the same `--state-dir`) and rerun the command. A shell that sets neither variable uses the daemon's credentials.
+If you change credentials while the daemon runs, see [Change credentials while the daemon runs](/docs/device-clouds#change-credentials-while-the-daemon-runs).
 
 Optional labels:
 
@@ -83,7 +83,7 @@ agent-device artifacts --json
 agent-device disconnect
 ```
 
-To use BrowserStack only through MCP, run `connect` in the same effective state directory before you start `agent-device mcp`. MCP exposes device commands such as `open`, `snapshot`, `close`, and `artifacts`, but not provider `connect` commands.
+To drive BrowserStack only through MCP, see [Use a provider only through MCP](/docs/device-clouds#use-a-provider-only-through-mcp).
 
 ## Use the Node.js client
 
@@ -120,12 +120,8 @@ if (providerSessionId) {
 
 ## Get artifacts and troubleshoot
 
-After `close`, BrowserStack can return session video, Appium logs, device logs, dashboard URLs, and public URLs. Run `agent-device artifacts --json`, or look up an earlier session by its ID:
+After `close`, BrowserStack can return session video, Appium logs, device logs, dashboard URLs, and public URLs. The provider session ID is the WebDriver session ID. See [Retrieve artifacts after close](/docs/device-clouds#retrieve-artifacts-after-close).
 
-```bash
-agent-device artifacts <webdriver-session-id> --provider browserstack --json
-```
+BrowserStack errors distinguish rejected credentials, an unavailable device/OS pair, a missing `bs://` upload, and a missing local app file.
 
-BrowserStack errors distinguish rejected credentials, an unavailable device/OS pair, a missing `bs://` upload, and a missing local app file. If artifacts are still pending right after `close`, retry the lookup; BrowserStack may still be finalizing video and log URLs.
-
-On hosted WebDriver sessions, `fill` checks that the field received focus before it sends keys. If it cannot confirm focus, it fails without typing. Use `snapshot -i` to confirm the target. If the driver cannot report focus at all, use `press <target>` followed by `type <text>`, which sends text without confirming where it lands.
+To enter text, see [Fill text on hosted WebDriver sessions](/docs/device-clouds#fill-text-on-hosted-webdriver-sessions).

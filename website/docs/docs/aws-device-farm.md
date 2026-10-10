@@ -76,7 +76,7 @@ agent-device artifacts --json
 agent-device disconnect
 ```
 
-To use AWS Device Farm only through MCP, run `connect` in the same effective state directory before you start `agent-device mcp`. MCP exposes device commands such as `open`, `snapshot`, `close`, and `artifacts`, but not provider `connect` commands.
+To drive AWS Device Farm only through MCP, see [Use a provider only through MCP](/docs/device-clouds#use-a-provider-only-through-mcp).
 
 ## Use the Node.js client
 
@@ -100,14 +100,10 @@ const closed = await client.sessions.close();
 
 ## Get artifacts and troubleshoot
 
-After `close`, AWS Device Farm can return remote-access video and log artifacts once it finalizes them. Run `agent-device artifacts --json`, or look up an earlier session by its ARN:
+After `close`, AWS Device Farm can return remote-access video and log artifacts once it finalizes them. The provider session ID is the remote-access session ARN. See [Retrieve artifacts after close](/docs/device-clouds#retrieve-artifacts-after-close).
 
-```bash
-agent-device artifacts <remote-access-session-arn> --provider aws-device-farm --json
-```
+If `connect` fails, use the reported `aws devicefarm get-*` error to check the credential chain, ARN, region, resource platform, or upload readiness. A failed `connect` has not allocated a device yet.
 
-If `connect` fails, use the reported `aws devicefarm get-*` error to check the credential chain, ARN, region, resource platform, or upload readiness. A failed `connect` has not allocated a device yet. If artifacts are still pending right after `close`, retry the lookup.
-
-On hosted WebDriver sessions, `fill` checks that the field received focus before it sends keys. If it cannot confirm focus, it fails without typing. Use `snapshot -i` to confirm the target. If the driver cannot report focus at all, use `press <target>` followed by `type <text>`, which sends text without confirming where it lands.
+To enter text, see [Fill text on hosted WebDriver sessions](/docs/device-clouds#fill-text-on-hosted-webdriver-sessions).
 
 On a screen that never goes still, such as a looping video, a live ticker, or continuous animation, `snapshot -i` can time out while `screenshot` of the same screen still returns. On a metered device every second of that read is billed, so do not retry the snapshot in a loop. Take a screenshot instead and drive from `@refs` an earlier snapshot captured. `--depth` trims the tree after it arrives, so it cannot shorten a read that never finishes. See [Snapshots](/docs/snapshots) for details.
