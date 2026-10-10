@@ -12,6 +12,7 @@ import {
   parseSettingState,
   parseTextSizeCategory,
   resolveSettingsApp,
+  SETTINGS_APP_NOT_PACKAGE_REASON,
   textSizeSettingPayload,
   TEXT_SIZE_CATEGORIES,
   type ReadableSetting,
@@ -23,7 +24,7 @@ import { runAndroidAdb, runAndroidShell } from './adb.ts';
 import { setAndroidAirplaneMode } from './settings-airplane.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
-import { setAndroidPermission } from './settings-permission.ts';
+import { parseAndroidPermissionRequest, setAndroidPermission } from './settings-permission.ts';
 
 const ANDROID_ANIMATION_SCALE_SETTINGS = [
   'window_animation_scale',
@@ -165,11 +166,11 @@ export async function setAndroidSetting(
           sessionAppRequiredDetails(),
         );
       }
+      const request = parseAndroidPermissionRequest(state, options);
       return await setAndroidPermission(
         device,
         await resolveAndroidSettingsPackage(device, normalized, appPackage),
-        state,
-        options,
+        request,
       );
     }
     case 'text-size': {
@@ -192,8 +193,10 @@ async function resolveAndroidSettingsPackage(
       'INVALID_ARGS',
       `settings ${setting} requires a package name, not an intent.`,
       {
-        app,
+        reason: SETTINGS_APP_NOT_PACKAGE_REASON,
         dispatched: 'no',
+        app,
+        hint: 'Run apps --all for the exact package name, then retry with it in --app.',
       },
     );
   }

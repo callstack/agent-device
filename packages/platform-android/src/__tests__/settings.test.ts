@@ -1,6 +1,9 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { TEXT_SIZE_CATEGORIES } from '@agent-device/contracts/settings';
+import {
+  SETTINGS_APP_NOT_PACKAGE_REASON,
+  TEXT_SIZE_CATEGORIES,
+} from '@agent-device/contracts/settings';
 import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import { readAndroidSetting, setAndroidSetting } from '../settings.ts';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
@@ -136,6 +139,7 @@ test.for(['permission', 'clear-app-state'] as const)(
           code: 'APP_NOT_INSTALLED',
           reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled,
           dispatched: 'no',
+          hint: /apps --all/,
         },
       );
       assert.deepEqual(calls, [['shell', 'pm', 'list', 'packages']]);
@@ -150,7 +154,20 @@ test('setAndroidSetting permission refuses an app alias that resolves to an inte
         setAndroidSetting(device, 'permission', 'grant', 'settings', {
           permissionTarget: 'camera',
         }),
-      { code: 'INVALID_ARGS', dispatched: 'no' },
+      { code: 'INVALID_ARGS', reason: SETTINGS_APP_NOT_PACKAGE_REASON, dispatched: 'no' },
+    );
+    assert.deepEqual(calls, []);
+  });
+});
+
+test('setAndroidSetting permission validates the request before resolving the app', async () => {
+  await withFakeAdb(installedPackagesAdb, async ({ calls, device }) => {
+    await assertRejectsAppError(
+      () =>
+        setAndroidSetting(device, 'permission', 'grant', 'Nowhere', {
+          permissionTarget: 'siri',
+        }),
+      { code: 'INVALID_ARGS' },
     );
     assert.deepEqual(calls, []);
   });

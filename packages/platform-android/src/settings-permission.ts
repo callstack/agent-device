@@ -4,6 +4,7 @@ import {
   type MobilePermissionTarget,
   parsePermissionAction,
   parsePermissionTarget,
+  type PermissionAction,
   type SettingOptions,
 } from '@agent-device/contracts/settings';
 import { runAndroidShell } from './adb.ts';
@@ -113,14 +114,27 @@ async function requireAndroidPermissionUser(device: DeviceInfo): Promise<number>
   );
 }
 
+type AndroidPermissionRequest = Readonly<{
+  action: PermissionAction;
+  target: AndroidPermissionTarget;
+}>;
+
+/** Validates a permission change before anything about the app or the device is read. */
+export function parseAndroidPermissionRequest(
+  state: string,
+  options: SettingOptions | undefined,
+): AndroidPermissionRequest {
+  return {
+    action: parsePermissionAction(state),
+    target: parseAndroidPermissionTarget(options?.permissionTarget, options?.permissionMode),
+  };
+}
+
 export async function setAndroidPermission(
   device: DeviceInfo,
   appPackage: string,
-  state: string,
-  options: SettingOptions | undefined,
+  { action, target }: AndroidPermissionRequest,
 ): Promise<Record<string, unknown> | void> {
-  const action = parsePermissionAction(state);
-  const target = parseAndroidPermissionTarget(options?.permissionTarget, options?.permissionMode);
   const userId = await requireAndroidPermissionUser(device);
   const userArgs: AndroidUserArgs = ['--user', String(userId)];
   if (target.kind === 'all') {

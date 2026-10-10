@@ -37,12 +37,26 @@ export async function invalidateIosAppResolutionCache<T>(
   return await iosAppResolutionCache.invalidateWhile(iosAppResolutionScope(device), fn);
 }
 
-export async function resolveIosApp(device: DeviceInfo, app: string): Promise<string> {
+type IosAppResolutionOptions = Readonly<{
+  /**
+   * Answer only with an app installed on the device. A dotted target is then matched against the
+   * installed bundle ids before display names, so `Booking.com` resolves instead of passing through,
+   * and a target nothing installed matches is refused rather than returned as a literal id.
+   */
+  installedOnly?: boolean;
+}>;
+
+export async function resolveIosApp(
+  device: DeviceInfo,
+  app: string,
+  options: IosAppResolutionOptions = {},
+): Promise<string> {
   if (isMacOs(device)) {
     return await resolveMacOsApp(app);
   }
   const trimmed = app.trim();
-  if (trimmed.includes('.')) return trimmed;
+  const dotted = trimmed.includes('.');
+  if (dotted && !options.installedOnly) return trimmed;
 
   const alias = resolveIosAppAlias(trimmed);
   if (alias !== trimmed) return alias;
@@ -54,6 +68,9 @@ export async function resolveIosApp(device: DeviceInfo, app: string): Promise<st
     device.kind === 'simulator'
       ? await listSimulatorApps(device)
       : await resolveIosPhysicalDeviceControl(device).listApps(device, 'all');
+  if (dotted && list.some((entry) => entry.bundleId === trimmed)) {
+    return iosAppResolutionCache.set(cacheScope, trimmed, trimmed);
+  }
   const matches = list.filter((entry) => entry.name.toLowerCase() === trimmed.toLowerCase());
   const match = matches[0];
   if (match !== undefined && matches.length === 1) {
