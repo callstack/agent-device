@@ -24,13 +24,14 @@ test('a nightly is refused unless main carries a -dev version', () => {
 test('the latest nightly orders by base, then date, then run number', () => {
   const tags = [
     'v0.21.24',
-    'v0.21.25-nightly.20261009.9',
-    'v0.21.25-nightly.20261010.10',
-    'v0.21.25-nightly.20261010.12',
-    'v0.21.24-nightly.20261011.13',
-    'evidence/v0.21.26-nightly.20261012.14',
+    'nightly/v0.21.25-nightly.20261009.9',
+    'nightly/v0.21.25-nightly.20261010.10',
+    'nightly/v0.21.25-nightly.20261010.12',
+    'nightly/v0.21.24-nightly.20261011.13',
+    'v0.21.26-nightly.20261012.14',
+    'evidence/v0.21.26-nightly.20261012.15',
   ];
-  assert.equal(latestNightlyTag(tags), 'v0.21.25-nightly.20261010.12');
+  assert.equal(latestNightlyTag(tags), 'nightly/v0.21.25-nightly.20261010.12');
   assert.equal(latestNightlyTag(['v0.21.24']), null);
 });
 

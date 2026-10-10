@@ -3,8 +3,9 @@ name: Release
 # One workflow owns every npm publish, so each package trusts exactly this file
 # (npm trusted publishing pins the workflow filename and the npm-publish
 # environment). scripts/release-plan.mjs maps the triggering event to a mode:
-# dry-run (PR), nightly (schedule or dispatch), promote (dispatch stable), or
-# stable (a vX.Y.Z tag, created by promote or pushed by a maintainer).
+# dry-run (PR), nightly (schedule or dispatch on main), or stable (a vX.Y.Z tag on
+# main, which only a repository admin can create, normally by publishing a GitHub
+# release).
 on:
   pull_request:
     paths:
@@ -20,20 +21,8 @@ on:
     # Retried every few hours: a nightly waits for green CI on main's HEAD and
     # publishes at most once per UTC day.
     - cron: '23 */3 * * *'
+  # On main: publish a nightly now. On a vX.Y.Z tag: retry that stable release.
   workflow_dispatch:
-    inputs:
-      channel:
-        description: nightly publishes main now; stable promotes the latest nightly.
-        required: true
-        default: nightly
-        type: choice
-        options:
-          - nightly
-          - stable
-      version:
-        description: Stable version override (X.Y.Z). Defaults to the version the latest nightly previews.
-        required: false
-        type: string
 
 permissions: {}
 
@@ -41,7 +30,6 @@ concurrency:
   group: >-
     ${{ github.event_name == 'pull_request' && format('release-pr-{0}', github.ref)
     || startsWith(github.ref, 'refs/tags/') && format('release-{0}', github.ref)
-    || inputs.channel == 'stable' && 'release-promote'
     || 'release-nightly' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
@@ -74,40 +62,7 @@ jobs:
         name: Plan release
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          RELEASE_CHANNEL: ${{ inputs.channel }}
-          RELEASE_VERSION: ${{ inputs.version }}
         run: node scripts/release-plan.mjs
-
-  promote:
-    name: Promote ${{ needs.plan.outputs.version }}
-    needs: plan
-    if: needs.plan.outputs.mode == 'promote'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: write
-      contents: write
-    steps:
-      # A run started by GITHUB_TOKEN's tag push would not trigger; dispatching
-      # on the tag gives the stable run a github.sha (and npm provenance) of
-      # exactly the promoted commit.
-      - name: Tag the promoted nightly and start its stable release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: v${{ needs.plan.outputs.version }}
-          COMMIT: ${{ needs.plan.outputs.commit }}
-        run: |
-          set -euo pipefail
-          # Idempotent, so re-running a failed dispatch reuses the tag it already created.
-          tagged="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha 2>/dev/null || true)"
-          if [ -z "$tagged" ]; then
-            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$COMMIT"
-          elif [ "$tagged" != "$COMMIT" ]; then
-            echo "$TAG already points at $tagged, not $COMMIT." >&2
-            exit 1
-          fi
-          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
-          echo "Started the $TAG release from $COMMIT." >> "$GITHUB_STEP_SUMMARY"
 
   approve:
     name: Approve ${{ needs.plan.outputs.version }}
@@ -217,7 +172,7 @@ jobs:
       - name: Tag the published commit
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v${{ needs.plan.outputs.version }}
+          TAG: nightly/v${{ needs.plan.outputs.version }}
           COMMIT: ${{ needs.plan.outputs.commit }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$COMMIT"
