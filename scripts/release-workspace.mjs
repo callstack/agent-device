@@ -4,11 +4,8 @@ import path from 'node:path';
 
 const root = process.cwd();
 const [command, ...options] = process.argv.slice(2);
-if (
-  !['sync', 'check', 'pack', 'publish'].includes(command) ||
-  options.some((option) => option !== '--stage')
-) {
-  throw new Error('Usage: node scripts/release-workspace.mjs <sync|check|pack|publish> [--stage]');
+if (!['sync', 'pack'].includes(command) || options.length > 0) {
+  throw new Error('Usage: node scripts/release-workspace.mjs <sync|pack>');
 }
 const packages = JSON.parse(
   execFileSync('pnpm', ['list', '--recursive', '--depth', '-1', '--json'], {
@@ -34,12 +31,11 @@ if (command === 'sync') {
   for (const pkg of publicPackages) {
     if (pkg.manifest.version !== version) {
       throw new Error(
-        `${pkg.manifest.name}@${pkg.manifest.version} must match agent-device@${version}. Run npm version first.`,
+        `${pkg.manifest.name}@${pkg.manifest.version} must match agent-device@${version}. Run release-version.mjs stamp first.`,
       );
     }
   }
-  if (command === 'pack') packWorkspacePackages();
-  if (command === 'publish') publishWorkspacePackages();
+  packWorkspacePackages();
 }
 
 function syncVersions() {
@@ -47,12 +43,6 @@ function syncVersions() {
     if (pkg.manifest.version === version) continue;
     pkg.manifest.version = version;
     fs.writeFileSync(pkg.manifestPath, `${JSON.stringify(pkg.manifest, null, 2)}\n`);
-  }
-  if (options.includes('--stage')) {
-    execFileSync('git', ['add', '--', ...publicPackages.map((pkg) => pkg.manifestPath)], {
-      cwd: root,
-      stdio: 'inherit',
-    });
   }
 }
 
@@ -100,42 +90,4 @@ function checkPackedIdentity(packed, name) {
   if (packed.name !== name || packed.version !== version || packed.private === true) {
     throw new Error('Packed package identity differs from the synchronized public package.');
   }
-}
-
-function publishWorkspacePackages() {
-  if (process.env.npm_config_dry_run === 'true') {
-    if (process.env.npm_lifecycle_event !== 'postpublish') {
-      throw new Error(
-        'Use npm publish --dry-run to preview a release; the retry command publishes.',
-      );
-    }
-    return;
-  }
-  const args = [
-    '--recursive',
-    '--include-workspace-root',
-    'publish',
-    '--access',
-    'public',
-    '--no-git-checks',
-    '--ignore-scripts',
-  ];
-  if (process.env.npm_lifecycle_event === 'postpublish') {
-    args.push('--filter', `!${rootPackage.manifest.name}`);
-  }
-  execFileSync('pnpm', args, { cwd: root, stdio: 'inherit' });
-  execFileSync(process.execPath, ['scripts/release-mark-dev.mjs'], { cwd: root, stdio: 'inherit' });
-  execFileSync(
-    'git',
-    [
-      'commit',
-      '--only',
-      '-m',
-      `chore: mark ${version} as released`,
-      '--',
-      ...publicPackages.map((pkg) => pkg.manifestPath),
-      path.join(root, 'server.json'),
-    ],
-    { cwd: root, stdio: 'inherit' },
-  );
 }
