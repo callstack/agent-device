@@ -379,7 +379,7 @@ await client.command.fold({
 });
 ```
 
-`fold` accepts either `pose` or `keyframes`. Keyframes use linear interpolation at roughly 60 updates per second; repeat an angle to hold it. Timestamps must start at zero and increase strictly, with 2–64 frames and a final timestamp no greater than 60,000ms. Angles must be finite and between 0° and 180°. The final timestamp bounds motion, excluding helper preparation and final hinge verification. A custom final angle is verified within 0.5°; interior angles must also settle. Cancellation stops the motion at its current angle. Re-snapshot afterwards, including after interrupted motion.
+`fold` accepts either `pose` or `keyframes`. Keyframes use linear interpolation at roughly 60 updates per second; repeat an angle to hold it. Timestamps must start at zero and increase strictly, with 2–64 frames and a final timestamp no greater than 60,000ms. Angles must be finite and between 0° and 180°. The final timestamp bounds motion, excluding helper preparation and final hinge verification. A custom final angle is verified within 0.5°; interior angles must also settle. Cancellation stops the motion at its current angle. Re-snapshot afterwards, including after interrupted motion. Android emulators accept `pose` only.
 
 `press`, `click`, and `longpress` take `readinessTimeoutMs`. With it, the command waits up to that many milliseconds for a target that is not on screen yet, then performs the requested interaction. Without it, the command looks once and fails at once, which is the right choice for an agent that most often misses because the selector is wrong. Use it in scripted flows, where a step can run before the screen finishes rendering:
 
