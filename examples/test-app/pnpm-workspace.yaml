@@ -4,9 +4,9 @@
 # its overrides were silently ignored when declared in package.json, letting the
 # lockfile drift back to vulnerable transitive versions (see PR #649). Keeping
 # them here ensures they actually apply. These pin transitive deps to versions
-# that clear Dependabot security alerts; ws/brace-expansion/js-yaml/@babel/core
-# are scoped to the vulnerable major so unrelated majors elsewhere in the tree
-# stay untouched.
+# that clear Dependabot security alerts; ws/brace-expansion/js-yaml/@babel/core/
+# compression/source-map-js are scoped to the vulnerable major so unrelated
+# majors elsewhere in the tree stay untouched.
 overrides:
   '@xmldom/xmldom': 0.8.15
   browserslist: ^4.28.7
@@ -15,8 +15,10 @@ overrides:
   uuid: 14.0.0
   ws@8: ^8.20.1
   ws@7: ^7.5.11
-  brace-expansion@5: ^5.0.9
-  shell-quote: ^1.9.0
+  brace-expansion@5: ^5.0.12
+  shell-quote: ^1.11.0
+  compression@1: ^1.8.2
+  source-map-js@1: ^1.2.2
   js-yaml@4: ^4.3.1
   nanoid@3: ^3.3.18
   '@babel/core@7': ^7.29.6
