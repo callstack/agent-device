@@ -2,6 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "extends": ["./.fallowrc.json"],
   "ignoreExportsUsedInFile": true,
+  // scripts/ is repository tooling that never ships, so it has no production call sites to measure.
+  "ignoreFindings": ["scripts/**"],
   "rules": {
     "unused-exports": "warn"
   }
