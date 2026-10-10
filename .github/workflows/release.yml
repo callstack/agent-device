@@ -98,7 +98,14 @@ jobs:
           COMMIT: ${{ needs.plan.outputs.commit }}
         run: |
           set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$COMMIT"
+          # Idempotent, so re-running a failed dispatch reuses the tag it already created.
+          tagged="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha 2>/dev/null || true)"
+          if [ -z "$tagged" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$COMMIT"
+          elif [ "$tagged" != "$COMMIT" ]; then
+            echo "$TAG already points at $tagged, not $COMMIT." >&2
+            exit 1
+          fi
           gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$TAG"
           echo "Started the $TAG release from $COMMIT." >> "$GITHUB_STEP_SUMMARY"
 
