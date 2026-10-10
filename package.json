@@ -335,6 +335,8 @@
     "ipaddr.js": "^2.5.0",
     "jpeg-js": "^0.4.4",
     "mdast-util-from-markdown": "^2.0.3",
+    "mdast-util-mdx": "^3.0.0",
+    "micromark-extension-mdxjs": "^3.0.0",
     "oxc-parser": "^0.146.0",
     "oxfmt": "^0.67.0",
     "oxlint": "^1.79.0",

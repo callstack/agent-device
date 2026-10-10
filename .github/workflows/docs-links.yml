@@ -1,13 +1,14 @@
 name: Docs Links
 
 # ci.yml ignores docs paths, so docs-only PRs need their own lane. The rspress
-# version in the lockfile owns the heading-ID slugger, so a lockfile change
-# re-runs the check as well.
+# version (website/package.json, the lockfile) owns the heading-ID slugger, and
+# the rspress config owns the site's routes, so those re-run the check as well.
 on:
   pull_request:
     paths:
       - 'website/docs/**'
       - 'website/package.json'
+      - 'website/rspress.config.ts'
       - 'README.md'
       - 'scripts/check-doc-links.ts'
       - 'scripts/__tests__/check-doc-links.test.ts'
@@ -23,6 +24,7 @@ on:
     paths:
       - 'website/docs/**'
       - 'website/package.json'
+      - 'website/rspress.config.ts'
       - 'README.md'
       - 'scripts/check-doc-links.ts'
       - 'scripts/__tests__/check-doc-links.test.ts'

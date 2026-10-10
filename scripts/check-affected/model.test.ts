@@ -206,7 +206,14 @@ test('docs-only change selects no checks and records the docs paths', () => {
 });
 
 test('user docs pages and README select the docs-links check', () => {
-  for (const file of ['README.md', 'website/docs/index.md', 'website/docs/docs/sessions.md']) {
+  for (const file of [
+    'README.md',
+    'website/docs/index.md',
+    'website/docs/docs/sessions.md',
+    'website/docs/404.mdx',
+    'website/package.json',
+    'website/rspress.config.ts',
+  ]) {
     const result = plan([file]);
     assert.deepEqual(result.checks, ['docs-links'], file);
     assert.deepEqual(result.docsOnlyPaths, []);

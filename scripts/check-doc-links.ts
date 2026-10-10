@@ -1,16 +1,20 @@
 // `pnpm check:doc-links` — internal links in the user docs must land on a page and heading that
-// exist. Reads website/docs Markdown and README.md; external URLs are skipped (no network).
+// exist. Reads website/docs Markdown and MDX and README.md; external URLs are skipped (no network).
+// In MDX, only Markdown link syntax is checked; JSX attributes such as `href` are not.
 //
 // Heading IDs come from rspress's own slugger and custom-ID parser, resolved through the website
 // package's @rspress/core, so the IDs checked here are the IDs that version renders. The heading
 // text fed to the slugger mirrors rspress's `rehypeHeaderAnchor`: direct text, inline code, and
-// the direct text of a formatted or linked span; deeper nesting is dropped there and here.
+// the direct text of a formatted or linked span; deeper nesting is dropped there and here. As in
+// rspress, each page gets one slugger in document order, and a custom `{#id}` bypasses it.
 
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fromMarkdown } from 'mdast-util-from-markdown';
+import { mdxFromMarkdown } from 'mdast-util-mdx';
+import { mdxjs } from 'micromark-extension-mdxjs';
 import { parse as parseYaml } from 'yaml';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..');
@@ -93,9 +97,21 @@ type ParsedPage = {
   readonly frontmatterSource: string;
 };
 
-function parsePage(source: string): ParsedPage {
+// rspress escapes `{#` on ATX heading lines before compiling, so MDX reads a custom ID as text.
+function escapeHeadingIds(body: string): string {
+  return body.replaceAll(/(?:^|\n)#{1,6}(?!#).*/g, (line) =>
+    line.replace('{#', String.raw`\{#`).replace(String.raw`\\{#`, String.raw`\{#`),
+  );
+}
+
+function parsePage(source: string, format: 'md' | 'mdx'): ParsedPage {
   const { body, frontmatter } = stripFrontmatter(source);
-  return { tree: fromMarkdown(body) as MdNode, frontmatter, frontmatterSource: source };
+  const escaped = escapeHeadingIds(body);
+  const tree =
+    format === 'mdx'
+      ? fromMarkdown(escaped, { extensions: [mdxjs()], mdastExtensions: [mdxFromMarkdown()] })
+      : fromMarkdown(escaped);
+  return { tree: tree as MdNode, frontmatter, frontmatterSource: source };
 }
 
 function headingIds(
@@ -104,27 +120,25 @@ function headingIds(
   violations: DocLinkViolation[],
 ): ReadonlySet<string> {
   const slugger = new RspressSlugger();
-  const ids = new Set<string>();
-  const bases = new Map<string, number>();
+  const lineOf = new Map<string, number>();
   walk(tree, (node) => {
     if (node.type !== 'heading') return;
     const [text, customId] = headingText(node);
-    const base = customId || new RspressSlugger().slug(text.trim());
+    const id = customId || slugger.slug(text.trim());
     const line = node.position?.start.line ?? 0;
-    const previous = bases.get(base);
-    if (previous !== undefined) {
-      violations.push({
-        file,
-        line,
-        column: node.position?.start.column ?? 0,
-        message: `heading ID "${base}" duplicates the heading on line ${previous}`,
-      });
-    } else {
-      bases.set(base, line);
+    const previous = lineOf.get(id);
+    if (previous === undefined) {
+      lineOf.set(id, line);
+      return;
     }
-    ids.add(customId || slugger.slug(text.trim()));
+    violations.push({
+      file,
+      line,
+      column: node.position?.start.column ?? 0,
+      message: `heading ID "${id}" is also rendered for the heading on line ${previous}`,
+    });
   });
-  return ids;
+  return new Set(lineOf.keys());
 }
 
 function linkSites(tree: MdNode): LinkSite[] {
@@ -189,8 +203,14 @@ function splitFragment(url: string): { target: string; fragment: string | null }
 }
 
 /** The site path a link names, or null when it leaves the docs site. */
+function isPublishedUrl(url: string): boolean {
+  return (
+    url.startsWith(PUBLISHED_ORIGIN) && /^(?:[/?#]|$)/.test(url.slice(PUBLISHED_ORIGIN.length))
+  );
+}
+
 function sitePath(url: string, fromRoute: string | null): string | null {
-  if (url.startsWith(PUBLISHED_ORIGIN)) return url.slice(PUBLISHED_ORIGIN.length) || '/';
+  if (isPublishedUrl(url)) return url.slice(PUBLISHED_ORIGIN.length) || '/';
   if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//')) return null;
   if (url.startsWith('/')) return url;
   if (fromRoute === null) return null;
@@ -233,14 +253,14 @@ type SourcePage = {
   readonly file: string;
   readonly route: string;
   readonly page: ParsedPage;
-  readonly checked: boolean;
 };
 
 function readPages(root: string): SourcePage[] {
   return listPages(root).map((pagePath) => {
     const file = `${DOCS_DIR}/${pagePath}`;
-    const page = parsePage(fs.readFileSync(path.join(root, file), 'utf8'));
-    return { file, route: routeOf(pagePath), page, checked: pagePath.endsWith('.md') };
+    const format = pagePath.endsWith('.mdx') ? 'mdx' : 'md';
+    const page = parsePage(fs.readFileSync(path.join(root, file), 'utf8'), format);
+    return { file, route: routeOf(pagePath), page };
   });
 }
 
@@ -249,7 +269,6 @@ function pageLinkViolations(
   pages: ReadonlyMap<string, Page>,
 ): DocLinkViolation[] {
   return sources
-    .filter((source) => source.checked)
     .flatMap(({ file, route, page }) =>
       [...frontmatterLinkSites(page), ...linkSites(page.tree)].map((site) =>
         checkSite(file, site, route, pages),
@@ -262,8 +281,8 @@ function pageLinkViolations(
 function readmeViolations(root: string, pages: ReadonlyMap<string, Page>): DocLinkViolation[] {
   const readme = path.join(root, 'README.md');
   if (!fs.existsSync(readme)) return [];
-  return linkSites(parsePage(fs.readFileSync(readme, 'utf8')).tree)
-    .filter((site) => site.url.startsWith(`${PUBLISHED_ORIGIN}/`))
+  return linkSites(parsePage(fs.readFileSync(readme, 'utf8'), 'md').tree)
+    .filter((site) => isPublishedUrl(site.url))
     .map((site) => checkSite('README.md', site, null, pages))
     .filter((violation): violation is DocLinkViolation => violation !== null);
 }

@@ -541,9 +541,16 @@ function isAgentGuidance(file: string): boolean {
   return AGENT_GUIDANCE.has(file) || file.startsWith('docs/agents/');
 }
 
-// The pages and README whose internal links and heading anchors `check:doc-links` resolves.
+// The pages and README whose internal links and heading anchors `check:doc-links` resolves, and
+// the website manifest and config that pick the rspress version (its slugger) and the routes.
+const DOC_LINKS_INPUTS = new Set([
+  'README.md',
+  'website/package.json',
+  'website/rspress.config.ts',
+]);
+
 function isLinkedDoc(file: string): boolean {
-  return file === 'README.md' || (file.startsWith('website/docs/') && /\.mdx?$/.test(file));
+  return DOC_LINKS_INPUTS.has(file) || (file.startsWith('website/docs/') && /\.mdx?$/.test(file));
 }
 
 const docsOwnership: OwnershipRule = ({ file }) => {

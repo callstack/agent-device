@@ -92,11 +92,43 @@ test('reference-style link definitions are checked', () => {
   );
 });
 
-test('duplicate heading IDs on one page fail', () => {
-  assert.deepEqual(plant(page('## Notes\n\n## Notes\n\n## Custom {#notes}')), [
-    'website/docs/docs/guide.md:5 heading ID "notes" duplicates the heading on line 3',
-    'website/docs/docs/guide.md:7 heading ID "notes" duplicates the heading on line 3',
-  ]);
+// The rendered IDs below were read from an rspress build of the same headings.
+test('repeated titles get the deduped IDs rspress renders, and links to them resolve', () => {
+  assert.deepEqual(
+    plant(
+      page('## Notes\n\n## Notes\n\n[first](#notes) and [second](#notes-1)\n\n[none](#notes-2)'),
+    ),
+    ['website/docs/docs/guide.md:9 "#notes-2" names no heading on website/docs/docs/guide.md'],
+  );
+});
+
+test('a custom ID that collides with another rendered ID fails', () => {
+  assert.deepEqual(
+    plant(page('## Notes\n\n## Pinned {#notes}\n\n## Other {#setup-1}\n\n## Setup\n\n## Setup')),
+    [
+      'website/docs/docs/guide.md:5 heading ID "notes" is also rendered for the heading on line 3',
+      'website/docs/docs/guide.md:11 heading ID "setup-1" is also rendered for the heading on line 7',
+    ],
+  );
+});
+
+test('MDX pages are indexed and their Markdown links are checked', () => {
+  assert.deepEqual(
+    plant({
+      'website/docs/docs/widget.mdx': [
+        "import { Widget } from '@theme';",
+        '',
+        '# Widget {#custom-widget}',
+        '',
+        '<Widget />',
+        '',
+        '[ok](/docs/sessions#pinned) and [gone](/docs/missing)',
+        '',
+      ].join('\n'),
+      ...page('[widget](/docs/widget#custom-widget)'),
+    }),
+    ['website/docs/docs/widget.mdx:7 "/docs/missing" names no docs page (route /docs/missing)'],
+  );
 });
 
 test('code blocks, inline code, and external URLs are not checked', () => {
@@ -107,6 +139,7 @@ test('code blocks, inline code, and external URLs are not checked', () => {
           '```md\n[gone](/docs/missing)\n```',
           'Inline `[gone](/docs/missing)` code.',
           '[external](https://example.com/docs/missing#x)',
+          '[lookalike](https://oss.callstack.com/agent-device-old/docs/missing)',
           '[mail](mailto:hello@example.com)',
           '[asset](/logo.svg)',
         ].join('\n\n'),
