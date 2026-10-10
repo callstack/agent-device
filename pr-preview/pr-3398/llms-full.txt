@@ -3142,7 +3142,7 @@ Use a device cloud or farm when an agent needs to drive a hosted mobile device w
 | Credentials             | `BROWSERSTACK_USERNAME`, `BROWSERSTACK_ACCESS_KEY`              | The AWS CLI credential chain, such as `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | `LT_USERNAME`, `LT_ACCESS_KEY`                                                                   | `LIMRUN_API_KEY` (optional `LIMRUN_REGION`), or `LIM_*_INSTANCE_*` for an existing instance |
 | Device allocated on     | `open`                                                          | `open`                                                                                                                | `open`                                                                                           | First device command, such as `install` or `open`                                           |
 | App source              | `--provider-app`: `bs://` reference, HTTP(S) URL, or local path | `--aws-app-arn` upload ARN; no install after allocation                                                               | `--provider-app`: `lt://` reference, HTTP(S) URL, or local path                                  | `install <id> <path-or-url>`, or `open <asset-name>` for an uploaded asset                  |
-| Artifacts after `close` | Video, Appium and device logs, dashboard and public links       | Video and log files                                                                                                   | Video, Appium, device, network, and command logs, screenshots, dashboard link                    | None                                                                                        |
+| Artifacts after `close` | Video, Appium and device logs, dashboard and public links       | Video and log files, once AWS finalizes them                                                                          | Video, Appium, device, network, and command logs, screenshots, dashboard link                    | None                                                                                        |
 | Port reverse            | No; use BrowserStack Local                                      | No                                                                                                                    | No                                                                                               | Android over ADB; not on iOS                                                                |
 
 ## Shared workflow
@@ -3176,7 +3176,7 @@ On BrowserStack, AWS Device Farm, and TestMu AI, `fill` checks that the field re
 
 ## Retrieve artifacts after close
 
-After `close`, run `agent-device artifacts --json` to get the provider's video, log, and dashboard URLs. To look up an earlier session, pass its provider session ID:
+After `close`, run `agent-device artifacts --json` to check for the artifacts your provider makes available (see [Compare providers](#compare-providers)). To look up an earlier session, pass its provider session ID:
 
 ```bash
 agent-device artifacts <provider-session-id> --provider <provider> --json
