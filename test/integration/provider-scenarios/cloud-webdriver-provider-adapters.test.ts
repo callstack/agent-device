@@ -5,7 +5,6 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  CLOUD_WEBDRIVER_PROVIDERS,
   bundledCloudWebDriverProvider,
   createBundledCloudWebDriverRuntimes,
   type RunHostCommand,
@@ -29,6 +28,7 @@ import {
 import testMuPlugin from '@agent-device/testmu';
 import { createPluginHost } from '../../../src/plugins/host.ts';
 import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/plugin';
+import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 
 const CLIENT_VERSION = '0.20.3-test';
 

@@ -15,7 +15,7 @@ import {
 import { toIosSnapshotEngineErrorDetails } from './types.ts';
 import {
   IosSnapshotEngineError,
-  presentIosInteractiveSnapshot,
+  buildIosInteractiveSnapshotPresentation,
   presentIosSnapshot,
   publishIosSnapshot,
 } from './index.ts';
@@ -342,13 +342,13 @@ test('a source-declared disabled node is not actionable without hittability evid
 
 test('interactive compaction stays available through the engine boundary', () => {
   const rowRect = { x: 16, y: 80, width: 288, height: 52 };
-  const compacted = presentIosInteractiveSnapshot([
+  const compacted = buildIosInteractiveSnapshotPresentation([
     node(0, 'Application', 'App', viewport),
     node(1, 'Table', 'Settings', { x: 0, y: 40, width: 320, height: 200 }, 0),
     node(2, 'Cell', 'General', rowRect, 1, 2),
     node(3, 'Button', 'General', rowRect, 2, 3),
     node(4, 'StaticText', 'General', rowRect, 3, 4),
-  ]);
+  ]).nodes;
 
   assert.deepEqual(
     compacted.map((entry) => entry.type),

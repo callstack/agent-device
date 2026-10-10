@@ -3,7 +3,6 @@ import { createLocalArtifactAdapter } from '../../../../../io.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import {
   createAgentDevice,
-  createMemorySessionStore,
   localCommandPolicy,
   type CommandSessionStore,
 } from '../../../../../runtime.ts';
@@ -15,6 +14,7 @@ import {
   RN_TEXT_ECHO_OFFSET_RECT_NODES,
   UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
 } from '@agent-device/selectors/interaction-targeting-fixtures';
+import { createMemorySessionStore } from '../../../../../command-runtime/runtime-factory.ts';
 
 export function selectorSnapshot(): SnapshotState {
   return makeSnapshotState([
@@ -79,31 +79,6 @@ export function offscreenDrawerSnapshot(): SnapshotState {
       type: 'Button',
       label: 'Explore',
       rect: { x: -320, y: 240, width: 300, height: 50 },
-      hittable: true,
-    },
-  ]);
-}
-
-export function runtimeScrollSnapshot(options: {
-  hiddenBelow: boolean;
-  message?: string;
-}): SnapshotState {
-  return makeSnapshotState([
-    {
-      index: 1,
-      depth: 0,
-      type: 'ScrollView',
-      label: 'Messages',
-      hiddenContentBelow: options.hiddenBelow ? true : undefined,
-      rect: { x: 0, y: 100, width: 400, height: 600 },
-    },
-    {
-      index: 2,
-      depth: 1,
-      parentIndex: 1,
-      type: 'Button',
-      label: options.message ?? 'Latest message',
-      rect: { x: 0, y: 640, width: 400, height: 56 },
       hittable: true,
     },
   ]);

@@ -12,8 +12,8 @@ import {
   readmitRunnerStartAdmission,
   runnerStartAdmitsPreparation,
   runnerStartRetiredError,
-  runnerStartTeardownPending,
 } from '../runner-xctestrun.ts';
+import { runnerStartTeardownPending } from '../runner-artifact.ts';
 
 // The start-admission decisions #3220 puts in one place: whether one start may still prepare, and
 // which cancellation is the last one. These are the primitives the spawn seam, the publish point,

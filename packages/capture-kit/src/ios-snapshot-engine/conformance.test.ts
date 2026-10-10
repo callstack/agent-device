@@ -7,8 +7,8 @@ import {
   canonicalNodes,
   runTypeScriptCase,
   runnerPresentationAgrees,
-  writeDifferentialFailureArtifact,
 } from './conformance-harness.ts';
+import { writeDifferentialFailureArtifact } from './conformance-harness.fixtures.ts';
 import {
   acquisitionForGoldenCase,
   normalizeGoldenNodes,

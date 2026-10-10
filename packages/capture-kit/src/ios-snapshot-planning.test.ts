@@ -11,7 +11,7 @@ import type {
   IosSnapshotRequestInput,
 } from '@agent-device/contracts/ios-snapshot';
 import {
-  areIosSnapshotComparisonIdentitiesEqual,
+  iosSnapshotComparisonIdentityKey,
   buildIosSnapshotComparisonIdentity,
   buildIosSnapshotPresentationKey,
   createIosSnapshotRequest,
@@ -119,22 +119,33 @@ test('comparison identity rejects every identity axis and residue mismatch', () 
     { ...base, presentationKey: { ...base.presentationKey, depth: 1 } },
     { ...base, residue: [{ kind: 'truncated' }] },
   ];
-  assert.equal(areIosSnapshotComparisonIdentitiesEqual(base, { ...base }), true);
   assert.equal(
-    areIosSnapshotComparisonIdentitiesEqual(base, {
-      ...base,
-      residue: [{ kind: 'provider-pruned', fields: ['scope', 'nodes'] }],
-    }),
+    iosSnapshotComparisonIdentityKey(base) === iosSnapshotComparisonIdentityKey({ ...base }),
+    true,
+  );
+  assert.equal(
+    iosSnapshotComparisonIdentityKey(base) ===
+      iosSnapshotComparisonIdentityKey({
+        ...base,
+        residue: [{ kind: 'provider-pruned', fields: ['scope', 'nodes'] }],
+      }),
     false,
   );
   for (const mismatch of mismatches) {
-    assert.equal(areIosSnapshotComparisonIdentitiesEqual(base, mismatch), false);
+    assert.equal(
+      iosSnapshotComparisonIdentityKey(base) === iosSnapshotComparisonIdentityKey(mismatch),
+      false,
+    );
   }
   assert.equal(
-    areIosSnapshotComparisonIdentitiesEqual(
-      { ...base, residue: [{ kind: 'provider-pruned', fields: ['scope', 'nodes'] }] },
-      { ...base, residue: [{ kind: 'provider-pruned', fields: ['nodes', 'scope'] }] },
-    ),
+    iosSnapshotComparisonIdentityKey({
+      ...base,
+      residue: [{ kind: 'provider-pruned', fields: ['scope', 'nodes'] }],
+    }) ===
+      iosSnapshotComparisonIdentityKey({
+        ...base,
+        residue: [{ kind: 'provider-pruned', fields: ['nodes', 'scope'] }],
+      }),
     true,
   );
 });

@@ -1,10 +1,10 @@
 import { expect, test } from 'vitest';
-import { canonicalizeAgentCommands, canonicalizeUpstreamFlow } from '../conformance-normalize.ts';
+import { canonicalizeAgentCommands, canonicalizeUpstreamFlow } from './conformance-normalize.ts';
 import {
   canonicalizeAgentSelector,
   canonicalizeUpstreamSelector,
-} from '../conformance-selector-projection.ts';
-import { parseMaestroProgram } from '../program-ir-parser.ts';
+} from './conformance-selector-projection.ts';
+import { parseMaestroProgram } from '../../src/internal/program-ir-parser.ts';
 
 test('canonicalizes command labels separately from selector identity', () => {
   const program = parseMaestroProgram(

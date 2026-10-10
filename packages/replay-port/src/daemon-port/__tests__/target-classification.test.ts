@@ -6,7 +6,7 @@ import { computeTargetEvidence } from '@agent-device/selectors/target-evidence';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '@agent-device/selectors/press-retarget';
 import { classifyReplayTarget } from '../target-classification.ts';
-import { resolveUnverifiedWrapperControl } from '@agent-device/selectors/interaction-targeting';
+import { resolveElementReportedTwice } from '@agent-device/selectors/interaction-targeting';
 import {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
   UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
@@ -663,7 +663,7 @@ test('#1280 e2e: a retargeted press on a row container rebinds its labeled desce
 test('#2498 e2e: a read recorded on a collapsed wrapper chain verifies on the same tree', () => {
   const nodes = toSnapshotNodes(UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES);
   const reports = nodes.filter((node) => node.identifier === 'scoring_home_button');
-  const control = resolveUnverifiedWrapperControl(nodes, reports);
+  const control = resolveElementReportedTwice(nodes, reports);
   assert.ok(control, 'dispatch resolves the toolbar button, not the item host that reports it');
   const recorded = computeTargetEvidence({ node: control, preActionNodes: nodes });
   assert.ok(recorded);

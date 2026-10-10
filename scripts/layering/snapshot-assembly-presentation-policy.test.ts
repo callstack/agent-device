@@ -46,7 +46,7 @@ test('R74 rejects the assembly importing the iOS snapshot engine', () => {
   const result = violations(
     appended(
       assemblyFile,
-      `\nimport { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';\nvoid presentIosInteractiveSnapshot;\n`,
+      `\nimport { buildIosInteractiveSnapshotPresentation } from '@agent-device/capture-kit/ios-snapshot-engine';\nvoid buildIosInteractiveSnapshotPresentation;\n`,
     ),
   );
 

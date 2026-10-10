@@ -1,10 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
-import {
-  CLOUD_WEBDRIVER_PROVIDERS,
-  createBundledCloudWebDriverRuntimes,
-} from '@agent-device/provider-webdriver';
+import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -20,6 +17,7 @@ import {
   awsRegressionContext,
 } from './cloud-webdriver-regression-fixtures.ts';
 import { inspectProviderDeploymentAdmission } from './stale-provider-runtime-admission.fixtures.ts';
+import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 
 const limrunState = vi.hoisted(() => ({
   androidCreate: vi.fn(async () => ({

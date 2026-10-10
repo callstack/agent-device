@@ -17,10 +17,6 @@ const IOS_PRESENTATION_RULES: Array<
   collectIosPresentationNoiseSuppression,
 ];
 
-export function presentIosInteractiveSnapshot(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
-  return buildIosInteractiveSnapshotPresentation(nodes).nodes;
-}
-
 export type IosInteractiveSnapshotPresentation = {
   nodes: RawSnapshotNode[];
   /** Canonical presented representatives for every semantic source index; pure noise maps to []. */

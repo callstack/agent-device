@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
+import { buildIosInteractiveSnapshotPresentation } from '@agent-device/capture-kit/ios-snapshot-engine';
 
 test('a disabled navigation title field is promoted to a Button without its hittability', () => {
   const nodes: RawSnapshotNode[] = [
@@ -49,7 +49,7 @@ test('a disabled navigation title field is promoted to a Button without its hitt
     },
   ];
 
-  const presented = presentIosInteractiveSnapshot(nodes);
+  const presented = buildIosInteractiveSnapshotPresentation(nodes).nodes;
   const affordance = presented.find((node) => node.identifier === 'DisplayNameTextField');
 
   expect(affordance).toMatchObject({ type: 'Button', label: 'Team Standup', enabled: true });

@@ -2,13 +2,15 @@ import { expect, test } from 'vitest';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { createInteractionDevice } from '../../commands/interaction/runtime/__tests__/test-utils/index.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
+import { buildIosInteractiveSnapshotPresentation } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { navigationTitleWithAppProvidedDetailsAffordanceNodes } from '@agent-device/capture-kit/snapshot-presentation-ios-transitions-fixtures';
 
 test('the daemon publishes engine transitions without reapplying runner-owned scope', () => {
   const snapshot = buildSnapshotState(
     {
-      nodes: presentIosInteractiveSnapshot(navigationTitleWithAppProvidedDetailsAffordanceNodes),
+      nodes: buildIosInteractiveSnapshotPresentation(
+        navigationTitleWithAppProvidedDetailsAffordanceNodes,
+      ).nodes,
       backend: 'xctest',
       producer: 'apple-runner',
     },
@@ -27,7 +29,9 @@ test('the daemon publishes engine transitions without reapplying runner-owned sc
 });
 
 test('iOS presentation promotes an app-provided navigation title affordance without stealing a content action', () => {
-  const nodes = presentIosInteractiveSnapshot(navigationTitleWithAppProvidedDetailsAffordanceNodes);
+  const nodes = buildIosInteractiveSnapshotPresentation(
+    navigationTitleWithAppProvidedDetailsAffordanceNodes,
+  ).nodes;
   const titleActions = nodes.filter(
     (node) => node.type === 'Button' && node.label === 'Team Standup',
   );
@@ -47,7 +51,8 @@ test('iOS presentation promotes an app-provided navigation title affordance with
 
 test('promoted navigation title dispatches as its presented button semantics, not its disabled source field', async () => {
   const snapshot = makeSnapshotState(
-    presentIosInteractiveSnapshot(navigationTitleWithAppProvidedDetailsAffordanceNodes),
+    buildIosInteractiveSnapshotPresentation(navigationTitleWithAppProvidedDetailsAffordanceNodes)
+      .nodes,
   );
   const title = snapshot.nodes.find((node) => node.identifier === 'DisplayNameTextField');
   expect(title).toEqual(expect.objectContaining({ type: 'Button', enabled: true }));
@@ -69,7 +74,7 @@ test('iOS presentation leaves a disabled navigation title field alone without a 
     node.identifier === 'RoomDetailsIconImageView' ? { ...node, identifier: undefined } : node,
   );
 
-  const nodes = presentIosInteractiveSnapshot(withoutNamedAffordance);
+  const nodes = buildIosInteractiveSnapshotPresentation(withoutNamedAffordance).nodes;
   expect(
     nodes.some((node) => node.type === 'TextField' && node.identifier === 'DisplayNameTextField'),
   ).toBe(true);

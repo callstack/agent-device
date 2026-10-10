@@ -1,16 +1,13 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
-import {
-  createDurableResourceEnvelope,
-  encodeDurableDescriptor,
-  hostAudioProbeDescriptorCodec,
-} from '@agent-device/capture-kit';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { audioProbeResourceStore } from '@agent-device/capture-kit/audio-probe-resource-store';
 import {
   sessionCloseShutdownFixture,
   type SessionState,
 } from './session-close-shutdown.fixtures.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
 
 const {
   AppError,
@@ -110,7 +107,7 @@ test('close stops active host audio probe before deleting session', async () => 
     owner: localRuntimeOwner('apple'),
     fence: { token: sessionName + '-fence', generation: 1 },
     lifecycle: 'open',
-    descriptor: encodeDurableDescriptor(hostAudioProbeDescriptorCodec, {
+    descriptor: encodeHostAudioProbeDescriptor({
       backend: 'macos-screencapturekit',
       source: 'system-audio',
       sourceCount: 1,

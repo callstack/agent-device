@@ -18,7 +18,6 @@ export {
   runnerPrepProcessChildrenWithoutLiveOwner,
   runnerStartAdmitsPreparation,
   runnerStartRetiredError,
-  runnerStartTeardownPending,
   type RunnerStartAdmission,
   type RunnerXctestrunArtifact,
   type RunnerXctestrunArtifactState,

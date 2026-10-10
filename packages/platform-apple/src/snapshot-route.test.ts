@@ -11,7 +11,7 @@ import { createRequestCanceledError } from '@agent-device/kernel/errors';
 vi.mock('./system-surface-presence.ts', () => ({
   createSystemSurfacePresenceProbe: () => async () => 'absent',
 }));
-import { areIosSnapshotComparisonIdentitiesEqual } from '@agent-device/capture-kit/ios-snapshot-planning';
+import { iosSnapshotComparisonIdentityKey } from '@agent-device/capture-kit/ios-snapshot-planning';
 import { IOS_SYSTEM_SURFACE_HOSTS } from '@agent-device/contracts/ios-system-surface';
 import { simulatorAddressFor } from './core/simctl.ts';
 import { mkdtempForTest } from './__tests__/tmp-dir.ts';
@@ -111,7 +111,8 @@ test('a presented system surface captures under the host lineage, never the app 
     residue: [{ kind: 'fallback-source', producer: 'apple-runner' }],
   });
   expect(
-    areIosSnapshotComparisonIdentitiesEqual(first.comparisonIdentity!, second.comparisonIdentity!),
+    iosSnapshotComparisonIdentityKey(first.comparisonIdentity!) ===
+      iosSnapshotComparisonIdentityKey(second.comparisonIdentity!),
   ).toBe(true);
   // The bridge is healthy here and simply cannot see the surface, so the app's wording would lie.
   expect(first.warnings).toEqual([
@@ -140,12 +141,14 @@ test('a lingering probe cannot make a sheet capture and an app capture compare e
   });
   expect(app.comparisonIdentity?.lineage).toEqual({ targetId: target.targetId });
   expect(
-    areIosSnapshotComparisonIdentitiesEqual(sheet.comparisonIdentity!, app.comparisonIdentity!),
+    iosSnapshotComparisonIdentityKey(sheet.comparisonIdentity!) ===
+      iosSnapshotComparisonIdentityKey(app.comparisonIdentity!),
   ).toBe(false);
   // Two app captures taken in the same lingering window still compare equal, so a poll can settle on
   // app content: the capture decides the lineage, and nothing here carries a per-capture residue.
   expect(
-    areIosSnapshotComparisonIdentitiesEqual(app.comparisonIdentity!, stillApp.comparisonIdentity!),
+    iosSnapshotComparisonIdentityKey(app.comparisonIdentity!) ===
+      iosSnapshotComparisonIdentityKey(stillApp.comparisonIdentity!),
   ).toBe(true);
   expect(app.warnings).toEqual([
     'Simulator AX snapshot inapplicable (system-surface-host-lingering); used XCTest, which read app content: the system surface host process was still running but no longer presenting.',
@@ -182,14 +185,13 @@ test('a sheet that appears after an absent probe is identified by the surface, n
     generation: target.generation,
   });
   expect(
-    areIosSnapshotComparisonIdentitiesEqual(app.comparisonIdentity!, sheet.comparisonIdentity!),
+    iosSnapshotComparisonIdentityKey(app.comparisonIdentity!) ===
+      iosSnapshotComparisonIdentityKey(sheet.comparisonIdentity!),
   ).toBe(false);
   // Two captures of the same sheet still compare equal, so a poll can settle on the sheet.
   expect(
-    areIosSnapshotComparisonIdentitiesEqual(
-      sheet.comparisonIdentity!,
-      sheetAgain.comparisonIdentity!,
-    ),
+    iosSnapshotComparisonIdentityKey(sheet.comparisonIdentity!) ===
+      iosSnapshotComparisonIdentityKey(sheetAgain.comparisonIdentity!),
   ).toBe(true);
   // The reason the bridge was skipped survives — it is independent of what the runner found — but
   // the sentence cannot claim an app generation this capture did not read.
@@ -216,10 +218,8 @@ test('a surface capture drops the app-generation residue of the arm that reached
     residue: [{ kind: 'fallback-source', producer: 'apple-runner' }],
   });
   expect(
-    areIosSnapshotComparisonIdentitiesEqual(
-      sheet.comparisonIdentity!,
-      sheetAgain.comparisonIdentity!,
-    ),
+    iosSnapshotComparisonIdentityKey(sheet.comparisonIdentity!) ===
+      iosSnapshotComparisonIdentityKey(sheetAgain.comparisonIdentity!),
   ).toBe(true);
 });
 
@@ -472,7 +472,8 @@ test('two target-resolution fallbacks cannot share comparison identity', async (
   expect(first.comparisonIdentity).toBeDefined();
   expect(second.comparisonIdentity).toBeDefined();
   expect(
-    areIosSnapshotComparisonIdentitiesEqual(first.comparisonIdentity!, second.comparisonIdentity!),
+    iosSnapshotComparisonIdentityKey(first.comparisonIdentity!) ===
+      iosSnapshotComparisonIdentityKey(second.comparisonIdentity!),
   ).toBe(false);
 });
 

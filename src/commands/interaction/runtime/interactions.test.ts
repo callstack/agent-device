@@ -3,11 +3,7 @@ import { test } from 'vitest';
 import type { AgentDeviceBackend } from '../../../backend.ts';
 import { ref, selector } from './selector-read-utils.ts';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import {
-  createAgentDevice,
-  createMemorySessionStore,
-  localCommandPolicy,
-} from '../../../runtime.ts';
+import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
 import type { Point, SnapshotState } from '@agent-device/kernel/snapshot';
 import { summarizeAxEvidence } from '@agent-device/capture-kit/snapshot-evidence';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
@@ -20,6 +16,7 @@ import {
   offscreenDrawerSnapshot,
   selectorSnapshot,
 } from './__tests__/test-utils/index.ts';
+import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
 
 test('runtime click taps an explicit point without requiring a snapshot', async () => {
   const calls: Array<{ point: Point; count?: number }> = [];

@@ -2,16 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceBackend, BackendSnapshotOptions } from '../../../backend.ts';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import {
-  createAgentDevice,
-  createMemorySessionStore,
-  localCommandPolicy,
-} from '../../../runtime.ts';
+import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { createFakeClock } from './__tests__/test-utils/index.ts';
 import { computeTargetEvidence } from '@agent-device/selectors/target-evidence';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 import { AppError } from '@agent-device/kernel/errors';
+import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
 
 test('runtime focused selector waits against a full snapshot', async () => {
   const snapshot = makeSnapshotState([

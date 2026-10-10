@@ -2,11 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceBackend } from '../../../backend.ts';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import {
-  createAgentDevice,
-  createMemorySessionStore,
-  localCommandPolicy,
-} from '../../../runtime.ts';
+import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
+import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
 
 type Deferred = {
   promise: Promise<void>;

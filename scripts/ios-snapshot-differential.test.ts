@@ -7,10 +7,12 @@ import { isGeometricallyActionable, isPositiveFiniteRect } from '@agent-device/k
 import type { Rect } from '@agent-device/kernel/snapshot';
 import {
   compareDifferentialCases,
-  swiftToolchainAvailable,
   SWIFT_RUN_TIMEOUT_MS,
-  writeDifferentialFailureArtifact,
 } from '../packages/capture-kit/src/ios-snapshot-engine/conformance-harness.ts';
+import {
+  swiftToolchainAvailable,
+  writeDifferentialFailureArtifact,
+} from '../packages/capture-kit/src/ios-snapshot-engine/conformance-harness.fixtures.ts';
 import { differentialBatchArbitrary } from '../packages/capture-kit/src/ios-snapshot-engine/conformance-generator.ts';
 import { readIosSnapshotEngineFixture } from '../packages/capture-kit/src/ios-snapshot-engine/conformance-fixture.ts';
 import {

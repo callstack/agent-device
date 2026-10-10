@@ -8,11 +8,8 @@ import type {
 } from '../../../backend.ts';
 import type { JsonObject } from '@agent-device/contracts/client';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import {
-  createAgentDevice,
-  localCommandPolicy,
-  restrictedCommandPolicy,
-} from '../../../runtime.ts';
+import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
+import { restrictedCommandPolicy } from '../../../command-runtime/runtime-factory.ts';
 
 test('runtime app commands call typed backend lifecycle primitives', async () => {
   const calls: unknown[] = [];

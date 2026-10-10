@@ -114,13 +114,6 @@ const WRAPPER_RECT_SLACK = 1;
  * to the descendant. Candidates carrying any hittability fact, and candidates
  * that do not form one ancestry chain, also keep the existing rules.
  */
-export function resolveUnverifiedWrapperControl(
-  nodes: SnapshotNode[],
-  candidates: readonly SnapshotNode[],
-): SnapshotNode | null {
-  return resolveUnverifiedWrapperControlWithIndex(candidates, buildActionableTouchIndex(nodes));
-}
-
 function resolveUnverifiedWrapperControlWithIndex(
   candidates: readonly SnapshotNode[],
   index: ActionableTouchIndex,

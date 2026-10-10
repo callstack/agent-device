@@ -7,10 +7,7 @@ import {
   markRequestCanceled,
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
-import {
-  CLOUD_WEBDRIVER_PROVIDERS,
-  createBundledCloudWebDriverRuntimes,
-} from '@agent-device/provider-webdriver';
+import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
 import type { CloudArtifact } from '@agent-device/contracts/observability';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
@@ -31,6 +28,7 @@ import {
   startCloudWebDriverTestServer,
   type StartedCloudWebDriverTestServer,
 } from './cloud-webdriver-test-server.ts';
+import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 
 const WEBDRIVER_PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.browserStack;
 const CLIENT_VERSION = '0.20.3-test';

@@ -2,7 +2,7 @@ import {
   canonicalizeAgentCommands,
   canonicalizeUpstreamFlow,
   type CanonicalCommand,
-} from '../../src/internal/conformance-normalize.ts';
+} from './conformance-normalize.ts';
 import {
   MAESTRO_COMPATIBILITY_PRESETS,
   MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,

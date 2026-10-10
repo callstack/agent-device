@@ -3,11 +3,7 @@ import { test } from 'vitest';
 import type { AgentDeviceBackend } from '../../../backend.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import {
-  createAgentDevice,
-  createMemorySessionStore,
-  localCommandPolicy,
-} from '../../../runtime.ts';
+import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { ref, selector } from './selector-read-utils.ts';
 import { buildSettleTailEntries, NEVER_SETTLED_HINT } from './settle.ts';
@@ -18,6 +14,7 @@ import {
   welcomeSnapshot,
 } from './__tests__/settle-device-fixtures.ts';
 import { readSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
+import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
 
 // #1101 --settle: quiet-window settle loop composition on the interaction
 // commands. Budgets are injected (fake clock) — no real waiting.

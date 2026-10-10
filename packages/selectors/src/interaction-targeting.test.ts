@@ -12,7 +12,7 @@ import {
   classifyActionableTouchCandidates,
   createActionableTouchResolver,
   resolveActionableTouchResolution,
-  resolveUnverifiedWrapperControl,
+  resolveElementReportedTwice,
 } from './interaction-targeting.ts';
 import {
   ELEMENT14_DISTINCT_SUBTREE_NODES,
@@ -462,7 +462,7 @@ test('resolves the control of one ancestry chain through the rule on its own', (
     ['XCUIElementTypeOther', 'XCUIElementTypeButton'],
   );
 
-  const control = resolveUnverifiedWrapperControl(snapshot.nodes, reports);
+  const control = resolveElementReportedTwice(snapshot.nodes, reports);
 
   assert.equal(control?.type, 'XCUIElementTypeButton');
   assert.equal(control?.index, 1);
@@ -474,7 +474,7 @@ test('refuses a candidate set that is one report, not a pair to collapse', () =>
   const snapshot = makeSnapshotState(UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES);
   const reports = identifierReports(snapshot, 'scoring_home_button');
 
-  assert.equal(resolveUnverifiedWrapperControl(snapshot.nodes, [reports[1]!]), null);
+  assert.equal(resolveElementReportedTwice(snapshot.nodes, [reports[1]!]), null);
 });
 
 test('refuses one ancestry chain of two real controls through the rule on its own', () => {
@@ -485,7 +485,7 @@ test('refuses one ancestry chain of two real controls through the rule on its ow
     ['XCUIElementTypeCell', 'XCUIElementTypeButton'],
   );
 
-  assert.equal(resolveUnverifiedWrapperControl(snapshot.nodes, reports), null);
+  assert.equal(resolveElementReportedTwice(snapshot.nodes, reports), null);
 });
 
 test('refuses reports that sit in two separate ancestry chains', () => {
@@ -524,6 +524,6 @@ test('refuses reports that sit in two separate ancestry chains', () => {
     ['XCUIElementTypeOther', 'XCUIElementTypeButton'],
   );
 
-  assert.equal(resolveUnverifiedWrapperControl(snapshot.nodes, reports), null);
+  assert.equal(resolveElementReportedTwice(snapshot.nodes, reports), null);
   assert.equal(classifyActionableTouchCandidates(snapshot.nodes, reports).kind, 'ambiguous');
 });

@@ -9,11 +9,7 @@ export type {
   CommandSessionRecord,
   CommandSessionStore,
 } from './runtime-contract.ts';
-export {
-  createMemorySessionStore,
-  localCommandPolicy,
-  restrictedCommandPolicy,
-} from './command-runtime/runtime-factory.ts';
+export { localCommandPolicy } from './command-runtime/runtime-factory.ts';
 
 export type AgentDevice = AgentDeviceRuntime & BoundAgentDeviceCommands;
 

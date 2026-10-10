@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
+import { buildIosInteractiveSnapshotPresentation } from '@agent-device/capture-kit/ios-snapshot-engine';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 
 // End-to-end publication-membership contract for the acquire/present design (#1797, external
@@ -17,7 +17,11 @@ import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 // engine's presenter has to be the one that decides membership.
 function publish(nodes: RawSnapshotNode[]) {
   return buildSnapshotState(
-    { nodes: presentIosInteractiveSnapshot(nodes), backend: 'xctest', producer: 'apple-runner' },
+    {
+      nodes: buildIosInteractiveSnapshotPresentation(nodes).nodes,
+      backend: 'xctest',
+      producer: 'apple-runner',
+    },
     { snapshotInteractiveOnly: true },
   ).nodes;
 }

@@ -1,10 +1,7 @@
 import { expect, test } from 'vitest';
-import {
-  rankMaestroCandidates,
-  selectMaestroPositionMatches,
-  selectMaestroSnapshotMatch,
-} from '../runtime-target-ranking.ts';
+import { rankMaestroCandidates, selectMaestroSnapshotMatch } from '../runtime-target-ranking.ts';
 import { makeSnapshot } from './runtime-target-fixtures.ts';
+import { selectMaestroPositionMatches } from '../runtime-target-ranking.fixtures.ts';
 
 test('uses strict top-left comparisons for all positional relations', () => {
   const snapshot = makeSnapshot([

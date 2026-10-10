@@ -3,15 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  IS_PREDICATES,
-  checkIsArgs,
-  checkIsPredicate,
-  IS_PREDICATE_USAGE_HINT,
-} from '@agent-device/selectors';
+import { checkIsArgs, checkIsPredicate, IS_PREDICATE_USAGE_HINT } from '@agent-device/selectors';
 import { interactionCommandMetadata } from '../commands/interaction/metadata.ts';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
+import { IS_PREDICATES } from '@agent-device/contracts/is-predicate';
 
 // Parity gate for the `is` argument contract across every surface that admits one.
 //

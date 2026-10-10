@@ -2,17 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceBackend } from '../../../backend.ts';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import {
-  createAgentDevice,
-  createMemorySessionStore,
-  localCommandPolicy,
-} from '../../../runtime.ts';
+import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
 import {
   elementSettledRoomSnapshot,
   elementThreadsNoticeSnapshot,
   elementTransientRoomSnapshot,
 } from './stable-capture.fixtures.ts';
 import { settleAfterInteraction } from './settle.ts';
+import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
 
 test('settle recovers the session baseline when resolved target evidence is absent', async () => {
   let elapsedMs = 0;

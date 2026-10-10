@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
+import { buildIosInteractiveSnapshotPresentation } from '@agent-device/capture-kit/ios-snapshot-engine';
 
 test('projects iOS WebKit heading and text wrappers to semantic roles', () => {
   const nodes: RawSnapshotNode[] = [
@@ -15,7 +15,7 @@ test('projects iOS WebKit heading and text wrappers to semantic roles', () => {
   ];
 
   expect(
-    presentIosInteractiveSnapshot(nodes).map((node) => [
+    buildIosInteractiveSnapshotPresentation(nodes).nodes.map((node) => [
       node.type,
       node.label,
       node.value,
@@ -38,7 +38,9 @@ test('recognizes numeric WebView types from retained older runners', () => {
     { index: 2, depth: 2, parentIndex: 1, type: 'StaticText', label: 'Body copy' },
   ];
 
-  expect(presentIosInteractiveSnapshot(nodes).map((node) => [node.type, node.label])).toEqual([
+  expect(
+    buildIosInteractiveSnapshotPresentation(nodes).nodes.map((node) => [node.type, node.label]),
+  ).toEqual([
     ['WebView', 'Example page'],
     ['StaticText', 'Body copy'],
   ]);
@@ -52,7 +54,9 @@ test('keeps a nested heading whose label matches the WebView title', () => {
     { index: 3, depth: 3, parentIndex: 2, type: 'StaticText', label: 'Same title' },
   ];
 
-  expect(presentIosInteractiveSnapshot(nodes).map((node) => [node.type, node.label])).toEqual([
+  expect(
+    buildIosInteractiveSnapshotPresentation(nodes).nodes.map((node) => [node.type, node.label]),
+  ).toEqual([
     ['WebView', 'Same title'],
     ['Heading', 'Same title'],
   ]);
@@ -68,7 +72,9 @@ test('keeps a heading through repeated WebKit document-title wrappers', () => {
     { index: 5, depth: 5, parentIndex: 4, type: 'StaticText', label: 'Same title' },
   ];
 
-  expect(presentIosInteractiveSnapshot(nodes).map((node) => [node.type, node.label])).toEqual([
+  expect(
+    buildIosInteractiveSnapshotPresentation(nodes).nodes.map((node) => [node.type, node.label]),
+  ).toEqual([
     ['WebView', 'Same title'],
     ['Other', 'Same title'],
     ['Other', 'main'],
@@ -83,7 +89,9 @@ test('keeps a direct heading whose label matches the WebView title', () => {
     { index: 2, depth: 2, parentIndex: 1, type: 'StaticText', label: 'Same title' },
   ];
 
-  expect(presentIosInteractiveSnapshot(nodes).map((node) => [node.type, node.label])).toEqual([
+  expect(
+    buildIosInteractiveSnapshotPresentation(nodes).nodes.map((node) => [node.type, node.label]),
+  ).toEqual([
     ['WebView', 'Same title'],
     ['Heading', 'Same title'],
   ]);
@@ -97,7 +105,9 @@ test('does not infer text from a nested same-label descendant', () => {
     { index: 3, depth: 3, parentIndex: 2, type: 'StaticText', label: 'Container' },
   ];
 
-  expect(presentIosInteractiveSnapshot(nodes).map((node) => [node.type, node.label])).toEqual([
+  expect(
+    buildIosInteractiveSnapshotPresentation(nodes).nodes.map((node) => [node.type, node.label]),
+  ).toEqual([
     ['WebView', 'Example'],
     ['Other', 'Container'],
     ['Button', 'Action'],
@@ -112,7 +122,9 @@ test('keeps a labelled WebKit container with additional semantic content', () =>
     { index: 3, depth: 2, parentIndex: 1, type: 'Link', label: 'Read more' },
   ];
 
-  expect(presentIosInteractiveSnapshot(nodes).map((node) => [node.type, node.label])).toEqual([
+  expect(
+    buildIosInteractiveSnapshotPresentation(nodes).nodes.map((node) => [node.type, node.label]),
+  ).toEqual([
     ['WebView', 'Example'],
     ['Other', 'News'],
     ['Link', 'Read more'],
@@ -126,7 +138,9 @@ test('does not infer semantic roles for matching wrappers outside a WebView', ()
     { index: 2, depth: 2, parentIndex: 1, type: 'StaticText', label: 'Native copy' },
   ];
 
-  expect(presentIosInteractiveSnapshot(nodes).map((node) => [node.type, node.label])).toEqual([
+  expect(
+    buildIosInteractiveSnapshotPresentation(nodes).nodes.map((node) => [node.type, node.label]),
+  ).toEqual([
     ['Application', 'Example'],
     ['Other', 'Native copy'],
   ]);

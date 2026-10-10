@@ -103,6 +103,9 @@ export default defineConfig({
           include: [
             'src/**/*.test.ts',
             'packages/*/src/**/*.test.ts',
+            // The maestro conformance projection is test-tree code beside its harness; its own
+            // test stays in the fast lane rather than the node:test conformance script.
+            'packages/maestro/test/conformance/conformance-selector-projection.test.ts',
             // The subprocess watchdog self-check: spawns a real node subprocess per case,
             // and one hangs on purpose (#1414).
             'scripts/fuzz/harness.test.ts',

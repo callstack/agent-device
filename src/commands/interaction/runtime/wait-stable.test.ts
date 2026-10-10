@@ -2,13 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../../../backend.ts';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import {
-  createAgentDevice,
-  createMemorySessionStore,
-  localCommandPolicy,
-} from '../../../runtime.ts';
+import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { createFakeClock, selectorReadSnapshot } from './__tests__/test-utils/index.ts';
+import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
 
 test('runtime wait stable settles after two unchanged captures', async () => {
   const snapshot = selectorReadSnapshot();

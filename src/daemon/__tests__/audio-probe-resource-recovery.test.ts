@@ -12,13 +12,12 @@ import { deviceIdentity } from '@agent-device/kernel/device';
 import {
   createDurableResourceEnvelope,
   createHostAudioProbeCaptureOperations,
-  encodeDurableDescriptor,
-  hostAudioProbeDescriptorCodec,
 } from '@agent-device/capture-kit';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { recoverAudioProbeResourceAfterDaemonLock } from '@agent-device/capture-kit/audio-probe-recovery';
 import { audioProbeResourceStore } from '@agent-device/capture-kit/audio-probe-resource-store';
+import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
 
 const device = {
   platform: 'apple' as const,
@@ -53,7 +52,7 @@ test('recovery never finalizes a running checkpoint from a dead helper as comple
     owner: localRuntimeOwner('apple'),
     fence: { token: 'fence-1', generation: 1 },
     lifecycle: 'open',
-    descriptor: encodeDurableDescriptor(hostAudioProbeDescriptorCodec, {
+    descriptor: encodeHostAudioProbeDescriptor({
       backend: 'macos-screencapturekit',
       source: 'system-audio',
       sourceCount: 1,

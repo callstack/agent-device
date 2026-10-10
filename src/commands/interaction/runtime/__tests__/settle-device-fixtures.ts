@@ -8,12 +8,9 @@
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../../../../backend.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '../../../../io.ts';
-import {
-  createAgentDevice,
-  createMemorySessionStore,
-  localCommandPolicy,
-} from '../../../../runtime.ts';
+import { createAgentDevice, localCommandPolicy } from '../../../../runtime.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
+import { createMemorySessionStore } from '../../../../command-runtime/runtime-factory.ts';
 
 export function createFakeClock(stepMs = 300): {
   now: () => number;

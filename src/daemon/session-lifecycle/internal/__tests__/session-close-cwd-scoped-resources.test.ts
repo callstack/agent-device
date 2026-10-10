@@ -3,11 +3,7 @@ import type { AppLogLiveHandle } from '@agent-device/contracts/app-log-runtime';
 import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
 import type { PerfNativeCaptureLiveHandle } from '@agent-device/contracts/perf-runtime';
 import type { DurableResourceEnvelope } from '@agent-device/contracts/durable-resource-envelope';
-import {
-  createDurableResourceEnvelope,
-  encodeDurableDescriptor,
-  hostAudioProbeDescriptorCodec,
-} from '@agent-device/capture-kit';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { appLogResourceStore } from '../../../app-log-resource-store.ts';
 import { audioProbeResourceStore } from '@agent-device/capture-kit/audio-probe-resource-store';
 import { perfCaptureResourceStore } from '@agent-device/capture-kit/perf-capture-resource-store';
@@ -18,6 +14,7 @@ import {
   type SessionState,
 } from './session-close-shutdown.fixtures.ts';
 import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
 
 const {
   handleSessionCommands,
@@ -203,7 +200,7 @@ test('close finishes the audio probe of a cwd-scoped session by store address', 
     owner: localRuntimeOwner('apple'),
     fence: { token: 'audio-probe-fence', generation: 1 },
     lifecycle: 'open',
-    descriptor: encodeDurableDescriptor(hostAudioProbeDescriptorCodec, {
+    descriptor: encodeHostAudioProbeDescriptor({
       backend: 'macos-screencapturekit',
       source: 'system-audio',
       sourceCount: 1,

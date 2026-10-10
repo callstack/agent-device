@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { presentIosInteractiveSnapshot } from '../../../ios-snapshot-engine/index.ts';
+import { buildIosInteractiveSnapshotPresentation } from '../../../ios-snapshot-engine/index.ts';
 import {
   closedComposerWithRetainedActionShelfNodes,
   closedComposerWithRetainedRegularTreeActionNodes,
@@ -7,7 +7,9 @@ import {
 } from './transitions.fixtures.ts';
 
 test('iOS presentation removes an action shelf whose child actions moved outside its viewport', () => {
-  const nodes = presentIosInteractiveSnapshot(closedComposerWithRetainedActionShelfNodes);
+  const nodes = buildIosInteractiveSnapshotPresentation(
+    closedComposerWithRetainedActionShelfNodes,
+  ).nodes;
   const labels = nodes.map((node) => node.label).filter(Boolean);
 
   expect(labels).toEqual([
@@ -21,14 +23,16 @@ test('iOS presentation removes an action shelf whose child actions moved outside
 });
 
 test('iOS presentation removes retained regular-tree actions while the shelf toggle is collapsed', () => {
-  const nodes = presentIosInteractiveSnapshot(closedComposerWithRetainedRegularTreeActionNodes);
+  const nodes = buildIosInteractiveSnapshotPresentation(
+    closedComposerWithRetainedRegularTreeActionNodes,
+  ).nodes;
 
   expect(nodes.some((node) => node.label === 'action file')).toBe(false);
   expect(nodes.some((node) => node.identifier === 'GrowingTextView')).toBe(true);
 });
 
 test('iOS presentation keeps an action shelf whose child actions are inside its viewport', () => {
-  const nodes = presentIosInteractiveSnapshot(openComposerActionShelfNodes);
+  const nodes = buildIosInteractiveSnapshotPresentation(openComposerActionShelfNodes).nodes;
   const actionLabels = nodes
     .map((node) => node.label)
     .filter((label) => label?.startsWith('action '));

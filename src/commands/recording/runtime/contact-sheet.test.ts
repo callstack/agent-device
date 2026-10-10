@@ -5,11 +5,8 @@ import {
   CONTACT_SHEET_THRESHOLD_REASON,
 } from '@agent-device/capture-kit/recording-contact-sheet';
 import type { ArtifactAdapter, ArtifactDescriptor, FileInputRef } from '../../../io.ts';
-import {
-  createAgentDevice,
-  localCommandPolicy,
-  restrictedCommandPolicy,
-} from '../../../runtime.ts';
+import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
+import { restrictedCommandPolicy } from '../../../command-runtime/runtime-factory.ts';
 
 vi.mock('@agent-device/capture-kit/recording-contact-sheet', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/capture-kit/recording-contact-sheet')>()),

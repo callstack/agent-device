@@ -95,7 +95,8 @@ import {
   ensureRunnerSession,
   releaseIosRunnerOnClose,
 } from '../runner-session.ts';
-import { runnerPrepProcessChildren, runnerStartTeardownPending } from '../runner-xctestrun.ts';
+import { runnerPrepProcessChildren } from '../runner-xctestrun.ts';
+import { runnerStartTeardownPending } from '../runner-artifact.ts';
 
 let projectRoot: string;
 let derived: string;

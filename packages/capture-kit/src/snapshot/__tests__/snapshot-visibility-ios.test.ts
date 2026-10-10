@@ -1,11 +1,11 @@
 import { expect, test } from 'vitest';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { buildSnapshotVisibility } from '../snapshot-visibility.ts';
-import { presentIosInteractiveSnapshot } from '../../ios-snapshot-engine/index.ts';
+import { buildIosInteractiveSnapshotPresentation } from '../../ios-snapshot-engine/index.ts';
 
 function buildSnapshotState(data: { nodes?: RawSnapshotNode[]; backend?: 'xctest' }) {
   return {
-    nodes: attachRefs(presentIosInteractiveSnapshot(data.nodes ?? [])),
+    nodes: attachRefs(buildIosInteractiveSnapshotPresentation(data.nodes ?? []).nodes),
     backend: data.backend,
     createdAt: Date.now(),
   };

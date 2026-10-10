@@ -1,4 +1,4 @@
-import type { MaestroGestureTarget, MaestroSelector } from './program-ir.ts';
+import type { MaestroGestureTarget, MaestroSelector } from '../../src/internal/program-ir.ts';
 import { asRecord, bool, dropUndefined, numLike, str } from './conformance-value-coercion.ts';
 
 export type CanonicalSelector = {

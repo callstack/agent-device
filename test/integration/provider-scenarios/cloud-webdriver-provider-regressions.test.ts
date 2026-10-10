@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import {
-  CLOUD_WEBDRIVER_PROVIDERS,
   createBundledCloudWebDriverRuntimes,
   type RunHostCommand,
 } from '@agent-device/provider-webdriver';
@@ -28,6 +27,7 @@ import {
   providerRegressionLease,
   providerRuntimeFor,
 } from './cloud-webdriver-regression-fixtures.ts';
+import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 
 test('AWS Device Farm endpoint selection skips live-control WebSocket URLs', async () => {
   await withProviderScenarioResource(ProviderRegressionServer.start, async (server) => {

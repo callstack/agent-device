@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import {
-  CLOUD_WEBDRIVER_PROVIDERS,
-  createBundledCloudWebDriverRuntimes,
-} from '@agent-device/provider-webdriver';
+import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import type { DaemonRequest } from '../../../src/daemon/daemon-request.ts';
@@ -21,6 +18,7 @@ import {
   startCloudWebDriverTestServer,
   type StartedCloudWebDriverTestServer,
 } from './cloud-webdriver-test-server.ts';
+import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 
 const WEBDRIVER_PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.browserStack;
 const CLIENT_VERSION = '0.20.6-test';

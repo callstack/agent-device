@@ -4,9 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import {
   createAgentDevice,
-  createMemorySessionStore,
   localCommandPolicy,
-  restrictedCommandPolicy,
   type AgentDevice,
   type CommandSessionStore,
 } from '../runtime.ts';
@@ -19,6 +17,10 @@ import {
   type FileOutputRef,
 } from '../io.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import {
+  createMemorySessionStore,
+  restrictedCommandPolicy,
+} from '../command-runtime/runtime-factory.ts';
 
 const backend = {
   platform: 'ios',

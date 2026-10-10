@@ -1,9 +1,9 @@
 import { expect, test } from 'vitest';
 import { elementClassicRoomListNodes, legitimatelyLabeledCellNodes } from './rows.fixtures.ts';
-import { presentIosInteractiveSnapshot } from '../../../ios-snapshot-engine/index.ts';
+import { buildIosInteractiveSnapshotPresentation } from '../../../ios-snapshot-engine/index.ts';
 
 test('iOS row presentation associates generic room cells with their descendant titles', () => {
-  const nodes = presentIosInteractiveSnapshot(elementClassicRoomListNodes);
+  const nodes = buildIosInteractiveSnapshotPresentation(elementClassicRoomListNodes).nodes;
 
   expect(nodes.filter((node) => node.type === 'Cell').map((node) => node.label)).toEqual([
     'Book Club',
@@ -14,7 +14,7 @@ test('iOS row presentation associates generic room cells with their descendant t
 });
 
 test('iOS row presentation preserves a legitimate no-space cell label', () => {
-  const nodes = presentIosInteractiveSnapshot(legitimatelyLabeledCellNodes);
+  const nodes = buildIosInteractiveSnapshotPresentation(legitimatelyLabeledCellNodes).nodes;
 
   expect(nodes.find((node) => node.type === 'Cell')?.label).toBe('StemCell');
 });

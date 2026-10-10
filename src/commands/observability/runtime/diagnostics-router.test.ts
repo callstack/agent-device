@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceBackend, BackendCommandContext } from '../../../backend.ts';
 import type { ArtifactAdapter } from '../../../io.ts';
+import { createAgentDevice } from '../../../runtime.ts';
 import {
-  createAgentDevice,
   createMemorySessionStore,
   restrictedCommandPolicy,
-} from '../../../runtime.ts';
+} from '../../../command-runtime/runtime-factory.ts';
 
 const artifacts = {
   resolveInput: async () => ({ path: '/tmp/input' }),

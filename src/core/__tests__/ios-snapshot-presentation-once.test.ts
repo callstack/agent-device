@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { presentIosInteractiveSnapshot } from '@agent-device/capture-kit/ios-snapshot-engine';
+import { buildIosInteractiveSnapshotPresentation } from '@agent-device/capture-kit/ios-snapshot-engine';
 import type {
   IosAcquisitionProducer,
   IosSnapshotProducer,
@@ -91,7 +91,7 @@ const shape = (nodes: readonly RawSnapshotNode[]) =>
 test('the collapsible fixture is not already a presentation fixed point', () => {
   const acquisitionNodes = collapsibleNodes();
 
-  expect(presentIosInteractiveSnapshot(acquisitionNodes).length).toBeLessThan(
+  expect(buildIosInteractiveSnapshotPresentation(acquisitionNodes).nodes.length).toBeLessThan(
     acquisitionNodes.length,
   );
 });
@@ -105,7 +105,9 @@ test.each(ACQUISITION_PRODUCERS)(
     const published = result.nodes ?? [];
 
     // Presented at least once: the engine's output is a fixed point of the presentation rules.
-    expect(shape(presentIosInteractiveSnapshot([...published]))).toEqual(shape(published));
+    expect(shape(buildIosInteractiveSnapshotPresentation([...published]).nodes)).toEqual(
+      shape(published),
+    );
     // Presented at most once: the daemon assembly passes the engine's tree through untouched.
     expect(shape(buildSnapshotState(result, { snapshotInteractiveOnly: true }).nodes)).toEqual(
       shape(published),

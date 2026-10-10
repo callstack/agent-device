@@ -97,10 +97,10 @@ failure, not a pass.
   teeth (`invalid/`). To add a flow: drop the `.yaml` in, add a note to `NOTES`
   in `build-manifest.mjs`, and regenerate.
 - [`fixtures/`](./fixtures) — the generated, checked-in layer-1/layer-2 captures.
-- `packages/maestro/src/internal/conformance-normalize.ts` and
-  `conformance-selector-projection.ts` — package-private canonical projection and selector model.
-- `packages/maestro/test/conformance/` — the deterministic verifier, declared divergences,
-  package-private harness, shared fixture seal, and layer-3 differential scenarios. Keeping this
+- `packages/maestro/test/conformance/` — the canonical projection and selector model
+  (`conformance-normalize.ts`, `conformance-selector-projection.ts`), deterministic verifier,
+  declared divergences, package-private harness, shared fixture seal, and layer-3 differential
+  scenarios. Keeping this
   code under package tests prevents parser/canonicalization tooling from widening the production
   facade; regeneration imports the same package-owned seal implementation.
 - [`regenerate.mjs`](./regenerate.mjs) — SHA-verifies the jars, rebuilds the

@@ -8,11 +8,7 @@ import type {
 import type { AudioProbeResult } from '@agent-device/contracts/audio-probe-result';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
-import {
-  createDurableResourceEnvelope,
-  encodeDurableDescriptor,
-  hostAudioProbeDescriptorCodec,
-} from '@agent-device/capture-kit';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import {
   IOS_DEVICE,
   WEB_DESKTOP_DEVICE,
@@ -34,6 +30,7 @@ import type { SessionStore } from '../../../session-store.ts';
 import type { DaemonResponse } from '../../../daemon-request.ts';
 import { handleSessionObservabilityCommands } from '../../index.ts';
 import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '../../__tests__/session-audio.coverage.ts';
+import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
 
 async function runAudio(
   params: Parameters<typeof handleSessionObservabilityCommands>[0],
@@ -142,7 +139,7 @@ function fakeCaptureRuntime(device: DeviceInfo, status: AudioProbeResult) {
           owner,
           fence: input.fence,
           lifecycle: 'open',
-          descriptor: encodeDurableDescriptor(hostAudioProbeDescriptorCodec, {
+          descriptor: encodeHostAudioProbeDescriptor({
             backend: 'macos-screencapturekit',
             source: 'system-audio',
             sourceCount: 1,

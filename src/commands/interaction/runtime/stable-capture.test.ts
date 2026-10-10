@@ -3,11 +3,7 @@ import { test } from 'vitest';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceBackend } from '../../../backend.ts';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import {
-  createAgentDevice,
-  createMemorySessionStore,
-  localCommandPolicy,
-} from '../../../runtime.ts';
+import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
 import { runStableCaptureLoop } from './stable-capture.ts';
 import {
   elementSettingsSnapshot,
@@ -15,6 +11,7 @@ import {
   elementThreadsNoticeSnapshot,
   elementTransientRoomSnapshot,
 } from './stable-capture.fixtures.ts';
+import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
 
 const BROAD_TRANSITION_PARAMS = {
   quietMs: 500,

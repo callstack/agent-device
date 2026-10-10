@@ -4,7 +4,6 @@ import type { AgentDeviceBackend, BackendSnapshotOptions } from '../../../backen
 import { createLocalArtifactAdapter } from '../../../io.ts';
 import {
   createAgentDevice,
-  createMemorySessionStore,
   localCommandPolicy,
   type CommandSessionStore,
 } from '../../../runtime.ts';
@@ -17,6 +16,7 @@ import {
 } from './__tests__/test-utils/index.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { STALE_REF_HINT } from '@agent-device/selectors';
+import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
 
 test('runtime get reads text from a selector target', async () => {
   const snapshot = selectorReadSnapshot();

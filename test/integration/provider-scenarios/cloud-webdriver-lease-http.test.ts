@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { test } from 'vitest';
-import {
-  CLOUD_WEBDRIVER_PROVIDERS,
-  createBundledCloudWebDriverRuntimes,
-} from '@agent-device/provider-webdriver';
+import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
 import { buildHttpRpcPayload } from '../../../src/daemon-client/daemon-client-rpc.ts';
@@ -21,6 +18,7 @@ import {
   startCloudWebDriverTestServer,
   type StartedCloudWebDriverTestServer,
 } from './cloud-webdriver-test-server.ts';
+import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 
 const CLIENT_VERSION = '0.20.3-test';
 

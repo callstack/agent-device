@@ -2,10 +2,8 @@ import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot'
 import { attachSnapshotClickabilityEvidence } from '@agent-device/contracts/capture';
 import type { MaestroSelector } from '../../src/internal/program-ir.ts';
 import { resolveMaestroTargetFromSnapshot } from '../../src/internal/runtime-targets.ts';
-import {
-  rankMaestroCandidates,
-  selectMaestroPositionMatches,
-} from '../../src/internal/runtime-target-ranking.ts';
+import { rankMaestroCandidates } from '../../src/internal/runtime-target-ranking.ts';
+import { selectMaestroPositionMatches } from '../../src/internal/runtime-target-ranking.fixtures.ts';
 
 export type Layer2TreeVector = {
   id: string;

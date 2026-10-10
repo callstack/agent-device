@@ -6,7 +6,6 @@ import type {
 } from './provider-plugin.ts';
 import { createCloudWebDriverRuntime, type CloudWebDriverRuntime } from './runtime.ts';
 
-export { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 export type { RunHostCommand } from './dependencies.ts';
 export type {
   BundledCloudWebDriverProvider,

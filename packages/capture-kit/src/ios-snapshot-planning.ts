@@ -44,19 +44,6 @@ export function deriveIosCaptureHint(request: IosSnapshotRequest): CaptureHint {
   });
 }
 
-export function areIosSnapshotComparisonIdentitiesEqual(
-  left: IosSnapshotComparisonIdentity,
-  right: IosSnapshotComparisonIdentity,
-): boolean {
-  return (
-    left.producer === right.producer &&
-    left.intent === right.intent &&
-    lineagesEqual(left.lineage, right.lineage) &&
-    presentationKeysEqual(left.presentationKey, right.presentationKey) &&
-    residuesEqual(left.residue, right.residue)
-  );
-}
-
 export function iosSnapshotComparisonIdentityKey(identity: IosSnapshotComparisonIdentity): string {
   return JSON.stringify({
     producer: identity.producer,
@@ -87,36 +74,6 @@ export function buildIosSnapshotComparisonIdentity(
     presentationKey: input.validation.presentationKey,
     residue: Object.freeze([...input.validation.residue]),
   });
-}
-
-function lineagesEqual(
-  left: IosSnapshotComparisonIdentity['lineage'],
-  right: IosSnapshotComparisonIdentity['lineage'],
-): boolean {
-  return left.targetId === right.targetId && left.generation === right.generation;
-}
-
-function presentationKeysEqual(
-  left: IosSnapshotPresentationKey,
-  right: IosSnapshotPresentationKey,
-): boolean {
-  return (
-    left.projection === right.projection &&
-    left.interactiveOnly === right.interactiveOnly &&
-    left.depth === right.depth &&
-    left.scope === right.scope &&
-    left.customActions === right.customActions
-  );
-}
-
-function residuesEqual(
-  left: readonly IosAcquisitionResidue[],
-  right: readonly IosAcquisitionResidue[],
-): boolean {
-  return (
-    left.map(residueIdentity).sort().join('\u0000') ===
-    right.map(residueIdentity).sort().join('\u0000')
-  );
 }
 
 function residueIdentity(residue: IosAcquisitionResidue): string {

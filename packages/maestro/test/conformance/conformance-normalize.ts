@@ -11,8 +11,8 @@ import type {
   MaestroProgram,
   MaestroRunFlowCondition,
   MaestroSwipeGesture,
-} from './program-ir.ts';
-import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
+} from '../../src/internal/program-ir.ts';
+import { MAESTRO_COMPATIBILITY_PRESETS } from '../../src/internal/compatibility-policy.ts';
 import { asRecord, bool, dropUndefined, numLike, str } from './conformance-value-coercion.ts';
 import {
   canonicalizeAgentSelector,
