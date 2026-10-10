@@ -5,8 +5,8 @@ import type {
   BackendDeviceOrientation,
   BackendKeyboardResult,
   BackendTvRemoteOptions,
-} from '../../../backend.ts';
-import type { CommandContext } from '../../../runtime-contract.ts';
+} from '@agent-device/contracts/backend';
+import type { CommandContext } from '@agent-device/contracts/runtime-contract';
 import type { BackMode } from '@agent-device/contracts/back-mode';
 import { parseTvRemoteButton } from '@agent-device/contracts/tv-remote';
 import { AppError } from '@agent-device/kernel/errors';

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AgentDeviceRuntime } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime } from '@agent-device/contracts/runtime-contract';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { AppError } from '@agent-device/kernel/errors';
 import { createWaitPolling, waitTimeoutError } from './wait-polling.ts';

@@ -1,4 +1,4 @@
-import type { ArtifactAdapter } from '../io.ts';
+import type { ArtifactAdapter } from '@agent-device/contracts/artifact-adapter';
 import { AppError } from '@agent-device/kernel/errors';
 
 export function createUnsupportedArtifactAdapter(

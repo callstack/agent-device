@@ -11,7 +11,7 @@ import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-e
 import { observeUntil } from '@agent-device/capture-kit/observe-until';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { isUnreadableCaptureContentError } from '@agent-device/contracts/android-snapshot-quality';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import {
   captureInteractionSnapshot,
   type InteractionSnapshot,

@@ -1,5 +1,5 @@
-import type { FileOutputRef } from '../io.ts';
-import type { AgentDeviceRuntime, CommandContext } from '../runtime-contract.ts';
+import type { FileOutputRef } from '@agent-device/contracts/artifact-adapter';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { SnapshotCommandOptionFields } from '@agent-device/kernel/snapshot';
 

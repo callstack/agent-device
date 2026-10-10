@@ -1,5 +1,5 @@
 import type { AgentDeviceBackend } from './backend.ts';
-import type { ArtifactAdapter } from './io.ts';
+import type { ArtifactAdapter } from './artifact-adapter.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 
 export type CommandPolicy = {

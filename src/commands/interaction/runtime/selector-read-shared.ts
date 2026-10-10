@@ -2,8 +2,8 @@ import type {
   AgentDeviceRuntime,
   CommandContext,
   CommandSessionRecord,
-} from '../../../runtime-contract.ts';
-import type { BackendSnapshotResult } from '../../../backend.ts';
+} from '@agent-device/contracts/runtime-contract';
+import type { BackendSnapshotResult } from '@agent-device/contracts/backend';
 import {
   AppError,
   discloseDispatch,

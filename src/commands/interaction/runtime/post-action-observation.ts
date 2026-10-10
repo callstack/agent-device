@@ -1,4 +1,4 @@
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import type {
   InteractionEvidence,
   ResolvedInteractionTarget,

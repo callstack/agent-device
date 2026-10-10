@@ -3,7 +3,7 @@ import type { AndroidObservationAdapter } from '@agent-device/contracts/android-
 import type { Rect, SnapshotPreferredBackend, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { RequestCaptureProof } from '../../capture-disclosure.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { CommandSessionStore } from '../../../runtime-contract.ts';
+import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
 import type { DeferredInteractionOutcomeMark } from '../../deferred-interaction-outcome.ts';
 import type { RecordActionEntry } from '../../session-action-recorder.ts';
 import type { BoundContextFromFlags } from '../../context.ts';

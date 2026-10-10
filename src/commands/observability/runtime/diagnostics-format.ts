@@ -3,7 +3,7 @@ import type {
   BackendMeasurePerfResult,
   BackendNetworkIncludeMode,
   BackendReadLogsResult,
-} from '../../../backend.ts';
+} from '@agent-device/contracts/backend';
 import type {
   DiagnosticsLogsCommandResult,
   DiagnosticsNetworkCommandResult,

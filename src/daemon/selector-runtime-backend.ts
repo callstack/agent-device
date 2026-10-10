@@ -2,7 +2,7 @@ import type {
   AgentDeviceBackend,
   BackendCommandContext,
   BackendSnapshotResult,
-} from '../backend.ts';
+} from '@agent-device/contracts/backend';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { createCommandSurfaceAgentDevice } from '../command-runtime/runtime-command-surface.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
@@ -27,7 +27,7 @@ import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-run
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import { snapshotOptionsToFlags } from '../backend-snapshot-options.ts';
+import { snapshotOptionsToFlags } from '@agent-device/contracts/backend-snapshot-options';
 import type { RequestCaptureProof } from './capture-disclosure.ts';
 import { checkIsArgs } from '@agent-device/selectors';
 import { noActiveSessionError } from '@agent-device/kernel/contracts';

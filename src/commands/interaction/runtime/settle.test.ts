@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AgentDeviceBackend } from '../../../backend.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
+import { createAgentDevice } from '../../../runtime.ts';
+import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { ref, selector } from './selector-read-utils.ts';
 import { buildSettleTailEntries, NEVER_SETTLED_HINT } from './settle.ts';
@@ -156,7 +156,7 @@ test('press --settle pins an already-established private-ax observation backend'
       tap: async () => ({ ok: true }),
       fill: async () => ({ ok: true }),
       longPress: async () => ({ ok: true }),
-    } satisfies AgentDeviceBackend,
+    } satisfies import('@agent-device/contracts/backend').AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
     sessions: createMemorySessionStore([{ name: 'default', snapshot: established }]),
     policy: localCommandPolicy(),

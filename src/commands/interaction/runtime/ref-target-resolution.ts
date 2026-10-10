@@ -10,7 +10,7 @@ import type {
   AgentDeviceRuntime,
   CommandContext,
   CommandSessionRecord,
-} from '../../../runtime-contract.ts';
+} from '@agent-device/contracts/runtime-contract';
 import { STALE_REF_HINT } from '@agent-device/selectors';
 import type { InteractionSnapshot } from './interaction-snapshot-capture.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';

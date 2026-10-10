@@ -959,8 +959,8 @@ anchor, not as a proposed commitment.
   `packages/provider-limrun/src/`; these root files are the composition-time wiring, comparable in
   role to `src/platform-runtime.ts` itself.
 - `src/core` (R13-governed consumer seams), `src/commands`, `src/cli`, `src/cli-schema`,
-  `src/mcp`, `src/client`, `src/sdk`, `src/ai-sdk`, `src/remote`, `src/request`, `src/metro`,
-  `src/backend*.ts`. Not migration targets: these are command-surface, protocol-projection, and
+  `src/mcp`, `src/client`, `src/sdk`, `src/ai-sdk`, `src/remote`, `src/request`, `src/metro`.
+  Not migration targets: these are command-surface, protocol-projection, and
   daemon-owned zones this ADR keeps in `src/` by design, not residue awaiting a package.
 
 Neither number has an owning issue, gate, or accepted budget yet. Treat both as inputs to a

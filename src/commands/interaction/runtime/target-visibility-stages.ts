@@ -6,7 +6,7 @@ import type {
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { normalizeRef } from '@agent-device/kernel/snapshot';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import {
   runNodePipelineStages,
   type SelectorPipelineHooks,

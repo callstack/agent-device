@@ -6,9 +6,10 @@ import type {
   BackendDeviceOrientation,
   BackendKeyboardOptions,
   BackendTvRemoteOptions,
-} from '../../../backend.ts';
+} from '@agent-device/contracts/backend';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
+import { createAgentDevice } from '../../../runtime.ts';
+import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 
 test('runtime system commands call typed backend primitives', async () => {
   const calls: unknown[] = [];

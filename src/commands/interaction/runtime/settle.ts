@@ -3,7 +3,7 @@ import type {
   AgentDeviceRuntime,
   CommandContext,
   CommandSessionRecord,
-} from '../../../runtime-contract.ts';
+} from '@agent-device/contracts/runtime-contract';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { buildSnapshotDiff } from '@agent-device/capture-kit/snapshot-diff';
 import { displayLabel, formatRole } from '@agent-device/capture-kit/snapshot-lines';
