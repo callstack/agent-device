@@ -134,6 +134,16 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
       "composition belongs to the recovery policy's own module.",
   },
   {
+    file: 'src/daemon/device/device-ready.ts',
+    target: 'src/platform-runtime-device-ready.ts',
+    symbols: ['ensureLocalPlatformDeviceReady'],
+    classification: 'composition-essential',
+    rationale:
+      'neutral local-device-readiness port assembled at the root composition layer (the ' +
+      'platform dispatch is internal to the root module); the daemon keeps its TTL cache ' +
+      'and provider-device policy locally.',
+  },
+  {
     file: 'src/daemon/direct-ios-selector.ts',
     target: 'src/platform-runtime-apple-resources.ts',
     symbols: ['queryAppleRuntimeSelector'],
@@ -143,6 +153,54 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
       'selector-producer seam owned by #2273/#2274 is the accepted deepening, and this ' +
       'audit deliberately adds no second selector producer.',
     deepenedBy: '#2273, #2274',
+  },
+  {
+    file: 'src/daemon/ios-app-session-hint.ts',
+    target: 'src/platform-runtime-apple-resources.ts',
+    symbols: ['appleSessionObservation'],
+    classification: 'daemon-policy-essential',
+    rationale:
+      'daemon-owned hint composition and length limits consume the neutral foreground-app ' +
+      'observation; the Apple package owns ambiguity and probe mechanics.',
+  },
+  {
+    file: 'src/daemon/request-recording-health.ts',
+    target: 'src/platform-runtime-apple-resources.ts',
+    symbols: ['appleSessionObservation'],
+    classification: 'daemon-policy-essential',
+    rationale:
+      'daemon-owned recording invalidation consumes only liveness and session identity ' +
+      'through the neutral observation contract; runner mechanics stay Apple-owned.',
+  },
+  {
+    file: 'src/daemon/session-device-resolution.ts',
+    target: 'src/platform-runtime-apple-resources.ts',
+    symbols: ['appleSessionObservation'],
+    classification: 'daemon-policy-essential',
+    rationale:
+      'daemon-owned device refresh uses the neutral runner-session observation as boot ' +
+      'evidence; inventory selection and provider exclusions remain local policy.',
+  },
+  {
+    file: 'src/daemon/session-lifecycle/internal/session-open-execution.ts',
+    target: 'src/platform-runtime-device-boot.ts',
+    symbols: ['deviceBootObservation'],
+    classification: 'daemon-policy-essential',
+    rationale:
+      'daemon-owned claim reconciliation asks the device when it last booted to decide whether a ' +
+      'foreign claim can still describe live ownership; the per-family probe mechanics stay in the ' +
+      'Apple and Android packages behind the neutral observation contract (#2538).',
+  },
+  {
+    file: 'src/daemon/handlers/session-selector-dispatch.ts',
+    target: 'src/platform-runtime-open-target.ts',
+    symbols: ['resolveSessionAppBundleIdForTarget'],
+    classification: 'daemon-policy-essential',
+    rationale:
+      'selector dispatch reconstructs the session app-bundle identity after a trigger-app-event ' +
+      'deep link through the one neutral open-plan resolver (#2334); Android package resolution ' +
+      'moved behind the Android owning seam in packages/platform-android, so the resolver is the ' +
+      'only symbol this edge names.',
   },
   {
     file: 'src/daemon/server/daemon-runtime.ts',
@@ -178,15 +236,15 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
       'src/daemon/provider-device-admission.ts, so this edge is the composition and nothing else.',
   },
   {
-    file: 'src/daemon/server/daemon-runtime.ts',
-    target: 'src/platform-runtime-daemon-services.ts',
-    symbols: ['createDaemonPlatformServices'],
-    classification: 'composition-essential',
+    file: 'src/daemon/session-lifecycle/internal/session-open-prepare.ts',
+    target: 'src/platform-runtime-open-target.ts',
+    symbols: ['resolveRequestedOpenSurface', 'validateOpenRelaunchTarget'],
+    classification: 'daemon-policy-essential',
     rationale:
-      'process-root assembly of the daemon platform-services port (ADR 0019): local readiness, ' +
-      'boot and runner-session observation, and open-target classification reach the request ' +
-      'path only as this frozen object, so no daemon module names a platform adapter. Device ' +
-      'execution never enters the port; it stays behind the request-bound runtime binding.',
+      'open-prepare policy consumes only the neutral open plan/result surface (#2334): surface ' +
+      'classification and relaunch-target validation. The platform mechanics that used to share ' +
+      'the file (Android package resolution) moved behind the Android owning seam, leaving this ' +
+      'edge daemon policy over two neutral, non-mechanics functions.',
   },
 ] as const;
 

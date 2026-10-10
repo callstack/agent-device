@@ -63,6 +63,7 @@ import {
 import { createPlatformRequestScope } from './platform-request-scope.ts';
 import { parameterizeSensitiveString } from '@agent-device/selectors/parameterized-recorded-fill';
 import { createOwnerScopedDeviceClaimReconciler } from './device/device-claim-owner-recovery.ts';
+import type { ClaimRecoveryGatewayFactory } from './device/claim-recovery-gateway.ts';
 import { isConfinedToAppLease, scopeRequestSession } from './request-admission.ts';
 import { redactMacOsAppLeaseResponse } from './macos-app-lease.ts';
 import { resolveEffectiveSessionName } from './session-routing.ts';
@@ -113,6 +114,12 @@ export type RequestRouterDeps = {
    * process that never ran root composition cannot build one, and no daemon module may.
    */
   platformServices: DaemonPlatformServices;
+  /**
+   * Root composition's per-transaction claim-recovery gateway (#2168). Rebuilding the dead owner's
+   * gateway is the act that names platform modules, so the router holds only this factory and
+   * passes it to every reconciler it builds; only root composition can construct a router.
+   */
+  claimRecoveryGateway: ClaimRecoveryGatewayFactory;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   audioProbeAdmissionLedger?: AudioProbeAdmissionLedger;
   perfCaptureAdmissionLedger?: PerfCaptureAdmissionLedger;
@@ -172,6 +179,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     requestPlatformProviders = EMPTY_REQUEST_PLATFORM_PROVIDERS,
     deviceRuntimeGateway,
     platformServices,
+    claimRecoveryGateway,
     appLogAdmissionLedger = createAppLogAdmissionLedger(),
     audioProbeAdmissionLedger = createAudioProbeAdmissionLedger(),
     perfCaptureAdmissionLedger = createPerfCaptureAdmissionLedger(),
@@ -263,6 +271,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               leaseRegistry,
               deviceRuntimeGateway,
               platformServices,
+              claimRecoveryGateway,
               platformRequestScope,
               platformResourceCleanup,
               providerAppCatalog,
@@ -379,7 +388,10 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       platformServices: lockedScope.platformServices,
       inspectFacts: lockedScope.inspectFacts,
       bindExactDevice: lockedScope.bindExactDevice,
-      reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler(requestScope),
+      reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({
+        scope: requestScope,
+        composeGateway: claimRecoveryGateway,
+      }),
       appLogAdmissionLedger,
       audioProbeAdmissionLedger,
       perfCaptureAdmissionLedger,
@@ -421,6 +433,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           leaseRegistry,
           deviceRuntimeGateway,
           platformServices,
+          claimRecoveryGateway,
           platformRequestScope: createPlatformRequestScope(scopedReq),
           platformResourceCleanup,
           providerAppCatalog,

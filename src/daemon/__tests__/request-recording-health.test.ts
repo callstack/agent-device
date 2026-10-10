@@ -1,4 +1,7 @@
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import {
+  daemonPlatformServicesFixture,
+  daemonClaimRecoveryGatewayFixture,
+} from './platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../session-state.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -201,7 +204,8 @@ test.each(['rebuild', 'retire'] as const)(
       leaseRegistry: new LeaseRegistry(),
       // Locked preparation refreshes recording health through the port, so the scope carries
       // the fixture whose observation member is the test's spy.
-      platformServices: platformServices,
+      platformServices,
+      claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     });
     const prepared = scope.runLocked(() =>
       prepareLockedRequestScope({

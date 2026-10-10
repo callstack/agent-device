@@ -411,11 +411,13 @@ export async function startDaemonRuntime(
   const deviceInventoryGateways = createPlatformDeviceInventoryGateways(
     providerRuntimeProviders.deviceInventorySource,
   );
-  // Root composition of the platform-services port: it names concrete platform adapters, so it
-  // loads here — the process root's own startup — rather than riding the daemon entry's eager
-  // closure, and it stays lazy to the entry's import graph.
+  // Root composition of the platform-services port and the owner-scoped claim-recovery gateway.
+  // platform-runtime.ts is already static in this file, so the deferred imports keep these thin
+  // composition modules (and the readiness/open-target adapters only the services module pulls)
+  // off `src/daemon.ts`'s eager closure; what each adapter itself loads stays as lazy as it was.
   const { createDaemonPlatformServices } =
     await import('../../platform-runtime-daemon-services.ts');
+  const { createClaimRecoveryGateway } = await import('../../platform-runtime-claim-recovery.ts');
 
   const dispatchRequest = createRequestHandler({
     logPath,
@@ -428,6 +430,7 @@ export async function startDaemonRuntime(
     deviceInventoryGateways,
     deviceRuntimeGateway,
     platformServices: createDaemonPlatformServices(),
+    claimRecoveryGateway: createClaimRecoveryGateway,
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
     perfCaptureAdmissionLedger,
@@ -722,7 +725,10 @@ export async function startDaemonRuntime(
     // written before it is lost — including reconciliation diagnostics.
     await reconcileDeviceClaimsForDaemonStartup(
       logPath,
-      createOwnerScopedDeviceClaimReconciler(createDaemonRecoveryPlatformScope()),
+      createOwnerScopedDeviceClaimReconciler({
+        scope: createDaemonRecoveryPlatformScope(),
+        composeGateway: createClaimRecoveryGateway,
+      }),
       baseDir,
     );
     // Arms the initial idle-reap timer: a daemon that starts and never

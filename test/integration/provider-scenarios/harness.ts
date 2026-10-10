@@ -16,6 +16,7 @@ import {
   androidObservation,
   type PlatformProviderResolvers,
 } from '../../../src/platform-runtime.ts';
+import { createClaimRecoveryGateway } from '../../../src/platform-runtime-claim-recovery.ts';
 import { createDaemonPlatformServices } from '../../../src/platform-runtime-daemon-services.ts';
 import { platformResourceCleanup } from '../../../src/platform-runtime-resource-cleanup.ts';
 import { readDaemonProviderCredentials } from '../../../src/provider-credential-fingerprint.ts';
@@ -181,6 +182,7 @@ export async function createProviderScenarioHarness(
     androidObservation,
     platformResourceCleanup,
     platformServices: createDaemonPlatformServices(),
+    claimRecoveryGateway: createClaimRecoveryGateway,
     requestPlatformProviders:
       configuredRequestPlatformProviders ??
       createRequestPlatformProviders({

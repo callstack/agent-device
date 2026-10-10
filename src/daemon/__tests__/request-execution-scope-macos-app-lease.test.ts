@@ -1,5 +1,8 @@
 import { expect, test } from 'vitest';
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import {
+  daemonPlatformServicesFixture,
+  daemonClaimRecoveryGatewayFixture,
+} from './platform-services-fixture.ts';
 import { makeMacOsSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { parseDaemonPolicy } from '../../daemon-policy-file.ts';
@@ -39,6 +42,7 @@ async function runScoped(params: {
 }): Promise<{ ran: boolean; error?: unknown }> {
   const scope = await createRequestExecutionScope({
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: { token: 't', session: 'default', positionals: [], ...params.req },
     sessionStore: params.sessionStore,
     leaseRegistry: params.leaseRegistry,
@@ -121,6 +125,7 @@ test('a request under a pid-pinned macos-app lease does not run once that proces
   );
   const scope = await createRequestExecutionScope({
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: { token: 't', session: 'default', command: 'snapshot', positionals: [], flags: {} },
     sessionStore,
     leaseRegistry,

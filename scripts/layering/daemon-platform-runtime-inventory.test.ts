@@ -8,11 +8,9 @@ import {
   isRootPlatformRuntimeTarget,
 } from './daemon-platform-runtime-inventory.ts';
 
-// The classified pair these fixtures plant is the platform-services composition factory: the
-// edge this port introduced, and the shortest one whose symbols the rule still classifies.
-const CLASSIFIED_TARGET = 'src/platform-runtime-daemon-services.ts';
-const CLASSIFIED_STUB = 'export function createDaemonPlatformServices() { return {}; }\n';
-const CLASSIFIED_IMPORTER = 'src/daemon/server/daemon-runtime.ts';
+const DEVICE_READY_TARGET = 'src/platform-runtime-device-ready.ts';
+const DEVICE_READY_STUB =
+  'export async function ensureLocalPlatformDeviceReady(device: unknown) { return false; }\n';
 
 function violations(sources: Record<string, string>): LayeringViolation[] {
   return checkDaemonPlatformRuntimeInventory(resolveImportEdges(new Map(Object.entries(sources))));
@@ -24,12 +22,12 @@ function edgeViolations(sources: Record<string, string>, file: string): Layering
 
 test('R76 accepts a classified edge with the exact recorded symbols', () => {
   const sources = {
-    [CLASSIFIED_TARGET]: CLASSIFIED_STUB,
-    [CLASSIFIED_IMPORTER]:
-      "import { createDaemonPlatformServices } from '../../platform-runtime-daemon-services.ts';\n" +
-      'void createDaemonPlatformServices;\n',
+    [DEVICE_READY_TARGET]: DEVICE_READY_STUB,
+    'src/daemon/device/device-ready.ts':
+      "import { ensureLocalPlatformDeviceReady } from '../../platform-runtime-device-ready.ts';\n" +
+      'void ensureLocalPlatformDeviceReady;\n',
   };
-  assert.deepEqual(edgeViolations(sources, CLASSIFIED_IMPORTER), []);
+  assert.deepEqual(edgeViolations(sources, 'src/daemon/device/device-ready.ts'), []);
 });
 
 for (const [file, target, symbol] of [
@@ -52,18 +50,20 @@ for (const [file, target, symbol] of [
 
 test('R76 reports every classified edge missing from the tree as stale, not the other way around', () => {
   const sources = {
-    [CLASSIFIED_TARGET]: CLASSIFIED_STUB,
-    [CLASSIFIED_IMPORTER]:
-      "import { createDaemonPlatformServices } from '../../platform-runtime-daemon-services.ts';\n" +
-      'void createDaemonPlatformServices;\n',
+    [DEVICE_READY_TARGET]: DEVICE_READY_STUB,
+    'src/daemon/device/device-ready.ts':
+      "import { ensureLocalPlatformDeviceReady } from '../../platform-runtime-device-ready.ts';\n" +
+      'void ensureLocalPlatformDeviceReady;\n',
   };
   const stale = violations(sources).filter(
     (violation) => violation.file === 'scripts/layering/daemon-platform-runtime-inventory.ts',
   );
   assert.equal(stale.length, DAEMON_PLATFORM_RUNTIME_EDGES.length - 1);
   assert.ok(stale.every((violation) => violation.message.includes('stale classified edge')));
-  const classifiedStale = stale.find((violation) => violation.message.includes(CLASSIFIED_TARGET));
-  assert.equal(classifiedStale, undefined);
+  const deviceReadyStale = stale.find((violation) =>
+    violation.message.includes(DEVICE_READY_TARGET),
+  );
+  assert.equal(deviceReadyStale, undefined);
 });
 
 test('R76 rejects an unclassified edge with the pair and its line', () => {
@@ -86,32 +86,35 @@ test('R76 rejects an unclassified edge with the pair and its line', () => {
 
 test('R76 rejects new symbols on a classified edge', () => {
   const sources = {
-    [CLASSIFIED_TARGET]: CLASSIFIED_STUB + 'export function extraServicesKnob() {}\n',
-    [CLASSIFIED_IMPORTER]:
-      "import { createDaemonPlatformServices, extraServicesKnob } from '../../platform-runtime-daemon-services.ts';\n" +
-      'void [createDaemonPlatformServices, extraServicesKnob];\n',
+    [DEVICE_READY_TARGET]: DEVICE_READY_STUB + 'export function extraReadiness() {}\n',
+    'src/daemon/device/device-ready.ts':
+      "import { ensureLocalPlatformDeviceReady, extraReadiness } from '../../platform-runtime-device-ready.ts';\n" +
+      'void [ensureLocalPlatformDeviceReady, extraReadiness];\n',
   };
-  const found = edgeViolations(sources, CLASSIFIED_IMPORTER);
+  const found = edgeViolations(sources, 'src/daemon/device/device-ready.ts');
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
   assert.match(found[0]!.message, /classified symbols drifted/);
-  assert.match(found[0]!.message, /createDaemonPlatformServices, extraServicesKnob/);
+  assert.match(found[0]!.message, /ensureLocalPlatformDeviceReady, extraReadiness/);
 });
 
-test('R76 rejects a services object widened through an expanded composition edge', () => {
+test('R76 rejects a reintroduced Android-mechanics import on the selector-dispatch edge', () => {
   const sources = {
-    'src/platform-runtime-daemon-services.ts':
-      'export function createDaemonPlatformServices() { return {}; }\n' +
-      'export function createProviderPlatformServices() { return {}; }\n',
-    'src/daemon/server/daemon-runtime.ts':
-      "import {\n  createDaemonPlatformServices,\n  createProviderPlatformServices,\n} from '../../platform-runtime-daemon-services.ts';\n" +
-      'void [createDaemonPlatformServices, createProviderPlatformServices];\n',
+    'src/platform-runtime-open-target.ts':
+      'export async function resolveSessionAppBundleIdForTarget() { return undefined; }\n' +
+      'export async function resolveAndroidPackageForOpen() { return undefined; }\n',
+    'src/daemon/handlers/session-selector-dispatch.ts':
+      "import { resolveAndroidPackageForOpen, resolveSessionAppBundleIdForTarget } from '../../platform-runtime-open-target.ts';\n" +
+      'void [resolveAndroidPackageForOpen, resolveSessionAppBundleIdForTarget];\n',
   };
-  const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
+  const found = edgeViolations(sources, 'src/daemon/handlers/session-selector-dispatch.ts');
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
   assert.match(found[0]!.message, /classified symbols drifted/);
-  assert.match(found[0]!.message, /createDaemonPlatformServices, createProviderPlatformServices/);
+  assert.match(
+    found[0]!.message,
+    /resolveAndroidPackageForOpen, resolveSessionAppBundleIdForTarget/,
+  );
 });
 
 test('R76 matches a destructured dynamic import by target with the recorded bindings', () => {
@@ -208,13 +211,13 @@ test('R76 rejects a namespace import alongside the recorded named binding on the
 
 test('R76 treats the import and re-export of one classified pair as one entry', () => {
   const sources = {
-    [CLASSIFIED_TARGET]: CLASSIFIED_STUB,
-    [CLASSIFIED_IMPORTER]:
-      "import { createDaemonPlatformServices } from '../../platform-runtime-daemon-services.ts';\n" +
-      "export { createDaemonPlatformServices } from '../../platform-runtime-daemon-services.ts';\n" +
-      'void createDaemonPlatformServices;\n',
+    [DEVICE_READY_TARGET]: DEVICE_READY_STUB,
+    'src/daemon/device/device-ready.ts':
+      "import { ensureLocalPlatformDeviceReady } from '../../platform-runtime-device-ready.ts';\n" +
+      "export { ensureLocalPlatformDeviceReady } from '../../platform-runtime-device-ready.ts';\n" +
+      'void ensureLocalPlatformDeviceReady;\n',
   };
-  assert.deepEqual(edgeViolations(sources, CLASSIFIED_IMPORTER), []);
+  assert.deepEqual(edgeViolations(sources, 'src/daemon/device/device-ready.ts'), []);
 });
 
 test('R76 ignores test-shaped and non-daemon importers', () => {

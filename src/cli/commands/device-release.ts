@@ -2,6 +2,7 @@ import {
   createOwnerScopedDeviceClaimReconciler,
   type OwnerScopedClaimRecoveryComposer,
 } from '../../daemon/device/device-claim-owner-recovery.ts';
+import { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';
 import { createDaemonRecoveryPlatformScope } from '../../daemon/platform-request-scope.ts';
 import {
   releaseProvenStaleDeviceClaims,
@@ -22,9 +23,10 @@ export async function runStaleDeviceClaimRelease(
 ): Promise<DeviceClaimStaleReleaseOutcome[]> {
   return await releaseProvenStaleDeviceClaims({
     selectors,
-    reconcile: createOwnerScopedDeviceClaimReconciler(
-      createDaemonRecoveryPlatformScope(),
+    reconcile: createOwnerScopedDeviceClaimReconciler({
+      scope: createDaemonRecoveryPlatformScope(),
+      composeGateway: createClaimRecoveryGateway,
       composeRecovery,
-    ),
+    }),
   });
 }

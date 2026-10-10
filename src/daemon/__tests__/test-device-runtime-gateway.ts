@@ -26,6 +26,7 @@ import { withClientReplayScriptSources } from '../../__tests__/test-utils/replay
 import type { DaemonInvokeFn } from '../daemon-request.ts';
 import { clearAndroidObservationFixture } from './android-observation-fixture.ts';
 import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';
 import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 import { readDaemonProviderCredentials } from '../../provider-credential-fingerprint.ts';
 
@@ -225,16 +226,20 @@ export const unavailableBindExactDevice: BindExactDeviceRuntime = async (
 export function createRequestHandler(
   deps: Omit<
     RequestRouterDeps,
-    'deviceRuntimeGateway' | 'providerCredentials' | 'platformServices'
+    'deviceRuntimeGateway' | 'providerCredentials' | 'platformServices' | 'claimRecoveryGateway'
   > &
     Partial<
-      Pick<RequestRouterDeps, 'deviceRuntimeGateway' | 'providerCredentials' | 'platformServices'>
+      Pick<
+        RequestRouterDeps,
+        'deviceRuntimeGateway' | 'providerCredentials' | 'platformServices' | 'claimRecoveryGateway'
+      >
     >,
 ) {
   const {
     deviceRuntimeGateway = unavailableDeviceRuntimeGateway,
     providerCredentials = readDaemonProviderCredentials({}, path.dirname(deps.logPath)),
     platformServices = daemonPlatformServicesFixture(),
+    claimRecoveryGateway = createClaimRecoveryGateway,
     ...rest
   } = deps;
   const handle = createProductionRequestHandler({
@@ -242,6 +247,7 @@ export function createRequestHandler(
     platformResourceCleanup,
     ...rest,
     platformServices,
+    claimRecoveryGateway,
     deviceRuntimeGateway,
     providerCredentials,
   });

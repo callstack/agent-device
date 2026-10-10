@@ -52,7 +52,6 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/platform-runtime-apple-runner-owner.ts',
     'src/platform-runtime-daemon-lifecycle.ts',
     'src/platform-runtime-daemon-owner-cleanup.ts',
-    'src/platform-runtime-daemon-services.ts',
     'src/platform-runtime-device-boot.ts',
     'src/platform-runtime-device-inventory.ts',
     'src/platform-runtime-device-ready.ts',

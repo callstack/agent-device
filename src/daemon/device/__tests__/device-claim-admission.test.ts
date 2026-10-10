@@ -1,5 +1,8 @@
 import { expect, test } from 'vitest';
-import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
+import {
+  daemonPlatformServicesFixture,
+  daemonClaimRecoveryGatewayFixture,
+} from '../../__tests__/platform-services-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { localRuntimeOwner, providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
@@ -218,6 +221,7 @@ test('the none policy still reaches no device state at all', async () => {
 async function claimsWhileBound(command: string, stateDir: string) {
   const scope = await createRequestExecutionScope({
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     req: { token: 't', session: 'default', command, positionals: [], flags: {} },
     sessionStore: new SessionStore(path.join(stateDir, 'sessions')),
     leaseRegistry: new LeaseRegistry(),

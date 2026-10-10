@@ -1,4 +1,7 @@
-import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
+import {
+  daemonPlatformServicesFixture,
+  daemonClaimRecoveryGatewayFixture,
+} from '../../__tests__/platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -69,6 +72,7 @@ async function runStateCommand(
     leaseRegistry: new LeaseRegistry(),
     deviceRuntimeGateway: readinessDeviceRuntimeGateway,
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
     platformRequestScope: {
       signal: new AbortController().signal,
       diagnostics: { emit: () => {} },

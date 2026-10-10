@@ -1,4 +1,7 @@
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import {
+  daemonPlatformServicesFixture,
+  daemonClaimRecoveryGatewayFixture,
+} from './platform-services-fixture.ts';
 import { afterAll, test, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -889,11 +892,15 @@ test('router: an existing lease-less session under tenant isolation still refuse
 });
 
 function createTestRequestScope(
-  params: Omit<Parameters<typeof createRequestExecutionScope>[0], 'platformServices'>,
+  params: Omit<
+    Parameters<typeof createRequestExecutionScope>[0],
+    'platformServices' | 'claimRecoveryGateway'
+  >,
 ) {
   return createRequestExecutionScope({
     ...params,
     platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
   });
 }
 
