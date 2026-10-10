@@ -63,7 +63,7 @@ import {
 } from './commands/command-projection.ts';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
 import { sendToDaemon } from './daemon-client/daemon-client.ts';
-import { resolveDaemonPaths } from './daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { resolveMetroServerUrl } from './metro/metro-reload-endpoints.ts';
 import { prepareMetroRuntime, reloadMetro } from './metro/client-metro.ts';
 import {

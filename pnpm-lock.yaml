@@ -31,6 +31,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:packages/contracts
+      '@agent-device/daemon-contracts':
+        specifier: workspace:*
+        version: link:packages/daemon-contracts
       '@agent-device/device-selection':
         specifier: workspace:*
         version: link:packages/device-selection
@@ -264,6 +267,21 @@ importers:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
+
+  packages/daemon-contracts:
+    dependencies:
+      '@agent-device/command-registry':
+        specifier: workspace:*
+        version: link:../command-registry
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
 
   packages/device-selection:
     dependencies:

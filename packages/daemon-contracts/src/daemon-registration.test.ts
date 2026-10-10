@@ -6,9 +6,9 @@ import {
   isSupersededDaemonOwner,
   readRegisteredDaemonIdentity,
   readRegisteredDaemonOwnership,
-} from '../daemon-registration.ts';
-import { publishDaemonRegistration } from './test-utils/device-claim-store.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+} from './daemon-registration.ts';
+import { publishDaemonRegistration } from './daemon-registration.fixtures.ts';
+import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 const roots: string[] = [];
 

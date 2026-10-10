@@ -1,4 +1,4 @@
-import type { DaemonOwnerCleanup } from './daemon-owner-cleanup.ts';
+import type { DaemonOwnerCleanup } from '@agent-device/daemon-contracts/daemon-owner-cleanup';
 
 /**
  * Root composition for owner-scoped host cleanup. The CLI names only the neutral service; Apple

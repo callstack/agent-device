@@ -87,7 +87,7 @@ import type { AndroidObservationAdapter } from '@agent-device/contracts/android-
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import type { DaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
 import { restrictDeviceInventoryToDaemonPolicy } from './daemon-policy.ts';
-import type { DaemonPolicy } from '../daemon-policy-file.ts';
+import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
 // ---------------------------------------------------------------------------
 // Request handler API

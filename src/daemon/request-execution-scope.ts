@@ -70,7 +70,7 @@ import {
   assertDaemonPolicyAdmitsDevice,
   assertDaemonPolicyAdmitsRequest,
 } from './daemon-policy.ts';
-import type { DaemonPolicy } from '../daemon-policy-file.ts';
+import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { requestDispatchLedger, type RequestDispatchLedger } from './request-dispatch-ledger.ts';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps

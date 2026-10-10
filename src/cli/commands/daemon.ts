@@ -1,10 +1,10 @@
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   readDaemonStopIdentity,
   stopDaemon,
   type DaemonStopResult,
 } from '../../daemon/daemon-stop.ts';
-import { readDaemonShutdownReport } from '../../daemon-shutdown-report.ts';
+import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
 import { AppError } from '@agent-device/kernel/errors';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';

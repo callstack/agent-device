@@ -9,8 +9,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { acquireDeviceClaim } from '../device/device-claims.ts';
 import { canonicalLocalDeviceKey } from '../device/device-claim-paths.ts';
 import { createDurableCaptureResourceStore } from '@agent-device/capture-kit/durable-capture';
-import { tryAcquireDaemonRegistration } from '../../daemon-registration-owner.ts';
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { SessionScriptWriter, type SessionScriptWriteResult } from '../session-script-writer.ts';
 import { SessionStore } from '../session-store.ts';
 import {

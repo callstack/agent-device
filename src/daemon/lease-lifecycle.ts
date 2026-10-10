@@ -13,7 +13,7 @@ import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
 import { providerSessionIdFromData } from './provider-session-ownership.ts';
-import type { DaemonPolicy } from '../daemon-policy-file.ts';
+import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
 export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
 

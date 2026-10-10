@@ -16,7 +16,7 @@ vi.mock('../lease-registry.ts', async (importOriginal) => {
   return { ...actual, LeaseRegistry: RecordedLeaseRegistry };
 });
 
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { startDaemonRuntime } from './daemon-runtime.ts';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 

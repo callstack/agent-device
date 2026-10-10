@@ -20,7 +20,7 @@ import {
   stopDaemonProcess,
   waitForDaemonExit,
   type DaemonProcessIdentity,
-} from '../../src/daemon-process.ts';
+} from '@agent-device/daemon-contracts/daemon-process';
 import {
   expandProcessTree,
   isProcessAlive,

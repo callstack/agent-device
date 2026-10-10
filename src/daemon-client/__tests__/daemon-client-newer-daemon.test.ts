@@ -10,7 +10,7 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   runCmdSync: vi.fn(() => ({ exitCode: 1, stdout: '', stderr: '' })),
 }));
 
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { sendToDaemon } from '../daemon-client.ts';
 import { closeLoopbackServer, supportsLoopbackBind } from '../../__tests__/test-utils/loopback.ts';
 import {

@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { makeMacOsSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { parseDaemonPolicy } from '../../daemon-policy-file.ts';
+import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestExecutionScope } from '../request-execution-scope.ts';

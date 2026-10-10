@@ -2,12 +2,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveDaemonPaths } from '../src/daemon-resolution.ts';
-import { readRegisteredDaemonIdentity } from '../src/daemon-registration.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { readRegisteredDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import {
   stopAndRetireDaemon,
   recoverAbandonedDaemonRegistration,
-} from '../src/daemon-registration-owner.ts';
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
 
 const DAEMON_TERM_TIMEOUT_MS = 15_000;
 const DAEMON_KILL_TIMEOUT_MS = 2_000;
