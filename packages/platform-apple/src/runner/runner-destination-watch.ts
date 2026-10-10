@@ -116,7 +116,7 @@ const pendingWarmLossNotices = new Map<string, RunnerWarmLossNotice>();
  * sample of a quiet runner) lets that churn settle so a mid-shutdown read cannot misclassify a
  * crash. A stop that lands after the reboot has finished still powers the device back off.
  *
- *  * The confirm delay, the recheck delay and the attach-retry budget have production defaults; a
+ * The confirm delay, the recheck delay and the attach-retry budget have production defaults; a
  * non-negative millisecond value in `AGENT_DEVICE_IOS_RUNNER_DESTINATION_CONFIRM_MS`,
  * `..._RECHECK_MS` or `..._ATTACH_RETRY_MS` replaces one. Only tests set them, to avoid waiting
  * production time.
