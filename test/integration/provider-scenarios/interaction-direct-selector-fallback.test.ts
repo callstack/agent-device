@@ -46,6 +46,17 @@ function snapshotEntry(nodes: unknown[]): ProviderScenarioProviderEntry {
   };
 }
 
+// The scripted open is not read back, so the first capture after it settles over a quiet pair of
+// reads and the direct tap path stays paused until that capture has run.
+const SETTLING_CAPTURE_ENTRIES = [
+  snapshotEntry([APPLICATION_NODE]),
+  snapshotEntry([APPLICATION_NODE]),
+];
+
+async function settleAfterOpen(daemon: ProviderScenarioHarness): Promise<void> {
+  assertRpcOk(await daemon.callCommand('snapshot'));
+}
+
 async function withDirectSelectorScenario(
   transcript: ProviderScenarioTranscript,
   run: (daemon: ProviderScenarioHarness) => Promise<void>,
@@ -77,19 +88,18 @@ async function withDirectSelectorScenario(
 }
 
 test('Provider-backed iOS selector wait captures directly and strips selectorChain', async () => {
-  const transcript = createProviderTranscript([
-    snapshotEntry([
-      APPLICATION_NODE,
-      {
-        index: 1,
-        parentIndex: 0,
-        type: 'Button',
-        label: 'Continue',
-        hittable: true,
-        rect: { x: 100, y: 300, width: 200, height: 44 },
-      },
-    ]),
+  const continueSnapshot = snapshotEntry([
+    APPLICATION_NODE,
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Continue',
+      hittable: true,
+      rect: { x: 100, y: 300, width: 200, height: 44 },
+    },
   ]);
+  const transcript = createProviderTranscript([continueSnapshot, continueSnapshot]);
 
   await withDirectSelectorScenario(transcript, async (daemon) => {
     const wait = await daemon.callCommand('wait', ['label="Continue"']);
@@ -100,18 +110,20 @@ test('Provider-backed iOS selector wait captures directly and strips selectorCha
 });
 
 test('Provider-backed iOS selector wait polls a fresh capture after a selector miss', async () => {
+  const loadingSnapshot = snapshotEntry([
+    APPLICATION_NODE,
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Loading',
+      hittable: true,
+      rect: { x: 100, y: 300, width: 200, height: 44 },
+    },
+  ]);
   const transcript = createProviderTranscript([
-    snapshotEntry([
-      APPLICATION_NODE,
-      {
-        index: 1,
-        parentIndex: 0,
-        type: 'Button',
-        label: 'Loading',
-        hittable: true,
-        rect: { x: 100, y: 300, width: 200, height: 44 },
-      },
-    ]),
+    loadingSnapshot,
+    loadingSnapshot,
     snapshotEntry([
       APPLICATION_NODE,
       {
@@ -135,6 +147,7 @@ test('Provider-backed iOS selector wait polls a fresh capture after a selector m
 
 test('Provider-backed integration maestro replay dispatch keeps runner AMBIGUOUS_MATCH without fallback', async () => {
   const transcript = createProviderTranscript([
+    ...SETTLING_CAPTURE_ENTRIES,
     {
       command: 'ios.runner.tap',
       deviceId: DEVICE_ID,
@@ -154,6 +167,7 @@ test('Provider-backed integration maestro replay dispatch keeps runner AMBIGUOUS
   ]);
 
   await withDirectSelectorScenario(transcript, async (daemon) => {
+    await settleAfterOpen(daemon);
     const click = await daemon.callCommand('click', ['label="Continue"'], {
       maestro: { allowNonHittableCoordinateFallback: true },
     });
@@ -165,6 +179,7 @@ test(
   'Provider-backed integration maestro replay dispatch keeps runner ELEMENT_OFFSCREEN without fallback',
   async () => {
     const transcript = createProviderTranscript([
+      ...SETTLING_CAPTURE_ENTRIES,
       {
         command: 'ios.runner.tap',
         deviceId: DEVICE_ID,
@@ -182,6 +197,7 @@ test(
     ]);
 
     await withDirectSelectorScenario(transcript, async (daemon) => {
+      await settleAfterOpen(daemon);
       const click = await daemon.callCommand('click', ['label="Continue"'], {
         maestro: { allowNonHittableCoordinateFallback: true },
       });

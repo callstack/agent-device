@@ -82,7 +82,8 @@ function tapEntry(x: number, y: number): ProviderScenarioProviderEntry {
 
 test('Provider-backed integration iOS @refs reject after a selector press replaces the tree', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i: issues refs to the client
+    // snapshot -i: issues refs to the client; the first capture after open settles: one extra read
+    snapshotEntry(),
     snapshotEntry(),
     // press label=Continue: selector resolution capture replaces the stored tree
     snapshotEntry(),
@@ -149,7 +150,9 @@ test('Provider-backed integration iOS @refs reject after a selector press replac
 
 test('Provider-backed iOS press rejects a stale ref after navigation', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i: @e3 is Verify on the magic-code screen.
+    // snapshot -i: @e3 is Verify on the magic-code screen; the first capture after open settles:
+    // one extra read.
+    snapshotEntry(MAGIC_CODE_NODES),
     snapshotEntry(MAGIC_CODE_NODES),
     // press label=Back: the pre-action capture still sees that screen.
     snapshotEntry(MAGIC_CODE_NODES),

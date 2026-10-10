@@ -149,6 +149,7 @@ function iosSimulatorTool(): { provider: AppleToolProvider } {
 test('Provider-backed integration scroll down answers moved on the first post-gesture capture', async () => {
   const runnerTranscript = createProviderTranscript([
     snapshotEntry(screen(0, true)), // pre-scroll baseline
+    snapshotEntry(screen(0, true)), // the first capture after open settles: one extra read
     scrollEntry(),
     snapshotEntry(screen(-100, true)), // post-gesture: rows shifted into view on the first read
   ]);

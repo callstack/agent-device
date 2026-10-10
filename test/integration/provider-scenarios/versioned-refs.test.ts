@@ -66,7 +66,9 @@ function tapEntry(x: number, y: number): ProviderScenarioProviderEntry {
 
 test('Provider-backed integration rejects stale pinned @refs and accepts current pins', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i: issues the complete frame at the seeded generation g1
+    // snapshot -i: issues the complete frame at the seeded generation g1; the first capture after
+    // open settles: one extra read
+    snapshotEntry(),
     snapshotEntry(),
     // press @e2~s{g1}: pinned to the CURRENT frame — admitted, taps Cancel,
     // and crosses the seam so the frame expires
