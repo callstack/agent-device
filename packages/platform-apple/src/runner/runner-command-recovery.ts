@@ -12,6 +12,10 @@ import {
 } from './runner-contract.ts';
 import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
 import { RUNNER_REPLY_LOST_REASON } from './runner-error-classification.ts';
+import {
+  RUNNER_IN_FLIGHT_LIFECYCLE_STATES,
+  settleRunnerChargeForTerminalStatus,
+} from './runner-command-journal.ts';
 import type { AppleRunnerCommandOptions } from './runner-provider.ts';
 import { executeRunnerCommandWithSession, type RunnerSession } from './runner-session.ts';
 
@@ -275,38 +279,6 @@ async function tryRecoverRunnerCommandAfterTransportError(
     transportError,
     options,
   );
-}
-
-/**
- * The runner journal vocabulary, so the charge settlement below and the recovery verdict in
- * {@link handleRunnerCommandStatusRecovery} cannot disagree about what a state means.
- * `runner-swift-settlement-fixtures.ts` pins these names to `RunnerCommandLifecycleState`, and the
- * recovery wiring rows are derived from that same declaration, so a state the runner gains has to be
- * ruled here before it can decide a handoff.
- *
- * `completed` and `failed` close an entry — from the response's `ok` in `finish`, or a thrown error in
- * `fail` — so execution ended, and each gets its own recovery verdict below. `accepted` and `started`
- * are written as execution opens, so they share one in-flight verdict. `notAccepted` is what `status`
- * reports for an id the journal never held, which this daemon cannot read as terminal.
- */
-const RUNNER_TERMINAL_LIFECYCLE_STATES: ReadonlySet<string> = new Set(['completed', 'failed']);
-const RUNNER_IN_FLIGHT_LIFECYCLE_STATES: ReadonlySet<string> = new Set(['accepted', 'started']);
-
-/**
- * Discharges the abandoned charge terminal status proves landed (#2965). A status reply is served
- * inline, so it is no evidence that queued work finished; this is the only place a status answer may
- * settle a charge, and only the one its `statusCommandId` names.
- *
- * @returns whether the evidence paid a debt, or `undefined` when the state is not terminal and no
- *   settlement was attempted.
- */
-function settleRunnerChargeForTerminalStatus(
-  session: RunnerSession,
-  command: RunnerCommand,
-  lifecycleState: string,
-): boolean | undefined {
-  if (!RUNNER_TERMINAL_LIFECYCLE_STATES.has(lifecycleState)) return undefined;
-  return session.commandCharges.settleTerminalEvidence(command.commandId);
 }
 
 function handleRunnerCommandStatusRecovery(

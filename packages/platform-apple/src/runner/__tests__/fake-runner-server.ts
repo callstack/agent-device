@@ -17,7 +17,9 @@ export type FakeRunnerResponse =
   /** Hangs up on this request and every later one for the command: the entry is never consumed. */
   | { kind: 'hangUpAlways' }
   /** Hangs up and stops listening, as a runner process that died mid-command. */
-  | { kind: 'exit' };
+  | { kind: 'exit' }
+  /** Never answers, as a runner still executing the command when its caller gives up. */
+  | { kind: 'hold' };
 
 export type FakeRunnerRequest = {
   command: string;
@@ -79,9 +81,10 @@ export async function startFakeRunnerServer(
     requests,
     close: () =>
       stopped ??
-      new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      ),
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+        server.closeAllConnections();
+      }),
   };
 }
 
@@ -101,6 +104,7 @@ function writeFakeRunnerResponse(
     res.end(JSON.stringify({ ok: false, error: { message: 'fake runner script exhausted' } }));
     return;
   }
+  if (next.kind === 'hold') return;
   if (next.kind === 'hangUp' || next.kind === 'hangUpAlways') {
     res.destroy();
     return;
