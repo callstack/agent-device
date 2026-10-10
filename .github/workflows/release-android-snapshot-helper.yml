@@ -1,9 +1,13 @@
 name: Release Android Snapshot Helper
 
 on:
-  release:
-    types:
-      - published
+  # release.yml calls this after publishing a stable release; dispatch reruns it for one tag.
+  workflow_call:
+    inputs:
+      release_tag:
+        description: GitHub Release tag to upload assets to, for example v0.13.3.
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       release_tag:
@@ -30,7 +34,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event.inputs.checkout_ref || github.ref }}
+          ref: ${{ inputs.checkout_ref || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
@@ -60,13 +64,8 @@ jobs:
         id: meta
         run: |
           set -euo pipefail
-          PACKAGE_VERSION="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
-          TAG_NAME="${{ github.event.release.tag_name || github.event.inputs.release_tag }}"
+          TAG_NAME="${{ inputs.release_tag }}"
           VERSION="${TAG_NAME#v}"
-          if [ "$VERSION" != "$PACKAGE_VERSION" ]; then
-            echo "Release tag $TAG_NAME does not match package.json version $PACKAGE_VERSION" >&2
-            exit 1
-          fi
           echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         shell: bash
