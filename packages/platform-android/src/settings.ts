@@ -181,13 +181,15 @@ export async function setAndroidSetting(
   }
 }
 
-/** The package an app-scoped setting lands on: a package passes through, a display name resolves. */
+/** The installed package an app-scoped setting lands on, by package or app name. */
 async function resolveAndroidSettingsPackage(
   device: DeviceInfo,
   setting: string,
   app: string,
 ): Promise<string> {
-  const resolved = await resolveSettingsApp(app, (target) => resolveAndroidApp(device, target));
+  const resolved = await resolveSettingsApp(app, (target) =>
+    resolveAndroidApp(device, target, { installedOnly: true }),
+  );
   if (resolved.type === 'intent') {
     throw new AppError(
       'INVALID_ARGS',
