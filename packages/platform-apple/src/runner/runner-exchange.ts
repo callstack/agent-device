@@ -32,11 +32,12 @@ import {
   enrichRunnerFailureFromLog,
   type RunnerLogAttempt,
 } from './runner-failure-diagnostics.ts';
-import { advanceRunnerSessionState, type RunnerSession } from './runner-session-types.ts';
 import {
+  advanceRunnerSessionState,
   RUNNER_IN_FLIGHT_LIFECYCLE_STATES,
   settleRunnerChargeForTerminalStatus,
-} from './runner-command-journal.ts';
+  type RunnerSession,
+} from './runner-session-types.ts';
 
 type RunnerExchangeSession = RunnerConnectionSession &
   Pick<

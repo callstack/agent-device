@@ -15,7 +15,7 @@ import { RUNNER_REPLY_LOST_REASON } from './runner-error-classification.ts';
 import {
   RUNNER_IN_FLIGHT_LIFECYCLE_STATES,
   settleRunnerChargeForTerminalStatus,
-} from './runner-command-journal.ts';
+} from './runner-session-types.ts';
 import type { AppleRunnerCommandOptions } from './runner-provider.ts';
 import { executeRunnerCommandWithSession, type RunnerSession } from './runner-session.ts';
 
