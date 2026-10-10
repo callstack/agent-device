@@ -96,9 +96,11 @@ for BUILD_TOOL in aapt2 d8 zipalign apksigner; do
   fi
 done
 
+# A prerelease shares its base release's code, so a nightly or -dev helper replaces an older
+# release; an equal code reinstalls by checksum.
 VERSION_CODE="$(
   printf '%s\n' "$VERSION" | awk -F. '
-    /^[0-9]+[.][0-9]+[.][0-9]+$/ {
+    /^[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?$/ {
       print ($1 * 1000000) + ($2 * 1000) + $3
       next
     }
