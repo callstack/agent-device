@@ -194,3 +194,29 @@ jobs:
     'a gate five levels down is still credited to the lane',
   );
 });
+
+test('a local reusable workflow is opened, so its gates belong to the calling lane', () => {
+  const lanes = planted({
+    '.github/workflows/planted.yml': `name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    uses: ./.github/workflows/called.yml
+`,
+    '.github/workflows/called.yml': `name: Called
+on:
+  workflow_call:
+jobs:
+  called:
+    steps:
+      - uses: ./.github/actions/run-gate
+        with:
+          gate: layering
+`,
+  });
+  const caller = lanes.find((lane) => lane.workflow === 'planted.yml');
+  assert.deepEqual(caller?.gates, ['layering']);
+  assert.deepEqual(caller?.unsupported, []);
+  assert.ok(caller?.uses.includes('.github/workflows/called.yml'));
+});
