@@ -2,7 +2,7 @@ import { emitRequestProgress } from '@agent-device/host-kit/request';
 import {
   formatDoctorCheckDetailLines,
   formatDoctorCheckSummaryLine,
-} from '../../core/doctor-output.ts';
+} from '@agent-device/host-kit/doctor-lines';
 import type { DoctorCheck, DoctorStatus } from '@agent-device/contracts/observability';
 
 export function summarizeDoctorStatus(checks: DoctorCheck[]): 'pass' | 'warn' | 'fail' {

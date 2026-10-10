@@ -9,7 +9,7 @@ import type {
 import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { asAppError, normalizeError } from '@agent-device/kernel/errors';
-import { readResolvedInteractionTarget } from '../../../core/interaction-outcome.ts';
+import { readResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
 import { publishAmbiguousMatchCandidateRefs } from '../../session-snapshot.ts';
 import { isSessionRecording } from '../../session-script-publication-capability.ts';
 import type { DaemonResponse } from '../../daemon-request.ts';

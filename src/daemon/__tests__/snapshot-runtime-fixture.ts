@@ -35,7 +35,7 @@ import {
 } from '@agent-device/kernel/device';
 import { applePlugin } from '@agent-device/platform-apple';
 import { textSizeSettingPayload } from '@agent-device/contracts/settings';
-import { type DispatchContext } from '../../core/dispatch-context.ts';
+import { type DispatchContext } from '../dispatch-context.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { isActiveProviderDevice } from '../provider-device-admission.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';

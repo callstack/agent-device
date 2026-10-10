@@ -14,7 +14,7 @@ import {
   stripInternalInteractionDiagnostics,
   transformInteractionResponseData,
   type InteractionResponseDataTransformCommand,
-} from '../../../core/interaction-response-data-transform.ts';
+} from './interaction-response-data-transform.ts';
 import { issueSettleRefs } from '../../session-snapshot.ts';
 import type { RecordedTargetCapture } from '@agent-device/selectors/target-evidence';
 import type { CaptureSnapshotForSession, InteractionRouteInput } from './types.ts';

@@ -11,7 +11,7 @@ import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pip
 import type { Point } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { isFillableType } from '@agent-device/contracts/snapshot';
-import { attachResolvedInteractionTarget } from '../../../core/interaction-outcome.ts';
+import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
 import { toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult, type RuntimeCommand } from '../../runtime-types.ts';
 import {

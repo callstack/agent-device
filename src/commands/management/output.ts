@@ -187,7 +187,7 @@ export async function doctorCliOutput(
   progress?: CommandProgressState,
 ): Promise<CliOutput> {
   const { formatDoctorCheckDetailLines, formatDoctorCheckSummaryLine } =
-    await import('../../core/doctor-output.ts');
+    await import('@agent-device/host-kit/doctor-lines');
   const data = result as Record<string, unknown>;
   const status = typeof data.status === 'string' ? data.status : 'unknown';
   const lines = [`Doctor: ${status}`];
