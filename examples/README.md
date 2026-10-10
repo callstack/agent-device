@@ -2,10 +2,12 @@
 
 Runnable, typechecked Node.js examples for the `agent-device` SDK surface exposed to Node
 consumers. Source of truth for the API itself is
-[Node.js API](../website/docs/docs/client-api.md). Two guards keep these files in sync with that
-doc: `src/__tests__/client-api-examples-drift.test.ts` checks the doc's subpath API manifest against
-what these examples import, and `test/integration/client-api-doc-snippets.test.ts` compiles every
-fenced TypeScript code block in the doc itself against the real `agent-device/*` sources.
+[Node.js API](../website/docs/docs/client-api.md) and
+[Build an integration](../website/docs/docs/build-an-integration.md). Two guards keep these files in
+sync with those docs: `src/__tests__/client-api-examples-drift.test.ts` checks the docs' subpath API
+manifests against what these examples import, and `test/integration/client-api-doc-snippets.test.ts`
+compiles every fenced TypeScript code block in the docs themselves against the real
+`agent-device/*` sources.
 
 ## sdk/
 

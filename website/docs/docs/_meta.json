@@ -90,6 +90,11 @@
       },
       {
         "type": "custom-link",
+        "label": "Build an integration",
+        "link": "/docs/build-an-integration"
+      },
+      {
+        "type": "custom-link",
         "label": "AI SDK",
         "link": "/docs/ai-sdk"
       },

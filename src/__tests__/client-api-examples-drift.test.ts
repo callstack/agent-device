@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 
 // Guards `examples/sdk/*.ts` against drifting away from the subpath API
-// manifest documented in `website/docs/docs/client-api.md` (the "Public
-// subpath API exposed for Node consumers" bullet list), in both directions:
+// manifest documented across the Node.js API docs. Each page lists the entry
+// points for its audience under "API reference"; their union is the published
+// surface. Checked in both directions:
 //   forward — every symbol an example imports from an `agent-device/...`
 //             subpath is one the doc's manifest lists for that subpath, so an
 //             example cannot start exercising undocumented API unnoticed.
@@ -17,12 +18,15 @@ import { describe, test } from 'vitest';
 //             demonstrate.
 // This mirrors command-doc-coverage.test.ts's markdown-scanning approach
 // rather than compiling snippets, since the manifest list is already a
-// structured, parseable statement of the subpath surface. The doc's own
+// structured, parseable statement of the subpath surface. The docs' own
 // fenced ```ts snippets are compiled separately, in the Node integration lane
 // (test/integration/client-api-doc-snippets.test.ts) — that check spawns a
 // real tsc Program and doesn't fit the unit suite's wall-clock budget.
 
-const CLIENT_API_DOC_PATH = 'website/docs/docs/client-api.md';
+const API_DOC_PATHS = [
+  'website/docs/docs/client-api.md',
+  'website/docs/docs/build-an-integration.md',
+] as const;
 const EXAMPLES_SDK_DIR = 'examples/sdk';
 const PACKAGE_JSON_PATH = 'package.json';
 
@@ -99,7 +103,13 @@ function listExampleFiles(dir: string): string[] {
     .map((entry) => path.join(dir, entry));
 }
 
-const manifest = parseSubpathManifest(fs.readFileSync(CLIENT_API_DOC_PATH, 'utf8'));
+const manifestsByDoc = new Map(
+  API_DOC_PATHS.map((docPath) => [docPath, parseSubpathManifest(fs.readFileSync(docPath, 'utf8'))]),
+);
+const manifest: SubpathManifest = new Map(
+  [...manifestsByDoc.values()].flatMap((docManifest) => [...docManifest]),
+);
+const API_DOCS_LABEL = API_DOC_PATHS.join(' + ');
 const exampleFiles = listExampleFiles(EXAMPLES_SDK_DIR);
 const packageExports = Object.keys(
   (JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8')) as { exports?: Record<string, unknown> })
@@ -111,24 +121,38 @@ const importsByFile = new Map(
   exampleFiles.map((file) => [file, extractImportedSymbols(fs.readFileSync(file, 'utf8'))]),
 );
 
-describe('examples/sdk vs client-api.md drift guard', () => {
-  test('client-api.md documents a subpath API manifest to check examples against', () => {
-    assert.ok(
-      manifest.size > 0,
-      `${CLIENT_API_DOC_PATH} did not yield a parseable subpath API manifest; ` +
-        'has the "API reference" entry-point list moved or changed format?',
+describe('examples/sdk vs Node.js API docs drift guard', () => {
+  test('each API doc documents a subpath API manifest to check examples against', () => {
+    for (const [docPath, docManifest] of manifestsByDoc) {
+      assert.ok(
+        docManifest.size > 0,
+        `${docPath} did not yield a parseable subpath API manifest; ` +
+          'has the "API reference" entry-point list moved or changed format?',
+      );
+    }
+  });
+
+  test('each entry point is documented on exactly one API doc', () => {
+    const duplicated = [...manifest.keys()].filter(
+      (subpath) =>
+        [...manifestsByDoc.values()].filter((docManifest) => docManifest.has(subpath)).length > 1,
+    );
+    assert.deepEqual(
+      duplicated,
+      [],
+      `Entry point(s) listed on more than one of ${API_DOCS_LABEL}: ${duplicated.join(', ')}`,
     );
   });
 
-  test('client-api.md documents every published package entry point', () => {
+  test('the API docs together document every published package entry point', () => {
     assert.deepEqual(
       [...manifest.keys()].sort(),
       packageExports,
-      `${CLIENT_API_DOC_PATH}'s public subpath manifest must match ${PACKAGE_JSON_PATH}#exports`,
+      `The union of ${API_DOCS_LABEL} subpath manifests must match ${PACKAGE_JSON_PATH}#exports`,
     );
   });
 
-  test('every symbol an example imports from agent-device is documented in client-api.md', () => {
+  test('every symbol an example imports from agent-device is documented in the API docs', () => {
     const undocumented: string[] = [];
     for (const [file, importsBySubpath] of importsByFile) {
       for (const [subpath, symbols] of importsBySubpath) {
@@ -143,8 +167,8 @@ describe('examples/sdk vs client-api.md drift guard', () => {
     assert.deepEqual(
       undocumented,
       [],
-      `Example(s) import symbols not listed in ${CLIENT_API_DOC_PATH}'s subpath API manifest: ` +
-        `${undocumented.join(', ')}. Update the doc's manifest, or fix the example if this was a typo.`,
+      `Example(s) import symbols not listed in the ${API_DOCS_LABEL} subpath API manifests: ` +
+        `${undocumented.join(', ')}. Update the owning doc's manifest, or fix the example if this was a typo.`,
     );
   });
 
