@@ -36,8 +36,10 @@ export async function withAndroidAppResolutionCacheInvalidated<Result>(
 
 type AndroidAppResolutionOptions = Readonly<{
   /**
-   * Answer only with a package installed on the device: a package-shaped target is checked against
-   * the installed packages instead of passing through, so an uninstalled one is refused.
+   * Answer with a package installed on the device now, or with the intent an alias names, which a
+   * caller that needs a package must refuse. A package-shaped target is checked against the
+   * installed packages instead of passing through, and no earlier resolution is reused, so an app
+   * uninstalled since is refused.
    */
   installedOnly?: boolean;
 }>;
@@ -56,7 +58,9 @@ export async function resolveAndroidApp(
   if (alias) return alias;
 
   const cacheScope = androidAppResolutionScope(device);
-  const cached = androidAppResolutionCache.get(cacheScope, trimmed);
+  const cached = options.installedOnly
+    ? undefined
+    : androidAppResolutionCache.get(cacheScope, trimmed);
   if (cached) return cached;
 
   const result = await runAndroidShell(device, ['pm', 'list', 'packages']);

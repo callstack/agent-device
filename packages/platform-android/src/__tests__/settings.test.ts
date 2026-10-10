@@ -123,6 +123,28 @@ test('setAndroidSetting permission grants an installed package as named', async 
   });
 });
 
+test('setAndroidSetting permission refuses a name resolved earlier whose package is gone', async () => {
+  let packages = INSTALLED_PACKAGES;
+  await withFakeAdb(
+    (args) => (args.join(' ') === 'shell pm list packages' ? packages : installedPackagesAdb(args)),
+    async ({ calls, device }) => {
+      await setAndroidSetting(device, 'permission', 'grant', 'Chrome', {
+        permissionTarget: 'camera',
+      });
+      packages = 'package:com.example.app\n';
+      calls.length = 0;
+      await assertRejectsAppError(
+        () =>
+          setAndroidSetting(device, 'permission', 'grant', 'Chrome', {
+            permissionTarget: 'camera',
+          }),
+        { code: 'APP_NOT_INSTALLED', reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled },
+      );
+      assert.deepEqual(calls, [['shell', 'pm', 'list', 'packages']]);
+    },
+  );
+});
+
 test('setAndroidSetting permission requires an app in session with the published reason', async () => {
   await withFakeAdb(installedPackagesAdb, async ({ calls, device }) => {
     await assertRejectsAppError(
