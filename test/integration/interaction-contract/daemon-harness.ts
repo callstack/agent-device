@@ -19,6 +19,16 @@ import {
 export const CONTRACT_APP = 'com.example.app';
 const CONTRACT_DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
 
+const SETTLING_CAPTURE_READS = 2;
+const SETTLING_CAPTURE_NODES = [
+  {
+    index: 0,
+    type: 'Application',
+    label: 'Example',
+    rect: { x: 0, y: 0, width: 400, height: 800 },
+  },
+];
+
 /**
  * Provider-transcript harness for contract scenarios whose path involves the
  * iOS runner (maestro-non-hittable-fallback) or that
@@ -32,7 +42,25 @@ export async function withIosContractDaemon(
   run: (daemon: ProviderScenarioHarness, transcript: ProviderScenarioTranscript) => Promise<void>,
   options: { saveScript?: boolean | string } = {},
 ): Promise<void> {
-  const transcript = createProviderTranscript(entries);
+  // The scripted open is not read back, so the first capture after it settles over a quiet pair of
+  // reads and pauses the direct selector path. A snapshot consumes that pair here, keeping each
+  // scenario's own conversation with the runner exactly as scripted.
+  const transcript = createProviderTranscript([
+    ...Array.from({ length: SETTLING_CAPTURE_READS }, () =>
+      runnerSnapshotEntry(SETTLING_CAPTURE_NODES),
+    ),
+    ...entries,
+  ]);
+  const scenarioTranscript: ProviderScenarioTranscript = {
+    get calls() {
+      return transcript.calls.slice(SETTLING_CAPTURE_READS);
+    },
+    get remaining() {
+      return transcript.remaining;
+    },
+    assertComplete: () => transcript.assertComplete(),
+    next: (command, request, scope) => transcript.next(command, request, scope),
+  };
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(transcript, 'ios.runner');
   const appleTool = createRecordingAppleToolProvider({
     simctl: simctlDeviceLifecycleHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
@@ -54,7 +82,8 @@ export async function withIosContractDaemon(
         ...(options.saveScript !== undefined ? { saveScript: options.saveScript } : {}),
       });
       assertRpcOk(open);
-      await run(daemon, transcript);
+      assertRpcOk(await daemon.callCommand('snapshot'));
+      await run(daemon, scenarioTranscript);
       transcript.assertComplete();
     },
   );

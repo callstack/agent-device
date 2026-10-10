@@ -109,10 +109,12 @@ function markPostGestureStabilization(
 }
 
 /**
- * Called once an app open has published its session. `unobservable` means the launch was still in
- * flight or no app process was found when the open returned, so the next capture runs the
- * quiet-window loop before a selector resolves against a layout that may still be moving (#3354). No baseline: the pre-open tree is a
- * different surface, so the open is never reported as having no effect.
+ * Called once an app open has published its session. A verdict other than `observable` means the
+ * open never read the launched app: the probe failed or could not identify it, the device has no
+ * observation path, or the app stayed unreadable. Nothing proved its layout at rest, so the next
+ * capture runs the quiet-window loop (#3354, #3367). An open that reports no verdict does not mark.
+ * No baseline: the pre-open tree is a different surface, so the open is never reported as having no
+ * effect.
  */
 export function markPostOpenStabilization(
   session: SessionState,
@@ -120,7 +122,7 @@ export function markPostOpenStabilization(
 ): void {
   if (!isApplePlatform(session.device.platform)) return;
   if (!supportsPostGestureStabilization(session.device)) return;
-  if (observation !== 'unobservable') return;
+  if (observation === undefined || observation === 'observable') return;
   session.postGestureStabilization = { action: 'open', positionals: [], markedAt: Date.now() };
 }
 

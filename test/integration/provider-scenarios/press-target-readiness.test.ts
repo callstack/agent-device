@@ -73,7 +73,13 @@ async function withPressReadinessDaemon(
     transcript: ReturnType<typeof createProviderTranscript>,
   ) => Promise<void>,
 ): Promise<void> {
-  const runnerTranscript = createProviderTranscript(entries);
+  // The scripted open is not read back, so the first capture after it settles over a quiet pair of
+  // reads. A snapshot consumes that pair here, keeping the scenario's own captures one-for-one.
+  const runnerTranscript = createProviderTranscript([
+    snapshotEntry(APPLICATION_ONLY_NODES),
+    snapshotEntry(APPLICATION_ONLY_NODES),
+    ...entries,
+  ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
     runnerTranscript,
     'ios.runner',
@@ -94,6 +100,7 @@ async function withPressReadinessDaemon(
     async (daemon) => {
       const open = await daemon.callCommand('open', [APP], { platform: 'ios', udid: DEVICE_ID });
       assertRpcOk(open);
+      assertRpcOk(await daemon.callCommand('snapshot'));
       await run(daemon, runnerTranscript);
     },
   );

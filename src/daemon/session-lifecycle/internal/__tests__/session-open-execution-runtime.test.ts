@@ -491,6 +491,12 @@ test('a fresh iOS open that could not observe its app leaves the next capture to
   expect(session?.postGestureStabilization?.action).toBe('open');
 });
 
+test('a fresh iOS open whose observation probe failed leaves the next capture to settle', async () => {
+  const session = await openReportingObservation('probe-failed-open', 'probe-failed');
+
+  expect(session?.postGestureStabilization?.action).toBe('open');
+});
+
 test('a fresh iOS open that observed its app leaves nothing pending', async () => {
   const session = await openReportingObservation('observed-open', 'observable');
 

@@ -109,18 +109,25 @@ test('an Apple open that could not observe its app marks stabilization without a
   assert.equal(session.postGestureStabilization?.baselineSignature, undefined);
 });
 
-test('only an open that saw the launch still in flight marks stabilization', () => {
-  const quiet = (
-    ['observable', 'probe-failed', 'app-unidentified', 'not-eligible', undefined] as const
+test('every open verdict other than observable marks stabilization', () => {
+  const pending = (
+    [
+      'unobservable',
+      'probe-failed',
+      'app-unidentified',
+      'not-eligible',
+      'observable',
+      undefined,
+    ] as const
   ).map((observation) => {
     const session = makeSession('ios');
     markPostOpenStabilization(session, observation);
     return isPostGestureStabilizationPending(session);
   });
   const android = makeSession('android');
-  markPostOpenStabilization(android, 'unobservable');
+  markPostOpenStabilization(android, 'probe-failed');
 
-  assert.deepEqual(quiet, [false, false, false, false, false]);
+  assert.deepEqual(pending, [true, true, true, true, false, false]);
   assert.equal(isPostGestureStabilizationPending(android), false);
 });
 
