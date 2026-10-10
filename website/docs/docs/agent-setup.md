@@ -29,12 +29,26 @@ Skills come from the GitHub repository, not the npm package. The [agent-device s
 
 ## Recommended agent rule
 
-Add this as a project rule or custom instruction if your agent client supports one:
+Add this rule to your agent client's project rules or custom instructions. [Set up your client](#set-up-your-agent-client) shows where the file goes for each client.
 
 ```text
-Use agent-device only for app/device automation tasks. For a normal app-driving task, start immediately. Do not probe first with `--help`, `--version`, `devices`, `appstate`, `snapshot`, or `screenshot`; open the requested app in the foreground and continue from its initial interactive snapshot. For TV, Fire TV, or Vega OS tasks, read `agent-device help tv`. For exploratory QA, read `agent-device help dogfood`. For logs, network, audio, traces, or runtime failures, read `agent-device help debugging`. For React Native component trees, props/state/hooks, slow renders, or rerenders, read `agent-device help react-devtools`. For React Native JavaScript heap growth, heap snapshots, allocation hotspots, or retained-object leaks, read `agent-device help cdp`. For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to React DevTools or debugging evidence, read `agent-device help react-native`.
+Use agent-device only for app/device automation tasks.
+For a normal app-driving task, start immediately. Do not probe first with `--help`, `--version`, `devices`, `appstate`, `snapshot`, or `screenshot`; open the requested app in the foreground and continue from its initial interactive snapshot.
+For TV, Fire TV, or Vega OS tasks, read `agent-device help tv`.
+For exploratory QA, read `agent-device help dogfood`.
+For logs, network, audio, traces, or runtime failures, read `agent-device help debugging`.
+For React Native component trees, props/state/hooks, slow renders, or rerenders, read `agent-device help react-devtools`.
+For React Native JavaScript heap growth, heap snapshots, allocation hotspots, or retained-object leaks, read `agent-device help cdp`.
+For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to React DevTools or debugging evidence, read `agent-device help react-native`.
 
-Use MCP tools or the CLI in the integrated terminal. If `agent-device` is not on PATH but the user installed it globally in another shell, resolve the command the same way the user would from a normal terminal session and run that absolute path instead. This may require inspecting shell startup behavior or package-manager/global bin locations; do not assume the agent process `PATH` is the user's `PATH`. Do not silently fall back to `npx -y agent-device@latest`; ask or use an exact version. MCP exposes structured tools backed by the agent-device client; it does not expose generic shell execution. Prefer `open -> snapshot -i -> act -> re-snapshot -> verify -> close` where the target supports capture and selectors; otherwise follow target-specific help. Use current refs such as `@e3` for exploration and selectors for durable replay. Keep mutating commands against one session serial. Capture screenshots, logs, network, audio, perf, traces, recordings, and `.ad` replay scripts only when they add evidence.
+Use MCP tools or the CLI in the integrated terminal.
+If `agent-device` is not on PATH but the user installed it globally in another shell, resolve the command the same way the user would from a normal terminal session and run that absolute path instead. This may require inspecting shell startup behavior or package-manager/global bin locations; do not assume the agent process `PATH` is the user's `PATH`.
+Do not silently fall back to `npx -y agent-device@latest`; ask or use an exact version.
+MCP exposes structured tools backed by the agent-device client; it does not expose generic shell execution.
+Prefer `open -> snapshot -i -> act -> re-snapshot -> verify -> close` where the target supports capture and selectors; otherwise follow target-specific help.
+Use current refs such as `@e3` for exploration and selectors for durable replay.
+Keep mutating commands against one session serial.
+Capture screenshots, logs, network, audio, perf, traces, recordings, and `.ad` replay scripts only when they add evidence.
 ```
 
 ## MCP server
@@ -81,13 +95,26 @@ In MCP registries, the server is listed as `io.github.callstack/agent-device` (n
 
 Some agent clients run commands with a different `PATH` than your normal shell, so a global install that works in your terminal can be missing in the agent's terminal or MCP server. Run `command -v agent-device` in your own terminal and give the agent that absolute path, or use it as the MCP server `command`. If the path is under a version manager or a package-manager global bin directory, check your shell startup files for how that directory gets on `PATH`; the agent client may not load them.
 
+## Set up your agent client
+
+Each client reads the [recommended agent rule](#recommended-agent-rule) from its own location:
+
+| Client | Where the rule goes | Client-specific wrapper |
+| --- | --- | --- |
+| Cursor | `.cursor/rules/agent-device.mdc` | Required `.mdc` frontmatter above the rule |
+| Codex | `AGENTS.md` in the project root | None |
+| Claude Code | `CLAUDE.md` in the project root | None; an `# agent-device` heading keeps it separate from other instructions |
+| Windsurf, Cline, Goose, and others | The client's project rules or custom instructions | Whatever the client requires for a rules file |
+
+The sections below cover each client, including MCP setup.
+
 ## Cursor
 
 Cursor can use the CLI or MCP tools. Use the CLI when you want every command visible in the terminal. Add MCP when you want Cursor Agent to discover `agent-device` tools directly from chat.
 
 ### Cursor: use the CLI
 
-Create a project rule:
+Create the rule file with the frontmatter Cursor requires:
 
 ```bash
 mkdir -p .cursor/rules
@@ -97,23 +124,10 @@ description: Use agent-device for app and device automation
 alwaysApply: true
 ---
 
-Use agent-device only for app/device automation tasks.
-For a normal app-driving task, start immediately. Do not probe first with `--help`, `--version`, `devices`, `appstate`, `snapshot`, or `screenshot`; open the requested app in the foreground and continue from its initial interactive snapshot.
-For TV, Fire TV, or Vega OS tasks, read `agent-device help tv`.
-For exploratory QA, read `agent-device help dogfood`.
-For logs, network, audio, traces, or runtime failures, read `agent-device help debugging`.
-For React Native component trees, props/state/hooks, slow renders, or rerenders, read `agent-device help react-devtools`.
-For React Native JavaScript heap growth, heap snapshots, or retained-object leaks, read `agent-device help cdp`.
-For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to React DevTools or debugging evidence, read `agent-device help react-native`.
-
-Use the CLI in Cursor's integrated terminal.
-If `agent-device` is not on PATH but the user installed it globally in another shell, resolve the absolute binary path instead of using `npx -y agent-device@latest`.
-Prefer `open -> snapshot -i -> act -> re-snapshot -> verify -> close` where supported; otherwise follow target-specific help.
-Keep mutating commands against one session serial.
 EOF
 ```
 
-Then ask Cursor Agent to run:
+Open `.cursor/rules/agent-device.mdc` and paste the [recommended agent rule](#recommended-agent-rule) below the closing `---`. Then ask Cursor Agent to run:
 
 ```bash
 agent-device open <app-or-url> --platform ios --foreground
@@ -158,7 +172,7 @@ If the MCP server fails to start because Cursor can't find the global binary, us
 
 ## Codex
 
-Put the [recommended rule](#recommended-agent-rule) in `AGENTS.md` or the project instructions, then let Codex run `agent-device` in the terminal:
+Paste the [recommended agent rule](#recommended-agent-rule) into `AGENTS.md` in the project root, or into the project instructions, then let Codex run `agent-device` in the terminal:
 
 ```bash
 agent-device open <app-or-url> --platform ios --foreground
@@ -174,27 +188,7 @@ Claude Code can use `agent-device` from the terminal or from the VS Code extensi
 
 ### Claude Code: use the CLI
 
-Put this in `CLAUDE.md`:
-
-```bash
-cat > CLAUDE.md <<'EOF'
-# agent-device
-
-Use agent-device only for app/device automation tasks.
-For a normal app-driving task, start immediately. Do not probe first with `--help`, `--version`, `devices`, `appstate`, `snapshot`, or `screenshot`; open the requested app in the foreground and continue from its initial interactive snapshot.
-For TV, Fire TV, or Vega OS tasks, read `agent-device help tv`.
-For exploratory QA, read `agent-device help dogfood`.
-For logs, network, audio, traces, or runtime failures, read `agent-device help debugging`.
-For React Native component trees, props/state/hooks, slow renders, or rerenders, read `agent-device help react-devtools`.
-For React Native JavaScript heap growth, heap snapshots, or retained-object leaks, read `agent-device help cdp`.
-For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to React DevTools or debugging evidence, read `agent-device help react-native`.
-
-Use the CLI in the integrated terminal.
-If `agent-device` is not on PATH but the user installed it globally in another shell, resolve the absolute binary path instead of using `npx -y agent-device@latest`.
-Prefer `open -> snapshot -i -> act -> re-snapshot -> verify -> close` where supported; otherwise follow target-specific help.
-Keep mutating commands against one session serial.
-EOF
-```
+Open `CLAUDE.md` in the project root, creating it if it doesn't exist. Add an `# agent-device` heading and paste the [recommended agent rule](#recommended-agent-rule) below it. Keep any instructions already in the file.
 
 Then ask Claude Code to run:
 
@@ -242,7 +236,7 @@ You can still run CLI commands in the integrated terminal for long-running or ma
 
 If the client supports `mcpServers`, use the [MCP server](#mcp-server) configuration, then tell the agent to use MCP tools or terminal CLI commands for device work.
 
-If the client supports project rules or custom instructions, add the [recommended agent rule](#recommended-agent-rule). If it doesn't, ask the agent to open the requested app and continue from the initial interactive snapshot; point it to a help topic only when the task is specialized or a command is unclear.
+If the client supports project rules or custom instructions, paste the [recommended agent rule](#recommended-agent-rule) there, inside any wrapper the client requires for a rules file. If it doesn't, ask the agent to open the requested app and continue from the initial interactive snapshot; point it to a help topic only when the task is specialized or a command is unclear.
 
 ## Related pages
 
