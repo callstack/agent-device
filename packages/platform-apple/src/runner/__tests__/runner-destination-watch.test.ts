@@ -347,20 +347,21 @@ test('closing the watch detaches it so a later runner death stops nothing', asyn
   assert.equal(onStop.mock.calls.length, 0);
 });
 
-test('a second retention window re-arms the existing watch instead of stacking another', async () => {
+test('a second retention window replaces the existing watch instead of stacking another', async () => {
   const listener = await listen();
   stubHost({ boots: [{ observed: true, bootedAtMs: Date.now() + 60_000 }] });
   const first = watchParams(listener.port);
   const second = watchParams(listener.port);
 
   attachRunnerDestinationWatch(first.params);
-  const socket = await listener.nextConnection();
+  const firstSocket = await listener.nextConnection();
   attachRunnerDestinationWatch(second.params);
-  socket.destroy();
+  const secondSocket = await listener.nextConnection();
+  firstSocket.destroy();
+  secondSocket.destroy();
   await vi.waitFor(() => assert.equal(second.onStop.mock.calls.length, 1));
 
   assert.equal(first.onStop.mock.calls.length, 0);
-  assert.equal(listener.connections.length, 0);
 });
 
 test('a handler resuming after its window was replaced leaves the newer watch tracked', async () => {
@@ -373,13 +374,16 @@ test('a handler resuming after its window was replaced leaves the newer watch tr
   await new Promise((resolve) => setTimeout(resolve, 10));
 
   closeRunnerDestinationWatch(DEVICE.id);
-  const second = watchParams(listener.port);
-  attachRunnerDestinationWatch(second.params);
-  await listener.nextConnection();
-  await new Promise((resolve) => setTimeout(resolve, 120));
   attachRunnerDestinationWatch(watchParams(listener.port).params);
-  await new Promise((resolve) => setTimeout(resolve, 30));
+  const newer = await listener.nextConnection();
+  let newerClosed = false;
+  newer.on('close', () => {
+    newerClosed = true;
+  });
+  await new Promise((resolve) => setTimeout(resolve, 120));
+  assert.equal(newerClosed, false);
 
+  closeRunnerDestinationWatch(DEVICE.id);
+  await vi.waitFor(() => assert.equal(newerClosed, true));
   assert.equal(first.onStop.mock.calls.length, 0);
-  assert.equal(listener.connections.length, 0);
 });

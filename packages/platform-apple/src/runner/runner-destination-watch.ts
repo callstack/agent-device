@@ -109,29 +109,37 @@ const pendingWarmLossNotices = new Map<string, RunnerWarmLossNotice>();
  * reboot starts within ~1s of the shutdown returning. One bounded re-read per event (never a
  * sample of a quiet runner) lets that churn settle so a mid-shutdown read cannot misclassify a
  * crash. A stop that lands after the reboot has finished still powers the device back off.
+ *
+ * The confirm delay, the recheck delay and the attach-retry budget are fixed in production; whole
+ * milliseconds in `AGENT_DEVICE_IOS_RUNNER_DESTINATION_CONFIRM_MS`, `..._RECHECK_MS` and
+ * `..._ATTACH_RETRY_MS` shorten them so tests do not wait production time.
  */
-function resolveConfirmDelayMs(env: NodeJS.ProcessEnv = process.env): number {
-  const raw = env.AGENT_DEVICE_IOS_RUNNER_DESTINATION_CONFIRM_MS?.trim();
-  const parsed = raw ? Number(raw) : Number.NaN;
-  return Number.isFinite(parsed) && parsed >= 0
-    ? Math.floor(parsed)
-    : DESTINATION_CONFIRM_DEFAULT_MS;
+function resolveConfirmDelayMs(): number {
+  return readDurationEnvMs(
+    'AGENT_DEVICE_IOS_RUNNER_DESTINATION_CONFIRM_MS',
+    DESTINATION_CONFIRM_DEFAULT_MS,
+  );
 }
 
-function resolveRecheckDelayMs(env: NodeJS.ProcessEnv = process.env): number {
-  const raw = env.AGENT_DEVICE_IOS_RUNNER_DESTINATION_RECHECK_MS?.trim();
-  const parsed = raw ? Number(raw) : Number.NaN;
-  return Number.isFinite(parsed) && parsed >= 0
-    ? Math.floor(parsed)
-    : DESTINATION_RECHECK_DEFAULT_MS;
+function resolveRecheckDelayMs(): number {
+  return readDurationEnvMs(
+    'AGENT_DEVICE_IOS_RUNNER_DESTINATION_RECHECK_MS',
+    DESTINATION_RECHECK_DEFAULT_MS,
+  );
 }
 
-function resolveAttachRetryBudgetMs(env: NodeJS.ProcessEnv = process.env): number {
-  const raw = env.AGENT_DEVICE_IOS_RUNNER_DESTINATION_ATTACH_RETRY_MS?.trim();
+function resolveAttachRetryBudgetMs(): number {
+  return readDurationEnvMs(
+    'AGENT_DEVICE_IOS_RUNNER_DESTINATION_ATTACH_RETRY_MS',
+    ATTACH_RETRY_BUDGET_DEFAULT_MS,
+  );
+}
+
+/** A non-negative whole-millisecond override; anything else keeps the default. */
+function readDurationEnvMs(key: string, fallbackMs: number): number {
+  const raw = process.env[key]?.trim();
   const parsed = raw ? Number(raw) : Number.NaN;
-  return Number.isFinite(parsed) && parsed >= 0
-    ? Math.floor(parsed)
-    : ATTACH_RETRY_BUDGET_DEFAULT_MS;
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallbackMs;
 }
 
 function delay(ms: number): Promise<void> {
@@ -161,21 +169,16 @@ export type RunnerDestinationWatchParams = {
 };
 
 /**
- * Attaches the watcher for one retention window. Idempotent per device: a fresh retention window
- * re-arms the existing watch rather than stacking another. `isArmed` is consulted again at every
+ * Attaches the watcher for one retention window. A device has one watch: a fresh window replaces
+ * the existing one rather than stacking another. `isArmed` is consulted again at every
  * decision, so an attach that lands after its retention window already ended arms nothing that
  * can act.
  */
 export function attachRunnerDestinationWatch(params: RunnerDestinationWatchParams): void {
+  // One watch per device, and a new attach replaces rather than amends: nothing carries over
+  // from a window another path already ended, so no caller has to have detached first.
   const existing = destinationWatches.get(params.device.id);
-  if (existing && !existing.detached) {
-    existing.sessionId = params.sessionId;
-    existing.runnerPid = params.runnerPid;
-    existing.armedAtMs = Date.now();
-    existing.isArmed = params.isArmed;
-    existing.onStop = params.onStop;
-    return;
-  }
+  if (existing) detachWatch(existing);
   const watch: DestinationWatch = {
     device: params.device,
     sessionId: params.sessionId,

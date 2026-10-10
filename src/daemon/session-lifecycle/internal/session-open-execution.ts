@@ -147,8 +147,8 @@ function warmRunnerLossWarning(notice: RunnerWarmLossNotice): string {
       ? 'the simulator was shut down externally while it was retained, so the runner was stopped before it could boot the simulator again'
       : 'it stopped answering while it was retained';
   return (
-    `The warm iOS runner left by the previous close was stopped: ${cause}. ` +
-    `This open started a fresh runner. reason=${notice.reason}`
+    `The warm iOS runner left by a previous close was stopped at ${new Date(notice.atMs).toISOString()}: ${cause}. ` +
+    `reason=${notice.reason}`
   );
 }
 

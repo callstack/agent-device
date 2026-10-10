@@ -43,7 +43,7 @@ import {
   getRunnerDeviceClaimAuthorityProbe,
   getRunnerLeaseOwnerStateDir,
 } from './runner-owner-state.ts';
-import { buildSimctlArgsForDevice, readSimctlDeviceState, simulatorAddressFor } from './simctl.ts';
+import { buildSimctlArgsForDevice, simulatorAddressFor } from './simctl.ts';
 import {
   hasScopedAppleToolProvider,
   readApplePlistJson,
@@ -114,11 +114,8 @@ export const appleRunnerHost: AppleRunnerHost = {
   hasDeviceClaimAuthority: (device) => getRunnerDeviceClaimAuthorityProbe()?.(device) ?? false,
   observeSimulatorState: async (device) => {
     try {
-      const result = await runXcrun(buildSimctlArgsForDevice(device, ['list', 'devices', '-j']), {
-        allowFailure: true,
-        timeoutMs: SIMULATOR_STATE_PROBE_TIMEOUT_MS,
-      });
-      return result.exitCode === 0 ? readSimctlDeviceState(result.stdout, device.id) : null;
+      const { getSimulatorState } = await import('./simulator.ts');
+      return await getSimulatorState(device, { timeoutMs: SIMULATOR_STATE_PROBE_TIMEOUT_MS });
     } catch {
       return null;
     }
