@@ -11,14 +11,12 @@ import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runti
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { currentManagedDeviceScope } from '@agent-device/provision-kit/managed-device-scope';
 import { ensureAndroidReady } from '../readiness/runtime.ts';
 import {
   inferAndroidAppName,
   installAndroidArtifact,
   pushAndroidNotification,
   uninstallAndroidPackage,
-  assertManagedAndroidInstallablePath,
 } from './native.ts';
 
 const available = Object.freeze({ available: true } as const);
@@ -71,19 +69,12 @@ async function deployAndroidApp(
     return await host.androidDeployment.withInvalidatedAppResolutionCache(device, async () => {
       let artifact: MaterializedAppSource | undefined;
       try {
-        if (currentManagedDeviceScope()) {
-          artifact = await host.androidDeployment.prepareArtifact(
-            { source: { kind: 'path', path: input.appPath } },
-            { resolveIdentity: false, signal },
-          );
-          assertManagedAndroidInstallablePath(artifact.installablePath);
-        }
         if (device.booted !== true) {
           await ensureAndroidReady(host, device, { headless: false }, signal);
         }
         const packageName = await host.androidDeployment.resolveAppPackage(device, input.app);
         await uninstallAndroidPackage(host, device, packageName, signal);
-        artifact ??= await host.androidDeployment.prepareArtifact(
+        artifact = await host.androidDeployment.prepareArtifact(
           { source: { kind: 'path', path: input.appPath } },
           { resolveIdentity: false, signal },
         );
@@ -100,17 +91,10 @@ async function deployAndroidApp(
   // reviving a daemon readiness adapter.
   let artifact: MaterializedAppSource | undefined;
   try {
-    if (currentManagedDeviceScope()) {
-      artifact = await host.androidDeployment.prepareArtifact(
-        { source: { kind: 'path', path: input.appPath } },
-        { resolveIdentity: true, signal },
-      );
-      assertManagedAndroidInstallablePath(artifact.installablePath);
-    }
     if (device.booted !== true) {
       await ensureAndroidReady(host, device, { headless: false }, signal);
     }
-    artifact ??= await host.androidDeployment.prepareArtifact(
+    artifact = await host.androidDeployment.prepareArtifact(
       { source: { kind: 'path', path: input.appPath } },
       { resolveIdentity: true, signal },
     );

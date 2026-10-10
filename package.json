@@ -297,7 +297,6 @@
     "@agent-device/host-kit": "workspace:*",
     "@agent-device/kernel": "workspace:*",
     "@agent-device/maestro": "workspace:*",
-    "@agent-device/managed-allocation": "workspace:*",
     "@agent-device/platform-android": "workspace:*",
     "@agent-device/platform-apple": "workspace:*",
     "@agent-device/platform-harmonyos": "workspace:*",

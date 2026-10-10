@@ -61,11 +61,7 @@ import {
 import type { TakenOverDeviceClaim } from '../../device/device-claim-reboot.ts';
 import { deviceBootObservation } from '../../../platform-runtime-device-boot.ts';
 import { appendResponseWarning } from './session-open-warnings.ts';
-import {
-  buildAllocatorHeldRefusal,
-  buildDeviceClaimConflictError,
-} from '../../device/device-claim-conflict.ts';
-import { requireAllocatorHeldDeviceClaim } from '../../device/device-claim-allocator.ts';
+import { buildDeviceClaimConflictError } from '../../device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../device/device-claim-rule.ts';
 import { errorResponse, type DaemonFailureResponse } from '@agent-device/kernel/contracts';
 
@@ -410,31 +406,11 @@ async function acquireDeviceClaimForOwner(params: {
   sessionName: string;
   sessionStore: SessionStore;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
-}): Promise<
-  | DeviceClaimAcquireResult
-  | { status: 'not-required' }
-  | { status: 'refused'; response: DaemonResponse }
-> {
+}): Promise<DeviceClaimAcquireResult | { status: 'not-required' }> {
   const { req, device, owner, sessionName, sessionStore, reconcileOrphanedDeviceClaim } = params;
   switch (deviceClaimRuleForOwner(owner, req.internal?.admittedLease)) {
     case 'none':
       return { status: 'not-required' };
-    case 'allocator-held': {
-      // Session open binds ordinarily, so this literal is the truth of the route and not a
-      // placeholder: the Host open route replaces it with the request's exact intent when it
-      // lands. Until then a managed owner reaches here without a fence and is always refused.
-      const response = buildAllocatorHeldRefusal(
-        device,
-        owner,
-        requireAllocatorHeldDeviceClaim({
-          device,
-          owner,
-          stateDir: sessionStore.resolveDaemonStateDir(),
-          intent: { kind: 'ordinary' },
-        }),
-      );
-      return response ? { status: 'refused', response } : { status: 'not-required' };
-    }
     case 'ordinary':
       return await acquireDeviceClaim({
         device,
@@ -494,7 +470,6 @@ export async function openNewSessionWithDeviceClaim(params: {
       type: 'response',
       response: buildDeviceClaimConflictError(device, ownerClaim.conflict),
     };
-  if (ownerClaim.status === 'refused') return { type: 'response', response: ownerClaim.response };
   const deviceClaim = ownerClaim.status === 'acquired' ? ownerClaim.ownership : undefined;
   const tookOverDeviceClaim = ownerClaim.status === 'acquired' ? ownerClaim.tookOver : undefined;
   const effects: NewSessionOpenEffects = { mayHaveStarted: false };

@@ -277,11 +277,9 @@ export function createUnavailablePlatformRuntimeFacts(
   });
 }
 
-/** A managed local owner executes through its local family, so it reports the local mode. */
 function providerModeForOwner(owner: RuntimeOwnerRef): RuntimeProviderMode {
   switch (owner.kind) {
     case 'local-family':
-    case 'managed-local':
       return 'local';
     case 'provider-runtime':
       return 'provider-runtime';

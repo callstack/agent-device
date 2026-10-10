@@ -3,7 +3,6 @@ import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runti
 import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { emitRequestProgress } from '@agent-device/host-kit/request';
-import { delegateManagedDeviceReadiness } from '@agent-device/provision-kit/managed-device-scope';
 import { scopeSimctlArgsForDevice } from '../core/simctl.ts';
 import { getSimulatorState } from '../simulator-state.ts';
 
@@ -37,7 +36,6 @@ export async function ensureAppleReady(
   options: AppleReadinessOptions = {},
 ): Promise<DeviceInfo> {
   signal.throwIfAborted();
-  if (await delegateManagedDeviceReadiness(device)) return { ...device, booted: true };
   if (isMacOs(device)) return { ...device, booted: true };
   if (device.kind === 'device') {
     await host.deviceReadiness.applePhysical.ensureConnected(device, signal);

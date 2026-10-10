@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import {
-  localRuntimeOwner,
-  managedLocalRuntimeOwner,
-  providerRuntimeOwner,
-} from './platform-runtime.ts';
+import { localRuntimeOwner, providerRuntimeOwner } from './platform-runtime.ts';
 import { applicationLifecycleOperationFacts } from './application-lifecycle-runtime.ts';
 import {
   createUnavailablePlatformRuntimeBinding,
@@ -110,15 +106,10 @@ test('generic unavailable binding preserves exact provider ownership and mode', 
   await binding[Symbol.asyncDispose]();
 });
 
-test('generic unavailable facts report provider mode local for a managed local owner', () => {
-  const owner = managedLocalRuntimeOwner('sim-a');
+test('generic unavailable facts report provider mode local for a local family owner', () => {
+  const owner = localRuntimeOwner('linux');
   assert.equal(
     createUnavailablePlatformRuntimeFacts(device, owner, UNAVAILABLE_FACTS).device.providerMode,
-    'local',
-  );
-  assert.equal(
-    createUnavailablePlatformRuntimeFacts(device, localRuntimeOwner('linux'), UNAVAILABLE_FACTS)
-      .device.providerMode,
     'local',
   );
   assert.equal(

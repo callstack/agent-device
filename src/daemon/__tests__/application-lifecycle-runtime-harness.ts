@@ -8,7 +8,6 @@ import {
   type DeviceBinding,
   type RuntimeFacts,
   localRuntimeOwner,
-  managedLocalRuntimeOwner,
   narrowDeviceBinding,
   providerRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
@@ -115,13 +114,6 @@ export const inspectLifecycleRuntimeFacts: InspectDeviceRuntimeFacts = async (de
 
 export const bindLifecycleRuntime: BindDeviceRuntime = async (device, use) =>
   narrowDeviceBinding(await lifecycleBinding(device), use);
-
-/** The same local lifecycle mechanics under a managed local owner that holds no allocator-held claim. */
-export const bindManagedLocalLifecycleRuntime: BindDeviceRuntime = async (device, use) =>
-  narrowDeviceBinding(
-    { ...(await lifecycleBinding(device)), owner: managedLocalRuntimeOwner('fixture-allocator') },
-    use,
-  );
 
 function providerLifecycleBinding(device: DeviceInfo): DeviceBinding<PlatformRuntimeOperations> {
   const facts = providerLifecycleRuntimeFacts(device);

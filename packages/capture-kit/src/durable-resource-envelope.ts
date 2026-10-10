@@ -20,7 +20,6 @@ import {
   type ResourceOwnershipFence,
   type RuntimeOwnerRef,
   localRuntimeOwner,
-  managedLocalRuntimeOwner,
   providerRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime';
 import { freezeJsonObject, isBoundedJsonObject } from './durable-json.ts';
@@ -121,9 +120,6 @@ function decodeRuntimeOwnerRef(value: unknown): RuntimeOwnerRef | null {
   if (!isObject(value)) return null;
   if (value.kind === 'local-family' && isPlatform(value.family)) {
     return localRuntimeOwner(value.family);
-  }
-  if (value.kind === 'managed-local' && isNonEmptyString(value.instance)) {
-    return managedLocalRuntimeOwner(value.instance);
   }
   if (
     value.kind === 'provider-runtime' &&

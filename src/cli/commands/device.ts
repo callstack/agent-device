@@ -113,16 +113,10 @@ function renderReleaseOutcomeLine(outcome: DeviceClaimStaleReleaseOutcome): stri
 }
 
 function renderOutcomeOwner(outcome: DeviceClaimStaleReleaseOutcome): string {
-  if (outcome.allocator) {
-    return ` allocator=${outcome.allocator.instanceId} incarnation=${outcome.allocator.identityIncarnationId}`;
-  }
   return outcome.session ? ` session=${outcome.session} workspace=${outcome.workspace}` : '';
 }
 
 function releaseRefusalHint(outcome: DeviceClaimStaleReleaseOutcome): string {
-  if (outcome.classification === 'allocator-held') {
-    return 'held by its managed-device allocator; it is cleared only after the allocator proves the identity removed.';
-  }
   if (outcome.classification === 'live' || outcome.classification === 'owner-state-dir-gone') {
     return outcome.stateDir
       ? `close the owning session from its workspace, or stop its daemon: agent-device daemon stop --state-dir ${shellQuoteIfNeeded(outcome.stateDir)}`
@@ -132,7 +126,7 @@ function releaseRefusalHint(outcome: DeviceClaimStaleReleaseOutcome): string {
 }
 
 function serializeClaim(entry: InspectedDeviceClaim): Record<string, unknown> {
-  const record = entry.claim ?? entry.allocatorClaim;
+  const record = entry.claim;
   return {
     ...(entry.deviceKey ? { deviceKey: entry.deviceKey } : {}),
     ...(!record ? { fileName: entry.fileName } : {}),
@@ -146,15 +140,6 @@ function serializeClaim(entry: InspectedDeviceClaim): Record<string, unknown> {
             stateDir: entry.claim.stateDir,
             pid: entry.claim.ownerPid,
             startTime: entry.claim.ownerStartTime,
-          },
-        }
-      : {}),
-    ...(entry.allocatorClaim
-      ? {
-          owner: {
-            kind: 'allocator',
-            stateDir: entry.allocatorClaim.stateDir,
-            allocator: entry.allocatorClaim.allocator,
           },
         }
       : {}),
@@ -220,14 +205,8 @@ function renderClaimLabel(claim: Record<string, unknown>): string {
 
 function renderClaimOwner(value: unknown): string {
   if (!value || typeof value !== 'object') return '';
-  const owner = value as {
-    session?: string;
-    workspace?: string;
-    stateDir?: string;
-    allocator?: { instanceId?: string; identityIncarnationId?: string };
-  };
-  if (!owner.allocator) return ` session=${owner.session} workspace=${owner.workspace}`;
-  return ` allocator=${owner.allocator.instanceId} incarnation=${owner.allocator.identityIncarnationId} installation=${owner.stateDir}`;
+  const owner = value as { session?: string; workspace?: string };
+  return ` session=${owner.session} workspace=${owner.workspace}`;
 }
 
 function buildStaleInspectionCommand(

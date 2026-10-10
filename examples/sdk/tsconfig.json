@@ -43,7 +43,6 @@
     { "path": "../../packages/host-kit" },
     { "path": "../../packages/kernel" },
     { "path": "../../packages/maestro" },
-    { "path": "../../packages/managed-allocation" },
     { "path": "../../packages/platform-android" },
     { "path": "../../packages/platform-apple" },
     { "path": "../../packages/platform-harmonyos" },

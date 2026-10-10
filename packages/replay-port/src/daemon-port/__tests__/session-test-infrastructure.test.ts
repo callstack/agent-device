@@ -123,17 +123,3 @@ test('isReplayInfrastructureFailure rejects normal replay failures', () => {
 
   assert.equal(isReplayInfrastructureFailure(response), false);
 });
-
-test('isReplayInfrastructureFailure does not retry a missing allocator-held claim as infrastructure', () => {
-  const response: DaemonResponse = {
-    ok: false,
-    error: {
-      code: 'COMMAND_FAILED',
-      message:
-        'android device emulator-5554 is a managed identity with no allocator-held execution claim for this installation.',
-      details: { reason: 'allocator-claim-missing', retriable: false },
-    },
-  };
-
-  assert.equal(isReplayInfrastructureFailure(response), false);
-});

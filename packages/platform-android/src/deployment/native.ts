@@ -4,7 +4,6 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceShellArgv, type ShellWord } from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import path from 'node:path';
-import { currentManagedDeviceScope } from '@agent-device/provision-kit/managed-device-scope';
 
 export async function installAndroidArtifact(
   host: PlatformRuntimeHost,
@@ -13,7 +12,6 @@ export async function installAndroidArtifact(
   packageNameHint: string | undefined,
   signal: AbortSignal,
 ): Promise<string | undefined> {
-  assertManagedAndroidInstallablePath(installablePath);
   const before = packageNameHint ? undefined : await listInstalledPackages(host, device, signal);
   if (path.extname(installablePath).toLowerCase() === '.aab') {
     await installAndroidBundle(host, device, installablePath, signal);
@@ -30,19 +28,6 @@ export async function installAndroidArtifact(
   const after = await listInstalledPackages(host, device, signal);
   const installed = [...after].filter((name) => !before?.has(name));
   return installed.length === 1 ? installed[0] : undefined;
-}
-
-export function assertManagedAndroidInstallablePath(installablePath: string): void {
-  if (currentManagedDeviceScope() && path.extname(installablePath).toLowerCase() === '.aab') {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'Managed Android deployment does not support app bundles.',
-      {
-        reason: 'managed-bundle-install-unavailable',
-        hint: 'Install an APK on this managed device.',
-      },
-    );
-  }
 }
 
 export async function uninstallAndroidPackage(

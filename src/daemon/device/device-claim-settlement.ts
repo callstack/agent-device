@@ -200,7 +200,7 @@ function isCurrentClaimOwner(
 }
 
 /** The one diagnostic that names who holds a device when an acquisition is refused. */
-export function emitClaimConflict(
+function emitClaimConflict(
   deviceKey: string,
   existing: InspectedDeviceClaim,
   reconciliationReason?: string,
@@ -217,15 +217,8 @@ export function emitClaimConflict(
   });
 }
 
-/** The owner projection of either claim kind, for diagnostics that name who holds the device. */
+/** The owner projection for diagnostics that name who holds the device. */
 function describeClaimOwner(existing: InspectedDeviceClaim): Record<string, unknown> {
-  if (existing.allocatorClaim) {
-    return {
-      ownerStateDir: existing.allocatorClaim.stateDir,
-      allocatorInstanceId: existing.allocatorClaim.allocator.instanceId,
-      identityIncarnationId: existing.allocatorClaim.allocator.identityIncarnationId,
-    };
-  }
   return { ownerSession: existing.claim?.session, ownerStateDir: existing.claim?.stateDir };
 }
 

@@ -533,7 +533,7 @@ export function androidAdbPayloadWithoutSerial(
   }
 }
 
-/** Managed (ADR 0021) transport: the lease owns a private adb server. */
+/** Private-server transport: the caller names its own adb server port (`serverPort`). */
 export type AndroidManagedAdbServer = Readonly<{ port: number }>;
 
 /**

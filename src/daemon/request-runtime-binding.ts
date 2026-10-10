@@ -1,5 +1,5 @@
 import { deviceIdentity, deviceIdentityKey, type DeviceInfo } from '@agent-device/kernel/device';
-import { AppError, errorMessage } from '@agent-device/kernel/errors';
+import { errorMessage } from '@agent-device/kernel/errors';
 import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import {
   type BoundDeviceRuntime,
@@ -17,12 +17,6 @@ import type { PlatformRequestScope } from '@agent-device/contracts/platform-runt
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { ensureDeviceReady } from './device/device-ready.ts';
 import { recordBoundMutations, type RequestDispatchLedger } from './request-dispatch-ledger.ts';
-import type {
-  ManagedRequestAdmission,
-  ResolveManagedRequestLease,
-} from './managed-device-allocation/request-admission.ts';
-
-const managedReadiness = new WeakMap<BoundDeviceIdentity, () => Promise<void>>();
 
 export type BindDeviceRuntime = <
   const Required extends readonly RuntimeOperationKey<PlatformRuntimeOperations>[],
@@ -82,23 +76,11 @@ export type BoundDeviceIdentity = Readonly<{
   owner: RuntimeOwnerRef;
 }>;
 
-/** Confirms managed authority or runs local readiness after binding and claim admission. */
+/** Runs local readiness after binding and claim admission; a provider runtime owns its own. */
 export async function ensureBoundDeviceReady(bound: BoundDeviceIdentity): Promise<void> {
   switch (bound.owner.kind) {
     case 'provider-runtime':
       return;
-    case 'managed-local': {
-      const ready = managedReadiness.get(bound);
-      if (ready) {
-        await ready();
-        return;
-      }
-      throw new AppError(
-        'UNSUPPORTED_OPERATION',
-        'Managed-device readiness is unavailable until allocator confirmation.',
-        { reason: 'managed-readiness-unavailable' },
-      );
-    }
     case 'local-family':
       await ensureDeviceReady(bound.device);
   }
@@ -120,24 +102,17 @@ export function createRequestRuntimeBindings(params: {
   gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
   scope: PlatformRequestScope;
   dispatchLedger: RequestDispatchLedger;
-  resolveManagedLease?: ResolveManagedRequestLease;
-  admitDeviceClaim: (
-    device: DeviceInfo,
-    owner: RuntimeOwnerRef,
-    intent: DeviceBindingIntent,
-  ) => Promise<void>;
+  admitDeviceClaim: (device: DeviceInfo, owner: RuntimeOwnerRef) => Promise<void>;
   /** ADR 0029 daemon-policy device scope, checked before the gateway inspects or binds a device. */
   admitDevice?: (device: DeviceInfo) => void;
 }): RequestRuntimeBindings {
   const cleanups = new AsyncCleanupStack();
-  const managedLifetime = new AbortController();
   const bindings = new Map<string, Promise<DeviceBinding<PlatformRuntimeOperations>>>();
 
   const admitBinding = async (
     binding: DeviceBinding<PlatformRuntimeOperations>,
-    intent: DeviceBindingIntent,
   ): Promise<DeviceBinding<PlatformRuntimeOperations>> => {
-    await params.admitDeviceClaim(binding.device, binding.owner, intent);
+    await params.admitDeviceClaim(binding.device, binding.owner);
     return binding;
   };
 
@@ -150,7 +125,7 @@ export function createRequestRuntimeBindings(params: {
       bindingPromise = params.gateway
         .bind({ device, intent, scope: params.scope })
         .then((binding) => cleanups.use(binding))
-        .then((binding) => admitBinding(binding, intent));
+        .then(admitBinding);
       bindings.set(key, bindingPromise);
       void bindingPromise.catch(() => {
         if (bindings.get(key) === bindingPromise) bindings.delete(key);
@@ -165,28 +140,10 @@ export function createRequestRuntimeBindings(params: {
   const bindExactDevice: BindExactDeviceRuntime = async (device, owner, fence, use, scope) => {
     params.admitDevice?.(device);
     const intent: DeviceBindingIntent = { kind: 'exact-owner', owner, fence };
-    let managed: ManagedRequestAdmission | undefined;
-    if (owner.kind === 'managed-local') {
-      const { createManagedRequestAdmission } =
-        await import('./managed-device-allocation/request-admission.ts');
-      managed = createManagedRequestAdmission({
-        device,
-        intent,
-        scope,
-        lifetime: managedLifetime.signal,
-        resolve: params.resolveManagedLease,
-      });
-    }
-    if (managed) await params.admitDeviceClaim(device, owner, intent);
-    const published = managed
-      ? await managed.bind(() => params.gateway.bind({ device, intent, scope: managed.scope }))
-      : await params.gateway.bind({ device, intent, scope });
+    const published = await params.gateway.bind({ device, intent, scope });
     const adopted = await adoptExactBinding(cleanups, published, scope);
-    const binding = managed ? adopted : await admitBinding(adopted, intent);
-    const bound = recordBoundMutations(narrowDeviceBinding(binding, use), params.dispatchLedger);
-    managed?.activate();
-    if (managed) managedReadiness.set(bound, managed.ensureReady);
-    return bound;
+    const binding = await admitBinding(adopted);
+    return recordBoundMutations(narrowDeviceBinding(binding, use), params.dispatchLedger);
   };
 
   return {
@@ -197,7 +154,6 @@ export function createRequestRuntimeBindings(params: {
     bindDevice,
     bindExactDevice,
     [Symbol.asyncDispose]: async () => {
-      managedLifetime.abort();
       await cleanups[Symbol.asyncDispose]();
     },
   };
