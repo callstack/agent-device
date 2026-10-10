@@ -109,10 +109,11 @@ function markPostGestureStabilization(
 }
 
 /**
- * Called once an app open has published its session. Any defined verdict other than `observable`
- * means the open returned on a fixed delay without reading the app, so nothing proved the layout at
- * rest and the next capture runs the quiet-window loop (#3354, #3367). No baseline: the pre-open
- * tree is a different surface, so the open is never reported as having no effect.
+ * Called once an app open has published its session. Any verdict other than `observable` means the
+ * open returned on a fixed delay without reading the app, so nothing proved the layout at rest and
+ * the next capture runs the quiet-window loop (#3354, #3367). An open without a verdict launched no
+ * app the owner could watch (a URL-only open, a physical device), so it does not mark. No baseline:
+ * the pre-open tree is a different surface, so the open is never reported as having no effect.
  */
 export function markPostOpenStabilization(
   session: SessionState,
