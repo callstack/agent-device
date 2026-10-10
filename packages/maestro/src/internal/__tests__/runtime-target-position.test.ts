@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { rankMaestroCandidates, selectMaestroSnapshotMatch } from '../runtime-target-ranking.ts';
 import { makeSnapshot } from './runtime-target-fixtures.ts';
-import { selectMaestroPositionMatches } from '../runtime-target-ranking.fixtures.ts';
+import { resolveMaestroPositionForTest } from '../runtime-target-ranking.fixtures.ts';
 
 test('uses strict top-left comparisons for all positional relations', () => {
   const snapshot = makeSnapshot([
@@ -35,7 +35,7 @@ test('keeps relative pair distance as intermediate order but preserves composed 
     { index: 2, identifier: 'near-anchor', rect: { x: 40, y: 40, width: 40, height: 30 } },
     { index: 3, identifier: 'far-anchor', rect: { x: 300, y: 40, width: 40, height: 30 } },
   ]);
-  const relation = selectMaestroPositionMatches(snapshot, 'below', { id: '.*anchor' });
+  const relation = resolveMaestroPositionForTest(snapshot, 'below', { id: '.*anchor' });
   expect(relation.map((node) => node.identifier)).toEqual([
     'near-candidate',
     'far-candidate',

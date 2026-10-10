@@ -454,7 +454,7 @@ function identifierReports(
   return snapshot.nodes.filter((node) => node.identifier === identifier);
 }
 
-test('resolves the control of one ancestry chain through the rule on its own', () => {
+test('resolves the control of one ancestry chain through resolveElementReportedTwice', () => {
   const snapshot = makeSnapshotState(UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES);
   const reports = identifierReports(snapshot, 'scoring_home_button');
   assert.deepEqual(
@@ -477,7 +477,7 @@ test('refuses a candidate set that is one report, not a pair to collapse', () =>
   assert.equal(resolveElementReportedTwice(snapshot.nodes, [reports[1]!]), null);
 });
 
-test('refuses one ancestry chain of two real controls through the rule on its own', () => {
+test('refuses one ancestry chain of two real controls through resolveElementReportedTwice', () => {
   const snapshot = makeSnapshotState(TWO_ACTIONABLE_WRAPPER_CHAIN_NODES);
   const reports = identifierReports(snapshot, 'profile');
   assert.deepEqual(

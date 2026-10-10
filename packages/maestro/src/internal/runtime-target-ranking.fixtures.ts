@@ -5,7 +5,7 @@ import { createMaestroResolver } from './runtime-target-ranking.ts';
 import type { MaestroPositionRelation } from './runtime-target-position.ts';
 import type { MaestroPlatform } from './runtime-target-policy.ts';
 
-export function selectMaestroPositionMatches(
+export function resolveMaestroPositionForTest(
   snapshot: SnapshotState,
   relation: MaestroPositionRelation,
   anchor: MaestroSelector,

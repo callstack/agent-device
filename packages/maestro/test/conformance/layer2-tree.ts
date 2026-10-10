@@ -3,7 +3,7 @@ import { attachSnapshotClickabilityEvidence } from '@agent-device/contracts/capt
 import type { MaestroSelector } from '../../src/internal/program-ir.ts';
 import { resolveMaestroTargetFromSnapshot } from '../../src/internal/runtime-targets.ts';
 import { rankMaestroCandidates } from '../../src/internal/runtime-target-ranking.ts';
-import { selectMaestroPositionMatches } from '../../src/internal/runtime-target-ranking.fixtures.ts';
+import { resolveMaestroPositionForTest } from '../../src/internal/runtime-target-ranking.fixtures.ts';
 
 export type Layer2TreeVector = {
   id: string;
@@ -44,7 +44,7 @@ export function checkLayer2TreeVector(vector: Layer2TreeVector): Layer2TreeResul
   const actualSelected = resolution.ok ? [vector.nodes[resolution.node.index]?.key ?? ''] : [];
   const expectedSelected = vector.selected === undefined ? [] : [vector.selected];
   const actualIntermediate = vector.intermediateRelation
-    ? selectMaestroPositionMatches(
+    ? resolveMaestroPositionForTest(
         snapshot,
         vector.intermediateRelation,
         vector.selector[vector.intermediateRelation]!,
