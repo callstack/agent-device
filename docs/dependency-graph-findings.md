@@ -324,6 +324,13 @@ lines in one flat directory whose _names_ carry a hierarchy the filesystem does 
 (14 723 lines), 16 `interaction-*`, 13 `record-*`, 5 `snapshot-*`. `daemon/` itself is another 103
 flat files.
 
+Since #3391 the zone has an enforced interior: R81 (`scripts/layering/daemon-layers.ts`) owns the
+manifest partitioning every production daemon file into five layers — `daemon-core` <
+`daemon-resources` < `daemon-execution` < `daemon-sessions` < `daemon-server` — and rejects any
+upward static value or type edge between them (dynamic cross-layer edges are reported, not
+rejected). The global spine rank stays 4 for all five, so this is the only direction claim inside
+the zone; the manifest is the living claim, restated here at risk of drift.
+
 Things that are **not** wrong, checked and ruled out:
 
 - **No copy-paste.** Zero 7-line windows repeat across three or more daemon files.
