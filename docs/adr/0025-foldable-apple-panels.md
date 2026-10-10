@@ -3,7 +3,7 @@
 ## Status
 
 Accepted (2026-09-20; the pose-settle rule amended 2026-09-21 under #2730; the touch-overlay
-export diagnosis corrected 2026-09-22 under #2707). Covers iPhone Duo (iOS 27.1, `iPhone19,4`) and
+export diagnosis corrected 2026-09-22 under #2707; the Android emulator pose added 2026-10-10). Covers iPhone Duo (iOS 27.1, `iPhone19,4`) and
 any Apple device that reports more than one integrated CoreDevice display.
 
 An iPhone Duo carries two integrated panels — Apple's **outer display** and **inner display** —
@@ -536,3 +536,19 @@ incorrect viewport, not an inner-panel delivery prohibition.
   hidden-sidebar recovery were checked; the simultaneous same-name simulator matrix remains open.
 - **Physical foldables.** Device Hub poses simulators only; the leaf fact refuses a physical device,
   and the hinge stream on one was not exercised.
+
+## Android emulators (amendment, 2026-10-10)
+
+The same `fold` command poses a foldable Android emulator, with the two facts of this ADR kept
+apart in the same way. There is no host display authority to consult: the emulator console's
+`posture <id>` moves the hinge sensor to a fixed angle (0°, 90°, 180°), and the pose is verified by
+polling `cmd device_state print-state` until the guest commits the posture's own device state
+(`CLOSED`, `HALF_OPENED`, `OPENED`); the hinge sensor is read back for the reported angle. A
+`half-open` Android pose is therefore 90°, the emulator's definition, where the Duo's is 130°.
+
+Folding to the cover display can raise the keyguard (Android's "continue using apps on fold"
+setting, which emulator images do not honour); `fold` dismisses it, because every later capture
+would otherwise read the lock screen instead of the app. A profile that lists none of those device
+states has no hinge and is refused as `single-panel-device`, the typed reason a single-panel
+simulator gets. Keyframes and panel geometry stay Apple-only: the console poses only fixed
+postures, and Android reports the app window on its next snapshot rather than a panel.

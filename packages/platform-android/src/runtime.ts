@@ -50,6 +50,7 @@ import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orient
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
+import { androidFoldableFacts, createAndroidFoldableOperations } from './foldable/runtime.ts';
 import { androidAudioProbeCaptureFact } from './audio-runtime.ts';
 import { ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT } from './clipboard-shell-response.ts';
 import { createAndroidPerfOperations } from './perf/runtime.ts';
@@ -90,15 +91,6 @@ const hoverUnavailable = unavailableFact('unsupported-platform-leaf');
 const systemButtonUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   'Android has no key event for this system button.',
-);
-/**
- * Foldable Android emulators do carry a posture control (the emulator console's `fold` and
- * `posture` commands), but nothing in this project drives it yet, so the cell refuses on every
- * kind rather than advertising a pose it cannot set.
- */
-const foldUnavailable = unavailableFact(
-  'unsupported-platform-leaf',
-  'fold drives the hinge of a foldable iPhone simulator; the Android emulator posture control is not driven by agent-device yet.',
 );
 const headlessUnavailable = unavailableFact(
   'unsupported-device-kind',
@@ -348,7 +340,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           home: androidTouchFact(device),
           appSwitcher: androidTouchFact(device),
         }),
-        setFoldPose: foldUnavailable,
+        ...androidFoldableFacts(device),
         // The deep link opens through `am start`, admitted wherever the retired `ANDROID_ALL`
         // bucket admitted it.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: androidTouchFact(device) }),
@@ -463,6 +455,10 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
             }),
           ),
           ...androidInteractionOperations(host, request, facts),
+          ...createAndroidFoldableOperations({
+            device: request.device,
+            signal: request.scope.signal,
+          }),
           ensureReady: async (input: EnsureReadyInput) =>
             await ensureAndroidReady(
               host,
