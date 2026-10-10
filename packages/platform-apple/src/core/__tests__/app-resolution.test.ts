@@ -62,6 +62,17 @@ test.for([
   },
 );
 
+test('resolveIosApp installedOnly re-checks a name an earlier resolution cached', async () => {
+  assert.equal(await resolveIosApp(bootedSimulator, 'Demo'), 'com.example.demo');
+  mockRunSimctl.mockResolvedValue({ stdout: JSON.stringify({}) });
+
+  assert.equal(await resolveIosApp(bootedSimulator, 'Demo'), 'com.example.demo');
+  await assert.rejects(
+    () => resolveIosApp(bootedSimulator, 'Demo', { installedOnly: true }),
+    (error: unknown) => error instanceof AppError && error.code === 'APP_NOT_INSTALLED',
+  );
+});
+
 test('resolveIosApp installedOnly matches installed bundle ids, then display names, else refuses', async () => {
   const installedOnly = { installedOnly: true } as const;
   assert.equal(

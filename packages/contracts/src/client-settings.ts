@@ -88,10 +88,11 @@ export type SettingsUpdateOptions =
        * The app the permission changes, by bundle id, package name, or app name, resolved as `open`
        * resolves it: an iOS simulator matches display names and accepts only an installed bundle
        * id, Android accepts only an installed package and matches other names against installed
-       * package names, and a Limrun iOS session resolves only the `settings` alias. One that resolves to nothing is refused with `app_not_installed`. Without it the app bound to the session is used; with it no app
-       * has to be running or open, because `simctl privacy` and Android's `pm` need only the id.
-       * macOS permissions are host-level TCC grants, so naming an app there is refused rather than
-       * dropped.
+       * package names, and a Limrun iOS session resolves only the `settings` alias. One that
+       * resolves to nothing is refused with `app_not_installed`. Without it the app bound to the
+       * session is used; with it no app has to be running or open, because `simctl privacy` and
+       * Android's `pm` need only the id. macOS permissions are host-level TCC grants, so naming an
+       * app there is refused rather than dropped.
        */
       app?: string;
     });
