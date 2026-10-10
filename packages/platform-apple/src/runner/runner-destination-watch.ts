@@ -93,7 +93,7 @@ type DestinationWatch = {
   sessionId: string;
   port: number;
   runnerPid: number | undefined;
-  /** When this retention window began; a boot starting later belongs to a replacement device state. */
+  /** When this retention window began; a boot starting later is a replacement device state. */
   armedAtMs: number;
   /** Re-read at every decision: false once any path has left the idle-retention window. */
   isArmed: () => boolean;
@@ -107,7 +107,7 @@ type DestinationWatch = {
    * runner generation started after the device changed under the session.
    */
   replacement: boolean;
-  /** The in-flight loss decision, which a notice reader waits for while the window is still open. */
+  /** The in-flight loss decision, which a notice reader waits for while the window is open. */
   deciding: Promise<void> | undefined;
   detached: boolean;
 };
@@ -298,13 +298,14 @@ async function decide(watch: DestinationWatch, run: () => Promise<void>): Promis
 }
 
 /**
- * The attach never reached a listener. A rebooting destination is usually unreachable for a
- * couple of seconds while Xcode restarts the app onto the same port, so retry at a flat one-second
- * cadence inside a bounded budget; a retry that connects classifies the replacement generation. Only when the budget runs out is the retained runner called
- * what it has proven to be: unable to answer anything. By then the destination process's own
- * liveness decides whether this was a crash (Xcode gave up with it, the device lost its boot
- * owner) or a listener that died while Xcode kept the device — the latter is exactly the silent
- * power-on #3321 is about, so the runner goes with a notice.
+ * The attach never reached a listener. A rebooting destination is usually unreachable for a couple
+ * of seconds while Xcode restarts the app onto the same port, so retry at a flat one-second cadence
+ * inside a bounded budget; a retry that connects classifies the replacement generation. Only when
+ * the budget runs out is the retained runner called what it has proven to be: unable to answer
+ * anything. By then the destination process's own liveness decides whether this was a crash (Xcode
+ * gave up with it, the device lost its boot owner) or a listener that died while Xcode kept the
+ * device — the latter is exactly the silent power-on #3321 is about, so the runner goes with a
+ * notice.
  */
 async function handleRefusedAttach(
   watch: DestinationWatch,
@@ -342,15 +343,16 @@ async function handleRefusedAttach(
 }
 
 /**
- * Reads whether the device behind the runner stopped being the device this session was armed on.
- * A dead destination process answers for itself before the probe: Xcode cannot reboot from a dead
+ * Reads whether the device behind the runner stopped being the device this session was armed on. A
+ * dead destination process answers for itself before the probe: Xcode cannot reboot from a dead
  * process, so stopping is plain lease cleanup. Otherwise the device must be listed `Booted` on the
  * boot the window began with, and anything else is destination loss: a shut-down device keeps its
- * old `launchd_sim` listed for ~6s, so the boot witness alone would read the old boot and call it
- * a crash. A listing that timed out or was unreadable is no evidence of a healthy device, so it
- * stops the runner too, but as `runner_destination_unverified`: it cannot support a claim about the device. A boot newer than the
- * window is Xcode's reboot; a boot unobservable twice is a device that is down with a reboot
- * promise that may already be in flight. Stopping pre-empts that promise in every loss case.
+ * old `launchd_sim` listed for ~6s, so the boot witness alone would read the old boot and call it a
+ * crash. A listing that timed out or was unreadable is no evidence of a healthy device, so it stops
+ * the runner too, but as `runner_destination_unverified`: it cannot support a claim about the
+ * device. A boot newer than the window is Xcode's reboot; a boot unobservable twice is a device
+ * that is down with a reboot promise that may already be in flight. Stopping pre-empts that promise
+ * in every loss case.
  */
 async function classifyConnectedLoss(watch: DestinationWatch): Promise<LossVerdict> {
   if (watch.runnerPid !== undefined && !isProcessAlive(watch.runnerPid)) {

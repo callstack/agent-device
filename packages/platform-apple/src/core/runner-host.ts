@@ -51,7 +51,10 @@ import {
   runXcrun,
 } from './tool-provider.ts';
 
-/** `simctl list` takes ~0.7s per spawn on an idle host; an unanswered probe reads as a lost device, so the budget leaves room for a loaded one. */
+/**
+ * `simctl list` takes ~0.7s per spawn on an idle host; an unanswered probe reads as an unverified
+ * device, so the budget leaves room for a loaded one.
+ */
 const SIMULATOR_STATE_PROBE_TIMEOUT_MS = 5_000;
 
 /**
