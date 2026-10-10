@@ -6,9 +6,10 @@ for detected communities). One row per candidate: `move`, `merge`, or `keep`, wi
 Moves land as `refactor(move)` PRs; batch 1 is the companion PR to this decision.
 
 2026-10-10: `packages/managed-allocation` was removed with the withdrawn allocator design
-([ADR 0021](0021-host-simlock-managed-device-allocation.md)). Rows that refuse a move into it, or
-cite its capture-kit dependency as a cycle, no longer bind; re-evaluate those files on their
-remaining edges.
+([ADR 0021](0021-host-simlock-managed-device-allocation.md)). The `src/managed-device-allocation.ts`
+row and Batch 1 record a move that landed (#3287) and was then deleted with the package; nothing
+moves there now. Rows that refuse a move into it, or cite its capture-kit dependency as a cycle, no
+longer bind; re-evaluate those files on their remaining edges.
 
 ## Rules at a glance
 
