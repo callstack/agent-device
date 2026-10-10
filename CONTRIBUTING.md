@@ -68,7 +68,7 @@ Use `pnpm build:macos-helper:clean` if a Swift cache was created in another work
 
 ## Prepare the npm package
 
-`pnpm publish` and package-manager pack commands run `prepack`, which first checks synchronized MCP
+Package-manager pack commands run `prepack`, which first checks synchronized MCP
 metadata and then runs `pnpm package:npm`. This is the one completeness-oriented aggregate: it
 builds the TypeScript distribution and all four Apple runner targets (into a scratch directory under
 `.tmp/` that it removes afterwards, not into `~/.agent-device`), clean-builds the macOS helper,
@@ -83,50 +83,33 @@ so name the version the CI lanes install and the published helper matches the CI
 `pnpm package:npm` is a release guard, not a routine development command. Use the specific commands
 above while iterating.
 
-### Release the core and public workspace packages together
+### Release through the Release workflow
 
-The root `package.json` owns the release version. Every public workspace package uses that version;
-private internal packages stay unpublished. There is one Git tag and GitHub release, `v<version>`,
-for the whole release. No changeset files or per-package tags are needed.
+Every npm publish runs in `.github/workflows/release.yml`, through npm trusted publishing: no npm
+token or one-time password is involved, and every version carries provenance. A local
+`npm publish` from the repository root refuses to run.
 
-From a clean release checkout, bump the version once:
+The core and every public workspace package release together at one version. Private packages
+stay unpublished. There are three channels:
 
-```bash
-npm version patch
-# or npm version minor / npm version 0.22.0
-```
+- **Nightly** (`npm install -g agent-device@nightly`): every few hours the workflow checks `main`.
+  It publishes `X.Y.Z-nightly.<YYYYMMDD>.<run>` under the `nightly` dist-tag when `main`'s HEAD has
+  changed since the last nightly, its CI passed, and no nightly shipped that UTC day. It then tags
+  the commit `nightly/v<nightly version>`. To publish one now, run **Release** on `main`.
+- **Stable** (`latest`): a repository admin publishes a GitHub release with a new `vX.Y.Z` tag
+  targeting `main`. Use the version `main` builds towards (its `X.Y.Z-dev`), or a later one. Write the
+  notes or generate them in the release form. The tag starts a **Release** run, which publishes
+  that commit once its CI has passed and the run is approved in the `release` environment. The run
+  publishes the packages, attaches the iOS runner and Android helper assets to the release, publishes
+  the MCP Registry entry, and commits `main`'s next `-dev` version. If you reject the run, delete the
+  release and its tag. Pushing the tag instead (`git push origin main:refs/tags/vX.Y.Z`) starts the
+  same run, which then drafts the release itself.
+- **Dry run**: a pull request that changes release tooling builds and verifies every package with a
+  nightly version, and publishes nothing.
 
-The version hook synchronizes all public workspace manifests and MCP metadata, stages them, and
-includes them in npm's version commit and `v<version>` tag. Do not bump plugin versions separately.
-
-Publish and push using the normal npm workflow:
-
-```bash
-npm publish && git push && git push --tags
-```
-
-The publish hooks prepare and validate every public package before uploading the core, then
-publish the remaining workspace packages at the same version. Private packages stay unpublished.
-After every package succeeds, the hook commits all public manifests and MCP metadata at the next
-`-dev` version. Your `git push` includes that commit; the version bump created the single release
-tag. Write one GitHub release covering the core and plugins.
-
-After setting the version, preview the full release with `npm publish --dry-run`. It builds and
-checks the packages without uploading them, changing versions, or creating commits. The dry-run
-publish hook makes no additional registry requests. Dependency installation during preparation
-still requires registry access unless the dependencies are cached. Publishing requires npm registry access for
-`agent-device` and the `@agent-device` scope.
-
-If core publication succeeds but a later package fails, run `pnpm release:publish` to finish the
-release. It skips versions already published and commits the development marker once every package
-succeeds. Plain `npm publish` cannot retry an already-published core version.
-If every upload succeeds but development-marker synchronization or its Git commit fails, fix the
-reported error and run `pnpm release:mark-dev` to finish any interrupted version synchronization, then commit the
-changed public manifests and `server.json` before pushing. No package needs republishing.
-
-Use `npm pack` to build and validate a development-version package locally. The normal npm and
-pnpm publishers repack the prepared files when uploading; the checks validate package contents,
-not the byte identity of the uploaded archive.
+To retry a failed run, re-run its failed jobs, or run **Release** on the release tag. The publisher skips package versions that are already
+on npm, so a partial publish completes on the next attempt. To preview the packages locally, run
+`pnpm release:prepare`. It builds, verifies, and packs every public package into `.tmp/release`.
 
 A public package owns its `files`, published `exports`, license, repository metadata, README,
 and `prepack` build (including any prerequisites). Use `publishConfig.exports` for source-only
@@ -134,21 +117,66 @@ workspace test exports; pnpm applies the overrides when packing. Keep plugin SDK
 bundled workspace helpers in `devDependencies`. Plugins must not depend on the core at runtime
 or through a peer dependency. Their factories receive the host from `agent-device`.
 
-When adding a public package, initialize its version from the root `package.json`; subsequent
-`npm version` and `release:mark-dev` runs keep it synchronized automatically. An optional plugin
-must have no production import from the core build or production dependency in the root manifest.
-Run its packed-install smoke before releasing.
+When adding a public package, initialize its version from the root `package.json`; the release
+workflow stamps the release version into every public package. An optional plugin must have no
+production import from the core build or production dependency in the root manifest. Run its
+packed-install smoke before releasing. npm can only trust a package that exists, so a maintainer
+publishes an empty `0.0.0` placeholder once and grants the trust before the next nightly:
+
+```bash
+cd "$(mktemp -d)"
+echo '{"name":"@agent-device/<name>","version":"0.0.0","license":"MIT"}' > package.json
+npm publish --access public --tag reserved
+npm trust github @agent-device/<name> --file release.yml --repository callstack/agent-device \
+  --environment npm-publish --allow-publish --yes
+npm access set mfa=publish @agent-device/<name>
+```
+
+### One-time repository setup
+
+npm trusts every run of `release.yml` that reaches the `npm-publish` environment, so GitHub
+settings, not the workflow, decide who can publish. The plan job refuses to publish until the first
+three are in place. Apply them before granting npm trust:
+
+1. **Environment `npm-publish`** (Settings → Environments): deployment branches and tags limited to
+   the branch `main` and the tag pattern `v*`. No reviewers and no secrets, so nightlies run
+   unattended.
+2. **Environment `release`**: required reviewers. Turn on "Prevent self-review" only when another
+   maintainer can approve, because the admin who creates the tag cannot approve their own run.
+3. **Tag ruleset** (Settings → Rules → Rulesets → New tag ruleset): active, targeting
+   `refs/tags/v*`, restricting creations, updates, and deletions, with only the Repository admin
+   role allowed to bypass. Nightly tags live under `nightly/` and stay outside it.
+4. **Actions** (Settings → Actions → General): workflow permissions set to read repository contents,
+   and "Allow GitHub Actions to create and approve pull requests" turned off.
+5. **Releases** (Settings → General): leave release immutability off, because the run attaches its
+   assets after the release is published.
+
+Confirm the result, then grant npm trust to each public package and, once a nightly has published,
+refuse token-based publishing:
+
+```bash
+gh api repos/callstack/agent-device/environments/npm-publish/deployment-branch-policies \
+  --jq '.branch_policies[] | "\(.type) \(.name)"'   # branch main, tag v*
+gh api repos/callstack/agent-device/environments/release \
+  --jq '.protection_rules[] | select(.type == "required_reviewers")'
+gh api repos/callstack/agent-device/rulesets --jq '.[] | select(.target == "tag") | .name'
+npm trust github <package> --file release.yml --repository callstack/agent-device \
+  --environment npm-publish --allow-publish --yes
+npm access set mfa=publish <package>
+```
+
+Anyone who can push to `main` can still change what the next nightly publishes; `main` does not
+require pull requests.
 
 ### The version on main never equals a published version
 
-`postpublish` runs `release:mark-dev` after all packages publish, moving all public manifests
-and synchronized `server.json` to the next patch with a `-dev` prerelease marker (for example
-`0.20.11-dev`) and committing that bump as part of the release. The invariant it protects: MCP registry
-scanners diff the repository's tool surface per version string, so a released number left on `main`
-while `main` keeps changing is indistinguishable from a republished ("rug-pull") version.
-`prepublishOnly` and the retry command refuse to publish while the `-dev` marker is
-still in place — set the real release version first (for example `npm version patch`, which strips
-the prerelease marker), commit, then publish.
+`main` carries `X.Y.Z-dev`, naming the release it is building towards. Nightlies preview it as
+`X.Y.Z-nightly.*`, and only a stable release publishes `X.Y.Z`. After a stable release, the workflow
+moves `main` to the next patch's `-dev` version, unless `main` already builds towards a later
+release. To plan a minor or major release, commit the new `-dev` version to `main` (for example
+`0.22.0-dev`); nightlies then preview it. The invariant protects MCP Registry scanners, which diff
+the repository's tool surface per version string: a released number left on `main` while `main`
+keeps changing is indistinguishable from a republished ("rug-pull") version.
 
 ### Released-surface baselines roll forward on publish
 
