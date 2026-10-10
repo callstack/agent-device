@@ -21,7 +21,6 @@ import type {
   LimrunRuntimeDependencies,
 } from './runtime-dependencies.ts';
 import type { AndroidAdbInvocation } from '@agent-device/platform-android/mechanics';
-import { createLimrunAndroidTextInjector } from './android-text-entry.ts';
 import type { LimrunInstanceOwnership } from './instance-access.ts';
 import { normalizeOptionalString } from './strings.ts';
 import {
@@ -80,7 +79,11 @@ export async function createLimrunAndroidSession(
   };
   const adbProvider: LimrunAdbProvider = {
     exec: async (args, execOptions) => await runLimrunAndroidAdb(session, args, execOptions),
-    text: createLimrunAndroidTextInjector(client),
+    text: async (request) => {
+      // Loaded on the text-entry path to keep this provider's declared import-time closure budget.
+      const { createLimrunAndroidTextInjector } = await import('./android-text-entry.ts');
+      await createLimrunAndroidTextInjector(client)(request);
+    },
   };
   adbProvider.reverse = await dependencies.android.createPortReverse(adbProvider.exec, {
     noRebind: options.ownership === 'attached',
