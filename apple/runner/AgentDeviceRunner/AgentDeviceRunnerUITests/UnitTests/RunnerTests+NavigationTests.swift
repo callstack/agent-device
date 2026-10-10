@@ -74,11 +74,19 @@ extension RunnerTests {
   }
 
   func testTopNavigationBackCandidateBoundsSystemBackButtonToUpperWindow() {
+    // 40% of 932 is 372.8; the classic band ends at 180, so only the floating-bar bound decides.
     let window = CGRect(x: 0, y: 0, width: 430, height: 932)
 
+    XCTAssertTrue(
+      Self.isTopNavigationBackCandidateFrame(
+        CGRect(x: 20, y: 348, width: 44, height: 44),
+        in: window,
+        identifier: "BackButton"
+      )
+    )
     XCTAssertFalse(
       Self.isTopNavigationBackCandidateFrame(
-        CGRect(x: 20, y: 760, width: 72, height: 44),
+        CGRect(x: 20, y: 356, width: 44, height: 44),
         in: window,
         identifier: "BackButton"
       )
