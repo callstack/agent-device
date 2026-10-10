@@ -63,6 +63,54 @@ test('detectPossibleRepeatedNavSubtree does not warn when duplicates are below t
   assert.equal(detectPossibleRepeatedNavSubtree(nodes), false);
 });
 
+const EMAIL_LIKE_REFERENCE = /\S+@\S+\.\S+/;
+
+test.each([
+  ['user@example.com', true],
+  ['Signed in as User@Example.com today', true],
+  ['a@b.c', true],
+  ['a@@b..c', true],
+  ['@a@b.c', true],
+  ['a.b@c.d.e', true],
+  ['x a@b.c', true],
+  ['user@example', false],
+  ['@example.com', false],
+  ['user@.com', false],
+  ['user@example.', false],
+  ['a@ b.c', false],
+  ['a @b.c', false],
+  ['a@b .c', false],
+  ['a.b@c', false],
+  ['Inbox', false],
+  ['@', false],
+  ['a@b.', false],
+])('detectPossibleRepeatedNavSubtree treats %j as email-like: %s', (label, emailLike) => {
+  assert.equal(EMAIL_LIKE_REFERENCE.test(label.toLowerCase()), emailLike);
+  assert.equal(detectPossibleRepeatedNavSubtree(makeOverlappingDuplicates(label)), !emailLike);
+});
+
+test.each([
+  ['@'.repeat(50_000)],
+  ['a@'.repeat(25_000)],
+  ['a@b'.repeat(20_000)],
+  [`${'a@'.repeat(25_000)}.`],
+])('detectPossibleRepeatedNavSubtree classifies adversarial labels in linear time', (label) => {
+  const startedAt = performance.now();
+  assert.equal(detectPossibleRepeatedNavSubtree(makeOverlappingDuplicates(label)), true);
+  assert.ok(performance.now() - startedAt < 1_000);
+});
+
+function makeOverlappingDuplicates(label: string): SnapshotNode[] {
+  return makeNodes(24, (index) => ({
+    type: index === 0 ? 'android.widget.FrameLayout' : 'android.widget.Button',
+    label: index === 0 ? 'Root' : label,
+    rect:
+      index === 0
+        ? { x: 0, y: 0, width: 1080, height: 2400 }
+        : { x: 20, y: 40, width: 300, height: 48 },
+  }));
+}
+
 function makeNodes(
   count: number,
   build: (index: number) => Pick<SnapshotNode, 'type' | 'label' | 'rect'>,

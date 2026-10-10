@@ -32,7 +32,12 @@ function normalizeRepeatedNodeLabel(label: string): string | null {
 }
 
 function isEmailLikeLabel(label: string): boolean {
-  return /\S+@\S+\.\S+/.test(label);
+  return label.split(' ').some(isEmailLikeToken);
+}
+
+function isEmailLikeToken(token: string): boolean {
+  const at = token.indexOf('@', 1);
+  return at !== -1 && token.lastIndexOf('.', token.length - 2) > at + 1;
 }
 
 function hasOverlappingDuplicateRects(nodes: SnapshotNode[]): boolean {
