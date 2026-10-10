@@ -16,7 +16,7 @@ export const SWIFT_RUN_TIMEOUT_MS = 60_000;
 
 let swiftHarnessExecutable: string | undefined;
 
-export type DifferentialCase = Readonly<{
+type DifferentialCase = Readonly<{
   name: string;
   route: 'acquired' | 'runner-presented';
   projection: 'regular' | 'raw';

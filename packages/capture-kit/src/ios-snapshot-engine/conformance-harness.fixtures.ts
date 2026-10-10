@@ -2,7 +2,10 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
-import type { DifferentialCase } from './conformance-harness.ts';
+import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
+import type { compareDifferentialCases } from './conformance-harness.ts';
+
+type DifferentialCase = Parameters<typeof compareDifferentialCases>[0][number];
 
 export function swiftToolchainAvailable(): boolean {
   if (process.platform !== 'darwin') return false;
@@ -27,7 +30,7 @@ export function writeDifferentialFailureArtifact(input: {
   const replayCommand = [
     'node --experimental-strip-types',
     'packages/capture-kit/src/ios-snapshot-engine/replay.ts',
-    JSON.stringify(casePath),
+    shellQuoteIfNeeded(casePath),
   ].join(' ');
   fs.writeFileSync(
     path.join(directory, 'replay-command.txt'),
