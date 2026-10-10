@@ -119,10 +119,11 @@ description: Use agent-device for app and device automation
 alwaysApply: true
 ---
 
+REPLACE THIS LINE with the recommended agent rule from https://oss.callstack.com/agent-device/docs/agent-setup#recommended-agent-rule
 EOF
 ```
 
-Open `.cursor/rules/agent-device.mdc` and paste the [recommended agent rule](#recommended-agent-rule) below the closing `---`. Then ask Cursor Agent to run:
+Open `.cursor/rules/agent-device.mdc` and replace the placeholder line with the [recommended agent rule](#recommended-agent-rule). Then ask Cursor Agent to run:
 
 ```bash
 agent-device open <app-or-url> --platform ios --foreground
