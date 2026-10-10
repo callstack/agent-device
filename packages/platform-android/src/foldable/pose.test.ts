@@ -35,6 +35,12 @@ const GENERIC_FOLDABLE_STATES = `Supported states: [
   DeviceState{identifier=3, name='OPENED', app_accessible=true, cancel_when_requester_not_on_top=false},
 ]
 `;
+/** A profile with a hinge that lists only the two end stops. */
+const END_STOPS_ONLY_STATES = `Supported states: [
+  DeviceState{identifier=0, name='CLOSED', app_accessible=true, cancel_when_requester_not_on_top=false},
+  DeviceState{identifier=2, name='OPENED', app_accessible=true, cancel_when_requester_not_on_top=false},
+]
+`;
 /** A phone profile has one state and no hinge. */
 const PHONE_STATES = `Supported states: [
   DeviceState{identifier=0, name='DEFAULT', app_accessible=true, cancel_when_requester_not_on_top=false},
@@ -148,7 +154,22 @@ test('looks the device state up by name, so a profile numbered from 1 verifies t
     hingeAngleDegrees: 90,
   });
   expect(adbCommands()[0]).toBe('emu posture 2');
-  expect(shellCommands()).not.toContain('wm dismiss-keyguard');
+  // Unfolding lights the inner display and raises no keyguard, so no lock-screen read is paid.
+  expect(shellCommands()).toEqual([
+    'cmd device_state print-states',
+    'cmd device_state print-state',
+  ]);
+  expect(mockSleep).not.toHaveBeenCalled();
+});
+
+test('refuses a posture the profile cannot commit with its own reason, not as single-panel', async () => {
+  stubEmulator({ states: END_STOPS_ONLY_STATES, stateReads: ['0'] });
+
+  await expect(setAndroidFoldPose(ANDROID_EMULATOR, { pose: 'half-open' })).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    details: { reason: 'fold-posture-unsupported', deviceStates: ['CLOSED', 'OPENED'] },
+  });
+  expect(mockAdb).not.toHaveBeenCalled();
 });
 
 test('refuses a phone profile as single-panel-device before touching the console', async () => {

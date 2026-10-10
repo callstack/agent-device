@@ -56,17 +56,11 @@ export async function setAndroidFoldPose(
   const pose = requirePosePreset(device, input);
   const states = await readDeviceStates(device, signal);
   const posture = EMULATOR_POSTURES[pose];
-  const expectedState = states.get(posture.state);
-  if (expectedState === undefined) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      `${device.name} is not a foldable emulator: fold requires a ${posture.state} device state`,
-      { deviceId: device.id, reason: 'single-panel-device', hint: FOLDABLE_REQUIRED_HINT },
-    );
-  }
+  const expectedState = requirePostureState(device, pose, states);
 
-  // A keyguard already showing is not the fold's to clear; only one the fold raises is dismissed.
-  const lockedBefore = await isKeyguardShowing(device, signal);
+  // Only a fold to the cover display raises the keyguard, and a keyguard already showing is not
+  // the fold's to clear: only one that `closed` raises is dismissed.
+  const lockedBefore = pose === 'closed' && (await isKeyguardShowing(device, signal));
   await sendEmulatorPosture(device, pose, posture.id, signal);
   emitDiagnostic({
     level: 'info',
@@ -75,7 +69,7 @@ export async function setAndroidFoldPose(
   });
 
   await awaitDeviceState(device, pose, expectedState, states, signal);
-  if (!lockedBefore) await dismissFoldLockScreen(device, signal);
+  if (pose === 'closed' && !lockedBefore) await dismissFoldLockScreen(device, signal);
   const hingeAngleDegrees = await readHingeAngle(device, signal);
   if (Math.abs(hingeAngleDegrees - posture.angle) > ANDROID_FOLD_ANGLE_TOLERANCE_DEGREES) {
     throw new AppError(
@@ -92,6 +86,42 @@ export async function setAndroidFoldPose(
     );
   }
   return { pose, hingeAngleDegrees };
+}
+
+/**
+ * The id of the requested posture's device state. A profile that lists none of the posture states
+ * has no hinge at all; one that lists some but not the requested one has a hinge the console
+ * cannot pose this way, which is its own refusal rather than a single-panel one.
+ */
+function requirePostureState(
+  device: DeviceInfo,
+  pose: FoldPose,
+  states: ReadonlyMap<string, string>,
+): string {
+  const posture = EMULATOR_POSTURES[pose];
+  const expectedState = states.get(posture.state);
+  if (expectedState !== undefined) return expectedState;
+  const listed = Object.values(EMULATOR_POSTURES)
+    .map((candidate) => candidate.state)
+    .filter((state) => states.has(state));
+  if (listed.length === 0) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      `${device.name} is not a foldable emulator: it lists no CLOSED, HALF_OPENED, or OPENED device state`,
+      { deviceId: device.id, reason: 'single-panel-device', hint: FOLDABLE_REQUIRED_HINT },
+    );
+  }
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    `${device.name} has no ${posture.state} device state to commit for the ${pose} pose; it lists ${listed.join(', ')}`,
+    {
+      deviceId: device.id,
+      reason: 'fold-posture-unsupported',
+      requestedPose: pose,
+      deviceStates: listed,
+      hint: `This profile poses only ${listed.join(' and ')}; request one of those poses.`,
+    },
+  );
 }
 
 /** The console poses fixed postures only, so a keyframe trajectory has no Android driver. */
@@ -187,8 +217,9 @@ async function readDeviceState(
  * Android's continue-using-apps-on-fold setting, which the emulator images do not honour. Left
  * alone, every later capture reads the lock screen instead of the app, so it is dismissed the
  * way the swipe would. The keyguard can land after the device state did, so it has to stay away
- * for consecutive reads before the fold is done. Runs only when the keyguard was not showing
- * before the fold.
+ * for consecutive reads before the fold is done. Runs only for `closed` (unfolding lights the
+ * inner display, which raises nothing) and only when the keyguard was not showing before the
+ * fold.
  */
 async function dismissFoldLockScreen(
   device: DeviceInfo,
