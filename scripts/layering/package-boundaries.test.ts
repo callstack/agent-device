@@ -439,6 +439,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit',
     '@agent-device/capture-kit/android-replacement-surface-occlusion',
     '@agent-device/capture-kit/audio-probe-admission-ledger',
+    '@agent-device/capture-kit/audio-probe-descriptor-fixtures',
     '@agent-device/capture-kit/audio-probe-recovery',
     '@agent-device/capture-kit/audio-probe-resource-store',
     '@agent-device/capture-kit/audio-probe-session-resource',

@@ -137,8 +137,8 @@
       "default": "./src/daemon-port/target-classification.ts"
     },
     "./target-classification-fixtures": {
-      "types": "./src/target-classification-fixtures.ts",
-      "default": "./src/target-classification-fixtures.ts"
+      "types": "./src/target-classification.fixtures.ts",
+      "default": "./src/target-classification.fixtures.ts"
     },
     "./target-token": {
       "types": "./src/daemon-port/target-token.ts",

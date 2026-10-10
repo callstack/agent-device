@@ -529,6 +529,14 @@
       "crap_high": {
         "count": 1
       }
+    },
+    "packages/maestro/test/conformance/conformance-normalize.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      }
     }
   },
   "runtime_coverage_findings": [],

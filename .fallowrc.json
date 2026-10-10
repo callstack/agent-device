@@ -83,6 +83,11 @@
       "exports": ["*"]
     },
     {
+      "comment": "A published provider package's default export is its plugin contract; src/plugins/load.ts imports the package by name at runtime and reads `default`.",
+      "file": "packages/provider-*/src/index.ts",
+      "exports": ["default"]
+    },
+    {
       "comment": "Android perf mechanics are selected through the lazy platform host so importing agent-device does not eagerly load adb mechanics. Fallow cannot follow the dynamic property read in src/platform-runtime-perf-host.ts.",
       "file": "packages/platform-android/src/perf.ts",
       "exports": ["sampleAndroidMemoryPerf"]
@@ -91,6 +96,11 @@
       "comment": "Apple perf sampling metadata is selected through the same lazy platform host; Fallow cannot follow the dynamic property read in src/platform-runtime-perf-host.ts.",
       "file": "packages/platform-apple/src/core/perf.ts",
       "exports": ["buildAppleFrameSamplingMetadata", "buildAppleMemorySamplingMetadata"]
+    },
+    {
+      "comment": "packages/platform-apple/src/lifecycle.ts loads this module on demand and reads the member off the memoized import() promise, which Fallow cannot follow.",
+      "file": "packages/platform-apple/src/expo-dev-client-launch.ts",
+      "exports": ["resolveExpoDevClientLaunchUrl"]
     },
     {
       "comment": "These host-process helpers are consumed only by integration leak-oracle support and host-process unit tests; Fallow's production graph intentionally excludes both consumers.",
@@ -287,6 +297,15 @@
       "exports": ["findSnapshotScopeRange"]
     },
     {
+      "comment": "Same façade-exhaustiveness rule (scripts/layering/facade-surface.test.ts): these façades must re-export every symbol of ../screenshot.ts, ../remote-config-fields.ts and ../snapshot-visibility.ts, whose production callers import the source module directly.",
+      "file": "packages/contracts/src/facades/{capture,remote,snapshot}.ts",
+      "exports": [
+        "SCREENSHOT_ACTION_FLAG_KEYS",
+        "PROVIDER_PROFILE_FIELD_FLAG_ALIASES",
+        "collectViewportRects"
+      ]
+    },
+    {
       "comment": "Test fixtures: every *.fixtures.ts builds doubles for co-located *.test.ts files (several import `vi` directly) and none is imported by production source, so --production analysis sees no consumer for any of them. Scoped to unused-exports rather than ignorePatterns so fixtures stay inside every other Fallow rule (health, dead-code, cycles); `*` rather than today's three symbols because the property being asserted is per-file, not per-symbol.",
       "file": "**/*.fixtures.ts",
       "exports": ["*"]
@@ -349,14 +368,42 @@
       "exports": ["getSessionCommandKind"]
     },
     {
-      "comment": "Workspace-package symbols whose only consumers are test-tree files, which --production analysis does not see. Each import is the package specifier, so the façade entry is load-bearing: parseTargetAnnotationV1Payload/TARGET_ANNOTATION_MAX_FIELD_BYTES from src/daemon/__tests__/session-target-evidence.test.ts, MAESTRO_COMPAT_* from src/cli/parser/__tests__/maestro-support-matrix.test.ts, createAppLogLiveHandle from src/__tests__/test-utils/app-log-live-handle.ts (its production sibling createAppLogLiveHandleFromFinish wraps it, and scripts/layering/platform-package-policy.test.ts pins the specifier form).",
+      "comment": "Workspace-package symbols whose only consumers are test-tree files, which --production analysis does not see. Each import is the package specifier, so the façade entry is load-bearing: parseTargetAnnotationV1Payload/TARGET_ANNOTATION_MAX_FIELD_BYTES from src/daemon/__tests__/session-target-evidence.test.ts, MAESTRO_COMPAT_* from src/cli/parser/__tests__/maestro-support-matrix.test.ts, SCRIPT_FLAG_COMMANDS/scriptFlagEntries from src/commands/replay/script-flag-admission.test.ts (the #3197 two-way drift guard between the .ad grammar and the CLI schema), createAppLogLiveHandle from src/__tests__/test-utils/app-log-live-handle.ts (its production sibling createAppLogLiveHandleFromFinish wraps it, and scripts/layering/platform-package-policy.test.ts pins the specifier form).",
       "file": "packages/{ad-script,maestro,capture-kit}/src/index.ts",
       "exports": [
         "parseTargetAnnotationV1Payload",
         "TARGET_ANNOTATION_MAX_FIELD_BYTES",
         "MAESTRO_COMPAT_LIMITATIONS",
         "MAESTRO_COMPAT_SUPPORTED_CAPABILITIES",
-        "createAppLogLiveHandle"
+        "createAppLogLiveHandle",
+        "SCRIPT_FLAG_COMMANDS",
+        "scriptFlagEntries"
+      ]
+    },
+    {
+      "comment": "src/daemon/__tests__/request-runtime-binding.test.ts drives the daemon's exact bind through the recovery authority, whose cancellation race is what rejects; production reaches it only through finishRecoveredDurableCapture and recoverDurableCaptureResource in the same package.",
+      "file": "packages/capture-kit/src/durable-capture/index.ts",
+      "exports": ["acquireDurableCaptureRecoveryAuthorityBeforeDeadline"]
+    },
+    {
+      "comment": "The collected copy's path is part of the stop-sequence contract (ADR 0024 §2.3) beside nativeRecordingPath; provider-scenario and Apple recovery tests assert pulls land on it, while production derives it inside the stop sequence.",
+      "file": "packages/capture-kit/src/recording/stop-sequence.ts",
+      "exports": ["collectedRecordingPath"]
+    },
+    {
+      "comment": "Staged managed-local lease foundations (ADR 0021, #2284/#2308): src/daemon/request-runtime-binding.ts enters request admission for managed-local owners, but the allocator activation unit that would construct these journals, stores, claims and admissions never landed. Remove with the feature, not export by export: its owner kind is part of persisted device-claim and durable-resource records.",
+      "file": "{packages/managed-allocation/src/{journal,record,store}.ts,src/daemon/device/device-claim-allocator.ts,src/daemon/managed-device-allocation/lease-admission.ts,src/managed-device-reachability.ts}",
+      "exports": [
+        "createAllocationOperationJournal",
+        "ALLOCATION_OPERATION_SCHEMA_VERSION",
+        "newAllocationOperation",
+        "decodeAllocationOperationRecord",
+        "bindingFenceFor",
+        "createAllocationOperationStore",
+        "acquireAllocatorHeldDeviceClaim",
+        "releaseAllocatorHeldClaim",
+        "createManagedLeaseAdmission",
+        "createManagedLeaseReachability"
       ]
     },
     {

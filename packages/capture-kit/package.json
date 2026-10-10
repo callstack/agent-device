@@ -22,6 +22,10 @@
       "types": "./src/capture-admission/audio-probe-admission-ledger.ts",
       "default": "./src/capture-admission/audio-probe-admission-ledger.ts"
     },
+    "./audio-probe-descriptor-fixtures": {
+      "types": "./src/audio-probe-descriptor.fixtures.ts",
+      "default": "./src/audio-probe-descriptor.fixtures.ts"
+    },
     "./audio-probe-recovery": {
       "types": "./src/capture-admission/audio-probe-resource-recovery.ts",
       "default": "./src/capture-admission/audio-probe-resource-recovery.ts"
