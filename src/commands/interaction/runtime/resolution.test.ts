@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { BackendSnapshotOptions } from '../../../backend.ts';
+import type { BackendSnapshotOptions } from '@agent-device/contracts/backend';
 import { ref, selector } from './selector-read-utils.ts';
 import { resolveRecordedTarget } from '@agent-device/selectors';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';

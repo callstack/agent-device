@@ -14,7 +14,7 @@ import {
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   ElementTarget,

@@ -39,7 +39,9 @@ test('runtime focus and longPress share selector/ref target resolution', async (
 
 test('runtime drag resolves generic selector endpoints before one continuous pointer plan', async () => {
   let capturedPlan:
-    | Parameters<NonNullable<import('../../../backend.ts').AgentDeviceBackend['performGesture']>>[1]
+    | Parameters<
+        NonNullable<import('@agent-device/contracts/backend').AgentDeviceBackend['performGesture']>
+      >[1]
     | undefined;
   const snapshot = dragTargetSnapshot();
   const device = createInteractionDevice(snapshot, {

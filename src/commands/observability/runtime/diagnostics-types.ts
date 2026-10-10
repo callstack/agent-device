@@ -3,7 +3,7 @@ import type {
   BackendLogEntry,
   BackendNetworkEntry,
   BackendPerfMetric,
-} from '../../../backend.ts';
+} from '@agent-device/contracts/backend';
 
 export type DiagnosticsLogsCommandResult = {
   kind: 'diagnosticsLogs';

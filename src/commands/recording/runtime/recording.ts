@@ -3,9 +3,9 @@ import type {
   BackendRecordingResult,
   BackendTraceOptions,
   BackendTraceResult,
-} from '../../../backend.ts';
-import type { ArtifactDescriptor, FileOutputRef } from '../../../io.ts';
-import type { CommandContext } from '../../../runtime-contract.ts';
+} from '@agent-device/contracts/backend';
+import type { ArtifactDescriptor, FileOutputRef } from '@agent-device/contracts/artifact-adapter';
+import type { CommandContext } from '@agent-device/contracts/runtime-contract';
 import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
 import { requireIntInRange } from '@agent-device/kernel/validation';

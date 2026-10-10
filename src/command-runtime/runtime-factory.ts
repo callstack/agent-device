@@ -1,10 +1,10 @@
 import type {
   AgentDeviceRuntime,
   AgentDeviceRuntimeConfig,
-  CommandPolicy,
   CommandSessionRecord,
   CommandSessionStore,
-} from '../runtime-contract.ts';
+} from '@agent-device/contracts/runtime-contract';
+import { restrictedCommandPolicy } from '@agent-device/contracts/command-policy';
 
 /**
  * Assembles an in-process runtime from its backend, artifact adapter, session store, policy and
@@ -62,22 +62,4 @@ function cloneMetadata(metadata: Record<string, unknown>): Record<string, unknow
   } catch {
     return { ...metadata };
   }
-}
-
-export function localCommandPolicy(overrides: Partial<CommandPolicy> = {}): CommandPolicy {
-  return {
-    allowLocalInputPaths: true,
-    allowLocalOutputPaths: true,
-    maxImagePixels: 20_000_000,
-    ...overrides,
-  };
-}
-
-export function restrictedCommandPolicy(overrides: Partial<CommandPolicy> = {}): CommandPolicy {
-  return {
-    allowLocalInputPaths: false,
-    allowLocalOutputPaths: false,
-    maxImagePixels: 20_000_000,
-    ...overrides,
-  };
 }

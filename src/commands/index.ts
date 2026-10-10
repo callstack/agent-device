@@ -1,4 +1,4 @@
-import type { AgentDeviceRuntime } from '../runtime-contract.ts';
+import type { AgentDeviceRuntime } from '@agent-device/contracts/runtime-contract';
 import { bindRuntimeCommands } from './runtime-types.ts';
 import { bindCaptureCommands, type BoundCaptureCommands } from './capture/runtime/index.ts';
 import {

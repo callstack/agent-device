@@ -11,7 +11,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { Point, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { successText } from '@agent-device/kernel/success-text';
 import { requireIntInRange } from '@agent-device/kernel/validation';
 import { toBackendContext } from '../../runtime-common.ts';

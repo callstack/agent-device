@@ -4,14 +4,12 @@ import type {
   AgentDeviceBackend,
   BackendSnapshotOptions,
   BackendSnapshotResult,
-} from '../../../backend.ts';
+} from '@agent-device/contracts/backend';
 import type { IosSnapshotProducer } from '@agent-device/contracts/ios-snapshot';
 import { createLocalArtifactAdapter } from '../../../io.ts';
-import {
-  createAgentDevice,
-  localCommandPolicy,
-  type CommandSessionStore,
-} from '../../../runtime.ts';
+import { createAgentDevice } from '../../../runtime.ts';
+import { localCommandPolicy } from '@agent-device/contracts/command-policy';
+import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
 import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';

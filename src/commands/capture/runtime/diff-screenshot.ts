@@ -1,14 +1,17 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { BackendScreenshotOptions, BackendScreenshotResult } from '../../../backend.ts';
+import type {
+  BackendScreenshotOptions,
+  BackendScreenshotResult,
+} from '@agent-device/contracts/backend';
 import type {
   ArtifactDescriptor,
   FileInputRef,
   FileOutputRef,
   ReservedOutputFile,
   ResolvedInputFile,
-} from '../../../io.ts';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+} from '@agent-device/contracts/artifact-adapter';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   compareScreenshots,

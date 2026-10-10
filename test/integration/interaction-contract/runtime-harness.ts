@@ -1,7 +1,8 @@
-import type { AgentDeviceBackend } from '../../../src/backend.ts';
+import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '../../../src/io.ts';
-import { createAgentDevice, localCommandPolicy } from '../../../src/runtime.ts';
+import { createAgentDevice } from '../../../src/runtime.ts';
+import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { createMemorySessionStore } from '../../../src/command-runtime/runtime-factory.ts';
 
 type ContractBackendOverrides = Partial<

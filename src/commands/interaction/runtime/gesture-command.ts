@@ -1,4 +1,4 @@
-import type { CommandContext } from '../../../runtime-contract.ts';
+import type { CommandContext } from '@agent-device/contracts/runtime-contract';
 import type {
   GestureCommandInput,
   GestureIntent,

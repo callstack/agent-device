@@ -3,7 +3,7 @@ import { validateScreenshotScale } from '@agent-device/contracts/capture';
 import { successText } from '@agent-device/kernel/success-text';
 import { resizePngFileToScale } from '@agent-device/capture-kit/png-resize';
 import type { DeviceRotation } from '@agent-device/contracts/device';
-import type { ArtifactDescriptor } from '../../../io.ts';
+import type { ArtifactDescriptor } from '@agent-device/contracts/artifact-adapter';
 import type { RuntimeCommand, ScreenshotCommandOptions } from '../../runtime-types.ts';
 import { reserveCommandOutput } from '../../io-policy.ts';
 

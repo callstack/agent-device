@@ -1,20 +1,19 @@
-import type {
-  ScreenshotResultData,
-  SnapshotCaptureAnnotations,
-  SnapshotDiagnosticsSummary,
-} from '@agent-device/contracts/capture';
-import type { JsonObject } from '@agent-device/contracts/client';
-import type { AppsFilter, DeviceRotation } from '@agent-device/contracts/device';
-import type { AlertAction, AlertInfo } from '@agent-device/contracts/alert-contract';
-import type { BackMode } from '@agent-device/contracts/back-mode';
-import type { ClickButton } from '@agent-device/contracts/click-button';
-import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
-import type { RepeatedInput } from '@agent-device/contracts/interaction';
-import type { ScrollDirection } from '@agent-device/contracts/scroll-gesture';
-import type { ResolvedScrollExecutionOptions } from '@agent-device/contracts/scroll-command';
-import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
-import type { RecordingExportQuality } from '@agent-device/contracts/recording';
-import type { SessionSurface } from '@agent-device/contracts/session';
+import type { ScreenshotResultData } from './snapshot-types.ts';
+import type { SnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
+import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
+import type { JsonObject } from './json.ts';
+import type { AppsFilter } from './app-inventory.ts';
+import type { DeviceRotation } from './device-rotation.ts';
+import type { AlertAction, AlertInfo } from './alert-contract.ts';
+import type { BackMode } from './back-mode.ts';
+import type { ClickButton } from './click-button.ts';
+import type { GesturePlan } from './gesture-plan-types.ts';
+import type { RepeatedInput } from './interaction.ts';
+import type { ScrollDirection } from './scroll-gesture.ts';
+import type { ResolvedScrollExecutionOptions } from './scroll-command.ts';
+import type { TvRemoteButton } from './tv-remote.ts';
+import type { RecordingExportQuality } from './recording-export-quality.ts';
+import type { SessionSurface } from './session-surface.ts';
 import type {
   DeviceTarget,
   Platform,
@@ -327,7 +326,7 @@ import type {
   BackendDumpNetworkResult,
   BackendNetworkEntry,
   BackendNetworkIncludeMode,
-} from '@agent-device/contracts/backend-diagnostics';
+} from './backend-diagnostics.ts';
 
 export type {
   BackendDiagnosticsPageOptions,

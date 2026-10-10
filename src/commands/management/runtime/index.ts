@@ -1,4 +1,4 @@
-import type { AgentDeviceRuntime } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime } from '@agent-device/contracts/runtime-contract';
 import { bindRuntimeCommands, type BoundOf, type RuntimeCommand } from '../../runtime-types.ts';
 import { resolveAppsFilter } from '../app-inventory-contract.ts';
 import {

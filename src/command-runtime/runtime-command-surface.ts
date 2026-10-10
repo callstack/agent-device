@@ -9,7 +9,10 @@ import {
   type BoundCaptureCommands,
 } from '../commands/capture/runtime/index.ts';
 import { createAgentDeviceRuntime } from './runtime-factory.ts';
-import type { AgentDeviceRuntime, AgentDeviceRuntimeConfig } from '../runtime-contract.ts';
+import type {
+  AgentDeviceRuntime,
+  AgentDeviceRuntimeConfig,
+} from '@agent-device/contracts/runtime-contract';
 
 /**
  * The command surface an in-process executor dispatches through: capture, selector reads and

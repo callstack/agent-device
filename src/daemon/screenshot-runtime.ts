@@ -13,9 +13,9 @@ import type { ScreenshotOverlayRef } from '@agent-device/kernel/snapshot';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { AgentDeviceBackend } from '../backend.ts';
-import type { ArtifactAdapter } from '../io.ts';
-import { localCommandPolicy } from '../command-runtime/runtime-factory.ts';
+import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
+import type { ArtifactAdapter } from '@agent-device/contracts/artifact-adapter';
+import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { createCommandSurfaceAgentDevice } from '../command-runtime/runtime-command-surface.ts';
 import {
   assertSupportedScreenshotPixelDensity,

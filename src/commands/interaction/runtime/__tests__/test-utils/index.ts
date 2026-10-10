@@ -1,11 +1,9 @@
-import type { AgentDeviceBackend, BackendSnapshotResult } from '../../../../../backend.ts';
+import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/contracts/backend';
 import { createLocalArtifactAdapter } from '../../../../../io.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
-import {
-  createAgentDevice,
-  localCommandPolicy,
-  type CommandSessionStore,
-} from '../../../../../runtime.ts';
+import { createAgentDevice } from '../../../../../runtime.ts';
+import { localCommandPolicy } from '@agent-device/contracts/command-policy';
+import type { CommandSessionStore } from '@agent-device/contracts/runtime-contract';
 import { ref } from '../../selector-read-utils.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {

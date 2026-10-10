@@ -6,8 +6,8 @@ import type {
   BackendMeasurePerfOptions,
   BackendNetworkIncludeMode,
   BackendReadLogsOptions,
-} from '../../../backend.ts';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+} from '@agent-device/contracts/backend';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { AppError } from '@agent-device/kernel/errors';
 import { requireIntInRange } from '@agent-device/kernel/validation';
 import { formatLogsResult, formatNetworkResult, formatPerfResult } from './diagnostics-format.ts';

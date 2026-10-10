@@ -11,8 +11,8 @@ import type {
   FileInputRef,
   FileOutputRef,
   ReservedOutputFile,
-} from '../../../io.ts';
-import type { CommandContext } from '../../../runtime-contract.ts';
+} from '@agent-device/contracts/artifact-adapter';
+import type { CommandContext } from '@agent-device/contracts/runtime-contract';
 import type { RuntimeCommand } from '../../runtime-types.ts';
 import { reserveCommandOutput, resolveCommandInput } from '../../io-policy.ts';
 

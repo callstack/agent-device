@@ -5,10 +5,11 @@
 //
 // Budgets are injected (fake clock) — no real waiting.
 
-import type { AgentDeviceBackend, BackendSnapshotResult } from '../../../../backend.ts';
+import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/contracts/backend';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '../../../../io.ts';
-import { createAgentDevice, localCommandPolicy } from '../../../../runtime.ts';
+import { createAgentDevice } from '../../../../runtime.ts';
+import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { createMemorySessionStore } from '../../../../command-runtime/runtime-factory.ts';
 

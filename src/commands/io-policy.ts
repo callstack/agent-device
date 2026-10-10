@@ -7,8 +7,8 @@ import type {
   ResolvedInputFile,
   ResolveInputOptions,
   TemporaryFile,
-} from '../io.ts';
-import type { AgentDeviceRuntime } from '../runtime-contract.ts';
+} from '@agent-device/contracts/artifact-adapter';
+import type { AgentDeviceRuntime } from '@agent-device/contracts/runtime-contract';
 import { AppError, asAppError } from '@agent-device/kernel/errors';
 
 export async function resolveCommandInput(

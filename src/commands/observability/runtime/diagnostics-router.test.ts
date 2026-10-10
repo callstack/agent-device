@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AgentDeviceBackend, BackendCommandContext } from '../../../backend.ts';
-import type { ArtifactAdapter } from '../../../io.ts';
+import type { AgentDeviceBackend, BackendCommandContext } from '@agent-device/contracts/backend';
+import type { ArtifactAdapter } from '@agent-device/contracts/artifact-adapter';
 import { createAgentDevice } from '../../../runtime.ts';
-import {
-  createMemorySessionStore,
-  restrictedCommandPolicy,
-} from '../../../command-runtime/runtime-factory.ts';
+import { restrictedCommandPolicy } from '@agent-device/contracts/command-policy';
+import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
 
 const artifacts = {
   resolveInput: async () => ({ path: '/tmp/input' }),

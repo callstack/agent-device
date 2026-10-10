@@ -7,8 +7,8 @@ import {
 import type { SnapshotResult } from '@agent-device/contracts/snapshot-runtime';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
-import type { CommandSessionRecord } from '../runtime-contract.ts';
+import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/contracts/backend';
+import type { CommandSessionRecord } from '@agent-device/contracts/runtime-contract';
 import { createCommandSurfaceAgentDevice } from '../command-runtime/runtime-command-surface.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';

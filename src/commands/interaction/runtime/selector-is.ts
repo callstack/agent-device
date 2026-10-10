@@ -11,7 +11,7 @@ import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeli
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { SelectorTarget } from '@agent-device/contracts/interaction';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';

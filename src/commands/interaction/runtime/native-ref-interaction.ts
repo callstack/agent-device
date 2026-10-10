@@ -1,7 +1,7 @@
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { normalizeRef } from '@agent-device/kernel/snapshot';
 import { resolveRectCenter } from '@agent-device/kernel/rect-center';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import { surfaceScopedNodes } from './post-action-surface.ts';
 import type {
@@ -13,7 +13,7 @@ import type {
   BackendActionResult,
   BackendCommandContext,
   BackendRefTarget,
-} from '../../../backend.ts';
+} from '@agent-device/contracts/backend';
 import { toBackendContext } from '../../runtime-common.ts';
 import { toBackendResult } from '../../runtime-types.ts';
 import type { InteractionAction } from './interaction-resolution-request.ts';

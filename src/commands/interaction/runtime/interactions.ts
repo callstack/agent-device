@@ -9,7 +9,7 @@ import type {
 import { AppError } from '@agent-device/kernel/errors';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { Point } from '@agent-device/kernel/snapshot';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import { isFillableType } from '@agent-device/contracts/snapshot';
 import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
 import { toBackendContext } from '../../runtime-common.ts';

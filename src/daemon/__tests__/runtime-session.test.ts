@@ -7,7 +7,7 @@ import {
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
 import { createDaemonRuntimeSessionStore } from '../runtime-session.ts';
-import type { CommandSessionRecord } from '../../runtime-contract.ts';
+import type { CommandSessionRecord } from '@agent-device/contracts/runtime-contract';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 
 test('createDaemonRuntimeSessionStore hides non-matching sessions and scopes writes', async () => {
