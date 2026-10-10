@@ -36,6 +36,10 @@
       "types": "./src/daemon-port/replay-dispatch-envelope.ts",
       "default": "./src/daemon-port/replay-dispatch-envelope.ts"
     },
+    "./replay-backend-registry": {
+      "types": "./src/daemon-port/replay-backend-registry.ts",
+      "default": "./src/daemon-port/replay-backend-registry.ts"
+    },
     "./replay-script-selection": {
       "types": "./src/daemon-port/replay-script-selection.ts",
       "default": "./src/daemon-port/replay-script-selection.ts"
