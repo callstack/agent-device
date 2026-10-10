@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
-import { stopDaemonProcess } from '../../src/daemon-process.ts';
+import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
 import { formatResultDebug } from './cli-json.ts';
 import { assertNoDaemonLeaks } from './support/daemon-leak-oracle.ts';
 import { runCliJson } from './test-helpers.ts';

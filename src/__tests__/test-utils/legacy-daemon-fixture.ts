@@ -3,8 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
-import { stopDaemonProcess } from '../../daemon-process.ts';
-import type { DaemonPaths } from '../../daemon-resolution.ts';
+import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
+import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
 // c237027737: server-lifecycle.ts readLockInfo/acquireDaemonLock/releaseDaemonLock.
 const legacyLockProtocol = `
@@ -49,7 +49,10 @@ export function spawnLegacyDaemonFixture(paths: DaemonPaths, acquisitionBarrier?
   const entry = path.join(codeDir, 'dist', 'src', 'internal', 'daemon.js');
   fs.mkdirSync(path.dirname(entry), { recursive: true });
   fs.writeFileSync(path.join(codeDir, 'package.json'), '{"type":"module"}');
-  const processUrl = new URL('../../daemon-process.ts', import.meta.url).href;
+  const processUrl = new URL(
+    '../../../packages/daemon-contracts/src/daemon-process.ts',
+    import.meta.url,
+  ).href;
   const hostProcessUrl = new URL('../../../packages/host-kit/src/process.ts', import.meta.url).href;
   fs.writeFileSync(
     entry,

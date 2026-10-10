@@ -40,7 +40,7 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { sendRequest } from '../daemon-client-transport.ts';
 import type { DaemonRequest } from '../../daemon/daemon-request.ts';
 import type { DaemonInfo } from '../daemon-client-metadata.ts';
-import type { DaemonPaths } from '../../daemon-resolution.ts';
+import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import {
   closeLoopbackServer,

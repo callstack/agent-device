@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test } from 'vitest';
 import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
-import { isAgentDeviceDaemonProcess, stopDaemonProcess } from '../daemon-process.ts';
+import { isAgentDeviceDaemonProcess, stopDaemonProcess } from './daemon-process.ts';
 
 const TAKEOVER_TIMEOUTS = { termTimeoutMs: 5_000, killTimeoutMs: 2_000 };
 const spawnedChildren: { child: ChildProcess; exited: Promise<void> }[] = [];

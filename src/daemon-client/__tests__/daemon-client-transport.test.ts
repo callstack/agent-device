@@ -20,7 +20,7 @@ import {
   isDaemonTransportUnavailableError,
   sendRequest,
 } from '../daemon-client-transport.ts';
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import {
   closeLoopbackServer,

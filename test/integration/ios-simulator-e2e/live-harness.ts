@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { resolveDaemonPaths } from '../../../src/daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import type { CliJsonResult } from '../cli-json.ts';
 import {

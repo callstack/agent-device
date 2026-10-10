@@ -19,7 +19,7 @@ import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 import { assertMacOsAppLeaseAdmitsRequest } from './macos-app-lease.ts';
 import { assertDaemonPolicyAdmitsLease } from './daemon-policy.ts';
-import type { DaemonPolicy } from '../daemon-policy-file.ts';
+import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
   const isolation = resolveSessionIsolationMode(

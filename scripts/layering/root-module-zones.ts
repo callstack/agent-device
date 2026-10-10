@@ -9,7 +9,7 @@
  * This reduces `(root)` in the logical graph only: the declared modules still live directly under
  * `src/`, and classifying them is not collocating them. The table bridges that layout and should
  * shrink. When a group moves into a folder named for its zone (`src/command-runtime/`,
- * `src/daemon-contracts/`, ...) or into a package, `topFolder` derives the same zone and the
+ * `src/command-runtime/`, ...) or into a package, `topFolder` derives the same zone and the
  * group's rows are deleted. The end state: renaming a module within its owner needs no edit here,
  * while a forbidden dependency still fails R5 or R80.
  *
@@ -21,19 +21,6 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
   '(root)': ['src/bin.ts', 'src/cli.ts', 'src/daemon.ts'],
   // Imported by core's interactor resolution, so they sit at core's rank.
   core: ['src/platform-runtime-android-adb-host.ts', 'src/provider-device-runtime.ts'],
-  // On-disk and wire contracts a daemon process shares with its clients (#2559): the client
-  // reaches the daemon over the network, so both sides read these from below.
-  'daemon-contracts': [
-    'src/daemon-owner-cleanup.ts',
-    'src/daemon-policy-file.ts',
-    'src/daemon-process.ts',
-    'src/daemon-registration-owner.ts',
-    'src/daemon-registration.ts',
-    'src/daemon-resolution.ts',
-    'src/daemon-shutdown-report.ts',
-    'src/request-progress-protocol.ts',
-    'src/session-repair-tombstone.ts',
-  ],
   // The in-process command runtime: the backend and artifact contracts it drives and the
   // assemblies that bind command families onto it. The daemon executes commands through it.
   'command-runtime': [

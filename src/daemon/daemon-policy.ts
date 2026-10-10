@@ -11,13 +11,13 @@ import {
   resolveDaemonPolicyCommandName,
   type DaemonPolicy,
   type DaemonPolicyCapability,
-} from '../daemon-policy-file.ts';
+} from '@agent-device/daemon-contracts/daemon-policy-file';
 import type { DaemonRequest } from './daemon-request.ts';
 
 /**
  * ADR 0029 enforcement: every request the daemon admits, including `batch` steps and `replay`
  * actions, which re-enter request admission rather than the HTTP edge. The policy file itself is
- * loaded and validated by `src/daemon-policy-file.ts`.
+ * loaded and validated by `@agent-device/daemon-contracts/daemon-policy-file`.
  */
 
 /** Refuses a request the policy denies before it resolves a device or takes a lock. */

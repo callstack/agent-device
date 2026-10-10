@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import net from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
 import { closeLoopbackServer, listenOnLoopback } from '../../__tests__/test-utils/loopback.ts';
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   buildLeaseHeartbeatRequest,
   buildUploadLeaseHeartbeat,

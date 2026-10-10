@@ -10,8 +10,8 @@ import { providerCredentialFingerprint } from '../../provider-credential-fingerp
 import {
   DAEMON_STARTUP_EXIT_CODES,
   tryAcquireDaemonRegistration,
-} from '../../daemon-registration-owner.ts';
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+} from '@agent-device/daemon-contracts/daemon-registration-owner';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { interactorResolution } from '../interactor-resolution.ts';
 
 vi.mock('../../platform-runtime.ts', () => ({

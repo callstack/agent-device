@@ -7,7 +7,7 @@ import {
   readHostProcessIdentityObservations,
 } from '@agent-device/host-kit/process';
 
-import { isSupersededDaemonOwner } from '../../daemon-registration.ts';
+import { isSupersededDaemonOwner } from '@agent-device/daemon-contracts/daemon-registration';
 import { resolveDeviceClaimRoot } from './device-claim-paths.ts';
 import { decodeStoredDeviceClaim, type DeviceClaim } from './device-claim-record.ts';
 

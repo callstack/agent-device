@@ -19,7 +19,7 @@ import { downloadRemoteArtifact } from '../../remote/daemon-artifacts.ts';
 import { resolveDaemonStartupHint } from '../daemon-client-metadata.ts';
 import { canConnectSocket } from '../daemon-client-transport.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readVersion } from '@agent-device/host-kit/version';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 

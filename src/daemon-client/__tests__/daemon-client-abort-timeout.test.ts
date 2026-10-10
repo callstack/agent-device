@@ -19,7 +19,7 @@ import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon/daemon-request.ts';
 import { createSocketServer, listenNetServer } from '../../daemon/server/transport.ts';
 import { sendRequest } from '../daemon-client-transport.ts';
-import { resolveDaemonPaths } from '../../daemon-resolution.ts';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   closeLoopbackServer,
   listenOnLoopback,
