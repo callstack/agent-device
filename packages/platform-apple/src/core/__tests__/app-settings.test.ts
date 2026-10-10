@@ -652,3 +652,28 @@ test.for([
     });
   },
 );
+
+test('setIosSetting permission keeps a failed app listing distinct from a missing app', async () => {
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+
+  await withFakeAppleTool(
+    (args) =>
+      isSimctlListApps(args)
+        ? { stderr: 'CoreSimulator error', exitCode: 1 }
+        : unexpectedArgs(args),
+    async ({ calls }) => {
+      const thrown = await setIosSetting(
+        IOS_TEST_SIMULATOR,
+        'permission',
+        'grant',
+        'com.example.unlisted',
+        { permissionTarget: 'photos' },
+      ).catch((error: unknown) => error);
+      assert.ok(thrown instanceof AppError);
+      assert.equal(thrown.code, 'COMMAND_FAILED');
+      assert.notEqual(thrown.details?.reason, PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled);
+      assert.equal(thrown.details?.dispatched, 'no');
+      assert.deepEqual(calls, [['simctl', 'listapps', 'sim-1']]);
+    },
+  );
+});

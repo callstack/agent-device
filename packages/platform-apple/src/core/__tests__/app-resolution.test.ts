@@ -40,6 +40,28 @@ test('resolveIosApp passes a dotted target through without listing apps by defau
   assert.equal(mockRunSimctl.mock.calls.length, 0);
 });
 
+test.for([
+  { label: 'a failed listapps', reply: { stdout: '', stderr: 'CoreSimulator error', exitCode: 1 } },
+  { label: 'an unparsable listapps answer', reply: { stdout: 'garbage', stderr: '', exitCode: 0 } },
+])(
+  'resolveIosApp reports $label as an enumeration failure, not a missing app',
+  async ({ reply }) => {
+    mockRunSimctl.mockResolvedValue(reply);
+    for (const [target, options] of [
+      ['com.example.unlisted', { installedOnly: true }],
+      ['Unlisted', {}],
+    ] as const) {
+      await assert.rejects(
+        () => resolveIosApp(bootedSimulator, target, options),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'COMMAND_FAILED' &&
+          error.details?.reason === undefined,
+      );
+    }
+  },
+);
+
 test('resolveIosApp installedOnly matches installed bundle ids, then display names, else refuses', async () => {
   const installedOnly = { installedOnly: true } as const;
   assert.equal(

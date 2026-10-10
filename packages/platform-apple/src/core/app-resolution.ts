@@ -66,7 +66,7 @@ export async function resolveIosApp(
 
   const list =
     device.kind === 'simulator'
-      ? await listSimulatorApps(device)
+      ? await requireSimulatorApps(device)
       : await resolveIosPhysicalDeviceControl(device).listApps(device, 'all');
   if (dotted && list.some((entry) => entry.bundleId === trimmed)) {
     return iosAppResolutionCache.set(cacheScope, trimmed, trimmed);
@@ -297,6 +297,23 @@ async function listSimulatorApps(
   }));
 }
 
+/**
+ * The installed apps an app resolution matches against. A listing `simctl` could not produce is a
+ * failure of its own, never an empty list: reading it as one would report an installed app missing.
+ */
+async function requireSimulatorApps(device: DeviceInfo): Promise<IosAppInfo[]> {
+  const read = await readSimulatorAppMetadata(device);
+  if (read.type === 'unreadable') {
+    throw new AppError('COMMAND_FAILED', `Could not list the apps installed on ${device.id}`, {
+      deviceId: device.id,
+      exitCode: read.exitCode,
+      stderr: read.stderr,
+      hint: 'Check that the simulator is booted and that `xcrun simctl listapps <udid>` answers, then retry.',
+    });
+  }
+  return read.apps.map((app) => ({ bundleId: app.bundleId, name: app.name }));
+}
+
 type SimulatorAppListRecord = Record<
   string,
   {
@@ -312,18 +329,35 @@ async function listSimulatorAppMetadata(
   device: DeviceInfo,
   options?: SimulatorAppListOptions,
 ): Promise<SimulatorAppMetadata[]> {
+  const read = await readSimulatorAppMetadata(device, options);
+  return read.type === 'listed' ? read.apps : [];
+}
+
+type SimulatorAppListRead =
+  | Readonly<{ type: 'listed'; apps: SimulatorAppMetadata[] }>
+  | Readonly<{ type: 'unreadable'; exitCode: number | null | undefined; stderr: string }>;
+
+async function readSimulatorAppMetadata(
+  device: DeviceInfo,
+  options?: SimulatorAppListOptions,
+): Promise<SimulatorAppListRead> {
   const remaining = remainingLookupBudget(options ?? {});
   const result = await runSimctlForDevice(device, ['listapps', device.id], {
     allowFailure: true,
     ...remaining(),
   });
+  const unreadable = {
+    type: 'unreadable',
+    exitCode: result.exitCode,
+    stderr: String(result.stderr ?? ''),
+  } as const;
   const trimmed = (result.stdout as string).trim();
-  if (!trimmed.startsWith('{')) return [];
+  if (!trimmed.startsWith('{')) return unreadable;
 
   const parsed =
     parseSimulatorAppList(trimmed) ?? (await convertSimulatorAppList(trimmed, remaining()));
-  if (!parsed) return [];
-  return Object.entries(parsed).map(([bundleId, info]) => {
+  if (!parsed) return unreadable;
+  const apps = Object.entries(parsed).map(([bundleId, info]) => {
     const appPath = resolveSimulatorAppPath(info);
     return {
       bundleId,
@@ -332,6 +366,7 @@ async function listSimulatorAppMetadata(
       ...(info.ApplicationType ? { applicationType: info.ApplicationType } : {}),
     };
   });
+  return { type: 'listed', apps };
 }
 
 function parseSimulatorAppList(text: string): SimulatorAppListRecord | null {
