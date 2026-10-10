@@ -9,7 +9,7 @@
 <script defer src="/agent-device/pr-preview/pr-3357/static/js/lib-react.e84adf13b9.js"></script>
 <script defer src="/agent-device/pr-preview/pr-3357/static/js/lib-router.270f17bfa6.js"></script>
 <script defer src="/agent-device/pr-preview/pr-3357/static/js/476.52ed165336.js"></script>
-<script defer src="/agent-device/pr-preview/pr-3357/static/js/index.75c9c486ad.js"></script>
+<script defer src="/agent-device/pr-preview/pr-3357/static/js/index.96766561a2.js"></script>
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="generator" content="Rspress v2.0.12">
 <meta property="og:url" content="https://oss.callstack.com/agent-device">
@@ -104,7 +104,7 @@ in CI and on shared hosts so devices don&#x27;t keep running after the run:</p>
 <p>Without <code>--shutdown</code>, <code>close</code> keeps the iOS runner warm for the next <code>open</code>. If you shut that simulator
 down yourself (<code>xcrun simctl shutdown</code>) while the runner is waiting, agent-device stops the runner so it
 doesn&#x27;t boot the simulator again, and the next <code>open</code> returns a warning that ends in
-<code>reason=runner_destination_lost</code>. It ends in <code>reason=runner_unreachable</code> when the runner stopped answering, or <code>reason=runner_destination_unverified</code> when its connection closed and the simulator&#x27;s state could not be read.</p>
+<code>reason=runner_connection_lost</code>.</p>
 <h2 class="rp-toc-include" id="wait-for-a-slow-or-busy-device"><a href="#wait-for-a-slow-or-busy-device" class="rp-header-anchor rp-link" aria-hidden="true">#</a>Wait for a slow or busy device</h2>
 <p>A never-booted iOS Simulator can take several minutes to finish its first boot. Give <code>open</code> (or
 <code>prepare ios-runner</code>) a <code>--timeout</code> long enough to cover it. The session claims the device from the
