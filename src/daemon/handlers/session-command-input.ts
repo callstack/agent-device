@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import type { PlatformResourceCleanup } from '../platform-resource-cleanup.ts';
@@ -29,6 +30,7 @@ export type SessionCommandInput = {
   /** Request-scoped Android adb transport override, opaque to the daemon. */
   androidAdbExecutor?: unknown;
   bindDevice?: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
   inspectFacts?: InspectDeviceRuntimeFacts;
   bindExactDevice?: BindExactDeviceRuntime;
   appLogAdmissionLedger?: AppLogAdmissionLedger;

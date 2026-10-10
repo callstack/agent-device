@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import path from 'node:path';
@@ -63,6 +64,7 @@ async function close(params: {
   internal?: DaemonRequest['internal'];
 }) {
   return await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: closeRequest(params.sessionName, params.positionals ?? [], params.internal),
     sessionName: params.sessionName,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

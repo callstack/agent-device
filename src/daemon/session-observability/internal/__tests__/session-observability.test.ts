@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
@@ -13,6 +14,7 @@ test('network dump validates include mode directly', async () => {
     emptyAppLogResult('android', input),
   );
   const response = await handleSessionObservabilityCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'android',
@@ -40,6 +42,7 @@ test('network dump accepts explicit include flag and rejects conflicting values'
     emptyAppLogResult('android', input),
   );
   const okResponse = await handleSessionObservabilityCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'android',
@@ -55,6 +58,7 @@ test('network dump accepts explicit include flag and rejects conflicting values'
   if (okResponse?.ok) assert.equal(okResponse.data?.include, 'headers');
 
   const conflictResponse = await handleSessionObservabilityCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'android',
@@ -88,6 +92,7 @@ test.each(REMOVED_AGGREGATE_PERF_POSITIONALS.map((positionals) => [positionals] 
   async (positionals) => {
     const sessionStore = makeAndroidStore();
     const response = await handleSessionObservabilityCommands({
+      platformServices: daemonPlatformServicesFixture(),
       req: { token: 't', session: 'android', command: 'perf', positionals, flags: {} },
       sessionName: 'android',
       sessionStore,

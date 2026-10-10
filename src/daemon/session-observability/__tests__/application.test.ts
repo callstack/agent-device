@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
@@ -31,6 +32,7 @@ function request(command: DaemonRequest['command']): DaemonRequest {
 
 async function run(command: DaemonRequest['command']): Promise<DaemonResponse | null> {
   return await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: request(command),
     sessionName: 'default',
     logPath: '/tmp/agent-device-session-observability-route.log',
@@ -57,6 +59,7 @@ test('observability commands retain their route response and narrow facade input
         'bindDevice',
         'inspectFacts',
         'perfCaptureAdmissionLedger',
+        'platformServices',
         'req',
         'sessionName',
         'sessionStore',

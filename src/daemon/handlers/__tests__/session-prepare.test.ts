@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { resolveCommandTimeoutPolicy } from '@agent-device/command-registry/registry';
@@ -85,6 +86,7 @@ async function runPrepare(flags: { timeoutMs?: number }): Promise<{
     ...flags,
   };
   const response = await handlePrepareCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,

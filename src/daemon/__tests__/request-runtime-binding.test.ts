@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
@@ -44,6 +45,8 @@ const scope = {
 
 const admitDeviceClaim = async () => {};
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
+// Bound readiness forwards the port to the local readiness ask, so the test asserts on it.
+const platformServices = daemonPlatformServicesFixture();
 
 beforeEach(() => {
   mockEnsureDeviceReady.mockReset();
@@ -53,16 +56,22 @@ beforeEach(() => {
 test('bound readiness preserves local behavior after the binding fence', async () => {
   const selected = device('ready-after-bind');
 
-  await ensureBoundDeviceReady({ device: selected, owner: localRuntimeOwner('android') });
+  await ensureBoundDeviceReady(
+    { device: selected, owner: localRuntimeOwner('android') },
+    platformServices,
+  );
 
-  expect(mockEnsureDeviceReady).toHaveBeenCalledWith(selected);
+  expect(mockEnsureDeviceReady).toHaveBeenCalledWith(selected, platformServices);
 });
 
 test('bound readiness leaves provider-owned devices alone', async () => {
-  await ensureBoundDeviceReady({
-    device: device('provider-ready'),
-    owner: providerRuntimeOwner('test', 'provider-ready'),
-  });
+  await ensureBoundDeviceReady(
+    {
+      device: device('provider-ready'),
+      owner: providerRuntimeOwner('test', 'provider-ready'),
+    },
+    daemonPlatformServicesFixture(),
+  );
 
   expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
 });
@@ -84,6 +93,7 @@ test('runtime readiness follows device claim admission', async () => {
   });
 
   const admission = await admitRuntimeUse({
+    platformServices: daemonPlatformServicesFixture(),
     command: 'logs',
     device: device('claim-order'),
     use: appLogInspectUse,

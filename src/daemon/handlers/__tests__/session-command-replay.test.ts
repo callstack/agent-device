@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { test, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -16,6 +17,7 @@ test('replay parses open --relaunch flag and replays open with relaunch semantic
 
   const invoked: DaemonRequest[] = [];
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -54,6 +56,7 @@ test('replay parses runtime set flags and replays runtime command', async () => 
   const invoked: DaemonRequest[] = [];
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -93,6 +96,7 @@ test('replay parses inline open runtime flags and replays open with runtime payl
   const invoked: DaemonRequest[] = [];
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -137,6 +141,7 @@ test('replay delivers scroll --until and wait --raw flags to the dispatched step
 
   const invoked: DaemonRequest[] = [];
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -172,6 +177,7 @@ test('replay inherits parent device selectors for each invoked step', async () =
 
   const invoked: DaemonRequest[] = [];
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -211,6 +217,7 @@ test('replay inherits the parent web platform selector for each invoked step', a
 
   const invoked: DaemonRequest[] = [];
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -254,6 +261,7 @@ test('test --platform web reports no matching scripts, typed or untyped, because
   fs.writeFileSync(path.join(root, '02-android.ad'), 'context platform=android\nopen "Demo"\n');
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

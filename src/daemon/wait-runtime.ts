@@ -118,6 +118,7 @@ async function bindWaitOperations(
     device,
     session,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   return bound.ok ? bound.operations : bound.response;

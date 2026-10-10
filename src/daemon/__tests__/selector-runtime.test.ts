@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
@@ -101,6 +102,7 @@ test.each(['rebuild', 'retire'] as const)(
       [Symbol.asyncDispose]: async () => {},
     };
     const running = dispatchGetViaRuntime({
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: 'default',

@@ -51,6 +51,7 @@ export async function handleReactNativeCommands(
     command: 'press',
     requiresCapture: false,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
     unavailableResponse: (unavailable) =>
       errorResponse(

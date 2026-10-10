@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { afterEach, expect, test } from 'vitest';
 import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -71,8 +72,16 @@ for (const command of ['snapshot', 'diff snapshot'] as const) {
       };
       const running =
         command === 'snapshot'
-          ? dispatchSnapshotViaRuntime({ ...input, ...snapshotRuntimeFixture(requestId) })
-          : dispatchSnapshotDiffViaRuntime({ ...input, ...snapshotRuntimeFixture(requestId) });
+          ? dispatchSnapshotViaRuntime({
+              ...input,
+              ...snapshotRuntimeFixture(requestId),
+              platformServices: daemonPlatformServicesFixture(),
+            })
+          : dispatchSnapshotDiffViaRuntime({
+              ...input,
+              ...snapshotRuntimeFixture(requestId),
+              platformServices: daemonPlatformServicesFixture(),
+            });
       await dispatchEntered.promise;
       markRequestCanceled(requestId);
       releaseDispatch.resolve();

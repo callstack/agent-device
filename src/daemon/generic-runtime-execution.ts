@@ -37,6 +37,7 @@ export async function resolveGenericRuntimeExecution(
     return await resolveBoundSystemButtonRuntime(params.req.command, {
       device: params.session.device,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     });
   }
@@ -48,6 +49,7 @@ export async function resolveGenericRuntimeExecution(
         device: params.session.device,
         positionals: params.req.positionals ?? [],
         inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
         bindDevice: params.bindDevice,
       });
     case 'scroll':
@@ -61,6 +63,7 @@ export async function resolveGenericRuntimeExecution(
         session: params.session,
         flags: params.req.flags,
         inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
         bindDevice: params.bindDevice,
       });
     case 'viewport':
@@ -68,12 +71,14 @@ export async function resolveGenericRuntimeExecution(
         device: params.session.device,
         positionals: params.req.positionals ?? [],
         inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
         bindDevice: params.bindDevice,
       });
     case 'back':
       return await resolveBoundBackRuntime({
         device: params.session.device,
         inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
         bindDevice: params.bindDevice,
       });
     case 'orientation':
@@ -81,6 +86,7 @@ export async function resolveGenericRuntimeExecution(
         device: params.session.device,
         positionals: params.req.positionals ?? [],
         inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
         bindDevice: params.bindDevice,
       });
     case 'fold':
@@ -89,6 +95,7 @@ export async function resolveGenericRuntimeExecution(
         device: params.session.device,
         positionals: params.req.positionals ?? [],
         inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
         bindDevice: params.bindDevice,
       });
     case 'tv-remote':
@@ -97,6 +104,7 @@ export async function resolveGenericRuntimeExecution(
         positionals: params.req.positionals ?? [],
         durationMs: params.req.flags?.durationMs,
         inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
         bindDevice: params.bindDevice,
       });
     default:

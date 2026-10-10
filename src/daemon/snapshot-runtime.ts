@@ -49,6 +49,7 @@ export async function dispatchSnapshotViaRuntime(
         logPath: params.logPath,
         verdict: result.snapshotQuality,
         inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
         bindDevice: params.bindDevice,
       });
       const published = copySnapshotClickabilityEvidence(

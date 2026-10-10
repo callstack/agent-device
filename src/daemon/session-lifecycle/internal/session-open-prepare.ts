@@ -7,10 +7,7 @@ import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { startupDeadlineAtMs } from '../../startup-deadline.ts';
 import type { SessionRuntimeHints, SessionState } from '../../session-state.ts';
 import { SessionStore } from '../../session-store.ts';
-import {
-  resolveRequestedOpenSurface,
-  validateOpenRelaunchTarget,
-} from '../../../platform-runtime-open-target.ts';
+import type { DaemonPlatformServices } from '../../platform-services.ts';
 import {
   hasRuntimeTransportHints,
   maybeClearRemovedRuntimeTransportHints,
@@ -52,13 +49,14 @@ export function invalidOpenArgs(message: string): DaemonResponse {
 }
 
 export function resolveOpenSurfaceResponse(
+  platformServices: DaemonPlatformServices,
   device: DeviceInfo,
   surfaceFlag: string | undefined,
   openTarget: string | undefined,
   existingSurface?: SessionSurface,
 ): SessionSurface | DaemonResponse {
   try {
-    return resolveRequestedOpenSurface({
+    return platformServices.resolveRequestedOpenSurface({
       device,
       surfaceFlag,
       openTarget,
@@ -77,10 +75,11 @@ export async function validateResolvedOpenRequest(params: {
   openTarget: string | undefined;
   surface: SessionSurface;
   device: DeviceInfo;
+  platformServices: DaemonPlatformServices;
 }): Promise<DaemonResponse | null> {
-  const { shouldRelaunch, openTarget, surface, device } = params;
+  const { shouldRelaunch, openTarget, surface, device, platformServices } = params;
   if (!shouldRelaunch) return null;
-  const message = await validateOpenRelaunchTarget({
+  const message = await platformServices.validateOpenRelaunchTarget({
     target: openTarget,
     platform: device.platform,
     surface,
@@ -92,10 +91,14 @@ export async function validatePreResolvedOpenRequest(params: {
   shouldRelaunch: boolean;
   openTarget: string | undefined;
   platform: DeviceInfo['platform'] | undefined;
+  platformServices: DaemonPlatformServices;
 }): Promise<DaemonResponse | null> {
-  const { shouldRelaunch, openTarget, platform } = params;
+  const { shouldRelaunch, openTarget, platform, platformServices } = params;
   if (!shouldRelaunch) return null;
-  const message = await validateOpenRelaunchTarget({ target: openTarget, platform });
+  const message = await platformServices.validateOpenRelaunchTarget({
+    target: openTarget,
+    platform,
+  });
   return message ? invalidOpenArgs(message) : null;
 }
 

@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { expect, vi } from 'vitest';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
@@ -73,6 +74,7 @@ export function makeRecordRuntimeHarness(
     runtime,
     run: (positionals: string[], meta?: DaemonRequest['meta']) =>
       handleRecordCommand({
+        platformServices: daemonPlatformServicesFixture(),
         ...common,
         req: {
           token: 'token',

@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { WAIT_REASONS, type ReadinessPhase } from '@agent-device/contracts/wait';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
@@ -158,6 +159,7 @@ test.each(['rebuild', 'retire'] as const)(
       const address = 'cwd:sleep-wait:default';
       const ref = sessionStore.publish(address, makeSession('default', { device: harness.device }));
       const running = handleSnapshotCommands({
+        platformServices: daemonPlatformServicesFixture(),
         req: waitRequest(['100']),
         sessionName: address,
         logPath: '/tmp/daemon.log',
@@ -212,6 +214,7 @@ async function runWait(
   }
   sessionStore.publish(session.name, session);
   const response = await handleSnapshotCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: waitRequest(positionals, flags),
     sessionName: session.name,
     logPath: '/tmp/daemon.log',
@@ -246,6 +249,7 @@ test('an observing wait binds through the shared selector entry', async () => {
   const harness = waitRuntimeHarness({ findText: available });
 
   const bound = await resolveBoundSelectorCapture({
+    platformServices: daemonPlatformServicesFixture(),
     command: 'wait',
     session: undefined,
     device: harness.device,
@@ -465,6 +469,7 @@ test('a read after a natively satisfied text wait captures instead of reusing th
   expect(harness.captureSnapshot).toHaveBeenCalledOnce();
 
   const read = await dispatchGetViaRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       command: 'get',
       positionals: ['text', 'label="cold.start"'],

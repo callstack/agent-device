@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 
 import path from 'node:path';
@@ -153,6 +154,7 @@ async function dispatchCapabilities(params: {
   inspectFacts: InspectDeviceRuntimeFacts;
 }) {
   return await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: params.sessionName,

@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, vi } from 'vitest';
 import {
   localRuntimeOwner,
@@ -216,7 +217,11 @@ export async function refuseUnavailableExactOwnerFact(
   const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async () => facts);
   const bindDevice = vi.fn() as unknown as BindDeviceRuntime;
 
-  const resolved = await binding.resolve(testCase.device, { inspectFacts, bindDevice });
+  const resolved = await binding.resolve(testCase.device, {
+    inspectFacts,
+    bindDevice,
+    platformServices: daemonPlatformServicesFixture(),
+  });
 
   expect(inspectFacts).toHaveBeenCalledTimes(1);
   expect(inspectFacts).toHaveBeenCalledWith(testCase.device);

@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { test, expect, vi } from 'vitest';
 import path from 'node:path';
 
@@ -60,6 +61,7 @@ async function projectAndroidCapabilities(sessionName: string) {
     providerMode: 'local',
   });
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -142,6 +144,7 @@ test('capabilities excludes logs from an unavailable provider-mode XCTest runtim
   });
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -185,6 +188,7 @@ test('capabilities excludes network when the runtime fact is unavailable', async
   });
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -229,6 +233,7 @@ test('capabilities includes apps for the available HarmonyOS runtime fact', asyn
     async (request) => (request.platform === 'harmonyos' ? [harmonyDevice] : []),
     async () =>
       await handleSessionCommands({
+        platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
           session: sessionName,
@@ -307,6 +312,7 @@ test.each(APPS_UNAVAILABLE_CAPABILITY_CASES)(
     });
 
     const response = await handleSessionCommands({
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -341,6 +347,7 @@ test('capabilities excludes appstate when its runtime fact is unavailable', asyn
   });
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -374,6 +381,7 @@ test('capabilities excludes appstate when its readiness fact is unavailable', as
   });
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -449,6 +457,7 @@ test.each([
       async () => [device],
       async () =>
         await handleSessionCommands({
+          platformServices: daemonPlatformServicesFixture(),
           req: {
             token: 't',
             session: sessionName,
@@ -485,6 +494,7 @@ test('capabilities accepts a stopped Android AVD placeholder for explicit platfo
     async (request) => (request.platform === 'android' ? [stoppedAvd] : []),
     async () =>
       await handleSessionCommands({
+        platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
           session: 'default',

@@ -7,6 +7,8 @@
  * cannot keep another agent's abandoned claim alive; and a request whose client hung up preserves
  * nothing, exactly as a canceled request renews no lease (ADR 0007).
  */
+
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { afterAll, test, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -54,6 +56,7 @@ test('a command that completes under the session lock stamps the session it ran 
   const sessionStore = storeWithSession();
   const scope = await withDiagnosticsScope({ command: 'snapshot', logPath: LOG_PATH }, () =>
     createRequestExecutionScope({
+      platformServices: daemonPlatformServicesFixture(),
       req: makeRequest({ command: 'snapshot' }),
       sessionStore,
       leaseRegistry: new LeaseRegistry(),
@@ -69,6 +72,7 @@ test('a lock-exempt inventory command reports no activity, even against a claim-
   const sessionStore = storeWithSession();
   const scope = await withDiagnosticsScope({ command: 'devices', logPath: LOG_PATH }, () =>
     createRequestExecutionScope({
+      platformServices: daemonPlatformServicesFixture(),
       req: makeRequest({ command: 'devices' }),
       sessionStore,
       leaseRegistry: new LeaseRegistry(),
@@ -89,6 +93,7 @@ test('a command whose client hung up mid-flight preserves no activity', async ()
     { command: 'snapshot', requestId, logPath: LOG_PATH },
     () =>
       createRequestExecutionScope({
+        platformServices: daemonPlatformServicesFixture(),
         req: makeRequest({ command: 'snapshot', meta: { requestId } }),
         sessionStore,
         leaseRegistry: new LeaseRegistry(),
@@ -116,6 +121,7 @@ test('a command still running when the expiry arrives blocks it until the stamp 
   const locks = getLeaseRegistryExecutionLocks(leaseRegistry);
   const scope = await withDiagnosticsScope({ command: 'snapshot', logPath: LOG_PATH }, () =>
     createRequestExecutionScope({
+      platformServices: daemonPlatformServicesFixture(),
       req: makeRequest({ command: 'snapshot' }),
       sessionStore,
       leaseRegistry,
@@ -166,6 +172,7 @@ test('the reaper never observes a mid-command session through the shared map', a
   const leaseRegistry = new LeaseRegistry();
   const scope = await withDiagnosticsScope({ command: 'snapshot', logPath: LOG_PATH }, () =>
     createRequestExecutionScope({
+      platformServices: daemonPlatformServicesFixture(),
       req: makeRequest({ command: 'snapshot' }),
       sessionStore,
       leaseRegistry,

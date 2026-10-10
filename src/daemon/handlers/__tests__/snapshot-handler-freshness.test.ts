@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { test, expect, vi, afterEach, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { resetGetRuntimeFixture } from '../../__tests__/interaction-get-runtime-fixture.ts';
@@ -177,6 +178,7 @@ test('snapshot annotations survive a deferred post-gesture capture into CLI JSON
   });
 
   const response = await handleSnapshotCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -207,6 +209,7 @@ test('snapshot timeout captures Android screenshot evidence with overlay refs', 
   const sessionStore = makeAndroidTimeoutEvidenceSession(sessionName);
   mockAndroidTimeoutEvidenceDispatch();
   const response = await handleSnapshotCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -236,6 +239,7 @@ test('snapshot warns when recent snapshot node count collapses sharply', async (
   );
 
   const response = await handleSnapshotCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -282,6 +286,7 @@ test('snapshot does not warn on expected node drop across presentation modes', a
   });
 
   const response = await handleSnapshotCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot', { flags: { snapshotInteractiveOnly: true } }),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -319,6 +324,7 @@ test('snapshot automatically retries stale Android trees after recent navigation
     );
 
   const response = await handleSnapshotCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot', { flags: { snapshotInteractiveOnly: true } }),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -347,6 +353,7 @@ test('snapshot warns when Android freshness retries still return the previous ro
   );
 
   const response = await handleSnapshotCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot', { flags: { snapshotInteractiveOnly: true } }),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -395,6 +402,7 @@ test('snapshot response includes normalized visibility metadata', async () => {
   });
 
   const response = await handleSnapshotCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot', { flags: { snapshotInteractiveOnly: true } }),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -423,6 +431,7 @@ test('diff snapshot carries stale-tree warnings for recent Android presses', asy
   );
 
   const response = await handleSnapshotCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'diff', {
       positionals: ['snapshot'],
       flags: { snapshotInteractiveOnly: true },

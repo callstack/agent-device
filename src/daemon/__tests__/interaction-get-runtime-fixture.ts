@@ -26,8 +26,10 @@ import {
   HOVER_UNAVAILABLE_HINT,
 } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { androidObservationFixture } from './android-observation-fixture.ts';
 import { createUnavailableRuntimeFactsForTest } from '../../__tests__/test-utils/runtime-operation-facts.ts';
 
@@ -238,11 +240,13 @@ const mockBindElementReadRuntime: BindDeviceRuntime = vi.fn(async (device: Devic
 export function getRuntimeBindings(): Readonly<{
   inspectFacts: InspectDeviceRuntimeFacts;
   bindDevice: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
   androidObservation: typeof androidObservationFixture;
 }> {
   return {
     inspectFacts: mockInspectElementReadFacts,
     bindDevice: mockBindElementReadRuntime,
+    platformServices: daemonPlatformServicesFixture(),
     androidObservation: androidObservationFixture,
   };
 }

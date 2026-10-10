@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { makeSession, makeSessionStore } from '../../../handlers/__tests__/session-test-harness.ts';
@@ -107,6 +108,7 @@ async function listApps(appsFilter: 'all' | 'user-installed'): Promise<DaemonRes
     flags: { appsFilter },
   };
   return await handleSessionInventoryCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName,
     sessionStore,

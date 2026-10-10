@@ -25,6 +25,7 @@ import { createUnavailableRuntimeFactsForTest } from '../../__tests__/test-utils
 import { withClientReplayScriptSources } from '../../__tests__/test-utils/replay-script-source.ts';
 import type { DaemonInvokeFn } from '../daemon-request.ts';
 import { clearAndroidObservationFixture } from './android-observation-fixture.ts';
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 import { readDaemonProviderCredentials } from '../../provider-credential-fingerprint.ts';
 
@@ -222,18 +223,25 @@ export const unavailableBindExactDevice: BindExactDeviceRuntime = async (
   );
 
 export function createRequestHandler(
-  deps: Omit<RequestRouterDeps, 'deviceRuntimeGateway' | 'providerCredentials'> &
-    Partial<Pick<RequestRouterDeps, 'deviceRuntimeGateway' | 'providerCredentials'>>,
+  deps: Omit<
+    RequestRouterDeps,
+    'deviceRuntimeGateway' | 'providerCredentials' | 'platformServices'
+  > &
+    Partial<
+      Pick<RequestRouterDeps, 'deviceRuntimeGateway' | 'providerCredentials' | 'platformServices'>
+    >,
 ) {
   const {
     deviceRuntimeGateway = unavailableDeviceRuntimeGateway,
     providerCredentials = readDaemonProviderCredentials({}, path.dirname(deps.logPath)),
+    platformServices = daemonPlatformServicesFixture(),
     ...rest
   } = deps;
   const handle = createProductionRequestHandler({
     androidObservation: clearAndroidObservationFixture,
     platformResourceCleanup,
     ...rest,
+    platformServices,
     deviceRuntimeGateway,
     providerCredentials,
   });

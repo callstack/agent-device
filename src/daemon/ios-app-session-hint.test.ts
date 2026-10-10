@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/test-utils/device-fixtures.ts';
 import { buildIosOpenCommandHint } from './ios-app-session-hint.ts';
@@ -18,7 +19,7 @@ test('an unambiguous environment gets the exact runnable open command', async ()
     app: { bundleId: 'xyz.blueskyweb.app' },
   });
 
-  const hint = await buildIosOpenCommandHint(IOS_SIMULATOR);
+  const hint = await buildIosOpenCommandHint(IOS_SIMULATOR, daemonPlatformServicesFixture());
 
   expect(hint).toBe(
     'One booted device found ("iPhone 16", udid booted-1) with xyz.blueskyweb.app running. ' +
@@ -39,7 +40,7 @@ test('a custom simulator set is echoed back so the printed command is the one th
     app: { bundleId: 'xyz.blueskyweb.app' },
   });
 
-  const hint = await buildIosOpenCommandHint(soleBootedDevice);
+  const hint = await buildIosOpenCommandHint(soleBootedDevice, daemonPlatformServicesFixture());
 
   expect(hint).toBe(
     'One booted device found ("iPhone 16", udid booted-1) with xyz.blueskyweb.app running. ' +
@@ -64,21 +65,29 @@ test('a hint that would exceed the wire-redaction truncation length falls back t
     app: { bundleId: 'xyz.blueskyweb.app' },
   });
 
-  await expect(buildIosOpenCommandHint(soleBootedDevice)).resolves.toBeUndefined();
+  await expect(
+    buildIosOpenCommandHint(soleBootedDevice, daemonPlatformServicesFixture()),
+  ).resolves.toBeUndefined();
 });
 
 test('an inconclusive observation keeps the generic hint', async () => {
   resolveSoleForegroundApp.mockResolvedValue(undefined);
-  await expect(buildIosOpenCommandHint(IOS_SIMULATOR)).resolves.toBeUndefined();
+  await expect(
+    buildIosOpenCommandHint(IOS_SIMULATOR, daemonPlatformServicesFixture()),
+  ).resolves.toBeUndefined();
 });
 
 test('control-flow failures from the observation port propagate', async () => {
   const canceled = new DOMException('This operation was aborted', 'AbortError');
   resolveSoleForegroundApp.mockRejectedValue(canceled);
-  await expect(buildIosOpenCommandHint(IOS_SIMULATOR)).rejects.toBe(canceled);
+  await expect(
+    buildIosOpenCommandHint(IOS_SIMULATOR, daemonPlatformServicesFixture()),
+  ).rejects.toBe(canceled);
 });
 
 test('a physical iOS device never probes for a hint', async () => {
-  await expect(buildIosOpenCommandHint(IOS_DEVICE)).resolves.toBeUndefined();
+  await expect(
+    buildIosOpenCommandHint(IOS_DEVICE, daemonPlatformServicesFixture()),
+  ).resolves.toBeUndefined();
   expect(resolveSoleForegroundApp).not.toHaveBeenCalled();
 });

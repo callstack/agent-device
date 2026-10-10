@@ -98,6 +98,7 @@ async function runGestureInteraction(
     device: session.device,
     input: gesture,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (!bound.ok) return { refused: bound.response };
@@ -172,6 +173,7 @@ export async function dispatchSwipeViaRuntime(
       device: session.device,
       input: normalizePublicSwipeMotion(input).gesture,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     });
     if (!bound.ok) return { refused: bound.response };

@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { test, expect } from 'vitest';
 import path from 'node:path';
 import { handleSessionInventoryCommands } from '../inventory.ts';
@@ -36,6 +37,7 @@ async function runSessionList(): Promise<DaemonResponse | null> {
     flags: {},
   };
   return await handleSessionInventoryCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: SCOPED_KEY,
     sessionStore,
@@ -84,6 +86,7 @@ test('session list returns the caller cwd and local named sessions without cross
   });
 
   const response = await handleSessionInventoryCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: callerSessionAddress,
     sessionStore,
@@ -126,6 +129,7 @@ test('session list returns only sessions owned by the requesting tenant', async 
   };
 
   const response = await handleSessionInventoryCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: req.session,
     sessionStore,

@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 import {
@@ -17,6 +18,7 @@ test('an available plan inspects once and binds once, on the admitted device', a
   const fixture = selectorCaptureFixture();
 
   const bound = await resolveBoundSelectorCapture({
+    platformServices: daemonPlatformServicesFixture(),
     command: 'find',
     device: ANDROID_EMULATOR,
     session: makeAndroidSession('selector'),
@@ -32,6 +34,7 @@ test('an available plan inspects once and binds once, on the admitted device', a
 test('repeated captures reuse the one binding the plan was admitted for', async () => {
   const fixture = selectorCaptureFixture();
   const bound = await resolveBoundSelectorCapture({
+    platformServices: daemonPlatformServicesFixture(),
     command: 'wait',
     device: ANDROID_EMULATOR,
     session: makeAndroidSession('selector'),
@@ -53,6 +56,7 @@ test('an unavailable required operation refuses before any bind', async () => {
   });
 
   const bound = await resolveBoundSelectorCapture({
+    platformServices: daemonPlatformServicesFixture(),
     command: 'is',
     device: ANDROID_EMULATOR,
     session: makeAndroidSession('selector'),
@@ -70,6 +74,7 @@ test.each(['find', 'get', 'is'] as const)(
     const fixture = selectorCaptureFixture({ findText: { available: true } });
 
     const bound = await resolveBoundSelectorCapture({
+      platformServices: daemonPlatformServicesFixture(),
       command,
       device: ANDROID_EMULATOR,
       session: makeAndroidSession('selector'),
@@ -87,6 +92,7 @@ test('wait rejects an advertised observation with no implementation', async () =
 
   await expect(
     resolveBoundSelectorCapture({
+      platformServices: daemonPlatformServicesFixture(),
       command: 'wait',
       device: ANDROID_EMULATOR,
       session: makeAndroidSession('selector'),
@@ -104,6 +110,7 @@ test('a session without a tracked app selects the without-active-app plan', asyn
   });
 
   const withApp = await resolveBoundSelectorCapture({
+    platformServices: daemonPlatformServicesFixture(),
     command: 'get',
     device: IOS_SIMULATOR,
     session: makeIosSession('with-app', { appBundleId: 'com.example.app' }),
@@ -115,6 +122,7 @@ test('a session without a tracked app selects the without-active-app plan', asyn
     {},
     async () =>
       await resolveBoundSelectorCapture({
+        platformServices: daemonPlatformServicesFixture(),
         command: 'get',
         device: IOS_SIMULATOR,
         session: makeIosSession('no-app'),
@@ -138,6 +146,7 @@ test('the bound construction path admits and binds before it builds a runtime', 
 
   const resolved = await createBoundSelectorRuntime(
     {
+      platformServices: daemonPlatformServicesFixture(),
       req: { token: 't', session: 'bound', command: 'get', positionals: [], flags: {} },
       sessionName: 'bound',
       logPath: '/tmp/bound.log',
@@ -162,6 +171,7 @@ test('the bound construction path refuses an unavailable operation without build
 
   const resolved = await createBoundSelectorRuntime(
     {
+      platformServices: daemonPlatformServicesFixture(),
       req: { token: 't', session: 'bound', command: 'is', positionals: [], flags: {} },
       sessionName: 'bound',
       logPath: '/tmp/bound.log',

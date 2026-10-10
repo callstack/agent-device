@@ -85,6 +85,7 @@ import { discloseRequestDispatch, refusedBeforeDispatch } from './request-dispat
 import { recordNestedRequests } from './request-dispatch-ledger.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
+import type { DaemonPlatformServices } from './platform-services.ts';
 import type { DaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
 import { restrictDeviceInventoryToDaemonPolicy } from './daemon-policy.ts';
 import type { DaemonPolicy } from '../daemon-policy-file.ts';
@@ -101,6 +102,12 @@ export type RequestRouterDeps = {
   requestPlatformProviders?: RequestPlatformProviders;
   deviceInventoryGateways: ComposedDeviceInventoryGateways;
   deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
+  /**
+   * Root-composed platform services for the request-path asks that bind no device runtime
+   * (readiness, boot and runner-session observation, open-target classification). Required: a
+   * process that never ran root composition cannot build one, and no daemon module may.
+   */
+  platformServices: DaemonPlatformServices;
   appLogAdmissionLedger?: AppLogAdmissionLedger;
   audioProbeAdmissionLedger?: AudioProbeAdmissionLedger;
   perfCaptureAdmissionLedger?: PerfCaptureAdmissionLedger;
@@ -159,6 +166,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     token,
     requestPlatformProviders = EMPTY_REQUEST_PLATFORM_PROVIDERS,
     deviceRuntimeGateway,
+    platformServices,
     appLogAdmissionLedger = createAppLogAdmissionLedger(),
     audioProbeAdmissionLedger = createAudioProbeAdmissionLedger(),
     perfCaptureAdmissionLedger = createPerfCaptureAdmissionLedger(),
@@ -246,6 +254,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
               sessionStore,
               leaseRegistry,
               deviceRuntimeGateway,
+              platformServices,
               platformRequestScope,
               platformResourceCleanup,
               providerAppCatalog,
@@ -359,6 +368,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       androidObservation,
       platformResourceCleanup,
       bindDevice: lockedScope.bindDevice,
+      platformServices: lockedScope.platformServices,
       inspectFacts: lockedScope.inspectFacts,
       bindExactDevice: lockedScope.bindExactDevice,
       reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler(requestScope),
@@ -402,6 +412,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           sessionStore,
           leaseRegistry,
           deviceRuntimeGateway,
+          platformServices,
           platformRequestScope: createPlatformRequestScope(scopedReq),
           platformResourceCleanup,
           providerAppCatalog,
@@ -528,6 +539,7 @@ async function dispatchGenericForLockedScope(params: {
       session.trace?.outPath,
     ),
     inspectFacts: lockedScope.inspectFacts,
+    platformServices: lockedScope.platformServices,
     bindDevice: lockedScope.bindDevice,
   });
   if (!runtimeExecution.ok) return refusedBeforeDispatch(runtimeExecution.response);
@@ -540,6 +552,7 @@ async function dispatchGenericForLockedScope(params: {
     logPath,
     sessionStore,
     contextFromFlags: lockedScope.contextFromFlags,
+    platformServices: lockedScope.platformServices,
     executePlatformCommand: runtimeExecution.execute,
     androidObservation,
     ...(runtimeExecution.recorded ? { recordedRequest: runtimeExecution.recorded } : {}),

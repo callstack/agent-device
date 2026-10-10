@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { SessionStore } from '../session-store.ts';
 import { handleRecordCommand } from './record-runtime.ts';
@@ -12,6 +13,7 @@ export async function handleRecordTraceCommands(params: {
   sessionStore: SessionStore;
   logPath?: string;
   bindDevice: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
   bindExactDevice: BindExactDeviceRuntime;
   admissionLedger: ScreenRecordingAdmissionLedger;
   requestScope: PlatformRequestScope;
@@ -27,6 +29,7 @@ export async function handleRecordTraceCommands(params: {
       sessionName,
       sessionStore,
       bindDevice: params.bindDevice,
+      platformServices: params.platformServices,
       bindExactDevice: params.bindExactDevice,
       admissionLedger: params.admissionLedger,
       requestScope: params.requestScope,

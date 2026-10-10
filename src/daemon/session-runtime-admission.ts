@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from './platform-services.ts';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type {
   RuntimeOperationFact,
@@ -15,6 +16,7 @@ export type RuntimeCommandHandlerParams = Readonly<{
   sessionName: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }>;
 

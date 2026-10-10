@@ -411,6 +411,11 @@ export async function startDaemonRuntime(
   const deviceInventoryGateways = createPlatformDeviceInventoryGateways(
     providerRuntimeProviders.deviceInventorySource,
   );
+  // Root composition of the platform-services port: it names concrete platform adapters, so it
+  // loads here — the process root's own startup — rather than riding the daemon entry's eager
+  // closure, and it stays lazy to the entry's import graph.
+  const { createDaemonPlatformServices } =
+    await import('../../platform-runtime-daemon-services.ts');
 
   const dispatchRequest = createRequestHandler({
     logPath,
@@ -422,6 +427,7 @@ export async function startDaemonRuntime(
     providerAppCatalog,
     deviceInventoryGateways,
     deviceRuntimeGateway,
+    platformServices: createDaemonPlatformServices(),
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
     perfCaptureAdmissionLedger,

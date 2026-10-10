@@ -42,6 +42,7 @@ export async function resolveBoundFoldRuntime(
       device: params.device,
       use: foldRuntimeUse,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     },
     (runtime) => executeSetFoldPose(runtime, input),

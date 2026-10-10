@@ -5,6 +5,7 @@ import type { SessionStore } from './session-store.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
+import type { DaemonPlatformServices } from './platform-services.ts';
 import {
   ensureAndroidBlockingSystemDialogReady,
   recoverAndroidBlockingSystemDialog,
@@ -39,6 +40,7 @@ export async function dispatchGenericCommand(params: {
   executePlatformCommand: GenericPlatformExecution;
   recordedRequest?: RecordedGenericRequest;
   androidObservation?: AndroidObservationAdapter;
+  platformServices: DaemonPlatformServices;
 }): Promise<DaemonResponse> {
   const { req, ref: sessionRef, logPath, sessionStore, contextFromFlags } = params;
   const session = sessionStore.requireCurrent(sessionRef);
@@ -60,6 +62,7 @@ export async function dispatchGenericCommand(params: {
     logPath,
     sessionStore,
     contextFromFlags,
+    platformServices: params.platformServices,
     command: platformCommand,
     flags: req.flags,
   });
@@ -214,6 +217,7 @@ async function planGenericSettleObservation(params: {
     appBundleId?: string,
     traceLogPath?: string,
   ) => DaemonCommandContext;
+  platformServices: DaemonPlatformServices;
   command: string;
   flags: CommandFlags | undefined;
 }): Promise<
