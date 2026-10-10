@@ -140,8 +140,10 @@ export type AndroidTextInjectionRequest = {
   text: string;
   delayMs?: number;
   /**
-   * Present only for fill. Providers must make this target the focused/replaced
-   * input for the request, not inject into an unrelated currently focused field.
+   * Present only for fill. Providers must make this target the focused input AND replace its
+   * contents with `text`, not inject into an unrelated currently focused field and not insert at
+   * its cursor. An empty `text` is the clear request: the target must end up empty, and the
+   * provider may complete it without any text-set call of its own.
    */
   target?: {
     x: number;

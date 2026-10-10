@@ -1,4 +1,7 @@
-import type { AndroidAdbInvocation } from '@agent-device/platform-android/mechanics';
+import type {
+  AndroidAdbInvocation,
+  AndroidTextInjectionRequest,
+} from '@agent-device/platform-android/mechanics';
 import type { AppsFilter } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { AndroidInputOwner } from '@agent-device/contracts/android-input-ownership';
@@ -49,12 +52,7 @@ export type LimrunPortReverse = {
 export type LimrunAdbProvider = {
   exec: LimrunAdbExecutor;
   reverse?: LimrunPortReverse;
-  text?: (request: {
-    action: 'type' | 'fill';
-    text: string;
-    delayMs?: number;
-    target?: { x: number; y: number };
-  }) => Promise<void>;
+  text?: (request: AndroidTextInjectionRequest) => Promise<void>;
 };
 
 export type LimrunAndroidKeyboardState = {

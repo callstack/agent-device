@@ -40,6 +40,7 @@ export {
   type AndroidAdbProvider,
   type AndroidPortReverseEndpoint,
   type AndroidTextInputAction,
+  type AndroidTextInjectionRequest,
   type AndroidTouchInjector,
 } from './adb-executor.ts';
 export {

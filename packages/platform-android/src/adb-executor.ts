@@ -26,5 +26,6 @@ export type {
   AndroidAdbProvider,
   AndroidPortReverseEndpoint,
   AndroidTextInputAction,
+  AndroidTextInjectionRequest,
   AndroidTouchInjector,
 } from './adb-transport.ts';
