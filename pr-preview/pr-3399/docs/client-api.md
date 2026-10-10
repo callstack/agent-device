@@ -1,0 +1,445 @@
+# Node.js API
+
+This page is for developers who drive devices from their own Node.js code. Use `createAgentDeviceClient()` for typed, deterministic device automation instead of shelling out to the CLI.
+
+Building an agent? Start with the dedicated [AI SDK](/agent-device/pr-preview/pr-3399/docs/ai-sdk.md) or [Eve](/agent-device/pr-preview/pr-3399/docs/eve.md) integration. Building a bridge, remote daemon, or device-cloud backend that owns device access or command dispatch? See [Build an integration](/agent-device/pr-preview/pr-3399/docs/build-an-integration.md).
+
+## Runnable examples
+
+The repository includes [runnable, typechecked Node.js examples](https://github.com/callstack/agent-device/tree/main/examples/sdk). They import the same published `agent-device/*` entry points your code uses:
+
+| Example                                                                                                       | Demonstrates                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`client-session.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/client-session.ts)     | Open, snapshot, interact, handle typed errors, and always close the session                                                                        |
+| [`contracts-result.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/contracts-result.ts) | Consume snapshot results with helpers from [`agent-device/contracts`](/agent-device/pr-preview/pr-3399/docs/build-an-integration.md#api-reference) |
+
+Examples for custom transports and Metro are on [Build an integration](/agent-device/pr-preview/pr-3399/docs/build-an-integration.md#runnable-examples).
+
+Each example typechecks against the SDK through its own [`tsconfig.json`](https://github.com/callstack/agent-device/blob/main/examples/sdk/tsconfig.json). Build the package with `pnpm build`, then run an example with Node:
+
+```bash
+node --experimental-strip-types examples/sdk/client-session.ts
+```
+
+## API reference
+
+Entry points for driving devices from Node.js:
+
+- `agent-device`
+  - `createAgentDeviceClient(options?)`
+  - `createLocalArtifactAdapter(options?)`
+  - `AppError`, `isAgentDeviceError(error)`, `normalizeAgentDeviceError(error)`
+  - `centerOfRect(rect)`
+  - types: `AgentDeviceClient`, `AgentDeviceClientConfig`, `AgentDeviceDevice`
+  - types: every option and result type of the client's methods, among them `AppOpenOptions`,
+    `AppOpenResult`, `CaptureSnapshotOptions`, `CaptureSnapshotResult`, `CaptureScreenshotResult`,
+    `PressOptions`
+  - types: `SnapshotNode`, `RawSnapshotNode`, `SnapshotState`, `Rect`, `Point`
+  - types: `NormalizedError`, `AppErrorCode`, `KnownAppErrorCode`, `AppErrorDetails`, `ErrorCause`
+- `agent-device/io`
+  - `createLocalArtifactAdapter(options?)`
+  - types: `ArtifactAdapter`, `ArtifactDescriptor`, `CreateTempFileOptions`, `FileInputRef`,
+    `FileOutputRef`, `LocalArtifactAdapterOptions`, `OutputVisibility`, `ReserveOutputOptions`,
+    `ReservedOutputFile`, `ResolveInputOptions`, `ResolvedInputFile`, `TemporaryFile`
+- `agent-device/ai-sdk`
+  - `createAgentDeviceTools(options)`
+  - types: `AgentDeviceToolSet`, `AgentDeviceTools`, `CreateAgentDeviceToolsOptions`
+
+## Basic usage
+
+This example opens an app, takes a snapshot, interacts, handles typed errors, and always closes the session. Run it from [`examples/sdk/client-session.ts`](https://github.com/callstack/agent-device/blob/main/examples/sdk/client-session.ts).
+
+```ts file="<root>/../examples/sdk/client-session.ts"
+/**
+ * Root client session: create a client, open an app, capture a snapshot, tap
+ * a node, then close the session — with typed error handling via the
+ * exported error helpers.
+ *
+ * Demonstrates: `createAgentDeviceClient`, `AppError`, `isAgentDeviceError`,
+ * and `normalizeAgentDeviceError` from the `agent-device` root export.
+ *
+ * Prerequisites: an `agent-device` daemon target (a booted iOS simulator).
+ * This file typechecks without one; running it for real also requires
+ * `pnpm build` first, so the package resolves at runtime.
+ *
+ * Run: node --experimental-strip-types examples/sdk/client-session.ts
+ */
+import {
+  AppError,
+  createAgentDeviceClient,
+  isAgentDeviceError,
+  normalizeAgentDeviceError,
+} from 'agent-device';
+import type { AgentDeviceClient, AgentDeviceDevice } from 'agent-device';
+
+async function resolveSnapshotCapableIosDevice(
+  client: AgentDeviceClient,
+): Promise<AgentDeviceDevice> {
+  const devices = await client.devices.list({ platform: 'ios' });
+  const device = devices[0];
+  if (!device) {
+    throw new AppError('DEVICE_NOT_FOUND', 'No iOS device available');
+  }
+
+  const capabilities = await client.devices.capabilities({ platform: 'ios' });
+  if (!capabilities.availableCommands.includes('snapshot')) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'Selected target does not support snapshots');
+  }
+
+  return device;
+}
+
+function reportAgentDeviceError(error: unknown): void {
+  const normalized = normalizeAgentDeviceError(error);
+  console.error(`agent-device error [${normalized.code}]: ${normalized.message}`);
+  if (normalized.hint) {
+    console.error(`hint: ${normalized.hint}`);
+  }
+  process.exitCode = 1;
+}
+
+async function main(): Promise<void> {
+  const client = createAgentDeviceClient({
+    session: 'sdk-example',
+    lockPolicy: 'reject',
+    lockPlatform: 'ios',
+  });
+
+  try {
+    const device = await resolveSnapshotCapableIosDevice(client);
+
+    await client.apps.open({
+      app: 'com.apple.Preferences',
+      platform: 'ios',
+      udid: device.id,
+    });
+
+    const snapshot = await client.capture.snapshot({ interactiveOnly: true });
+    const target = snapshot.nodes.find((node) => node.role === 'button');
+    if (target) {
+      await client.interactions.press({ ref: target.ref });
+    }
+  } catch (error) {
+    if (!isAgentDeviceError(error)) throw error;
+    reportAgentDeviceError(error);
+  } finally {
+    await client.sessions.close();
+  }
+}
+
+await main();
+
+```
+
+`client.devices.capabilities()` returns `{ device, availableCommands }`, using the same capability matrix as the CLI. Use it to check which command names the selected target supports.
+
+For direct iOS simulator app launches, `client.apps.open({ app, platform: 'ios', launchConsole: './artifacts/app.console.log' })` captures launch-time
+stdout/stderr. The option mirrors `open --launch-console` and is not valid for URL opens or non-simulator targets.
+
+`client.sessions.stateDir()` mirrors `session state-dir` and returns the resolved daemon state directory without starting
+or contacting the daemon. Pass `{ stateDir }` to resolve an explicit override the same way the CLI resolves `--state-dir`.
+
+`client.sessions.artifacts({ provider, providerSessionId })` mirrors `artifacts --provider ... --provider-session ...` and returns provider-hosted `cloudArtifacts`.
+Use it for BrowserStack, AWS Device Farm, or TestMu AI session videos/logs after a cloud session has stopped; `client.sessions.close()` returns the ID as `closed.provider?.providerSessionId`. Omit `providerSessionId` when an embedding host has registered a provider runtime that can infer the active lease. Limrun does not expose provider artifacts through this command.
+
+```ts
+const result = await client.sessions.artifacts({
+  provider: 'aws-device-farm',
+  providerSessionId: 'arn:aws:devicefarm:us-west-2:123:session/project/session/00000',
+});
+
+if ('cloudArtifacts' in result) {
+  for (const artifact of result.cloudArtifacts) {
+    console.log(artifact.kind, artifact.name, artifact.url);
+  }
+}
+```
+
+## Device cloud sessions
+
+You drive Limrun, BrowserStack, AWS Device Farm, and TestMu AI devices with the same typed client methods. Use the CLI `connect` flow to persist connection state locally. Pass provider settings in the client config when your Node.js integration already owns credentials and provider selectors.
+
+```ts
+import { createAgentDeviceClient } from 'agent-device';
+
+const client = createAgentDeviceClient({
+  leaseProvider: 'browserstack',
+  providerOsVersion: '14.0',
+  providerApp: 'bs://app-id',
+  // Optional hosted device features, applied when the session is created.
+  providerDeviceOrientation: 'portrait',
+  providerTimezone: 'New_York',
+});
+
+await client.apps.open({ app: 'com.example.app', platform: 'android', device: 'Google Pixel 8' });
+await client.capture.snapshot({ interactiveOnly: true });
+const closed = await client.sessions.close();
+```
+
+`apps.open` also returns a response-level `selection` record describing whether the target came
+from an explicit selector, an existing session, one local booted/bootable candidate, the one booted
+simulator with the app installed, or one provider-owned candidate. Ambiguous requests fail with
+structured retry selectors instead of silently retargeting.
+
+To fetch provider-hosted video and log URLs after close, pass `closed.provider?.providerSessionId` to [`client.sessions.artifacts()`](#basic-usage). See the [BrowserStack](/agent-device/pr-preview/pr-3399/docs/browserstack.md), [AWS Device Farm](/agent-device/pr-preview/pr-3399/docs/aws-device-farm.md), [TestMu AI](/agent-device/pr-preview/pr-3399/docs/testmu.md), and [Limrun](/agent-device/pr-preview/pr-3399/docs/limrun.md) guides for provider-specific setup.
+
+## Web sessions
+
+Pass `platform: 'web'` to drive a browser session with the same command methods. Web automation
+requires Node 24+. No client method sets up the managed web backend: run `agent-device web setup`
+before first use, in the same state directory the client uses. Run `agent-device web doctor` to check
+backend health.
+
+```ts
+await client.apps.open({ url: 'https://example.com', platform: 'web' });
+await client.capture.snapshot({ platform: 'web', interactiveOnly: true });
+await client.interactions.fill({ platform: 'web', ref: '@e12', text: 'test@example.com' });
+await client.command.wait({ platform: 'web', text: 'Welcome' });
+await client.observability.network({ platform: 'web', include: 'headers' });
+await client.observability.audio({
+  platform: 'web',
+  action: 'probe',
+  probeAction: 'start',
+  durationMs: 10_000,
+  bucketMs: 1_000,
+});
+await client.sessions.close();
+```
+
+MCP tools use the same command contracts, so they can also target `platform: 'web'` after setup;
+setup and doctor stay CLI-only. Web network inspection returns the standard network result shape
+without request or response bodies.
+
+## Command methods
+
+Use `client.command.<method>()` for command-level device actions. These calls go through the same daemon transport as the higher-level client methods, so they carry session metadata and tenant/run/lease fields, return normalized daemon errors, and handle remote artifacts.
+
+Results are daemon-shaped objects with typed known fields and follow the CLI's command semantics.
+
+A failed interaction rejects with the same error the CLI prints. Read `error.details.dispatched` before you retry; [Retry after a failed command](/agent-device/pr-preview/pr-3399/docs/commands.md#retry-after-a-failed-command) explains the values.
+
+Every client call that dispatches to the daemon accepts `signal?: AbortSignal` to cancel that one call:
+
+```ts
+const controller = new AbortController();
+await client.interactions.press({ ref: '@e12', signal: controller.signal });
+```
+
+With the built-in transport, a signal that is already aborted rejects the call without sending anything (`error.details.dispatched: 'no'`). Aborting while the request is in flight closes that request's connection, the daemon marks the request canceled, and the promise rejects with the typed canceled-request error (`error.details.reason: 'request_canceled'`, `error.details.dispatched: 'unknown'`). A custom transport receives the signal on its context and may cancel differently. The daemon and the session stay alive for other requests. An abort is not a timeout: it never triggers the runner cleanup or daemon reset that a timeout does. Cancellation covers only the daemon request, so a response-artifact download already underway is not stopped, and a canceled one-shot replay still runs the existing cleanup that can tear down a daemon this client started.
+
+```ts
+await client.command.wait({
+  text: 'Continue',
+  timeoutMs: 5_000,
+});
+
+await client.command.keyboard({
+  action: 'dismiss',
+});
+
+await client.command.clipboard({
+  action: 'write',
+  text: 'hello from Node',
+});
+
+await client.command.back({
+  mode: 'system',
+});
+
+await client.command.tvRemote({
+  platform: 'android',
+  target: 'tv',
+  button: 'down',
+});
+
+await client.command.tvRemote({
+  platform: 'ios',
+  target: 'tv',
+  button: 'select',
+});
+
+await client.command.tvRemote({
+  platform: 'vega',
+  target: 'tv',
+  serial: 'VirtualDevice',
+  button: 'select',
+  durationMs: 900,
+});
+
+await client.command.appSwitcher();
+await client.command.actionButton();
+await client.command.fold({ pose: 'open' });
+await client.command.fold({
+  keyframes: [
+    { atMs: 0, angle: 0 },
+    { atMs: 1667, angle: 160 },
+    { atMs: 3333, angle: 100 },
+    { atMs: 5000, angle: 180 },
+  ],
+});
+```
+
+`fold` accepts either `pose` or `keyframes`. Keyframes use linear interpolation at roughly 60 updates per second; repeat an angle to hold it. Timestamps must start at zero and increase strictly, with 2–64 frames and a final timestamp no greater than 60,000ms. Angles must be finite and between 0° and 180°. The final timestamp bounds motion, excluding helper preparation and final hinge verification. A custom final angle is verified within 0.5°; interior angles must also settle. Cancellation stops the motion at its current angle. Re-snapshot afterwards, including after interrupted motion. Android emulators accept `pose` only.
+
+`press`, `click`, and `longpress` take `readinessTimeoutMs`. With it, the command waits up to that many milliseconds for a target that is not on screen yet, then performs the requested interaction. Without it, the command looks once and fails at once, which is the right choice for an agent that most often misses because the selector is wrong. Use it in scripted flows, where a step can run before the screen finishes rendering:
+
+```ts
+await client.interactions.press({
+  selector: 'label="Continue"',
+  readinessTimeoutMs: 2_000,
+});
+```
+
+The wait is capped at 2 seconds and covers only a target that has not appeared. When the target is still missing after the wait, the error carries `error.details.readiness` with `waitedMs`, `polls`, and `end` (`expired` or `stalled`). A capture that shows an empty accessibility tree ends the wait at once with `capture_sparse` and `readiness.end: sparse`. When the command had to wait and then succeeded, the result carries `data.readiness` with `polls` and `waitedMs`. A command that found its target on the first look has no `readiness` field. A covered, off-screen, or ambiguous target fails at once, and a screen that stays unreadable for the whole wait fails with its own error; neither carries `readiness`. `readinessTimeoutMs` is not an MCP tool argument and has no CLI flag.
+
+Vega OS client support is VVD-only and covers device discovery, app open/close, `back`, `home`, and `tvRemote`. Physical Fire TV, capture, selector, install, logging, and performance methods report unsupported for Vega targets.
+
+Supported command methods:
+
+- `wait`
+- `alert`
+- `appState`
+- `back`
+- `home`
+- `orientation`
+- `appSwitcher`
+- `actionButton`
+- `fold`
+- `keyboard`
+- `clipboard`
+- `tvRemote`
+- `reactNative`
+- `doctor`
+- `prepare`
+- `viewport`
+
+`rotate()` is a deprecated alias for `orientation()`; use `orientation()`.
+
+Domain client methods:
+
+- `client.devices.list()`, `capabilities()`, `boot()`, `shutdown()`
+- `client.sessions.list()`, `stateDir()`, `close()`, `saveScript()`, `artifacts()`
+- `client.apps.install()`, `reinstall()`, `installFromSource()`, `list()`, `open()`, `close()`, `push()`, `triggerEvent()`
+- `client.materializations.release()`
+- `client.leases.allocate()`, `heartbeat()`, `release()`. Pass `retainOnClose: true` to `allocate()` when you release the lease yourself; session `close` then leaves it active until `release()`, expiry, or daemon shutdown. The returned lease has `retainOnClose: true` only when the daemon honored it. Keep heartbeating a retained lease between sessions: it expires after its `ttlMs` like any other lease.
+- `client.metro.prepare()`, `reload()`
+- `client.capture.snapshot()`, `screenshot()`, `diff()`
+- `client.interactions.click()`, `press()`, `longPress()`, `swipe()`, `pan()`, `drag()`, `fling()`, `swipeGesture()`, `focus()`, `type()`, `fill()`, `scroll()`, `pinch()`, `rotateGesture()`, `transformGesture()`, `get()`, `is()`, `find()`
+- `client.replay.run()` and `client.replay.test()`
+- `client.batch.run()`
+- `client.observability.perf(options)`, `logs()`, `events()`, `network()`, and `audio()`
+- `client.debug.symbols()`
+- `client.recording.record()` and `client.recording.trace()`
+- `client.settings.update()`
+
+`client.devices.list()` returns `AgentDeviceDevice` entries. Their optional `model` and `osVersion` fields describe the hardware and OS when discovery reports them; see [Device discovery](/agent-device/pr-preview/pr-3399/docs/commands.md#device-discovery) for the sources.
+
+`client.capture.snapshot()` carries an optional `viewport: { width, height }` beside `nodes`: the box those rects are measured in, in the same coordinate space and orientation. Scale and clip against it instead of inferring the screen from the largest rect. When no box was measured, the field is absent rather than zero; see [Coordinates and viewport](/agent-device/pr-preview/pr-3399/docs/snapshots.md#coordinates-and-viewport) for what each producer answers with.
+
+`client.observability.events({ cursor, limit })` reads the session event timeline as paged JSON entries. Use `nextCursor` from the previous page to continue from the daemon-owned `events.ndjson` file without replaying already uploaded/displayed events. Cursors are absolute and survive the file's size rotation; a cursor older than the retained window rejects with `COMMAND_FAILED`, `details.reason: "EVENT_LOG_CURSOR_EXPIRED"`, and `details.earliestCursor` to resume from.
+The timeline leaves out user-entered content such as typed text, selector values, and payloads; see [Sessions](/agent-device/pr-preview/pr-3399/docs/sessions.md#find-a-sessions-logs-and-artifacts) for what it keeps.
+
+`client.observability.audio()` mirrors `audio probe start|status|stop`. Use it to collect compact RMS/peak dBFS buckets while other session actions continue:
+
+```ts
+await client.observability.audio({
+  platform: 'web',
+  action: 'probe',
+  probeAction: 'start',
+  durationMs: 10_000,
+  bucketMs: 1_000,
+});
+await client.interactions.click({ platform: 'web', ref: '@e4' });
+const audio = await client.observability.audio({
+  platform: 'web',
+  action: 'probe',
+  probeAction: 'status',
+});
+await client.observability.audio({ platform: 'web', action: 'probe', probeAction: 'stop' });
+```
+
+Pass `platform: 'web'`, `'macos'`, `'ios'` (simulators), or `'android'` (emulators on macOS hosts). See [Audio probes](/agent-device/pr-preview/pr-3399/docs/debugging-profiling.md#audio-probes) for what each platform samples, permissions, and unsupported targets.
+
+`client.observability.perf()` requires an options object with an explicit `area`; a call without one fails with an error that names the replacement. The option shapes mirror the `perf` CLI forms:
+
+- Frame health: `{ area: 'frames' }`
+- Memory: `{ area: 'memory', action: 'sample' }`, or `{ area: 'memory', action: 'snapshot', kind: 'android-hprof' | 'memgraph', out }` to write an artifact to disk
+- CPU profile: `{ area: 'cpu', subject: 'profile', action: 'start' | 'stop' | 'report', kind: 'xctrace' | 'simpleperf', out }`
+- Trace: `{ area: 'trace', action: 'start' | 'stop', kind: 'perfetto' | 'xctrace', out }`
+
+To start an xctrace capture, also pass a `template` such as `'Time Profiler'` or `'Animation Hitches'`.
+
+On Android, each successful `perf({ area: 'frames' })` read and each `open` of an app resets the frame window, so call it, perform a transition or gesture, then call it again to inspect that window. See [Performance snapshots](/agent-device/pr-preview/pr-3399/docs/debugging-profiling.md#performance-snapshots) for result fields and platform support.
+
+`client.recording.record({ action: 'start', path, quality: 'medium' })` starts a recording with medium output quality.
+
+`client.capture.screenshot({ path, scale: 0.3 })` captures a screenshot at 30% of its original width and height. `scale` accepts `0.01` through `1`.
+
+`client.batch.run({ steps })` accepts structured steps:
+`{ command: 'open', input: { app: 'settings' } }`. Step `input` uses the same fields as the
+matching client command. Daemon-shaped `positionals`/`flags` steps are internal to the daemon and not
+part of the client API. To run daemon-shaped batches through your own dispatcher, see
+[Batch orchestration for custom transports](/agent-device/pr-preview/pr-3399/docs/build-an-integration.md#batch-orchestration-for-custom-transports).
+
+## Android `installFromSource()`
+
+```ts
+import { createAgentDeviceClient } from 'agent-device';
+
+const androidClient = createAgentDeviceClient({ session: 'qa-android' });
+
+const installed = await androidClient.apps.installFromSource({
+  platform: 'android',
+  retainPaths: true,
+  retentionMs: 60_000,
+  source: { kind: 'url', url: 'https://example.com/app.apk' },
+});
+
+await androidClient.apps.open({
+  platform: 'android',
+  app: installed.launchTarget,
+});
+
+console.log(installed.packageName, installed.launchTarget);
+
+if (installed.materializationId) {
+  await androidClient.materializations.release({
+    materializationId: installed.materializationId,
+  });
+}
+
+await androidClient.sessions.close();
+```
+
+On Android, a successful `installFromSource()` response includes the identity you need to relaunch the app:
+
+- `packageName`
+- `launchTarget`
+
+If the daemon cannot determine the installed app's identity, the request fails instead of returning an empty success payload.
+
+## URL source rules
+
+`installFromSource()` limits URL sources:
+
+- Private and loopback hosts are blocked by default.
+- URL sources from any public host may point directly to an installable, including a bare iOS `.ipa`, or to a `.zip`, `.tar`, `.tar.gz`, or `.tgz` archive containing exactly one.
+- For existing reachable artifact URLs, use `source: { kind: 'url', url: ... }`.
+- For local artifacts, use `source: { kind: 'path', path: ... }` or the CLI `install`/`reinstall` commands.
+- When a remote daemon resolves CI artifacts server-side, pass a GitHub Actions artifact source:
+
+```ts
+await client.apps.installFromSource({
+  platform: 'android',
+  source: {
+    kind: 'github-actions-artifact',
+    owner: 'acme',
+    repo: 'mobile',
+    artifactId: 1234567890,
+  },
+});
+```
+
+Remote daemons may also support `{ kind: 'github-actions-artifact', owner, repo, artifactName }` or `{ kind: 'github-actions-artifact', owner, repo, runId, artifactName }`. The local client passes these payloads through unchanged; it does not authenticate with GitHub or download the artifact.
+
+Android `.apk` and `.aab` URL sources resolve package identity from the downloaded install artifact. Archive URLs may contain one installable `.apk`, `.aab`, `.ipa`, or iOS `.app`, including inside nested archives.
