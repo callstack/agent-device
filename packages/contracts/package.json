@@ -84,6 +84,10 @@
       "types": "./src/application-lifecycle-runtime-plan.ts",
       "default": "./src/application-lifecycle-runtime-plan.ts"
     },
+    "./artifact-adapter": {
+      "types": "./src/artifact-adapter.ts",
+      "default": "./src/artifact-adapter.ts"
+    },
     "./async-lifecycle": {
       "types": "./src/async-lifecycle.ts",
       "default": "./src/async-lifecycle.ts"
@@ -116,9 +120,17 @@
       "types": "./src/back-runtime.ts",
       "default": "./src/back-runtime.ts"
     },
+    "./backend": {
+      "types": "./src/backend.ts",
+      "default": "./src/backend.ts"
+    },
     "./backend-diagnostics": {
       "types": "./src/backend-diagnostics.ts",
       "default": "./src/backend-diagnostics.ts"
+    },
+    "./backend-snapshot-options": {
+      "types": "./src/backend-snapshot-options.ts",
+      "default": "./src/backend-snapshot-options.ts"
     },
     "./boot-failure": {
       "types": "./src/boot-failure.ts",
@@ -151,6 +163,10 @@
     "./command-platform-execution": {
       "types": "./src/command-platform-execution.ts",
       "default": "./src/command-platform-execution.ts"
+    },
+    "./command-policy": {
+      "types": "./src/command-policy.ts",
+      "default": "./src/command-policy.ts"
     },
     "./daemon-http": {
       "types": "./src/daemon-http.ts",
@@ -355,6 +371,10 @@
     "./platform-runtime-unavailable": {
       "types": "./src/platform-runtime-unavailable.ts",
       "default": "./src/platform-runtime-unavailable.ts"
+    },
+    "./runtime-contract": {
+      "types": "./src/runtime-contract.ts",
+      "default": "./src/runtime-contract.ts"
     },
     "./runtime-contract-error": {
       "types": "./src/runtime-contract-error.ts",

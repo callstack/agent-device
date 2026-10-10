@@ -287,9 +287,9 @@
       "exports": ["applyRuntimeHintValues", "clearRuntimeHintValues"]
     },
     {
-      // createAgentDevice and localCommandPolicy are consumed by the lazy imports in src/cli/commands/{recording,screenshot}.ts; Fallow cannot connect the dynamic member reads.
+      // createAgentDevice is consumed by the lazy imports in src/cli/commands/{recording,screenshot}.ts; Fallow cannot connect the dynamic member reads.
       "file": "src/runtime.ts",
-      "exports": ["createAgentDevice", "localCommandPolicy"]
+      "exports": ["createAgentDevice"]
     },
     {
       // The contracts snapshot façade must re-export every symbol of ../snapshot-scope.ts (scripts/layering/package-boundaries.test.ts, façade exhaustiveness); callers import it from @agent-device/contracts/snapshot-scope, so the façade copy has no consumer.
@@ -591,11 +591,6 @@
         "summarizeAgentBrowserProcesses",
         "summarizeManagedAgentBrowserProcesses"
       ]
-    },
-    {
-      // src/runtime.ts keeps its published type surface while its implementation moves to src/command-runtime/runtime-factory.ts (#2540, #3294). These two re-exports have no in-repo consumer; they stay so the module's exported shape is unchanged.
-      "file": "src/runtime.ts",
-      "exports": ["CommandPolicy", "CommandSessionRecord"]
     }
   ],
   "usedClassMembers": [
