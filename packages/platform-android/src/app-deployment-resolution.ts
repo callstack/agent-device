@@ -34,19 +34,33 @@ export async function withAndroidAppResolutionCacheInvalidated<Result>(
   );
 }
 
+type AndroidAppResolutionOptions = Readonly<{
+  /**
+   * Answer with a package installed on the device now, or with the intent an alias names, which a
+   * caller that needs a package must refuse. A package-shaped target is checked against the
+   * installed packages instead of passing through, and no earlier resolution is reused, so an app
+   * uninstalled since is refused.
+   */
+  installedOnly?: boolean;
+}>;
+
 /** Resolves aliases and fuzzy display names to an Android intent or installed package. */
 export async function resolveAndroidApp(
   device: DeviceInfo,
   app: string,
+  options: AndroidAppResolutionOptions = {},
 ): Promise<AndroidAppResolution> {
   const trimmed = app.trim();
-  if (classifyAndroidAppTarget(trimmed) === 'package') return { type: 'package', value: trimmed };
+  const packageShaped = classifyAndroidAppTarget(trimmed) === 'package';
+  if (packageShaped && !options.installedOnly) return { type: 'package', value: trimmed };
 
   const alias = ALIASES[trimmed.toLowerCase()];
   if (alias) return alias;
 
   const cacheScope = androidAppResolutionScope(device);
-  const cached = androidAppResolutionCache.get(cacheScope, trimmed);
+  const cached = options.installedOnly
+    ? undefined
+    : androidAppResolutionCache.get(cacheScope, trimmed);
   if (cached) return cached;
 
   const result = await runAndroidShell(device, ['pm', 'list', 'packages']);
@@ -54,6 +68,10 @@ export async function resolveAndroidApp(
     .split('\n')
     .map((line: string) => line.replace('package:', '').trim())
     .filter(Boolean);
+  if (packageShaped) {
+    if (!packages.includes(trimmed)) throw androidAppNotInstalledError(app);
+    return androidAppResolutionCache.set(cacheScope, trimmed, { type: 'package', value: trimmed });
+  }
 
   const matches = packages.filter((pkg: string) =>
     pkg.toLowerCase().includes(trimmed.toLowerCase()),
@@ -73,7 +91,11 @@ export async function resolveAndroidApp(
     });
   }
 
-  throw new AppError('APP_NOT_INSTALLED', `No package found matching "${app}"`, {
+  throw androidAppNotInstalledError(app);
+}
+
+function androidAppNotInstalledError(app: string): AppError {
+  return new AppError('APP_NOT_INSTALLED', `No package found matching "${app}"`, {
     hint: androidAppsDiscoveryHint,
   });
 }
