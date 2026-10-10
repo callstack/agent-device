@@ -115,13 +115,14 @@ If xcodebuild still exits for another reason, the next command detects the stale
 process/liveness checks and avoids the old 15-second graceful-shutdown wait. The remaining latency is
 fresh xcodebuild runner startup, not a stale transport stall.
 
-A `close` then `open` on a runner still draining abandoned main-thread work now pays a fresh runner boot
-instead of inheriting the stalled one, so the wedge no longer survives the close/open cycle. Runners
-that are ready and have no unanswered exchanges can remain warm when retention is requested;
-iOS-family simulators additionally require an observed live listener. Close retires unfinished startup and its recovery authority. The retained
-generation owns its idle timer and listener observation; successful reuse ends retention, listener
-loss or idle expiry disposes that generation, and graceful daemon shutdown stops idle retained
-generations before exiting. Active ready generations retain the existing handoff policy.
+A `close` then `open` on a runner still draining abandoned main-thread work now pays a fresh runner
+boot instead of inheriting the stalled one, so the wedge no longer survives the close/open cycle.
+Runners that are ready and have no unanswered exchanges can remain warm when retention is requested;
+iOS-family simulators additionally require an observed live listener. Close retires unfinished
+startup and its recovery authority. The retained generation owns its idle timer and listener
+observation; successful reuse ends retention, listener loss or idle expiry disposes that generation,
+and graceful daemon shutdown stops idle retained generations before exiting. Active ready
+generations retain the existing handoff policy.
 
 The daemon no longer models a generic "recent success" cache as a runner-health signal. A proven
 healthy mutating response for the same app — recorded only after the `runnerFatal` check and only
