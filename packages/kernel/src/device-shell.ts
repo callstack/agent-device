@@ -159,6 +159,21 @@ export function relayDeviceShellArgvWithoutOptions(
 }
 
 /**
+ * A command with transport options put in front of it: the `-P`/`-s` pair and readiness token a
+ * transport lowers typed addressing into. The words from the subcommand onward are untouched, so a
+ * minted command stays minted and an argv built outside the funnel comes back unminted.
+ */
+export function relayDeviceShellArgvWithOptions(
+  options: readonly string[],
+  args: readonly string[],
+): readonly string[] {
+  const optionRun = mintedDeviceShellOptionRuns.get(args);
+  const command = Object.freeze([...options, ...args]);
+  if (optionRun !== undefined) mintedDeviceShellOptionRuns.set(command, options.length + optionRun);
+  return command;
+}
+
+/**
  * The dispatch-boundary guard: refuses a `shell`/`exec-out` command that {@link deviceShellArgv} did
  * not build. Checked on the value, so a variable-built or indirect command is caught the same as a
  * literal one, and a copy of a minted command is refused rather than trusted.

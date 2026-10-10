@@ -198,7 +198,7 @@ test('addresses app-log adb traffic at the tunnel serial and hands cleanup a com
           calls.push({
             selector: invocation.target.selector,
             command: [...invocation.command],
-            argv: serializeAndroidAdbInvocation(invocation),
+            argv: [...serializeAndroidAdbInvocation(invocation)],
             options,
           });
           return { exitCode: 0, stdout: '', stderr: '' };

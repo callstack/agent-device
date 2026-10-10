@@ -307,7 +307,7 @@ function createContractFixture() {
     },
     host: {
       runAdb: async (invocation: AndroidAdbInvocation) => {
-        adbCalls.push(serializeAndroidAdbInvocation(invocation));
+        adbCalls.push([...serializeAndroidAdbInvocation(invocation)]);
         return { stdout: '', stderr: '', exitCode: 0 };
       },
       archiveDirectory: async () => undefined,

@@ -3,6 +3,7 @@ import {
   assertDeviceShellArgv,
   deviceShellArgv,
   deviceShellExecutableOf,
+  relayDeviceShellArgvWithOptions,
   relayDeviceShellArgvWithoutOptions,
   shellFragment,
 } from './device-shell.ts';
@@ -143,6 +144,23 @@ describe('assertDeviceShellArgv', () => {
     const payload = relayDeviceShellArgvWithoutOptions(adopted, 0, 2);
     expect(payload).toEqual(['shell', 'id']);
     expect(() => assertDeviceShellArgv(payload, 'test')).not.toThrow();
+  });
+
+  it('keeps a command minted when a transport lowers addressing in front of it', () => {
+    const lowered = relayDeviceShellArgvWithOptions(
+      ['-s', 'emulator-5554'],
+      deviceShellArgv('adb', 'shell', ['id'], ['wait-for-device']),
+    );
+    expect(lowered).toEqual(['-s', 'emulator-5554', 'wait-for-device', 'shell', 'id']);
+    expect(() => assertDeviceShellArgv(lowered, 'test')).not.toThrow();
+    expect(relayDeviceShellArgvWithoutOptions(lowered, 0, 3)).toEqual(['shell', 'id']);
+    expect(() =>
+      assertDeviceShellArgv(relayDeviceShellArgvWithoutOptions(lowered, 0, 3), 'test'),
+    ).not.toThrow();
+    const raw = ['shell', 'am start -n x;id'];
+    expect(() =>
+      assertDeviceShellArgv(relayDeviceShellArgvWithOptions(['-s', 'emulator-5554'], raw), 'test'),
+    ).toThrow(UNGUARDED);
   });
 
   it('refuses a relay that reaches the device command, and one that never had a minted command', () => {

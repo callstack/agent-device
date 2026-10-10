@@ -60,7 +60,7 @@ function scoped(serial: string, ...command: string[]) {
   return { args: ['-s', serial, ...command], serverPort: 15_037, optionServerPort: undefined };
 }
 
-function invokedArgv(invocation: AndroidAdbInvocation): string[] {
+function invokedArgv(invocation: AndroidAdbInvocation): readonly string[] {
   return serializeAndroidAdbInvocation({
     ...invocation,
     target: { ...invocation.target, server: { kind: 'ambient' } },
@@ -120,7 +120,7 @@ test('a command adb refused as device offline waits for the device and runs once
   let offline = true;
   bindAndroidAdbHostStub({
     execAdb: async (invocation, options) => {
-      calls.push({ args: invokedArgv(invocation), timeoutMs: options?.timeoutMs });
+      calls.push({ args: [...invokedArgv(invocation)], timeoutMs: options?.timeoutMs });
       if (isWaitForDevice(invocation)) {
         offline = false;
         return ok();
@@ -341,7 +341,7 @@ test('the installed override routes only normalized device-scoped adb calls to t
 
   // An override-capturing host observes the scope's routing decisions directly.
   let captured:
-    | ((cmd: string, args: string[], options: object) => Promise<unknown> | undefined)
+    | ((cmd: string, args: readonly string[], options: object) => Promise<unknown> | undefined)
     | undefined;
   bindAndroidAdbHostStub({
     withAdbCommandExecutorOverride: async (override, fn) => {
@@ -350,12 +350,43 @@ test('the installed override routes only normalized device-scoped adb calls to t
     },
   });
   await withAndroidAdbProvider(provider, { serial: DEVICE.id }, async () => {
-    expect(captured?.('adb', ['-s', DEVICE.id, 'shell', 'ls'], {})).toBeDefined();
+    expect(
+      captured?.('adb', deviceShellArgv('adb', 'shell', ['ls'], ['-s', DEVICE.id]), {}),
+    ).toBeDefined();
     expect(captured?.('adb', ['-s', OTHER.id, 'shell', 'ls'], {})).toBeUndefined();
     expect(captured?.('adb', ['devices'], {})).toBeUndefined();
     expect(captured?.('emulator', ['-list-avds'], {})).toBeUndefined();
   });
   expect(providerCalls).toEqual([['shell', 'ls']]);
+});
+
+test('the installed override refuses a device-shell argv the funnel did not mint', async () => {
+  const providerCalls: (readonly string[])[] = [];
+  let captured:
+    | ((cmd: string, args: readonly string[], options: object) => Promise<unknown> | undefined)
+    | undefined;
+  bindAndroidAdbHostStub({
+    withAdbCommandExecutorOverride: async (override, fn) => {
+      captured = override;
+      return await fn();
+    },
+  });
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        providerCalls.push(args);
+        return ok();
+      },
+    },
+    { serial: DEVICE.id },
+    async () => {
+      const joined = ['am', 'start', '-n', 'com.example/.Main;id'].join(' ');
+      await expect(captured?.('adb', ['-s', DEVICE.id, 'shell', joined], {})).rejects.toMatchObject(
+        { code: 'INVALID_ARGS', details: { reason: 'unguarded-device-shell-argv' } },
+      );
+    },
+  );
+  expect(providerCalls).toEqual([]);
 });
 
 test('a managed port scope refuses global options the provider cannot restate', async () => {
@@ -366,9 +397,12 @@ test('a managed port scope refuses global options the provider cannot restate', 
       return ok();
     },
   };
-  const capture = async (scope: { serial: string; serverPort?: number }, args: string[]) => {
+  const capture = async (
+    scope: { serial: string; serverPort?: number },
+    args: readonly string[],
+  ) => {
     let captured:
-      | ((cmd: string, args: string[], options: object) => Promise<unknown> | undefined)
+      | ((cmd: string, args: readonly string[], options: object) => Promise<unknown> | undefined)
       | undefined;
     bindAndroidAdbHostStub({
       withAdbCommandExecutorOverride: async (override, fn) => {
@@ -412,21 +446,23 @@ test('a managed port scope refuses global options the provider cannot restate', 
 
   // The server this lease holds is the one port the provider may be handed a request for, argv
   // included, and the request still travels as the caller wrote it.
-  await capture({ serial: DEVICE.id, serverPort: 15_037 }, [
-    '-P',
-    '15037',
-    '-s',
-    DEVICE.id,
-    'shell',
-    'ls',
-  ]);
+  await capture(
+    { serial: DEVICE.id, serverPort: 15_037 },
+    deviceShellArgv('adb', 'shell', ['ls'], ['-P', '15037', '-s', DEVICE.id]),
+  );
   expect(providerCalls).toEqual([['-P', '15037', 'shell', 'ls']]);
 
   // Without a lease the caller's own adb invocation is what runs, globals and all: the provider
   // receives the request with only this scope's `-s` pair removed, and no server rule applies.
   providerCalls.length = 0;
-  await capture({ serial: DEVICE.id }, ['-t', '42', '-s', DEVICE.id, 'shell', 'ls']);
-  await capture({ serial: DEVICE.id }, ['-P', '9999', '-s', DEVICE.id, 'shell', 'ls']);
+  await capture(
+    { serial: DEVICE.id },
+    deviceShellArgv('adb', 'shell', ['ls'], ['-t', '42', '-s', DEVICE.id]),
+  );
+  await capture(
+    { serial: DEVICE.id },
+    deviceShellArgv('adb', 'shell', ['ls'], ['-P', '9999', '-s', DEVICE.id]),
+  );
   expect(providerCalls).toEqual([
     ['-t', '42', 'shell', 'ls'],
     ['-P', '9999', 'shell', 'ls'],
@@ -443,7 +479,7 @@ test('the provider receives the caller request with only the scope serial remove
     },
   };
   let captured:
-    | ((cmd: string, args: string[], options: object) => Promise<unknown> | undefined)
+    | ((cmd: string, args: readonly string[], options: object) => Promise<unknown> | undefined)
     | undefined;
   bindAndroidAdbHostStub({
     execAdb: async (invocation, options) => {
@@ -459,13 +495,17 @@ test('the provider receives the caller request with only the scope serial remove
   await withAndroidAdbProvider(provider, { serial: DEVICE.id, serverPort: 15_037 }, async () => {
     // A readiness token is part of the request the provider must honor, not addressing it owns,
     // so it travels ahead of the command instead of being parsed away.
-    captured?.('adb', ['-s', DEVICE.id, 'wait-for-device', 'shell', 'getprop'], {});
+    captured?.(
+      'adb',
+      deviceShellArgv('adb', 'shell', ['getprop'], ['-s', DEVICE.id, 'wait-for-device']),
+      {},
+    );
     // A call that addresses no device is not the provider's to answer as a device command.
     captured?.('adb', ['get-state'], {});
   });
   // A transport global under a lease is refused by the test above, not restated here.
   await withAndroidAdbProvider(provider, { serial: DEVICE.id }, async () => {
-    captured?.('adb', ['-d', '-s', DEVICE.id, 'shell', 'getprop'], {});
+    captured?.('adb', deviceShellArgv('adb', 'shell', ['getprop'], ['-d', '-s', DEVICE.id]), {});
   });
 
   expect(providerCalls).toEqual([
@@ -527,7 +567,7 @@ test('a managed port scope classifies absolute adb commands and preserves the de
   const providerCalls: (readonly string[])[] = [];
   const hostCalls: (readonly string[])[] = [];
   let captured:
-    | ((cmd: string, args: string[], options: object) => Promise<unknown> | undefined)
+    | ((cmd: string, args: readonly string[], options: object) => Promise<unknown> | undefined)
     | undefined;
   bindAndroidAdbHostStub({
     execAdb: async (invocation) => {
@@ -552,7 +592,7 @@ test('a managed port scope classifies absolute adb commands and preserves the de
       const global = captured?.('/opt/android-sdk/platform-tools/adb', ['devices', '-l'], {});
       const matching = captured?.(
         '/opt/android-sdk/platform-tools/adb',
-        ['-s', DEVICE.id, 'shell', 'ls'],
+        deviceShellArgv('adb', 'shell', ['ls'], ['-s', DEVICE.id]),
         {},
       );
       expect(() => captured?.('adb', ['-s', OTHER.id, 'shell', 'ls'], {})).toThrowError(
@@ -716,7 +756,7 @@ test('a device route answers for the server it was built with, not one a call na
 test('a managed port scope keeps shell -s arguments on the private transport', async () => {
   const hostCalls: ReturnType<typeof hostCall>[] = [];
   let captured:
-    | ((cmd: string, args: string[], options: object) => Promise<unknown> | undefined)
+    | ((cmd: string, args: readonly string[], options: object) => Promise<unknown> | undefined)
     | undefined;
   bindAndroidAdbHostStub({
     execAdb: async (invocation, options) => {

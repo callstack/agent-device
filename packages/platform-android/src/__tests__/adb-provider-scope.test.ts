@@ -39,26 +39,6 @@ test('withAndroidAdbProvider intercepts adb commands for the scoped serial', asy
   assert.deepEqual(calls, [['shell', 'echo', 'ok']]);
 });
 
-test('withAndroidAdbProvider refuses an unminted device-shell argv for the scoped serial', async () => {
-  const calls: (readonly string[])[] = [];
-
-  await assert.rejects(
-    withAndroidAdbProvider(
-      async (args) => {
-        calls.push(args);
-        return { stdout: '', stderr: '', exitCode: 0 };
-      },
-      { serial: device.id },
-      async () =>
-        await runCmd('adb', ['-s', device.id, 'shell', ['am start -n', "'x;id'"].join(' ')], {
-          allowFailure: true,
-        }),
-    ),
-    { code: 'INVALID_ARGS', details: { reason: 'unguarded-device-shell-argv' } },
-  );
-  assert.deepEqual(calls, []);
-});
-
 test('withAndroidAdbProvider ignores adb commands for another serial', async () => {
   const calls: (readonly string[])[] = [];
   const tmpDir = mkdtempForTestSync('agent-device-adb-provider-scope-');

@@ -161,7 +161,7 @@ test('host.runAdb carries addressing apart from payload and routes through the h
   const result = await withAndroidHostAdbTransport(
     async (invocation, options) => {
       seen.push({
-        args: serializeAndroidAdbInvocation(invocation),
+        args: [...serializeAndroidAdbInvocation(invocation)],
         payload: invocation.command,
         ...(options ? { options } : {}),
       });

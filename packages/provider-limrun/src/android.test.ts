@@ -27,7 +27,7 @@ test('cleanup asks the platform to address the disconnect as a server-level comm
       android: { hostAdbInvocation },
       host: {
         runAdb: async (invocation: AndroidAdbInvocation, options?: LimrunAdbCommandOptions) => {
-          calls.push({ argv: serializeAndroidAdbInvocation(invocation), options });
+          calls.push({ argv: [...serializeAndroidAdbInvocation(invocation)], options });
           return ok;
         },
       },

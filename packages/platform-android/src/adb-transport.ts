@@ -1,4 +1,7 @@
-import { relayDeviceShellArgvWithoutOptions } from '@agent-device/kernel/device-shell';
+import {
+  relayDeviceShellArgvWithOptions,
+  relayDeviceShellArgvWithoutOptions,
+} from '@agent-device/kernel/device-shell';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Readable, Stream, Writable } from 'node:stream';
 import type { Rect } from '@agent-device/kernel/snapshot';
@@ -345,16 +348,15 @@ export function adoptAndroidAdbSerial(
  * The only place adb global options are emitted for an invocation whose addressing was rewritten.
  * `command` is appended, never re-parsed.
  */
-export function serializeAndroidAdbInvocation(invocation: AndroidAdbInvocation): string[] {
-  if (invocation.rawArgv) return [...invocation.rawArgv];
+export function serializeAndroidAdbInvocation(invocation: AndroidAdbInvocation): readonly string[] {
+  if (invocation.rawArgv) return relayDeviceShellArgvWithOptions([], invocation.rawArgv);
   const { target, command } = invocation;
   const serialized: string[] = [];
   if (target.server.kind === 'port') serialized.push('-P', String(target.server.port));
   if (target.selector.kind === 'serial') serialized.push('-s', target.selector.serial);
   if (target.hostGlobals) serialized.push(...target.hostGlobals);
   if (target.waitFor) serialized.push(target.waitFor);
-  serialized.push(...command);
-  return serialized;
+  return relayDeviceShellArgvWithOptions(serialized, command);
 }
 
 const OWNED_OPTIONS: Readonly<Record<string, 'serial' | 'server'>> = {
@@ -631,7 +633,7 @@ export function lowerAndroidAdbInvocation<Options extends AndroidAdbServerOption
   invocation: AndroidAdbInvocation,
   options: Options | undefined,
   environment: Record<string, string | undefined>,
-): { args: string[]; options: Omit<Options, 'serverPort'> } {
+): { args: readonly string[]; options: Omit<Options, 'serverPort'> } {
   const { serverPort: _requestedServerPort, ...execOptions } = options ?? ({} as Options);
   const port = requireAndroidAdbServerPort(invocation, options);
   const resolved =
