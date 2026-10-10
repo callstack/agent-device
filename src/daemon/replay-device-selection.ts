@@ -1,7 +1,12 @@
-import { parseReplayInput, resolveReplayFormat } from '@agent-device/ad-script';
+import {
+  parseReplayInput,
+  resolveReplayFormat,
+  type ReplayBackendId,
+} from '@agent-device/ad-script';
 import type { ResolveTargetDeviceOptions } from '@agent-device/device-selection/dispatch-resolve';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { readReplayScriptSourceFile } from '@agent-device/replay-port/script-source';
+import type { ReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
 import type { DaemonRequest } from './daemon-request.ts';
 import {
   appTargetResolutionOptions,
@@ -37,23 +42,31 @@ export async function buildReplayTargetDeviceResolution(
   return readAdvisoryResolution(async () => {
     const resolved = bundle.entry;
     const source = readReplayScriptSourceFile(bundle, resolved);
-    if (resolveReplayFormat(resolved, req.flags?.replayBackend) === 'maestro') {
-      return await readMaestroReplayResolution(source, resolved, req.flags);
+    const backendId = resolveReplayFormat(resolved, req.flags?.replayBackend);
+    if (backendId !== 'ad') {
+      return await readBackendReplayResolution(backendId, source, resolved, req.flags);
     }
     return readAdScriptResolution(source, req.flags);
   });
 }
 
-async function readMaestroReplayResolution(
+async function readBackendReplayResolution(
+  backendId: ReplayBackendId,
   source: string,
   resolvedPath: string,
   flags: DaemonRequest['flags'],
 ): Promise<ReplayTargetDeviceResolution> {
-  const { inspectMaestroFlow } = await import('@agent-device/maestro');
-  const flow = inspectMaestroFlow(source, resolvedPath);
+  // Function-scoped through the #3377 registry: request binding sits in the daemon's startup
+  // closure, and the engine sits one thunk behind the backend.
+  const backend: ReplayBackend = await (
+    await import('@agent-device/replay-port/replay-backend-registry')
+  ).getReplayBackend(backendId);
   return {
     flags: flags ?? {},
-    options: buildMaestroReplayTargetDeviceResolutionOptions(flow.appTarget, flags?.platform),
+    options: buildMaestroReplayTargetDeviceResolutionOptions(
+      backend.inspectSource(source, resolvedPath).appTarget,
+      flags?.platform,
+    ),
   };
 }
 

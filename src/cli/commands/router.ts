@@ -6,8 +6,9 @@ import type { ClientCommandHandlerMap, ClientCommandParams } from './router-type
 export type { ClientCommandParams } from './router-types.ts';
 
 // Some dedicated handlers pull in sizeable dependency subtrees (e.g.
-// replay.ts -> @agent-device/maestro), so they're loaded lazily, on demand,
-// the same way runGenericClientBackedCommand lazy-loads generic.ts below.
+// replay.ts -> the Maestro backend behind the #3377 registry, engine and all), so they're
+// loaded lazily, on demand, the same way runGenericClientBackedCommand lazy-loads
+// generic.ts below.
 const dedicatedCliCommandHandlerLoaders = {
   connect: async () => (await import('./connection.ts')).connectCommand,
   disconnect: async () => (await import('./connection.ts')).disconnectCommand,

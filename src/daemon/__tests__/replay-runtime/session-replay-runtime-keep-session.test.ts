@@ -19,7 +19,7 @@ import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
  * the six (`--keep-session fails explicitly when the completed replay has
  * no live session`, `--keep-session rejects Maestro YAML before engine
  * dispatch`) exercise daemon-ONLY authority
- * (`requireLiveSessionForKeepSession`'s postcondition, `routeMaestroReplay`'s
+ * (`requireLiveSessionForKeepSession`'s postcondition, `routeReplayBackend`'s
  * routing) that never reaches the engine's step loop at all. The engine's
  * OWN terminal-close-suppression decision has its own cheaper, direct
  * coverage in `packages/ad-replay/src/internal/__tests__/step-loop.test.ts`

@@ -3,6 +3,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import { resolveUserPath } from '@agent-device/host-kit/file';
 import { resolveReplayFormat } from '@agent-device/ad-script';
+import type { ReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
 
 export const REPLAY_SCRIPT_SOURCE_BUNDLE_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -18,11 +19,17 @@ export async function loadReplayScriptSourceBundle(
 ): Promise<ReplayScriptSourceBundle> {
   const entry = resolveUserPath(params.inputPath, { cwd: params.cwd });
   const entrySource = readReplayEntryScript(entry, params.inputPath);
-  if (resolveReplayFormat(entry, params.replayBackend) !== 'maestro') {
+  const backendId = resolveReplayFormat(entry, params.replayBackend);
+  if (backendId === 'ad') {
     return finishBundle(entry, { [entry]: entrySource }, params.inputPath);
   }
-  const { collectMaestroFlowSources } = await import('@agent-device/maestro');
-  const files = collectMaestroFlowSources({
+  // Function-scoped on purpose: the eager-closure budget gate counts a static import here as a
+  // module every warm CLI command evaluates, for a format most runs never use (#1802), and the
+  // backend's engine sits one thunk behind it (#3377).
+  const backend: ReplayBackend = await (
+    await import('@agent-device/replay-port/replay-backend-registry')
+  ).getReplayBackend(backendId);
+  const files = backend.collectSourceFiles({
     entryPath: entry,
     entrySource,
     env: params.env,
