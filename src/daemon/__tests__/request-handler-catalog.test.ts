@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -506,6 +507,7 @@ async function runCatalogCommandThroughHandlerChain(
       async () => [],
       async () =>
         await runRequestHandlerChain({
+          platformServices: daemonPlatformServicesFixture(),
           req,
           sessionName: req.session,
           logPath: '/tmp/agent-device-catalog-route.log',

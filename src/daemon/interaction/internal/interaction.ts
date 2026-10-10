@@ -92,6 +92,7 @@ async function dispatchTypeViaRuntime(params: InteractionRouteInput): Promise<Da
   const bound = await resolveBoundTypeTextRuntime({
     device: session.device,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (!bound.ok) return bound.response;

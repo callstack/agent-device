@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import {
@@ -137,6 +138,7 @@ test.each(Object.keys(EXPECTED) as SystemButtonCommand[])(
     const harness = runtimeHarness(expected.button);
 
     const resolved = await resolveBoundSystemButtonRuntime(command, {
+      platformServices: daemonPlatformServicesFixture(),
       device: iosSimulator,
       inspectFacts: harness.inspectFacts,
       bindDevice: harness.bindDevice,

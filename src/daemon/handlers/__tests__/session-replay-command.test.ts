@@ -9,6 +9,7 @@ import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import type { SessionCommandParams } from '../session-command-input.ts';
 import { handleReplayTestCommand } from '../session-replay-command.ts';
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { makeSessionStore } from './session-test-harness.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
@@ -26,6 +27,7 @@ test('replay test handler threads the complete video owner into the application 
     sessionName: 'default',
     logPath: path.join(root, 'daemon.log'),
     sessionStore: makeSessionStore(),
+    platformServices: daemonPlatformServicesFixture(),
     leaseRegistry: new LeaseRegistry(),
     invoke: async () => ({ ok: true, data: {} }),
     bindDevice: unavailableBindDevice,

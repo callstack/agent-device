@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from './platform-services.ts';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import {
   type SelectorCaptureRuntimePlan,
@@ -47,6 +48,7 @@ export type SnapshotRuntimeRouteParams = {
   logPath: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   platformResourceCleanup?: PlatformResourceCleanup;
 };
@@ -103,6 +105,7 @@ export async function admitAndBindSnapshotCapture(
     session: SessionState | undefined;
     plan: SnapshotRuntimePlan | SelectorCaptureRuntimePlan;
     inspectFacts?: InspectDeviceRuntimeFacts;
+    platformServices: DaemonPlatformServices;
     bindDevice?: BindDeviceRuntime;
     readiness?: boolean;
   }>,
@@ -118,10 +121,16 @@ export async function admitAndBindSnapshotCapture(
         session,
         device,
         command,
+        platformServices: params.platformServices,
       }),
     };
   }
-  const bound = await bindSnapshotCaptureRuntime(params.bindDevice, admission, params.readiness);
+  const bound = await bindSnapshotCaptureRuntime(
+    params.bindDevice,
+    admission,
+    params.readiness,
+    params.platformServices,
+  );
   return Object.freeze({
     ok: true,
     capture: async (input: CaptureSnapshotInput) => await bound.captureSnapshot(input),
@@ -165,6 +174,7 @@ export async function resolveBoundSnapshotCaptureRuntime(
       hasActiveApp: session?.appBundleId !== undefined,
     }),
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
     readiness: !session,
   });
@@ -196,6 +206,7 @@ async function bindSnapshotCaptureRuntime(
   bindDevice: BindDeviceRuntime | undefined,
   admission: AdmittedRuntimePlan<SnapshotRuntimePlan | SelectorCaptureRuntimePlan>,
   readiness: boolean | undefined,
+  platformServices: DaemonPlatformServices,
 ): Promise<
   Readonly<{
     captureSnapshot(input: CaptureSnapshotInput): Promise<SnapshotResult>;
@@ -212,7 +223,7 @@ async function bindSnapshotCaptureRuntime(
   const bind = requireRuntimeBinding(bindDevice);
   const bindReady: BindDeviceRuntime = async (device, use) => {
     const runtime = await bind(device, use);
-    if (readiness) await ensureBoundDeviceReady(runtime);
+    if (readiness) await ensureBoundDeviceReady(runtime, platformServices);
     return runtime;
   };
   const { device, plan } = unwrapAdmittedRuntimePlan(admission);
@@ -373,6 +384,7 @@ type SnapshotPlanUnavailableParams = {
   session: SessionState | undefined;
   device: SessionState['device'];
   command: string;
+  platformServices: DaemonPlatformServices;
 };
 
 async function snapshotPlanUnavailableResponse(
@@ -390,7 +402,7 @@ async function snapshotPlanUnavailableResponse(
   if (params.operation === 'captureSnapshotWithCustomActions') {
     return snapshotCustomActionsUnavailableResponse(params);
   }
-  const openCommandHint = await buildIosOpenCommandHint(params.device);
+  const openCommandHint = await buildIosOpenCommandHint(params.device, params.platformServices);
   return errorResponse(
     'SESSION_NOT_FOUND',
     `iOS ${params.command} requires an active app session on the target device. Run open first (for example: open --session ${params.session?.name ?? 'sim'} --platform ios --device "<name>" <app>).`,

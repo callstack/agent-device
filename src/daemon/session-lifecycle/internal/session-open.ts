@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../../platform-services.ts';
 import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dispatch-resolve';
 import {
   openApplicationRuntimeUse,
@@ -53,6 +54,7 @@ export type SessionOpenCommandInput = Readonly<{
   logPath: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
 }>;
@@ -83,6 +85,7 @@ async function admitOpenRuntime(params: {
   device: DeviceInfo;
   runtimeHintPlan: ResolvedOpenRuntimeHintPlan;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<OpenRuntimeAdmission> {
   const plan = resolveOpenApplicationRuntimePlan({
@@ -136,6 +139,7 @@ async function resolveOpenRuntimePlanAdmission(params: {
   device: DeviceInfo;
   existingSession?: SessionState;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<OpenRuntimePlanAdmission> {
   const runtimeHintPlan = resolveOpenRuntimeHintPlan(params);
@@ -144,6 +148,7 @@ async function resolveOpenRuntimePlanAdmission(params: {
     device: params.device,
     runtimeHintPlan: runtimeHintPlan.plan,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (admission.type === 'response') return admission;
@@ -179,6 +184,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     const requestedOpenTarget = req.positionals?.[0];
     const openTarget = requestedOpenTarget ?? (shouldRelaunch ? session.appName : undefined);
     const surfaceResult = resolveOpenSurfaceResponse(
+      params.platformServices,
       session.device,
       req.flags?.surface,
       openTarget,
@@ -199,6 +205,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       openTarget,
       surface: surfaceResult,
       device: session.device,
+      platformServices: params.platformServices,
     });
     if (validation) return { type: 'response', response: validation };
 
@@ -211,7 +218,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     );
     if (lostClaim) return { type: 'response', response: lostClaim };
 
-    const device = await refreshSessionDeviceIfNeeded(session.device);
+    const device = await refreshSessionDeviceIfNeeded(session.device, params.platformServices);
     const selection = resolveExistingSessionDeviceSelection(device);
     await req.internal?.retainDeviceExecutionLock?.(device.id);
     const runtimePlanAdmission = await resolveOpenRuntimePlanAdmission({
@@ -221,6 +228,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
       device,
       existingSession: session,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     });
     if (runtimePlanAdmission.type === 'response')
@@ -288,6 +296,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     shouldRelaunch,
     openTarget,
     platform: req.flags?.platform === 'android' ? 'android' : undefined,
+    platformServices: params.platformServices,
   });
   if (preResolvedValidation) return { type: 'response', response: preResolvedValidation };
 
@@ -297,7 +306,12 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
   );
   const device = selection.device;
   await req.internal?.retainDeviceExecutionLock?.(device.id);
-  const surfaceResult = resolveOpenSurfaceResponse(device, req.flags?.surface, openTarget);
+  const surfaceResult = resolveOpenSurfaceResponse(
+    params.platformServices,
+    device,
+    req.flags?.surface,
+    openTarget,
+  );
   if (typeof surfaceResult !== 'string') return { type: 'response', response: surfaceResult };
 
   const validation = await validateResolvedOpenRequest({
@@ -305,6 +319,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     openTarget,
     surface: surfaceResult,
     device,
+    platformServices: params.platformServices,
   });
   if (validation) return { type: 'response', response: validation };
 
@@ -314,6 +329,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
     sessionName,
     device,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (runtimePlanAdmission.type === 'response')
@@ -337,6 +353,7 @@ async function handleOpenCommand(params: SessionOpenCommandInput): Promise<Sessi
         applyRuntimeHints: admission.applyRuntimeHints,
         clearRuntimeHints: admission.clearRuntimeHints,
         reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
+        platformServices: params.platformServices,
         selection,
       }),
   );

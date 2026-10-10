@@ -47,6 +47,7 @@ export async function resolveBoundTypeTextRuntime(
     device: params.device,
     use: typeTextRuntimeUse,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (admission.type === 'response') return { ok: false, response: admission.response };

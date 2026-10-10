@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from './platform-services.ts';
 import type { ElementTextRuntimeOperations } from '@agent-device/contracts/element-text-runtime';
 import { resolveSelectorCaptureRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
 import type { FindTextRuntimeOperations } from '@agent-device/contracts/selector-observation-runtime';
@@ -51,6 +52,7 @@ export async function resolveBoundSelectorCapture(
     device: SessionState['device'];
     session: SessionState | undefined;
     inspectFacts?: InspectDeviceRuntimeFacts;
+    platformServices: DaemonPlatformServices;
     bindDevice?: BindDeviceRuntime;
   }>,
 ): Promise<ResolvedSelectorCapture> {

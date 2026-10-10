@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../session-state.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -62,7 +63,7 @@ test('runner-backed iOS recordings still invalidate on runner restarts', async (
 
   const store = makeSessionStore();
   const ref = store.publish(session.name, session);
-  await refreshRecordingHealth(store, ref);
+  await refreshRecordingHealth(store, ref, daemonPlatformServicesFixture());
 
   expect(mockObserveRunnerSession).toHaveBeenCalledWith('sim-1');
   expect(session.screenRecording?.handle.inspect().invalidatedReason).toBe(
@@ -88,7 +89,7 @@ test.each([
 
   const store = makeSessionStore();
   const ref = store.publish(session.name, session);
-  await refreshRecordingHealth(store, ref);
+  await refreshRecordingHealth(store, ref, daemonPlatformServicesFixture());
 
   expect(session.screenRecording.handle.inspect().invalidatedReason).toBe(reason);
 });
@@ -103,7 +104,7 @@ test('a recording without a runner identity adopts the first live observation', 
 
   const store = makeSessionStore();
   const ref = store.publish(session.name, session);
-  await refreshRecordingHealth(store, ref);
+  await refreshRecordingHealth(store, ref, daemonPlatformServicesFixture());
 
   const recording = session.screenRecording.handle.inspect();
   expect(recording.runnerSessionId).toBe('runner-first');
@@ -129,7 +130,7 @@ test.each(['rebuild', 'retire', 'handle', 'token', 'generation'] as const)(
           finish = resolve;
         }),
     );
-    const observation = refreshRecordingHealth(store, ref);
+    const observation = refreshRecordingHealth(store, ref, daemonPlatformServicesFixture());
     expect(mockObserveRunnerSession).toHaveBeenCalledWith('sim-1');
     if (change === 'rebuild') {
       store.update(ref, { appName: 'Intervening app' });
@@ -196,6 +197,9 @@ test.each(['rebuild', 'retire'] as const)(
       req: { token: 'token', session: 'default', command: 'snapshot', positionals: [] },
       sessionStore: store,
       leaseRegistry: new LeaseRegistry(),
+      // Locked preparation refreshes recording health through the port, so the scope has to carry
+      // the composed services the mocked observation spy is hanging off.
+      platformServices: daemonPlatformServicesFixture(),
     });
     const prepared = scope.runLocked(() =>
       prepareLockedRequestScope({

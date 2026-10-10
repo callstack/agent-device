@@ -1,4 +1,5 @@
 import { afterAll, test, expect, vi } from 'vitest';
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import fs from 'node:fs';
 import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
 import type { CommandFlags } from '@agent-device/contracts/command';
@@ -115,11 +116,13 @@ test('an open that lost the race to a free device re-waits and opens rather than
   setTimeout(() => sessionStore.retire(holder), 50);
 
   const first = await createRequestExecutionScope({
+    platformServices: daemonPlatformServicesFixture(),
     req: openRequest('first-opener'),
     sessionStore,
     leaseRegistry,
   });
   const second = await createRequestExecutionScope({
+    platformServices: daemonPlatformServicesFixture(),
     req: openRequest('second-opener'),
     sessionStore,
     leaseRegistry,
@@ -152,6 +155,7 @@ test('a close that frees the device mid-wait gets through while the open is wait
   const order: string[] = [];
 
   const opened = createRequestExecutionScope({
+    platformServices: daemonPlatformServicesFixture(),
     req: openRequest('waiter'),
     sessionStore,
     leaseRegistry,
@@ -164,6 +168,7 @@ test('a close that frees the device mid-wait gets through while the open is wait
   );
   await sleep(50);
   const closer = await createRequestExecutionScope({
+    platformServices: daemonPlatformServicesFixture(),
     req: closeRequest('holder'),
     sessionStore,
     leaseRegistry,
@@ -195,6 +200,7 @@ test('an out-of-range wait budget is refused before resolving the target device'
   const resolveCallsBefore = vi.mocked(resolveTargetDevice).mock.calls.length;
   await expect(
     createRequestExecutionScope({
+      platformServices: daemonPlatformServicesFixture(),
       req: openRequest('unbounded-opener', max + 1, 'request-unbounded'),
       sessionStore: makeSessionStore('agent-device-open-wait-bounds-'),
       leaseRegistry: new LeaseRegistry(),

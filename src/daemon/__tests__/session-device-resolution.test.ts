@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../session-state.ts';
 
@@ -67,7 +68,7 @@ async function withMockedPlatform<T>(platform: NodeJS.Platform, fn: () => Promis
 
 test('refreshSessionDeviceIfNeeded keeps iOS simulator session device on non-mac hosts', async () => {
   const device = await withMockedPlatform('linux', async () =>
-    refreshSessionDeviceIfNeeded(iosSimulatorSession.device),
+    refreshSessionDeviceIfNeeded(iosSimulatorSession.device, daemonPlatformServicesFixture()),
   );
 
   expect(device).toBe(iosSimulatorSession.device);
@@ -78,6 +79,7 @@ test('resolveCommandDevice keeps an existing session for a platform-only filter'
     'linux',
     async () =>
       await resolveCommandDevice({
+        platformServices: daemonPlatformServicesFixture(),
         session: iosSimulatorSession,
         flags: { platform: 'ios' },
       }),
@@ -91,7 +93,11 @@ test('resolveCommandDevice does not prepare a sessionless device', async () => {
   const device = { ...iosSimulatorSession.device, id: 'sessionless-sim' };
   mockResolveTargetDevice.mockResolvedValue(device);
 
-  await resolveCommandDevice({ session: undefined, flags: { platform: 'ios' } });
+  await resolveCommandDevice({
+    session: undefined,
+    flags: { platform: 'ios' },
+    platformServices: daemonPlatformServicesFixture(),
+  });
 
   expect(mockResolveTargetDevice).toHaveBeenCalledOnce();
   expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
@@ -101,10 +107,10 @@ test('refreshSessionDeviceIfNeeded keeps provider-owned iOS simulators out of lo
   mockIsActiveProviderDevice.mockReturnValue(true);
 
   const device = await withMockedPlatform('darwin', async () =>
-    refreshSessionDeviceIfNeeded({
-      ...iosSimulatorSession.device,
-      id: 'limrun:ios:lease-1',
-    }),
+    refreshSessionDeviceIfNeeded(
+      { ...iosSimulatorSession.device, id: 'limrun:ios:lease-1' },
+      daemonPlatformServicesFixture(),
+    ),
   );
 
   expect(device.id).toBe('limrun:ios:lease-1');
@@ -118,7 +124,7 @@ test('refreshSessionDeviceIfNeeded skips re-resolve while the iOS runner session
   });
 
   const device = await withMockedPlatform('darwin', async () =>
-    refreshSessionDeviceIfNeeded(iosSimulatorSession.device),
+    refreshSessionDeviceIfNeeded(iosSimulatorSession.device, daemonPlatformServicesFixture()),
   );
 
   expect(device).toEqual({ ...iosSimulatorSession.device, booted: true });
@@ -134,7 +140,7 @@ test('refreshSessionDeviceIfNeeded re-resolves when the iOS runner session is go
   mockResolveTargetDevice.mockResolvedValue(resolved);
 
   const device = await withMockedPlatform('darwin', async () =>
-    refreshSessionDeviceIfNeeded(iosSimulatorSession.device),
+    refreshSessionDeviceIfNeeded(iosSimulatorSession.device, daemonPlatformServicesFixture()),
   );
 
   expect(device).toBe(resolved);

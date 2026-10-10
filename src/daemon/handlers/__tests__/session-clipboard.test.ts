@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
 import {
@@ -91,7 +92,11 @@ function request(positionals: string[]) {
 
 test('clipboard read admits clipboardReadUse and reports the platform-labelled text', async () => {
   const spies = harness({ read: available, write: available });
-  const response = await handleSessionClipboardCommand({ ...request(['read']), ...spies });
+  const response = await handleSessionClipboardCommand({
+    ...request(['read']),
+    ...spies,
+    platformServices: daemonPlatformServicesFixture(),
+  });
 
   expect(response.ok).toBe(true);
   expect(response.ok && response.data).toEqual({
@@ -105,7 +110,11 @@ test('clipboard read admits clipboardReadUse and reports the platform-labelled t
 
 test('clipboard readiness follows runtime binding', async () => {
   const spies = harness({ read: available, write: available });
-  const response = await handleSessionClipboardCommand({ ...request(['read']), ...spies });
+  const response = await handleSessionClipboardCommand({
+    ...request(['read']),
+    ...spies,
+    platformServices: daemonPlatformServicesFixture(),
+  });
 
   expect(response.ok).toBe(true);
   expect(spies.bindDevice).toHaveBeenCalledTimes(1);
@@ -121,6 +130,7 @@ test('clipboard readiness follows runtime binding', async () => {
 test('clipboard write joins its positionals and reports the code-point length', async () => {
   const spies = harness({ read: available, write: available });
   const response = await handleSessionClipboardCommand({
+    platformServices: daemonPlatformServicesFixture(),
     ...request(['write', 'hello', 'wörld']),
     ...spies,
   });
@@ -142,7 +152,11 @@ test('clipboard write joins its positionals and reports the code-point length', 
 // forward — not the missing argument the length check would otherwise reject.
 test('clipboard write forwards an explicit empty string as a clear', async () => {
   const spies = harness({ read: available, write: available });
-  const response = await handleSessionClipboardCommand({ ...request(['write', '']), ...spies });
+  const response = await handleSessionClipboardCommand({
+    ...request(['write', '']),
+    ...spies,
+    platformServices: daemonPlatformServicesFixture(),
+  });
 
   expect(response.ok).toBe(true);
   expect(spies.writeClipboard).toHaveBeenCalledWith(expect.objectContaining({ text: '' }));
@@ -155,7 +169,11 @@ test.each([{ positionals: ['read'] }, { positionals: ['write', 'text'] }])(
   'clipboard $positionals.0 inspects facts once and binds once',
   async ({ positionals }) => {
     const spies = harness({ read: available, write: available });
-    await handleSessionClipboardCommand({ ...request(positionals), ...spies });
+    await handleSessionClipboardCommand({
+      ...request(positionals),
+      ...spies,
+      platformServices: daemonPlatformServicesFixture(),
+    });
 
     expect(spies.inspectFacts).toHaveBeenCalledTimes(1);
     expect(spies.bindDevice).toHaveBeenCalledTimes(1);
@@ -164,7 +182,11 @@ test.each([{ positionals: ['read'] }, { positionals: ['write', 'text'] }])(
 
 test('an unadmitted cell refuses with the retired capability gate wording and its owner hint', async () => {
   const spies = harness({ read: unavailable, write: unavailable });
-  const response = await handleSessionClipboardCommand({ ...request(['read']), ...spies });
+  const response = await handleSessionClipboardCommand({
+    ...request(['read']),
+    ...spies,
+    platformServices: daemonPlatformServicesFixture(),
+  });
 
   expect(response.ok).toBe(false);
   if (!response.ok) {
@@ -180,18 +202,27 @@ test('a write-only refusal still admits the read', async () => {
   const spies = harness({ read: available, write: unavailable });
 
   const write = await handleSessionClipboardCommand({
+    platformServices: daemonPlatformServicesFixture(),
     ...request(['write', 'text']),
     ...spies,
   });
   expect(write.ok).toBe(false);
 
-  const read = await handleSessionClipboardCommand({ ...request(['read']), ...spies });
+  const read = await handleSessionClipboardCommand({
+    ...request(['read']),
+    ...spies,
+    platformServices: daemonPlatformServicesFixture(),
+  });
   expect(read.ok).toBe(true);
 });
 
 test('an unknown subcommand fails before any device is resolved', async () => {
   const spies = harness({ read: available, write: available });
-  const response = await handleSessionClipboardCommand({ ...request(['paste']), ...spies });
+  const response = await handleSessionClipboardCommand({
+    ...request(['paste']),
+    ...spies,
+    platformServices: daemonPlatformServicesFixture(),
+  });
 
   expect(response.ok).toBe(false);
   if (!response.ok) {
@@ -206,15 +237,23 @@ test('an unknown subcommand fails before any device is resolved', async () => {
 test('clipboard read rejects extra arguments', async () => {
   const spies = harness({ read: available, write: available });
   await expect(
-    handleSessionClipboardCommand({ ...request(['read', 'extra']), ...spies }),
+    handleSessionClipboardCommand({
+      ...request(['read', 'extra']),
+      ...spies,
+      platformServices: daemonPlatformServicesFixture(),
+    }),
   ).rejects.toThrow('clipboard read does not accept additional arguments');
 });
 
 test('clipboard write with no text argument reports how to clear instead', async () => {
   const spies = harness({ read: available, write: available });
-  await expect(handleSessionClipboardCommand({ ...request(['write']), ...spies })).rejects.toThrow(
-    'clipboard write requires text (use "" to clear clipboard)',
-  );
+  await expect(
+    handleSessionClipboardCommand({
+      ...request(['write']),
+      ...spies,
+      platformServices: daemonPlatformServicesFixture(),
+    }),
+  ).rejects.toThrow('clipboard write requires text (use "" to clear clipboard)');
 });
 
 for (const action of ['read', 'write'] as const) {
@@ -229,6 +268,7 @@ for (const action of ['read', 'write'] as const) {
     });
     await expect(
       handleSessionClipboardCommand({
+        platformServices: daemonPlatformServicesFixture(),
         ...input,
         req: { ...input.req, flags: { platform: 'android', serial: androidDevice.id } },
         ...spies,
@@ -252,7 +292,11 @@ test('clipboard read succeeds without journaling after its admitted lifetime end
     input.sessionStore.publish(input.sessionName, successor);
     return 'copied text';
   });
-  const response = await handleSessionClipboardCommand({ ...input, ...spies });
+  const response = await handleSessionClipboardCommand({
+    ...input,
+    ...spies,
+    platformServices: daemonPlatformServicesFixture(),
+  });
   expect(response?.ok).toBe(true);
   expect(spies.readClipboard).toHaveBeenCalledOnce();
   expect(retired.session.actions).toEqual([]);

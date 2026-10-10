@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { test, expect, vi } from 'vitest';
 
 import { handleSessionStateCommands } from '../session-state.ts';
@@ -33,6 +34,7 @@ test('boot rejects --headless outside Android directly', async () => {
     { local: async () => [device] },
     async () =>
       await handleSessionStateCommands({
+        platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
           session: 'default',
@@ -98,6 +100,7 @@ test('boot rejects --headless outside Android directly', async () => {
 
 test('appstate returns missing-session error for explicit session flag', async () => {
   const response = await handleSessionStateCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'named',
@@ -137,6 +140,7 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
     },
     async () =>
       await handleSessionStateCommands({
+        platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
           session: 'default',
@@ -257,6 +261,7 @@ test('appstate rejects a missing readiness fact even when appState is available'
     { local: async () => [device] },
     async () =>
       await handleSessionStateCommands({
+        platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
           session: 'default',
@@ -355,6 +360,7 @@ test('sessionless Android appstate inspects once, binds once, and preserves oper
     { local: async () => [device] },
     async () =>
       await handleSessionStateCommands({
+        platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
           session: 'default',

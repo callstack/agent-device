@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { test, expect } from 'vitest';
 
 import { handleSessionCommands } from './session-command-harness.ts';
@@ -14,6 +15,7 @@ const invoke = async (_req: DaemonRequest): Promise<DaemonResponse> => {
 test('trigger-app-event requires active session or explicit device selector', async () => {
   const sessionStore = makeSessionStore('agent-device-session-trigger-');
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

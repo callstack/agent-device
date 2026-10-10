@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import type { InspectDeviceRuntimeFacts } from '../../request-runtime-binding.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
@@ -89,6 +90,7 @@ async function dispatchPush(params: {
     flags: {},
   };
   return await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: 'default',
     logPath: '/tmp/daemon.log',

@@ -93,6 +93,7 @@ export async function dispatchSnapshotRuntimeCommand(
           session,
           device,
           inspectFacts: params.inspectFacts,
+          platformServices: params.platformServices,
           bindDevice: params.bindDevice,
         });
         if (!timeoutResponse) throw error;

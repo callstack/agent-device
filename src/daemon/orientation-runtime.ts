@@ -44,6 +44,7 @@ export async function resolveBoundOrientationRuntime(
       device: params.device,
       use: orientationRuntimeUse,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     },
     (runtime, context) => executeSetOrientation(runtime, rotation, context),

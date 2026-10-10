@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import path from 'node:path';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type {
@@ -63,6 +64,7 @@ export type RecordRuntimeHandlerParams = Readonly<{
   sessionName: string;
   sessionStore: SessionStore;
   bindDevice: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
   bindExactDevice: BindExactDeviceRuntime;
   admissionLedger: ScreenRecordingAdmissionLedger;
   requestScope: PlatformRequestScope;
@@ -150,7 +152,7 @@ async function startRecording(
   const binding = ref ? bindSessionScreenRecording(params.sessionStore, ref) : draft!.binding;
   binding.assertAdoptable();
   const admission = await params.bindDevice(session.device, screenRecordingAdmissionUse);
-  if (needsReadiness) await ensureBoundDeviceReady(admission);
+  if (needsReadiness) await ensureBoundDeviceReady(admission, params.platformServices);
   const startFact = admission.facts.screenRecordingStart;
   if (!startFact.available) return buildRecordingUnsupportedResponse(startFact);
   const runtime = await params.bindDevice(session.device, use);
@@ -309,7 +311,7 @@ async function finishRecovered(
         screenRecordingRecoveryUse,
         recoveryScope,
       );
-      if (needsReadiness) await ensureBoundDeviceReady(runtime);
+      if (needsReadiness) await ensureBoundDeviceReady(runtime, params.platformServices);
       return createScreenRecordingRecoveryControl({ runtime, dispose: async () => {} });
     },
   });

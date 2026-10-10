@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { publicPlatformString } from '@agent-device/kernel/device';
 import { clearRuntimeHintsRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
@@ -25,6 +26,7 @@ type RuntimeCommandDevice = NonNullable<ReturnType<SessionStore['get']>>['device
 type RuntimeCommandAdmission = Readonly<{
   device: RuntimeCommandDevice;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }>;
 
@@ -44,6 +46,7 @@ export async function handleRuntimeCommand(params: {
   logPath: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
@@ -53,6 +56,7 @@ export async function handleRuntimeCommand(params: {
       req,
       session: sessionStore.get(sessionName),
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     });
   }
@@ -75,6 +79,7 @@ export async function handleRuntimeCommand(params: {
       ref,
       current,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     });
   }
@@ -90,6 +95,7 @@ async function readGestureViewport(params: {
   logPath: string;
   session: ReturnType<SessionStore['get']>;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   if (!params.session) {
@@ -98,6 +104,7 @@ async function readGestureViewport(params: {
   const runtime = await resolveBoundGestureViewportRuntime({
     device: params.session.device,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (!runtime.ok) return runtime.response;
@@ -123,15 +130,18 @@ async function clearRuntimeCommand(params: {
   ref: SessionRef | undefined;
   current: ReturnType<SessionStore['getRuntimeHints']>;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
-  const { sessionName, sessionStore, ref, current, inspectFacts, bindDevice } = params;
+  const { sessionName, sessionStore, ref, current, inspectFacts, bindDevice, platformServices } =
+    params;
   const session = ref ? sessionStore.requireCurrent(ref) : undefined;
   if (hasRuntimeTransportHints(current) && session?.appBundleId) {
     const admission = await admitClearRuntime({
       device: session.device,
       inspectFacts,
       bindDevice,
+      platformServices,
     });
     if (admission.type === 'response') return admission.response;
     // Native hint removal can change the app's reachable surface. Expire the existing frame at

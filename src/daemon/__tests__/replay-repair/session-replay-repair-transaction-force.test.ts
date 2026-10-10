@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 /**
  * ADR 0012 decision 6 repair-transaction `--force`/`--overwrite` semantics (#1258): a
@@ -121,6 +122,7 @@ test('#1258: close --save-script --force overwrites an existing COMPLETE healed 
   );
 
   const closeResponse = await handleCloseCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -373,6 +375,7 @@ test('#1258 preflight is per-target: a --from continuation RETARGETING to an exi
   // (never the rejected <b>) — proof the rejected retarget corrupted neither
   // the completion flag nor the target path.
   const closeResponse = await handleCloseCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
     sessionName,
     logPath,
@@ -412,6 +415,7 @@ test('#1258 force is per-target: re-arming --save-script=<b> WITHOUT --force dro
   // `close --save-script=<b>` (NO --force): retargeting from <a> to <b>
   // without a live opt-in drops the force that was granted for <a>.
   const closeResponse = await handleCloseCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -455,6 +459,7 @@ test('#1258 force per-target, contrast: re-arming --save-script=<b> WITH --force
   // `close --save-script=<b> --force`: the live opt-in re-grants force for the
   // new target, overwriting it.
   const closeResponse = await handleCloseCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,

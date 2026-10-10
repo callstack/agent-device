@@ -76,6 +76,7 @@ async function captureFallbackScreenshot(
       device: session.device,
       overlayRefs: false,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     });
     // A target that cannot capture pixels owes the caller nothing here: the sparse verdict's own

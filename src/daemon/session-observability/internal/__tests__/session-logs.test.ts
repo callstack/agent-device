@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import fs from 'node:fs';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { AppLogRuntimeOperations } from '@agent-device/contracts/app-log-runtime';
@@ -296,6 +297,7 @@ async function runLogs(
   throwIfCanceled?: () => void,
 ) {
   return await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'logs', positionals, flags },
     sessionName,
     logPath: '/tmp/daemon.log',

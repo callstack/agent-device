@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { backRuntimeOperationFacts } from '@agent-device/contracts/back-runtime';
 import {
@@ -90,6 +91,7 @@ test('resolves one admitted binding and drives one back navigation', async () =>
   const harness = runtimeHarness(backRuntimeOperationFacts({ back: available }).back);
 
   const resolved = await resolveBoundBackRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: appleDevice,
     inspectFacts: harness.inspectFacts,
     bindDevice: harness.bindDevice,
@@ -113,6 +115,7 @@ test('forwards the requested back mode from the resolved dispatch context', asyn
   const harness = runtimeHarness();
 
   const resolved = await resolveBoundBackRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: appleDevice,
     inspectFacts: harness.inspectFacts,
     bindDevice: harness.bindDevice,

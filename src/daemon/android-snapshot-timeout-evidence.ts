@@ -72,6 +72,7 @@ async function captureAndroidSnapshotTimeoutEvidence(
       device: params.device,
       overlayRefs: false,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     });
     if (!capture.ok) {

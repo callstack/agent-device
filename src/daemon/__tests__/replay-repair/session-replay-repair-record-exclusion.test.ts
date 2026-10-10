@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 /**
  * #1271 stage 2 (ADR 0012 amendment): repair-segment default exclusion of
@@ -244,6 +245,7 @@ test('diagnostic get/is reads mid-repair are excluded from the healed script by 
 
   // --- Finalize: `close --save-script` commits the healed `.ad`. ---
   const closeResponse = await handleCloseCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: ctx.sessionName,
@@ -322,6 +324,7 @@ test("a --record'ed diagnostic read lands in the healed script (the diverged-ste
   expect(session.actions.map((a) => a.command)).toEqual(['open', 'get', 'click']);
 
   const closeResponse = await handleCloseCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: ctx.sessionName,

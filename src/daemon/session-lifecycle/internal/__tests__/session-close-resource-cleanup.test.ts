@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
@@ -42,6 +43,7 @@ test('close stops Android snapshot helper session before deleting session', asyn
   });
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -137,6 +139,7 @@ test('close stops active host audio probe before deleting session', async () => 
   );
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -161,6 +164,7 @@ test('close dispatches web session cleanup without a positional target', async (
   sessionStore.publish(sessionName, makeSession(sessionName, WEB_DESKTOP_DEVICE));
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -233,6 +237,7 @@ test('close preserves the session and lease when provider release fails so it ca
       },
     },
     invoke: noopInvoke,
+    platformServices: daemonPlatformServicesFixture(),
   };
 
   const failed = await handleSessionCommands(request);
@@ -290,6 +295,7 @@ test('close cannot retire a replacement session while its provider release waits
     return { releasedBy: 'provider' };
   });
   const closing = handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: address, command: 'close', positionals: [], flags: {} },
     sessionName: address,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

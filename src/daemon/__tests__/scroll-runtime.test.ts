@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, expectTypeOf, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
@@ -82,6 +83,7 @@ async function runScroll(
           flags: dispatch.flags,
         };
   const resolved = await resolveBoundScrollRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: session.device,
     positionals,
     context: context as DaemonCommandContext,
@@ -202,6 +204,7 @@ test('bound scroll rejects duration above the shared cap', async () => {
 test('bound scroll bottom refuses at admission when the owner declares no capture', async () => {
   const calls: ScrollCall[] = [];
   const resolved = await resolveBoundScrollRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: IOS_SIMULATOR,
     session: makeIosSession('scroll-runtime'),
     positionals: ['bottom'],
@@ -475,6 +478,7 @@ test('bound scroll rejects --until on an edge direction before any device work',
 
 test('bound scroll --until is refused at admission when the owner declares no capture', async () => {
   const resolved = await resolveBoundScrollRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: IOS_SIMULATOR,
     session: makeIosSession('scroll-runtime'),
     positionals: ['down'],

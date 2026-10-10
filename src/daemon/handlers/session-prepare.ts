@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import { prepareAppleRunnerRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
@@ -24,6 +25,7 @@ type PrepareRuntime = BoundDeviceRuntime<typeof prepareAppleRunnerRuntimeUse>;
 async function admitPrepareRuntime(params: {
   device: DeviceInfo;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }) {
   return await admitRuntimeUse({
@@ -39,6 +41,7 @@ export async function handlePrepareCommand(params: {
   logPath: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore } = params;
@@ -54,10 +57,15 @@ export async function handlePrepareCommand(params: {
 
   // Device selection is side-effect free enough for facts admission. The bound lifecycle owns
   // readiness, keeping provider-first facts as the sole support authority.
-  const device = await resolveCommandDevice({ session, flags });
+  const device = await resolveCommandDevice({
+    session,
+    flags,
+    platformServices: params.platformServices,
+  });
   const admission = await admitPrepareRuntime({
     device,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (admission.type === 'response') return admission.response;

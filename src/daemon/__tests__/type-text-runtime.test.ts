@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import {
   type DeviceBinding,
@@ -61,6 +62,7 @@ test('resolves one admitted binding and reproduces the retired leaf result exact
   const harness = runtimeHarness(typeTextRuntimeOperationFacts({ type: available }).typeText);
 
   const resolved = await resolveBoundTypeTextRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: appleDevice,
     inspectFacts: harness.inspectFacts,
     bindDevice: harness.bindDevice,
@@ -104,6 +106,7 @@ test('omits textEntryRoute when the owner types blind, exactly as the leaf did',
   harness.typeText.mockResolvedValueOnce(undefined as never);
 
   const resolved = await resolveBoundTypeTextRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: appleDevice,
     inspectFacts: harness.inspectFacts,
     bindDevice: harness.bindDevice,
@@ -119,6 +122,7 @@ test('omits textEntryRoute when the owner types blind, exactly as the leaf did',
 test('parses exactly as the retired leaf did: refs rejected, spaces joined, delay bounded', async () => {
   const harness = runtimeHarness();
   const resolved = await resolveBoundTypeTextRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: appleDevice,
     inspectFacts: harness.inspectFacts,
     bindDevice: harness.bindDevice,

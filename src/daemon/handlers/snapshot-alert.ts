@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import type { AlertRuntimeInput } from '@agent-device/contracts/alert-runtime';
 import {
   type AlertAction,
@@ -31,6 +32,7 @@ type HandleAlertCommandParams = {
   ref: SessionRef | undefined;
   device: SessionState['device'];
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 };
 
@@ -55,12 +57,13 @@ async function resolveBoundAlertRuntime(
   }> &
     RuntimeAdmissionBindings,
 ): Promise<ResolvedAlertExecution> {
-  const { device, action, inspectFacts, bindDevice } = params;
+  const { device, action, inspectFacts, bindDevice, platformServices } = params;
   const shared = {
     command: 'alert',
     device,
     inspectFacts,
     bindDevice,
+    platformServices,
     readiness: !params.session,
   };
   if (action === 'wait') {
@@ -118,7 +121,8 @@ async function executeDismissAlert(
 export async function handleAlertCommand(
   params: HandleAlertCommandParams,
 ): Promise<DaemonResponse> {
-  const { req, logPath, sessionStore, ref, device, inspectFacts, bindDevice } = params;
+  const { req, logPath, sessionStore, ref, device, inspectFacts, bindDevice, platformServices } =
+    params;
   let session = ref ? sessionStore.requireCurrent(ref) : undefined;
   const action = normalizeAlertAction(req.positionals?.[0]);
   const bound = await resolveBoundAlertRuntime({
@@ -127,6 +131,7 @@ export async function handleAlertCommand(
     session,
     inspectFacts,
     bindDevice,
+    platformServices,
   });
   if (!bound.ok) return bound.response;
   session = ref ? sessionStore.requireCurrent(ref) : undefined;

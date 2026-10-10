@@ -41,6 +41,7 @@ export async function resolveBoundFocusRuntime(
       device: params.device,
       use: focusRuntimeUse,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     },
     (runtime, context) => executeFocusPoint(runtime, point, context),

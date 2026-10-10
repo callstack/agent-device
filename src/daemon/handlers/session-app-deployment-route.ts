@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
@@ -13,9 +14,10 @@ export async function handleSessionAppDeploymentCommand(params: {
   sessionName: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse | null> {
-  const { req, sessionName, sessionStore, inspectFacts, bindDevice } = params;
+  const { req, sessionName, sessionStore, inspectFacts, bindDevice, platformServices } = params;
   if (req.command === 'install' || req.command === 'reinstall') {
     return await handleAppDeploymentCommand({
       req,
@@ -24,6 +26,7 @@ export async function handleSessionAppDeploymentCommand(params: {
       sessionStore,
       inspectFacts,
       bindDevice,
+      platformServices,
     });
   }
   if (req.command === 'install_source') {
@@ -33,6 +36,7 @@ export async function handleSessionAppDeploymentCommand(params: {
       sessionStore,
       inspectFacts,
       bindDevice,
+      platformServices,
     });
   }
   if (req.command === 'push') {
@@ -42,6 +46,7 @@ export async function handleSessionAppDeploymentCommand(params: {
       sessionStore,
       inspectFacts,
       bindDevice,
+      platformServices,
     });
   }
   return null;

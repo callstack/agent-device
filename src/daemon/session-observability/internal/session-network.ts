@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../../platform-services.ts';
 import type { NetworkDumpResult } from '@agent-device/contracts/network-runtime';
 import {
   networkAdmissionUse,
@@ -25,6 +26,7 @@ export type NetworkHandlerParams = Readonly<{
   sessionName: string;
   sessionStore: SessionStore;
   bindDevice?: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
 }>;
 
 type NetworkRequest = Readonly<{

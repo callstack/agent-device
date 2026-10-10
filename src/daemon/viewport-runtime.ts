@@ -16,6 +16,7 @@ export async function resolveBoundViewportRuntime(
     device: params.device,
     use: viewportRuntimeUse,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (admission.type === 'response') return { ok: false, response: admission.response };

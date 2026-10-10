@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
@@ -53,6 +54,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
   invoke,
   invokeReplayAction,
   bindDevice,
+  platformServices,
   inspectFacts,
   bindExactDevice,
   screenRecordingAdmissionLedger,
@@ -70,6 +72,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
   const video = createReplayTestVideoOwner({
     sessionStore,
     bindDevice,
+    platformServices,
     bindExactDevice,
     screenRecordingAdmissionLedger,
     requestScope,
@@ -92,6 +95,7 @@ export const handleReplayTestCommand: SessionCommandHandler = async ({
         leaseRegistry,
         inspectFacts,
         bindDevice,
+        platformServices,
         platformResourceCleanup,
       }),
     ...(video ? { video } : {}),
@@ -175,6 +179,7 @@ type ReplayTestSessionCleanupParams = Readonly<{
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
   platformResourceCleanup: PlatformResourceCleanup;
 }>;
@@ -196,6 +201,7 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
     sessionStore,
     leaseRegistry: params.leaseRegistry,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
     platformResourceCleanup: params.platformResourceCleanup,
   });

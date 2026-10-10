@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
@@ -59,6 +60,7 @@ test.each(NETWORK_RUNTIME_PROJECTION_PARITY)(
     const runtime = createNetworkRuntime(session.device, async () => result);
 
     const response = await handleSessionCommands({
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -112,6 +114,7 @@ test('network admission remains fail-closed before parsing invalid input', async
   });
 
   const response = await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,
@@ -209,6 +212,7 @@ async function runNetwork(
   bindDevice: BindDeviceRuntime,
 ) {
   return await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,

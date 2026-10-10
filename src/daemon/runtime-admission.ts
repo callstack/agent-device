@@ -107,7 +107,7 @@ export async function admitRuntimeUse<
   const admitted = await admitRuntimeOperations({ ...request, required: request.use.required });
   if (admitted.type === 'response') return admitted;
   const runtime = await admitted.bind(request.device, request.use);
-  if (request.readiness) await ensureBoundDeviceReady(runtime);
+  if (request.readiness) await ensureBoundDeviceReady(runtime, request.platformServices);
   return { type: 'runtime', runtime };
 }
 

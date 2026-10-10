@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import type { DaemonRequest } from '../../daemon-request.ts';
 import { handlePortReverseCommand } from '../session-runtime-port-reverse.ts';
@@ -13,6 +14,7 @@ test('port reverse rejects a missing resolved lease before runtime admission', a
   const inspectFacts = vi.fn();
   const bindDevice = vi.fn();
   const response = await handlePortReverseCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       ...baseRequest,
       flags: { platform: 'android', leaseProvider: 'limrun', devicePort: 8097 },
@@ -37,6 +39,7 @@ test('sessionless port reverse requires an explicit device selector', async () =
   const inspectFacts = vi.fn();
   const bindDevice = vi.fn();
   const response = await handlePortReverseCommand({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       ...baseRequest,
       flags: {

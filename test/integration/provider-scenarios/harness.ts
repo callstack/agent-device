@@ -16,6 +16,7 @@ import {
   androidObservation,
   type PlatformProviderResolvers,
 } from '../../../src/platform-runtime.ts';
+import { createDaemonPlatformServices } from '../../../src/platform-runtime-daemon-services.ts';
 import { platformResourceCleanup } from '../../../src/platform-runtime-resource-cleanup.ts';
 import { readDaemonProviderCredentials } from '../../../src/provider-credential-fingerprint.ts';
 import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
@@ -179,6 +180,7 @@ export async function createProviderScenarioHarness(
     hostDiagnostics: createHostDiagnostics(),
     androidObservation,
     platformResourceCleanup,
+    platformServices: createDaemonPlatformServices(),
     requestPlatformProviders:
       configuredRequestPlatformProviders ??
       createRequestPlatformProviders({

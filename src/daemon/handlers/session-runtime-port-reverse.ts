@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import type { ProviderPortReverseOptions } from '@agent-device/contracts/device';
 import { configureProviderPortReverseRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
@@ -24,9 +25,10 @@ export async function handlePortReverseCommand(params: {
   req: DaemonRequest;
   session: ReturnType<SessionStore['get']>;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
-  const { req, session, inspectFacts, bindDevice } = params;
+  const { req, session, inspectFacts, bindDevice, platformServices } = params;
   const parsed = readPortReverseOptions(req);
   if (!parsed.ok) return parsed.response;
   const selectorError = requireSessionOrExplicitSelector(
@@ -38,11 +40,13 @@ export async function handlePortReverseCommand(params: {
   const device = await resolveCommandDevice({
     session,
     flags: req.flags,
+    platformServices: params.platformServices,
   });
   const admission = await admitRuntimeUse({
     device,
     inspectFacts,
     bindDevice,
+    platformServices,
     command: 'runtime port-reverse',
     use: configureProviderPortReverseRuntimeUse,
   });

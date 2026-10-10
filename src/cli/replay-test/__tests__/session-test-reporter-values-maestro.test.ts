@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../daemon/__tests__/platform-services-fixture.ts';
 // Characterization of the shipped reporter contract for the MAESTRO adapter (#1478 P3).
 //
 // The sibling session-test-reporter-values.test.ts covers the same contract for native `.ad`.
@@ -112,6 +113,7 @@ async function runMaestroSuiteThroughReporter(params: {
     (event) => runReplayTestReporterProgress(reporters, event, reporterContext),
     async () =>
       await handleSessionCommands({
+        platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
           session: 'default',

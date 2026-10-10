@@ -66,6 +66,7 @@ import {
   resolveCommandDeviceClaimPolicy,
 } from '@agent-device/command-registry/registry';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
+import type { DaemonPlatformServices } from './platform-services.ts';
 import {
   assertDaemonPolicyAdmitsDevice,
   assertDaemonPolicyAdmitsRequest,
@@ -100,8 +101,10 @@ export type RequestExecutionScope = AsyncDisposable & {
   runLocked<T>(task: () => Promise<T>): Promise<T>;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   bindDevice: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
   inspectFacts: InspectDeviceRuntimeFacts;
   bindExactDevice: BindExactDeviceRuntime;
+  /** Root-composed platform services for this request's asks that bind no device runtime. */
   /** The request's mutations, recorded by every bound operation this scope hands out. */
   dispatchLedger: RequestDispatchLedger;
   throwIfCanceled(): void;
@@ -114,6 +117,7 @@ export type LockedRequestScope = {
   existingSession: SessionState | undefined;
   retainDeviceExecutionLock(deviceId: string): Promise<void>;
   bindDevice: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
   inspectFacts: InspectDeviceRuntimeFacts;
   bindExactDevice: BindExactDeviceRuntime;
   dispatchLedger: RequestDispatchLedger;
@@ -139,6 +143,7 @@ export async function createRequestExecutionScope(params: {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   deviceRuntimeGateway?: DeviceRuntimeGateway<PlatformRuntimeOperations>;
+  platformServices: DaemonPlatformServices;
   platformRequestScope?: PlatformRequestScope;
   platformResourceCleanup?: PlatformResourceCleanup;
   providerAppCatalog?: ProviderAppCatalog;
@@ -245,6 +250,7 @@ export async function createRequestExecutionScope(params: {
       bindDevice: runtimeBindings?.bindDevice ?? gatewayMissing,
       inspectFacts: runtimeBindings?.inspectFacts ?? gatewayMissing,
       bindExactDevice: runtimeBindings?.bindExactDevice ?? gatewayMissing,
+      platformServices: params.platformServices,
       dispatchLedger,
       throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
       runAdmitted: async (task) => {
@@ -472,7 +478,7 @@ export async function prepareLockedRequestScope(params: {
   scope.throwIfCanceled();
   const seededRef = sessionStore.lookup(scope.sessionName);
   if (seededRef) {
-    await refreshRecordingHealth(sessionStore, seededRef);
+    await refreshRecordingHealth(sessionStore, seededRef, scope.platformServices);
     scope.throwIfCanceled();
     sessionStore.requireCurrent(seededRef);
   }
@@ -537,6 +543,7 @@ export async function prepareLockedRequestScope(params: {
       existingSession,
       retainDeviceExecutionLock: scope.retainDeviceExecutionLock,
       bindDevice: scope.bindDevice,
+      platformServices: scope.platformServices,
       inspectFacts: scope.inspectFacts,
       bindExactDevice: scope.bindExactDevice,
       dispatchLedger: scope.dispatchLedger,

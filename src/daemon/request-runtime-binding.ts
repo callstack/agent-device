@@ -16,6 +16,7 @@ import {
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { ensureDeviceReady } from './device/device-ready.ts';
+import type { DaemonPlatformServices } from './platform-services.ts';
 import { recordBoundMutations, type RequestDispatchLedger } from './request-dispatch-ledger.ts';
 
 export type BindDeviceRuntime = <
@@ -34,18 +35,6 @@ export type BindDeviceRuntime = <
 ) => Promise<
   BoundDeviceRuntime<RuntimeUse<PlatformRuntimeOperations, Required, Preferred, Conditional>>
 >;
-
-/**
- * The two request-scoped seams a caller threads down to whichever route finally admits a device
- * cell. It lives here, beside the two function types it is composed of, rather than beside the
- * admission entry point that consumes it: callers that only forward the seams (a deferred capture
- * handing them to a retry, say) would otherwise have to import the whole admission module and
- * close a type cycle through it.
- */
-export type RuntimeAdmissionBindings = Readonly<{
-  inspectFacts?: InspectDeviceRuntimeFacts;
-  bindDevice?: BindDeviceRuntime;
-}>;
 
 export type BindExactDeviceRuntime = <
   const Required extends readonly RuntimeOperationKey<PlatformRuntimeOperations>[],
@@ -76,15 +65,34 @@ export type BoundDeviceIdentity = Readonly<{
   owner: RuntimeOwnerRef;
 }>;
 
-/** Runs local readiness after binding and claim admission; a provider runtime owns its own. */
-export async function ensureBoundDeviceReady(bound: BoundDeviceIdentity): Promise<void> {
+/**
+ * Runs local readiness after binding and claim admission; a provider runtime owns its own. The
+ * concrete mechanics arrive through the request's platform-services port, so no route can reach a
+ * platform it did not receive from root composition.
+ */
+export async function ensureBoundDeviceReady(
+  bound: BoundDeviceIdentity,
+  platformServices: DaemonPlatformServices,
+): Promise<void> {
   switch (bound.owner.kind) {
     case 'provider-runtime':
       return;
     case 'local-family':
-      await ensureDeviceReady(bound.device);
+      await ensureDeviceReady(bound.device, platformServices);
   }
 }
+
+/**
+ * The two request-scoped seams a route needs to admit and prepare a device, beside the two
+ * function types it is composed of. `platformServices` rides along because every admitted-device
+ * route runs local readiness through the same port; a caller that only forwards the seams still
+ * forwards one object rather than one member per platform ask.
+ */
+export type RuntimeAdmissionBindings = Readonly<{
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
+  bindDevice?: BindDeviceRuntime;
+}>;
 
 export type RequestRuntimeBindings = AsyncDisposable &
   Readonly<{

@@ -72,6 +72,7 @@ export async function resolveBoundSystemButtonRuntime(
       device: params.device,
       use: row.use,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     },
     async (runtime: BoundDeviceRuntime<SystemButtonUse>, context) => {

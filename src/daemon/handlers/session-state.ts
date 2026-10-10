@@ -1,3 +1,4 @@
+import type { DaemonPlatformServices } from '../platform-services.ts';
 import { asAppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
@@ -92,6 +93,7 @@ async function readAppleSessionAppState(
     device: session.device,
     use: appStateUse,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
   });
   if (admitted.type === 'response') return undefined;
@@ -189,6 +191,7 @@ async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promi
   const device = await resolveCommandDevice({
     session,
     flags,
+    platformServices: params.platformServices,
   });
   if (isIosFamily(device)) {
     return errorResponse('SESSION_NOT_FOUND', IOS_APPSTATE_SESSION_REQUIRED_MESSAGE);
@@ -201,6 +204,7 @@ async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promi
     device,
     use: appStateUse,
     inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
     bindDevice: params.bindDevice,
     unavailableResponse: (unavailable) =>
       errorResponse(
@@ -234,6 +238,7 @@ export async function handleSessionStateCommands(params: {
   sessionName: string;
   sessionStore: SessionStore;
   inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
   bindDevice?: BindDeviceRuntime;
 }): Promise<DaemonResponse | null> {
   const { req, sessionName, sessionStore } = params;
@@ -258,6 +263,7 @@ export async function handleSessionStateCommands(params: {
         session,
         flags,
         androidAvdSelection: 'include-stopped',
+        platformServices: params.platformServices,
       });
     } catch (error) {
       const appErr = asAppError(error);
@@ -286,6 +292,7 @@ export async function handleSessionStateCommands(params: {
       device,
       required: plan.use.required,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
       unavailableResponse: bootUnavailableResponse(plan.kind === 'boot-target-headless'),
     });
@@ -329,6 +336,7 @@ export async function handleSessionStateCommands(params: {
       flags,
       session: activeSession,
       androidAvdSelection: 'include-stopped',
+      platformServices: params.platformServices,
     });
     const inspectFacts = requireRuntimeFacts(params.inspectFacts);
     const facts = await inspectFacts(device);
@@ -397,6 +405,7 @@ export async function handleSessionStateCommands(params: {
       sessionName,
       sessionStore,
       inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
       bindDevice: params.bindDevice,
     });
   }

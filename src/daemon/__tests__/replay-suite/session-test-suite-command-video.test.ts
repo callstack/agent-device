@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 /** Per-attempt recording is finalized exactly once after cancellation. */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -266,6 +267,7 @@ test('test finalizes replay video exactly once when cancellation arrives after s
     meta: { cwd: root, requestId: 'record-video-suite' },
   };
   const video = createReplayTestVideoOwner({
+    platformServices: daemonPlatformServicesFixture(),
     sessionStore,
     bindDevice: unavailableBindDevice,
     bindExactDevice: unavailableBindExactDevice,

@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
@@ -35,6 +36,7 @@ const unavailable = Object.freeze({
 test('perf requires an active session', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSessionObservabilityCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -62,6 +64,7 @@ test('perf frames admits and binds only the selected runtime operation', async (
   const runtime = createPerfRuntime({ perfFrames });
 
   const response = await handleSessionObservabilityCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: 'android', command: 'perf', positionals: ['frames'] },
     sessionName: 'android',
     sessionStore,
@@ -80,6 +83,7 @@ test('perf refuses from owner facts before binding', async () => {
   const sessionStore = makeStore();
   const runtime = createPerfRuntime({}, unavailable);
   const response = await handleSessionObservabilityCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: 'android', command: 'perf', positionals: ['memory', 'sample'] },
     sessionName: 'android',
     sessionStore,
@@ -146,6 +150,7 @@ test('perf native capture is adopted durably and stop uses the live handle witho
   };
 
   const startResponse = await handleSessionObservabilityCommands({
+    platformServices: daemonPlatformServicesFixture(),
     ...common,
     req: {
       token: 't',
@@ -163,6 +168,7 @@ test('perf native capture is adopted durably and stop uses the live handle witho
   );
 
   const wrongModeResponse = await handleSessionObservabilityCommands({
+    platformServices: daemonPlatformServicesFixture(),
     ...common,
     req: {
       token: 't',
@@ -183,6 +189,7 @@ test('perf native capture is adopted durably and stop uses the live handle witho
   assert.equal(sessionStore.get('android')?.actions.length, 1);
 
   const stopResponse = await handleSessionObservabilityCommands({
+    platformServices: daemonPlatformServicesFixture(),
     ...common,
     req: {
       token: 't',
@@ -215,6 +222,7 @@ test.each(['shutdown', 'retire'] as const)(
       return bound;
     };
     const response = await handleSessionObservabilityCommands({
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: 'android',
@@ -320,6 +328,7 @@ test('a perf result does not record into a successor occupying the same address'
   });
   const runtime = createPerfRuntime({ perfFrames });
   const response = await handleSessionObservabilityCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: 'android', command: 'perf', positionals: ['frames'] },
     sessionName: 'android',
     sessionStore,

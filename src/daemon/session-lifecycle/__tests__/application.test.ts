@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
@@ -50,6 +51,7 @@ function request(command: DaemonRequest['command']): DaemonRequest {
 
 async function run(command: DaemonRequest['command']): Promise<DaemonResponse | null> {
   return await handleSessionCommands({
+    platformServices: daemonPlatformServicesFixture(),
     req: request(command),
     sessionName: 'default',
     logPath: '/tmp/agent-device-session-lifecycle-route.log',
@@ -109,6 +111,7 @@ test('open routes only its lifecycle input through the public facade', async () 
       'bindDevice',
       'inspectFacts',
       'logPath',
+      'platformServices',
       'reconcileOrphanedDeviceClaim',
       'req',
       'sessionName',
@@ -137,6 +140,7 @@ test('close routes only its lifecycle input through the public facade', async ()
       'leaseRegistry',
       'logPath',
       'platformResourceCleanup',
+      'platformServices',
       'req',
       'sessionName',
       'sessionStore',

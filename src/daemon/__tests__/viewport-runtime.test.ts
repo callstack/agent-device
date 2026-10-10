@@ -1,3 +1,4 @@
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import {
   type DeviceBinding,
@@ -104,6 +105,7 @@ test('resolves one admitted binding and exposes one normalized viewport operatio
   );
 
   const resolved = await resolveBoundViewportRuntime({
+    platformServices: daemonPlatformServicesFixture(),
     device: webDevice,
     positionals: ['1280', '900'],
     inspectFacts: harness.inspectFacts,
@@ -130,6 +132,7 @@ test('rejects invalid dimensions before inspection or binding', async () => {
 
   await expect(
     resolveBoundViewportRuntime({
+      platformServices: daemonPlatformServicesFixture(),
       device: webDevice,
       positionals: ['0', '900'],
       inspectFacts: harness.inspectFacts,
