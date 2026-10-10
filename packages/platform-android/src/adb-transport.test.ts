@@ -9,6 +9,7 @@ import {
   androidAdbPayloadWithoutSerial,
   androidAdbSerialTarget,
   type AndroidAdbExecutorOptions,
+  type AndroidAdbTarget,
   androidManagedAdbEnvironment,
   lowerAndroidAdbInvocation,
   requireSameAndroidAdbServer,
@@ -20,6 +21,10 @@ import {
   requireManagedAndroidAdbSerial,
   serializeAndroidAdbInvocation,
 } from './adb-transport.ts';
+
+function privateServerTarget(serial: string, port: number): AndroidAdbTarget {
+  return { ...androidAdbSerialTarget(serial), server: { kind: 'port', port } };
+}
 
 describe('adb argv grammar', () => {
   it('carries the arity adb documents for every global option', () => {
@@ -204,7 +209,7 @@ describe('lowerAndroidAdbInvocation', () => {
   it('carries the owned server into argv and environment, and drops the option channel', () => {
     const options: AndroidAdbExecutorOptions = { serverPort: 15_037, timeoutMs: 5_000 };
     const lowered = lowerAndroidAdbInvocation(
-      androidAdbInvocation(androidAdbSerialTarget('emulator-5554', 15_037), ['shell', 'id']),
+      androidAdbInvocation(privateServerTarget('emulator-5554', 15_037), ['shell', 'id']),
       options,
       { ANDROID_ADB_SERVER_PORT: '5037', ADB_SERVER_SOCKET: 'tcp:elsewhere:5037' },
     );
@@ -235,12 +240,12 @@ describe('lowerAndroidAdbInvocation', () => {
 
 describe('requireAndroidAdbServerPort', () => {
   it('answers from the port the addressing owns', () => {
-    const invocation = androidAdbInvocation(androidAdbSerialTarget('A', 15_037), ['shell', 'id']);
+    const invocation = androidAdbInvocation(privateServerTarget('A', 15_037), ['shell', 'id']);
     expect(requireAndroidAdbServerPort(invocation, { serverPort: 15_037 })).toBe(15_037);
   });
 
   it('refuses a per-call port that would move an owned server', () => {
-    const invocation = androidAdbInvocation(androidAdbSerialTarget('A', 15_037), ['shell', 'id']);
+    const invocation = androidAdbInvocation(privateServerTarget('A', 15_037), ['shell', 'id']);
     expect(() => requireAndroidAdbServerPort(invocation, { serverPort: 9_999 })).toThrowError(
       expect.objectContaining({
         code: 'COMMAND_FAILED',
@@ -400,7 +405,7 @@ describe('requireManagedAndroidAdbCommand', () => {
 describe('androidManagedAdbEnvironment', () => {
   it('points a private server at loopback and clears a socket', () => {
     const environment = androidManagedAdbEnvironment(
-      androidAdbSerialTarget('A', 5039),
+      privateServerTarget('A', 5039),
       { ANDROID_ADB_SERVER_PORT: '5037', ADB_SERVER_SOCKET: 'tcp:5037' },
       { ...process.env, PATH: '/bin' },
     );

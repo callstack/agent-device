@@ -62,8 +62,10 @@ sandbox" model applies: agent-device does not verify that a device is leased.
 - Remote access to a leased device uses Simlock's own gateway or HTTP API, or agent-device's
   existing `proxy` and remote daemon; neither depends on the other.
 - The CLI and daemon take no per-request Android adb server port: one daemon talks to one adb
-  server, so agents holding leases from different Simlock daemons use separate state dirs. Node SDK
-  callers can instead pass `serverPort` in `AndroidAdbExecutorOptions` (`agent-device/android-adb`).
+  server, so agents holding leases from different Simlock daemons use separate state dirs. The Node
+  SDK's `agent-device/android-adb` functions run the caller's own adb executor, so the caller points
+  that executor at Simlock's server; the per-call `serverPort` in `AndroidAdbExecutorOptions` takes
+  effect only when that executor honors it.
 
 ## 4. Withdrawn design
 
