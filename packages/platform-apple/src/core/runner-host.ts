@@ -52,12 +52,6 @@ import {
 } from './tool-provider.ts';
 
 /**
- * `simctl list` takes ~0.7s per spawn on an idle host; an unanswered probe reads as an unverified
- * device, so the budget leaves room for a loaded one.
- */
-const SIMULATOR_STATE_PROBE_TIMEOUT_MS = 5_000;
-
-/**
  * The real host capabilities for `@agent-device/platform-apple/runner`: the one place
  * the runner package's port meets the root-owned utilities. Consumed by the
  * production composition module (`runner-client.ts`) and by the vitest
@@ -115,14 +109,4 @@ export const appleRunnerHost: AppleRunnerHost = {
   visitXmlPlistEntries,
   leaseOwnerStateDir: getRunnerLeaseOwnerStateDir,
   hasDeviceClaimAuthority: (device) => getRunnerDeviceClaimAuthorityProbe()?.(device) ?? false,
-  observeSimulatorState: async (device) => {
-    try {
-      const { getSimulatorState } = await import('./simulator.ts');
-      return await getSimulatorState(device, { timeoutMs: SIMULATOR_STATE_PROBE_TIMEOUT_MS });
-    } catch {
-      return null;
-    }
-  },
-  observeSimulatorBootTimeMs: async (device) =>
-    (await import('../simulator-boot.ts')).observeSimulatorBootTimeMs(device),
 };

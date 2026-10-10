@@ -760,9 +760,8 @@ async function restoreReleasedRunnerRetention(
  * the façade closures the eager-closure budget holds at merge-base size.
  */
 async function armRunnerDestinationWatch(session: RunnerSession | undefined): Promise<void> {
-  // Local Simulators only: the push signal is the runner's loopback listener, the reboot owner is
-  // Xcode's Simulator destination machinery, and `launchd_sim` is the boot witness. A retained
-  // physical-device runner has none of these and stays exactly as it was.
+  // Local Simulators only: the reboot comes from Xcode's Simulator destination machinery. A
+  // retained physical-device runner has no such destination and stays exactly as it was.
   if (session?.device.kind !== 'simulator' || !isIosFamily(session.device)) return;
   if (!isRunnerIdleRetained(session.deviceId, session)) return;
   const { attachRunnerDestinationWatch } = await import('./runner-destination-watch.ts');
@@ -771,7 +770,6 @@ async function armRunnerDestinationWatch(session: RunnerSession | undefined): Pr
     device: session.device,
     sessionId: session.sessionId,
     port: session.port,
-    runnerPid: session.child.pid,
     isArmed: () => isRunnerIdleRetained(deviceId, session),
     onStop: async () => {
       await invalidateRunnerSession(session, 'warm_runner_destination_lost');

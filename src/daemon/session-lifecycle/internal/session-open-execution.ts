@@ -137,22 +137,15 @@ async function readWarmRunnerLossNotice(
 }
 
 /**
- * What the caller's `open` output says when the runner this session left warm after `close` had to
- * be stopped because the Simulator was shut down externally while it was retained (#3321). Names
- * the typed reason so automation can key on it without parsing prose.
+ * What the caller's `open` output says when the runner this session left warm after `close` was
+ * stopped because its connection closed while it was retained (#3321), typically a Simulator shut
+ * down externally. The reason is named so automation can key on it without parsing prose.
  */
-const WARM_RUNNER_LOSS_CAUSE: Record<RunnerWarmLossNotice['reason'], string> = {
-  runner_destination_lost:
-    'the simulator was shut down externally while it was retained, so the runner was stopped before it could boot the simulator again',
-  runner_unreachable: 'it stopped answering while it was retained',
-  runner_destination_unverified:
-    "its connection closed while it was retained and the simulator's state could not be read, so the runner was stopped as a precaution",
-};
-
 function warmRunnerLossWarning(notice: RunnerWarmLossNotice): string {
   return (
-    `The warm iOS runner left by a previous close was stopped at ${new Date(notice.atMs).toISOString()}: ` +
-    `${WARM_RUNNER_LOSS_CAUSE[notice.reason]}. reason=${notice.reason}`
+    `The warm iOS runner left by a previous close was stopped at ${new Date(notice.atMs).toISOString()} ` +
+    'because its connection closed while it was retained, typically because the simulator was shut ' +
+    'down externally; stopping it keeps Xcode from rebooting the simulator. reason=runner_connection_lost'
   );
 }
 

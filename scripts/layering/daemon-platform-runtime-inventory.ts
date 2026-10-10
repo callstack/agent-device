@@ -198,7 +198,7 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
     classification: 'daemon-policy-essential',
     rationale:
       'daemon-owned open reports that a runner left warm by close was stopped because its ' +
-      'simulator was shut down externally (#3321); the watcher and the typed reason stay ' +
+      'connection closed, typically a simulator shut down externally (#3321); the watcher stays ' +
       'Apple-owned behind the neutral notice read.',
   },
   {

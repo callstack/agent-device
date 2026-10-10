@@ -85,7 +85,7 @@ export async function ensureBootedSimulator(
 
   const state = wasSimulatorRecentlyObservedBooted(device)
     ? 'Booted'
-    : await getSimulatorState(device, { signal: options.signal });
+    : await getSimulatorState(device, options.signal);
   if (state === 'Booted') {
     markSimulatorBooted(device);
     return;
@@ -148,7 +148,7 @@ export async function ensureBootedSimulator(
 
         requireExecSuccess(bootStatusResult, 'simctl bootstatus failed');
 
-        const nextState = await getSimulatorState(device, { signal: options.signal });
+        const nextState = await getSimulatorState(device, options.signal);
         if (nextState !== 'Booted') {
           throw new AppError('COMMAND_FAILED', 'Simulator is still booting', { state: nextState });
         }
@@ -205,22 +205,12 @@ export async function ensureBootedSimulator(
   await openIosSimulatorApp({ signal: options.signal });
 }
 
-/**
- * The listed power state of one Simulator (`Booted`, `Shutting Down`, `Shutdown`), or null when the
- * listing exits non-zero or omits the device. A listing that exceeds `timeoutMs` rejects. This
- * runs through the global tool provider; the readiness and shutdown runtimes read the same listing
- * through their injected `AppleToolHost` in `simulator-state.ts`, which is a different execution
- * seam and not interchangeable with this one.
- */
-export async function getSimulatorState(
-  device: DeviceInfo,
-  options: { signal?: AbortSignal; timeoutMs?: number } = {},
-): Promise<string | null> {
+async function getSimulatorState(device: DeviceInfo, signal?: AbortSignal): Promise<string | null> {
   const simctlArgs = buildSimctlArgsForDevice(device, ['list', 'devices', '-j']);
   const result = await runXcrun(simctlArgs, {
     allowFailure: true,
-    signal: options.signal,
-    timeoutMs: options.timeoutMs ?? IOS_SIMCTL_LIST_TIMEOUT_MS,
+    signal,
+    timeoutMs: IOS_SIMCTL_LIST_TIMEOUT_MS,
   });
   if (result.exitCode !== 0) return null;
   return readSimctlDeviceState(result.stdout, device.id);

@@ -175,16 +175,11 @@ test('open takes a live foreign claim whose device rebooted after the claim was 
   }
 });
 
-test('open warns with the typed reason when a warm runner was stopped for a lost destination', async () => {
+test('open warns with the typed reason when a warm runner was stopped for a lost connection', async () => {
   const sessionStore = makeSessionStore('agent-device-router-open-warm-loss-');
   const device = makeIosDevice('SIM-WARM-LOSS');
   mockResolveTargetDevice.mockResolvedValue(device);
-  mockTakeRunnerWarmLossNotice.mockResolvedValueOnce({
-    reason: 'runner_destination_lost',
-    deviceId: device.id,
-    sessionId: 'warm-loss',
-    atMs: Date.now(),
-  });
+  mockTakeRunnerWarmLossNotice.mockResolvedValueOnce({ atMs: Date.now() });
   const claimsDir = mkdtempForTestSync('agent-device-router-open-warm-loss-claims-');
   const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
   process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
@@ -198,54 +193,11 @@ test('open warns with the typed reason when a warm runner was stopped for a lost
     if (!opened.ok) return;
     expect(mockTakeRunnerWarmLossNotice).toHaveBeenCalledWith(device.id);
     expect(opened.data?.warnings).toEqual([
-      expect.stringContaining('reason=runner_destination_lost'),
+      expect.stringContaining('reason=runner_connection_lost'),
     ]);
 
     const reopened = await createOpenHandler(sessionStore)(
       openRequest('warm-loss', { platform: 'ios' }, 'req-open-warm-loss-again', {}, ['FixtureApp']),
-    );
-    expect(reopened.ok).toBe(true);
-    if (reopened.ok) expect(reopened.data?.warnings).toBeUndefined();
-  } finally {
-    if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
-    else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
-    fs.rmSync(claimsDir, { recursive: true, force: true });
-  }
-});
-
-test('open warns with its own typed reason when a warm runner was stopped on an unverifiable state', async () => {
-  const sessionStore = makeSessionStore('agent-device-router-open-warm-unverified-');
-  const device = makeIosDevice('SIM-WARM-UNVERIFIED');
-  mockResolveTargetDevice.mockResolvedValue(device);
-  mockTakeRunnerWarmLossNotice.mockResolvedValueOnce({
-    reason: 'runner_destination_unverified',
-    deviceId: device.id,
-    sessionId: 'warm-unverified',
-    atMs: Date.now(),
-  });
-  const claimsDir = mkdtempForTestSync('agent-device-router-open-warm-unverified-claims-');
-  const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
-  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
-
-  try {
-    const opened = await createOpenHandler(sessionStore)(
-      openRequest('warm-unverified', { platform: 'ios' }, 'req-open-warm-unverified', {}, [
-        'FixtureApp',
-      ]),
-    );
-
-    expect(opened.ok).toBe(true);
-    if (!opened.ok) return;
-    expect(mockTakeRunnerWarmLossNotice).toHaveBeenCalledWith(device.id);
-    expect(opened.data?.warnings).toEqual([
-      expect.stringContaining('reason=runner_destination_unverified'),
-    ]);
-    expect(String(opened.data?.warnings)).not.toContain('stopped answering');
-
-    const reopened = await createOpenHandler(sessionStore)(
-      openRequest('warm-unverified', { platform: 'ios' }, 'req-open-warm-unverified-again', {}, [
-        'FixtureApp',
-      ]),
     );
     expect(reopened.ok).toBe(true);
     if (reopened.ok) expect(reopened.data?.warnings).toBeUndefined();

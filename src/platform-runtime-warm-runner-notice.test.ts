@@ -1,12 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { RunnerWarmLossNotice } from '@agent-device/platform-apple/runner/operations';
 
-const NOTICE: RunnerWarmLossNotice = {
-  reason: 'runner_destination_lost',
-  deviceId: 'sim-1',
-  sessionId: 'session-1',
-  atMs: 1,
-};
+const NOTICE: RunnerWarmLossNotice = { atMs: 1 };
 
 const mocks = vi.hoisted(() => ({
   takeRunnerWarmLossNotice: vi.fn(async (): Promise<RunnerWarmLossNotice | undefined> => undefined),
