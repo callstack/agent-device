@@ -295,17 +295,11 @@
       "complexity_critical": {
         "count": 1
       },
-      "complexity_high": {
-        "count": 1
-      },
       "crap_critical": {
         "count": 1
       },
-      "crap_high": {
-        "count": 1
-      },
       "crap_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/daemon/session-selector.ts": {
@@ -536,6 +530,17 @@
       },
       "crap_critical": {
         "count": 2
+      }
+    },
+    "src/daemon/server/http-rpc-methods.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
       }
     }
   },

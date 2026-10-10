@@ -45,6 +45,9 @@ const REQUEST_PROGRESS = 'packages/contracts/src/request-progress.ts';
 const DAEMON_HTTP = 'packages/contracts/src/daemon-http.ts';
 const HTTP_ERRORS = 'src/daemon/http-errors.ts';
 const HTTP_SERVER = 'src/daemon/server/http-server.ts';
+const HTTP_RPC_ENVELOPE = 'src/daemon/server/http-rpc-envelope.ts';
+const HTTP_RPC_METHODS = 'src/daemon/server/http-rpc-methods.ts';
+const HTTP_AUTHORIZATION = 'src/daemon/server/http-authorization.ts';
 const HTTP_INSTANCE_PRECONDITION = 'src/daemon/server/http-instance-precondition.ts';
 const UPLOAD_HTTP = 'src/daemon/upload-http.ts';
 const ARTIFACT_HTTP = 'src/daemon/downloadable-artifact-http.ts';
@@ -165,7 +168,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'buildDaemonHttpTenantHeaders',
       ),
       ...from(
-        HTTP_SERVER,
+        HTTP_AUTHORIZATION,
         'HttpAuthHookContext',
         'HttpAuthHookResult',
         'HttpAuthHook',
@@ -228,10 +231,9 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
       ...from('packages/contracts/src/lease-scope.ts', 'LeaseRpcCommand'),
       // Producer side: the method vocabulary a released client sends, and the
       // projections that turn each method's params into a DaemonRequest.
+      ...from(HTTP_RPC_ENVELOPE, 'JsonRpcRequest', 'JsonRpcResponse'),
       ...from(
-        HTTP_SERVER,
-        'JsonRpcRequest',
-        'JsonRpcResponse',
+        HTTP_RPC_METHODS,
         'COMMAND_RPC_METHODS',
         'INSTALL_FROM_SOURCE_RPC_METHODS',
         'RELEASE_MATERIALIZED_PATHS_RPC_METHODS',
@@ -299,7 +301,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'serializeDaemonRpcResponseEnvelope',
       ),
       ...from(
-        HTTP_SERVER,
+        HTTP_RPC_ENVELOPE,
         'createRpcError',
         'sendJson',
         'writeProgressEnvelope',
