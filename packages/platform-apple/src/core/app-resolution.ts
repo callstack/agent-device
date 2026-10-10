@@ -39,10 +39,11 @@ export async function invalidateIosAppResolutionCache<T>(
 
 type IosAppResolutionOptions = Readonly<{
   /**
-   * Answer only with an app installed on the device now. A dotted target is then matched against
-   * the installed bundle ids before display names, so `Booking.com` resolves instead of passing
-   * through; no earlier resolution is reused, and a target nothing installed matches is refused
-   * rather than returned as a literal id.
+   * On a simulator or device, answer only with an app installed on it now. A dotted target is then
+   * matched against the installed bundle ids before display names, so `Booking.com` resolves
+   * instead of passing through; no earlier resolution is reused, and a target nothing installed
+   * matches is refused rather than returned as a literal id. The macOS host ignores it and resolves
+   * through `resolveMacOsApp`.
    */
   installedOnly?: boolean;
 }>;
