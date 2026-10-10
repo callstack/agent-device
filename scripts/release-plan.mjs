@@ -70,6 +70,34 @@ function skip(reason) {
   return { mode: 'skip', reason };
 }
 
+/**
+ * What GitHub must enforce before any publish, since npm trusts every run of release.yml that
+ * reaches the npm-publish environment and a run's own copy of this script proves nothing.
+ */
+export function repositorySetupGaps({ npmPublish, npmPublishPolicies, release, tagRulesets }) {
+  const gaps = [];
+  const allowed = new Set(npmPublishPolicies.map((policy) => `${policy.type}:${policy.name}`));
+  const onlyMainAndTags = allowed.size === 2 && allowed.has('branch:main') && allowed.has('tag:v*');
+  if (!npmPublish?.deployment_branch_policy?.custom_branch_policies || !onlyMainAndTags) {
+    gaps.push('the npm-publish environment must deploy only from branch main and tags v*');
+  }
+  const reviewers = release?.protection_rules?.find((rule) => rule.type === 'required_reviewers');
+  if (!reviewers?.reviewers?.length) gaps.push('the release environment must require a reviewer');
+  if (!tagRulesets.some(guardsReleaseTags)) {
+    gaps.push('an active tag ruleset must restrict creating, updating, and deleting refs/tags/v*');
+  }
+  return gaps;
+}
+
+function guardsReleaseTags(ruleset) {
+  const types = new Set(ruleset.rules.map((rule) => rule.type));
+  return (
+    ruleset.enforcement === 'active' &&
+    ruleset.conditions?.ref_name?.include?.includes('refs/tags/v*') &&
+    ['creation', 'update', 'deletion'].every((type) => types.has(type))
+  );
+}
+
 function assertAheadOfStable(run, version) {
   if (run.latestStable && compareReleaseVersions(version, run.latestStable) <= 0) {
     throw new Error(
@@ -125,6 +153,21 @@ async function github(env, pathname) {
   return response.json();
 }
 
+async function readRepositorySetup(env) {
+  const environment = (name) => github(env, `environments/${name}`).catch(() => null);
+  const summaries = await github(env, 'rulesets?targets=tag');
+  return {
+    npmPublish: await environment('npm-publish'),
+    npmPublishPolicies: await github(env, 'environments/npm-publish/deployment-branch-policies')
+      .then((body) => body.branch_policies)
+      .catch(() => []),
+    release: await environment('release'),
+    tagRulesets: await Promise.all(
+      summaries.map((summary) => github(env, `rulesets/${summary.id}`)),
+    ),
+  };
+}
+
 async function readRun(env) {
   const event = env.GITHUB_EVENT_NAME;
   const ref = env.GITHUB_REF;
@@ -154,6 +197,14 @@ const OUTPUTS = {
 
 async function main(env) {
   const result = planRelease(await readRun(env));
+  if (result.mode === 'nightly' || result.mode === 'stable') {
+    const gaps = repositorySetupGaps(await readRepositorySetup(env));
+    if (gaps.length > 0) {
+      throw new Error(
+        `Repository setup is incomplete (see CONTRIBUTING.md, "One-time repository setup"): ${gaps.join('; ')}.`,
+      );
+    }
+  }
   const lines = Object.entries(OUTPUTS).map(([output, key]) => `${output}=${result[key] ?? ''}\n`);
   fs.appendFileSync(env.GITHUB_OUTPUT, lines.join(''));
   const summary = result.reason ?? `${result.mode} ${result.version}`;

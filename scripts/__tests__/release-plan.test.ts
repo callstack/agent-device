@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { planRelease } from '../release-plan.mjs';
+import { planRelease, repositorySetupGaps } from '../release-plan.mjs';
 
 const MAIN = 'a'.repeat(40);
 const NIGHTLY_COMMIT = 'b'.repeat(40);
@@ -77,4 +77,58 @@ test('a stable tag publishes its own commit once it is on main and its CI passed
 
 test('releases refuse to run from any other branch', () => {
   assert.throws(() => planRelease(run({ ref: 'refs/heads/feature' })), /main or a vX\.Y\.Z tag/);
+});
+
+function protectedSetup() {
+  return {
+    npmPublish: { deployment_branch_policy: { custom_branch_policies: true } },
+    npmPublishPolicies: [
+      { name: 'main', type: 'branch' },
+      { name: 'v*', type: 'tag' },
+    ],
+    release: {
+      protection_rules: [{ type: 'required_reviewers', reviewers: [{ type: 'User' }] }],
+    },
+    tagRulesets: [
+      {
+        enforcement: 'active',
+        conditions: { ref_name: { include: ['refs/tags/v*'] } },
+        rules: [{ type: 'creation' }, { type: 'update' }, { type: 'deletion' }],
+      },
+    ],
+  };
+}
+
+test('publishing needs the protections GitHub enforces, not this script', () => {
+  assert.deepEqual(repositorySetupGaps(protectedSetup()), []);
+  assert.equal(
+    repositorySetupGaps({
+      npmPublish: null,
+      npmPublishPolicies: [],
+      release: null,
+      tagRulesets: [],
+    }).length,
+    3,
+  );
+});
+
+test('each missing protection is named on its own', () => {
+  const setup = protectedSetup();
+  const anyBranch = {
+    ...setup,
+    npmPublishPolicies: [...setup.npmPublishPolicies, { name: '*', type: 'branch' }],
+  };
+  assert.match(repositorySetupGaps(anyBranch).join(), /npm-publish environment/);
+  const unreviewed = { ...setup, release: { protection_rules: [] } };
+  assert.match(repositorySetupGaps(unreviewed).join(), /release environment/);
+  const evaluating = {
+    ...setup,
+    tagRulesets: [{ ...setup.tagRulesets[0], enforcement: 'evaluate' }],
+  };
+  assert.match(repositorySetupGaps(evaluating).join(), /tag ruleset/);
+  const creatable = {
+    ...setup,
+    tagRulesets: [{ ...setup.tagRulesets[0], rules: [{ type: 'deletion' }] }],
+  };
+  assert.match(repositorySetupGaps(creatable).join(), /tag ruleset/);
 });
