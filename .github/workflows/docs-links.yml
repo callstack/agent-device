@@ -1,0 +1,55 @@
+name: Docs Links
+
+# ci.yml ignores docs paths, so docs-only PRs need their own lane. The rspress
+# version (website/package.json, the lockfile) owns the heading-ID slugger, and
+# the rspress config owns the site's routes, so those re-run the check as well.
+on:
+  pull_request:
+    paths:
+      - 'website/docs/**'
+      - 'website/package.json'
+      - 'website/rspress.config.ts'
+      - 'README.md'
+      - 'scripts/check-doc-links.ts'
+      - 'scripts/__tests__/check-doc-links.test.ts'
+      - 'scripts/check-affected/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/actions/run-gate/action.yml'
+      - '.github/actions/setup-node-pnpm/action.yml'
+      - '.github/workflows/docs-links.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'website/docs/**'
+      - 'website/package.json'
+      - 'website/rspress.config.ts'
+      - 'README.md'
+      - 'scripts/check-doc-links.ts'
+      - 'scripts/__tests__/check-doc-links.test.ts'
+      - 'scripts/check-affected/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/actions/run-gate/action.yml'
+      - '.github/actions/setup-node-pnpm/action.yml'
+      - '.github/workflows/docs-links.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Internal links and heading anchors
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Node and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Check docs links
+        uses: ./.github/actions/run-gate
+        with: { gate: docs-links }

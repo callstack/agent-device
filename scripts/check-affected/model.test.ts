@@ -199,10 +199,27 @@ test('public package surface change selects the build and the published-package 
 });
 
 test('docs-only change selects no checks and records the docs paths', () => {
-  const result = plan(['docs/adr/0011.md', 'README.md', 'website/page.mdx.md']);
+  const result = plan(['docs/adr/0011.md', 'LICENSE', 'website/page.mdx.md']);
   assert.equal(result.failOpen, false);
   assert.deepEqual(result.checks, []);
   assert.equal(result.docsOnlyPaths.length, 3);
+});
+
+test('user docs pages and README select the docs-links check', () => {
+  for (const file of [
+    'README.md',
+    'website/docs/index.md',
+    'website/docs/docs/sessions.md',
+    'website/docs/404.mdx',
+    'website/package.json',
+    'website/rspress.config.ts',
+  ]) {
+    const result = plan([file]);
+    assert.deepEqual(result.checks, ['docs-links'], file);
+    assert.deepEqual(result.docsOnlyPaths, []);
+  }
+  assert.deepEqual(plan(['website/docs/docs/commands.md']).checks, ['command-docs', 'docs-links']);
+  assert.deepEqual(plan(['website/docs/public/logo.svg']).checks, []);
 });
 
 test('agent guidance owns its focused contract instead of disappearing as docs-only', () => {

@@ -73,6 +73,7 @@ export const ALL_CHECKS = [
   'fixture-cache',
   'fixture-fallback',
   'command-docs',
+  'docs-links',
   'agent-guidance',
   'xctest-selection',
   'packaged-runner-swift',
@@ -540,26 +541,52 @@ function isAgentGuidance(file: string): boolean {
   return AGENT_GUIDANCE.has(file) || file.startsWith('docs/agents/');
 }
 
-const docsOwnership: OwnershipRule = ({ file }) =>
-  isAgentGuidance(file)
-    ? [
-        reason(
-          'agent-guidance',
-          file,
-          'own:agent-guidance',
-          'agent guidance is held to glossary, routing, and context-budget contracts',
-        ),
-      ]
-    : file === COMMAND_DOCS
-      ? [
-          reason(
-            'command-docs',
-            file,
-            'own:command-docs',
-            'the command reference is asserted against the CLI in both directions',
-          ),
-        ]
-      : [];
+// The pages and README whose internal links and heading anchors `check:doc-links` resolves, and
+// the website manifest and config that pick the rspress version (its slugger) and the routes.
+const DOC_LINKS_INPUTS = new Set([
+  'README.md',
+  'website/package.json',
+  'website/rspress.config.ts',
+]);
+
+function isLinkedDoc(file: string): boolean {
+  return DOC_LINKS_INPUTS.has(file) || (file.startsWith('website/docs/') && /\.mdx?$/.test(file));
+}
+
+const docsOwnership: OwnershipRule = ({ file }) => {
+  const selections: SelectionReason[] = [];
+  if (isAgentGuidance(file)) {
+    selections.push(
+      reason(
+        'agent-guidance',
+        file,
+        'own:agent-guidance',
+        'agent guidance is held to glossary, routing, and context-budget contracts',
+      ),
+    );
+  }
+  if (file === COMMAND_DOCS) {
+    selections.push(
+      reason(
+        'command-docs',
+        file,
+        'own:command-docs',
+        'the command reference is asserted against the CLI in both directions',
+      ),
+    );
+  }
+  if (isLinkedDoc(file)) {
+    selections.push(
+      reason(
+        'docs-links',
+        file,
+        'own:docs-links',
+        'internal docs links must land on an existing page and heading',
+      ),
+    );
+  }
+  return selections;
+};
 
 // Live device lanes, by platform family (device-lanes.ts). Selected here alongside the
 // static gates so a TypeScript-only Apple change carries its iOS/macOS lanes in the plan.
