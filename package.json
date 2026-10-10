@@ -330,7 +330,7 @@
     "ai": "^7.0.68",
     "eslint-plugin-no-only-tests": "^3.4.0",
     "eslint-plugin-perfectionist": "^5.10.1",
-    "fallow": "^2.104.0",
+    "fallow": "^3.32.0",
     "fast-check": "^4.9.0",
     "ipaddr.js": "^2.5.0",
     "jpeg-js": "^0.4.4",
