@@ -28,7 +28,7 @@
     }
   },
   "devDependencies": {
-    "undici": "7.29.0",
+    "undici": "7.29.1",
     "yaml": "^2.9.0"
   }
 }

@@ -49,6 +49,6 @@
   },
   "devDependencies": {
     "ipaddr.js": "^2.5.0",
-    "undici": "7.29.0"
+    "undici": "7.29.1"
   }
 }

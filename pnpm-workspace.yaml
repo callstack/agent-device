@@ -15,9 +15,9 @@ minimumReleaseAgeExclude:
 # package.json: tsdown bundles undici into the published build, so a caret here
 # would let lockFileMaintenance move the shipped bytes under an unchanged pin.
 overrides:
-  undici@7: 7.29.0
-  brace-expansion@5: '^5.0.9'
-  fast-uri: 3.1.6
+  undici@7: 7.29.1
+  brace-expansion@5: '^5.0.12'
+  fast-uri: 3.1.7
   postcss: 8.5.23
   qs@6: ^6.16.0
   react-router: 7.18.2
