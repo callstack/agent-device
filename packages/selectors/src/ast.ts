@@ -13,7 +13,7 @@
 // reachable from anywhere: `src/sdk/selectors.ts` is its only consumer, and
 // that file's explicit export list is the pin (the `facade-symbols.ts` table
 // #1574 added to hold it was retired in #1614, once every façade named its
-// exports itself). Nothing binds this list to `website/docs/docs/client-api.md`
+// exports itself). Nothing binds this list to `website/docs/docs/build-an-integration.md`
 // by gate, so widening it is a deliberate edit whose convention is to record
 // the new name in that published API surface too.
 import type { SelectorChain } from './internal/parse.ts';

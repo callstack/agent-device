@@ -6,12 +6,13 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { runCmdSync } from '@agent-device/host-kit/command';
 
-// Compiles every fenced ```ts snippet in website/docs/docs/client-api.md against
+// Compiles every fenced ```ts snippet in the Node.js API docs (client-api.md and
+// build-an-integration.md) against
 // agent-device's real `agent-device/*` subpath sources, so a doc snippet that no
 // longer compiles — wrong property, renamed export, changed signature — fails
 // CI instead of only being caught if an examples/sdk/*.ts file happens to drift
 // the same way. src/__tests__/client-api-examples-drift.test.ts covers the
-// doc's bullet-list API manifest against examples/sdk/*.ts; this is the
+// docs' bullet-list API manifests against examples/sdk/*.ts; this is the
 // complementary check the reviewer asked for on #1463's drift guard (checking
 // the doc's actual code, not just its symbol-name manifest).
 //
@@ -20,7 +21,10 @@ import { runCmdSync } from '@agent-device/host-kit/command';
 // 2.5s slow-test budget (see docs/agents/testing.md).
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-const CLIENT_API_DOC_PATH = path.join(repoRoot, 'website/docs/docs/client-api.md');
+const API_DOC_PATHS = [
+  path.join(repoRoot, 'website/docs/docs/client-api.md'),
+  path.join(repoRoot, 'website/docs/docs/build-an-integration.md'),
+];
 const EXAMPLES_SDK_TSCONFIG = path.join(repoRoot, 'examples/sdk/tsconfig.json');
 const TSC_BIN = path.join(repoRoot, 'node_modules/.bin/tsc');
 
@@ -47,7 +51,7 @@ function resolveExamplesSdkPaths(): Record<string, string[]> {
   return paths;
 }
 
-// Free identifiers a snippet references without declaring, because the doc's
+// Free identifiers a snippet references without declaring, because the docs'
 // prose treats them as continuing from an earlier snippet (`client`,
 // `androidClient`, `snapshot` — typed against the real SDK return type, not
 // `any`, so continuation snippets still get meaningful checking) or as
@@ -61,12 +65,12 @@ const KNOWN_FREE_NAME_STUB_TYPES: Record<string, string> = {
   client: `ReturnType<typeof import('agent-device').createAgentDeviceClient>`,
   androidClient: `ReturnType<typeof import('agent-device').createAgentDeviceClient>`,
   snapshot: `Awaited<ReturnType<ReturnType<typeof import('agent-device').createAgentDeviceClient>['capture']['snapshot']>>`,
-  // "Android ADB providers": the doc's own invented remote-transport glue, not
+  // build-an-integration.md "Android ADB providers": the doc's own invented remote-transport glue, not
   // part of agent-device — typed as the real `AndroidAdbExecutor` function
   // shape so the snippet's `exec: async (args, options) => ...` still has to
   // return something assignable to it.
   runAdbThroughRemoteTunnel: `import('agent-device/android-adb').AndroidAdbExecutor`,
-  // "Batch orchestration for custom transports": the doc's own invented
+  // build-an-integration.md "Batch orchestration for custom transports": the doc's own invented
   // command dispatcher and error mapper.
   dispatch: `(stepReq: unknown) => Promise<import('agent-device/contracts').DaemonResponseData>`,
   bridgeErrorToDaemonResponse: `(error: unknown) => import('agent-device/contracts').DaemonResponse`,
@@ -169,23 +173,23 @@ test('recognizes known free names when TypeScript prints a relative snippet path
   assert.deepEqual([...(freeNames.get('snippet-3.ts') ?? [])], ['client']);
 });
 
-test("every fenced ```ts snippet in client-api.md compiles against agent-device's real exports", () => {
-  const snippets = extractTsSnippets(fs.readFileSync(CLIENT_API_DOC_PATH, 'utf8'));
-  assert.ok(
-    snippets.length > 0,
-    `${CLIENT_API_DOC_PATH} has no fenced \`\`\`ts snippets to check.`,
-  );
+for (const docPath of API_DOC_PATHS) {
+  const docName = path.basename(docPath);
+  test(`every fenced \`\`\`ts snippet in ${docName} compiles against agent-device's real exports`, () => {
+    const snippets = extractTsSnippets(fs.readFileSync(docPath, 'utf8'));
+    assert.ok(snippets.length > 0, `${docPath} has no fenced \`\`\`ts snippets to check.`);
 
-  const failures = compileDocSnippets(snippets);
-  assert.deepEqual(
-    failures,
-    [],
-    `A \`\`\`ts snippet in ${CLIENT_API_DOC_PATH} no longer compiles against agent-device's real ` +
-      `exports:\n${failures.join('\n')}\n` +
-      'Fix the snippet to match the current API, or fix the actual exported contract if the doc ' +
-      'was right and the API regressed.',
-  );
-});
+    const failures = compileDocSnippets(snippets);
+    assert.deepEqual(
+      failures,
+      [],
+      `A \`\`\`ts snippet in ${docPath} no longer compiles against agent-device's real ` +
+        `exports:\n${failures.join('\n')}\n` +
+        'Fix the snippet to match the current API, or fix the actual exported contract if the doc ' +
+        'was right and the API regressed.',
+    );
+  });
+}
 
 test('rejects an unrecognized free identifier instead of silently stubbing it (e.g. a typo of `client`)', () => {
   const failures = compileDocSnippets([
