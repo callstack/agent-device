@@ -65,7 +65,7 @@ require the same confirmation for every process using their own paths.
 
 ## Registration operations
 
-[Shared retirement](../../src/daemon-registration-owner.ts) owns verified termination, protected
+[Shared retirement](../../packages/daemon-contracts/src/daemon-registration-owner.ts) owns verified termination, protected
 metadata inspection and removal, and release. Takeover, failed startup, replay cleanup, timeout
 reset and manual stop await its result. Abandoned recovery uses the same protected retirement
 sequence without signaling a live process. Daemon publication and shutdown use functions bound

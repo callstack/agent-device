@@ -37,7 +37,11 @@ test('the recorded wire-only edges are the accepted residue', () => {
 test('a client import of a non-daemon module is not daemon-client entry surface', () => {
   const edges = [
     ...recordedWireEdges(),
-    clientEdge('src/daemon-client/daemon-client-metadata.ts', 'src/daemon-process.ts', 'value'),
+    clientEdge(
+      'src/daemon-client/daemon-client-metadata.ts',
+      'packages/daemon-contracts/src/daemon-process.ts',
+      'value',
+    ),
     clientEdge('src/daemon-client/daemon-client-lifecycle.ts', 'src/config.ts', 'value'),
   ];
   assert.deepEqual(checkDaemonClientEntry(edges), []);

@@ -123,25 +123,28 @@ already owns the operations behind the vocabulary.
 ### (root)
 
 `#3288` assigns every process-root module a logical zone in
-`scripts/layering/root-module-zones.ts` (`daemon-contracts` rank 2, `command-runtime` rank 3,
+`scripts/layering/root-module-zones.ts` (`command-runtime` rank 3,
 `platform-runtime` rank 4, …) while leaving the files physically in place. Per the maintainer
 design decision, that reclassification is **not** completed collocation: the physical moves under
 #3294 (child of #3276) replace each file's row with folder-derived ownership.
-`daemon-diagnostics-scope.ts` has moved into `src/daemon-contracts/`; the runtime assembly pair
-`runtime-command-surface.ts` / `runtime-factory.ts` has moved into `src/command-runtime/`.
-The other rows below are keeps: the
-daemon ⇄ client shared files (`daemon-policy-file.ts`, `provider-credential-fingerprint.ts`,
-`request-progress-protocol.ts`) trace to #2559, which relocated the shared contracts **to the
-process root** so the client stops importing `src/daemon/` at all; R78 keeps any client→daemon
+The runtime assembly pair
+`runtime-command-surface.ts` / `runtime-factory.ts` has moved into `src/command-runtime/`, and
+the whole `daemon-contracts` zone has moved into `packages/daemon-contracts` — the folder and
+package derive the zone, so every moved file's `ROOT_MODULE_ZONES` row is gone.
+The daemon ⇄ client shared files that remain here (`provider-credential-fingerprint.ts`) trace
+to #2559, which relocated the shared contracts **to the process root** so the client stops
+importing `src/daemon/` at all; R78 keeps any client→daemon
 edge at zero runtime and a five-line recorded type-only residue, and #3288's `daemon-contracts`
-zone is the declaration of that shared-below-both ownership. Rows on path-keyed evidence alone
-(the `platform-runtime-*` seams) say "retain for this batch": a guard's current path lists
-constrain a relocation, they are not independent proof the placement is optimal.
+zone was the declaration of that shared-below-both ownership — the extraction makes it
+physical, with R11 and the package's dependency edges holding the same boundary. Rows on
+path-keyed evidence alone (the `platform-runtime-*` seams) say "retain for this batch": a guard's
+current path lists constrain a relocation, they are not independent proof the placement is
+optimal.
 
 | File | Decision | Reason |
 | --- | --- | --- |
-| `src/daemon-diagnostics-scope.ts` | moved → `src/daemon-contracts/daemon-diagnostics-scope.ts` ([#3297](https://github.com/callstack/agent-device/pull/3297)) | Physical move landed: the helper now lives under the folder that derives its `daemon-contracts` zone, so `topFolder` replaces the per-file `ROOT_MODULE_ZONES` row and an internal rename needs no ownership-table edit. |
-| `src/daemon-policy-file.ts` | keep | Daemon ⇄ client shared contract from #2559, declared `daemon-contracts` by #3288 — the shared-below-both ownership the spine needs, since daemon-client (rank 5) dynamically imports it. |
+| `src/daemon-diagnostics-scope.ts` | moved → `packages/daemon-contracts/src/daemon-diagnostics-scope.ts` ([#3297](https://github.com/callstack/agent-device/pull/3297) into `src/daemon-contracts/`, then the package extraction) | The whole `daemon-contracts` zone now lives as `packages/daemon-contracts`, so the package directory derives the zone and the per-file `ROOT_MODULE_ZONES` row stays deleted; an internal rename needs no ownership-table edit. |
+| `src/daemon-policy-file.ts` | moved → `packages/daemon-contracts/src/daemon-policy-file.ts` | Daemon ⇄ client shared contract from #2559, declared `daemon-contracts` by #3288 — the shared-below-both ownership the spine needs, since daemon-client (rank 5) dynamically imports it. The extraction makes that placement physical: the package sits below both sides and its manifest exports own the boundary. |
 | `src/daemon.ts` | keep | Entry point (`internal/daemon` bundle entry); composition roots stay in root by umbrella §4. |
 | `src/platform-runtime-apple-runner-owner.ts` | retain for this batch | `platform-runtime-*` composition seam: R13's exact-importer rule and the ADR 0022 R76 inventory key on its path, so relocation requires coordinated ownership changes to both declarations — the rules constrain the move, they do not independently prove the placement. |
 | `src/platform-runtime-daemon-lifecycle.ts` | retain for this batch | Same path-keyed R13/ADR 0022 seam: relocation is possible only with coordinated changes to those declarations. |
@@ -149,7 +152,7 @@ constrain a relocation, they are not independent proof the placement is optimal.
 | `src/platform-runtime-resource-cleanup.ts` | retain for this batch | Same path-keyed R13/ADR 0022 seam. |
 | `src/provider-credential-fingerprint.ts` | keep | Daemon ⇄ client shared contract from the same #2559 decision as `daemon-policy-file.ts`; #3288 declares its zone beside the provider composition that reads the credentials it fingerprints. |
 | `src/provider-limrun-runtime.ts` | keep | Proposed → provider-limrun, but there is no seam: the class's constructor self-builds the root dependency factory (`src/sdk/limrun-runtime-dependencies.ts`), which is the ADR 0019 composition seam — it loads the root's adb-host binder, core Android interactor, and platform-runtime app-state helpers that the package must not import. Moving the class means moving that composition, which is design, not a move. |
-| `src/request-progress-protocol.ts` | keep | Daemon ⇄ client shared contract from the same #2559 decision — the client reads it statically (`daemon-client-progress.ts`) and the server through `src/daemon/server/`, so only #2559's shared-placement boundary and the wire-compat ledgers pin it; declared `daemon-contracts` by #3288. Contracts was considered and R18 keeps contracts free of envelope validation mechanics. |
+| `src/request-progress-protocol.ts` | moved → `packages/daemon-contracts/src/request-progress-protocol.ts` | Daemon ⇄ client shared contract from the same #2559 decision — the client reads it statically (`daemon-client-progress.ts`) and the server through `src/daemon/server/`, so only #2559's shared-placement boundary and the wire-compat ledgers pin it; declared `daemon-contracts` by #3288 and now physically placed by the extraction. Contracts was considered and R18 keeps contracts free of envelope validation mechanics. The wire-ledger keys moved with the file. |
 | `src/runtime-command-surface.ts` | moved → `src/command-runtime/runtime-command-surface.ts` ([#3299](https://github.com/callstack/agent-device/pull/3299)) | Physical move landed with `runtime-factory.ts` as one assembly group: the command-surface binding sits beside the factory it composes, under the folder that derives its `command-runtime` zone, so `topFolder` replaces the per-file `ROOT_MODULE_ZONES` row. |
 | `src/runtime-factory.ts` | moved → `src/command-runtime/runtime-factory.ts` ([#3299](https://github.com/callstack/agent-device/pull/3299)) | Physical move landed: the runtime assembly now lives under the folder that derives its `command-runtime` zone, with the same row deletion through folder-derived ownership. |
 
@@ -173,12 +176,17 @@ files have no seam (published facade, public-type collision, root dependency fac
 ## Follow-ups (tracked on #3281)
 
 - Physical root-pass moves under [#3294](https://github.com/callstack/agent-device/issues/3294)
-  (child of #3276): `daemon-diagnostics-scope.ts` has moved into `src/daemon-contracts/`
-  ([#3297](https://github.com/callstack/agent-device/pull/3297)); the runtime assembly pair
+  (child of #3276): the runtime assembly pair
   `runtime-command-surface.ts` / `runtime-factory.ts` is collocated in `src/command-runtime/`
   ([#3299](https://github.com/callstack/agent-device/pull/3299)). Each folder derives its zone,
   replacing the moved files' `ROOT_MODULE_ZONES` rows; #3288's zone assignments alone were
-  classification, and each landed move completes its own file's collocation.
+  classification, and each landed move completes its own file's collocation. The
+  `daemon-contracts` side landed as a workspace package: the zone's ten files (`daemon-owner-cleanup`,
+  `daemon-policy-file`, `daemon-process`, `daemon-registration-owner`, `daemon-registration`,
+  `daemon-resolution`, `daemon-shutdown-report`, `request-progress-protocol`,
+  `session-repair-tombstone`, and `daemon-diagnostics-scope` from `src/daemon-contracts/`, first
+  moved there by [#3297](https://github.com/callstack/agent-device/pull/3297)) are now
+  `packages/daemon-contracts/src/` behind narrow per-file subpath exports.
 
 ## Refuted alternatives
 

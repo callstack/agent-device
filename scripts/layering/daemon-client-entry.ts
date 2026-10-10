@@ -4,7 +4,8 @@ import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 // daemon over the network, not over its module graph, so it is NOT an entry point into daemon
 // internals: the process root composition is. Every on-disk or protocol contract the client shares
 // with the daemon (state-dir/transport resolution, pidfile liveness, the repair tombstone, the
-// progress framing) therefore lives at the process root, not under `src/daemon/`, and the client
+// progress framing) therefore lives below both sides — since the daemon-contracts extraction, in
+// `packages/daemon-contracts` — not under `src/daemon/`, and the client
 // reaches it there. What remains is the client reading the daemon's request/response vocabulary —
 // the `DaemonRequest`/`DaemonResponse` types that anchor the ADR 0006 wire surface — recorded here,
 // per measured `file -> target` edge, and only as a type-only import. A runtime (value or dynamic)
@@ -80,8 +81,8 @@ type MeasuredEdge = { file: string; target: string; line: number; runtimeKind: s
  * Catches: the client reaching daemon internals again — a runtime import of any daemon module, or a
  *   new type-only import that was not measured and recorded. The runtime half is the regression this
  *   gate exists for: #2559 relocated the shared contracts to the process root specifically so the
- *   client stops value-importing `config.ts`, `daemon-process.ts`, `session-repair-tombstone.ts`,
- *   and `request-progress-protocol.ts`. The mirror failure — a recorded edge whose import is gone —
+ *   client stops value-importing `config.ts` or the shared contracts now owned by
+ *   `packages/daemon-contracts`. The mirror failure — a recorded edge whose import is gone —
  *   is caught too, so a repair cannot leave the door open.
  * Evidence: #2559 measured 13 client→daemon pairs (8 runtime) at the #2557 tip; the runtime half is
  *   now 0 and the 5 wire-only type edges are the residue recorded above.
@@ -119,8 +120,9 @@ export function checkDaemonClientEntry(edges: readonly ResolvedImportEdge[]): La
         line: entry.line,
         message:
           `the daemon client ${entry.runtimeKind} daemon internals: ${key}. The client composes the ` +
-          `daemon over the network, not its module graph. Move the shared contract to the process ` +
-          `root (or read the DaemonRequest/DaemonResponse types in src/daemon/daemon-request.ts as a type).`,
+          `daemon over the network, not its module graph. Move the shared contract to ` +
+          `packages/daemon-contracts (or read the DaemonRequest/DaemonResponse types in ` +
+          `src/daemon/daemon-request.ts as a type).`,
       });
       seen.add(key);
       continue;
