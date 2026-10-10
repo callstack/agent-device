@@ -163,7 +163,7 @@ test('a device listed as shutting down is a loss, not a crash', async () => {
   assert.equal((await takeRunnerWarmLossNotice(DEVICE.id))?.reason, 'runner_destination_lost');
 });
 
-test('an unreadable device state is no evidence of a healthy device', async () => {
+test('an unreadable device state stops the runner without claiming a shutdown', async () => {
   const listener = await listen();
   stubHost({ boots: [{ observed: true, bootedAtMs: Date.now() - 60_000 }], state: null });
   const { params, onStop } = watchParams(listener.port);
@@ -172,7 +172,7 @@ test('an unreadable device state is no evidence of a healthy device', async () =
   (await listener.nextConnection()).destroy();
   await vi.waitFor(() => assert.equal(onStop.mock.calls.length, 1));
 
-  assert.equal((await takeRunnerWarmLossNotice(DEVICE.id))?.reason, 'runner_destination_lost');
+  assert.equal((await takeRunnerWarmLossNotice(DEVICE.id))?.reason, 'runner_unreachable');
 });
 
 test('a boot unobservable on both reads while the destination process lives is a loss', async () => {

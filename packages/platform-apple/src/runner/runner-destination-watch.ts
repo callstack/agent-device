@@ -76,6 +76,12 @@ type LossVerdict = Readonly<{
 
 const DESTINATION_LOST: LossVerdict = { action: 'stop', noticeReason: 'runner_destination_lost' };
 
+/**
+ * The listing timed out or was unreadable, so nothing proves the device changed. Stopping is still
+ * the safe side, but the notice must not claim a shutdown nobody observed.
+ */
+const STATE_UNVERIFIABLE: LossVerdict = { action: 'stop', noticeReason: 'runner_unreachable' };
+
 type DestinationWatch = {
   device: DeviceInfo;
   sessionId: string;
@@ -335,7 +341,8 @@ async function handleRefusedAttach(
  * process, so stopping is plain lease cleanup. Otherwise the device must be listed `Booted` on the
  * boot the window began with, and anything else is destination loss: a shut-down device keeps its
  * old `launchd_sim` listed for ~6s, so the boot witness alone would read the old boot and call it
- * a crash, and an unreadable listing is no evidence of a healthy device. A boot newer than the
+ * a crash. A listing that timed out or was unreadable is no evidence of a healthy device, so it
+ * stops the runner too, but as `runner_unreachable`: it cannot support a claim about the device. A boot newer than the
  * window is Xcode's reboot; a boot unobservable twice is a device that is down with a reboot
  * promise that may already be in flight. Stopping pre-empts that promise in every loss case.
  */
@@ -343,9 +350,9 @@ async function classifyConnectedLoss(watch: DestinationWatch): Promise<LossVerdi
   if (watch.runnerPid !== undefined && !isProcessAlive(watch.runnerPid)) {
     return { action: 'stop' };
   }
-  if ((await observeSimulatorState(watch.device)) !== SIMULATOR_BOOTED_STATE) {
-    return DESTINATION_LOST;
-  }
+  const state = await observeSimulatorState(watch.device);
+  if (state === null) return STATE_UNVERIFIABLE;
+  if (state !== SIMULATOR_BOOTED_STATE) return DESTINATION_LOST;
   let boot = await readBootAgainstWindow(watch);
   if (boot === 'unobserved') {
     await delay(resolveRecheckDelayMs());
