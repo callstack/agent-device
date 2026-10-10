@@ -3,6 +3,8 @@ import XCTest
 
 extension RunnerTests {
   static let navigationBackKeywords = ["back", "close", "cancel"]
+  static let systemBackButtonIdentifier = "BackButton"
+  static let floatingBarBackControlMaxYFraction: CGFloat = 0.4
   static let navigationFallbackVerificationDelay: TimeInterval = 0.25
 
   /// What one in-app `back` attempt concluded. `.unverified` carries the typed capture failure the
@@ -88,7 +90,11 @@ extension RunnerTests {
     let candidates = app.buttons.matching(Self.navigationBackPredicate()).allElementsBoundByIndex.compactMap {
       element -> (XCUIElement, Int)? in
       guard element.exists, element.isHittable else { return nil }
-      guard Self.isTopNavigationControlFrame(element.frame, in: frame) else { return nil }
+      guard Self.isTopNavigationBackCandidateFrame(
+        element.frame,
+        in: frame,
+        identifier: element.identifier
+      ) else { return nil }
       guard let rank = Self.navigationBackControlRank(
         label: element.label,
         identifier: element.identifier
@@ -129,6 +135,24 @@ extension RunnerTests {
     }
     // Accept the compact navigation/search header band without matching deep content controls.
     let maxY = window.minY + min(max(window.height * 0.22, 96), 180)
+    return candidate.midY >= window.minY && candidate.midY <= maxY
+  }
+
+  /// UIKit names the system back control `BackButton`. That identity is the evidence that lets it sit
+  /// below the classic header band, where the iOS 27 floating toolbar places it (#3333); keyword-only
+  /// matches stay inside the band so content controls that merely say "back" are not tapped.
+  static func isTopNavigationBackCandidateFrame(
+    _ candidate: CGRect,
+    in window: CGRect,
+    identifier: String
+  ) -> Bool {
+    if isTopNavigationControlFrame(candidate, in: window) { return true }
+    guard identifier == systemBackButtonIdentifier,
+      SnapshotGeometry.isPositiveFinite(candidate), SnapshotGeometry.isPositiveFinite(window)
+    else {
+      return false
+    }
+    let maxY = window.minY + window.height * floatingBarBackControlMaxYFraction
     return candidate.midY >= window.minY && candidate.midY <= maxY
   }
 
