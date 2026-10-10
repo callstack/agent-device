@@ -49,8 +49,19 @@ for (const { tarball, name } of tarballs) {
 function isPublished(name) {
   try {
     return npm(['view', `${name}@${version}`, 'version', '--json']).trim() !== '';
+  } catch (error) {
+    // npm reports a missing package or version as E404 in its JSON output; anything else is a
+    // registry or network failure, which must not be read as "safe to publish".
+    if (readErrorCode(error.stdout) === 'E404') return false;
+    throw error;
+  }
+}
+
+function readErrorCode(output) {
+  try {
+    return JSON.parse(output).error?.code;
   } catch {
-    return false;
+    return undefined;
   }
 }
 

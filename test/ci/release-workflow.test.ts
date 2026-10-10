@@ -8,6 +8,8 @@ const source = fs.readFileSync(path.join(repoRoot, '.github/workflows/release.ym
 
 type Job = {
   environment?: string;
+  if?: string;
+  needs?: string[];
   permissions?: Record<string, string>;
   steps?: Array<{ uses?: string; with?: Record<string, string> }>;
   uses?: string;
@@ -39,4 +41,15 @@ test('the published bytes are built without a restored dependency cache', () => 
     (step) => step.uses === './.github/actions/setup-node-pnpm',
   );
   expect(setup?.with?.['cache-store']).toBe('false');
+});
+
+// The npm-publish environment cannot require a reviewer (nightlies run unattended), so a stable
+// publish is held only by the approve job and its `release` environment.
+test('a stable publish waits for the release environment approval', () => {
+  expect(workflow.jobs.approve?.environment).toBe('release');
+  expect(workflow.jobs.approve?.if).toBe("needs.plan.outputs.mode == 'stable'");
+  expect(workflow.jobs.publish?.needs).toContain('approve');
+  expect(workflow.jobs.publish?.if).toMatch(
+    /needs\.plan\.outputs\.mode == 'nightly' \|\| needs\.approve\.result == 'success'/,
+  );
 });
