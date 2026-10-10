@@ -857,6 +857,8 @@ Entry points for integrations:
   - `forceStopAndroidAppWithAdb(executor, packageName)`
   - `listAndroidAppsWithAdb(executor)`
   - `getAndroidAppStateWithAdb(executor)`
+  - `runAdbShell(executor, words, options?)` / `runAdbExecOut(executor, words, options?)`
+  - `runAndroidShell(device, words, options?)` / `runAndroidExecOut(device, words, options?)`
   - types: `AndroidAdbExecutor`, `AndroidAdbExecutorOptions`, `AndroidAdbProvider`,
     `AndroidKeyboardState`, `AndroidKeyboardDismissResult`, `AndroidPortReverseEndpoint`
 - `agent-device/batch`
@@ -1062,7 +1064,7 @@ Use `agent-device/remote-config` for profile loading and path resolution, `agent
 
 Use `agent-device/selectors` to parse and match selector expressions in a remote daemon or bridge. The `role=` term matches the platform-neutral `kind` vocabulary that `snapshot --json` publishes (see [Snapshots](/agent-device/pr-preview/pr-3399/docs/snapshots.md#structured-node-fields---json)): pass the nodes as captured, and a node whose `kind` is `text` always matches `role=text`. Separately, pre-reconciliation leaf spellings (`statictext`, `edittext`, `textview`, …) still match during a deprecation window, each on the nodes that actually carried that class. A legacy spelling matches beside such a node's `kind`, not in place of it — `role=webarea` resolves a macOS-helper `AXWebArea` node whose `kind` is `axwebarea`, for example. Matching stays platform-aware because editability checks differ by backend.
 
-`listSelectorChainMatches(nodes, chain, options)` returns every node the winning selector alternative matches, in snapshot order, plus that alternative and its index — the same first-match domain `findSelectorChainMatch` uses, without uniqueness refusal, so a runner applies its own strictness to the same nodes the CLI matched. `resolveSelectorChain` can name a later alternative: by default it refuses an ambiguous one and keeps walking, so the indices agree when it passes `requireUnique: false`, when the first matching alternative is unique, or when `disambiguateAmbiguous: true` resolves that alternative in place. It returns `null` when no alternative matches. `options` is `{ platform, requireRect? }`; the matched `SnapshotNode` objects are the ones passed in.
+`listSelectorChainMatches(nodes, chain, options)` returns every node the winning selector alternative matches, in snapshot order, plus that alternative and its index — the same first-match domain `findSelectorChainMatch` uses, without uniqueness refusal, so a runner applies its own strictness to the same nodes the CLI matched. `resolveSelectorChain` can name a later alternative: by default it refuses an ambiguous one and keeps walking, so the indices agree when it passes `requireUnique: false`, when the first matching alternative is unique, or when `disambiguateAmbiguous: true` resolves that alternative in place. It returns `null` when no alternative matches. `findSelectorChainMatch` and `listSelectorChainMatches` take `{ platform, requireRect? }`; `resolveSelectorChain` also takes `requireUnique?` (default `true`) and `disambiguateAmbiguous?`. The matched `SnapshotNode` objects are the ones passed in.
 
 ```ts
 import { findSelectorChainMatch, parseSelectorChain } from 'agent-device/selectors';
