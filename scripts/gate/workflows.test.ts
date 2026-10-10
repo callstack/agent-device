@@ -220,3 +220,29 @@ jobs:
   assert.deepEqual(caller?.unsupported, []);
   assert.ok(caller?.uses.includes('.github/workflows/called.yml'));
 });
+
+test('a remote or nested reusable workflow fails closed', () => {
+  const lanes = planted({
+    '.github/workflows/planted.yml': `name: Planted
+on:
+  pull_request:
+jobs:
+  remote:
+    uses: octo/repo/.github/workflows/called.yml@main
+  nested:
+    uses: ./.github/workflows/outer.yml
+`,
+    '.github/workflows/outer.yml': `name: Outer
+on:
+  workflow_call:
+jobs:
+  inner:
+    uses: ./.github/workflows/inner.yml
+`,
+  });
+  for (const job of ['remote', 'nested']) {
+    const lane = lanes.find((candidate) => candidate.label === `Planted / ${job}`);
+    assert.equal(lane?.unsupported.length, 1, `${job} must stay unsupported`);
+    assert.deepEqual(lane?.gates, []);
+  }
+});
