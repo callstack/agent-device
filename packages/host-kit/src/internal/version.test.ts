@@ -138,7 +138,7 @@ test('isNewerVersion orders releases numerically per segment', () => {
 });
 
 test('isNewerVersion ranks a release above the prerelease of the same base', () => {
-  // main carries `-dev` between releases (scripts/release-mark-dev.mjs): a released client meeting
+  // main carries `-dev` between releases (scripts/release-version.mjs): a released client meeting
   // a `-dev` daemon of the same base is the upgrade, and the reverse is the downgrade.
   assert.equal(isNewerVersion('0.21.13', '0.21.13-dev'), true);
   assert.equal(isNewerVersion('0.21.13-dev', '0.21.13'), false);

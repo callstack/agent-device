@@ -122,8 +122,6 @@
     "build:package": "pnpm build && pnpm package:xcuitest && pnpm build:macos-helper:clean && pnpm prepare:publish-assets",
     "package:npm": "pnpm build:package && pnpm check:package",
     "release:prepare": "rm -rf .tmp/release && pnpm check:mcp-metadata && pnpm build:package && pnpm check:package -- --pack-destination .tmp/release && node scripts/release-workspace.mjs pack",
-    "release:publish": "node scripts/release-mark-dev.mjs --check-release-version && pnpm release:prepare && node scripts/release-workspace.mjs publish",
-    "release:mark-dev": "node scripts/release-mark-dev.mjs",
     "ad": "node bin/agent-device.mjs",
     "bench:help-conformance": "node scripts/help-conformance-bench.mjs",
     "maestro:conformance": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/maestro-conformance/format-generated-json.test.mjs packages/maestro/test/conformance/verify.test.ts packages/maestro/test/conformance/differential/engine-process.test.ts packages/maestro/test/conformance/differential/report-output.test.ts packages/maestro/test/conformance/differential/run.test.ts packages/maestro/test/conformance/differential/invariants.test.ts",
@@ -173,7 +171,6 @@
     "check:quick": "pnpm lint && pnpm typecheck",
     "sync:mcp-metadata": "node scripts/sync-mcp-metadata.mjs",
     "check:mcp-metadata": "node scripts/sync-mcp-metadata.mjs --check",
-    "version": "node scripts/release-workspace.mjs sync --stage && pnpm sync:mcp-metadata && git add server.json",
     "check:tooling": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm check:layering && pnpm depgraph:test && pnpm check:gate-manifest:test && pnpm check:gate-manifest && pnpm check:production-exports && pnpm check:tmpdir-leaks:test && pnpm check:xctest-selection && pnpm check:packaged-runner-swift && pnpm check:mcp-metadata && pnpm build && pnpm check:bundle-owner-files && pnpm check:package",
     "check:unit": "pnpm test:unit && pnpm check:tmpdir-leaks && pnpm test:smoke",
     "check": "pnpm check:tooling && pnpm check:fallow && pnpm check:unit",
@@ -214,8 +211,7 @@
     "test:replay:macos": "node --experimental-strip-types src/bin.ts test test/integration/replays/macos",
     "test:replay:linux": "node --experimental-strip-types src/bin.ts test test/integration/replays/linux",
     "test:linux:command-evidence": "node --experimental-strip-types test/integration/linux-e2e/live-runner.ts",
-    "postpublish": "node scripts/release-workspace.mjs publish",
-    "prepublishOnly": "node scripts/release-mark-dev.mjs --check-release-version"
+    "prepublishOnly": "echo 'agent-device publishes from .github/workflows/release.yml; see CONTRIBUTING.md.' >&2 && exit 1"
   },
   "files": [
     "bin",
