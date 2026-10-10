@@ -1,0 +1,289 @@
+name: Release
+
+# One workflow owns every npm publish, so each package trusts exactly this file
+# (npm trusted publishing pins the workflow filename and the npm-publish
+# environment). scripts/release-plan.mjs maps the triggering event to a mode:
+# dry-run (PR), nightly (schedule or dispatch on main), or stable (a vX.Y.Z tag on
+# main, which only a repository admin can create, normally by publishing a GitHub
+# release).
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'scripts/release-*.mjs'
+      - 'scripts/build-package-xcuitest.mjs'
+      - 'scripts/check-package.ts'
+      - 'scripts/prepare-publish-assets.mjs'
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  schedule:
+    # Retried every few hours: a nightly waits for green CI on main's HEAD and
+    # publishes at most once per UTC day.
+    - cron: '23 */3 * * *'
+  # On main: publish a nightly now. On a vX.Y.Z tag: retry that stable release.
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: >-
+    ${{ github.event_name == 'pull_request' && format('release-pr-{0}', github.ref)
+    || startsWith(github.ref, 'refs/tags/') && format('release-{0}', github.ref)
+    || 'release-nightly' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      version: ${{ steps.plan.outputs.version }}
+      dist_tag: ${{ steps.plan.outputs.dist_tag }}
+      commit: ${{ steps.plan.outputs.commit }}
+      previous_tag: ${{ steps.plan.outputs.previous_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: '24.13'
+
+      - id: plan
+        name: Plan release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/release-plan.mjs
+
+  approve:
+    name: Approve ${{ needs.plan.outputs.version }}
+    needs: plan
+    if: needs.plan.outputs.mode == 'stable'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: release
+    permissions: {}
+    steps:
+      - run: echo "Approved the agent-device ${{ needs.plan.outputs.version }} release."
+
+  build:
+    name: Build ${{ needs.plan.outputs.version }}
+    needs: plan
+    if: contains(fromJSON('["dry-run", "nightly", "stable"]'), needs.plan.outputs.mode)
+    runs-on: macos-26
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      # The helper build refuses to guess its build-tools version on CI.
+      AGENT_DEVICE_ANDROID_BUILD_TOOLS: 36.0.0
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # No dependency cache: published bytes come from a clean install.
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          cache-store: 'false'
+
+      - name: Install Android helper toolchain
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;$AGENT_DEVICE_ANDROID_BUILD_TOOLS"
+
+      - name: Stamp release version
+        run: node scripts/release-version.mjs stamp "$VERSION"
+
+      - name: Build and verify every public package
+        run: pnpm release:prepare
+
+      - name: Upload packages
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: npm-packages
+          path: .tmp/release/*.tgz
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish ${{ needs.plan.outputs.version }} to npm
+    needs: [plan, approve, build]
+    if: >-
+      !cancelled() && needs.build.result == 'success'
+      && (needs.plan.outputs.mode == 'nightly' || needs.approve.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout publisher
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/release-publish.mjs
+          sparse-checkout-cone-mode: false
+
+      # No registry-url: setup-node would write an .npmrc token placeholder that
+      # shadows the OIDC exchange.
+      - name: Setup Node.js
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: '24.13'
+
+      - name: Download packages
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: npm-packages
+          path: ${{ runner.temp }}/npm-packages
+
+      - name: Publish
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          DIST_TAG: ${{ needs.plan.outputs.dist_tag }}
+        run: node scripts/release-publish.mjs "$RUNNER_TEMP/npm-packages" "$VERSION" "$DIST_TAG"
+
+  tag-nightly:
+    name: Tag nightly ${{ needs.plan.outputs.version }}
+    needs: [plan, publish]
+    if: needs.plan.outputs.mode == 'nightly'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Tag the published commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: nightly/v${{ needs.plan.outputs.version }}
+          COMMIT: ${{ needs.plan.outputs.commit }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$COMMIT"
+          echo "Published $TAG from $COMMIT: npm install agent-device@nightly" >> "$GITHUB_STEP_SUMMARY"
+
+  github-release:
+    name: Draft GitHub release
+    needs: [plan, publish]
+    if: needs.plan.outputs.mode == 'stable'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Draft release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.plan.outputs.version }}
+          PREVIOUS_TAG: ${{ needs.plan.outputs.previous_tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$TAG already has a release."
+            exit 0
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
+            --title "$TAG" --generate-notes ${PREVIOUS_TAG:+--notes-start-tag "$PREVIOUS_TAG"}
+
+  ios-runner:
+    name: iOS runner assets
+    needs: [plan, github-release]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-ios-runner.yml
+    with:
+      release_tag: v${{ needs.plan.outputs.version }}
+
+  android-snapshot-helper:
+    name: Android helper assets
+    needs: [plan, github-release]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-android-snapshot-helper.yml
+    with:
+      release_tag: v${{ needs.plan.outputs.version }}
+
+  publish-github-release:
+    name: Publish GitHub release
+    needs: [plan, ios-runner, android-snapshot-helper]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the drafted release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.plan.outputs.version }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+
+  mcp-registry:
+    name: MCP Registry
+    needs: [plan, publish]
+    if: needs.plan.outputs.mode == 'stable'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/publish-mcp-registry.yml
+    with:
+      release_tag: v${{ needs.plan.outputs.version }}
+
+  mark-released:
+    name: Move main past ${{ needs.plan.outputs.version }}
+    needs: [plan, publish]
+    if: needs.plan.outputs.mode == 'stable'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          install-deps: 'false'
+
+      # main must never carry a published version. Retried because merges can
+      # land on main while the release runs.
+      - name: Commit the next development version
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            next="$(node scripts/release-version.mjs advance "$VERSION")"
+            if git diff --quiet; then
+              echo "main already builds towards $next."
+              exit 0
+            fi
+            git add -u
+            git commit -m "chore: mark $VERSION as released"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+          done
+          exit 1

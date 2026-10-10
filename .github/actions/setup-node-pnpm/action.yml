@@ -10,6 +10,10 @@ inputs:
     description: 'Whether to install dependencies with pnpm install --frozen-lockfile'
     required: false
     default: 'true'
+  cache-store:
+    description: 'Whether installing dependencies may restore and save the pnpm store cache'
+    required: false
+    default: 'true'
   cache-dependency-path:
     description: 'Lockfile path(s) used to key the pnpm store cache'
     required: false
@@ -48,7 +52,7 @@ runs:
         # Only cache the pnpm store when this action also installs dependencies.
         # Jobs with install-deps: false never create the store, and on a cache
         # miss (any lockfile-changing PR) the post-job cache save fails the job.
-        cache: ${{ inputs.install-deps == 'true' && 'pnpm' || '' }}
+        cache: ${{ inputs.install-deps == 'true' && inputs.cache-store == 'true' && 'pnpm' || '' }}
         cache-dependency-path: ${{ inputs.cache-dependency-path }}
 
     # Corepack resolves the same `packageManager` field locally, so a mismatch
