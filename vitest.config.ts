@@ -257,7 +257,13 @@ export default defineConfig({
     ].map((project) => ({ ...project, test: { ...project.test, ...TEST_ISOLATION } })),
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'html', 'lcov', 'json-summary'],
+      reporter: [
+        'text',
+        'html',
+        'lcov',
+        'json-summary',
+        ['json', { file: 'coverage-istanbul.json' }],
+      ],
       thresholds: {
         statements: 78,
         lines: 80,
