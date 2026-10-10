@@ -25,8 +25,8 @@ export async function setLimrunIosSetting(
         deviceId: session.device.id,
         setting: normalized,
         state,
-        appBundleId:
-          appId === undefined ? undefined : await session.dependencies.ios.resolveAppAlias(appId),
+        appBundleId: appId,
+        resolveApp: (app) => session.dependencies.ios.resolveAppAlias(app),
         options,
       });
     case 'clear-app-state':

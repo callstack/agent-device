@@ -274,6 +274,12 @@ export const PRE_DISPATCH_REFUSAL_REASONS = {
    * find a device for it; the command it asks for stays in the message.
    */
   sessionOrDeviceSelectorRequired: 'session_or_device_selector_required',
+  /**
+   * An app-scoped setting named an app that resolves to no installed app on the target, so nothing
+   * was granted, revoked, or cleared under that name. Recovery: run `apps` for the exact bundle id
+   * or package, or install the app, then retry.
+   */
+  appNotInstalled: 'app_not_installed',
 } as const;
 
 export type PreDispatchRefusalReason =
@@ -291,6 +297,16 @@ export function sessionAppRequiredDetails(): RefusalDetails<
 > {
   return {
     reason: PRE_DISPATCH_REFUSAL_REASONS.sessionAppRequired,
+    dispatched: 'no',
+  };
+}
+
+/** The details of an app-scoped setting refused because its named app resolves to no installed app. */
+export function appNotInstalledDetails(): RefusalDetails<
+  (typeof PRE_DISPATCH_REFUSAL_REASONS)['appNotInstalled']
+> {
+  return {
+    reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled,
     dispatched: 'no',
   };
 }

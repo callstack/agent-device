@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   AppError,
+  appNotInstalledDetails,
   defaultHintForCode,
   discloseDispatch,
   discloseDispatchAfterSteps,
@@ -19,6 +20,7 @@ test('the pre-dispatch refusal reasons are the values consumers branch on', () =
   assert.deepEqual(PRE_DISPATCH_REFUSAL_REASONS, {
     sessionAppRequired: 'session_app_required',
     sessionOrDeviceSelectorRequired: 'session_or_device_selector_required',
+    appNotInstalled: 'app_not_installed',
   });
 });
 
@@ -34,6 +36,12 @@ for (const [label, details, code, message] of [
     sessionOrDeviceSelectorRequiredDetails(),
     'INVALID_ARGS',
     'clipboard requires an active session or an explicit device selector (e.g. --platform ios).',
+  ],
+  [
+    'appNotInstalled',
+    appNotInstalledDetails(),
+    'APP_NOT_INSTALLED',
+    'No app found matching "Maps"',
   ],
 ] as const) {
   test(`${label} refusal carries its reason and dispatched:no through normalize and the wire`, () => {

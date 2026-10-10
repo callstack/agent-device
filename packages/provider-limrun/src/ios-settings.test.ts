@@ -41,9 +41,13 @@ test('simctl settings run the Apple plan on the booted simulator, reporting the 
     deviceId: 'limrun:ios:settings',
     setting: 'permission',
     state: 'grant',
-    appBundleId: 'resolved.camera-app',
+    appBundleId: 'camera-app',
+    resolveApp: expect.any(Function),
     options,
   });
+  await expect(applySimctlSetting.mock.calls[0]?.[0].resolveApp('camera-app')).resolves.toBe(
+    'resolved.camera-app',
+  );
   expect(client.simctl.mock.calls).toEqual([[['ui', 'booted', 'appearance']]]);
   expect(result).toEqual({ output: { code: 0, stdout: 'dark\n', stderr: '' } });
 });

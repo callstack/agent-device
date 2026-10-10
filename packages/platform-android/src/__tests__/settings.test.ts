@@ -77,6 +77,85 @@ test('setAndroidSetting clear-app-state refuses an appless session with the publ
   );
 });
 
+const INSTALLED_PACKAGES = 'package:com.example.app\npackage:com.android.chrome\n';
+
+function installedPackagesAdb(args: string[]) {
+  const flat = args.join(' ');
+  if (flat === 'shell pm list packages') return INSTALLED_PACKAGES;
+  if (flat === 'shell am get-current-user') return '0';
+  if (flat.startsWith('shell dumpsys package ') || flat.startsWith('shell pm grant ')) return '';
+  return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
+}
+
+test('setAndroidSetting permission grants the package a display name resolves to', async () => {
+  await withFakeAdb(installedPackagesAdb, async ({ calls, device }) => {
+    await setAndroidSetting(device, 'permission', 'grant', 'Chrome', {
+      permissionTarget: 'camera',
+    });
+    assert.deepEqual(calls, [
+      ['shell', 'pm', 'list', 'packages'],
+      ['shell', 'am', 'get-current-user'],
+      ['shell', 'dumpsys', 'package', 'com.android.chrome'],
+      ['shell', 'pm', 'grant', '--user', '0', 'com.android.chrome', 'android.permission.CAMERA'],
+    ]);
+  });
+});
+
+test('setAndroidSetting permission passes a package through without listing packages', async () => {
+  await withFakeAdb(installedPackagesAdb, async ({ calls, device }) => {
+    await setAndroidSetting(device, 'permission', 'grant', 'com.example.app', {
+      permissionTarget: 'camera',
+    });
+    assert.deepEqual(calls.at(-1), [
+      'shell',
+      'pm',
+      'grant',
+      '--user',
+      '0',
+      'com.example.app',
+      'android.permission.CAMERA',
+    ]);
+    assert.ok(!calls.some((args) => args.join(' ') === 'shell pm list packages'));
+  });
+});
+
+test.for(['permission', 'clear-app-state'] as const)(
+  'setAndroidSetting %s refuses an app that resolves to nothing before changing anything',
+  async (setting) => {
+    await withFakeAdb(installedPackagesAdb, async ({ calls, device }) => {
+      await assertRejectsAppError(
+        () =>
+          setAndroidSetting(
+            device,
+            setting,
+            setting === 'permission' ? 'grant' : 'clear',
+            'Nowhere',
+            { permissionTarget: 'camera' },
+          ),
+        {
+          code: 'APP_NOT_INSTALLED',
+          reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled,
+          dispatched: 'no',
+        },
+      );
+      assert.deepEqual(calls, [['shell', 'pm', 'list', 'packages']]);
+    });
+  },
+);
+
+test('setAndroidSetting permission refuses an app alias that resolves to an intent', async () => {
+  await withFakeAdb(installedPackagesAdb, async ({ calls, device }) => {
+    await assertRejectsAppError(
+      () =>
+        setAndroidSetting(device, 'permission', 'grant', 'settings', {
+          permissionTarget: 'camera',
+        }),
+      { code: 'INVALID_ARGS', dispatched: 'no' },
+    );
+    assert.deepEqual(calls, []);
+  });
+});
+
 test('setAndroidSetting fingerprint retries emulator command when shell cmd fingerprint fails', async () => {
   await withFakeAdb(
     (args) => {

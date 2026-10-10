@@ -48,10 +48,10 @@ async function setAppearance({ runSimctl, udid, state }: SimctlSettingRequest): 
 
 async function setPermission(request: SimctlSettingRequest): Promise<void> {
   const { runSimctl, udid, deviceId, state, options } = request;
-  const appBundleId = requireAppBundleId(request);
   const permissionAction = parsePermissionAction(state);
   const action = permissionAction === 'deny' ? 'revoke' : permissionAction;
   const target = parseIosPrivacyService(options?.permissionTarget, options?.permissionMode);
+  const appBundleId = await requireAppBundleId(request);
   try {
     await runSimctl(['privacy', udid, action, target, appBundleId]);
   } catch (error) {
@@ -68,11 +68,15 @@ async function setLocation(request: SimctlSettingRequest): Promise<Record<string
     return { latitude, longitude };
   }
   const action = parseSettingState(state) ? 'grant' : 'revoke';
-  await runSimctl(['privacy', udid, action, 'location', requireAppBundleId(request)]);
+  await runSimctl(['privacy', udid, action, 'location', await requireAppBundleId(request)]);
 }
 
-function requireAppBundleId({ setting, appBundleId }: SimctlSettingRequest): string {
-  if (appBundleId) return appBundleId;
+async function requireAppBundleId({
+  setting,
+  appBundleId,
+  resolveApp,
+}: SimctlSettingRequest): Promise<string> {
+  if (appBundleId) return await resolveApp(appBundleId);
   throw new AppError(
     'INVALID_ARGS',
     `${setting} setting requires an active app in session`,
