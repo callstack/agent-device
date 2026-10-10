@@ -8,10 +8,10 @@ import {
   isRootPlatformRuntimeTarget,
 } from './daemon-platform-runtime-inventory.ts';
 
-// The classified pair these fixtures plant is the platform-services composition factory: the
+// The classified pair these fixtures plant is the claim-recovery gateway factory: the composition
 // edge this port introduced, and the shortest one whose symbols the rule still classifies.
-const CLASSIFIED_TARGET = 'src/platform-runtime-daemon-services.ts';
-const CLASSIFIED_STUB = 'export function createDaemonPlatformServices() { return {}; }\n';
+const CLASSIFIED_TARGET = 'src/platform-runtime-claim-recovery.ts';
+const CLASSIFIED_STUB = 'export const createClaimRecoveryGateway = () => ({});\n';
 const CLASSIFIED_IMPORTER = 'src/daemon/server/daemon-runtime.ts';
 
 function violations(sources: Record<string, string>): LayeringViolation[] {
@@ -26,8 +26,8 @@ test('R76 accepts a classified edge with the exact recorded symbols', () => {
   const sources = {
     [CLASSIFIED_TARGET]: CLASSIFIED_STUB,
     [CLASSIFIED_IMPORTER]:
-      "import { createDaemonPlatformServices } from '../../platform-runtime-daemon-services.ts';\n" +
-      'void createDaemonPlatformServices;\n',
+      "import { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';\n" +
+      'void createClaimRecoveryGateway;\n',
   };
   assert.deepEqual(edgeViolations(sources, CLASSIFIED_IMPORTER), []);
 });
@@ -54,8 +54,8 @@ test('R76 reports every classified edge missing from the tree as stale, not the 
   const sources = {
     [CLASSIFIED_TARGET]: CLASSIFIED_STUB,
     [CLASSIFIED_IMPORTER]:
-      "import { createDaemonPlatformServices } from '../../platform-runtime-daemon-services.ts';\n" +
-      'void createDaemonPlatformServices;\n',
+      "import { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';\n" +
+      'void createClaimRecoveryGateway;\n',
   };
   const stale = violations(sources).filter(
     (violation) => violation.file === 'scripts/layering/daemon-platform-runtime-inventory.ts',
@@ -86,32 +86,32 @@ test('R76 rejects an unclassified edge with the pair and its line', () => {
 
 test('R76 rejects new symbols on a classified edge', () => {
   const sources = {
-    [CLASSIFIED_TARGET]: CLASSIFIED_STUB + 'export function extraServicesKnob() {}\n',
+    [CLASSIFIED_TARGET]: CLASSIFIED_STUB + 'export function extraGatewayKnob() {}\n',
     [CLASSIFIED_IMPORTER]:
-      "import { createDaemonPlatformServices, extraServicesKnob } from '../../platform-runtime-daemon-services.ts';\n" +
-      'void [createDaemonPlatformServices, extraServicesKnob];\n',
+      "import { createClaimRecoveryGateway, extraGatewayKnob } from '../../platform-runtime-claim-recovery.ts';\n" +
+      'void [createClaimRecoveryGateway, extraGatewayKnob];\n',
   };
   const found = edgeViolations(sources, CLASSIFIED_IMPORTER);
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
   assert.match(found[0]!.message, /classified symbols drifted/);
-  assert.match(found[0]!.message, /createDaemonPlatformServices, extraServicesKnob/);
+  assert.match(found[0]!.message, /createClaimRecoveryGateway, extraGatewayKnob/);
 });
 
-test('R76 rejects a services object widened through an expanded composition edge', () => {
+test('R76 rejects a gateway assembled from an expanded recovery edge', () => {
   const sources = {
-    'src/platform-runtime-daemon-services.ts':
-      'export function createDaemonPlatformServices() { return {}; }\n' +
-      'export function createProviderPlatformServices() { return {}; }\n',
+    'src/platform-runtime-claim-recovery.ts':
+      'export const createClaimRecoveryGateway = () => ({});\n' +
+      'export const createProviderRecoveryGateway = () => ({});\n',
     'src/daemon/server/daemon-runtime.ts':
-      "import {\n  createDaemonPlatformServices,\n  createProviderPlatformServices,\n} from '../../platform-runtime-daemon-services.ts';\n" +
-      'void [createDaemonPlatformServices, createProviderPlatformServices];\n',
+      "import {\n  createClaimRecoveryGateway,\n  createProviderRecoveryGateway,\n} from '../../platform-runtime-claim-recovery.ts';\n" +
+      'void [createClaimRecoveryGateway, createProviderRecoveryGateway];\n',
   };
   const found = edgeViolations(sources, 'src/daemon/server/daemon-runtime.ts');
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
   assert.match(found[0]!.message, /classified symbols drifted/);
-  assert.match(found[0]!.message, /createDaemonPlatformServices, createProviderPlatformServices/);
+  assert.match(found[0]!.message, /createClaimRecoveryGateway, createProviderRecoveryGateway/);
 });
 
 test('R76 matches a destructured dynamic import by target with the recorded bindings', () => {
@@ -210,9 +210,9 @@ test('R76 treats the import and re-export of one classified pair as one entry', 
   const sources = {
     [CLASSIFIED_TARGET]: CLASSIFIED_STUB,
     [CLASSIFIED_IMPORTER]:
-      "import { createDaemonPlatformServices } from '../../platform-runtime-daemon-services.ts';\n" +
-      "export { createDaemonPlatformServices } from '../../platform-runtime-daemon-services.ts';\n" +
-      'void createDaemonPlatformServices;\n',
+      "import { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';\n" +
+      "export { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';\n" +
+      'void createClaimRecoveryGateway;\n',
   };
   assert.deepEqual(edgeViolations(sources, CLASSIFIED_IMPORTER), []);
 });

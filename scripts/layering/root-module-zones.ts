@@ -50,6 +50,7 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/platform-runtime-android-observation-host.ts',
     'src/platform-runtime-apple-resources.ts',
     'src/platform-runtime-apple-runner-owner.ts',
+    'src/platform-runtime-claim-recovery.ts',
     'src/platform-runtime-daemon-lifecycle.ts',
     'src/platform-runtime-daemon-owner-cleanup.ts',
     'src/platform-runtime-daemon-services.ts',

@@ -124,16 +124,6 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
       'orphan cleanups, and legacy app-log marker recovery.',
   },
   {
-    file: 'src/daemon/device/device-claim-owner-recovery.ts',
-    target: 'src/platform-runtime.ts',
-    symbols: ['createPlatformRuntimeGateway'],
-    classification: 'composition-essential',
-    rationale:
-      "per-transaction neutral gateway assembly scoped to the dead owner's state dir " +
-      '(#2168); the process root cannot carry a per-claim sessionsDir, so the scoped ' +
-      "composition belongs to the recovery policy's own module.",
-  },
-  {
     file: 'src/daemon/direct-ios-selector.ts',
     target: 'src/platform-runtime-apple-resources.ts',
     symbols: ['queryAppleRuntimeSelector'],
@@ -187,6 +177,16 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
       'boot and runner-session observation, and open-target classification reach the request ' +
       'path only as this frozen object, so no daemon module names a platform adapter. Device ' +
       'execution never enters the port; it stays behind the request-bound runtime binding.',
+  },
+  {
+    file: 'src/daemon/server/daemon-runtime.ts',
+    target: 'src/platform-runtime-claim-recovery.ts',
+    symbols: ['createClaimRecoveryGateway'],
+    classification: 'composition-essential',
+    rationale:
+      'process-root assembly of the per-transaction recovery gateway factory (#2168): the daemon ' +
+      'owns which dead owner state dir a recovery is rebuilt from and when the gateway is ' +
+      'disposed, and this composition module is the sole place that assembles the gateway itself.',
   },
 ] as const;
 
