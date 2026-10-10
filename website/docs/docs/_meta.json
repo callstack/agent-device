@@ -73,6 +73,11 @@
       },
       {
         "type": "custom-link",
+        "label": "Run Maestro flows",
+        "link": "/docs/run-maestro-flows"
+      },
+      {
+        "type": "custom-link",
         "label": "Debugging & Profiling",
         "link": "/docs/debugging-profiling"
       }
