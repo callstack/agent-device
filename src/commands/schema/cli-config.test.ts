@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { pluginHome } from '../../plugins/plugin.fixtures.ts';
-import { resolveConfigBackedFlagDefaults, resolveUserConfigPath } from './cli-config.ts';
+import { resolveConfigBackedFlagDefaults } from './cli-config.ts';
 
 test('AGENT_DEVICE_HOME relocates user defaults; project and explicit config cannot select plugins', () => {
   const { home, env } = pluginHome();
@@ -22,5 +22,9 @@ test('AGENT_DEVICE_HOME relocates user defaults; project and explicit config can
   };
   assert.throws(() => resolveConfigBackedFlagDefaults(explicit), { code: 'INVALID_ARGS' });
   const relative = { AGENT_DEVICE_HOME: './relative' };
-  assert.throws(() => resolveUserConfigPath(relative), { code: 'INVALID_ARGS' });
+  // The rejection is owned by resolveUserConfigPath (host-kit); what this loader owes its own
+  // callers is surfacing it, which the direct call below would not have proven.
+  assert.throws(() => resolveConfigBackedFlagDefaults({ ...options, env: relative }), {
+    code: 'INVALID_ARGS',
+  });
 });

@@ -60,3 +60,23 @@ test('the routing gap is what an unrouted command actually reaches', async () =>
   // Without this the test above would pass for a table that had no arms at all.
   expect(await reachesGenericRoutingGap('not-a-generic-route-command')).toBe(true);
 });
+
+test('the screenshot arm reaches its leaf through the deferred import', async () => {
+  // The leaf loads with `await import()` at the arm so the daemon starts without the
+  // command surface beneath it. A typo'd specifier or a bundler that dropped the chunk
+  // would fail here as a resolution error, and an arm that skipped the leaf would answer
+  // with the routing gap — neither reaches the retired-flag refusal, which only the leaf
+  // itself raises before any admission or device work.
+  await expect(
+    resolveGenericRuntimeExecution({
+      req: {
+        command: 'screenshot',
+        token: '',
+        positionals: [],
+        flags: { screenshotMaxSize: 1024 },
+      },
+      session: { device: { id: 'device-1', platform: 'android', kind: 'device' } },
+      context: { logPath: '' },
+    } as unknown as Parameters<typeof resolveGenericRuntimeExecution>[0]),
+  ).rejects.toThrow(/--max-size was removed/);
+});

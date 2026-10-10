@@ -1,6 +1,5 @@
 import type { ResolvedGenericExecution } from './generic-leaf-execution.ts';
 import { resolveBoundFocusRuntime } from './focus-runtime.ts';
-import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
 import { resolveBoundScrollRuntime } from './scroll-runtime.ts';
 import type { ScreenshotRuntimeBindings } from './screenshot-runtime-binding.ts';
 import type { DaemonCommandContext } from './context.ts';
@@ -41,8 +40,13 @@ export async function resolveGenericRuntimeExecution(
     });
   }
   switch (params.req.command) {
-    case 'screenshot':
+    case 'screenshot': {
+      // This branch alone owns an in-process command surface and the interaction implementations
+      // beneath it; the other leaves here are bound runtimes the dispatcher reaches directly, so
+      // only this one's module is deferred out of the daemon's startup closure.
+      const { resolveScreenshotGenericExecution } = await import('./screenshot-runtime.ts');
       return await resolveScreenshotGenericExecution(params);
+    }
     case 'focus':
       return await resolveBoundFocusRuntime({
         device: params.session.device,

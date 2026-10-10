@@ -6,7 +6,7 @@ import { isRecord } from '@agent-device/kernel/record';
 import { mergeDefinedFlags } from './merge-flags.ts';
 import { type FlagKey } from '@agent-device/command-registry/flag-types';
 import { projectConfigFlagKeys } from '@agent-device/command-registry/flag-registry';
-import { expandUserHomePath, resolveUserPath } from '@agent-device/host-kit/file';
+import { resolveUserConfigPath, resolveUserPath } from '@agent-device/host-kit/file';
 import {
   getConfigurableOptionSpecs,
   getOptionSpec,
@@ -54,15 +54,6 @@ function resolveConfigPaths(
     { path: resolveUserConfigPath(env), required: false, source: 'user' },
     { path: path.resolve(cwd, 'agent-device.json'), required: false, source: 'project' },
   ];
-}
-
-export function resolveUserConfigPath(env: EnvMap): string {
-  const home = env.AGENT_DEVICE_HOME
-    ? expandUserHomePath(env.AGENT_DEVICE_HOME, { env })
-    : path.join(expandUserHomePath('~', { env }), '.agent-device');
-  if (!path.isAbsolute(home))
-    throw new AppError('INVALID_ARGS', 'AGENT_DEVICE_HOME must be absolute or ~/...');
-  return path.join(home, 'config.json');
 }
 
 function resolveInputPath(inputPath: string, cwd: string, env: EnvMap): string {
