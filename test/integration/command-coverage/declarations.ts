@@ -179,7 +179,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'shutdown simulator boots again and inventory confirms it',
     ),
     macos: macos.contract(
-      'src/daemon/handlers/__tests__/session-boot-shutdown.test.ts',
+      'src/daemon/handlers/__tests__/session-boot.test.ts',
       'boot rejects the macOS host boot cell after one facts inspection and before binding',
       'macOS boot is refused by the runtime fact before dispatch',
     ),

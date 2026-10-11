@@ -9,6 +9,10 @@ import {
   makeSession,
   noopInvoke,
 } from './session-test-harness.ts';
+import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { handleSessionStateCommands } from '../session-state.ts';
 import type { SessionState } from '../../session-state.ts';
 import {
   handleSessionCommands,
@@ -16,7 +20,6 @@ import {
   mockEnsureReadyHeadlessRuntime,
   mockEnsureReadyRuntime,
   mockInspectDeviceRuntimeFacts,
-  mockShutdownTargetRuntime,
 } from './session-command-harness.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
@@ -442,227 +445,77 @@ test('boot keeps --target validation before facts inspection', async () => {
   }
 });
 
-test('shutdown turns off selected iOS simulator', async () => {
-  const sessionStore = makeSessionStore();
-  const selectedDevice: SessionState['device'] = {
-    platform: 'apple',
-    id: 'sim-2',
-    name: 'iPhone 17 Pro',
-    kind: 'simulator',
-    target: 'mobile',
-    booted: true,
-  };
-  mockResolveTargetDevice.mockResolvedValue(selectedDevice);
-
-  const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'shutdown',
-      positionals: [],
-      flags: { platform: 'ios', device: 'iPhone 17 Pro' },
-    },
-    sessionName: 'default',
-    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(true);
-  expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
-  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledOnce();
-  expect(mockBindDeviceRuntime).toHaveBeenCalledOnce();
-  expect(mockShutdownTargetRuntime).toHaveBeenCalledOnce();
-  if (response && response.ok) {
-    expect(response.data?.platform).toBe('ios');
-    expect(response.data?.id).toBe('sim-2');
-    expect(response.data?.shutdown).toEqual({
-      success: true,
-      exitCode: 0,
-      stdout: '',
-      stderr: '',
-    });
-  }
-});
-
-test('shutdown rejects active session device and points to close --shutdown', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'default';
-  const selectedDevice: SessionState['device'] = {
-    platform: 'apple',
-    id: 'sim-2',
-    name: 'iPhone 17 Pro',
-    kind: 'simulator',
-    target: 'mobile',
-    booted: true,
-  };
-  sessionStore.publish(sessionName, makeSession(sessionName, selectedDevice));
-  mockResolveTargetDevice.mockResolvedValue(selectedDevice);
-
-  const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'shutdown',
-      positionals: [],
-      flags: { platform: 'ios', device: 'iPhone 17 Pro' },
-    },
-    sessionName,
-    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(false);
-  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledOnce();
-  expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
-  expect(mockShutdownTargetRuntime).not.toHaveBeenCalled();
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('DEVICE_IN_USE');
-    expect(response.error.message).toMatch(/close --shutdown/i);
-    expect(response.error.details?.hint).toBe(
-      'Run agent-device close --shutdown --session default',
-    );
-  }
-});
-
-test('shutdown turns off selected Android emulator', async () => {
-  const sessionStore = makeSessionStore();
-  mockResolveTargetDevice.mockResolvedValue({
-    platform: 'android',
-    id: 'emulator-5554',
-    name: 'Pixel_9_Pro_XL',
-    kind: 'emulator',
-    target: 'mobile',
-    booted: false,
-  });
-
-  const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'shutdown',
-      positionals: [],
-      flags: { platform: 'android', device: 'Pixel_9_Pro_XL' },
-    },
-    sessionName: 'default',
-    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(true);
-  expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
-  expect(mockResolveTargetDevice).toHaveBeenCalledWith(
-    { platform: 'android', device: 'Pixel_9_Pro_XL' },
-    { androidAvdSelection: 'include-stopped' },
-  );
-  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledOnce();
-  expect(mockBindDeviceRuntime).toHaveBeenCalledOnce();
-  expect(mockShutdownTargetRuntime).toHaveBeenCalledOnce();
-  if (response && response.ok) {
-    expect(response.data?.platform).toBe('android');
-    expect(response.data?.id).toBe('emulator-5554');
-    expect(response.data?.shutdown).toEqual({
-      success: true,
-      exitCode: 0,
-      stdout: '',
-      stderr: '',
-    });
-  }
-});
-
-test('shutdown rejects unsupported physical devices', async () => {
-  const sessionStore = makeSessionStore();
-  mockResolveTargetDevice.mockResolvedValue({
-    platform: 'apple',
-    id: 'device-1',
+test('boot rejects --headless outside Android directly', async () => {
+  const device = {
+    platform: 'apple' as const,
+    appleOs: 'ios' as const,
+    id: 'sim-1',
     name: 'iPhone',
-    kind: 'device',
-    target: 'mobile',
-    booted: true,
-  });
-
-  const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
-    req: {
-      token: 't',
-      session: 'default',
-      command: 'shutdown',
-      positionals: [],
-      flags: { platform: 'ios', udid: 'device-1' },
-    },
-    sessionName: 'default',
-    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(false);
-  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledOnce();
-  expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
-  expect(mockShutdownTargetRuntime).not.toHaveBeenCalled();
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
-    expect(response.error.message).toMatch(/Apple simulators and Android emulators/i);
-  }
-});
-
-test('shutdown returns an error response when selected target shutdown fails', async () => {
-  const sessionStore = makeSessionStore();
-  const selectedDevice: SessionState['device'] = {
-    platform: 'apple',
-    id: 'sim-2',
-    name: 'iPhone 17 Pro',
-    kind: 'simulator',
-    target: 'mobile',
-    booted: true,
+    kind: 'simulator' as const,
+    target: 'mobile' as const,
+    booted: false,
   };
-  mockResolveTargetDevice.mockResolvedValue(selectedDevice);
-  mockShutdownTargetRuntime.mockResolvedValue({
-    success: false,
-    exitCode: 149,
-    stdout: '',
-    stderr: 'simctl shutdown failed',
-  });
-
-  const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+  mockResolveTargetDevice.mockResolvedValue(device);
+  const response = await handleSessionStateCommands({
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
-      command: 'shutdown',
+      command: 'boot',
       positionals: [],
-      flags: { platform: 'ios', device: 'iPhone 17 Pro' },
+      flags: { platform: 'ios', headless: true },
     },
     sessionName: 'default',
-    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
+    sessionStore: makeSessionStore(),
+    inspectFacts: async () =>
+      createUnavailablePlatformRuntimeFacts(device, localRuntimeOwner('apple'), {
+        appLog: { available: false, reason: 'owner-capability-missing' },
+        network: { available: false, reason: 'owner-capability-missing' },
+        screenshot: { available: false, reason: 'owner-capability-missing' },
+        viewport: { available: false, reason: 'owner-capability-missing' },
+        focus: { available: false, reason: 'owner-capability-missing' },
+        gesture: { available: false, reason: 'owner-capability-missing' },
+        scroll: { available: false, reason: 'owner-capability-missing' },
+        typeText: { available: false, reason: 'owner-capability-missing' },
+        touch: { available: false, reason: 'owner-capability-missing' },
+        elementText: { available: false, reason: 'owner-capability-missing' },
+        back: { available: false, reason: 'owner-capability-missing' },
+        orientation: { available: false, reason: 'owner-capability-missing' },
+        tvRemote: { available: false, reason: 'owner-capability-missing' },
+        keyboard: { available: false, reason: 'owner-capability-missing' },
+        clipboard: { available: false, reason: 'owner-capability-missing' },
+        systemButton: { available: false, reason: 'owner-capability-missing' },
+        fold: { available: false, reason: 'owner-capability-missing' },
+        triggerAppEvent: { available: false, reason: 'owner-capability-missing' },
+        settings: { available: false, reason: 'owner-capability-missing' },
+        readAlert: { available: false, reason: 'owner-capability-missing' },
+        awaitAlert: { available: false, reason: 'owner-capability-missing' },
+        acceptAlert: { available: false, reason: 'owner-capability-missing' },
+        dismissAlert: { available: false, reason: 'owner-capability-missing' },
+        audioProbeCapture: { available: false, reason: 'owner-capability-missing' },
+        audioProbeQuery: { available: false, reason: 'owner-capability-missing' },
+        readiness: { available: false, reason: 'unsupported-device-kind' },
+        lifecycle: applicationLifecycleOperationFacts({
+          resolveOpenTarget: { available: false, reason: 'owner-capability-missing' },
+          prepareApplicationOpen: { available: false, reason: 'owner-capability-missing' },
+          openApplication: { available: false, reason: 'owner-capability-missing' },
+          applyRuntimeHints: { available: false, reason: 'owner-capability-missing' },
+          clearRuntimeHints: { available: false, reason: 'owner-capability-missing' },
+          closeApplication: { available: false, reason: 'owner-capability-missing' },
+          finalizeApplicationClose: { available: false, reason: 'owner-capability-missing' },
+          prepareAppleRunner: { available: false, reason: 'owner-capability-missing' },
+          configureProviderPortReverse: {
+            available: false,
+            reason: 'owner-capability-missing',
+          },
+        }),
+      }),
   });
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
-    expect(response.error.code).toBe('COMMAND_FAILED');
-    expect(response.error.message).toBe('simctl shutdown failed');
-    expect(response.error.details?.shutdown).toEqual({
-      success: false,
-      exitCode: 149,
-      stdout: '',
-      stderr: 'simctl shutdown failed',
-    });
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.message).toMatch(/supported only for Android emulators/i);
   }
 });
