@@ -14,7 +14,7 @@ import { canonicalLocalDeviceKey } from '../device-claim-paths.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
-import { publishDaemonRegistration } from '../../../__tests__/test-utils/device-claim-store.ts';
+import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { acquireProcessLock } from '@agent-device/host-kit/file';
 

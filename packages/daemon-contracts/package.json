@@ -31,6 +31,10 @@
       "types": "./src/daemon-registration.ts",
       "default": "./src/daemon-registration.ts"
     },
+    "./daemon-registration-fixtures": {
+      "types": "./src/daemon-registration.fixtures.ts",
+      "default": "./src/daemon-registration.fixtures.ts"
+    },
     "./daemon-registration-owner": {
       "types": "./src/daemon-registration-owner.ts",
       "default": "./src/daemon-registration-owner.ts"

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test, vi } from 'vitest';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { runCliCapture } from './cli-capture.ts';
-import { publishDaemonRegistration } from './test-utils/device-claim-store.ts';
+import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
 vi.mock('@agent-device/host-kit/process', async (importOriginal) =>

@@ -7,7 +7,7 @@ import { reconcileOrphanedDeviceClaims } from '../device-claims.ts';
 import { resolveDeviceClaimPath } from '../device-claim-paths.ts';
 import { acquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { publishDaemonRegistration } from '../../../__tests__/test-utils/device-claim-store.ts';
+import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
 
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
