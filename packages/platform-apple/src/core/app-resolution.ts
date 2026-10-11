@@ -57,42 +57,56 @@ export async function resolveIosApp(
     return await resolveMacOsApp(app);
   }
   const trimmed = app.trim();
-  const dotted = trimmed.includes('.');
-  if (dotted && !options.installedOnly) return trimmed;
-
   const alias = resolveIosAppAlias(trimmed);
-  if (alias !== trimmed) return alias;
   const cacheScope = iosAppResolutionScope(device);
-  const cached = options.installedOnly ? undefined : iosAppResolutionCache.get(cacheScope, trimmed);
-  if (cached) return cached;
+  if (!options.installedOnly) {
+    if (trimmed.includes('.')) return trimmed;
+    if (alias !== trimmed) return alias;
+    const cached = iosAppResolutionCache.get(cacheScope, trimmed);
+    if (cached) return cached;
+  }
 
   const list =
     device.kind === 'simulator'
       ? await requireSimulatorApps(device)
       : await resolveIosPhysicalDeviceControl(device).listApps(device, 'all');
-  if (dotted && list.some((entry) => entry.bundleId === trimmed)) {
-    return iosAppResolutionCache.set(cacheScope, trimmed, trimmed);
+  return iosAppResolutionCache.set(
+    cacheScope,
+    trimmed,
+    matchInstalledIosApp(list, app, trimmed, alias),
+  );
+}
+
+/**
+ * The installed app a target names: an alias or a dotted target by its bundle id first, and any
+ * target but an alias by its display name.
+ */
+function matchInstalledIosApp(
+  list: readonly IosAppInfo[],
+  app: string,
+  trimmed: string,
+  alias: string,
+): string {
+  const isAlias = alias !== trimmed;
+  if ((isAlias || trimmed.includes('.')) && list.some((entry) => entry.bundleId === alias)) {
+    return alias;
   }
+  if (isAlias) throw buildAppNotInstalledError(app);
   const matches = list.filter((entry) => entry.name.toLowerCase() === trimmed.toLowerCase());
   const match = matches[0];
-  if (match !== undefined && matches.length === 1) {
-    return iosAppResolutionCache.set(cacheScope, trimmed, match.bundleId);
-  }
+  if (match !== undefined && matches.length === 1) return match.bundleId;
   if (matches.length > 1) {
     throw new AppError('INVALID_ARGS', `Multiple apps matched "${app}"`, { matches });
   }
-
   throw buildAppNotInstalledError(app);
 }
 
 export { buildAppNotInstalledError };
 
 /**
- * Resolves an app only when it is installed on this booted simulator.
- *
- * Device selection uses this narrower lookup before it has committed to a
- * simulator, so an exact bundle id must not take resolveIosApp's normal
- * pass-through path.
+ * Resolves an app only when it is installed on this booted simulator, by the `installedOnly` rule.
+ * Device selection probes candidates with it, so a missing or ambiguous app and an app list `simctl`
+ * could not produce all answer "not here" rather than failing the selection.
  */
 export async function findIosSimulatorInstalledApp(
   device: DeviceInfo,
@@ -101,17 +115,22 @@ export async function findIosSimulatorInstalledApp(
   if (!isIosFamily(device) || device.kind !== 'simulator' || device.booted !== true) {
     return undefined;
   }
-
-  const target = resolveIosAppAlias(app.trim());
-  if (!target) return undefined;
-
-  const apps = await listSimulatorApps(device);
-  if (target.includes('.')) {
-    return apps.find((entry) => entry.bundleId === target)?.bundleId;
+  if (!app.trim()) return undefined;
+  try {
+    return await resolveIosApp(device, app, { installedOnly: true });
+  } catch (error) {
+    if (isUnresolvedInstalledApp(error)) return undefined;
+    throw error;
   }
+}
 
-  const matches = apps.filter((entry) => entry.name.toLowerCase() === target.toLowerCase());
-  return matches.length === 1 ? matches[0]?.bundleId : undefined;
+function isUnresolvedInstalledApp(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  return (
+    error.code === 'APP_NOT_INSTALLED' ||
+    error.details?.reason === IOS_APP_LIST_UNREADABLE_REASON ||
+    Array.isArray(error.details?.matches)
+  );
 }
 
 export function resolveIosAppAlias(app: string): string {
@@ -303,10 +322,14 @@ async function listSimulatorApps(
  * The installed apps an app resolution matches against. A listing `simctl` could not produce is a
  * failure of its own, never an empty list: reading it as one would report an installed app missing.
  */
+/** `details.reason` of an app resolution that failed because `simctl` produced no app list. */
+const IOS_APP_LIST_UNREADABLE_REASON = 'app-list-unreadable';
+
 async function requireSimulatorApps(device: DeviceInfo): Promise<IosAppInfo[]> {
   const read = await readSimulatorAppMetadata(device);
   if (read.type === 'unreadable') {
     throw new AppError('COMMAND_FAILED', `Could not list the apps installed on ${device.id}`, {
+      reason: IOS_APP_LIST_UNREADABLE_REASON,
       deviceId: device.id,
       exitCode: read.exitCode,
       stderr: read.stderr,

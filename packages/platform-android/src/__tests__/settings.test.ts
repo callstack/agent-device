@@ -84,9 +84,14 @@ test('setAndroidSetting clear-app-state refuses an appless session with the publ
 
 const INSTALLED_PACKAGES = 'package:com.example.app\npackage:com.android.chrome\n';
 
+const LIST_PACKAGES = ['shell', 'pm', 'list', 'packages'];
+const CURRENT_USER = ['shell', 'am', 'get-current-user'];
+
 function installedPackagesAdb(args: string[]) {
   const flat = args.join(' ');
-  if (flat === 'shell pm list packages') return INSTALLED_PACKAGES;
+  if (flat === 'shell pm list packages' || flat === 'shell pm list packages --user 0') {
+    return INSTALLED_PACKAGES;
+  }
   if (flat === 'shell am get-current-user') return '0';
   if (flat.startsWith('shell dumpsys package ') || flat.startsWith('shell pm grant ')) return '';
   return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
@@ -98,8 +103,8 @@ test('setAndroidSetting permission grants the package a display name resolves to
       permissionTarget: 'camera',
     });
     assert.deepEqual(calls, [
-      ['shell', 'pm', 'list', 'packages'],
-      ['shell', 'am', 'get-current-user'],
+      CURRENT_USER,
+      [...LIST_PACKAGES, '--user', '0'],
       ['shell', 'dumpsys', 'package', 'com.android.chrome'],
       ['shell', 'pm', 'grant', '--user', '0', 'com.android.chrome', 'android.permission.CAMERA'],
     ]);
@@ -123,10 +128,36 @@ test('setAndroidSetting permission grants an installed package as named', async 
   });
 });
 
+test('setAndroidSetting permission checks the packages of the user it grants for', async () => {
+  await withFakeAdb(
+    (args) => {
+      const flat = args.join(' ');
+      if (flat === 'shell am get-current-user') return '10';
+      if (flat === 'shell pm list packages --user 10') return 'package:com.example.secondary\n';
+      if (flat.startsWith('shell dumpsys package ') || flat.startsWith('shell pm grant '))
+        return '';
+      return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
+    },
+    async ({ calls, device }) => {
+      await setAndroidSetting(device, 'permission', 'grant', 'com.example.secondary', {
+        permissionTarget: 'camera',
+      });
+      assert.deepEqual(calls, [
+        CURRENT_USER,
+        [...LIST_PACKAGES, '--user', '10'],
+        ['shell', 'dumpsys', 'package', 'com.example.secondary'],
+        // prettier-ignore
+        ['shell', 'pm', 'grant', '--user', '10', 'com.example.secondary', 'android.permission.CAMERA'],
+      ]);
+    },
+  );
+});
+
 test('setAndroidSetting permission refuses a name resolved earlier whose package is gone', async () => {
   let packages = INSTALLED_PACKAGES;
   await withFakeAdb(
-    (args) => (args.join(' ') === 'shell pm list packages' ? packages : installedPackagesAdb(args)),
+    (args) =>
+      args.join(' ') === 'shell pm list packages --user 0' ? packages : installedPackagesAdb(args),
     async ({ calls, device }) => {
       await setAndroidSetting(device, 'permission', 'grant', 'Chrome', {
         permissionTarget: 'camera',
@@ -140,7 +171,7 @@ test('setAndroidSetting permission refuses a name resolved earlier whose package
           }),
         { code: 'APP_NOT_INSTALLED', reason: PRE_DISPATCH_REFUSAL_REASONS.appNotInstalled },
       );
-      assert.deepEqual(calls, [['shell', 'pm', 'list', 'packages']]);
+      assert.deepEqual(calls, [CURRENT_USER, [...LIST_PACKAGES, '--user', '0']]);
     },
   );
 });
@@ -181,7 +212,12 @@ test.for([
           hint: /apps --all/,
         },
       );
-      assert.deepEqual(calls, [['shell', 'pm', 'list', 'packages']]);
+      assert.deepEqual(
+        calls,
+        setting === 'permission'
+          ? [CURRENT_USER, [...LIST_PACKAGES, '--user', '0']]
+          : [LIST_PACKAGES],
+      );
     });
   },
 );
@@ -195,7 +231,7 @@ test('setAndroidSetting permission refuses an app alias that resolves to an inte
         }),
       { code: 'INVALID_ARGS', reason: SETTINGS_APP_NOT_PACKAGE_REASON, dispatched: 'no' },
     );
-    assert.deepEqual(calls, []);
+    assert.deepEqual(calls, [CURRENT_USER]);
   });
 });
 

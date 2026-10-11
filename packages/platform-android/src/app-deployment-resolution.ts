@@ -42,6 +42,8 @@ type AndroidAppResolutionOptions = Readonly<{
    * uninstalled since is refused.
    */
   installedOnly?: boolean;
+  /** The user whose installed packages an `installedOnly` lookup reads; the device default without it. */
+  userId?: number;
 }>;
 
 /** Resolves aliases and fuzzy display names to an Android intent or installed package. */
@@ -63,7 +65,8 @@ export async function resolveAndroidApp(
     : androidAppResolutionCache.get(cacheScope, trimmed);
   if (cached) return cached;
 
-  const result = await runAndroidShell(device, ['pm', 'list', 'packages']);
+  const userArgs = options.userId === undefined ? [] : ['--user', String(options.userId)];
+  const result = await runAndroidShell(device, ['pm', 'list', 'packages', ...userArgs]);
   const packages = result.stdout
     .split('\n')
     .map((line: string) => line.replace('package:', '').trim())

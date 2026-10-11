@@ -56,7 +56,7 @@ test.for([
         (error: unknown) =>
           error instanceof AppError &&
           error.code === 'COMMAND_FAILED' &&
-          error.details?.reason === undefined,
+          error.details?.reason === 'app-list-unreadable',
       );
     }
   },
@@ -102,6 +102,20 @@ test('findIosSimulatorInstalledApp verifies exact bundle ids and app-name aliase
     await findIosSimulatorInstalledApp(bootedSimulator, 'com.example.missing'),
     undefined,
   );
+});
+
+test('findIosSimulatorInstalledApp answers not-here for an ambiguous name or an unreadable app list', async () => {
+  mockRunSimctl.mockResolvedValue({
+    stdout: JSON.stringify({
+      'com.example.one': { CFBundleDisplayName: 'Twin' },
+      'com.example.two': { CFBundleDisplayName: 'Twin' },
+    }),
+  });
+  assert.equal(await findIosSimulatorInstalledApp(bootedSimulator, 'Twin'), undefined);
+  assert.equal(await findIosSimulatorInstalledApp(bootedSimulator, 'settings'), undefined);
+
+  mockRunSimctl.mockResolvedValue({ stdout: '', stderr: 'CoreSimulator error', exitCode: 1 });
+  assert.equal(await findIosSimulatorInstalledApp(bootedSimulator, 'com.example.one'), undefined);
 });
 
 test('findIosSimulatorInstalledApp does not probe a stopped simulator', async () => {

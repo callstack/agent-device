@@ -24,7 +24,11 @@ import { runAndroidAdb, runAndroidShell } from './adb.ts';
 import { setAndroidAirplaneMode } from './settings-airplane.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
-import { parseAndroidPermissionRequest, setAndroidPermission } from './settings-permission.ts';
+import {
+  parseAndroidPermissionRequest,
+  requireAndroidPermissionUser,
+  setAndroidPermission,
+} from './settings-permission.ts';
 
 const ANDROID_ANIMATION_SCALE_SETTINGS = [
   'window_animation_scale',
@@ -167,10 +171,12 @@ export async function setAndroidSetting(
         );
       }
       const request = parseAndroidPermissionRequest(state, options);
+      const userId = await requireAndroidPermissionUser(device);
       return await setAndroidPermission(
         device,
-        await resolveAndroidSettingsPackage(device, normalized, appPackage),
+        await resolveAndroidSettingsPackage(device, normalized, appPackage, userId),
         request,
+        userId,
       );
     }
     case 'text-size': {
@@ -186,9 +192,10 @@ async function resolveAndroidSettingsPackage(
   device: DeviceInfo,
   setting: string,
   app: string,
+  userId?: number,
 ): Promise<string> {
   const resolved = await resolveSettingsApp(app, (target) =>
-    resolveAndroidApp(device, target, { installedOnly: true }),
+    resolveAndroidApp(device, target, { installedOnly: true, userId }),
   );
   if (resolved.type === 'intent') {
     throw new AppError(

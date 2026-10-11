@@ -663,7 +663,11 @@ function androidLaunchablePackagesAdbResult(args: readonly string[]): AndroidAdb
 }
 
 function androidInstalledPackagesAdbResult(key: string): AndroidAdbResult | undefined {
-  if (key === 'shell pm list packages -3' || key === 'shell pm list packages') {
+  if (
+    key === 'shell pm list packages -3' ||
+    key === 'shell pm list packages' ||
+    key === 'shell pm list packages --user 0'
+  ) {
     return {
       stdout: 'package:com.example.demo\npackage:com.example.serviceonly\n',
       stderr: '',

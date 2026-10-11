@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   androidRevokedPermissionWarning,
   parseAndroidPermissionRequest,
+  requireAndroidPermissionUser,
   setAndroidPermission,
 } from '../settings-permission.ts';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
@@ -17,10 +18,12 @@ async function setPermission(
   appPackage: string,
   options?: SettingOptions,
 ) {
+  const request = parseAndroidPermissionRequest(state, options);
   return await setAndroidPermission(
     device,
     appPackage,
-    parseAndroidPermissionRequest(state, options),
+    request,
+    await requireAndroidPermissionUser(device),
   );
 }
 

@@ -101,7 +101,7 @@ type AndroidUserArgs = readonly string[];
  * the path where we already know we are guessing, so the command refuses instead: no permission
  * state is changed when we cannot name whose state it is.
  */
-async function requireAndroidPermissionUser(device: DeviceInfo): Promise<number> {
+export async function requireAndroidPermissionUser(device: DeviceInfo): Promise<number> {
   const userId = await readAndroidCurrentUserId(device);
   if (userId !== undefined) return userId;
   throw new AppError(
@@ -130,12 +130,13 @@ export function parseAndroidPermissionRequest(
   };
 }
 
+/** Applies a validated permission change for `userId`, the user `requireAndroidPermissionUser` named. */
 export async function setAndroidPermission(
   device: DeviceInfo,
   appPackage: string,
   { action, target }: AndroidPermissionRequest,
+  userId: number,
 ): Promise<Record<string, unknown> | void> {
-  const userId = await requireAndroidPermissionUser(device);
   const userArgs: AndroidUserArgs = ['--user', String(userId)];
   if (target.kind === 'all') {
     return await setAllAndroidPermissions(device, appPackage, action, userId, userArgs);
