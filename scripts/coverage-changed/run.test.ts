@@ -96,6 +96,16 @@ test('fails when a changed source line is uncovered and names that line', () => 
   assert.match(out, /`src\/feature\.ts`: 2/);
 });
 
+test('a changed line in a non-ASCII path is scored, not skipped by quoted diff headers', () => {
+  write('src/café.ts', 'export const covered = 1;\nexport const uncovered = 2;\n');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'non-ascii path');
+  writeLcov('SF:src/café.ts\nDA:1,3\nDA:2,0\nend_of_record\n');
+  const { code, out } = capture(() => run(['--base', 'main'], repo));
+  assert.equal(code, 1);
+  assert.match(out, /`src\/café\.ts`: 2/);
+});
+
 test('fails when a changed workspace package line is uncovered and names that line', () => {
   write(
     'packages/contracts/src/feature.ts',

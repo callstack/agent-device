@@ -20,12 +20,15 @@ const CHANGED_LINES_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
 /**
  * The zero-context diff of HEAD against its merge base with `base`, which the changed-line gates
  * score. Renames are paired at 90% regardless of the host's `diff.renames`, so a moved file owes
- * only the hunks that differ from its source; the buffer fits a large stacked diff.
+ * only the hunks that differ from its source; paths stay unquoted (`core.quotePath=false`) so a
+ * non-ASCII file name matches its coverage record; the buffer fits a large stacked diff.
  */
 export function readChangedLinesDiff(repoRoot: string, base: string): string {
   return runCmdSync(
     'git',
     [
+      '-c',
+      'core.quotePath=false',
       'diff',
       '--unified=0',
       '--no-color',
