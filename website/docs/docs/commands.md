@@ -78,8 +78,8 @@ Select a device:
 
 Device claims and the daemon:
 
-- `device status` lists host-local device claims without starting or contacting a daemon; `--stale` shows the claims whose owner is provably gone. Scope it with `--platform` plus `--udid` (Apple) or `--serial` (Android). Another live owner's claim blocks `open`.
-- `device release --stale` settles a provably dead owner's durable resources, then clears its claim. Live and uncertain claims are refused with the reason. See [Sessions](/docs/sessions#release-a-device-another-workspace-holds).
+- `device status` lists host-local device claims without starting or contacting a daemon; `--stale` shows the stale claims it hides by default (owner exited, PID reused, state directory deleted, or daemon replaced), some of whose owners may still be running. Scope it with `--platform` plus `--udid` (Apple) or `--serial` (Android). A claim held by another live or uncertain owner blocks `open`, unless the device rebooted after the claim was taken: then `open` settles that owner's durable resources, takes the claim, and reports the release in `warnings`.
+- `device release --stale` settles the durable resources of an owner that provably can't release its claim (its process exited or a newer daemon replaced it), then clears the claim. Live, uncertain, PID-reused, corrupt, and deleted-state-directory claims are refused with the reason. See [Sessions](/docs/sessions#release-a-device-another-workspace-holds).
 - `daemon stop --state-dir <path>` stops a local daemon after verifying its identity. `--clean` also removes the Apple runner processes and leases that daemon retained.
 
 Open apps and links:
@@ -110,13 +110,13 @@ Back, orientation, and hardware buttons:
 
 Fold a foldable device:
 
-- `fold closed|half-open|open` sets the pose of a foldable iPhone simulator (iPhone Duo) or a foldable Android emulator (`pixel_9_pro_fold`, `pixel_10_pro_fold`, `7.6in Foldable`) and reports the pose only after reading it back. Re-snapshot after every fold, even an interrupted one; refs and coordinates from before it are stale. On iOS, expect about 10 seconds for `closed` or `open` and 16 for `half-open`.
+- `fold closed|half-open|open` sets the pose of a foldable iPhone simulator (iPhone Duo) or a foldable Android emulator (`pixel_9_pro_fold`, `pixel_10_pro_fold`, `7.6in Foldable`) and reports the pose only after confirming it on the device. Re-snapshot after every fold, even an interrupted one; refs and coordinates from before it are stale. On iOS, expect about 10 seconds for `closed` or `open` and 16 for `half-open`.
 - The iOS response names the lit panel and its size, marked `coordinateSpace: "native-panel"`. That size is not the next snapshot's viewport and cannot place a tap.
 - iOS only: `--keyframes` plays a timed trajectory instead of a preset, for example `fold --keyframes '[{"atMs":0,"angle":0},{"atMs":1667,"angle":160},{"atMs":3333,"angle":100},{"atMs":5000,"angle":180}]'`. Use 2–64 keyframes starting at 0ms, strictly increasing integer timestamps up to 60,000ms, and angles from 0 to 180°.
 - iOS needs an Xcode with the iOS simulator SDK and foldable HID support (verified on Xcode 27.1); Device Hub and Accessibility permission aren't required. The first fold builds a helper cached under `~/.agent-device/fold-helper`; failures report `fold-helper-build-failed` or `fold-hid-dispatch-failed`.
 - `COMMAND_FAILED` with `reason: fold-pose-unverified` means the hinge reports another pose; `fold-pose-unsettled` means it reached `half-open` but never came to rest.
 - `UNSUPPORTED_OPERATION` covers single-panel devices (`single-panel-device` on Android) and simulators in a non-default `--ios-simulator-device-set` (`unsupported-device-scope`; use the default set). Physical devices are refused.
-- On Android, `fold` dismisses the lock screen that folding to the cover display can raise. For panels, poses, and timings, see `agent-device help foldable`.
+- On Android, `fold` confirms the pose from the device state the emulator commits and reports `hingeAngleDegrees` as the hinge sensor reads it: the angle the AVD profile defines for the posture, such as 0°, 90°, and 180° on the Pixel folds or 15°, 90°, and 165° on the generic 7.6in Foldable. It also dismisses the lock screen that folding to the cover display can raise. For panels, poses, and timings, see `agent-device help foldable`.
 
 Remote daemons and tenants:
 
@@ -250,7 +250,7 @@ agent-device prepare ios-runner --platform ios --timeout 240000
 - In JSON output, `buildMs`, `connectMs`, and `healthCheckMs` may overlap (`connectMs` includes `buildMs` when the runner is built). Use `timing.additiveParts` for additive phase totals.
 - A cached runner that fails its health check is rebuilt once, and a runner stuck at launch is relaunched once.
 - CI may cache `~/.agent-device/apple-runner/derived` when the cache key includes the exact agent-device package contents and Xcode version. A cached runner whose files no longer match their recorded digests is rebuilt.
-- Each runner source or Xcode change creates a new key under `~/.agent-device/apple-runner/derived/<platform-folder>/`. After a build, keys that are neither among the 3 last used nor used in the last day are deleted; change the count with `AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP` (see [Configuration](/docs/configuration#supported-environment-variables)). A key that can't be deleted is reported as a `runner_xctestrun_cache_eviction_failed` warning. A custom `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` is never swept or trimmed.
+- Each runner source or Xcode change creates a new key under `~/.agent-device/apple-runner/derived/<platform-folder>/`. After a build, agent-device deletes, on a best-effort basis, keys that are neither among the 3 last used nor used in the last day, and never one a build is holding or a live runner lease names; change the count with `AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP` (see [Configuration](/docs/configuration#supported-environment-variables)). A key that can't be deleted is reported as a `runner_xctestrun_cache_eviction_failed` warning. A custom `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` is never swept or trimmed.
 - `runner_cache_uncertifiable` means the build products couldn't be verified, for example a product outside the derived-data root, an unreadable entry, a file over 128 MB, or a socket. Point `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` at a plain directory you own, or replace the tree as the error hint describes.
 - `~/.agent-device/ios-runner` belongs to older agent-device versions and is never touched. Delete it with `rm -rf ~/.agent-device/ios-runner` once no such version runs.
 - Runner build and start output goes to the session's `runner.log`; `daemon.log` covers daemon startup.
