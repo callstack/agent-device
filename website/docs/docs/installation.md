@@ -57,14 +57,14 @@ Set `AGENT_DEVICE_NO_UPDATE_NOTIFIER=1` to disable the notice.
 
 ## Nightly builds
 
-Nightly builds publish the latest `main` once a day, after its CI passes:
+Nightly builds publish `main` after its CI passes, at most once per UTC day:
 
 ```bash
 npm install -g agent-device@nightly
 ```
 
-A nightly install's update notice suggests the newest nightly. To return to stable releases, install
-`agent-device@latest`.
+A nightly install's update notice recommends a newer nightly when an update check finds one. To
+return to stable releases, install `agent-device@latest`.
 
 ## Without installing
 
