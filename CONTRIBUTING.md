@@ -100,11 +100,11 @@ stay unpublished. There are three channels:
 - **Stable** (`latest`): a repository admin publishes a GitHub release with a new `vX.Y.Z` tag
   targeting `main`. Use the version `main` builds towards (its `X.Y.Z-dev`), or a later one, and
   write the notes or generate them in the release form. The tag starts a **Release** run. It waits
-  up to 20 minutes for that commit's CI to pass and for approval in the `release` environment, then
-  publishes the packages, attaches the iOS runner and Android helper assets to the release,
-  publishes the MCP Registry entry, and commits `main`'s next `-dev` version. If you reject the run,
-  delete the release and its tag. Pushing the tag instead (`git push origin main:refs/tags/vX.Y.Z`)
-  starts the same run, which then drafts the release itself.
+  up to 20 minutes for that commit's CI to pass, then waits for approval in the `release`
+  environment. Once approved, it publishes the packages, attaches the iOS runner and Android helper
+  assets to the release, publishes the MCP Registry entry, and commits `main`'s next `-dev` version.
+  If you reject the run, delete the release and its tag. Pushing the tag instead (`git push origin
+  main:refs/tags/vX.Y.Z`) starts the same run, which then drafts the release itself.
 - **Dry run**: a pull request that changes release tooling builds and verifies every package with a
   nightly version, and publishes nothing.
 
