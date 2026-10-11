@@ -925,6 +925,7 @@ agent-device react-devtools profile report @c5
 ```
 
 - `react-devtools` runs the pinned `agent-react-devtools@0.5.0` package through npm and passes arguments through unchanged. The first run may download it; later runs can reuse the npm cache.
+- React Native 0.87+ needs `agent-react-devtools` installed as a dev dependency of the app project, then a one-time `npx agent-react-devtools init` there and a rebundle, before `react-devtools wait --connected` can succeed. The package `react-devtools` runs is temporary and does not install it into the app. Run `npx agent-react-devtools uninit` when you no longer need the setup.
 - Use it for component hierarchy, props, state, hooks, render causes, slow components, and re-render counts. For the profiling workflow, see [Debugging & Profiling](/docs/debugging-profiling#react-native-component-internals) and `agent-device help react-devtools`.
 - `agent-device` global flags work before or after `react-devtools`. Put `--` before downstream flags only when they share an `agent-device` global flag name.
 - Development builds connect to the DevTools daemon on port 8097. If an Android emulator or device cannot reach the host, run `adb reverse tcp:8097 tcp:8097`. Android `open` of a local Metro URL with a port sets up host reachability; for app/package launches, run `adb reverse tcp:8081 tcp:8081` if the app cannot reach Metro.
