@@ -1,11 +1,6 @@
 import type { DaemonPlatformServices } from '../platform-services.ts';
 import { asAppError, isRequestCanceledError } from '@agent-device/kernel/errors';
-import type { TargetShutdownResult } from '@agent-device/contracts/device';
-import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
-import {
-  appStateUse,
-  shutdownTargetUse,
-} from '@agent-device/contracts/platform-runtime-operations';
+import { appStateUse } from '@agent-device/contracts/platform-runtime-operations';
 import {
   isApplePlatform,
   isIosFamily,
@@ -26,28 +21,15 @@ import {
 } from '../session-device-resolution.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { admitRuntimeUse } from '../runtime-admission.ts';
-import {
-  requireRuntimeBinding,
-  requireRuntimeFacts,
-  type RuntimeCommandHandlerParams,
-} from '../session-runtime-admission.ts';
+import type { RuntimeCommandHandlerParams } from '../session-runtime-admission.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import { handleBootCommand } from './session-boot.ts';
+import { handleShutdownCommand } from './session-shutdown.ts';
 
 const IOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
   'iOS appstate requires an active session on the target device. Run open first (for example: open --session sim --platform ios --device "<name>" <app>).';
 const MACOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
   'macOS appstate requires an active session on the target device. Run open first (for example: open --session macos --platform macos "System Settings").';
-
-function shutdownUnavailableResponse(fact: RuntimeOperationFact) {
-  if (fact.available) return null;
-  return errorResponse(
-    'UNSUPPORTED_OPERATION',
-    'shutdown is supported only for Apple simulators and Android emulators.',
-    undefined,
-    fact.hint ? { hint: fact.hint } : undefined,
-  );
-}
 
 /**
  * The session app's state as a live runner reads it, when this device's owner admits the read;
@@ -227,76 +209,14 @@ export async function handleSessionStateCommands(params: {
   }
 
   if (req.command === 'shutdown') {
-    const activeSession = sessionStore.get(sessionName);
-    const flags = req.flags ?? {};
-    const guard = requireSessionOrExplicitSelector(req.command, activeSession, flags);
-    if (guard) return guard;
-
-    const device = await resolveCommandDevice({
-      flags,
-      session: activeSession,
-      androidAvdSelection: 'include-stopped',
+    return await handleShutdownCommand({
+      req,
+      sessionName,
+      sessionStore,
+      inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
+      bindDevice: params.bindDevice,
     });
-    const inspectFacts = requireRuntimeFacts(params.inspectFacts);
-    const facts = await inspectFacts(device);
-    const unsupported = shutdownUnavailableResponse(facts.operations.shutdownTarget);
-    if (unsupported) return unsupported;
-
-    if (
-      activeSession &&
-      activeSession.device.platform === device.platform &&
-      activeSession.device.id === device.id
-    ) {
-      return errorResponse(
-        'DEVICE_IN_USE',
-        'Cannot shut down an active session device directly. Use close --shutdown to end the session and turn off the simulator/emulator.',
-        {
-          hint: `Run agent-device close --shutdown --session ${sessionName}`,
-          session: sessionName,
-          platform: publicPlatformString(device),
-          target: device.target ?? 'mobile',
-          device: device.name,
-          id: device.id,
-          kind: device.kind,
-        },
-      );
-    }
-
-    const bindDevice = requireRuntimeBinding(params.bindDevice);
-    const shutdown = await (
-      await bindDevice(device, shutdownTargetUse)
-    ).operations.shutdownTarget();
-    if (!shutdown.success) {
-      return errorResponse(
-        shutdown.error?.code ?? 'COMMAND_FAILED',
-        shutdownFailureMessage(shutdown),
-        {
-          platform: publicPlatformString(device),
-          target: device.target ?? 'mobile',
-          device: device.name,
-          id: device.id,
-          kind: device.kind,
-          shutdown,
-        },
-      );
-    }
-
-    return {
-      ok: true,
-      data: {
-        platform: publicPlatformString(device),
-        target: device.target ?? 'mobile',
-        device: device.name,
-        id: device.id,
-        kind: device.kind,
-        shutdown,
-        // Additive Apple-OS discriminant; Apple devices only. Gate on the platform
-        // (not just field presence) so a non-Apple record with a stray appleOs never
-        // surfaces it.
-        ...(isApplePlatform(device.platform) && device.appleOs ? { appleOs: device.appleOs } : {}),
-      },
-    };
   }
 
   if (req.command === 'appstate') {
@@ -316,9 +236,4 @@ export async function handleSessionStateCommands(params: {
 function resolveAndroidSerialAllowlistForAppState(value: string | undefined): string[] | undefined {
   const allowlist = resolveAndroidSerialAllowlist(value);
   return allowlist ? [...allowlist].sort() : undefined;
-}
-
-function shutdownFailureMessage(shutdown: TargetShutdownResult): string {
-  const message = shutdown.error?.message ?? shutdown.stderr.trim();
-  return message.length > 0 ? message : 'Shutdown failed';
 }
