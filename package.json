@@ -152,7 +152,7 @@
     "check:coverage-changed": "node --experimental-strip-types scripts/coverage-changed/run.ts",
     "check:coverage-changed:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/coverage-changed/model.test.ts scripts/coverage-changed/run.test.ts",
     "check:coverage-crap": "node --experimental-strip-types scripts/coverage-crap/run.ts",
-    "check:coverage-crap:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/coverage-crap/model.test.ts scripts/coverage-crap/run.test.ts",
+    "check:coverage-crap:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/coverage-crap/model.test.ts scripts/coverage-crap/patches.test.ts scripts/coverage-crap/run.test.ts",
     "check:layering": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/layering/*.test.ts && node --experimental-strip-types scripts/layering/check.ts",
     "check:di-seams": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/di-seams/*.test.ts && node --experimental-strip-types scripts/di-seams/check.ts",
     "depgraph": "node --experimental-strip-types scripts/depgraph/build.ts",
