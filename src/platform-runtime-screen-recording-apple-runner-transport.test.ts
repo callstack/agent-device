@@ -7,11 +7,22 @@ import {
 const runner = vi.hoisted(() => ({
   run: vi.fn(),
   snapshot: vi.fn(),
+  staleLease: vi.fn(),
+  verifyLeaseIdentity: vi.fn(),
 }));
+
+const processState = vi.hoisted(() => ({ alive: new Map<number, boolean>() }));
 
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   runAppleRunnerCommand: runner.run,
   readRunnerSessionLiveness: runner.snapshot,
+  readStaleRunnerLease: runner.staleLease,
+  verifyLeaseRunnerPidIdentity: runner.verifyLeaseIdentity,
+}));
+
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/host-kit/process')>()),
+  isProcessAlive: (pid: number) => processState.alive.get(pid) ?? false,
 }));
 
 const device = {
@@ -128,4 +139,54 @@ test('keeps macOS runner recording ownership local to the requested output path'
     },
     { signal: undefined },
   );
+});
+
+test('reads live runner session ownership through the transport inspect seam', async () => {
+  const transport = resolveAppleRunnerScreenRecordingTransport();
+
+  runner.snapshot.mockReturnValue({ sessionId: 'runner-session-1', liveness: 'gone' });
+  await expect(transport.inspect(device, 'runner-session-1')).resolves.toBe('missing');
+
+  runner.snapshot.mockReturnValue({ sessionId: 'runner-session-1', liveness: 'ready' });
+  await expect(transport.inspect(device, 'runner-session-1')).resolves.toBe('owned-alive');
+  await expect(transport.inspect(device, 'runner-session-other')).resolves.toBe('ownership-lost');
+});
+
+test('falls back to the stale runner lease when no session is registered', async () => {
+  const transport = resolveAppleRunnerScreenRecordingTransport();
+  runner.snapshot.mockReturnValue(null);
+  const lease = {
+    schemaVersion: 1 as const,
+    deviceId: device.id,
+    ownerToken: 'token',
+    ownerPid: 300,
+    ownerStartTime: null,
+    sessionId: 'runner-session-3',
+    runnerPid: 4120,
+    port: 8100,
+    xctestrunPath: '/tmp/Runner.xctestrun',
+    jsonPath: '/tmp/lease.json',
+    createdAtMs: 1,
+  };
+
+  runner.staleLease.mockResolvedValue(null);
+  await expect(transport.inspect(device, 'runner-session-3')).resolves.toBe('missing');
+
+  runner.staleLease.mockResolvedValue({ ...lease, sessionId: 'runner-session-other' });
+  await expect(transport.inspect(device, 'runner-session-3')).resolves.toBe('ownership-lost');
+
+  runner.staleLease.mockResolvedValue({ ...lease, runnerPid: null });
+  await expect(transport.inspect(device, 'runner-session-3')).resolves.toBe('missing');
+
+  processState.alive.set(lease.runnerPid!, false);
+  runner.staleLease.mockResolvedValue(lease);
+  await expect(transport.inspect(device, 'runner-session-3')).resolves.toBe('missing');
+
+  processState.alive.set(lease.runnerPid!, true);
+  runner.verifyLeaseIdentity.mockReturnValue(false);
+  await expect(transport.inspect(device, 'runner-session-3')).resolves.toBe('ownership-lost');
+
+  runner.verifyLeaseIdentity.mockReturnValue(true);
+  await expect(transport.inspect(device, 'runner-session-3')).resolves.toBe('owned-alive');
+  expect(runner.verifyLeaseIdentity).toHaveBeenCalledWith(lease, lease.runnerPid);
 });
