@@ -192,6 +192,7 @@
     "src/daemon/handlers/session-app-deployment.ts",
     "src/daemon/handlers/session-app-source-deployment.ts",
     "src/daemon/handlers/session-batch.ts",
+    "src/daemon/handlers/session-boot.ts",
     "src/daemon/handlers/session-command-input.ts",
     "src/daemon/handlers/session-doctor-app.ts",
     "src/daemon/handlers/session-doctor-device.ts",
