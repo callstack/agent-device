@@ -78,11 +78,6 @@
         "count": 1
       }
     },
-    "src/daemon/handlers/session-state.ts": {
-      "complexity_critical": {
-        "count": 2
-      }
-    },
     "src/daemon/handlers/session-test-artifacts.ts": {
       "complexity_moderate": {
         "count": 1
@@ -197,7 +192,6 @@
     "packages/provision-kit/src/boot-diagnostics.ts:complexity",
     "src/compat/maestro/support.ts:high impact",
     "src/daemon/session-routing.ts:high impact",
-    "src/daemon/handlers/session-state.ts:complexity",
     "src/commands/cli-grammar/common.ts:high impact",
     "src/snapshot/snapshot-presentation/tree.ts:high impact",
     "packages/kernel/src/success-text.ts:high impact",
