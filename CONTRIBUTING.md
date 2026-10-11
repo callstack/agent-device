@@ -202,8 +202,8 @@ Useful direct entry points:
 - `pnpm perf --platform ios` or `pnpm perf --platform android` — device performance harness
 - `pnpm check:fallow --base origin/main` — changed-code quality gate
 - `pnpm check:coverage-crap --base origin/main` — CRAP from measured coverage for the functions a
-  change touches (run `pnpm test:coverage` first; `--all` lists every function). `check:fallow`
-  leaves CRAP off because it has no coverage.
+  change touches (run `pnpm test:coverage` first; `--all` scans every function). Both report scores
+  at or above 30. `check:fallow` leaves CRAP off because it has no coverage.
 - `pnpm fallow:all` — full-tree audit, including grandfathered baseline findings
 - `pnpm fallow:baseline` — intentionally regenerate both reviewed Fallow baselines
 
