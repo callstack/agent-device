@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { commonInputFromFlags, selectionOptionsFromFlags } from './common.ts';
+import { commonInputFromFlags, readJsonObject, selectionOptionsFromFlags } from './common.ts';
 
 function flags(overrides: Partial<CliFlags> = {}): CliFlags {
   return overrides as CliFlags;
@@ -89,5 +89,29 @@ describe('selectionOptionsFromFlags', () => {
       iosSimulatorDeviceSet: undefined,
       androidDeviceAllowlist: undefined,
     });
+  });
+});
+
+// `trigger-app-event [payloadJson]` reads its payload through this reader, so the
+// refusal must name the label the user actually typed against.
+describe('readJsonObject', () => {
+  test('accepts a JSON object', () => {
+    expect(readJsonObject('{"aps":{"alert":"hi"}}', 'payload')).toEqual({
+      aps: { alert: 'hi' },
+    });
+  });
+
+  test('refuses malformed JSON, arrays, nulls, and scalars with the labelled error', () => {
+    const refusal = (value: string) =>
+      expect(() => readJsonObject(value, 'trigger-app-event payload')).toThrow(
+        expect.objectContaining({
+          code: 'INVALID_ARGS',
+          message: 'trigger-app-event payload must be a JSON object',
+        }),
+      );
+    refusal('not json');
+    refusal('[1,2]');
+    refusal('null');
+    refusal('7');
   });
 });
