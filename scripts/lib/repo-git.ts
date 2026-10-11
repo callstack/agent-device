@@ -13,3 +13,25 @@ export function requireUnshallowHistory(git: RepoGit, subject: string): void {
     `${subject} needs full history and tags. Run \`git fetch --unshallow --tags\` first.`,
   );
 }
+
+const CHANGED_LINES_RENAME_SIMILARITY = '90%';
+const CHANGED_LINES_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
+
+/**
+ * The zero-context diff of HEAD against its merge base with `base`, which the changed-line gates
+ * score. Renames are paired at 90% regardless of the host's `diff.renames`, so a moved file owes
+ * only the hunks that differ from its source; the buffer fits a large stacked diff.
+ */
+export function readChangedLinesDiff(repoRoot: string, base: string): string {
+  return runCmdSync(
+    'git',
+    [
+      'diff',
+      '--unified=0',
+      '--no-color',
+      `--find-renames=${CHANGED_LINES_RENAME_SIMILARITY}`,
+      `${base}...HEAD`,
+    ],
+    { cwd: repoRoot, maxBuffer: CHANGED_LINES_MAX_BUFFER_BYTES },
+  ).stdout;
+}

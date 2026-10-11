@@ -1,0 +1,57 @@
+{
+  "kind": "health",
+  "schema_version": 11,
+  "version": "3.32.0",
+  "findings": [
+    {
+      "path": "src/daemon/handlers/session-state.ts",
+      "name": "handleSessionStateCommands",
+      "line": 232,
+      "col": 7,
+      "cyclomatic": 34,
+      "cognitive": 44,
+      "line_count": 174,
+      "param_count": 1,
+      "exceeded": "all",
+      "severity": "critical",
+      "effective_severity": "error",
+      "crap": 34.1,
+      "coverage_pct": 95.83333333333334,
+      "coverage_tier": "high",
+      "coverage_source": "istanbul"
+    },
+    {
+      "path": "src/daemon/handlers/session-state.ts",
+      "name": "handleAppStateCommand",
+      "line": 112,
+      "col": 0,
+      "cyclomatic": 30,
+      "cognitive": 36,
+      "line_count": 119,
+      "param_count": 1,
+      "exceeded": "all",
+      "severity": "high",
+      "effective_severity": "error",
+      "crap": 30.4,
+      "coverage_pct": 92.10526315789474,
+      "coverage_tier": "high",
+      "coverage_source": "istanbul"
+    },
+    {
+      "path": "src/daemon/server/http-server.ts",
+      "name": "<arrow>",
+      "line": 188,
+      "col": 18,
+      "cyclomatic": 45,
+      "cognitive": 40,
+      "line_count": 205,
+      "param_count": 0,
+      "exceeded": "all",
+      "severity": "critical",
+      "effective_severity": "error",
+      "crap": 482.4,
+      "coverage_tier": "partial",
+      "coverage_source": "estimated"
+    }
+  ]
+}

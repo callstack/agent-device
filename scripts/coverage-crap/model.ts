@@ -28,10 +28,10 @@ function countsAreValid(record: IstanbulCounters): boolean {
 }
 
 /**
- * Drops file records whose hit counts are impossible. Vitest's v8 provider merges a module loaded
- * both through its runner and natively into negative or zeroed counts (vitest#11541), and fallow
- * refuses the whole map on one negative count. A dropped file gets no CRAP score rather than a
- * wrong one.
+ * Drops file records with a negative or non-integer hit count. Vitest's v8 provider can merge a
+ * module loaded both through its runner and natively into negative counts (vitest#11541), and
+ * fallow refuses the whole map on one. Zeroed counts from the same bug are indistinguishable from
+ * untested code and stay. A dropped file gets no CRAP score rather than a wrong one.
  */
 export function sanitizeIstanbulCoverage(map: IstanbulCoverageMap): SanitizedCoverage {
   const kept: Record<string, IstanbulCounters> = {};
@@ -64,6 +64,13 @@ function readFinding(value: unknown): CrapFinding | null {
   }
   const coveragePct = typeof record.coverage_pct === 'number' ? record.coverage_pct : null;
   return { path, name, line, crap, cyclomatic, coveragePct };
+}
+
+/** The JSON report from fallow's stdout, past any line it prints before the report. */
+export function parseFallowJsonReport(stdout: string): unknown {
+  const start = stdout.indexOf('{');
+  if (start === -1) throw new Error(`fallow printed no JSON report:\n${stdout.slice(0, 2000)}`);
+  return JSON.parse(stdout.slice(start));
 }
 
 /** The measured CRAP findings of one `fallow health --format json` report, highest score first. */

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'node:test';
 import {
+  parseFallowJsonReport,
   readCrapFindings,
   renderCrapAnnotations,
   renderCrapReport,
@@ -111,4 +113,26 @@ test('annotations escape a path or name that would end the workflow command', ()
     renderCrapAnnotations(findings),
     '::warning file=src/a%2Cb%3Ac.ts,line=10,title=CRAP 42.0::run%0A::error::forged 100%25 has cyclomatic 6 at 20%25 coverage.\n',
   );
+});
+
+test('a captured fallow 3.32 report yields its measured findings past leading output', () => {
+  const report = fs.readFileSync(
+    new URL('./fallow-health-report.fixture.json', import.meta.url),
+    'utf8',
+  );
+  const findings = readCrapFindings(
+    parseFallowJsonReport(`loaded config: fallow-crap.json\n${report}`),
+    30,
+  );
+  assert.deepEqual(
+    findings.map((entry) => [entry.path, entry.name, entry.line, entry.crap]),
+    [
+      ['src/daemon/handlers/session-state.ts', 'handleSessionStateCommands', 232, 34.1],
+      ['src/daemon/handlers/session-state.ts', 'handleAppStateCommand', 112, 30.4],
+    ],
+  );
+});
+
+test('fallow output without a JSON report is an error', () => {
+  assert.throws(() => parseFallowJsonReport('Error: coverage map rejected'), /no JSON report/);
 });

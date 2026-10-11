@@ -11,7 +11,9 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { parseScriptArgs } from '../lib/cli-args.ts';
+import { readChangedLinesDiff } from '../lib/repo-git.ts';
 import {
+  parseFallowJsonReport,
   readCrapFindings,
   renderCrapAnnotations,
   renderCrapReport,
@@ -26,14 +28,7 @@ const SANITIZED_PATH = 'coverage/fallow-crap-coverage.json';
 const DIFF_PATH = 'coverage/fallow-crap.diff';
 const FALLOW_CONFIG = 'fallow-crap.json';
 const CRAP_THRESHOLD = 30;
-const GIT_DIFF_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
 const FALLOW_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
-
-function parseJsonReport(stdout: string): unknown {
-  const start = stdout.indexOf('{');
-  if (start === -1) throw new Error(`fallow printed no JSON report:\n${stdout.slice(0, 2000)}`);
-  return JSON.parse(stdout.slice(start));
-}
 
 export function run(argv: readonly string[], cwd?: string): number {
   const values = parseScriptArgs(argv, USAGE, {
@@ -56,11 +51,7 @@ export function run(argv: readonly string[], cwd?: string): number {
   );
   fs.writeFileSync(path.resolve(root, SANITIZED_PATH), JSON.stringify(map));
   if (scope === 'touched') {
-    const diff = runCmdSync('git', ['diff', '--unified=0', '--no-color', `${base}...HEAD`], {
-      cwd: root,
-      maxBuffer: GIT_DIFF_MAX_BUFFER_BYTES,
-    }).stdout;
-    fs.writeFileSync(path.resolve(root, DIFF_PATH), diff);
+    fs.writeFileSync(path.resolve(root, DIFF_PATH), readChangedLinesDiff(root, base));
   }
 
   const fallow = runCmdSync(
@@ -87,7 +78,7 @@ export function run(argv: readonly string[], cwd?: string): number {
     process.stderr.write(`check:coverage-crap: fallow health failed:\n${fallow.stderr}\n`);
     return 1;
   }
-  const findings = readCrapFindings(parseJsonReport(fallow.stdout), CRAP_THRESHOLD);
+  const findings = readCrapFindings(parseFallowJsonReport(fallow.stdout), CRAP_THRESHOLD);
   const report = renderCrapReport({
     findings,
     dropped: dropped.map((file) => path.relative(root, file)),
