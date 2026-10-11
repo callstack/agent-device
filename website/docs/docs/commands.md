@@ -413,7 +413,7 @@ agent-device alert accept
 agent-device alert dismiss
 ```
 
-- `wait` accepts a millisecond duration, `text <value>`, a snapshot ref (`@eN`), a selector, or strict `absent <selector>`, each with an optional `[timeoutMs]`. Selector waits, including those inside `replay`, poll snapshot captures with the same backend and recovery as `is`. `wait` resolves selectors the same way as `click`, `fill`, `get`, and `is`.
+- `wait` accepts a millisecond duration, `text <value>`, a snapshot ref (`@eN`), a selector, or strict `absent <selector>`. Every form except a plain duration takes an optional `[timeoutMs]`. Selector waits, including those inside `replay`, poll snapshot captures with the same backend and recovery as `is`. `wait` resolves selectors the same way as `click`, `fill`, `get`, and `is`.
 - `wait absent <selector>` is strict absence, not a visibility check: it passes only when a complete, readable capture has zero matches, so hidden or off-screen matches keep it pending. It rejects `--scope` and `--depth`. Sparse, truncated, incomplete, and Android unreadable-content captures never satisfy it.
 - `wait @ref` needs a snapshot from a prior `snapshot` command. It resolves the ref to its label or text, then waits for that text, so a duplicate label can match a different element than the original ref.
 - Wait failures carry `error.details.reason` in `--json` output:
@@ -482,9 +482,9 @@ Text-entry errors and what to do:
 - `TEXT_INPUT_COMMIT_NOT_OBSERVED` (iOS `fill`): the runner could not confirm the text landed before its deadline, or the text equals the field's placeholder. The field may hold none, part, or all of it. Run `snapshot -i`; if it doesn't match, retry with the full text quoted and `fill --delay-ms 80`.
 - `TEXT_INPUT_CLEAR_NOT_OBSERVED` (iOS `fill`): the old text was not seen cleared, so nothing was typed. Inspect with `snapshot -i`, then retry `fill`.
 - `TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED` (iOS `fill`): the text is too long to type in one runner command, and nothing was typed. Fill up to the character limit the hint names for your `--delay-ms`, then append the rest with `type`. `--delay-ms` lowers the limit; a longer timeout does not help.
-- `TEXT_ENTRY_MISMATCH` (iOS `fill`): the settled value only dropped characters from the expected text. This can also reject legitimate filtering, trimming, or masks (`5` into `$0.00` may show `$0.05`). Retry `fill --delay-ms 80` only if inspection shows the field needs correction.
+- `TEXT_ENTRY_MISMATCH` (iOS `fill`): the settled value contains only characters, in order, from the field's value after clearing plus your text. That covers dropped characters and an unchanged value. This can also reject legitimate filtering, trimming, or masks (`5` into `$0.00` may show `$0.05`). Retry `fill --delay-ms 80` only if inspection shows the field needs correction.
 
-After an iOS `fill` error, recover with `fill`, never `type`, which appends to whatever the field already holds. iOS `fill` types the replacement once and does not clear and retype a mismatch on its own.
+Except for `TEXT_INPUT_SYNTHESIS_BUDGET_EXCEEDED`, where you append the rest with `type` after the shorter `fill`, recover from these with `fill`, never `type`, which appends to whatever the field already holds. iOS `fill` types the replacement once and does not clear and retype a mismatch on its own.
 
 On iOS, a single-line `fill` ending in a submit key, or a field that became unreadable or disappeared after typing, succeeds without verification; assert the resulting screen.
 
@@ -510,7 +510,7 @@ agent-device wait 'id="field-phone" value="00 062 91 77"'
 - `scroll <direction> --until <selector>` repeats passes until the selector is on screen and fails if the content runs out first. Add an amount (`scroll down 0.8 --until <selector>`) to widen each pass. Use it in `.ad` scripts too, instead of fixed amounts that depend on screen size; see [Replay & E2E](/docs/replay-e2e).
 - Default snapshot text summarizes off-screen interactive content instead of listing refs. `scroll <direction> --settle` (and `back --settle`) waits for the UI to go quiet and returns the diff with fresh refs, so you don't need another `snapshot -i`. Settle is best-effort and never fails the action.
 - With a keyboard up on iOS or Android, the swipe stays above the keyboard (reported as `keyboardAvoided` and `keyboardMinY`) and the keyboard stays open. If too little room is left, the command refuses with `scroll_keyboard_occludes_surface`; run `keyboard dismiss` first.
-- A directional scroll reports what it observed as `movement`: `moved`, `at-edge` (no change and no more content that way), `unchanged` (no change, no edge signal), or `unobserved` (no reliable comparison). If nothing changed but the container still has hidden content, it refuses with `scroll_no_progress`; the hint names the usual causes: a focused keyboard, a nested scroller, or a list that needs a raw `swipe`. See `agent-device help scroll`.
+- A directional scroll reports what it observed as `movement`: `moved`, `at-edge` (no change and no more content that way), `unchanged` (no change, no edge signal), or `unobserved` (no reliable comparison). If nothing changed, the swipe ran inside a container, and that container still has hidden content in that direction, it refuses with `scroll_no_progress`; the hint names the usual causes: a focused keyboard, a nested scroller, or a list that needs a raw `swipe`. See `agent-device help scroll`.
 
 ## Retry after a failed command
 
@@ -705,7 +705,7 @@ Platform support:
 Device settings:
 
 - `settings animations off|on` (Android) sets the window, transition, and animator scales. Turn animations off to stabilize runs with heavy animation, and back on afterward.
-- `settings airplane on|off` (Android 11+) goes through the connectivity service and reports the resulting `airplaneMode`; older builds fail without changing anything. Connectivity takes a moment to settle, so poll the app rather than asserting offline behavior immediately.
+- `settings airplane on|off` (Android) needs the connectivity service's `cmd connectivity airplane-mode` command, available from Android 11. It reports the resulting `airplaneMode`; a build without that command fails with `UNSUPPORTED_OPERATION` without changing anything. Connectivity takes a moment to settle, so poll the app rather than asserting offline behavior immediately.
 - `settings text-size` reads the current size; `settings text-size <category>` sets one: `extra-small`, `small`, `medium`, `large`, `extra-large`, `extra-extra-large`, `extra-extra-extra-large`, `accessibility-medium`, `accessibility-large`, `accessibility-extra-large`, `accessibility-extra-extra-large`, or `accessibility-extra-extra-extra-large`. It works on iPhone and iPad simulators and on Android; every other target refuses both read and write. The read reports `category` and the target's own `platformValue` (iOS may capitalize it, for example `extra-Small`).
 - Android has only a font-scale multiplier, mapped so `large` is `1.0` and `accessibility-extra-extra-extra-large` is `3.2`. A value between rungs reads as the nearest category, with the exact multiplier in `platformValue`; an unset scale reads as `large`.
 - A running app adopts a new text size only at its next configuration change. Relaunch it (`open <app> --relaunch`) before asserting rendered sizes.
@@ -724,7 +724,7 @@ App state:
 
 Permissions:
 
-- On iOS and Android, `permission` and iOS simulator `location on|off` apply to the session app. Pass `--app <bundle-id, package, or name>` to target an installed app without opening it, for example to grant a permission before first launch. The app need not be running. Names resolve as they do for `open` and `clear-app-state` (`--app Maps` is `com.apple.Maps`); a Limrun iOS session resolves only the `settings` alias.
+- On iOS and Android, `permission` and iOS simulator `location on|off` apply to the session app. Pass `--app <bundle-id, package, or name>` to target an installed app without opening it, for example to grant a permission before first launch. The app need not be running. Unlike `open`, which passes an unknown id through, settings resolve only installed apps, the same way `clear-app-state` does. On an iOS simulator, a dotted name is first matched against installed bundle ids, and any name against installed display names (`--app Maps` is `com.apple.Maps`). On Android, a package must be installed, and any other name is matched against installed package names. A Limrun iOS session resolves only the `settings` alias.
 - `--app` counts only when passed on the command line; `AGENT_DEVICE_TARGET_APP` and `targetApp` in `~/.agent-device/config.json` never retarget a settings change.
 - Refusals for `permission`, `location`, and `clear-app-state`, all with `dispatched: no` and nothing changed:
   - `app_not_installed` (`APP_NOT_INSTALLED`): the app resolves to nothing installed.
