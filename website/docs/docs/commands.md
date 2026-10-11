@@ -8,29 +8,13 @@ Find the command for a task, the flags it takes, and how it behaves on each plat
 
 For persistent defaults and project-scoped CLI settings, see [Configuration](/docs/configuration).
 
-For agent workflow guidance that matches your installed CLI version, run:
+CLI help matches your installed version. `agent-device help` lists the workflow and platform guides, and `help <command>` gives a command's exact flags:
 
 ```bash
 agent-device help
 agent-device help commands
 agent-device help workflow
-agent-device help manual-qa
-agent-device help dogfood
-agent-device help validate
-agent-device help debugging
-agent-device help scripting
-agent-device help gestures
-agent-device help react-native
-agent-device help react-devtools
-agent-device help cdp
-agent-device help tv
-agent-device help web
-agent-device help macos
-agent-device help remote
-agent-device help physical-device
-agent-device help ios-system-ui
-agent-device help maestro
-agent-device help foldable
+agent-device help open
 ```
 
 If your agent runtime supports skills, install them to route agents automatically; they are optional. The CLI help topics are the reference for your installed version.
@@ -45,11 +29,10 @@ For MCP client setup and what MCP does not expose, see [AI Agent Setup](/docs/ag
 
 ## Output and warnings
 
-In text mode the CLI prints every response warning as a `Warning:` line after the command's own
-output, for every command. Four commands declare their stdout to be the value a caller pipes (`get`,
-`find`, `clipboard`, `record`) and print those lines on **stderr** instead, so
-`value=$(agent-device get text …)` still captures exactly the value. `--json` keeps them in
-`data.warnings` and writes neither line.
+In text mode, every command prints each response warning as a `Warning:` line after its own output.
+`get`, `find`, `clipboard`, and `record` print those lines on **stderr** instead, so
+`value=$(agent-device get text …)` captures only the value. With `--json`, warnings stay in
+`data.warnings` and no `Warning:` line is printed.
 
 ## Navigation
 
@@ -75,68 +58,72 @@ agent-device action-button
 agent-device fold closed
 agent-device fold half-open
 agent-device fold open
+agent-device device status --platform android --serial emulator-5554
+agent-device device release --stale
+agent-device daemon stop --clean
 ```
 
-- `boot` ensures the selected target is ready without launching an app.
-- `boot` requires either an active session or an explicit device selector.
-- `shutdown` turns off the selected Apple simulator or Android emulator.
-- `shutdown` must not target an active session device; use `close --shutdown` to end the session and turn it off.
-- `daemon stop --state-dir <path>` verifies the daemon PID/start-time identity, requests graceful shutdown, and reports whether provider-release state is known. Use `daemon stop --clean` to also remove retained Apple runner processes and leases owned by that daemon.
-- `device status` reads host-local device claims without starting or contacting a daemon. Normal output shows live and attention-needed claims, then summarizes proven-stale records in one line; use `device status --stale` to inspect the hidden records. Scope either view with `--platform` plus `--udid` (Apple) or `--serial` (Android). A foreign live or uncertain claim blocks `open`, and a proven-dead owner is replaced only after its session's exact-owner durable resources reconcile successfully.
-- `device release --stale` settles a provably dead owner's durable resources through the same exact-owner reconciliation `open` uses and clears its claim last, all without a daemon. Live, uncertain, PID-reused, and corrupt claims always fail closed and are reported with the reason; a live owner is released by closing its session from its own workspace or with `daemon stop --state-dir <owner state dir>`. One claim condition is settled on the device instead: a device that rebooted after its claim was taken destroyed the app, runner, and accessibility session that claim described, so `open` reconciles that owner's resources, takes the claim, and reports the release in `warnings`. `device release --stale` never probes a device for its boot, so it keeps refusing such a claim.
-- `--platform apple` is an alias for the Apple automation backend (`ios`, `tvOS`, `macOS` selection).
-- Use `--target mobile|tv|desktop` with `--platform` (required) to select phone/tablet vs TV-class vs desktop-class targets.
-- You need `boot` mainly when you start a new session and `open` fails because no simulator or emulator is booted.
-- `--timeout <ms>` on `boot`, `open <app>`, and `prepare ios-runner` is a startup budget for the iOS Simulator or Android emulator boot (for `prepare ios-runner`, one budget shared with runner preparation). A never-booted iOS Simulator runs Apple's first-boot migration, which can take several minutes; without the flag the command's 90-second request envelope ends the boot first, before the wait's own 120-second cap ever applies. When the budget runs out the command fails with `error.details.reason: boot_timeout` and the Simulator or emulator keeps booting, so a retry finds it further along. See [Sessions](/docs/sessions#wait-for-a-slow-or-busy-device).
-- Android: `boot --platform android --device <avd-name>` launches that emulator in GUI mode when needed.
-- Android: add `--headless` to launch without opening a GUI window.
-- Android: `shutdown --platform android --device <avd-name>` stops a running emulator.
-- `open [app|url] [url]` boots and activates the selected target when needed.
-- `open <app> --wait <ms>` waits up to that budget for a device another session is holding instead of failing at once, then fails with `DEVICE_IN_USE` if the budget runs out. Only session contention is waited for: a device claim held by another workspace's daemon is never retriable and returns its recovery command immediately. The wait extends the command's timeout envelope, so a long budget does not need a longer `--timeout`. See [Sessions](/docs/sessions#wait-for-a-slow-or-busy-device) for queuing behavior.
-- On an iOS Simulator, an `open` that launches an app tries to read it before returning, and reports the result as `timing.postOpenObservation`. When that value is present and is not `"observable"`, the next command that reads the screen keeps reading until two reads in a row agree, within a short bounded wait, before it acts. A `click` right after such an open then targets where the element comes to rest, not where it was mid-launch. If the screen is still moving after that wait, the command proceeds and its response warns that the surface was still changing after `open`. After an `observable` open, or an open that reports no `postOpenObservation`, the next command reads the screen once.
-- `open <url>` deep links are supported on Android and iOS.
-- On an iOS Simulator, handing the URL to the device is one bounded `simctl openurl`: when CoreSimulator never answers it, the open fails within 20 seconds with `details.reason: ios-simulator-openurl-timeout` and kills the child, instead of the request being cancelled around a still-running `openurl`. The Simulator may still have received the URL, so retry the open or answer the prompt with `alert accept`.
-- `open <app> <url>` opens a deep link on iOS.
-- On an iOS Simulator, iOS can ask `Open in "<App>"?` before your app receives the URL from `open <app> --launch-url <url>`. If the URL's scheme belongs to your session app, `open` taps **Open** for you and its JSON data includes `launchConfirmation: "accepted"`. If no prompt appears, the response has no `launchConfirmation` field.
-- `open` recognizes the prompt by its English title and the **Cancel** and **Open** buttons. On a Simulator set to another language, it leaves the prompt on screen and returns as if no prompt appeared; answer it with `alert accept` or `alert dismiss`. Run with `--debug` to see the title `open` did not recognize.
-- `open` reads the prompt whenever it cannot see your app after the launch, including on a slow host where the app's target discovery fails on its own deadline. A prompt that appears after `open` has already seen your app stays on screen; answer it with `alert accept` or `alert dismiss`.
-- When `open` taps **Open** and your app still provably never starts, it hands the same URL to the Simulator once more and reads the prompt again. If the app is still not running after that, `open` fails with `details.reason: launch_confirmation_unanswered` instead of reporting success for a launch that never happened; later commands that require a running app would have failed with `app is not running`.
-- If the recognized prompt remains visible after an attempt to tap **Open** fails, `open` also fails with `details.reason: launch_confirmation_unanswered`, even if the app is running behind the prompt. Answer it with `alert accept` or `alert dismiss` before continuing.
-- If the URL's scheme belongs to a different installed app, `open` does not answer the prompt. The command fails with `details.reason: launch_confirmation_foreign_app`; `details.foreignAppBundleId` names that app. The prompt stays on screen: close it with `alert dismiss`, then pass a launch URL whose scheme your app handles.
-- If `open` cannot identify a single installed app that owns the scheme, it does not know which app would receive the URL, so it leaves the prompt on screen and returns as if no prompt appeared; answer it with `alert accept` or `alert dismiss`. This happens when no installed app declares the scheme, when more than one does (for example a debug and a release build), and when the app list or an app's `Info.plist` could not be read.
-- `open <app> --launch-console <path>` captures launch-time stdout/stderr for direct iOS simulator app launches. It is not valid for URL opens or
-  non-simulator targets.
-- `open --platform macos --surface app|frontmost-app|desktop|menubar` selects the macOS session surface explicitly. `app` is the default when an app argument is provided.
-- A surface given to `open`, as a flag or from a config file, is saved in `--save-script` scripts, so `replay` reopens the same surface. When no surface is given, the script has no `--surface`, and replay opens an app session.
-- `back` defaults to app-owned back navigation. On Apple targets that means visible in-app back UI only. On Android it sends the back keyevent, because Android routes in-app back through that platform event.
-- `back --in-app` names the default app-owned behavior explicitly.
-- `back --system` asks for system back input explicitly. On Android this is the normal back keyevent. On iOS and tvOS it uses the platform back gesture or Siri Remote menu action. On macOS, where there is no generic system back input, `back --system` reports unavailable instead of falling back to app-owned navigation.
-- `orientation <orientation>` forces a mobile device into `portrait`, `portrait-upside-down`, `landscape-left`, or `landscape-right`.
-- `orientation` is supported on iOS and Android mobile targets. macOS and tvOS do not expose it.
-- `action-button` presses the iPhone Action Button once through the Apple runner. It takes no arguments and no `--duration-ms`: XCUITest exposes the press without a hold duration, so a long press is not expressible. The slide surface on the same edge belongs to Camera Control, which `action-button` does not drive.
-- `action-button` is an iPhone and iPad command. Android, web, Linux, HarmonyOS, and Vega refuse it, and so do tvOS, macOS, and visionOS leaves.
-- `action-button` asks the device whether it has the button before pressing it. A target whose model has none — an iPhone SE beside an iPhone 15, or most iPad simulators — fails with `UNSUPPORTED_OPERATION` rather than reporting a press that never happened.
-- `action-button` does not activate or relaunch the session's app, and it takes no `--settle`: pressing a hardware button is not a navigation, so the app stays where it was.
-- `action-button` reports that the press was dispatched, not what the system did with it. Simulators run no Shortcuts and no App Intents, so you can verify what a press triggers only on a physical iPhone; on a Simulator the command proves the press was accepted and that the session app was not brought forward.
-- `action-button` is slow to loop. On an iPhone 17 Pro Simulator the press itself spent about five seconds inside XCUITest, while `home` and `app-switcher` on the same session took under two seconds each.
-- `fold <closed|half-open|open>` puts a foldable iPhone simulator (iPhone Duo) into a hinge pose. The command sends a hinge event inside the selected simulator, then reads the hinge angle back with `devicectl device motion hinge-angle` and reports the pose only when that reading agrees: `closed` is 0°, `open` is 180°, and `half-open` is any angle between them (requested at 130°). An angle inside that interval only proves the category, so `half-open` is reported once two consecutive readings both fall inside it and agree within 0.5°. The response names the panel the device now lights and its native panel point size, marked `coordinateSpace: "native-panel"`; that size is the panel's own geometry, not the next snapshot's viewport (a 669x951 inner panel can host a 951x669 app window), so it cannot place a tap. Re-snapshot afterwards, and never carry refs or coordinates across a `fold`. After that snapshot, taps, long presses, and scrolling follow the app window on the active panel in closed, half-open, and open poses.
-- For timed motion, use `fold --keyframes '[{"atMs":0,"angle":0},{"atMs":1667,"angle":160},{"atMs":3333,"angle":100},{"atMs":5000,"angle":180}]'`. This runs the opening/reversal/reopening sequence over five seconds. Supply either a preset or keyframes, never both. Use 2–64 keyframes starting at 0ms with strictly increasing integer timestamps up to 60,000ms and finite angles in 0–180°. Linear interpolation runs at roughly 60Hz; equal consecutive angles hold the hinge. Motion duration excludes preparation and final-angle verification. Cancellation stops at the current angle; re-snapshot even after an interrupted trajectory.
-- On iOS, `fold` is simulator-only and requires an Xcode toolchain with the iOS simulator SDK and foldable HID support (verified on Xcode 27.1). It runs a helper against the session UDID; the helper is built once per `Fold.m` source hash and Xcode toolchain, cached under `~/.agent-device/fold-helper`, and rebuilt only when the source or the toolchain changes. Device Hub and host Accessibility permission are not required. Build failures report `fold-helper-build-failed`; dispatch failures report `fold-hid-dispatch-failed`. There is no UI fallback. Single-panel simulators and physical devices are refused.
-- A simulator scoped to a non-default set with `--ios-simulator-device-set` is refused before any hinge is touched with `UNSUPPORTED_OPERATION` and `details.reason: "unsupported-device-scope"`, because `devicectl` cannot read the hinge pose of a simulator outside the default set. Run `fold` against a simulator in the default set.
-- `fold` costs one bounded hinge stream per read, and devicectl's smallest stream is five seconds: `closed` and `open` take about ten seconds, `half-open` about sixteen, because the hinge animates and the command waits for it to stop. A hinge whose last reading is some other pose fails with `COMMAND_FAILED` and `reason: fold-pose-unverified`, naming the angle CoreDevice still reports. A hinge seen `half-open` but never at rest fails with `reason: fold-pose-unsettled`, naming the observed and previous angles: the requested category was observed, and what is missing is a pose the hinge holds.
-- On a foldable Android emulator (`pixel_9_pro_fold`, `pixel_10_pro_fold`, the generic `7.6in Foldable`), `fold` sets the posture through the emulator console (`adb emu posture`), waits until the guest commits the matching device state (`adb shell cmd device_state print-state`), and reports the hinge sensor's angle, which the AVD profile defines per posture: 0°, 90° and 180° on the Pixel folds, 15°, 90° and 165° on the generic 7.6in Foldable. The committed device state is the verification; it is what `WindowManager`'s `FoldingFeature` derives from. Folding to the cover display can raise Android's "Swipe up to continue" lock screen; `fold` dismisses it so the app stays reachable. The response carries no panel geometry and keyframes are not supported. A phone profile, which lists none of those device states, fails with `UNSUPPORTED_OPERATION` and `reason: single-panel-device`; a physical device is refused, since foldable hardware is folded by hand.
-- On iOS devices, `http(s)://` URLs open in Safari when no app is active. Custom scheme URLs require an active app in the session.
-- Commands that need one concrete device refuse to guess: if no `--device`/`--udid`/`--serial` is given and several candidates are equally preferred (for example two booted emulators), the command fails with `AMBIGUOUS_MATCH` and lists them, rather than picking one and returning a successful answer about a device you did not select. Preferences still apply first — virtual over physical, booted over offline — so one booted emulator beside offline ones resolves normally, as does any command running inside an existing session. `devices` still lists every device.
-- Commands that omit `--session` use an implicit session scoped to the caller's git worktree or working directory and to the selected platform (`ios`, `android`; the platform-less `default` session only without `--platform`), so independent local agents do not attach to each other's sessions. Use `--session <name>` or `AGENT_DEVICE_SESSION` to share a named session, and `--session-lock reject|strip` (or `AGENT_DEVICE_SESSION_LOCK`) to set its lock mode. See [Sessions](/docs/sessions#lock-a-named-session-to-a-device).
-- Tenant-scoped daemon runs can pass `--tenant`, `--session-isolation tenant`, `--run-id`, and `--lease-id` to enforce lease admission.
-- Remote daemon clients can pass `--daemon-base-url http(s)://host:port[/base-path]` to skip local daemon discovery/startup and call a remote HTTP daemon directly.
-- Use `--daemon-auth-token <token>` (or `AGENT_DEVICE_DAEMON_AUTH_TOKEN`) for explicit service/API-token automation against non-loopback remote daemon URLs; the client sends it in both the JSON-RPC request token and HTTP auth headers.
-- Use [Remote Proxy](/docs/remote-proxy) when you need to run `agent-device proxy` on a Mac with simulator/device access and drive it from another machine through cloudflared, ngrok, or another HTTP tunnel.
-- Use [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), or [TestMu AI](/docs/testmu) when a CI agent needs a hosted device session without interactive login.
-- For human cloud access with `connect` or `connect --remote-config`, see [Remote Metro workflow](#remote-metro-workflow).
-- Android React Native relaunch flows require an installed package name for `open --relaunch`; install/reinstall the APK first, then relaunch by package. `open <apk|aab> --relaunch` is rejected because runtime hints are written through the installed app sandbox.
-- For Metro-backed React Native JS changes, use `metro reload` before `open <app> --relaunch`; it mirrors pressing `r` in the Metro terminal and keeps the native process alive.
-- Remote daemon screenshots and recordings are downloaded back to the caller path, so `screenshot page.png` and `record start session.mp4` remain usable when the daemon runs on another host.
+Boot and shut down:
+
+- `boot` gets the selected target ready without launching an app. It needs an active session or a device selector. You mainly need it when `open` fails because no simulator or emulator is booted.
+- Android: `boot --platform android --device <avd-name>` launches that emulator with a window; add `--headless` to launch it without one.
+- `shutdown` turns off the selected Apple simulator or Android emulator. It refuses the active session's device; use `close --shutdown` to end the session and turn the device off.
+- `--timeout <ms>` on `boot`, `open <app>`, and `prepare ios-runner` is the startup budget for booting an iOS Simulator or Android emulator (for `prepare ios-runner`, shared with runner preparation). A never-booted iOS Simulator can take several minutes. When the budget runs out, the command fails with `error.details.reason: boot_timeout` and the device keeps booting, so a retry finds it further along. See [Sessions](/docs/sessions#wait-for-a-slow-or-busy-device).
+
+Select a device:
+
+- `--platform apple` is an alias for the Apple backend (`ios`, `tvOS`, `macOS`). Add `--target mobile|tv|desktop` to `--platform` to choose phone/tablet, TV, or desktop targets.
+- A command that needs one device fails with `AMBIGUOUS_MATCH` and lists the candidates when you pass no `--device`, `--udid`, or `--serial` and several are equally preferred, such as two booted emulators. Virtual devices are preferred over physical ones and booted over offline ones first, and commands inside a session use the session's device. `devices` still lists everything.
+- Commands without `--session` use an implicit session scoped to your worktree and the selected platform. For named sessions, `AGENT_DEVICE_SESSION`, and `--session-lock reject|strip`, see [Sessions](/docs/sessions).
+
+Device claims and the daemon:
+
+- `device status` lists host-local device claims without starting or contacting a daemon; `--stale` shows the claims whose owner is provably gone. Scope it with `--platform` plus `--udid` (Apple) or `--serial` (Android). Another live owner's claim blocks `open`.
+- `device release --stale` clears a provably dead owner's claim and resources. Live and uncertain claims are refused with the reason. See [Sessions](/docs/sessions#release-a-device-another-workspace-holds).
+- `daemon stop --state-dir <path>` stops a local daemon after verifying its identity. `--clean` also removes the Apple runner processes and leases that daemon retained.
+
+Open apps and links:
+
+- `open [app|url] [url]` boots and activates the selected target when needed. `open <url>` opens deep links on Android and iOS, and `open <app> <url>` opens a deep link in that app on iOS.
+- On iOS devices, `http(s)://` URLs open in Safari when no app is active. Custom-scheme URLs need an active app in the session.
+- `open <app> --wait <ms>` waits up to that budget for a device another session holds, then fails with `DEVICE_IN_USE`. The wait extends the command's timeout, so you don't need a longer `--timeout`. A claim held by another workspace's daemon is not waited for; `open` returns its recovery command at once. See [Sessions](/docs/sessions#wait-for-a-slow-or-busy-device).
+- `open <app> --launch-console <path>` captures launch-time stdout/stderr for iOS simulator app launches. It is not valid for URL opens or other targets.
+- `open --platform macos --surface app|frontmost-app|desktop|menubar` selects the macOS session surface; `app` is the default when you name an app. See [Desktop targets](#desktop-targets). `--save-script` records the surface so `replay` reopens it; with no surface given, replay opens an app session.
+- Android React Native: `open --relaunch` needs an installed package name. Install or reinstall the APK first; `open <apk|aab> --relaunch` is rejected. For Metro-backed JS changes, run `metro reload` before reaching for `open <app> --relaunch`.
+
+iOS Simulator launch behavior:
+
+- An `open` that launches an app reports `timing.postOpenObservation`. When it is present and not `"observable"`, the next command that reads the screen waits briefly until two reads agree, so a `click` lands where the element comes to rest. If the screen is still moving after that wait, the command proceeds and warns that the surface was still changing.
+- If CoreSimulator never answers a URL hand-off, `open` fails within 20 seconds with `details.reason: ios-simulator-openurl-timeout`. The Simulator may still have received the URL; retry the open or answer the prompt with `alert accept`.
+- When `open <app> --launch-url <url>` raises an `Open in "<App>"?` prompt and the URL's scheme belongs to the session app, `open` taps **Open** and returns `launchConfirmation: "accepted"`. If the app still never starts, `open` hands over the URL once more.
+- `details.reason: launch_confirmation_unanswered` means the app never started after the prompt was accepted, or the prompt stayed visible after a failed tap. Answer it with `alert accept` or `alert dismiss` before continuing.
+- `details.reason: launch_confirmation_foreign_app` means another installed app owns the scheme (`details.foreignAppBundleId`). Close the prompt with `alert dismiss` and pass a URL your app handles.
+- `open` leaves the prompt on screen and returns as if none appeared when the Simulator isn't set to English (run with `--debug` to see the title), when the prompt appears after `open` has seen your app, or when no single installed app owns the scheme (none does, a debug and a release build both do, or the app list can't be read). Answer it with `alert accept` or `alert dismiss`.
+
+Back, orientation, and hardware buttons:
+
+- `back` uses app-owned back navigation: visible in-app back UI on Apple targets, and the back keyevent on Android. `--in-app` names this default explicitly.
+- `back --system` sends system back input: the Android back keyevent, the iOS back gesture, or the tvOS Siri Remote Menu button. macOS has no system back, so it reports unavailable.
+- `orientation portrait|portrait-upside-down|landscape-left|landscape-right` works on iOS and Android mobile targets only.
+- `action-button` presses the iPhone or iPad Action Button once. It takes no arguments, no hold duration, and no `--settle`, and it doesn't activate the session app or drive Camera Control. Other platforms refuse it, and a model without the button (an iPhone SE, most iPad simulators) fails with `UNSUPPORTED_OPERATION`.
+- `action-button` reports that the press was dispatched, not what it triggered. Simulators run no Shortcuts or App Intents, so verify the outcome on a physical iPhone. Expect a press to take about five seconds on a Simulator.
+
+Fold a foldable device:
+
+- `fold closed|half-open|open` sets the pose of a foldable iPhone simulator (iPhone Duo) or a foldable Android emulator (`pixel_9_pro_fold`, `pixel_10_pro_fold`, `7.6in Foldable`) and reports the pose only after reading it back. Re-snapshot after every fold, even an interrupted one; refs and coordinates from before it are stale. On iOS, expect about 10 seconds for `closed` or `open` and 16 for `half-open`.
+- The iOS response names the lit panel and its size, marked `coordinateSpace: "native-panel"`. That size is not the next snapshot's viewport and cannot place a tap.
+- iOS only: `--keyframes` plays a timed trajectory instead of a preset, for example `fold --keyframes '[{"atMs":0,"angle":0},{"atMs":1667,"angle":160},{"atMs":3333,"angle":100},{"atMs":5000,"angle":180}]'`. Use 2–64 keyframes starting at 0ms, strictly increasing integer timestamps up to 60,000ms, and angles from 0 to 180°.
+- iOS needs an Xcode with the iOS simulator SDK and foldable HID support (verified on Xcode 27.1); Device Hub and Accessibility permission aren't required. The first fold builds a helper cached under `~/.agent-device/fold-helper`; failures report `fold-helper-build-failed` or `fold-hid-dispatch-failed`.
+- `COMMAND_FAILED` with `reason: fold-pose-unverified` means the hinge reports another pose; `fold-pose-unsettled` means it reached `half-open` but never came to rest.
+- `UNSUPPORTED_OPERATION` covers single-panel devices (`single-panel-device` on Android) and simulators in a non-default `--ios-simulator-device-set` (`unsupported-device-scope`; use the default set). Physical devices are refused.
+- On Android, `fold` dismisses the lock screen that folding to the cover display can raise. For panels, poses, and timings, see `agent-device help foldable`.
+
+Remote daemons and tenants:
+
+- `--tenant`, `--session-isolation tenant`, `--run-id`, and `--lease-id` enforce lease admission on tenant-scoped daemons.
+- `--daemon-base-url http(s)://host:port[/base-path]` calls a remote HTTP daemon directly instead of starting a local one. Add `--daemon-auth-token <token>` (or `AGENT_DEVICE_DAEMON_AUTH_TOKEN`) for non-loopback daemon URLs.
+- Screenshots and recordings from a remote daemon are downloaded to the path you pass, so `screenshot page.png` and `record start session.mp4` work as they do locally.
+- To drive a Mac's simulators and devices from another machine, see [Remote Proxy](/docs/remote-proxy). For hosted devices in CI, see [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), or [TestMu AI](/docs/testmu). For `connect --remote-config`, see [Remote Metro workflow](#remote-metro-workflow).
 
 ```bash
 agent-device open "https://example.com" --platform ios           # open link in web browser
@@ -150,8 +137,8 @@ agent-device metro reload
 
 ## Human Takeover
 
-Use `takeover` with an active remote connection when a person needs to interact with its leased
-device without racing the agent:
+Use `takeover` with an active remote connection when a person needs to use its leased device
+without racing the agent:
 
 ```bash
 agent-device takeover --session remote-session
@@ -159,18 +146,14 @@ agent-device takeover status --session remote-session
 agent-device takeover release <hold-id> --session remote-session
 ```
 
-`takeover` holds the leased device in the foreground until you press Ctrl+C. While held,
-state-changing commands fail with `DEVICE_IN_USE` and `details.reason: "human_control_active"`;
-read-only diagnostics remain available. Takeover requires a device-scoped remote lease; local
-sessions without one are not supported. Holds do not survive a daemon restart; reconnect and
-re-establish them before continuing human interaction. See
-[Remote Proxy](./remote-proxy.md#human-takeover) for hold lifetime, lease behavior, and the host API.
+`takeover` holds the device until you press Ctrl+C. While it holds, state-changing commands fail with
+`DEVICE_IN_USE` and `details.reason: "human_control_active"`; read-only diagnostics still work. It
+needs a device-scoped remote lease, so local sessions aren't supported. Holds don't survive a daemon
+restart; reconnect and take the hold again. See [Remote Proxy](/docs/remote-proxy#human-takeover).
 
 ## Web Automation
 
-`--platform web` drives a browser through [agent-browser](https://github.com/vercel-labs/agent-browser). Web automation requires Node 24+. `agent-device` owns command/session/replay integration, refs/selectors, and artifact routing; `agent-browser` owns browser launch, page control, screenshots, and browser-specific mechanics.
-
-Use `--platform web` when a browser step belongs inside an `agent-device` session, replay, batch, MCP, or Node.js client flow. Use `agent-browser` directly for standalone web automation.
+`--platform web` drives a browser through [agent-browser](https://github.com/vercel-labs/agent-browser) and requires Node 24+. Use it when a browser step belongs inside an `agent-device` session, replay, batch, MCP, or Node.js client flow. For standalone browser automation, use `agent-browser` directly.
 
 Set up and verify the managed web backend before you open a web session:
 
@@ -196,16 +179,11 @@ agent-device viewport 1280 900 --platform web
 agent-device close --platform web
 ```
 
-- `agent-device` installs and manages its own pinned `agent-browser` backend.
-- Run `web setup` before first use and in CI bootstrap steps. Normal `--platform web` commands do not install the backend implicitly.
-- Runtime web commands resolve the backend only from the managed install in the effective agent-device state dir.
-- `web setup` is idempotent and reuses the pinned backend when it is already installed.
-- `web doctor` verifies the managed backend after setup.
-- The managed install respects `--state-dir` and `AGENT_DEVICE_STATE_DIR`.
-- Supported through `agent-device`: URL open, snapshot refs, `get text/attrs`, `is visible/hidden/exists/absent/focused/text`, `find text/selector`, click/press, hover, fill/type, wait, `network dump`, `audio probe`, screenshot, close, and replay scripts composed from those commands.
-- `hover <@ref|selector|x y>` moves the pointer without pressing so hover-gated UI (row toolbars, menus) appears. Add `--settle` to read what it revealed instead of taking another snapshot. `hover @ref` hovers the browser's own element handle; like `click @ref --settle`, the `--settle` diff needs a selector or coordinate target on web because web refs carry no geometry.
-- `audio probe start [durationSeconds] [bucketMs]` samples HTML media elements into compact RMS/peak dBFS buckets; see [Debugging & Profiling](/docs/debugging-profiling#audio-probes).
-- Out of scope for `agent-device` web support: tab/window/devtools control, network routing/interception/HAR, cookies/storage, downloads/uploads, arbitrary page scripting, multi-page orchestration, and raw browser diagnostics. Use `agent-browser` directly for those browser-specific workflows.
+- `web setup` installs a pinned `agent-browser` backend into the agent-device state directory (`--state-dir`, `AGENT_DEVICE_STATE_DIR`) and reuses it when present. Run it before first use and in CI bootstrap: web commands never install the backend themselves and use only that managed install. `web doctor` verifies it.
+- Supported: URL open, snapshot refs, `get text/attrs`, `is visible/hidden/exists/absent/focused/text`, `find text/selector`, click/press, hover, fill/type, wait, `network dump`, `audio probe`, screenshot, close, and replay scripts made from those commands.
+- `hover <@ref|selector|x y>` moves the pointer without pressing so hover-gated UI (row toolbars, menus) appears. Add `--settle` to read what it revealed; on web, `--settle` needs a selector or coordinate target because web refs carry no geometry.
+- `audio probe start [durationSeconds] [bucketMs]` samples HTML media elements into RMS/peak dBFS buckets; see [Debugging & Profiling](/docs/debugging-profiling#audio-probes).
+- Not supported: tab/window/devtools control, network routing/interception/HAR, cookies/storage, downloads/uploads, arbitrary page scripting, multi-page orchestration, and raw browser diagnostics. Use `agent-browser` directly for those.
 
 ## Device isolation scopes
 
@@ -214,14 +192,12 @@ agent-device devices --platform ios --ios-simulator-device-set /tmp/tenant-a/sim
 agent-device devices --platform android --android-device-allowlist emulator-5554,device-1234
 ```
 
-- `--ios-simulator-device-set <path>` constrains simulator discovery and simulator command execution via `xcrun simctl --set <path> ...`.
-- The Apple runner's `xcodebuild` phases resolve a scoped simulator in the same set through `-DVTSimulatorSetLocation=<path>`; `~/Library/Developer/XCTestDevices` is never redirected. If the selected Xcode no longer resolves the simulator that way, the runner start fails with `details.reason: "simulator_set_destination_not_found"`, and the error names the set, and the selected Xcode version when this daemon has already read it.
-- On macOS, daemon startup puts back a `~/Library/Developer/XCTestDevices` that an older agent-device left redirected into a scoped set, before the daemon accepts requests: it removes any symlink at that path, restores `XCTestDevices.agent-device-backup` when it exists, and records each step in `daemon.log`. A symlinked `XCTestDevices` is not supported: daemon startup removes a symlink you made yourself too, for example one that moves `XCTestDevices` to another volume. Only the link is removed, never the directory it points to, and the `daemon.log` entry names that directory. A failed restore is recorded there too and does not stop the daemon or a runner start.
-- `--android-device-allowlist <serials>` constrains Android discovery/selection to comma or space separated serials.
-- Scope is applied before selectors (`--device`, `--udid`, `--serial`), so out-of-scope selectors fail with `DEVICE_NOT_FOUND`.
-- With iOS simulator-set scope enabled, iOS physical devices are not enumerated.
-- Device scoping can also be configured with `iosSimulatorDeviceSet` and `androidDeviceAllowlist` config keys. Android allowlists can use `AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST`.
-- CLI scope flags override environment values unless bound-session lock mode is active with `strip`, in which case conflicting per-call selectors are ignored.
+- `--ios-simulator-device-set <path>` limits simulator discovery and commands to that simulator set. iOS physical devices are not listed while it is set.
+- If the selected Xcode can't resolve a scoped simulator for the Apple runner, the runner start fails with `details.reason: "simulator_set_destination_not_found"`, naming the set and, when known, the Xcode version.
+- `--android-device-allowlist <serials>` limits Android discovery and selection to comma- or space-separated serials.
+- Set the same scopes with the `iosSimulatorDeviceSet` and `androidDeviceAllowlist` config keys, or `AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST`. CLI flags override environment values, except under a `strip` session lock, which ignores conflicting per-call selectors.
+- Scope applies before `--device`, `--udid`, and `--serial`, so an out-of-scope selector fails with `DEVICE_NOT_FOUND`.
+- On macOS, daemon startup removes any symlink at `~/Library/Developer/XCTestDevices`, including one you made yourself (for example to move it to another volume), and restores `XCTestDevices.agent-device-backup` when it exists. A symlinked `XCTestDevices` is not supported. Only the link is removed, never the directory it points to; `daemon.log` records each step and any failed restore, which doesn't stop the daemon.
 
 ## Device discovery
 
@@ -237,21 +213,17 @@ agent-device capabilities --platform android
 agent-device capabilities --session checkout --json
 ```
 
-- `devices` lists available targets after applying any platform selector or isolation scope flags.
-- Use `--platform` to narrow discovery to Apple-family (`ios`, `tvOS`, `macOS`), Android, HarmonyOS, or Vega OS targets.
-- Use `--ios-simulator-device-set` and `--android-device-allowlist` when you need tenant- or lab-scoped discovery.
-- Each listed device carries `model` (hardware model, for example `iPhone 17 Pro` or `Pixel 9`) and `osVersion` (for example `26.1` or `16`) when the platform tooling reports them. iOS simulators read them from `simctl` device types and runtimes, physical iOS devices from `devicectl` (or the OS version printed by `xctrace`), and running Android devices from `ro.product.model` and `ro.build.version.release`; Android emulators report the system image model, such as `sdk_gphone64_arm64`. Stopped AVDs and other platforms omit both fields. They describe a device only and are not selectors.
-- `capabilities` reports the command names supported by the selected session device or an explicit `--platform`/`--device`/`--udid`/`--serial` target.
-- In JSON output, `capabilities` returns `{ device, availableCommands }`. Use `availableCommands` for dynamic integrations instead of maintaining a separate platform support table.
+- `devices` lists available targets after applying `--platform` and [isolation scopes](#device-isolation-scopes).
+- Each device carries `model` (such as `iPhone 17 Pro` or `Pixel 9`) and `osVersion` (such as `26.1` or `16`) when platform tooling reports them: `simctl` for iOS simulators, `devicectl` or `xctrace` for physical iOS devices, and `ro.product.model` and `ro.build.version.release` for running Android devices. Android emulators report the system image model, such as `sdk_gphone64_arm64`. Stopped AVDs and other platforms omit both fields. They describe a device and are not selectors.
+- `capabilities` lists the commands the session device, or an explicit `--platform`/`--device`/`--udid`/`--serial` target, supports. JSON output is `{ device, availableCommands }`; use `availableCommands` instead of keeping your own platform support table.
 
 ### HarmonyOS command boundary
 
-HarmonyOS support uses HDC and ArkUI `uitest`. On API 24 devices it supports lifecycle and HAP deployment, ArkUI snapshot/screenshot and selector reads, one-pointer touch and text actions, keyboard `enter`/`dismiss`, app logs, foreground app state, process RSS samples, and `settings clear-app-state`. Run `agent-device capabilities --platform harmonyos` for the authoritative command list for a selected device.
+HarmonyOS support uses HDC and ArkUI `uitest`. On API 24 devices it supports lifecycle and HAP deployment, ArkUI snapshot/screenshot and selector reads, one-pointer touch and text actions, keyboard `enter`/`dismiss`, app logs, foreground app state, process RSS samples, and `settings clear-app-state`. Run `agent-device capabilities --platform harmonyos` for the command list of a selected device.
 
-- `gesture pan|fling|swipe` and `swipe` use HDC's single-pointer input primitives. Multi-touch gestures and target-authored `gesture drag` return `UNSUPPORTED_OPERATION` rather than approximating the interaction.
-- Physical HarmonyOS devices support whole-screen recording through `record start <path> --scope device` or `--scope system`. This uses the device ScreenRecorder service, not HDC `screenrecord`; emulator recording is rejected. HarmonyOS recording does not support `--fps`, `--quality`, or `--hide-touches`.
-- Orientation control, clipboard, alert automation, network/audio capture, push and app-event delivery, React Native helpers, and trace capture are not advertised for HarmonyOS. The public API 24 HDC surface has no usable `pasteboard`, notification, or `aa send` command on the supported emulator and physical device.
-- `settings` intentionally supports only `clear-app-state`; other system settings are not changed through undocumented parameter writes. `perf memory sample` provides process RSS; frame health and memory-snapshot artifacts remain unavailable.
+- `gesture pan|fling|swipe` and `swipe` use single-pointer input. Multi-touch gestures and target-authored `gesture drag` return `UNSUPPORTED_OPERATION`.
+- Physical devices support whole-screen recording with `record start <path> --scope device` or `--scope system`, without `--fps`, `--quality`, or `--hide-touches`. Emulator recording is rejected.
+- Not available: orientation, clipboard, alerts, network/audio capture, push and app-event delivery, React Native helpers, and trace capture. `settings` supports only `clear-app-state`. `perf memory sample` reports process RSS; frame health and memory snapshots are unavailable.
 
 ## Diagnostics
 
@@ -262,11 +234,10 @@ agent-device doctor --platform android --app com.example.myapp
 agent-device doctor --remote --json
 ```
 
-- `doctor` diagnoses device, app, Metro, and React Native setup/readiness issues for the selected target.
-- Use `--platform ios|android|vega|macos|linux|web|apple` to scope the checks to one backend; without it, `doctor` reports across the discoverable targets.
-- `--app <id-or-name>` focuses app-specific checks (install state, Metro/React Native wiring) on a single bundle id or app name.
-- `--remote` runs only the environment checks that do not need a booted device; use it in CI bootstrap.
-- `doctor` is read-only: it never boots, installs, or mutates the session device.
+- `doctor` diagnoses device, app, Metro, and React Native setup for the selected target. It is read-only: it never boots, installs, or changes the device.
+- `--platform ios|android|vega|macos|linux|web|apple` limits checks to one backend; without it, `doctor` checks every discoverable target.
+- `--app <id-or-name>` adds app checks (install state, Metro and React Native wiring) for one bundle id or app name.
+- `--remote` runs only the checks that don't need a booted device; use it in CI bootstrap.
 
 ## Prepare Apple runner
 
@@ -274,20 +245,15 @@ agent-device doctor --remote --json
 agent-device prepare ios-runner --platform ios --timeout 240000
 ```
 
-- Use `prepare ios-runner` in Apple-platform CI setup before `snapshot`, `replay`, or `test`.
-- Run it after the simulator/device is booted and the app is installed, but before the first snapshot, replay, or test command.
+- In Apple CI setup, run `prepare ios-runner` after the device is booted and the app is installed, before the first `snapshot`, `replay`, or `test`. It builds or reuses the Apple runner, starts it, and checks that it answers.
 - `--timeout <ms>` is one budget shared by the Simulator boot and runner preparation; see [Navigation](#navigation).
-- It builds or reuses the local Apple runner, starts a runner session, and verifies that the runner can answer a lightweight health command.
-- In JSON output, top-level `buildMs`, `connectMs`, and `healthCheckMs` are diagnostic fields and may overlap; use `timing.additiveParts` for additive wall-clock phase totals. `connectMs` contains `buildMs` when a runner artifact is built or rebuilt.
-- If health checking exposes a bad restored runner artifact, agent-device marks that artifact bad and rebuilds once.
-- If a fresh runner launch gets stuck before accepting connections, agent-device invalidates that runner session and launches it once more without forcing a rebuild.
-- CI may cache `~/.agent-device/apple-runner/derived` when the cache key includes the exact agent-device package contents and selected Xcode version.
-- After a successful build, agent-device removes the build scratch from the new cache key (intermediates, precompiled and module caches, logs) and keeps `Build/Products` and the metadata file, which is all reuse and launch read; one iOS simulator key measured 165.7 MB before the trim and 5.9 MB after. A key that fails certification is rebuilt from scratch either way, and a runner source or Xcode change mints a new key, so the scratch is never used again. Only the key this build gets with no path override is trimmed, compared by resolved real path; a `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` pointing anywhere else, including inside the managed runner cache, is never trimmed, because a fixed path rebuilds into the same tree incrementally.
-- agent-device never reads or removes `~/.agent-device/ios-runner`, a runner cache that older agent-device versions on the same machine may still use. Delete it with `rm -rf ~/.agent-device/ios-runner` once no such version runs.
-- Runner reuse is authorized only by the cache metadata's content manifest: a restored tree whose files no longer match the recorded digests, modes, or symlink targets is discarded and rebuilt. A cache key must stay exact — the runtime never falls back to a broader cache.
-- Every runner source or Xcode change creates a new cache key under `~/.agent-device/apple-runner/derived/<folder>/`, where the folder names the platform and device kind (`ios-simulator`, `ios-device`, `tvos-simulator`, `tvos-device`, `macos`, `visionos-simulator`, `visionos-device`). After a build, agent-device deletes, on a best-effort basis and without delaying the start, keys beside the new one in the same folder that are neither among the 3 last used (the new key included) nor used in the last day, and never one a runner lease not proven dead points at or a build is holding. A key that cannot be deleted is left in place and reported as a `runner_xctestrun_cache_eviction_failed` warning diagnostic. `AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP=<n>` changes that count and `0` keeps every key. A set `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` is never swept.
-- Certification is fail-closed: when a product tree cannot be certified at all — a product escaping the derived-data root, an unreadable subtree, a file over 128 MB, or a non-regular entry such as a socket — the build fails with `runner_cache_uncertifiable` naming the path instead of launching uncertified bytes. Point `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` at a plain directory the current user owns; replacing the tree (the error's hint says how) clears a refusal.
-- Runner build/start output is written to the session's `runner.log`. The top-level `daemon.log` is reserved for daemon lifecycle/startup issues.
+- In JSON output, `buildMs`, `connectMs`, and `healthCheckMs` may overlap (`connectMs` includes `buildMs` when the runner is built). Use `timing.additiveParts` for additive phase totals.
+- A cached runner that fails its health check is rebuilt once, and a runner stuck at launch is relaunched once.
+- CI may cache `~/.agent-device/apple-runner/derived` when the cache key includes the exact agent-device package contents and Xcode version. A cached runner whose files no longer match their recorded digests is rebuilt.
+- Each runner source or Xcode change creates a new key under `~/.agent-device/apple-runner/derived/<platform-folder>/`. After a build, keys that are neither among the 3 last used nor used in the last day are deleted; change the count with `AGENT_DEVICE_IOS_RUNNER_CACHE_KEEP` (see [Configuration](/docs/configuration#supported-environment-variables)). A key that can't be deleted is reported as a `runner_xctestrun_cache_eviction_failed` warning. A custom `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` is never swept or trimmed.
+- `runner_cache_uncertifiable` means the build products couldn't be verified, for example a product outside the derived-data root, an unreadable entry, a file over 128 MB, or a socket. Point `AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH` at a plain directory you own, or replace the tree as the error hint describes.
+- `~/.agent-device/ios-runner` belongs to older agent-device versions and is never touched. Delete it with `rm -rf ~/.agent-device/ios-runner` once no such version runs.
+- Runner build and start output goes to the session's `runner.log`; `daemon.log` covers daemon startup.
 
 ## TV targets
 
@@ -311,18 +277,13 @@ agent-device close com.example.app.main --session vega-tv
 vega virtual-device stop
 ```
 
-- AndroidTV app launch and app listing resolve TV launchable activities via `LEANBACK_LAUNCHER`.
-- TV target selection supports Apple TV and Android TV simulators/emulators and connected devices. Vega OS support is limited to the Vega Virtual Device (VVD).
-- TV targets are focus-first. Use `tv-remote` to move D-pad/remote focus before selecting a control; avoid raw `adb shell input keyevent` in command plans.
-- On Android TV, `tv-remote` maps to ADB keyevents. `tv-remote longpress <button>` is CLI sugar for a 500ms hold; `--duration-ms` overrides the preset and uses Android's longpress keyevent form for any positive duration because the platform command does not expose exact hold timing.
-- tvOS supports the same runner-driven interaction/snapshot flow as iOS (`snapshot`, `wait`, `press`, `fill`, `get`, `scroll`, `back`, `home`, `app-switcher`, `record`, and related selector flows).
-- On tvOS, `tv-remote`, runner `back`/`home`/`app-switcher` map to Siri Remote actions (`back` is Menu, `home` is Home, app switcher is double-home). `--duration-ms` is an exact remote-button hold duration.
-- Vega OS discovery and remote input use the SDK-matched Vega CLI and VDA. Use `--platform vega --target tv`, and use Vega component IDs such as `com.example.app.main`.
-- Use `--serial VirtualDevice` for explicit VVD selection.
-- The Vega VVD supports app open/close, `back`, `home`, and all shared `tv-remote` buttons. Exact holds are sent through `inputd-cli`.
-- On Vega OS, physical Fire TV, app inventory, snapshot, screenshot, selector, install, touch/text/gesture, logs, and performance are not supported and report unsupported.
-- On Android TV and tvOS, use `screenshot --overlay-refs` when visual focus evidence is useful or when focus metadata is unavailable/transient. On Vega OS, use the VVD display as visual truth.
-- tvOS follows iOS simulator-only command semantics for helpers like `gesture pinch`, `settings`, and `push`.
+- TV targets include Apple TV and Android TV simulators, emulators, and connected devices. Vega OS support is limited to the Vega Virtual Device (VVD).
+- TV targets are focus-first: move focus with `tv-remote` before selecting a control. Don't use raw `adb shell input keyevent` in command plans.
+- Android TV: app launch and app listing use `LEANBACK_LAUNCHER` activities. `tv-remote` sends ADB keyevents; `longpress <button>` is a 500ms hold, and any positive `--duration-ms` uses Android's longpress keyevent, which has no exact hold time.
+- tvOS supports the same runner-driven commands as iOS (`snapshot`, `wait`, `press`, `fill`, `get`, `scroll`, `back`, `home`, `app-switcher`, `record`, and selector flows). `back` is the Siri Remote Menu button, `home` is Home, and the app switcher is a double Home press; `--duration-ms` is an exact hold. Helpers that are simulator-only on iOS, such as `gesture pinch`, `settings`, and `push`, are simulator-only on tvOS too.
+- Vega OS: use `--platform vega --target tv` with Vega component IDs such as `com.example.app.main`, and `--serial VirtualDevice` to select the VVD explicitly. Commands go through the SDK-matched Vega CLI and VDA. The VVD supports app open/close, `back`, `home`, and every shared `tv-remote` button, with exact holds.
+- Vega OS doesn't support physical Fire TV, app inventory, snapshot, screenshot, selectors, install, touch/text/gesture, logs, or performance; those report unsupported. Use the VVD display as visual truth.
+- On Android TV and tvOS, use `screenshot --overlay-refs` for visual focus evidence, especially when focus metadata is missing or transient.
 
 ## Desktop targets
 
@@ -333,26 +294,19 @@ agent-device open --platform macos --surface desktop
 agent-device snapshot -i --platform apple --target desktop
 ```
 
-- `--platform macos` selects the host Mac as a `desktop` target.
-- `--platform apple --target desktop` selects the same macOS backend through the Apple-family alias.
-- Use `app` sessions for normal app control: `open`, `snapshot`, `click`, `fill`, `press`, `scroll`, `back`, `screenshot`, `record`.
-- Use `frontmost-app`, `desktop`, and `menubar` when you need to inspect desktop-global UI before choosing one app, mainly with `snapshot`, `get`, `is`, and `wait`.
-- `open --platform macos --surface frontmost-app` inspects the focused app without naming it first.
-- `open --platform macos --surface desktop` inspects visible windows across the desktop.
-- `open --platform macos --surface menubar` inspects the active app menu bar and system menu extras.
-- `open <app> --platform macos --surface menubar` targets one menu bar app's extras bar, which is useful for status-item apps.
-- Status-item apps often expose little or no useful UI through the default macOS `app` surface. Prefer `--surface menubar` for discovery when the app lives in the top menu bar.
-- If you inspect with `desktop` or `menubar` and then need to click or fill inside one app, open that app in a normal `app` session.
-- macOS also supports `clipboard read|write`, `trigger-app-event`, `logs`, `network dump`, `audio probe`, `alert`, and a subset of `settings` (see [Settings helpers](#settings-helpers)).
-- `audio probe start 10 1000 --platform macos` samples host system audio and needs Screen Recording permission; see [Debugging & Profiling](/docs/debugging-profiling#audio-probes).
-- In macOS app sessions, `screenshot` captures the target app window bounds rather than the full desktop.
-- Prefer selector or `@ref`-driven interactions on macOS. Window position can shift between runs, so raw x/y point commands are less stable than snapshot-derived targets.
-- Use `click --button secondary` for context menus on macOS, then run `snapshot -i` again.
-- On `frontmost-app` and `menubar` surfaces, `press` and `click` post synthetic mouse events through the macOS helper (the `desktop` surface inspects only): `--hold-ms` is how long the button stays down (at least 40 ms, 60 ms by default, because AppKit drops a release posted in the same tick as its press), `--count` is that many independent clicks (apps that detect a double-click by timing, such as Finder, still read two clicks at the default interval as one; pass an `--interval-ms` longer than the system double-click time to keep them apart), and `--double-tap` posts each click as a double-click pair. A long schedule such as `--hold-ms 10000 --count 4` is given the time it needs, and a helper stopped mid-hold — by a cancelled request, a dropped client, or its deadline — releases the button before it exits. `--jitter-px` is not applied on these surfaces.
-- With `AGENT_DEVICE_MACOS_APP_BACKEND=native`, macOS app sessions run without XCTest: no Automation Mode overlay, the app can stay behind other windows, and the real pointer stays with you while a drawn pointer shows each action. `click`, `press`, and `fill` use accessibility actions on the element at their target point, which must lie inside one of the app's own on-screen windows and not on its menu bar; `type` inserts at the focused control and falls back to key events sent to the app; `scroll` moves the accessibility scroll bar under the front window's center. Chromium-based apps expose their full tree. The daemon then never starts the Apple runner on macOS: `record`, `prepare`, `back`, `longpress` and `--hold-ms`, `--double-tap`, `--button secondary`, and gestures are refused with `UNSUPPORTED_OPERATION` (`reason: unsupported-device-backend`), as is a click on an element with no accessibility action. Use the default XCTest backend for those. `screenshot` captures only the app's front window, even when other windows cover it.
-- Mobile-only helpers are unsupported on macOS: `boot`, `shutdown`, `home`, `orientation`, `app-switcher`, `action-button`, `fold`, `install`, `reinstall`, `install-from-source`, and `push`.
+- `--platform macos`, or `--platform apple --target desktop`, selects the host Mac as a `desktop` target.
+- Use an `app` session for normal app control: `open`, `snapshot`, `click`, `fill`, `press`, `scroll`, `back`, `screenshot`, `record`. In app sessions, `screenshot` captures the app window, not the whole desktop.
+- Use the other surfaces to inspect desktop-wide UI before choosing an app, mainly with `snapshot`, `get`, `is`, and `wait`: `frontmost-app` is the focused app, `desktop` is the visible windows across the desktop, and `menubar` is the active app's menu bar and system menu extras. To click or fill inside one app afterwards, open it in an `app` session.
+- `open <app> --platform macos --surface menubar` targets one app's menu bar extras. Prefer it for status-item apps, which often expose little through the `app` surface.
+- Prefer selectors and `@ref`s; window positions shift between runs, so raw x/y is less stable. Use `click --button secondary` for context menus, then run `snapshot -i` again.
+- On `frontmost-app` and `menubar`, `press` and `click` post synthetic mouse events (`desktop` is inspect-only). `--hold-ms` keeps the button down (at least 40 ms, default 60 ms), `--count` sends independent clicks, and `--double-tap` sends double-click pairs. Apps like Finder read two clicks at the default interval as one double-click; pass an `--interval-ms` longer than the system double-click time to keep them apart. Long schedules get the time they need, and a cancelled or interrupted click releases the button. `--jitter-px` is ignored on these surfaces.
+- macOS also supports `clipboard read|write`, `trigger-app-event`, `logs`, `network dump`, `audio probe`, `alert`, and part of `settings` (see [Settings helpers](#settings-helpers)). `audio probe` samples host system audio and needs Screen Recording permission; see [Debugging & Profiling](/docs/debugging-profiling#audio-probes).
+- Mobile-only commands are unsupported on macOS: `boot`, `shutdown`, `home`, `orientation`, `app-switcher`, `action-button`, `fold`, `install`, `reinstall`, `install-from-source`, and `push`.
 
-Recommended loops:
+Set `AGENT_DEVICE_MACOS_APP_BACKEND=native` to run macOS app sessions without XCTest. There is no Automation Mode overlay, the app can stay behind other windows, and your pointer stays yours while a drawn pointer shows each action.
+
+- `click`, `press`, and `fill` use accessibility actions on the element at the target point, which must be inside one of the app's on-screen windows, not its menu bar. `type` inserts at the focused control or falls back to key events. `scroll` moves the scroll bar under the front window's center. Chromium-based apps expose their full tree. `screenshot` captures only the app's front window, even when it is covered.
+- `record`, `prepare`, `back`, `longpress`, `--hold-ms`, `--double-tap`, `--button secondary`, gestures, and clicks on an element with no accessibility action fail with `UNSUPPORTED_OPERATION` (`reason: unsupported-device-backend`). Use the default XCTest backend for those.
 
 ```bash
 # One app, full interaction

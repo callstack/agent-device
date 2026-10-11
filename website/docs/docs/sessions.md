@@ -130,6 +130,10 @@ first `open` onward, so another workspace gets `DEVICE_IN_USE` the whole time:
 agent-device open Settings --platform ios --udid <udid> --timeout 600000
 ```
 
+Without `--timeout`, the command gives up after about 90 seconds, often before a first boot finishes.
+When the budget runs out, the command fails with `error.details.reason: boot_timeout`, but the
+Simulator or emulator keeps booting, so a retry finds it further along.
+
 When another session holds the device but will release it soon — a parallel agent finishing its run —
 `open --wait <ms>` waits for the device instead of failing at once, and reports who holds it while it
 waits:
@@ -142,6 +146,36 @@ If the wait runs out while the device is still busy, `open` fails with `DEVICE_I
 session address that holds it; `close --session <address>` releases it. Each waiting `open` gets its
 full wait: if another waiter gets the device first, the rest keep waiting for what is left of their own
 budget, so several agents can queue on one device.
+
+`--wait` waits only for another session. A device claimed by another workspace's
+daemon is never waited for; `open` fails at once and names the command that releases it.
+
+## Release a device another workspace holds
+
+Each daemon claims the devices its sessions use, and another live owner's claim blocks `open`. List
+the claims on this host without starting a daemon:
+
+```bash
+agent-device device status
+agent-device device status --platform ios --udid <udid>
+agent-device device status --stale
+```
+
+Normal output shows live claims and claims that need attention, then summarizes claims whose owner is
+provably gone in one line; `--stale` lists those. Scope either view with `--platform` plus `--udid`
+(Apple) or `--serial` (Android).
+
+To free a device:
+
+- If the owner is still running, close its session from its own workspace, or stop its daemon with
+  `agent-device daemon stop --state-dir <owner state dir>`.
+- If the owner is gone, run `agent-device device release --stale`. It cleans up the resources that owner
+  left behind, then clears the claim. Live, uncertain, PID-reused, and corrupt claims are
+  refused with the reason; `device release` never forces them.
+- `open` replaces a dead owner's claim itself once that owner's resources are cleaned up.
+- If the device rebooted after the claim was taken, the reboot already ended that owner's app, runner,
+  and accessibility session. `open` takes the claim and reports the release in `warnings`;
+  `device release --stale` doesn't check for reboots and keeps refusing such a claim.
 
 ## Notes
 
