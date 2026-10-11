@@ -297,7 +297,23 @@ test('rejects mismatching serial selectors for existing android sessions', () =>
 
 // Fresh-session target ↔ lock-platform matrix (`targetSelectorsConflict`). A fresh session under a
 // platform lock binds its first device from that platform, so a target that cannot exist on it must
-// fail loudly instead of binding the wrong device class (or none).
+// fail loudly instead of binding the wrong device class (or none). Each family keeps its native
+// target: mobile-family locks bind `mobile`, vega binds `tv`, desktop-family locks bind `desktop`.
+test('a mobile-family lock accepts its native mobile target on a fresh session', () => {
+  for (const lockPlatform of ['android', 'harmonyos', 'ios'] as const) {
+    const req = applyRequestLockPolicy({
+      token: 'token',
+      session: 'qa-fresh',
+      command: 'snapshot',
+      positionals: [],
+      flags: { target: 'mobile' },
+      meta: { lockPolicy: 'reject', lockPlatform },
+    });
+    assert.equal(req.flags?.target, 'mobile');
+    assert.equal(req.flags?.platform, lockPlatform);
+  }
+});
+
 test('rejects a desktop target under a mobile-family lock platform on a fresh session', () => {
   for (const lockPlatform of ['android', 'harmonyos', 'ios'] as const) {
     assert.throws(
