@@ -204,9 +204,11 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
               ? available
               : screenshotKindUnavailable,
         }),
-        // No native text reading: every text wait on this owner polls the canonical tree.
+        // No native text reading: every text wait on this owner polls the canonical tree. No live
+        // selector read either: the off-screen guard refuses on the capture's verdict unchanged.
         ...selectorObservationRuntimeOperationFacts({
           findText: snapshotKindUnavailable,
+          querySelector: snapshotKindUnavailable,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: harmonyFocusFact(device) }),

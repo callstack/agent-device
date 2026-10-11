@@ -31,7 +31,10 @@ import {
   bindLocalScreenshotInteractor,
   screenshotRuntimeOperationFacts,
 } from '@agent-device/contracts/screenshot-runtime';
-import { selectorObservationRuntimeOperationFacts } from '@agent-device/contracts/selector-observation-runtime';
+import {
+  selectorObservationRuntimeOperationFacts,
+  type SelectorObservationRuntimeOperations,
+} from '@agent-device/contracts/selector-observation-runtime';
 import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
 import {
   bindLocalTypeTextInteractor,
@@ -71,6 +74,7 @@ import { appleNavigationFacts, createAppleNavigationOperations } from './navigat
 import { appleSystemFacts, createAppleSystemOperations } from './system/runtime.ts';
 import { appleFoldableFacts, createAppleFoldableOperations } from './foldable/runtime.ts';
 import { bindAppleFindTextRuntime, bindAppleSnapshotRuntime } from './runtime-snapshot.ts';
+import { bindAppleQuerySelectorRuntime } from './runtime-selector-query.ts';
 import type { MacOsAppBackend } from '@agent-device/contracts/session';
 import { hostMacOsAppBackend } from './os/macos/app-backend.ts';
 import { macOsNativeBackendFacts } from './os/macos/native-backend-facts.ts';
@@ -285,6 +289,9 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ...screenshotRuntimeOperationFacts({ capture: appleScreenshotFact(device) }),
         ...selectorObservationRuntimeOperationFacts({
           findText: appleSnapshotFact(device),
+          // The live selector read rides the runner, so it shares the exact iOS-family kind cell
+          // the fused selector tap declares — not the macOS desktop or watchOS.
+          querySelector: isIosFamily(device) ? appleFocusFact(device) : unavailable,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: appleFocusFact(device) }),
@@ -336,8 +343,18 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
             resolveInteractor: host.localInteractors.resolve,
           }),
       );
+      // Typed on its own for the same union-budget reason as `appStateOperations`.
+      const selectorQueryOperations: Partial<SelectorObservationRuntimeOperations> = whenAdmitted(
+        facts.operations.querySelector,
+        () =>
+          bindAppleQuerySelectorRuntime({
+            device: request.device,
+            signal: request.scope.signal,
+          }),
+      );
       const operations: DeviceBinding<PlatformRuntimeOperations>['operations'] = {
         ...appStateOperations,
+        ...selectorQueryOperations,
         ...logs.operations,
         ...createAppleAppDeploymentOperations({
           host,

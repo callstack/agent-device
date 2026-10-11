@@ -48,6 +48,7 @@ export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.fre
   ...unavailableShutdownOperationFacts,
   ...screenshotRuntimeOperationFacts({ capture: unavailable }),
   findText: unavailable,
+  querySelector: unavailable,
   setViewport: unavailable,
   focusPoint: unavailable,
   typeText: unavailable,

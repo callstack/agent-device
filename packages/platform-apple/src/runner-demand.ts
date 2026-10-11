@@ -58,6 +58,7 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
   captureSnapshotWithCustomActions: 'runner',
   captureScreenshot: 'simulator',
   findText: 'runner',
+  querySelector: 'runner',
   readTextAtPoint: 'runner',
   // Every interaction and runner-driven capture.
   tapPoint: 'runner',

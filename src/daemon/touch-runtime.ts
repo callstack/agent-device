@@ -24,6 +24,7 @@ import { successText } from '@agent-device/kernel/success-text';
 import { requireIntInRange } from '@agent-device/kernel/validation';
 import type { DaemonCommandContext } from './context.ts';
 import type { DirectIosSelectorTarget } from './direct-ios-selector.ts';
+import type { QuerySelectorRuntimeOperations } from '@agent-device/contracts/selector-observation-runtime';
 import {
   admitRuntimeOperations,
   type RuntimeAdmissionBindings,
@@ -188,6 +189,12 @@ export type BoundTouchExecutor = Readonly<{
     options?: { delayMs?: number },
   ) => Promise<Record<string, unknown> | void>;
   tapElementSelector?: (selector: DirectIosSelectorTarget) => Promise<Record<string, unknown>>;
+  /**
+   * The owner's CONDITIONAL live selector read (#1542 off-screen rescue). Present only when this
+   * captured touch bind admitted it; its absence is the parity side of the declaration — the
+   * guard refuses on the capture's verdict unchanged.
+   */
+  querySelector?: QuerySelectorRuntimeOperations['querySelector'];
 }>;
 
 export function createBoundTouchExecutor(
@@ -199,6 +206,30 @@ export function createBoundTouchExecutor(
     appBundleId: context.appBundleId,
   };
   const captureSnapshot = bound.captured ? readCaptureSnapshot(bound.runtime) : undefined;
+  const base = createBaseTouchExecutor(bound, context, shared, captureSnapshot);
+  const querySelector = selectOffscreenTargetQuery(bound);
+  return querySelector ? Object.freeze({ ...base, querySelector }) : base;
+}
+
+/**
+ * The owner's live selector read, present only on the captured arms whose use declares it
+ * CONDITIONAL and only when the exact owner admitted it. The freeze keeps the executor's shape
+ * identical to the builders' own.
+ */
+function selectOffscreenTargetQuery(
+  bound: BoundTouchRuntime,
+): BoundTouchExecutor['querySelector'] | undefined {
+  if (!bound.captured) return undefined;
+  const { querySelector } = bound.runtime.operations;
+  return querySelector ? async (input) => await querySelector(input) : undefined;
+}
+
+function createBaseTouchExecutor(
+  bound: BoundTouchRuntime,
+  context: DaemonCommandContext,
+  shared: TouchSharedInput,
+  captureSnapshot: BoundTouchExecutor['captureSnapshot'],
+): BoundTouchExecutor {
   switch (bound.kind) {
     case 'tap':
       return createTapTouchExecutor(bound, context, shared, captureSnapshot);

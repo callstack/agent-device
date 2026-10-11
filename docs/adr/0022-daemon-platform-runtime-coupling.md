@@ -70,9 +70,11 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
      relaunch-target policy, `session-selector-dispatch.ts` consumes the app-bundle-identity
      resolver; both edges are daemon-policy-essential, and the resolver stays the one
      construction path for the open plan.
-   - **#2273/#2274** (existing) — `direct-ios-selector.ts` → `queryAppleRuntimeSelector` is the
-     selector seam those issues own; coordination was posted there rather than opening a second
-     selector producer.
+   - **#2273/#2274 (done)** — the `direct-ios-selector.ts` → `queryAppleRuntimeSelector` edge is
+     retired. The live selector read is now the `querySelector` runtime operation on the
+     request-bound owner (`SelectorObservationRuntimeOperations`, declared CONDITIONAL on the
+     captured touch and gesture uses), so the off-screen rescue (#1542) executes on the binding
+     the command was already admitted for; no second selector producer was added.
 
 3. **Session state and store authority are measured as a symbol-level overlay and ratcheted
    on the handler-owned slice.** At `27a97ee619` the overlay is 112 `SessionState` shape edges
@@ -133,4 +135,5 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
   `scripts/layering/check.ts` (both observed red against planted violations before acceptance).
 - R7 `session-state-ownership` and the R10 merge-base ratchet for the owning-module slice.
 - R65 for the concrete-platform-import ban this audit builds on.
-- Child issues #2333 and #2334 landed (see §2.2); #2273/#2274 remain for the selector seam.
+- Child issues #2333 and #2334 landed (see §2.2); #2273/#2274 landed with the `querySelector`
+  runtime operation (see §2.2).

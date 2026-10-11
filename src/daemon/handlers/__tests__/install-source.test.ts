@@ -443,6 +443,7 @@ function sourceRuntimeFacts(
       }),
       ...screenshotRuntimeOperationFacts({ capture: unavailable }),
       findText: unavailable,
+      querySelector: unavailable,
       setViewport: unavailable,
       focusPoint: unavailable,
       typeText: unavailable,

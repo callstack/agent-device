@@ -6,8 +6,11 @@ import type { SessionState } from './session-state.ts';
 import { readSimpleSelectorTarget } from '@agent-device/selectors';
 import { asAppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { ElementSelectorTapOptions } from '@agent-device/contracts/interactor-types';
-import { queryAppleRuntimeSelector } from '../platform-runtime-apple-resources.ts';
-import type { AppleRunnerRequestOptions } from './apple-runner-options.ts';
+import type {
+  QuerySelectorNodeReading,
+  QuerySelectorRuntimeOperations,
+} from '@agent-device/contracts/selector-observation-runtime';
+import type { SnapshotRuntimeExecution } from '@agent-device/contracts/snapshot-runtime';
 
 export type DirectIosSelectorTarget = ElementSelectorTapOptions & { raw: string };
 
@@ -47,36 +50,34 @@ export function deriveDirectIosNodeSelector(
 
 export type DirectIosSelectorQueryResult = {
   found: boolean;
-  text?: string;
-  node?: SnapshotNode;
+  node?: QuerySelectorNodeReading;
 };
 
+/**
+ * The off-screen rescue's live read, executed on the caller's request-bound
+ * `querySelector` operation (the same binding the command was admitted for; ADR 0019 §2). The
+ * daemon names no platform and builds no runner request: the owner answers with the geometry it
+ * measured right now, or its facts declared the operation absent and the hook was never installed.
+ */
 export async function queryDirectIosSelector(
   session: SessionState,
   selector: Pick<DirectIosSelectorTarget, 'key' | 'value'>,
-  requestOptions: AppleRunnerRequestOptions,
+  querySelector: QuerySelectorRuntimeOperations['querySelector'],
+  input: Readonly<{
+    execution: SnapshotRuntimeExecution;
+    signal?: AbortSignal;
+  }>,
 ): Promise<DirectIosSelectorQueryResult> {
-  const data = await queryAppleRuntimeSelector(
-    session.device,
+  const { found, node } = await querySelector({
     selector,
-    session.appBundleId,
-    requestOptions,
-  );
-  const found = data.found === true;
-  const node = readDirectIosSelectorNode(data);
+    ...(session.appBundleId === undefined ? {} : { options: { appBundleId: session.appBundleId } }),
+    execution: input.execution,
+    ...(input.signal === undefined ? {} : { signal: input.signal }),
+  });
   return {
     found,
-    ...(typeof data.text === 'string' ? { text: data.text } : {}),
     ...(node ? { node } : {}),
   };
-}
-
-function readDirectIosSelectorNode(data: Record<string, unknown>): SnapshotNode | undefined {
-  const nodes = data.nodes;
-  if (!Array.isArray(nodes)) return undefined;
-  const node = nodes[0];
-  if (!node || typeof node !== 'object') return undefined;
-  return node as SnapshotNode;
 }
 
 /** The runner's selector refusals: it resolved the selector and refused before any gesture. */

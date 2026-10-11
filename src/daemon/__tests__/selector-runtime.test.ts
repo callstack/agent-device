@@ -1,9 +1,9 @@
 import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
-import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
+import type { QuerySelectorInput } from '@agent-device/contracts/selector-observation-runtime';
 import type { SessionState } from '../session-state.ts';
 import {
   localRuntimeOwner,
@@ -21,15 +21,7 @@ import { makeSession as makeStoredSession } from '../../__tests__/test-utils/ses
 import { dispatchGetViaRuntime } from '../selector-runtime.ts';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
-const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
-  mockRunAppleRunnerCommand: vi.fn(),
-}));
-
 import { queryDirectIosSelector } from '../direct-ios-selector.ts';
-
-beforeEach(() => {
-  mockRunAppleRunnerCommand.mockReset();
-});
 
 function makeSession(): SessionState {
   return { name: 'default', device: IOS_SIMULATOR, createdAt: Date.now(), actions: [] };
@@ -140,92 +132,88 @@ test.each(['rebuild', 'retire'] as const)(
   },
 );
 
-async function withRunner<T>(operation: () => Promise<T>): Promise<T> {
-  return await withAppleRunnerProvider(
-    mockRunAppleRunnerCommand,
-    { deviceId: IOS_SIMULATOR.id },
-    operation,
-  );
-}
+// #1542: queryDirectIosSelector is the daemon-side adapter for the off-screen rescue's live
+// read. The runner request shape is the Apple owner's contract (its `querySelector` runtime
+// operation, pinned by packages/platform-apple); what the daemon owns here is the projection:
+// the session's app scope rides along, and the verdict passes through unchanged.
 
-// #1542: queryDirectIosSelector is the ONE querySelector client for the local
-// XCTest runner — the offscreen refusal double-check probe
-// (src/daemon/offscreen-target-probe.ts) reuses this exact function rather
-// than opening a second client, so its request-shape and node-extraction
-// contract is covered here, independent of any selector-runtime request.
-
-test('queryDirectIosSelector: builds the querySelector runner command from key/value/appBundleId', async () => {
-  mockRunAppleRunnerCommand.mockResolvedValue({ found: false, nodes: [] });
+test('queryDirectIosSelector: forwards the selector with the session appBundleId scope', async () => {
   const session = { ...makeSession(), appBundleId: 'com.example.demo' };
+  const querySelector = vi.fn(async (_input: QuerySelectorInput) => ({ found: false }) as const);
 
-  await withRunner(() => queryDirectIosSelector(session, { key: 'id', value: 'submit-order' }, {}));
+  await queryDirectIosSelector(session, { key: 'id', value: 'submit-order' }, querySelector, {
+    execution: { requestId: 'req-1' },
+  });
 
-  const [device, command] = mockRunAppleRunnerCommand.mock.calls[0] ?? [];
-  assert.equal(device, session.device);
-  const { commandId: _commandId, ...commandWithoutId } = command as Record<string, unknown>;
-  assert.deepEqual(commandWithoutId, {
-    command: 'querySelector',
-    selectorKey: 'id',
-    selectorValue: 'submit-order',
-    appBundleId: 'com.example.demo',
+  assert.deepEqual(querySelector.mock.calls[0]?.[0], {
+    selector: { key: 'id', value: 'submit-order' },
+    options: { appBundleId: 'com.example.demo' },
+    execution: { requestId: 'req-1' },
   });
 });
 
-test('queryDirectIosSelector: accepts a bare {key, value} selector — no `raw` field required', async () => {
-  // The offscreen double-check derives a selector from a node's own
-  // identifier/label (deriveDirectIosNodeSelector), which has no `raw`
-  // string — this must type/run without one.
-  mockRunAppleRunnerCommand.mockResolvedValue({
-    found: true,
-    nodes: [{ index: 0, rect: { x: 1, y: 2, width: 3, height: 4 }, hittable: true }],
+test('queryDirectIosSelector: a session without an app sends no options bag', async () => {
+  let received: QuerySelectorInput | undefined;
+  const querySelector = vi.fn(async (input: QuerySelectorInput) => {
+    received = input;
+    return { found: false } as const;
   });
 
-  const result = await withRunner(() =>
-    queryDirectIosSelector(makeSession(), { key: 'label', value: 'Pickup' }, {}),
+  await queryDirectIosSelector(makeSession(), { key: 'label', value: 'Pickup' }, querySelector, {
+    execution: {},
+  });
+
+  assert.ok(received);
+  assert.equal('options' in received, false);
+});
+
+test('queryDirectIosSelector: passes the node projection through when the owner reports one', async () => {
+  const node = { rect: { x: 1, y: 2, width: 3, height: 4 }, hittable: true };
+  const querySelector = vi.fn(
+    async (_input: QuerySelectorInput) => ({ found: true, node }) as const,
+  );
+
+  const result = await queryDirectIosSelector(
+    makeSession(),
+    { key: 'label', value: 'Pickup' },
+    querySelector,
+    {
+      execution: {},
+    },
   );
 
   assert.equal(result.found, true);
-  assert.deepEqual(result.node, {
-    index: 0,
-    rect: { x: 1, y: 2, width: 3, height: 4 },
-    hittable: true,
-  });
+  assert.deepEqual(result.node, node);
 });
 
-test('queryDirectIosSelector: found:false with no nodes reports not-found without a node', async () => {
-  mockRunAppleRunnerCommand.mockResolvedValue({ found: false, nodes: [] });
+test('queryDirectIosSelector: found:false with no node reports not-found without a node', async () => {
+  const querySelector = vi.fn(async (_input: QuerySelectorInput) => ({ found: false }) as const);
 
-  const result = await withRunner(() =>
-    queryDirectIosSelector(makeSession(), { key: 'id', value: 'missing' }, {}),
+  const result = await queryDirectIosSelector(
+    makeSession(),
+    { key: 'id', value: 'missing' },
+    querySelector,
+    {
+      execution: {},
+    },
   );
 
   assert.equal(result.found, false);
   assert.equal(result.node, undefined);
 });
 
-test('queryDirectIosSelector: surfaces text when the runner includes it', async () => {
-  mockRunAppleRunnerCommand.mockResolvedValue({
-    found: true,
-    text: 'Ada Lovelace',
-    nodes: [{ index: 0 }],
+test('queryDirectIosSelector: propagates an AMBIGUOUS_MATCH refusal from the owner rather than swallowing it', async () => {
+  const querySelector = vi.fn(async (_input: QuerySelectorInput) => {
+    throw new AppError('AMBIGUOUS_MATCH', 'selector matched multiple elements');
   });
-
-  const result = await withRunner(() =>
-    queryDirectIosSelector(makeSession(), { key: 'id', value: 'field-name' }, {}),
-  );
-
-  assert.equal(result.text, 'Ada Lovelace');
-});
-
-test('queryDirectIosSelector: propagates a runner AMBIGUOUS_MATCH rather than swallowing it', async () => {
-  mockRunAppleRunnerCommand.mockRejectedValue(
-    new AppError('AMBIGUOUS_MATCH', 'selector matched multiple elements'),
-  );
 
   await assert.rejects(
     () =>
-      withRunner(() =>
-        queryDirectIosSelector(makeSession(), { key: 'label', value: 'Checkout form' }, {}),
+      queryDirectIosSelector(
+        makeSession(),
+        { key: 'label', value: 'Checkout form' },
+        querySelector,
+        { execution: {} },
       ),
     (error: unknown) => {
       assert.ok(error instanceof AppError);

@@ -72,6 +72,7 @@ export const RUNTIME_OPERATION_EFFECTS: Readonly<
   performTargetAuthoredDrag: 'mutates',
   prepareAppleRunner: 'repeatable',
   prepareApplicationOpen: 'repeatable',
+  querySelector: 'repeatable',
   readAlert: 'repeatable',
   readClipboard: 'repeatable',
   readSetting: 'repeatable',
