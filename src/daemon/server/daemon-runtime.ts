@@ -18,7 +18,7 @@ import {
   loadDaemonPolicy,
   type DaemonPolicy,
 } from '@agent-device/daemon-contracts/daemon-policy-file';
-import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
+import type { LoadDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { getInteractor } from '../../core/interactors.ts';
 import { installInteractorResolution } from '../interactor-resolution.ts';
 import {
@@ -212,8 +212,12 @@ export type DaemonRuntimeOptions = {
   stderr?: WritableOutput;
   exit?: (code: number) => void;
   registerProcessHandlers?: boolean;
-  /** The command-surface factory the request handler builds per-request runtimes from. */
-  createCommandSurface: CreateDaemonCommandSurface;
+  /**
+   * Loads the command-surface factory the request handler builds per-request runtimes from.
+   * Required, and awaited once at startup: the composition root keeps the surface behind
+   * `await import` so it never joins `src/daemon.ts`'s eager closure (ADR 0019).
+   */
+  loadCommandSurface: LoadDaemonCommandSurface;
 };
 
 export type DaemonRuntimeController = {
@@ -331,6 +335,9 @@ export async function startDaemonRuntime(
   const daemonPaths = resolveDaemonPaths(env.AGENT_DEVICE_STATE_DIR);
   const { baseDir, infoPath, logPath, sessionsDir } = daemonPaths;
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
+  // The composition root's loader resolves once here; the request handler keeps threading the
+  // sync factory it returns, so the `await import` never enters this module's import time.
+  const createCommandSurface = await options.loadCommandSurface();
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
   // with a weaker policy than its operator named.
@@ -454,7 +461,7 @@ export async function startDaemonRuntime(
     providerDeviceRuntimeScope: providerRuntimeProviders.providerDeviceRuntimeScope,
     trackDownloadableArtifact,
     daemonPolicy,
-    createCommandSurface: options.createCommandSurface,
+    createCommandSurface,
   });
 
   let stopMetadataLossWatch: () => void = () => {};

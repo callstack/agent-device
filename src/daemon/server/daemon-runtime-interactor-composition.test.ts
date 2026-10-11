@@ -61,7 +61,7 @@ test('daemon startup composes the interactor resolution the daemon resolves thro
   const providerInteractor = { snapshot: async () => ({ nodes: [] }) } as unknown as Interactor;
   try {
     const runtime = await startDaemonRuntime({
-      createCommandSurface: testCreateCommandSurface,
+      loadCommandSurface: async () => testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -96,7 +96,7 @@ test('daemon startup compares lease credentials with its own startup environment
   const stateDir = mkdtempForTestSync('agent-device-daemon-credential-composition-');
   const daemonEnv = { BROWSERSTACK_USERNAME: 'user', BROWSERSTACK_ACCESS_KEY: 'key-1' };
   const runtime = await startDaemonRuntime({
-    createCommandSurface: testCreateCommandSurface,
+    loadCommandSurface: async () => testCreateCommandSurface,
     env: {
       ...process.env,
       ...daemonEnv,
@@ -163,7 +163,7 @@ test('a daemon attempt losing the lock shuts down every constructed provider', a
   });
   const exit = vi.fn();
   const runtime = await startDaemonRuntime({
-    createCommandSurface: testCreateCommandSurface,
+    loadCommandSurface: async () => testCreateCommandSurface,
     env: { AGENT_DEVICE_STATE_DIR: stateDir },
     exit,
     registerProcessHandlers: false,

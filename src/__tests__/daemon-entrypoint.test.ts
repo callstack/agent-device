@@ -88,7 +88,7 @@ test('daemon runtime starts HTTP transport in-process and shuts down cleanly', a
 
   try {
     const runtime = await startDaemonRuntime({
-      createCommandSurface: testCreateCommandSurface,
+      loadCommandSurface: async () => testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -148,7 +148,7 @@ test('daemon runtime publishes dual transport metadata', async () => {
 
   try {
     const runtime = await startDaemonRuntime({
-      createCommandSurface: testCreateCommandSurface,
+      loadCommandSurface: async () => testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -199,7 +199,7 @@ test('daemon rejects unowned cloud artifacts over RPC', async () => {
 
   try {
     runtime = await startDaemonRuntime({
-      createCommandSurface: testCreateCommandSurface,
+      loadCommandSurface: async () => testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -330,7 +330,7 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
     );
 
     const runtime = await startDaemonRuntime({
-      createCommandSurface: testCreateCommandSurface,
+      loadCommandSurface: async () => testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -456,7 +456,7 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
     );
 
     runtime = await startDaemonRuntime({
-      createCommandSurface: testCreateCommandSurface,
+      loadCommandSurface: async () => testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: daemonStateDir,

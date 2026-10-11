@@ -19,6 +19,7 @@ import type {
 } from './gesture-plan-types.ts';
 import type { FindLocator } from './snapshot-types.ts';
 import type {
+  ElementTarget,
   FillCommandResult,
   FindReadResult,
   HoverCommandResult,
@@ -110,7 +111,9 @@ export type DaemonGetOptions = CommandContext &
   DaemonSelectorSnapshotOptions &
   Readonly<{
     property: 'text' | 'attrs';
-    target: InteractionTarget;
+    // `get` reads an element, never a coordinate: the implementation's options take an
+    // ElementTarget, and contravariant checking only holds while the port agrees.
+    target: ElementTarget;
     /** ADR 0012 step 4: replay-only post-resolution guard. */
     expectedResolvedTarget?: ReplayTargetGuardDenotation;
   }>;
@@ -295,50 +298,57 @@ export type DaemonSettleObservationOptions = CommandContext &
     baseline: SurfaceScopedNodes;
   }>;
 
-/** The three captures the daemon runs. */
+/**
+ * The three captures the daemon runs. Members are function-typed properties, not method
+ * shorthand: `strictFunctionTypes` checks properties contravariantly, so an implementation
+ * whose options require a field this port does not pass fails the build instead of compiling
+ * through bivariant method checking.
+ */
 export type DaemonCommandSurfaceCapture = Readonly<{
-  screenshot(options: DaemonScreenshotCommandOptions): Promise<DaemonScreenshotResult>;
-  snapshot(options: DaemonSnapshotOptions): Promise<DaemonSnapshotResult>;
-  diffSnapshot(options: DaemonSnapshotOptions): Promise<DiffSnapshotCommandResult>;
+  screenshot: (options: DaemonScreenshotCommandOptions) => Promise<DaemonScreenshotResult>;
+  snapshot: (options: DaemonSnapshotOptions) => Promise<DaemonSnapshotResult>;
+  diffSnapshot: (options: DaemonSnapshotOptions) => Promise<DiffSnapshotCommandResult>;
 }>;
 
-/** The five selector reads the daemon's selector and wait routes serve. */
+/** The five selector reads the daemon's selector and wait routes serve. Function-typed
+ * properties for the same contravariance reason as {@link DaemonCommandSurfaceCapture}. */
 export type DaemonCommandSurfaceSelectors = Readonly<{
-  find(options: DaemonFindOptions): Promise<FindReadResult>;
-  get(options: DaemonGetOptions): Promise<DaemonGetResult>;
-  is(options: DaemonIsOptions): Promise<DaemonIsResult>;
-  wait(options: DaemonWaitOptions): Promise<DaemonWaitResult>;
-  waitForText(
+  find: (options: DaemonFindOptions) => Promise<FindReadResult>;
+  get: (options: DaemonGetOptions) => Promise<DaemonGetResult>;
+  is: (options: DaemonIsOptions) => Promise<DaemonIsResult>;
+  wait: (options: DaemonWaitOptions) => Promise<DaemonWaitResult>;
+  waitForText: (
     text: string,
     options?: Omit<DaemonWaitForTextOptions, 'text'>,
-  ): Promise<DaemonWaitResult>;
+  ) => Promise<DaemonWaitResult>;
 }>;
 
-/** The seven actions the daemon's touch, gesture and settle routes serve. */
+/** The seven actions the daemon's touch, gesture and settle routes serve. Function-typed
+ * properties for the same contravariance reason as {@link DaemonCommandSurfaceCapture}. */
 export type DaemonCommandSurfaceInteractions = Readonly<{
-  click(
+  click: (
     target: InteractionTarget,
     options?: Omit<DaemonPressOptions, 'target'>,
-  ): Promise<PressCommandResult>;
-  press(
+  ) => Promise<PressCommandResult>;
+  press: (
     target: InteractionTarget,
     options?: Omit<DaemonPressOptions, 'target'>,
-  ): Promise<PressCommandResult>;
-  fill(
+  ) => Promise<PressCommandResult>;
+  fill: (
     target: InteractionTarget,
     text: string,
     options?: Omit<DaemonFillOptions, 'target' | 'text'>,
-  ): Promise<FillCommandResult>;
-  longPress(
+  ) => Promise<FillCommandResult>;
+  longPress: (
     target: InteractionTarget,
     options?: Omit<DaemonLongPressOptions, 'target'>,
-  ): Promise<LongPressCommandResult>;
-  hover(
+  ) => Promise<LongPressCommandResult>;
+  hover: (
     target: InteractionTarget,
     options?: Omit<DaemonHoverOptions, 'target'>,
-  ): Promise<HoverCommandResult>;
-  gesture(options: DaemonGestureOptions): Promise<DaemonGestureResult>;
-  settleObservation(options: DaemonSettleObservationOptions): Promise<SettleObservation>;
+  ) => Promise<HoverCommandResult>;
+  gesture: (options: DaemonGestureOptions) => Promise<DaemonGestureResult>;
+  settleObservation: (options: DaemonSettleObservationOptions) => Promise<SettleObservation>;
 }>;
 
 /** What a daemon route may call, and nothing else. */
@@ -355,3 +365,10 @@ export type DaemonCommandSurface = Readonly<{
  * supplies `createCommandSurfaceAgentDevice`; a test supplies a fake through the same seam.
  */
 export type CreateDaemonCommandSurface = (config: AgentDeviceRuntimeConfig) => DaemonCommandSurface;
+
+/**
+ * How the composition root hands the factory to the daemon: the daemon awaits this once at
+ * startup, so the entry executable can keep the surface behind `await import` and out of its
+ * eager closure (ADR 0019).
+ */
+export type LoadDaemonCommandSurface = () => Promise<CreateDaemonCommandSurface>;
