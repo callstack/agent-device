@@ -15,8 +15,8 @@ test('copyCoreDeviceRunnerFile copies with the app data container domain', async
   assert.equal(calls.length, 1);
   const args = calls[0]!;
   assert.deepEqual(args.slice(0, 4), ['devicectl', 'device', 'copy', 'from']);
-  assert.ok(args.includes('--source') && args.includes('/tmp/shot.png'));
-  assert.ok(args.includes('--destination') && args.includes('/out/shot.png'));
+  assert.equal(args[args.indexOf('--source') + 1], '/tmp/shot.png');
+  assert.equal(args[args.indexOf('--destination') + 1], '/out/shot.png');
   assert.equal(args[args.indexOf('--domain-type') + 1], 'appDataContainer');
 });
 
@@ -33,9 +33,27 @@ test('copyCoreDeviceRunnerFile retries the next runner container and stops at th
 });
 
 test('copyCoreDeviceRunnerFile reports the last container error', async () => {
-  await assertCopyFailure(
-    () => ({ exitCode: 1, stderr: 'Failed to find a matching device' }),
-    /Failed to copy runner file from iOS device: Failed to find a matching device/,
+  // Distinct per-attempt errors: reporting an earlier candidate's failure instead of the final
+  // one is the regression this pins, so the message must carry the last attempt's text only.
+  const calls: string[][] = [];
+  await assert.rejects(
+    async () =>
+      await withFakeAppleTool(
+        (args) => {
+          calls.push(args);
+          return { exitCode: 1, stderr: `container miss ${calls.length}` };
+        },
+        async () => await copyCoreDeviceRunnerFile(IOS_DEVICE, '/tmp/shot.png', '/out/shot.png'),
+        { device: IOS_DEVICE },
+      ),
+    (error: unknown) => {
+      const message = error instanceof Error ? error.message : '';
+      // Every candidate container is tried, and the report names the last one alone.
+      assert.ok(calls.length >= 2, 'every candidate container must be tried');
+      assert.ok(domainIdentifier(calls[0]!) !== domainIdentifier(calls[1]!));
+      assert.ok(message.endsWith(`container miss ${calls.length}`), message);
+      return true;
+    },
   );
 });
 

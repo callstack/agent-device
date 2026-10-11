@@ -12,8 +12,9 @@ import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
  * An IPA whose `Payload` holds more than one `.app` is legal on disk and ambiguous for the
  * installer: `appIdentifierHint` is how the caller breaks the tie. The hint matches a bundle by
  * name first and by bundle id only when it is dotted, so these cases run the real extraction over
- * real multi-payload IPAs and pin each outcome: one name match, one id match, an ambiguous name,
- * and a hint that matches nothing.
+ * real multi-payload IPAs and pin name/id resolution plus the unmatched-hint and no-hint errors.
+ * (Two bundles whose names differ only by case, which would make the hint itself ambiguous, cannot
+ * be built on a case-insensitive host filesystem and stay unpinned.)
  */
 test('prepareIosInstallArtifact resolves a multi-payload IPA by a bundle-name hint', async () => {
   await withMultiPayloadIpa([{ name: 'Alpha' }, { name: 'Beta' }], async (ipaPath) => {
