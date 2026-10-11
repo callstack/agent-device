@@ -103,8 +103,9 @@ export async function waitForRunner(
             if (!isRunnerCommandProvablyUnwritten(err)) commandMayHaveBeenWritten = true;
           },
         }).catch((error: unknown) => {
-          // A cancellation that interrupts an attempt may land after its POST was written.
-          if (isRequestCanceledError(error)) commandMayHaveBeenWritten = true;
+          if (isRequestCanceledError(error) && !isRunnerCommandProvablyUnwritten(error)) {
+            commandMayHaveBeenWritten = true;
+          }
           throw error;
         });
         if (response) return response;
@@ -158,7 +159,11 @@ export async function waitForRunner(
       remainingMs,
       signal,
     ).catch((error: unknown) => {
-      if (signal?.aborted || isRequestCanceledError(error)) throw canceledRunnerConnect(true);
+      if (signal?.aborted || isRequestCanceledError(error)) {
+        throw canceledRunnerConnect(
+          commandMayHaveBeenWritten || !isProvablyUnwrittenBeforeCancel(error, signal),
+        );
+      }
       throw withRunnerWriteEvidence(error, commandMayHaveBeenWritten);
     });
     return new Response(simResponse.body, { status: simResponse.status });
@@ -184,6 +189,22 @@ export async function waitForRunner(
 
 function canceledRunnerConnect(commandMayHaveBeenWritten: boolean): AppError {
   return createRequestCanceledError({ dispatched: commandMayHaveBeenWritten ? 'unknown' : 'no' });
+}
+
+/**
+ * The cancellation one route reports. It keeps `dispatched: no` only when the failure it replaces
+ * proves nothing was written (a refused connect, or a cancel seen before the POST); an abort that
+ * interrupted the POST itself proves nothing, so the loop reads it as possibly written.
+ */
+function canceledRunnerAttempt(error: unknown, signal: AbortSignal | undefined): AppError {
+  return createRequestCanceledError(
+    isProvablyUnwrittenBeforeCancel(error, signal) ? { dispatched: 'no' } : {},
+  );
+}
+
+/** The request's shared abort reason is never evidence about one send. */
+function isProvablyUnwrittenBeforeCancel(error: unknown, signal: AbortSignal | undefined): boolean {
+  return error !== signal?.reason && isRunnerCommandProvablyUnwritten(error);
 }
 
 /**
@@ -400,7 +421,7 @@ async function tryRunnerRoute(
     );
   } catch (error) {
     if (params.signal?.aborted || isRequestCanceledError(error)) {
-      throw createRequestCanceledError();
+      throw canceledRunnerAttempt(error, params.signal);
     }
     if (isUsbmuxDeviceUnattachedError(error)) {
       if (!canFallBackFromUsbmux(device, error)) {
@@ -453,7 +474,7 @@ async function tryRunnerEndpoints(
       );
     } catch (error) {
       if (signal?.aborted || isRequestCanceledError(error)) {
-        throw createRequestCanceledError();
+        throw canceledRunnerAttempt(error, signal);
       }
       onError(endpoint, error);
     }
@@ -479,7 +500,7 @@ async function tryRunnerSimulatorEndpoint(
     return new Response(simResponse.body, { status: simResponse.status });
   } catch (error) {
     if (signal?.aborted || isRequestCanceledError(error)) {
-      throw createRequestCanceledError();
+      throw canceledRunnerAttempt(error, signal);
     }
     onError(error);
     return null;

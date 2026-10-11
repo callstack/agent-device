@@ -131,6 +131,109 @@ test('waitForRunner discloses whether a canceled command could have been written
   );
 });
 
+function refusedConnect(): Error {
+  return Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:8100'), { code: 'ECONNREFUSED' });
+}
+
+function canceledWithDispatch(dispatched: string) {
+  return (error: unknown) =>
+    isRequestCanceledError(error) && (error as AppError).details?.dispatched === dispatched;
+}
+
+test('waitForRunner keeps no when usbmux is canceled while it is still connecting', async () => {
+  const controller = new AbortController();
+  mockUsbmuxPostCommand.mockImplementation(async () => {
+    controller.abort(createRequestCanceledError());
+    throw createRequestCanceledError({ dispatched: 'no' });
+  });
+
+  await assert.rejects(
+    () =>
+      waitForRunner(
+        xctestIosDevice,
+        8100,
+        { command: 'snapshot' },
+        undefined,
+        5_000,
+        undefined,
+        controller.signal,
+      ),
+    canceledWithDispatch('no'),
+  );
+});
+
+test('waitForRunner keeps no when a canceled network attempt was refused', async () => {
+  const controller = new AbortController();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      controller.abort(createRequestCanceledError());
+      throw refusedConnect();
+    }),
+  );
+
+  await assert.rejects(
+    () =>
+      waitForRunner(
+        iosSimulator,
+        8100,
+        { command: 'snapshot' },
+        undefined,
+        5_000,
+        undefined,
+        controller.signal,
+      ),
+    canceledWithDispatch('no'),
+  );
+});
+
+test('waitForRunner keeps no when a canceled simulator fallback could not connect', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(refusedConnect()));
+  const controller = new AbortController();
+  mockRunCmd.mockImplementation(async () => {
+    controller.abort(createRequestCanceledError());
+    return { exitCode: 7, stdout: '', stderr: 'curl: (7) Failed to connect' };
+  });
+
+  await assert.rejects(
+    () =>
+      waitForRunner(
+        iosSimulator,
+        8100,
+        { command: 'snapshot' },
+        undefined,
+        5_000,
+        makeReadyRunnerSession(),
+        controller.signal,
+      ),
+    canceledWithDispatch('no'),
+  );
+});
+
+test('waitForRunner keeps no when the final simulator post is canceled after a refused connect', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(refusedConnect()));
+  const controller = new AbortController();
+  mockRunCmd.mockImplementation(async () => {
+    controller.abort(createRequestCanceledError());
+    return { exitCode: 7, stdout: '', stderr: 'curl: (7) Failed to connect' };
+  });
+
+  await assert.rejects(
+    () =>
+      waitForRunner(
+        iosSimulator,
+        8100,
+        { command: 'snapshot' },
+        undefined,
+        100,
+        undefined,
+        controller.signal,
+      ),
+    canceledWithDispatch('no'),
+  );
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+});
+
 test('waitForRunner reuses cached physical-device tunnel IP across commands', async () => {
   mockUsbmuxPostCommand.mockRejectedValue(usbmuxDeviceUnattachedError());
   stubSuccessfulFetch();
