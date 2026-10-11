@@ -3,40 +3,7 @@ import { isProductionSourceFile } from './tracked-sources.ts';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 import { ALL_EDGES, importGraphFromResolvedEdges } from '../depgraph/import-graph.ts';
 
-// The classified inventory of every production daemon import that reaches the root platform-runtime
-// composition modules (#2278, ADR 0022, #2542). R65 already bans daemon imports of concrete platform
-// packages and the retired src/platforms zone; the composition layer is the one place the daemon may
-// still touch, and this table is the classification of every edge that reaches it — either directly
-// into the src/platform-runtime*.ts family, or into any module outside the daemon zone that imports
-// that family itself, statically or dynamically. A root hub such as src/provider-device-runtime.ts is
-// named by neither file pattern nor zone, so a daemon import of it used to be invisible here while
-// carrying the same platform mechanics. An edge is unclassifiable until it is recorded here with a
-// rationale, and a recorded edge that no longer exists is stale — both fail, so the inventory and the
-// tree cannot drift apart in either direction.
-
 export const DAEMON_PLATFORM_RUNTIME_RULE = 'R76 daemon-platform-runtime-inventory';
-
-export type DaemonPlatformRuntimeClassification =
-  | 'composition-essential'
-  | 'daemon-policy-essential'
-  | 'leaked-platform-mechanics';
-
-export type DaemonPlatformRuntimeEdge = Readonly<{
-  file: string;
-  target: string;
-  /**
-   * Exact named symbols across every edge of the pair; empty for static side-effect imports (a
-   * destructured dynamic import records its bindings, so widening the destructure is a drift, not
-   * a silent expansion). Unnameable dynamic-import forms cannot be recorded here, and R76 rejects
-   * the edge: a rest or computed destructure binding, or a namespace/side-effect import() call —
-   * both expose exports beyond this list.
-   */
-  symbols: readonly string[];
-  classification: DaemonPlatformRuntimeClassification;
-  rationale: string;
-  /** The seam or child issue that deepens a leaked-platform-mechanics edge. */
-  deepenedBy?: string;
-}>;
 
 /** The root platform-runtime composition family: src/platform-runtime.ts and src/platform-runtime-*.ts. */
 export function isRootPlatformRuntimeTarget(target: string): boolean {
@@ -48,8 +15,8 @@ export function isRootPlatformRuntimeTarget(target: string): boolean {
  * platform-runtime family: the family itself, plus anything that imports it, transitively, over
  * static and dynamic edges alike. Computed from the tree rather than patterned so a root hub that
  * carries platform mechanics without naming them gains no immunity from its filename, and so a
- * dynamic edge out of the daemon zone is caught like a static one instead of escaping the
- * inventory (#2542).
+ * dynamic edge out of the daemon zone is caught like a static one instead of escaping the rule
+ * (#2542).
  */
 export function computePlatformMechanicsHubs(
   edges: readonly ResolvedImportEdge[],
@@ -72,152 +39,43 @@ export function computePlatformMechanicsHubs(
 }
 
 /**
- * The current classified edges from the #2278 audit, ratcheted as owning interfaces land.
- */
-export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[] = [
-  {
-    file: 'src/daemon/direct-ios-selector.ts',
-    target: 'src/platform-runtime-apple-resources.ts',
-    symbols: ['queryAppleRuntimeSelector'],
-    classification: 'leaked-platform-mechanics',
-    rationale:
-      'the direct-iOS fast path queries the Apple runner selector mechanics directly; the ' +
-      'selector-producer seam owned by #2273/#2274 is the accepted deepening, and this ' +
-      'audit deliberately adds no second selector producer.',
-    deepenedBy: '#2273, #2274',
-  },
-] as const;
-
-function keyOf(file: string, target: string): string {
-  return `${file} -> ${target}`;
-}
-
-function sorted(symbols: readonly string[]): string[] {
-  return [...symbols].sort();
-}
-
-/**
- * Catches: unclassified daemon-to-platform-mechanics coupling regrowing — a new edge (or a
- *   new symbol on an existing edge) that the #2278 audit never classified, the mirror failure, a
- *   classified edge that no longer exists and would silently admit its return, and dynamic
- *   imports whose binding set the inventory cannot name: a rest or computed destructure binding,
- *   or a namespace/side-effect import() call exposed alongside (or instead of) the named ones.
- *   Reaching the platform through a root hub is caught the same way as reaching it directly, and a
- *   dynamic edge is classified rather than skipped, so the direction the ranked spine cannot see is
- *   at least named here (#2542).
- * Evidence: #2278 measured 14 production edges in 9 daemon files at origin/main 6e22e266d7;
- *   this table is that measurement, classified per ADR 0022, plus the 3 edges the hub widening and
- *   dynamic-edge pass made visible at #2541 (2 provider-runtime hubs, 1 dynamic interactor lookup
- *   that #2555 has since composed away). The daemon-runtime composition edges this table carried
- *   through #3402 moved to the process root with the PR-6 extraction (`src/daemon-composition.ts`
- *   is outside the daemon zone, so R76 no longer sees them); only the leaked selector-query edge
- *   below remains.
+ * Catches: any production daemon import of the root platform-runtime family, directly or through a
+ *   root hub that reaches it, in any static or dynamic form. The #2278 audit classified every edge
+ *   that was allowed to exist; the inventory is now empty, so the allowance is retired and every
+ *   such edge is a violation naming the pair and its line. Reaching the platform through a root
+ *   hub counts the same as reaching it directly, and no dynamic-import form is exempt.
+ * Evidence: #2278's 14 classified edges were all retired — the composition edges by #3431, moved
+ *   to the process-root composition module outside the daemon zone, and the leaked selector-query
+ *   edge by #3430, routed through the request-bound runtime binding. The rule then collapsed to
+ *   this ban per its own kill criterion, deleting the classification table and its drift and
+ *   staleness passes.
  * Cost: attributed to the R76 rule registration in check.ts; not a standalone CI job.
- * Kill criterion: the daemon reaches the platform only through the gateway and declared
- *   contract capabilities (the inventory empty), or a maintainer decision retires the
- *   classification requirement.
+ * Kill criterion: the daemon moves into its own workspace package, whose package boundary then
+ *   forbids these imports structurally.
  */
 export function checkDaemonPlatformRuntimeInventory(
   edges: readonly ResolvedImportEdge[],
 ): LayeringViolation[] {
   const hubs = computePlatformMechanicsHubs(edges);
-  const actual = new Map<
-    string,
-    { line: number; symbols: Set<string>; residue: boolean; openEnded: boolean }
-  >();
+  const violations: LayeringViolation[] = [];
+  const reported = new Set<string>();
   for (const edge of edges) {
     if (!edge.file.startsWith('src/daemon/')) continue;
     if (!isProductionSourceFile(edge.file)) continue;
     if (!hubs.has(edge.target)) continue;
-    const key = keyOf(edge.file, edge.target);
-    const entry = actual.get(key) ?? {
-      line: edge.line,
-      symbols: new Set<string>(),
-      residue: false,
-      openEnded: false,
-    };
-    for (const symbol of edge.symbols) entry.symbols.add(symbol);
-    entry.residue = entry.residue || edge.bindingResidue;
-    // Validated per edge before the per-pair union: a dynamic import that names no binding
-    // exposes the whole module namespace, which sibling named edges of the same pair would
-    // otherwise mask inside the union.
-    entry.openEnded =
-      entry.openEnded || (edge.dynamic && !edge.bindingResidue && edge.symbols.length === 0);
-    actual.set(key, entry);
-  }
-
-  const violations: LayeringViolation[] = [];
-  const seen = new Set<string>();
-
-  for (const [key, entry] of actual) {
-    const declaration = DAEMON_PLATFORM_RUNTIME_EDGES.find(
-      (candidate) => keyOf(candidate.file, candidate.target) === key,
-    );
-    if (declaration === undefined) {
-      violations.push({
-        rule: DAEMON_PLATFORM_RUNTIME_RULE,
-        file: key.split(' -> ')[0]!,
-        line: entry.line,
-        message:
-          `unclassified daemon coupling to platform mechanics: ${key}. Classify it in ` +
-          `DAEMON_PLATFORM_RUNTIME_EDGES (${DAEMON_PLATFORM_RUNTIME_RULE}) with its rationale, ` +
-          `or remove the coupling.`,
-      });
-      continue;
-    }
-    seen.add(key);
-    if (entry.residue) {
-      violations.push({
-        rule: DAEMON_PLATFORM_RUNTIME_RULE,
-        file: key.split(' -> ')[0]!,
-        line: entry.line,
-        message:
-          `unnameable dynamic-import binding for ${key}: a rest or computed destructure exposes ` +
-          `bindings the inventory cannot name. Destructure every binding explicitly and record it ` +
-          `in DAEMON_PLATFORM_RUNTIME_EDGES (${DAEMON_PLATFORM_RUNTIME_RULE}), or remove the coupling.`,
-      });
-      continue;
-    }
-    if (entry.openEnded) {
-      violations.push({
-        rule: DAEMON_PLATFORM_RUNTIME_RULE,
-        file: key.split(' -> ')[0]!,
-        line: entry.line,
-        message:
-          `open-ended dynamic import for ${key}: a namespace or side-effect import() exposes the ` +
-          `whole module, which the inventory cannot name symbol by symbol. Destructure every ` +
-          `binding explicitly and record it in DAEMON_PLATFORM_RUNTIME_EDGES ` +
-          `(${DAEMON_PLATFORM_RUNTIME_RULE}), or remove the coupling.`,
-      });
-      continue;
-    }
-    const expected = sorted(declaration.symbols);
-    const measured = sorted([...entry.symbols]);
-    if (expected.join('\u0000') !== measured.join('\u0000')) {
-      violations.push({
-        rule: DAEMON_PLATFORM_RUNTIME_RULE,
-        file: key.split(' -> ')[0]!,
-        line: entry.line,
-        message:
-          `classified symbols drifted for ${key}: the tree imports ${measured.join(', ') || '(none)'} ` +
-          `but the inventory records ${expected.join(', ') || '(none)'}. Update the inventory ` +
-          `entry in the same change, or remove the added coupling.`,
-      });
-    }
-  }
-
-  for (const declaration of DAEMON_PLATFORM_RUNTIME_EDGES) {
-    const key = keyOf(declaration.file, declaration.target);
-    if (actual.has(key) || seen.has(key)) continue;
+    const key = `${edge.file} -> ${edge.target}`;
+    if (reported.has(key)) continue;
+    reported.add(key);
     violations.push({
       rule: DAEMON_PLATFORM_RUNTIME_RULE,
-      file: 'scripts/layering/daemon-platform-runtime-inventory.ts',
-      line: 1,
+      file: edge.file,
+      line: edge.line,
       message:
-        `stale classified edge: ${key} no longer exists. Remove the entry so the coupling ` +
-        `cannot return unclassified.`,
+        `daemon coupling to root platform mechanics is banned: ${key}. The #2278 ` +
+        `classification inventory is retired and empty (${DAEMON_PLATFORM_RUNTIME_RULE}): ` +
+        `reach the platform through the gateway or a declared contract capability, or move the ` +
+        `responsibility to the process root.`,
     });
   }
-
   return violations;
 }

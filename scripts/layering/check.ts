@@ -129,10 +129,7 @@ import { selectorPipelineOwnershipViolations } from './selector-pipeline-ownersh
 import { recordRuntimeRegistryJoinViolations } from './record-runtime-registry-policy.ts';
 import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechanics-policy.ts';
 import { checkDaemonPlatformBoundary } from './daemon-platform-boundary.ts';
-import {
-  checkDaemonPlatformRuntimeInventory,
-  DAEMON_PLATFORM_RUNTIME_EDGES,
-} from './daemon-platform-runtime-inventory.ts';
+import { checkDaemonPlatformRuntimeInventory } from './daemon-platform-runtime-inventory.ts';
 import { checkDaemonClientEntry } from './daemon-client-entry.ts';
 import { checkDaemonLayers, readDaemonLayerManifest } from './daemon-layers.ts';
 import { checkSessionAuthorityOverlay, handlerOwnedOverlay } from './session-authority-overlay.ts';
@@ -431,8 +428,8 @@ function report(
         `runtime facts remain the only device-command admission authority and daemon code cannot ` +
         `manufacture narrowed runtime proof (R66); R65 keeps production src/daemon free of ` +
         `concrete platform imports in every executable and type-only form; ` +
-        `${DAEMON_PLATFORM_RUNTIME_EDGES.length} daemon-to-root platform-runtime edges hold ` +
-        `their #2278 classification (R76); and the handler-owned SessionState/SessionStore ` +
+        `no production daemon file reaches the root platform-runtime family or a hub that ` +
+        `does (R76); and the handler-owned SessionState/SessionStore ` +
         `authority overlay holds at or under the merge-base (R75, ` +
         `${handlerOwnedShapeFiles} shape / ${handlerOwnedAuthorityFiles} authority files); and ` +
         `every production daemon file is owned by one layer with no upward static edges across ` +

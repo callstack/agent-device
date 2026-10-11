@@ -1,6 +1,5 @@
 {
   "daemon-core": [
-    "src/daemon/apple-runner-options.ts",
     "src/daemon/capture-disclosure.ts",
     "src/daemon/config.ts",
     "src/daemon/context.ts",

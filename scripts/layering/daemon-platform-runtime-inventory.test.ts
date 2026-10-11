@@ -3,17 +3,15 @@ import { test } from 'node:test';
 import { resolveImportEdges, type LayeringViolation } from './model.ts';
 import {
   checkDaemonPlatformRuntimeInventory,
-  DAEMON_PLATFORM_RUNTIME_EDGES,
   DAEMON_PLATFORM_RUNTIME_RULE,
   isRootPlatformRuntimeTarget,
 } from './daemon-platform-runtime-inventory.ts';
 
-// The classified pair these fixtures plant is the direct-iOS selector query: the one edge the
-// PR-6 composition extraction left between the daemon and the root platform-runtime family, and
-// the shortest live one whose symbols the rule still classifies.
-const CLASSIFIED_TARGET = 'src/platform-runtime-apple-resources.ts';
-const CLASSIFIED_STUB = 'export const queryAppleRuntimeSelector = () => ({});\n';
-const CLASSIFIED_IMPORTER = 'src/daemon/direct-ios-selector.ts';
+// The pair these fixtures plant is the direct-iOS selector query: the last edge the #2278
+// inventory carried, retired by #3430. Under the ban it is a violation like any other.
+const RETIRED_TARGET = 'src/platform-runtime-apple-resources.ts';
+const RETIRED_STUB = 'export const queryAppleRuntimeSelector = () => ({});\n';
+const RETIRED_IMPORTER = 'src/daemon/direct-ios-selector.ts';
 
 function violations(sources: Record<string, string>): LayeringViolation[] {
   return checkDaemonPlatformRuntimeInventory(resolveImportEdges(new Map(Object.entries(sources))));
@@ -23,14 +21,21 @@ function edgeViolations(sources: Record<string, string>, file: string): Layering
   return violations(sources).filter((violation) => violation.file === file);
 }
 
-test('R76 accepts a classified edge with the exact recorded symbols', () => {
+test('R76 rejects the direct-iOS selector edge the retired inventory classified', () => {
   const sources = {
-    [CLASSIFIED_TARGET]: CLASSIFIED_STUB,
-    [CLASSIFIED_IMPORTER]:
+    [RETIRED_TARGET]: RETIRED_STUB,
+    [RETIRED_IMPORTER]:
       "import { queryAppleRuntimeSelector } from '../platform-runtime-apple-resources.ts';\n" +
       'void queryAppleRuntimeSelector;\n',
   };
-  assert.deepEqual(edgeViolations(sources, CLASSIFIED_IMPORTER), []);
+  const found = edgeViolations(sources, RETIRED_IMPORTER);
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
+  assert.match(found[0]!.message, /daemon coupling to root platform mechanics is banned/);
+  assert.match(
+    found[0]!.message,
+    /src\/daemon\/direct-ios-selector\.ts -> src\/platform-runtime-apple-resources\.ts/,
+  );
 });
 
 for (const [file, target, symbol] of [
@@ -47,27 +52,11 @@ for (const [file, target, symbol] of [
     const found = edgeViolations(sources, importer);
     assert.equal(found.length, 1);
     assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
-    assert.match(found[0]!.message, /unclassified daemon coupling|classified symbols drifted/);
+    assert.match(found[0]!.message, /daemon coupling to root platform mechanics is banned/);
   });
 }
 
-test('R76 reports every classified edge missing from the tree as stale, not the other way around', () => {
-  const sources = {
-    [CLASSIFIED_TARGET]: CLASSIFIED_STUB,
-    [CLASSIFIED_IMPORTER]:
-      "import { queryAppleRuntimeSelector } from '../platform-runtime-apple-resources.ts';\n" +
-      'void queryAppleRuntimeSelector;\n',
-  };
-  const stale = violations(sources).filter(
-    (violation) => violation.file === 'scripts/layering/daemon-platform-runtime-inventory.ts',
-  );
-  assert.equal(stale.length, DAEMON_PLATFORM_RUNTIME_EDGES.length - 1);
-  assert.ok(stale.every((violation) => violation.message.includes('stale classified edge')));
-  const classifiedStale = stale.find((violation) => violation.message.includes(CLASSIFIED_TARGET));
-  assert.equal(classifiedStale, undefined);
-});
-
-test('R76 rejects an unclassified edge with the pair and its line', () => {
+test('R76 rejects an edge with the pair and its line', () => {
   const sources = {
     'src/platform-runtime-android-tool-host.ts': 'export function createAndroidToolHost() {}\n',
     'src/daemon/fixture.ts':
@@ -78,140 +67,48 @@ test('R76 rejects an unclassified edge with the pair and its line', () => {
   assert.equal(found.length, 1);
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
   assert.equal(found[0]!.line, 1);
-  assert.match(found[0]!.message, /unclassified daemon coupling to platform mechanics/);
+  assert.match(found[0]!.message, /daemon coupling to root platform mechanics is banned/);
   assert.match(
     found[0]!.message,
     /src\/daemon\/fixture\.ts -> src\/platform-runtime-android-tool-host\.ts/,
   );
 });
 
-test('R76 rejects new symbols on a classified edge', () => {
+test('R76 reports an import and re-export of one pair as a single violation', () => {
   const sources = {
-    [CLASSIFIED_TARGET]: CLASSIFIED_STUB + 'export function extraGatewayKnob() {}\n',
-    [CLASSIFIED_IMPORTER]:
-      "import { queryAppleRuntimeSelector, extraGatewayKnob } from '../platform-runtime-apple-resources.ts';\n" +
-      'void [queryAppleRuntimeSelector, extraGatewayKnob];\n',
-  };
-  const found = edgeViolations(sources, CLASSIFIED_IMPORTER);
-  assert.equal(found.length, 1);
-  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
-  assert.match(found[0]!.message, /classified symbols drifted/);
-  assert.match(found[0]!.message, /extraGatewayKnob, queryAppleRuntimeSelector/);
-});
-
-test('R76 rejects a selector fast path assembled from an expanded query edge', () => {
-  const sources = {
-    'src/platform-runtime-apple-resources.ts':
-      'export const queryAppleRuntimeSelector = () => ({});\n' +
-      'export const queryProviderRuntimeSelector = () => ({});\n',
-    'src/daemon/direct-ios-selector.ts':
-      "import {\n  queryAppleRuntimeSelector,\n  queryProviderRuntimeSelector,\n} from '../platform-runtime-apple-resources.ts';\n" +
-      'void [queryAppleRuntimeSelector, queryProviderRuntimeSelector];\n',
-  };
-  const found = edgeViolations(sources, 'src/daemon/direct-ios-selector.ts');
-  assert.equal(found.length, 1);
-  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
-  assert.match(found[0]!.message, /classified symbols drifted/);
-  assert.match(found[0]!.message, /queryAppleRuntimeSelector, queryProviderRuntimeSelector/);
-});
-
-test('R76 matches a destructured dynamic import by target with the recorded bindings', () => {
-  const sources = {
-    'src/platform-runtime-apple-resources.ts': 'export const queryAppleRuntimeSelector = {};\n',
-    'src/daemon/direct-ios-selector.ts':
-      "const { queryAppleRuntimeSelector } = await import('../platform-runtime-apple-resources.ts');\n" +
-      'void queryAppleRuntimeSelector;\n',
-  };
-  assert.deepEqual(edgeViolations(sources, 'src/daemon/direct-ios-selector.ts'), []);
-});
-
-test('R76 rejects an expanded destructured dynamic import on a classified edge', () => {
-  const sources = {
-    'src/platform-runtime-apple-resources.ts':
-      'export const queryAppleRuntimeSelector = {};\n' +
-      'export const extraLifecycleParticipant = {};\n',
-    'src/daemon/direct-ios-selector.ts':
-      "const { queryAppleRuntimeSelector, extraLifecycleParticipant } = await import('../platform-runtime-apple-resources.ts');\n" +
-      'void [queryAppleRuntimeSelector, extraLifecycleParticipant];\n',
-  };
-  const found = edgeViolations(sources, 'src/daemon/direct-ios-selector.ts');
-  assert.equal(found.length, 1);
-  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
-  assert.match(found[0]!.message, /classified symbols drifted/);
-  assert.match(found[0]!.message, /extraLifecycleParticipant, queryAppleRuntimeSelector/);
-});
-
-test('R76 rejects a rest binding next to a recorded dynamic-import binding', () => {
-  const sources = {
-    'src/platform-runtime-apple-resources.ts':
-      'export const queryAppleRuntimeSelector = {};\n' +
-      'export const sweepLifecycleParticipants = {};\n',
-    'src/daemon/direct-ios-selector.ts':
-      "const { queryAppleRuntimeSelector, ...lifecycleModule } = await import('../platform-runtime-apple-resources.ts');\n" +
-      'void [queryAppleRuntimeSelector, lifecycleModule];\n',
-  };
-  const found = edgeViolations(sources, 'src/daemon/direct-ios-selector.ts');
-  assert.equal(found.length, 1);
-  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
-  assert.match(found[0]!.message, /unnameable dynamic-import binding/);
-  assert.match(
-    found[0]!.message,
-    /src\/daemon\/direct-ios-selector\.ts -> src\/platform-runtime-apple-resources\.ts/,
-  );
-});
-
-test('R76 rejects a computed destructure key on a classified dynamic import', () => {
-  const sources = {
-    'src/platform-runtime-apple-resources.ts': 'export const queryAppleRuntimeSelector = {};\n',
-    'src/daemon/direct-ios-selector.ts':
-      "const ownersName = 'queryAppleRuntimeSelector';\n" +
-      'const { [ownersName]: owners } = await import("../platform-runtime-apple-resources.ts");\n' +
-      'void owners;\n',
-  };
-  const found = edgeViolations(sources, 'src/daemon/direct-ios-selector.ts');
-  assert.equal(found.length, 1);
-  assert.match(found[0]!.message, /unnameable dynamic-import binding/);
-});
-
-test('R76 rejects a namespace-form dynamic import that hides the recorded bindings', () => {
-  const sources = {
-    'src/platform-runtime-apple-resources.ts': 'export const queryAppleRuntimeSelector = {};\n',
-    'src/daemon/direct-ios-selector.ts':
-      "const mod = await import('../platform-runtime-apple-resources.ts');\nvoid mod;\n",
-  };
-  const found = edgeViolations(sources, 'src/daemon/direct-ios-selector.ts');
-  assert.equal(found.length, 1);
-  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
-  assert.match(found[0]!.message, /open-ended dynamic import/);
-});
-
-test('R76 rejects a namespace import alongside the recorded named binding on the same pair', () => {
-  const sources = {
-    'src/platform-runtime-apple-resources.ts': 'export const queryAppleRuntimeSelector = {};\n',
-    'src/daemon/direct-ios-selector.ts':
-      "const { queryAppleRuntimeSelector } = await import('../platform-runtime-apple-resources.ts');\n" +
-      "const lifecycleModule = await import('../platform-runtime-apple-resources.ts');\n" +
-      'void [queryAppleRuntimeSelector, lifecycleModule];\n',
-  };
-  const found = edgeViolations(sources, 'src/daemon/direct-ios-selector.ts');
-  assert.equal(found.length, 1);
-  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
-  assert.match(found[0]!.message, /open-ended dynamic import/);
-  assert.match(
-    found[0]!.message,
-    /src\/daemon\/direct-ios-selector\.ts -> src\/platform-runtime-apple-resources\.ts/,
-  );
-});
-
-test('R76 treats the import and re-export of one classified pair as one entry', () => {
-  const sources = {
-    [CLASSIFIED_TARGET]: CLASSIFIED_STUB,
-    [CLASSIFIED_IMPORTER]:
+    [RETIRED_TARGET]: RETIRED_STUB,
+    [RETIRED_IMPORTER]:
       "import { queryAppleRuntimeSelector } from '../platform-runtime-apple-resources.ts';\n" +
       "export { queryAppleRuntimeSelector } from '../platform-runtime-apple-resources.ts';\n" +
       'void queryAppleRuntimeSelector;\n',
   };
-  assert.deepEqual(edgeViolations(sources, CLASSIFIED_IMPORTER), []);
+  assert.equal(edgeViolations(sources, RETIRED_IMPORTER).length, 1);
+});
+
+test('R76 rejects a destructured dynamic import of the root platform-runtime family', () => {
+  const sources = {
+    [RETIRED_TARGET]: RETIRED_STUB,
+    [RETIRED_IMPORTER]:
+      "const { queryAppleRuntimeSelector } = await import('../platform-runtime-apple-resources.ts');\n" +
+      'void queryAppleRuntimeSelector;\n',
+  };
+  assert.equal(edgeViolations(sources, RETIRED_IMPORTER).length, 1);
+});
+
+test('R76 rejects a dynamic namespace import of a root platform-runtime module', () => {
+  const sources = {
+    [RETIRED_TARGET]: RETIRED_STUB,
+    [RETIRED_IMPORTER]:
+      "const appleResources = await import('../platform-runtime-apple-resources.ts');\n" +
+      'void appleResources;\n',
+  };
+  const found = edgeViolations(sources, RETIRED_IMPORTER);
+  assert.equal(found.length, 1);
+  assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
+  assert.match(
+    found[0]!.message,
+    /src\/daemon\/direct-ios-selector\.ts -> src\/platform-runtime-apple-resources\.ts/,
+  );
 });
 
 test('R76 ignores test-shaped and non-daemon importers', () => {
@@ -224,12 +121,7 @@ test('R76 ignores test-shaped and non-daemon importers', () => {
       "import { createAndroidToolHost } from './platform-runtime-android-tool-host.ts';\n" +
       'void createAndroidToolHost;\n',
   };
-  assert.deepEqual(
-    violations(sources).filter(
-      (violation) => violation.file !== 'scripts/layering/daemon-platform-runtime-inventory.ts',
-    ),
-    [],
-  );
+  assert.deepEqual(violations(sources), []);
 });
 
 test('R76 ignores retired-zone targets, which R65 owns', () => {
@@ -265,7 +157,7 @@ test('R76 catches a daemon import of a root hub that reaches the platform family
   assert.match(found[0]!.message, /src\/daemon\/fixture\.ts -> src\/hub-runtime\.ts/);
 });
 
-test('R76 does not turn an intra-daemon hop into a classified hub edge', () => {
+test('R76 does not turn an intra-daemon hop into a hub edge', () => {
   const sources = {
     'src/platform-runtime.ts': ROOT_PLATFORM_STUB,
     'src/daemon/dispatch.ts':
@@ -273,4 +165,8 @@ test('R76 does not turn an intra-daemon hop into a classified hub edge', () => {
     'src/daemon/handler.ts': "import { dispatch } from './dispatch.ts';\nvoid dispatch;\n",
   };
   assert.deepEqual(edgeViolations(sources, 'src/daemon/handler.ts'), []);
+  assert.equal(
+    violations(sources).filter((violation) => violation.file === 'src/daemon/dispatch.ts').length,
+    1,
+  );
 });

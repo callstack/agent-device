@@ -10,9 +10,11 @@ Amended 2026-10-11 by #3431: the daemon-runtime composition edges this
 ADR classified (the gateway/diagnostics/resource-cleanup/lifecycle edges, the provider-runtime
 hubs, and the platform-services and claim-recovery dynamic edges) moved out of `src/daemon/` into
 the process-root composition module `src/daemon-composition.ts`, which R76 does not see because it
-is no longer a daemon-zone importer. The R76 inventory now carries only the leaked
-selector-query edge (`src/daemon/direct-ios-selector.ts`); the section-2 outcomes below remain the
-record of how each was classified.
+is no longer a daemon-zone importer. #3430 then routed the leaked selector-query edge
+(`src/daemon/direct-ios-selector.ts`) through the request-bound runtime binding, so the R76
+inventory is empty; with nothing left to classify, the same change collapsed R76 to a plain ban on
+the coupling and deleted the classification machinery, per the rule's own kill criterion. The
+section-2 outcomes below remain the record of how each was classified.
 
 ## 1. Context
 
@@ -30,9 +32,13 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
 ## 2. Decision
 
 1. **Every daemon import of a root `src/platform-runtime-*.ts` module is classified as exactly
-   one of three categories**, and the classification is owned by the machine-readable inventory
+   one of three categories** (retired by the 2026-10-12 amendment below: the inventory
    `DAEMON_PLATFORM_RUNTIME_EDGES` in
-   [`scripts/layering/daemon-platform-runtime-inventory.ts`](../../scripts/layering/daemon-platform-runtime-inventory.ts):
+   [`scripts/layering/daemon-platform-runtime-inventory.ts`](../../scripts/layering/daemon-platform-runtime-inventory.ts)
+   is now empty, so the classification table and its symbol-drift and staleness passes are deleted
+   and R76 bans the coupling outright — any production `src/daemon/**` import of the family or of a
+   root hub that reaches it is a violation. The categories and outcomes below remain the record of
+   how each edge was judged and retired):
    - **Composition-essential** — assembling neutral runtime implementations at the process root.
    - **Daemon-policy-essential** — request admission, session ownership, conflicts, locking,
      cancellation, teardown ordering, artifact publication, or response/event semantics.
@@ -40,9 +46,10 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
      behind a deeper runtime interface or adapter; only this category creates implementation
      work (child issues below).
    The gate rule **R76 `daemon-platform-runtime-inventory`** (in `scripts/layering/check.ts`)
-   fails the layering check on any unclassified edge, on symbol-set drift between a file and its
-   inventory entry, and on stale entries. Observed red against a planted unclassified import
-   before acceptance.
+   originally failed the layering check on any unclassified edge, on symbol-set drift between a
+   file and its inventory entry, and on stale entries; observed red against a planted unclassified
+   import before acceptance. Since the amendment it fails on any production daemon import of the
+   family or a hub that reaches it, in any static or dynamic form.
 
 2. **Per-edge outcomes at `27a97ee619`.** Four edges are composition-essential and stay
    (`daemon-runtime.ts` → `platform-runtime.ts` and → `platform-runtime-host-diagnostics.ts`;
@@ -131,8 +138,10 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
 
 ## 4. Enforced by
 
-- R76 `daemon-platform-runtime-inventory` and R75 `session-authority-overlay` in
-  `scripts/layering/check.ts` (both observed red against planted violations before acceptance).
+- R76 `daemon-platform-runtime-inventory` — since the 2026-10-12 amendment a plain ban on the
+  coupling rather than a classification table (the inventory is empty and its machinery is
+  deleted) — and R75 `session-authority-overlay` in `scripts/layering/check.ts` (both observed red
+  against planted violations before acceptance).
 - R7 `session-state-ownership` and the R10 merge-base ratchet for the owning-module slice.
 - R65 for the concrete-platform-import ban this audit builds on.
 - Child issues #2333 and #2334 landed (see §2.2); #2273/#2274 landed with the `querySelector`

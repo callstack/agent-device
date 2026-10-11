@@ -29,7 +29,6 @@ export {
   verifyLeaseRunnerPidIdentity,
   writeRunnerCacheMetadataForArtifacts,
 } from './core/runner-client.ts';
-export { queryAppleRunnerSelector } from './core/runner-selector-query.ts';
 
 export async function cleanupRunnerLeasesForOwner(
   owner: Parameters<(typeof import('./core/runner-client.ts'))['cleanupRunnerLeasesForOwner']>[0],
