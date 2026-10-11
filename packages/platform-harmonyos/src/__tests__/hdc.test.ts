@@ -67,16 +67,6 @@ test('runHarmonyHdc forwards a binding abort signal to an in-flight HDC command'
   assert.equal(mockRunCmd.mock.calls[0]?.[2]?.signal, controller.signal);
 });
 
-/** Creates `<root>/default/openharmony/toolchains/hdc` as an executable, like DevEco lays out. */
-async function seedToolchain(root: string): Promise<string> {
-  const toolchains = path.join(root, 'default', 'openharmony', 'toolchains');
-  await fs.mkdir(toolchains, { recursive: true });
-  const hdc = path.join(toolchains, 'hdc');
-  await fs.writeFile(hdc, '#!/bin/sh\nexit 0\n', 'utf8');
-  await fs.chmod(hdc, 0o755);
-  return root;
-}
-
 /** HDC_SDK_PATH names the toolchains directory itself, so `HDC_SDK_PATH/hdc` must exist. */
 async function seedDirectToolchain(root: string): Promise<string> {
   await fs.mkdir(root, { recursive: true });
@@ -86,17 +76,29 @@ async function seedDirectToolchain(root: string): Promise<string> {
   return root;
 }
 
+/** DevEco's home joins `default/openharmony/toolchains`; the command-line-tools root adds `sdk` first. */
+async function seedNestedToolchain(root: string, ...segments: string[]): Promise<string> {
+  const toolchains = path.join(root, ...segments, 'default', 'openharmony', 'toolchains');
+  await fs.mkdir(toolchains, { recursive: true });
+  const hdc = path.join(toolchains, 'hdc');
+  await fs.writeFile(hdc, '#!/bin/sh\nexit 0\n', 'utf8');
+  await fs.chmod(hdc, 0o755);
+  return root;
+}
+
 test('ensureHarmonyToolchainPathConfigured prepends every root holding an hdc binary', async () => {
   const hdcSdkRoot = await seedDirectToolchain(mkdtempForTestSync('agent-device-hdc-sdk-'));
-  const devecoRoot = await seedToolchain(mkdtempForTestSync('agent-device-hdc-deveco-'));
-  // A declared root without an hdc executable must not join PATH.
-  const emptyRoot = mkdtempForTestSync('agent-device-hdc-empty-');
+  const devecoRoot = await seedNestedToolchain(mkdtempForTestSync('agent-device-hdc-deveco-'));
+  const cmdlineRoot = await seedNestedToolchain(
+    mkdtempForTestSync('agent-device-hdc-cmdline-'),
+    'sdk',
+  );
 
   const env: NodeJS.ProcessEnv = {
     PATH: '/usr/bin',
     HDC_SDK_PATH: hdcSdkRoot,
     DEVECO_SDK_HOME: devecoRoot,
-    HARMONYOS_COMMAND_LINE_TOOLS: emptyRoot,
+    HARMONYOS_COMMAND_LINE_TOOLS: cmdlineRoot,
   };
 
   await ensureHarmonyToolchainPathConfigured(env);
@@ -104,6 +106,7 @@ test('ensureHarmonyToolchainPathConfigured prepends every root holding an hdc bi
   assert.deepEqual((env.PATH ?? '').split(path.delimiter), [
     hdcSdkRoot,
     path.join(devecoRoot, 'default', 'openharmony', 'toolchains'),
+    path.join(cmdlineRoot, 'sdk', 'default', 'openharmony', 'toolchains'),
     '/usr/bin',
   ]);
 });
@@ -113,6 +116,7 @@ test('ensureHarmonyToolchainPathConfigured leaves PATH untouched when no root ho
     PATH: '/usr/bin',
     HDC_SDK_PATH: '   ',
     DEVECO_SDK_HOME: mkdtempForTestSync('agent-device-hdc-none-'),
+    HARMONYOS_COMMAND_LINE_TOOLS: mkdtempForTestSync('agent-device-hdc-none-'),
   };
 
   await ensureHarmonyToolchainPathConfigured(env);
