@@ -58,6 +58,20 @@ test('confirmIosOffscreenTargetVisible: forwards the derived id/label selector a
   });
 });
 
+test('confirmIosOffscreenTargetVisible: a session without an app sends no options bag', async () => {
+  const querySelector = vi.fn<ProbeQuery>(found({ x: 1, y: 2, width: 3, height: 4 }, true));
+
+  await confirmIosOffscreenTargetVisible({
+    session: makeSession(),
+    node: { label: 'Pickup' },
+    rootViewport: ROOT_VIEWPORT,
+    querySelector,
+    execution: {},
+  });
+
+  assert.equal('options' in (querySelector.mock.calls[0]?.[0] ?? {}), false);
+});
+
 test('confirmIosOffscreenTargetVisible: null when the node has no usable id/label (never calls the operation)', async () => {
   const querySelector = vi.fn<ProbeQuery>(found({ x: 1, y: 2, width: 3, height: 4 }, true));
 

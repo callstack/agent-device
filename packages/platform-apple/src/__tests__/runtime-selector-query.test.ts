@@ -52,13 +52,13 @@ test('forwards the selector, app scope, and the full runner-execution projection
   );
 });
 
-test('composes the caller signal with the binding signal and refuses an already-aborted request', async () => {
+test('refuses an already-aborted binding signal without querying the runner', async () => {
   const controller = new AbortController();
   controller.abort();
 
   await expect(
     bind(controller.signal).querySelector({ selector: { key: 'label', value: 'Go' } }),
-  ).rejects.toThrow();
+  ).rejects.toMatchObject({ name: 'AbortError' });
   expect(queryAppleRunnerSelector).not.toHaveBeenCalled();
 });
 

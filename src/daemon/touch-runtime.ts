@@ -207,21 +207,11 @@ export function createBoundTouchExecutor(
   };
   const captureSnapshot = bound.captured ? readCaptureSnapshot(bound.runtime) : undefined;
   const base = createBaseTouchExecutor(bound, context, shared, captureSnapshot);
-  const querySelector = selectOffscreenTargetQuery(bound);
+  // The owner's live selector read (#1542 rescue), forwarded only on the captured arms whose use
+  // declares it CONDITIONAL and only when the exact owner advertised it. The freeze keeps the
+  // executor's shape identical to the builders' own.
+  const querySelector = bound.captured ? bound.runtime.operations.querySelector : undefined;
   return querySelector ? Object.freeze({ ...base, querySelector }) : base;
-}
-
-/**
- * The owner's live selector read, present only on the captured arms whose use declares it
- * CONDITIONAL and only when the exact owner admitted it. The freeze keeps the executor's shape
- * identical to the builders' own.
- */
-function selectOffscreenTargetQuery(
-  bound: BoundTouchRuntime,
-): BoundTouchExecutor['querySelector'] | undefined {
-  if (!bound.captured) return undefined;
-  const { querySelector } = bound.runtime.operations;
-  return querySelector ? async (input) => await querySelector(input) : undefined;
 }
 
 function createBaseTouchExecutor(

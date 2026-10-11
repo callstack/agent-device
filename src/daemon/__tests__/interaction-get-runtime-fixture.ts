@@ -25,6 +25,10 @@ import {
   type TapRefInput,
   HOVER_UNAVAILABLE_HINT,
 } from '@agent-device/contracts/touch-runtime';
+import type {
+  QuerySelectorInput,
+  QuerySelectorResult,
+} from '@agent-device/contracts/selector-observation-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../platform-services.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
@@ -91,6 +95,14 @@ const mockFillRef = vi.fn(async (input: FillRefInput) => ({
 export const mockTapElementSelector = vi.fn(async (_input: TapElementSelectorInput) => ({}));
 
 /**
+ * The CONDITIONAL live selector read (#1542 rescue). Off by default so only the tests that pin
+ * the rescue's wiring flip it; when advertised, the binding answers through this mock.
+ */
+export const mockQuerySelector = vi.fn(
+  async (_input: QuerySelectorInput): Promise<QuerySelectorResult> => ({ found: false }),
+);
+
+/**
  * Flip to model an exact owner cell: no live element read (web, HarmonyOS, provider), no capture
  * at all (the watchOS sentinel, an inactive provider), which refuses admission outright, or no
  * touch (a device kind whose family cannot drive a point focus).
@@ -101,6 +113,8 @@ export const elementReadFixtureState = {
   focusPointAvailable: true,
   typeTextAvailable: true,
   tapElementSelectorAvailable: true,
+  /** Off by default: only the tests pinning the #1542 rescue wiring advertise the live read. */
+  querySelectorAvailable: false,
 };
 
 export function resetGetRuntimeFixture(): void {
@@ -143,6 +157,9 @@ export function resetGetRuntimeFixture(): void {
   elementReadFixtureState.focusPointAvailable = true;
   elementReadFixtureState.typeTextAvailable = true;
   elementReadFixtureState.tapElementSelectorAvailable = true;
+  elementReadFixtureState.querySelectorAvailable = false;
+  mockQuerySelector.mockReset();
+  mockQuerySelector.mockResolvedValue({ found: false });
 }
 
 const available = Object.freeze({ available: true } as const);
@@ -186,6 +203,7 @@ function fixtureTouchFacts(device: DeviceInfo) {
     tapElementSelector: elementReadFixtureState.tapElementSelectorAvailable
       ? available
       : unavailable,
+    querySelector: elementReadFixtureState.querySelectorAvailable ? available : unavailable,
   };
 }
 
@@ -226,6 +244,9 @@ const mockBindElementReadRuntime: BindDeviceRuntime = vi.fn(async (device: Devic
       ...(device.platform === 'web' ? { fillRef: mockFillRef } : {}),
       ...(elementReadFixtureState.tapElementSelectorAvailable
         ? { tapElementSelector: mockTapElementSelector }
+        : {}),
+      ...(elementReadFixtureState.querySelectorAvailable
+        ? { querySelector: mockQuerySelector }
         : {}),
     }),
     [Symbol.asyncDispose]: async () => undefined,

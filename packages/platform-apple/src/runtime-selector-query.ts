@@ -5,7 +5,7 @@ import type {
   SelectorObservationRuntimeOperations,
 } from '@agent-device/contracts/selector-observation-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { Rect } from '@agent-device/kernel/snapshot';
+import { parseRect } from '@agent-device/kernel/record';
 import type { RunnerCallOptions } from '@agent-device/contracts/interactor-types';
 
 type AppleSelectorQueryRequest = Readonly<{
@@ -32,7 +32,9 @@ export function bindAppleQuerySelectorRuntime(
         ? AbortSignal.any([request.signal, input.signal])
         : request.signal;
       signal.throwIfAborted();
-      const options = runnerCallOptions(input, signal);
+      // Same projection bindAppleFindTextRuntime builds: the execution context is exactly the
+      // runner-call fields, with the composed signal replacing the caller's own.
+      const options: RunnerCallOptions = { ...input.execution, signal };
       // Deferred exactly like the retired daemon-side edge: the runner client binds its host at
       // evaluation, so mechanics load on the first read, never with the runtime façade.
       const { queryAppleRunnerSelector } = await import('./core/runner-selector-query.ts');
@@ -51,29 +53,6 @@ export function bindAppleQuerySelectorRuntime(
   });
 }
 
-function runnerCallOptions(input: QuerySelectorInput, signal: AbortSignal): RunnerCallOptions {
-  const execution = input.execution ?? {};
-  return {
-    signal,
-    ...(execution.verbose === undefined ? {} : { verbose: execution.verbose }),
-    ...(execution.logPath === undefined ? {} : { logPath: execution.logPath }),
-    ...(execution.traceLogPath === undefined ? {} : { traceLogPath: execution.traceLogPath }),
-    ...(execution.requestId === undefined ? {} : { requestId: execution.requestId }),
-    ...(execution.iosXctestrunFile === undefined
-      ? {}
-      : { iosXctestrunFile: execution.iosXctestrunFile }),
-    ...(execution.iosXctestDerivedDataPath === undefined
-      ? {}
-      : { iosXctestDerivedDataPath: execution.iosXctestDerivedDataPath }),
-    ...(execution.iosXctestEnvDir === undefined
-      ? {}
-      : { iosXctestEnvDir: execution.iosXctestEnvDir }),
-    ...(execution.runnerLeaseContext === undefined
-      ? {}
-      : { runnerLeaseContext: execution.runnerLeaseContext }),
-  };
-}
-
 function readQuerySelectorNode(
   data: Record<string, unknown>,
 ): QuerySelectorNodeReading | undefined {
@@ -81,24 +60,10 @@ function readQuerySelectorNode(
   if (!Array.isArray(nodes)) return undefined;
   const node = nodes[0];
   if (!node || typeof node !== 'object') return undefined;
-  const rect = readRect((node as { rect?: unknown }).rect);
+  const rect = parseRect((node as { rect?: unknown }).rect);
   if (!rect) return undefined;
   return Object.freeze({
     rect,
     hittable: (node as { hittable?: unknown }).hittable === true,
   });
-}
-
-function readRect(value: unknown): Rect | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const { x, y, width, height } = value as Record<string, unknown>;
-  if (
-    typeof x !== 'number' ||
-    typeof y !== 'number' ||
-    typeof width !== 'number' ||
-    typeof height !== 'number'
-  ) {
-    return undefined;
-  }
-  return { x, y, width, height };
 }

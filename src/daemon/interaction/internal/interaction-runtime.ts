@@ -10,7 +10,6 @@ import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { Rect, SnapshotState } from '@agent-device/kernel/snapshot';
 import type { DaemonCommandContext } from '../../context.ts';
 import { createDaemonRuntimePolicy } from '../../runtime-policy.ts';
-import { isLocalIosRunnerSession } from '../../direct-ios-selector.ts';
 import { recordCaptureProof } from '../../capture-disclosure.ts';
 import { confirmIosOffscreenTargetVisible } from '../../offscreen-target-probe.ts';
 import { runtimeExecutionFromContext } from '../../snapshot-runtime-capture-input.ts';
@@ -85,9 +84,8 @@ export async function createInteractionRuntimeForRoute(
     expireRefFrame: () => expireRefFrame(params.sessionStore.requireCurrent(ref)),
     // The #1542 rescue hook installs only when this request's own binding admitted the live
     // selector read — the same conditional fact the guard's refusal is built on, so the hook and
-    // the verdict it may overturn come from one admission (ADR 0019 §2). A local iOS session
-    // whose owner did not advertise the read, and every other platform, keeps the bulk-tree
-    // verdict unchanged.
+    // the verdict it may overturn come from one admission (ADR 0019 §2). A session whose owner did
+    // not advertise the read keeps the bulk-tree verdict unchanged.
     confirmOffscreenTargetVisible: readOffscreenTargetRescue(params, session),
     pairedGestureViewport: params.pairedGestureViewport,
     touchExecutor: params.touchExecutor,
@@ -98,10 +96,11 @@ export async function createInteractionRuntimeForRoute(
 /**
  * The #1542 rescue read over the live selector query, or `undefined` when this request must not
  * hold one. It installs only on a route whose own request-bound binding admitted the CONDITIONAL
- * `querySelector` operation (the touch or gesture use it already holds; ADR 0019 §2), and only for
- * the sessions the retired probe gated: local iOS runner sessions, pending post-gesture
- * stabilization included. An owner that did not advertise the read keeps the guard's bulk-tree
- * verdict unchanged — the declared parity side of the conditional, not a fallback.
+ * `querySelector` operation (the touch or gesture use it already holds; ADR 0019 §2), which is the
+ * whole gate: only the local Apple owner declares the read, and only on iOS-family leaves, so
+ * provider-owned devices (whose facts start every operation unavailable and never declare it),
+ * the macOS desktop, and every other platform never hold the hook — their guard refuses on the
+ * bulk-tree verdict unchanged.
  */
 function readOffscreenTargetRescue(
   params: InteractionRouteInput & {
@@ -112,9 +111,6 @@ function readOffscreenTargetRescue(
 ): InteractionRuntimeInput['confirmOffscreenTargetVisible'] {
   const querySelector = params.touchExecutor?.querySelector ?? params.gestures?.querySelector;
   if (!querySelector) return undefined;
-  if (!isLocalIosRunnerSession(session, { skipPendingPostGestureStabilization: false })) {
-    return undefined;
-  }
   return async (node, rootViewport) =>
     await confirmIosOffscreenTargetVisible({
       session,

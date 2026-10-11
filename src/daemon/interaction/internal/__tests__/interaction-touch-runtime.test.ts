@@ -4,7 +4,9 @@ import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import {
+  elementReadFixtureState,
   getRuntimeBindings,
+  mockQuerySelector,
   mockTapPoint,
   resetGetRuntimeFixture,
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
@@ -212,6 +214,99 @@ test('press @ref fails closed when stored ref bounds are invalid (ADR 0014)', as
     expect(response.error.message).toMatch(/Ref @e1 has no usable bounds/);
     expect(response.error.details).toMatchObject({ reason: 'target_bounds_invalid', ref: 'e1' });
   }
+  expect(mockTapPoint).not.toHaveBeenCalled();
+});
+
+// #1542 wiring, daemon route: the off-screen rescue's live read rides the SAME request-bound
+// binding the touch command was admitted for. These two tests pin both declared sides of the
+// CONDITIONAL `querySelector` fact: an owner that advertises it answers the guard with a live
+// rect the tap lands on; an owner that does not refuses on the bulk-tree verdict with ZERO
+// queries. Deleting `conditional: ['querySelector']` from the captured touch uses, or making the
+// rescue hook return undefined, breaks one of these two; the Apple binding's own spread is pinned
+// in platform-apple's runtime.test.ts.
+
+const RESCUE_ROUTE_SESSION = 'rescue-route';
+
+function offscreenRefSessionStore() {
+  const sessionStore = makeSessionStore();
+  const session = makeSession(RESCUE_ROUTE_SESSION);
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        depth: 0,
+        type: 'Window',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'XCUIElementTypeButton',
+        label: 'Far item',
+        identifier: 'far_item',
+        rect: { x: 20, y: 1200, width: 120, height: 44 },
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  sessionStore.publish(RESCUE_ROUTE_SESSION, session);
+  return sessionStore;
+}
+
+async function pressOffscreenRef(sessionStore: ReturnType<typeof makeSessionStore>) {
+  return await handleInteractionCommands({
+    createCommandSurface: testCreateCommandSurface,
+    req: {
+      token: 't',
+      session: RESCUE_ROUTE_SESSION,
+      command: 'press',
+      positionals: ['@e2'],
+      flags: {},
+    },
+    sessionName: RESCUE_ROUTE_SESSION,
+    sessionStore,
+    contextFromFlags,
+    ...getRuntimeBindings(),
+  });
+}
+
+test('press @ref an off-screen node is rescued to the live rect when the owner advertises querySelector', async () => {
+  const sessionStore = offscreenRefSessionStore();
+  elementReadFixtureState.querySelectorAvailable = true;
+  mockQuerySelector.mockResolvedValue({
+    found: true,
+    node: { rect: { x: 20, y: 400, width: 120, height: 44 }, hittable: true },
+  });
+
+  const response = await pressOffscreenRef(sessionStore);
+
+  // The rescue wins: the press lands at the CENTER OF THE LIVE RECT, not the stale
+  // bulk-tree row's off-screen geometry, and the live read carried the derived selector.
+  expect(response?.ok).toBe(true);
+  expect(mockQuerySelector).toHaveBeenCalledTimes(1);
+  expect(mockQuerySelector.mock.calls[0]?.[0].selector).toEqual({
+    key: 'id',
+    value: 'far_item',
+  });
+  expect(mockTapPoint).toHaveBeenCalledTimes(1);
+  expect(mockTapPoint.mock.calls[0]?.[0]?.point).toEqual({ x: 80, y: 422 });
+});
+
+test('press @ref an off-screen node refuses with zero queries when the owner does not advertise querySelector', async () => {
+  // The fixture default: the owner's facts declare the CONDITIONAL read unavailable, so the
+  // route holds no hook and the guard's refusal is built from the bulk tree alone.
+  const sessionStore = offscreenRefSessionStore();
+
+  const response = await pressOffscreenRef(sessionStore);
+
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.details?.reason).toBe('offscreen_ref');
+  }
+  expect(mockQuerySelector).not.toHaveBeenCalled();
   expect(mockTapPoint).not.toHaveBeenCalled();
 });
 

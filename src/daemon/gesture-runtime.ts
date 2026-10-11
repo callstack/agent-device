@@ -145,7 +145,9 @@ async function bindGestureTier(
         performPlan: async (gesturePlan, context) =>
           await runtime.operations.performGesturePlan(gesturePlanInput(gesturePlan, context)),
         ...selectGestureFrame(runtime),
-        ...selectOffscreenTargetQuery(runtime),
+        ...(runtime.operations.querySelector
+          ? { querySelector: runtime.operations.querySelector }
+          : {}),
       };
     }
     case 'directional-fling': {
@@ -156,7 +158,9 @@ async function bindGestureTier(
             gesturePlanInput(gesturePlan, context),
           ),
         ...selectGestureFrame(runtime),
-        ...selectOffscreenTargetQuery(runtime),
+        ...(runtime.operations.querySelector
+          ? { querySelector: runtime.operations.querySelector }
+          : {}),
       };
     }
     case 'multi-touch': {
@@ -167,7 +171,9 @@ async function bindGestureTier(
             gesturePlanInput(gesturePlan, context),
           ),
         ...selectGestureFrame(runtime),
-        ...selectOffscreenTargetQuery(runtime),
+        ...(runtime.operations.querySelector
+          ? { querySelector: runtime.operations.querySelector }
+          : {}),
       };
     }
     case 'target-authored-drag': {
@@ -178,24 +184,12 @@ async function bindGestureTier(
             gesturePlanInput(gesturePlan, context),
           ),
         ...selectGestureFrame(runtime),
-        ...selectOffscreenTargetQuery(runtime),
+        ...(runtime.operations.querySelector
+          ? { querySelector: runtime.operations.querySelector }
+          : {}),
       };
     }
   }
-}
-
-/**
- * The live selector read the off-screen rescue consumes, forwarded only when this tier's
- * CONDITIONAL declaration found the owner advertising it.
- */
-function selectOffscreenTargetQuery(
-  runtime: Readonly<{
-    operations: Readonly<{ querySelector?: QuerySelectorRuntimeOperations['querySelector'] }>;
-  }>,
-): Pick<BoundGestureExecutor, 'querySelector'> | Record<string, never> {
-  const { querySelector } = runtime.operations;
-  if (!querySelector) return {};
-  return { querySelector: async (input) => await querySelector(input) };
 }
 
 /** Keeps both viewport paths inside the request's admitted gesture binding. */
