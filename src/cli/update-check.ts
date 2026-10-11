@@ -12,6 +12,8 @@ const UPDATE_CHECK_CACHE_FILE = 'update-check.json';
 
 type UpdateCheckCache = {
   checkedAt?: string;
+  /** The dist-tag `latestVersion` was read from; a cache from before channels means `latest`. */
+  distTag?: string;
   latestVersion?: string;
   prompted?: boolean;
 };
@@ -50,7 +52,7 @@ export function maybeRunUpgradeNotifier(options: UpgradeNotifierOptions): void {
     });
   }
 
-  if (shouldStartBackgroundCheck(cache, now)) {
+  if (shouldStartBackgroundCheck(cache, options.currentVersion, now)) {
     spawnBackgroundUpdateCheck(cachePath, options.currentVersion);
   }
 }
@@ -59,16 +61,17 @@ export async function runUpdateCheckWorker(options: UpdateCheckWorkerOptions): P
   const now = Date.now();
   const cache = readUpdateCheckCache(options.cachePath);
 
+  const distTag = distTagFor(options.currentVersion);
   try {
-    const latestVersion =
-      (await fetchLatestPackageVersion(distTagFor(options.currentVersion))) ?? undefined;
+    const latestVersion = (await fetchLatestPackageVersion(distTag)) ?? undefined;
     if (!latestVersion || compareVersions(latestVersion, options.currentVersion) <= 0) {
-      writeUpdateCheckCache(options.cachePath, { checkedAt: new Date(now).toISOString() });
+      writeUpdateCheckCache(options.cachePath, { checkedAt: new Date(now).toISOString(), distTag });
       return;
     }
 
     writeUpdateCheckCache(options.cachePath, {
       checkedAt: new Date(now).toISOString(),
+      distTag,
       latestVersion,
       prompted: cache.latestVersion === latestVersion ? cache.prompted === true : false,
     });
@@ -92,11 +95,17 @@ function shouldEnableUpgradeNotifier(options: UpgradeNotifierOptions): boolean {
 
 function shouldShowUpgradeNotice(cache: UpdateCheckCache, currentVersion: string): boolean {
   if (!cache.latestVersion) return false;
+  if (cachedDistTag(cache) !== distTagFor(currentVersion)) return false;
   if (compareVersions(cache.latestVersion, currentVersion) <= 0) return false;
   return cache.prompted !== true;
 }
 
-function shouldStartBackgroundCheck(cache: UpdateCheckCache, now: number): boolean {
+function shouldStartBackgroundCheck(
+  cache: UpdateCheckCache,
+  currentVersion: string,
+  now: number,
+): boolean {
+  if (cachedDistTag(cache) !== distTagFor(currentVersion)) return true;
   const checkedAt = parseTimestamp(cache.checkedAt);
   return checkedAt === undefined || now - checkedAt >= UPDATE_CHECK_INTERVAL_MS;
 }
@@ -106,6 +115,7 @@ function readUpdateCheckCache(cachePath: string): UpdateCheckCache {
     const raw = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as UpdateCheckCache;
     return {
       checkedAt: typeof raw.checkedAt === 'string' ? raw.checkedAt : undefined,
+      distTag: typeof raw.distTag === 'string' ? raw.distTag : undefined,
       latestVersion: typeof raw.latestVersion === 'string' ? raw.latestVersion : undefined,
       prompted: raw.prompted === true,
     };
@@ -149,6 +159,10 @@ function spawnBackgroundUpdateCheck(cachePath: string, currentVersion: string): 
     cachePath,
     currentVersion,
   ]);
+}
+
+function cachedDistTag(cache: UpdateCheckCache): string {
+  return cache.distTag ?? 'latest';
 }
 
 /** A nightly build follows the `nightly` dist-tag; every other build follows `latest`. */

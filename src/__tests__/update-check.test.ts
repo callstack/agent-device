@@ -218,3 +218,24 @@ test('a nightly build checks and recommends the nightly dist-tag', async () => {
     /-> 0\.12\.0-nightly\.20261011\.8\. Run `npm install -g agent-device@nightly`/,
   );
 });
+
+test('a cached version from the other channel is neither shown nor kept past a channel switch', () => {
+  vi.mocked(runCmdDetached).mockClear();
+  const stateDir = makeTempStateDir();
+  cleanupPaths.push(stateDir);
+  writeCache(stateDir, {
+    latestVersion: '0.12.0-nightly.20261011.8',
+    distTag: 'nightly',
+    checkedAt: '2026-03-30T10:00:00.000Z',
+  });
+  let stderr = '';
+  vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
+    stderr += String(chunk);
+    return true;
+  }) as typeof process.stderr.write);
+
+  maybeRunUpgradeNotifier({ command: 'devices', currentVersion: '0.11.3', stateDir, flags: {} });
+
+  assert.equal(stderr, '');
+  assert.equal(vi.mocked(runCmdDetached).mock.calls.length, 1, 'the switch starts a fresh check');
+});
