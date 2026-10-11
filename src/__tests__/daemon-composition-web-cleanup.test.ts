@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { installFakeManagedAgentBrowser } from '../../__tests__/test-utils/web-managed-agent-browser.ts';
+import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { installFakeManagedAgentBrowser } from './test-utils/web-managed-agent-browser.ts';
 
 const { cleanupManagedAgentBrowserOrphansMock } = vi.hoisted(() => ({
   cleanupManagedAgentBrowserOrphansMock: vi.fn(),
@@ -17,9 +17,10 @@ vi.mock('@agent-device/platform-web', async (importOriginal) => {
   };
 });
 
-import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
-import { SessionStore } from '../session-store.ts';
-import { cleanupWebBrowserOrphansForDaemonStartup } from './daemon-runtime.ts';
+import { WEB_DESKTOP_DEVICE } from './test-utils/device-fixtures.ts';
+import { SessionStore } from '../daemon/session-store.ts';
+import { openWebSessionNames } from '../daemon/web-session-names.ts';
+import { cleanupWebBrowserOrphansForDaemonStartup } from '../daemon-composition.ts';
 
 const mockCleanupManagedAgentBrowserOrphans = vi.mocked(cleanupManagedAgentBrowserOrphansMock);
 
@@ -39,7 +40,10 @@ test('daemon-startup web cleanup passes open web sessions to the reaper', async 
       actions: [],
     });
 
-    await cleanupWebBrowserOrphansForDaemonStartup({ stateDir, sessionStore });
+    await cleanupWebBrowserOrphansForDaemonStartup({
+      stateDir,
+      openWebSessionNames: openWebSessionNames(sessionStore),
+    });
 
     assert.equal(mockCleanupManagedAgentBrowserOrphans.mock.calls.length, 1);
     assert.equal(mockCleanupManagedAgentBrowserOrphans.mock.calls[0]?.[1], 'daemon-startup');
@@ -56,7 +60,10 @@ test('daemon-startup web cleanup does not run when the managed backend is absent
   try {
     const sessionStore = new SessionStore(path.join(stateDir, 'sessions'));
 
-    await cleanupWebBrowserOrphansForDaemonStartup({ stateDir, sessionStore });
+    await cleanupWebBrowserOrphansForDaemonStartup({
+      stateDir,
+      openWebSessionNames: openWebSessionNames(sessionStore),
+    });
 
     assert.equal(mockCleanupManagedAgentBrowserOrphans.mock.calls.length, 0);
   } finally {

@@ -1,3 +1,4 @@
+import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -19,9 +20,7 @@ import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.t
 test('daemon startup awaits app-log recovery after acquiring the lock and before opening servers', () => {
   const source = fs.readFileSync(new URL('../server/daemon-runtime.ts', import.meta.url), 'utf8');
   const acquiredLock = source.indexOf("if (acquisition.status !== 'acquired')");
-  const legacyRecovery = source.indexOf(
-    'await platformDaemonLifecycleOwners.recoverLegacyAppLogMarkers(',
-  );
+  const legacyRecovery = source.indexOf('await deps.ownerLifecycle.recoverLegacyAppLogMarkers(');
   const recovery = source.indexOf('await recoverAppLogResourcesAfterDaemonLock(');
   const openedServers = source.indexOf('const opened = await openDaemonServers()');
 
@@ -37,9 +36,7 @@ test('daemon startup configures the Apple runner owner after acquiring the lock,
   // configures a global platform owner it does not own.
   const source = fs.readFileSync(new URL('../server/daemon-runtime.ts', import.meta.url), 'utf8');
   const acquiredLock = source.indexOf("if (acquisition.status !== 'acquired')");
-  const runnerOwnerConfigured = source.indexOf(
-    'await platformDaemonLifecycleOwners.configureForDaemonLock(',
-  );
+  const runnerOwnerConfigured = source.indexOf('await deps.ownerLifecycle.configureForDaemonLock(');
   const lockFailureExit = source.indexOf('exit(', acquiredLock);
 
   expect(acquiredLock).toBeGreaterThanOrEqual(0);
@@ -134,6 +131,8 @@ test('daemon shutdown settles fenced app-log cleanup before finalization can rel
     ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: () => {} },
+
+    platformCleanup: platformResourceCleanup,
   });
   await cleanupStarted;
 

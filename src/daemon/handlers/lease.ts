@@ -31,7 +31,7 @@ import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeo
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { listDownloadableArtifacts } from '../artifact-tracking.ts';
 import { providerSessionIdFromData } from '../provider-session-ownership.ts';
-import type { DaemonProviderCredentials } from '../../provider-credential-fingerprint.ts';
+import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 
 type LeaseHandlerArgs = {

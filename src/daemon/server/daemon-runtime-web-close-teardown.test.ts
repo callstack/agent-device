@@ -1,3 +1,4 @@
+import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 
@@ -52,6 +53,8 @@ test('daemon shutdown awaits a slow web close inside its extended budget', async
     ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
+
+    platformCleanup: platformResourceCleanup,
   });
   await vi.dynamicImportSettled();
   await vi.advanceTimersByTimeAsync(20_000);
@@ -85,6 +88,8 @@ test('daemon shutdown closes an open web session immediately, without waiting fo
     ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
+
+    platformCleanup: platformResourceCleanup,
   });
 
   expect(stderrChunks.join('')).toBe('');
@@ -117,6 +122,8 @@ test('daemon shutdown reports a web close failure on stderr instead of losing it
     ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
+
+    platformCleanup: platformResourceCleanup,
   });
 
   // Best-effort: the failure is surfaced, but it never blocks the session from being torn down.

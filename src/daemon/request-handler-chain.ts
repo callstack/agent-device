@@ -26,7 +26,7 @@ import type { RequestPlatformProviderScope } from '@agent-device/contracts/platf
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
-import type { DaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
+import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
 
 type RequestHandlerChainParams = {
   req: DaemonRequest;

@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { testCreateCommandSurface } from '../__tests__/command-surface-fixture.ts';
 
 const reapCalls = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 
@@ -43,7 +42,7 @@ vi.mock('../../provider-device-runtimes.ts', () => ({
   createDaemonProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
 }));
 
-import { startDaemonRuntime } from './daemon-runtime.ts';
+import { startDaemonRuntimeFixture } from '../__tests__/daemon-runtime-fixture.ts';
 
 afterEach(() => {
   reapCalls.length = 0;
@@ -52,8 +51,7 @@ afterEach(() => {
 test('daemon startup reaps orphaned simctl recorders with a graceful finalize window', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-recording-reaper-');
   try {
-    const runtime = await startDaemonRuntime({
-      createCommandSurface: testCreateCommandSurface,
+    const runtime = await startDaemonRuntimeFixture({
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,

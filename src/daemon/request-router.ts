@@ -93,7 +93,7 @@ import type { AndroidObservationAdapter } from '@agent-device/contracts/android-
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { PlatformResourceCleanup } from './platform-resource-cleanup.ts';
 import type { DaemonPlatformServices } from './platform-services.ts';
-import type { DaemonProviderCredentials } from '../provider-credential-fingerprint.ts';
+import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
 import { restrictDeviceInventoryToDaemonPolicy } from './daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 

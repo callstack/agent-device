@@ -13,7 +13,6 @@ import {
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { interactorResolution } from '../interactor-resolution.ts';
-import { testCreateCommandSurface } from '../__tests__/command-surface-fixture.ts';
 
 vi.mock('../../platform-runtime.ts', () => ({
   androidObservation: {},
@@ -45,7 +44,7 @@ vi.mock('../../provider-device-runtimes.ts', () => ({
   })),
 }));
 
-import { startDaemonRuntime } from './daemon-runtime.ts';
+import { startDaemonRuntimeFixture } from '../__tests__/daemon-runtime-fixture.ts';
 
 afterEach(() => {
   setActiveProviderDeviceRuntimes([]);
@@ -60,8 +59,7 @@ test('daemon startup composes the interactor resolution the daemon resolves thro
   const stateDir = mkdtempForTestSync('agent-device-daemon-interactor-composition-');
   const providerInteractor = { snapshot: async () => ({ nodes: [] }) } as unknown as Interactor;
   try {
-    const runtime = await startDaemonRuntime({
-      createCommandSurface: testCreateCommandSurface,
+    const runtime = await startDaemonRuntimeFixture({
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -95,8 +93,7 @@ test('daemon startup composes the interactor resolution the daemon resolves thro
 test('daemon startup compares lease credentials with its own startup environment', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-credential-composition-');
   const daemonEnv = { BROWSERSTACK_USERNAME: 'user', BROWSERSTACK_ACCESS_KEY: 'key-1' };
-  const runtime = await startDaemonRuntime({
-    createCommandSurface: testCreateCommandSurface,
+  const runtime = await startDaemonRuntimeFixture({
     env: {
       ...process.env,
       ...daemonEnv,
@@ -162,8 +159,7 @@ test('a daemon attempt losing the lock shuts down every constructed provider', a
     platformModules: [],
   });
   const exit = vi.fn();
-  const runtime = await startDaemonRuntime({
-    createCommandSurface: testCreateCommandSurface,
+  const runtime = await startDaemonRuntimeFixture({
     env: { AGENT_DEVICE_STATE_DIR: stateDir },
     exit,
     registerProcessHandlers: false,

@@ -54,7 +54,7 @@ import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/t
 import { openWebSessionNames } from '../../../src/daemon/web-session-names.ts';
 import { testCreateCommandSurface } from '../../../src/daemon/__tests__/command-surface-fixture.ts';
 
-// Match daemon composition (src/daemon/server/daemon-runtime.ts): the daemon decides on provider
+// Match daemon composition (src/daemon-composition.ts): the daemon decides on provider
 // ownership through its own admission seam, which root composition installs.
 installProviderDeviceAdmission({ isActive: (device) => isActiveProviderDevice(device) });
 installInteractorResolution({ resolve: getInteractor });
@@ -178,7 +178,7 @@ export async function createProviderScenarioHarness(
       : createTestDeviceInventoryGatewaysFromProvider(deviceInventoryProvider),
     deviceRuntimeGateway,
     trackDownloadableArtifact,
-    // Match daemon composition (src/daemon/server/daemon-runtime.ts): doctor's host-scoped
+    // Match daemon composition (src/daemon-composition.ts): doctor's host-scoped
     // diagnostics are injected at the root, so the harness composes them the same way.
     hostDiagnostics: createHostDiagnostics(),
     androidObservation,

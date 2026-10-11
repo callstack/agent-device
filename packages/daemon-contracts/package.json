@@ -47,6 +47,10 @@
       "types": "./src/daemon-shutdown-report.ts",
       "default": "./src/daemon-shutdown-report.ts"
     },
+    "./provider-credentials": {
+      "types": "./src/provider-credentials.ts",
+      "default": "./src/provider-credentials.ts"
+    },
     "./request-progress-protocol": {
       "types": "./src/request-progress-protocol.ts",
       "default": "./src/request-progress-protocol.ts"

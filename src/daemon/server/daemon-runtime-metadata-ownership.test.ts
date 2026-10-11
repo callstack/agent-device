@@ -3,7 +3,6 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
 import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
-import { testCreateCommandSurface } from '../__tests__/command-surface-fixture.ts';
 
 const lifecycleEvents = vi.hoisted(() => [] as string[]);
 const startupFailure = vi.hoisted(() => ({ active: false }));
@@ -58,7 +57,7 @@ vi.mock('../../platform-runtime-daemon-lifecycle.ts', () => ({
   },
 }));
 
-import { startDaemonRuntime } from './daemon-runtime.ts';
+import { startDaemonRuntimeFixture } from '../__tests__/daemon-runtime-fixture.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
 type DaemonPaths = ReturnType<typeof resolveDaemonPaths>;
@@ -68,8 +67,7 @@ type DaemonPaths = ReturnType<typeof resolveDaemonPaths>;
 const SUCCESSOR_PID = 999_999_999;
 
 function startRuntime(stateDir: string, exit: (code: number) => void) {
-  return startDaemonRuntime({
-    createCommandSurface: testCreateCommandSurface,
+  return startDaemonRuntimeFixture({
     env: {
       ...process.env,
       AGENT_DEVICE_STATE_DIR: stateDir,
