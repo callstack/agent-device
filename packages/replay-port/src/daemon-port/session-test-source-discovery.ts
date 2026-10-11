@@ -35,9 +35,14 @@ export async function buildReplayTestSourceDiscovery(
   sources: readonly ReplayScriptSourceBundle[],
   replayBackend: string | undefined,
 ): Promise<ReplayTestDiscoverSources> {
-  const backend: ReplayBackend | undefined = isReplayBackendId(replayBackend)
-    ? await getReplayBackend(replayBackend)
-    : undefined;
+  // `--maestro` names a backend, but the format resolver only routes a source to it when the
+  // source is a flow file; a suite whose sources are all `.ad` must not load the backend at all
+  // (same lazy-loading property #1802 pinned for replay).
+  const backend: ReplayBackend | undefined =
+    isReplayBackendId(replayBackend) &&
+    sources.some((bundle) => resolveReplayFormat(bundle.entry, replayBackend) !== 'ad')
+      ? await getReplayBackend(replayBackend)
+      : undefined;
   return () => sources.map((bundle) => inspectReplayTestSource(bundle, replayBackend, backend));
 }
 

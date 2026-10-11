@@ -84,14 +84,19 @@ const BUILTIN_REPLAY_BACKENDS: Readonly<Record<ReplayBackendId, () => Promise<Re
 const loadedBackends = new Map<ReplayBackendId, Promise<ReplayBackend>>();
 
 /**
- * Resolves a backend once per process, memoizing the engine's single evaluation. The id's type
- * is the grammar's `isReplayBackendId` guard, so an unregistered value is rejected by the caller
- * before it reaches here; engines never fall back to one another.
+ * Resolves a backend once per process, memoizing the engine's single evaluation. A load failure
+ * is NOT cached — a failed `import()` stays retryable, as it was at the pre-registry call sites
+ * that imported fresh per invocation. The id's type is the grammar's `isReplayBackendId` guard, so
+ * an unregistered value is rejected by the caller before it reaches here; engines never fall back
+ * to one another.
  */
 export function getReplayBackend(id: ReplayBackendId): Promise<ReplayBackend> {
   const cached = loadedBackends.get(id);
   if (cached) return cached;
-  const loading = BUILTIN_REPLAY_BACKENDS[id]();
+  const loading = BUILTIN_REPLAY_BACKENDS[id]().catch((error: unknown) => {
+    loadedBackends.delete(id);
+    throw error;
+  });
   loadedBackends.set(id, loading);
   return loading;
 }
