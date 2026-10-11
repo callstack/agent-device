@@ -1,6 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { bootFailureHint, classifyBootFailure } from './boot-diagnostics.ts';
+import {
+  bootFailureHint,
+  classifyBootFailure,
+  type BootFailureReason,
+} from './boot-diagnostics.ts';
 import { isInfrastructureBootFailureReason } from '@agent-device/contracts/boot-failure';
 import { AppError } from '@agent-device/kernel/errors';
 
@@ -49,6 +53,20 @@ test('classifyBootFailure reads stderr from AppError details', () => {
 test('bootFailureHint returns actionable guidance', () => {
   const hint = bootFailureHint('IOS_RUNNER_CONNECT_TIMEOUT');
   assert.equal(hint.includes('xcodebuild logs'), true);
+});
+
+const HINT_CASES = [
+  ['IOS_BOOT_TIMEOUT', /simctl bootstatus/],
+  ['ANDROID_BOOT_TIMEOUT', /sys\.boot_completed/],
+  ['ADB_TRANSPORT_UNAVAILABLE', /adb devices -l/],
+  ['CI_RESOURCE_STARVATION_SUSPECTED', /resource constrained/],
+  ['IOS_TOOL_MISSING', /xcode-select --install/],
+  ['BOOT_COMMAND_FAILED', /failing boot phase/],
+  ['UNKNOWN', /Retry once/],
+] satisfies ReadonlyArray<readonly [BootFailureReason, RegExp]>;
+
+test.each(HINT_CASES)('bootFailureHint gives %s its own remediation text', (reason, expected) => {
+  assert.match(bootFailureHint(reason), expected);
 });
 
 test('connect phase does not classify non-timeout errors as connect timeout', () => {

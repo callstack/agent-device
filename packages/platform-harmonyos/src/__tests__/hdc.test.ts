@@ -1,13 +1,26 @@
 import assert from 'node:assert/strict';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn() };
 });
+vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
+  return { ...actual, hostEnvironment: vi.fn() };
+});
 
 import { runCmd } from '@agent-device/host-kit/command';
-import { DEFAULT_HARMONY_HDC_TIMEOUT_MS, runHarmonyHdc, runHarmonyShell } from '../hdc.ts';
+import { hostEnvironment } from '@agent-device/host-kit/process';
+import {
+  DEFAULT_HARMONY_HDC_TIMEOUT_MS,
+  ensureHarmonyToolchainPathConfigured,
+  runHarmonyHdc,
+  runHarmonyShell,
+} from '../hdc.ts';
+import { mkdtempForTestSync } from './tmp-dir.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const device = { id: '127.0.0.1:5555' };
@@ -52,4 +65,84 @@ test('runHarmonyHdc forwards a binding abort signal to an in-flight HDC command'
 
   await assert.rejects(pending, (error: unknown) => error === aborted);
   assert.equal(mockRunCmd.mock.calls[0]?.[2]?.signal, controller.signal);
+});
+
+/** Creates `<root>/default/openharmony/toolchains/hdc` as an executable, like DevEco lays out. */
+async function seedToolchain(root: string): Promise<string> {
+  const toolchains = path.join(root, 'default', 'openharmony', 'toolchains');
+  await fs.mkdir(toolchains, { recursive: true });
+  const hdc = path.join(toolchains, 'hdc');
+  await fs.writeFile(hdc, '#!/bin/sh\nexit 0\n', 'utf8');
+  await fs.chmod(hdc, 0o755);
+  return root;
+}
+
+/** HDC_SDK_PATH names the toolchains directory itself, so `HDC_SDK_PATH/hdc` must exist. */
+async function seedDirectToolchain(root: string): Promise<string> {
+  await fs.mkdir(root, { recursive: true });
+  const hdc = path.join(root, 'hdc');
+  await fs.writeFile(hdc, '#!/bin/sh\nexit 0\n', 'utf8');
+  await fs.chmod(hdc, 0o755);
+  return root;
+}
+
+test('ensureHarmonyToolchainPathConfigured prepends every root holding an hdc binary', async () => {
+  const hdcSdkRoot = await seedDirectToolchain(mkdtempForTestSync('agent-device-hdc-sdk-'));
+  const devecoRoot = await seedToolchain(mkdtempForTestSync('agent-device-hdc-deveco-'));
+  // A declared root without an hdc executable must not join PATH.
+  const emptyRoot = mkdtempForTestSync('agent-device-hdc-empty-');
+
+  const env: NodeJS.ProcessEnv = {
+    PATH: '/usr/bin',
+    HDC_SDK_PATH: hdcSdkRoot,
+    DEVECO_SDK_HOME: devecoRoot,
+    HARMONYOS_COMMAND_LINE_TOOLS: emptyRoot,
+  };
+
+  await ensureHarmonyToolchainPathConfigured(env);
+
+  assert.deepEqual((env.PATH ?? '').split(path.delimiter), [
+    hdcSdkRoot,
+    path.join(devecoRoot, 'default', 'openharmony', 'toolchains'),
+    '/usr/bin',
+  ]);
+});
+
+test('ensureHarmonyToolchainPathConfigured leaves PATH untouched when no root holds hdc', async () => {
+  const env: NodeJS.ProcessEnv = {
+    PATH: '/usr/bin',
+    HDC_SDK_PATH: '   ',
+    DEVECO_SDK_HOME: mkdtempForTestSync('agent-device-hdc-none-'),
+  };
+
+  await ensureHarmonyToolchainPathConfigured(env);
+
+  assert.equal(env.PATH, '/usr/bin');
+});
+
+test('ensureHarmonyToolchainPathConfigured creates PATH and dedupes a root already on it', async () => {
+  const toolchains = await seedDirectToolchain(mkdtempForTestSync('agent-device-hdc-dup-'));
+
+  const env: NodeJS.ProcessEnv = {
+    PATH: `/usr/bin${path.delimiter}${toolchains}`,
+    HDC_SDK_PATH: toolchains,
+  };
+  await ensureHarmonyToolchainPathConfigured(env);
+
+  // The toolchain root moves to the front instead of appearing twice.
+  assert.equal(env.PATH, [toolchains, '/usr/bin'].join(path.delimiter));
+
+  const missingPath: NodeJS.ProcessEnv = { HDC_SDK_PATH: toolchains };
+  await ensureHarmonyToolchainPathConfigured(missingPath);
+  assert.equal(missingPath.PATH, toolchains);
+});
+
+test('ensureHarmonyToolchainPathConfigured defaults to the host environment', async () => {
+  const toolchains = await seedDirectToolchain(mkdtempForTestSync('agent-device-hdc-host-'));
+  const hostEnv: NodeJS.ProcessEnv = { PATH: '/usr/bin', HDC_SDK_PATH: toolchains };
+  vi.mocked(hostEnvironment).mockReturnValue(hostEnv);
+
+  await ensureHarmonyToolchainPathConfigured();
+
+  assert.equal(hostEnv.PATH, [toolchains, '/usr/bin'].join(path.delimiter));
 });

@@ -74,6 +74,53 @@ async function runImeCheck(adb: AndroidAdbExecutor): Promise<DoctorCheck | undef
   return checks.find((check) => check.id === 'android-test-ime');
 }
 
+function contextWithMetroProbe(
+  reverse: () => Promise<{ exitCode: number; stdout: string; stderr: string }>,
+): HostDiagnosticsContext {
+  const metroAdb: AndroidAdbExecutor = async (args, options) => {
+    if (args[0] === 'reverse') {
+      assert.deepEqual(args, ['reverse', '--list']);
+      assert.equal(options?.allowFailure, true);
+      return await reverse();
+    }
+    return await fakeAdb(NORMAL_IME)(args, options);
+  };
+  return Object.freeze({ ...contextWith(metroAdb), shouldProbeMetro: true });
+}
+
+async function runReverseCheck(
+  reverse: () => Promise<{ exitCode: number; stdout: string; stderr: string }>,
+): Promise<DoctorCheck | undefined> {
+  const checks = await androidDeviceChecks(ANDROID_EMULATOR, contextWithMetroProbe(reverse));
+  return checks.find((check) => check.id === 'android-reverse');
+}
+
+test('reports pass when the Metro reverse mapping already exists', async () => {
+  const check = await runReverseCheck(async () => ({
+    exitCode: 0,
+    stdout: 'tcp:8081 tcp:8081\n',
+    stderr: '',
+  }));
+  assert.equal(check?.status, 'pass');
+  assert.equal(check?.command, undefined);
+  assert.match(check?.summary ?? '', /exists for Metro port 8081/);
+});
+
+test('reports warn with the reverse command when the Metro mapping is missing', async () => {
+  const check = await runReverseCheck(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+  assert.equal(check?.status, 'warn');
+  assert.equal(check?.command, `adb -s ${ANDROID_EMULATOR.id} reverse tcp:8081 tcp:8081`);
+});
+
+test('reports warn instead of failing the doctor when the reverse probe errors', async () => {
+  const check = await runReverseCheck(async () => {
+    throw new Error('adb server died');
+  });
+  assert.equal(check?.status, 'warn');
+  assert.match(check?.summary ?? '', /Could not inspect Android adb reverse/);
+  assert.match(check?.hint ?? '', /adb server died/);
+});
+
 test('reports pass when the normal IME is active', async () => {
   const check = await runImeCheck(fakeAdb(NORMAL_IME));
   assert.equal(check?.status, 'pass');
