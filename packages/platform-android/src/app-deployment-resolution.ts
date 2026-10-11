@@ -71,9 +71,14 @@ export async function resolveAndroidApp(
     .split('\n')
     .map((line: string) => line.replace('package:', '').trim())
     .filter(Boolean);
+  // The cache is device-wide, so only a device-default listing may answer a later lookup.
+  const remember = (resolution: AndroidAppResolution): AndroidAppResolution =>
+    options.userId === undefined
+      ? androidAppResolutionCache.set(cacheScope, trimmed, resolution)
+      : resolution;
   if (packageShaped) {
     if (!packages.includes(trimmed)) throw androidAppNotInstalledError(app);
-    return androidAppResolutionCache.set(cacheScope, trimmed, { type: 'package', value: trimmed });
+    return remember({ type: 'package', value: trimmed });
   }
 
   const matches = packages.filter((pkg: string) =>
@@ -81,10 +86,7 @@ export async function resolveAndroidApp(
   );
   const match = matches[0];
   if (match !== undefined && matches.length === 1) {
-    return androidAppResolutionCache.set(cacheScope, trimmed, {
-      type: 'package',
-      value: match,
-    });
+    return remember({ type: 'package', value: match });
   }
 
   if (matches.length > 1) {

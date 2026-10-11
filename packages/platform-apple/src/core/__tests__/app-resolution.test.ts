@@ -104,7 +104,7 @@ test('findIosSimulatorInstalledApp verifies exact bundle ids and app-name aliase
   );
 });
 
-test('findIosSimulatorInstalledApp answers not-here for an ambiguous name or an unreadable app list', async () => {
+test('findIosSimulatorInstalledApp answers not-here for an ambiguous name, an uninstalled alias target, or an unreadable app list', async () => {
   mockRunSimctl.mockResolvedValue({
     stdout: JSON.stringify({
       'com.example.one': { CFBundleDisplayName: 'Twin' },

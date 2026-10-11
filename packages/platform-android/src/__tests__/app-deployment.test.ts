@@ -289,6 +289,27 @@ test('resolveAndroidApp does not treat file paths as package names', async () =>
   );
 });
 
+test('resolveAndroidApp keeps a user-scoped listing out of the device-wide name cache', async () => {
+  await withFakeAdb(
+    (args) => {
+      const flat = args.join(' ');
+      if (flat === 'shell pm list packages --user 10') return 'package:com.example.secondonly';
+      if (flat === 'shell pm list packages') return 'package:com.example.demo';
+      return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
+    },
+    async ({ calls, device }) => {
+      assert.deepEqual(
+        await resolveAndroidApp(device, 'secondonly', { installedOnly: true, userId: 10 }),
+        { type: 'package', value: 'com.example.secondonly' },
+      );
+      await assertRejectsAppError(() => resolveAndroidApp(device, 'secondonly'), {
+        code: 'APP_NOT_INSTALLED',
+      });
+      assert.deepEqual(calls.at(-1), ['shell', 'pm', 'list', 'packages']);
+    },
+  );
+});
+
 test('resolveAndroidApp caches display-name package matches but bypasses exact package ids', async () => {
   await withFakeAdb(
     (args) => {

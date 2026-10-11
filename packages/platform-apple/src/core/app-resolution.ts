@@ -318,13 +318,13 @@ async function listSimulatorApps(
   }));
 }
 
+/** `details.reason` of an app resolution that failed because `simctl` produced no app list. */
+const IOS_APP_LIST_UNREADABLE_REASON = 'app-list-unreadable';
+
 /**
  * The installed apps an app resolution matches against. A listing `simctl` could not produce is a
  * failure of its own, never an empty list: reading it as one would report an installed app missing.
  */
-/** `details.reason` of an app resolution that failed because `simctl` produced no app list. */
-const IOS_APP_LIST_UNREADABLE_REASON = 'app-list-unreadable';
-
 async function requireSimulatorApps(device: DeviceInfo): Promise<IosAppInfo[]> {
   const read = await readSimulatorAppMetadata(device);
   if (read.type === 'unreadable') {
