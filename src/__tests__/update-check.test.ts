@@ -239,3 +239,22 @@ test('a cached version from the other channel is neither shown nor kept past a c
   assert.equal(stderr, '');
   assert.equal(vi.mocked(runCmdDetached).mock.calls.length, 1, 'the switch starts a fresh check');
 });
+
+test('a failed check after a channel switch records the new channel and drops the old version', async () => {
+  const stateDir = makeTempStateDir();
+  cleanupPaths.push(stateDir);
+  const cachePath = path.join(stateDir, 'update-check.json');
+  writeCache(stateDir, {
+    latestVersion: '0.12.0-nightly.20261011.8',
+    distTag: 'nightly',
+    checkedAt: '2026-03-30T10:00:00.000Z',
+  });
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+
+  await runUpdateCheckWorker({ cachePath, currentVersion: '0.11.3' });
+
+  const cache = readCache(stateDir);
+  assert.equal(cache.distTag, 'latest');
+  assert.equal(cache.latestVersion, undefined);
+  assert.equal(cache.checkedAt, '2026-03-31T10:00:00.000Z');
+});

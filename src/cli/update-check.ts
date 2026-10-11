@@ -76,9 +76,13 @@ export async function runUpdateCheckWorker(options: UpdateCheckWorkerOptions): P
       prompted: cache.latestVersion === latestVersion ? cache.prompted === true : false,
     });
   } catch {
+    // A failed check still records this channel, so a channel switch waits out the interval
+    // instead of retrying on every command, and never keeps the other channel's version.
+    const kept = cachedDistTag(cache) === distTag ? cache : {};
     writeUpdateCheckCache(options.cachePath, {
-      ...cache,
+      ...kept,
       checkedAt: new Date(now).toISOString(),
+      distTag,
     });
   }
 }
