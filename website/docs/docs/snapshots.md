@@ -82,7 +82,7 @@ and disclosure behavior ([#2682](https://github.com/callstack/agent-device/issue
 - On Android, repeating an unfiltered snapshot when nothing on screen changed (content or bounds) returns a short acknowledgement instead of the tree. `-i`, `-d`, `-s`, `--json`, and `--raw` always print full output. Add `--force-full` to get the full tree anyway.
 - The default text output is a compact view for planning and targeting actions. It lists visible elements first and may collapse helper and accessibility noise. Use `--raw` or `--json` when you need the full provider tree. Keep `--raw` for troubleshooting, such as when you need the full off-screen tree that summaries abbreviate.
 - Off-screen interactive content is collapsed into summaries that show only a few labels, such as `[off-screen below] 3 interactive items: "Privacy", "Battery", "About"`.
-- If your target only appears in an off-screen summary, run `scroll <direction>` and snapshot again until it is visible.
+- If your target only appears in an off-screen summary, run `scroll <direction> --until <selector>` to stop on it, or `scroll <direction> --settle` to get the diff with fresh refs. See [Interactions](/docs/commands#interactions).
 - When agent-device knows which container holds the hidden content, it shows the summary inside that scroll or list container, for example `[content above scroll-area hidden]` or `[content below list hidden]`.
 - Add `-s "<label>"` (or `-s @ref`) to limit output to one part of the screen. See [Scope a snapshot](#scope-a-snapshot).
 - Add `-d <depth>` when you only need the upper layers of the hierarchy.
