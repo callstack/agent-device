@@ -1,18 +1,7 @@
 import type { DaemonPlatformServices } from '../platform-services.ts';
-import { asAppError, isRequestCanceledError } from '@agent-device/kernel/errors';
-import { appStateUse } from '@agent-device/contracts/platform-runtime-operations';
-import {
-  isApplePlatform,
-  isIosFamily,
-  isMacOs,
-  publicPlatformString,
-  type DeviceInfo,
-} from '@agent-device/kernel/device';
+import { isApplePlatform } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { SessionStore } from '../session-store.ts';
-import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import type { AppleApplicationState } from '@agent-device/kernel/snapshot';
-import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import {
   hasExplicitSessionFlag,
   requireSessionOrExplicitSelector,
@@ -20,50 +9,17 @@ import {
   selectorTargetsSessionDevice,
 } from '../session-device-resolution.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import { admitRuntimeUse } from '../runtime-admission.ts';
 import type { RuntimeCommandHandlerParams } from '../session-runtime-admission.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import { handleBootCommand } from './session-boot.ts';
 import { handleShutdownCommand } from './session-shutdown.ts';
+import { appleSessionAppStateResponse } from './session-appstate-apple-session.ts';
+import { queryDeviceRuntimeAppState } from './session-appstate-device-runtime.ts';
 
 const IOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
   'iOS appstate requires an active session on the target device. Run open first (for example: open --session sim --platform ios --device "<name>" <app>).';
 const MACOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
   'macOS appstate requires an active session on the target device. Run open first (for example: open --session macos --platform macos "System Settings").';
-
-/**
- * The session app's state as a live runner reads it, when this device's owner admits the read;
- * nothing otherwise, so the session record alone answers and no state is invented. The owner never
- * starts a runner for it. A runner that cannot answer right now (busy, mid-restart) leaves the
- * session answer as it was and says so in the log; a cancelled request stays cancelled.
- */
-async function readAppleSessionAppState(
-  params: RuntimeCommandHandlerParams,
-  session: Readonly<{ device: DeviceInfo; appBundleId?: string }>,
-): Promise<AppleApplicationState | undefined> {
-  if (!session.appBundleId) return undefined;
-  const admitted = await admitRuntimeUse({
-    command: 'appstate',
-    device: session.device,
-    use: appStateUse,
-    inspectFacts: params.inspectFacts,
-    platformServices: params.platformServices,
-    bindDevice: params.bindDevice,
-  });
-  if (admitted.type === 'response') return undefined;
-  try {
-    const read = await admitted.runtime.operations.appState({ appBundleId: session.appBundleId });
-    return read.applicationState;
-  } catch (error) {
-    if (isRequestCanceledError(error)) throw error;
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'apple_appstate_runner_read_failed',
-      data: { code: asAppError(error).code, message: asAppError(error).message },
-    });
-    return undefined;
-  }
-}
 
 async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
@@ -95,51 +51,7 @@ async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promi
   }
 
   if (shouldUseSessionStateForApple && session) {
-    const appName = session.appName ?? session.appBundleId;
-    if (!session.appName && !session.appBundleId) {
-      if (
-        isMacOs(session.device) &&
-        session.surface &&
-        session.surface !== 'app' &&
-        session.surface !== 'frontmost-app'
-      ) {
-        return {
-          ok: true,
-          data: {
-            platform: publicPlatformString(session.device),
-            appName: session.surface,
-            appBundleId: session.appBundleId,
-            source: 'session',
-            surface: session.surface,
-          },
-        };
-      }
-
-      const sessionPlatform = isMacOs(session.device) ? 'macOS' : 'iOS';
-      return errorResponse(
-        'COMMAND_FAILED',
-        `No foreground app is tracked for this ${sessionPlatform} session. Open an app in the session, then retry appstate.`,
-      );
-    }
-
-    const state = await readAppleSessionAppState(params, session);
-    return {
-      ok: true,
-      data: {
-        platform: publicPlatformString(session.device),
-        appName: appName ?? 'unknown',
-        appBundleId: session.appBundleId,
-        source: state ? 'runner' : 'session',
-        ...(state ? { state } : {}),
-        surface: session.surface ?? 'app',
-        ...(isIosFamily(session.device)
-          ? {
-              device_udid: session.device.id,
-              ios_simulator_device_set: session.device.simulatorSetPath ?? null,
-            }
-          : {}),
-      },
-    };
+    return await appleSessionAppStateResponse(params, session);
   }
 
   const device = await resolveCommandDevice({
@@ -147,44 +59,7 @@ async function handleAppStateCommand(params: RuntimeCommandHandlerParams): Promi
     flags,
     platformServices: params.platformServices,
   });
-  if (isIosFamily(device)) {
-    return errorResponse('SESSION_NOT_FOUND', IOS_APPSTATE_SESSION_REQUIRED_MESSAGE);
-  }
-  if (isMacOs(device)) {
-    return errorResponse('SESSION_NOT_FOUND', MACOS_APPSTATE_SESSION_REQUIRED_MESSAGE);
-  }
-  const admitted = await admitRuntimeUse({
-    command: 'appstate',
-    device,
-    use: appStateUse,
-    inspectFacts: params.inspectFacts,
-    platformServices: params.platformServices,
-    bindDevice: params.bindDevice,
-    unavailableResponse: (unavailable) =>
-      errorResponse(
-        'UNSUPPORTED_OPERATION',
-        device.platform === 'web'
-          ? 'appstate is not supported on web.'
-          : 'appstate is not supported on this device',
-        undefined,
-        unavailable.hint ? { hint: unavailable.hint } : undefined,
-      ),
-  });
-  if (admitted.type === 'response') return admitted.response;
-  const runtime = admitted.runtime;
-  await runtime.operations.ensureReady({
-    serial: flags.serial,
-    androidSerialAllowlist: resolveAndroidSerialAllowlistForAppState(flags.androidDeviceAllowlist),
-  });
-  const state = await runtime.operations.appState();
-  return {
-    ok: true,
-    data: {
-      platform: publicPlatformString(device),
-      package: state.package,
-      activity: state.activity,
-    },
-  };
+  return await queryDeviceRuntimeAppState(params, device);
 }
 
 export async function handleSessionStateCommands(params: {
@@ -231,9 +106,4 @@ export async function handleSessionStateCommands(params: {
   }
 
   return null;
-}
-
-function resolveAndroidSerialAllowlistForAppState(value: string | undefined): string[] | undefined {
-  const allowlist = resolveAndroidSerialAllowlist(value);
-  return allowlist ? [...allowlist].sort() : undefined;
 }
