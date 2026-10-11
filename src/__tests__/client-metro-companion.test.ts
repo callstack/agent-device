@@ -363,17 +363,23 @@ test('stopping a companion survives every process-teardown race', async () => {
     assert.equal(killSpy.mock.calls.length, 0);
     killSpy.mockRestore();
 
-    // 3. SIGTERM loses the race (EPERM): the companion is treated as stopped without escalating.
+    // 3. SIGTERM is refused (EPERM). The shared stopper reads "signal refused" as
+    //    already-exited, so teardown reports stopped, skips the exit wait and SIGKILL,
+    //    and drops the state file without confirming an exit. EPERM can also mean a
+    //    companion still running under another owner, which is why the daemon's own
+    //    stopper keeps its registration instead (`signal-failed` in
+    //    src/daemon/process/daemon-stop.ts); companion teardown keeps the weaker
+    //    local-dev contract that a pid we cannot signal is not ours to keep tracking.
     vi.mocked(isProcessAlive).mockReturnValueOnce(true);
     vi.mocked(readProcessCommand).mockReturnValueOnce(companionCommand);
     killSpy = vi.spyOn(process, 'kill').mockImplementationOnce(() => {
       throw errnoException('EPERM');
     });
-    vi.mocked(waitForProcessExit).mockResolvedValueOnce(true);
     statePath = writeOwnCompanionState(projectRoot, 4003);
     assert.equal((await stopMetroCompanion({ projectRoot })).stopped, true);
     assert.deepEqual(killSpy.mock.calls, [[4003, 'SIGTERM']]);
     assert.equal(vi.mocked(waitForProcessExit).mock.calls.length, 0);
+    assert.equal(fs.existsSync(statePath), false);
     killSpy.mockRestore();
 
     // 4. SIGTERM is ignored: escalate to SIGKILL and wait for the exit again.
