@@ -127,11 +127,21 @@ async function ciConclusion(env, sha) {
   return isVersionOnlyCommit(commit) ? ciConclusion(env, commit.parents[0].sha) : 'missing';
 }
 
+// `missing` included: a tag pushed right after a merge can arrive before the merge's CI run exists.
+const UNSETTLED_CI = new Set([
+  'missing',
+  'requested',
+  'queued',
+  'waiting',
+  'pending',
+  'in_progress',
+]);
+
 /** A tag pushed right after a merge waits, within the Plan job's budget, for that merge's CI. */
 async function settledCiConclusion(env, sha) {
   for (let attempt = 0; ; attempt += 1) {
     const conclusion = await ciConclusion(env, sha);
-    if (!['queued', 'in_progress', 'waiting', 'pending'].includes(conclusion) || attempt >= 40) {
+    if (!UNSETTLED_CI.has(conclusion) || attempt >= 40) {
       return conclusion;
     }
     await new Promise((resolve) => setTimeout(resolve, 30_000));
