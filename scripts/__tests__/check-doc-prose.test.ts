@@ -67,8 +67,28 @@ test('a backtick fence is not closed by tildes', () => {
   assert.deepEqual(hits('```\n~~~\njust\n```\nJust.'), ['5:1 just']);
 });
 
+test('a fence inside a blockquote is skipped through its quoted closer', () => {
+  assert.deepEqual(hits('> ```sh\n> just build\n> ```\n> Simply.'), ['4:3 simply']);
+});
+
+test('a fence inside an HTML comment does not swallow the prose after the comment', () => {
+  assert.deepEqual(hits('<!--\n```\n-->\nJust.'), ['4:1 just']);
+});
+
 test('inline code spans are skipped, matching backtick run lengths', () => {
   assert.deepEqual(hits('Run `just build` or ``a ` just`` then just go.'), ['1:39 just']);
+});
+
+test('an inline code span that wraps across lines is skipped', () => {
+  assert.deepEqual(hits('Run `just\nsimply` here.'), []);
+});
+
+test('a stray backtick does not mask past the end of its paragraph', () => {
+  assert.deepEqual(hits('A ` tick.\n\nJust `x`.'), ['3:1 just']);
+});
+
+test('a phrase wrapped across lines matches at its first word', () => {
+  assert.deepEqual(hits('Support is coming\nsoon.'), ['1:12 coming soon']);
 });
 
 test('HTML tags, comments, link destinations, and bare URLs are skipped', () => {

@@ -135,4 +135,4 @@ The daemon refuses to start when it finds a legacy lock file or can't verify who
 
 Packaged installs use `~/.agent-device` by default; source checkouts use a per-worktree directory under `~/.agent-device/dev/`. Set `AGENT_DEVICE_STATE_DIR` or pass `--state-dir` to override either default.
 
-In a source checkout, `pnpm clean:daemon --prune-dev` first stops the current checkout's daemon, even if its state directory has recent activity. It then finds development state directories with no activity for 14 days (by the newest modification time of the directory and its immediate children) and removes daemon registrations it can confirm are abandoned. It keeps the directories, session artifacts, and logs.
+In a source checkout, `pnpm clean:daemon --prune-dev` first stops the current checkout's daemon; the 14-day inactivity rule below does not apply to it. It then finds development state directories with no activity for 14 days (by the newest modification time of the directory and its immediate children) and removes daemon registrations it can confirm are abandoned. It keeps the directories, session artifacts, and logs.

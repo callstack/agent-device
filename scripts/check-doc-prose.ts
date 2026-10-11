@@ -1,7 +1,8 @@
 // `pnpm check:doc-prose` — flags filler, marketing, and time-relative words in the user docs
-// (website/docs/**/*.md(x) and README.md). Line-based on purpose: no Markdown parser. It skips
-// YAML frontmatter, fenced code blocks, inline code spans, HTML tags and comments, link
-// destinations, and bare URLs, so commands and identifiers never trip a rule.
+// (website/docs/**/*.md(x) and README.md). Regex masks on purpose: no Markdown parser. It blanks
+// YAML frontmatter, HTML comments, fenced code blocks, inline code spans, HTML tags, link
+// destinations, and bare URLs, so commands and identifiers never trip a rule. Destinations with
+// nested parentheses are not masked.
 //
 // There is no allowlist: a legitimate hit ('just' meaning 'only', a quoted message) gets its sentence
 // rewritten.
@@ -50,82 +51,54 @@ const RULE_PATTERNS = PROSE_RULES.map((rule) => ({
   pattern: new RegExp(String.raw`\b${rule.word.replaceAll(' ', String.raw`\s+`)}\b`, 'gi'),
 }));
 
-const FENCE_OPEN = /^ {0,3}(`{3,}|~{3,})/;
-// Spans that are not prose, blanked in place so columns stay true.
+const FRONTMATTER = /^---\n[\s\S]*?\n---(?=\n|$)/;
+const HTML_COMMENT = /<!--[\s\S]*?-->/g;
+// A fence line, optionally inside blockquotes: the marker run, then the info string or nothing.
+const FENCE_LINE = /^ {0,3}(?:> ?)*(`{3,}|~{3,})(.*)$/;
+// Spans that are not prose. Code spans stop at a blank line, as paragraphs do.
 const NON_PROSE = [
-  /(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g, // inline code span; backtick runs of matching length
-  /<!--.*?-->/g,
+  /(?<!`)(`+)(?!`)(?:(?!\n\s*\n)[\s\S])*?(?<!`)\1(?!`)/g, // backtick runs of matching length
   /<\/?[A-Za-z][^>]*>/g, // HTML or JSX tag
   /\]\([^)]*\)/g, // link or image destination
   /\b(?:https?:\/\/|mailto:|www\.)\S+/g,
 ];
 
+/** Spaces in place of everything but newlines, so line and column math stays exact. */
 function blank(text: string): string {
-  return ' '.repeat(text.length);
+  return text.replaceAll(/[^\n]/g, ' ');
 }
 
-function maskNonProse(line: string): string {
-  return NON_PROSE.reduce((masked, pattern) => masked.replace(pattern, blank), line);
-}
-
-function frontmatterEnd(lines: readonly string[]): number {
-  if (lines[0]?.trim() !== '---') return 0;
-  const close = lines.findIndex((line, index) => index > 0 && line.trim() === '---');
-  return close === -1 ? 0 : close + 1;
-}
-
-/** A closing fence repeats the opening character at least as many times, and nothing else. */
-function closesFence(line: string, fence: string): boolean {
-  const trimmed = line.trim();
-  return trimmed.startsWith(fence) && trimmed.replaceAll(fence[0] ?? '', '') === '';
-}
-
-/** The open fence after `line`: opened, closed, or carried over. */
-function fenceAfter(fence: string | null, line: string): string | null {
-  if (fence === null) return FENCE_OPEN.exec(line)?.[1] ?? null;
-  return closesFence(line, fence) ? null : fence;
-}
-
-/** The line with the end of a multi-line HTML comment blanked, or null when it does not end. */
-function afterCommentClose(line: string): string | null {
-  const end = line.indexOf('-->') + 3;
-  return end < 3 ? null : blank(line.slice(0, end)) + line.slice(end);
-}
-
-/** Each line's prose with everything else blanked; lines inside code or comments yield nothing. */
-function* proseLines(lines: readonly string[]): Generator<{ index: number; prose: string }> {
+/** Blank every fenced code block, fence lines included; an unclosed fence runs to the end. */
+function blankFences(text: string): string {
   let fence: string | null = null;
-  let inComment = false;
-  for (let index = frontmatterEnd(lines); index < lines.length; index += 1) {
-    const raw = lines[index] ?? '';
-    const inCode = fence !== null || FENCE_OPEN.test(raw);
-    fence = fenceAfter(fence, raw);
-    if (inCode) continue;
-    const line = inComment ? afterCommentClose(raw) : raw;
-    if (line === null) continue;
-    const prose = maskNonProse(line);
-    const open = prose.indexOf('<!--');
-    inComment = open !== -1;
-    yield { index, prose: inComment ? prose.slice(0, open) : prose };
-  }
+  const lines = text.split('\n').map((line) => {
+    const [, marker = '', info = ''] = FENCE_LINE.exec(line) ?? [];
+    if (fence === null && marker === '') return line;
+    if (fence === null) fence = marker;
+    else if (marker[0] === fence[0] && marker.length >= fence.length && info.trim() === '') {
+      fence = null;
+    }
+    return blank(line);
+  });
+  return lines.join('\n');
+}
+
+function proseOnly(text: string): string {
+  const masked = blankFences(text.replace(FRONTMATTER, blank).replaceAll(HTML_COMMENT, blank));
+  return NON_PROSE.reduce((prose, pattern) => prose.replaceAll(pattern, blank), masked);
 }
 
 /** Violations in one Markdown or MDX file. `fileName` prefixes each message. */
 export function checkDocProse(fileName: string, text: string): ProseViolation[] {
-  const violations: ProseViolation[] = [];
-  for (const { index, prose } of proseLines(text.split('\n'))) {
-    for (const { word, reason, pattern } of RULE_PATTERNS) {
-      for (const match of prose.matchAll(pattern)) {
-        const where = `${fileName}:${index + 1}:${match.index + 1}`;
-        violations.push({
-          line: index + 1,
-          column: match.index + 1,
-          word,
-          message: `${where}: "${match[0]}" — ${reason}`,
-        });
-      }
-    }
-  }
+  const prose = proseOnly(text);
+  const violations = RULE_PATTERNS.flatMap(({ word, reason, pattern }) =>
+    [...prose.matchAll(pattern)].map((match) => {
+      const line = prose.slice(0, match.index).split('\n').length;
+      const column = match.index - prose.lastIndexOf('\n', match.index - 1);
+      const where = `${fileName}:${line}:${column}`;
+      return { line, column, word, message: `${where}: "${match[0]}" — ${reason}` };
+    }),
+  );
   return violations.sort((a, b) => a.line - b.line || a.column - b.column);
 }
 
