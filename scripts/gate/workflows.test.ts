@@ -246,3 +246,48 @@ jobs:
     assert.deepEqual(lane?.gates, []);
   }
 });
+
+test("a reusable workflow's gate input resolves from the caller's with", () => {
+  const lanes = planted({
+    '.github/workflows/planted.yml': `name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    uses: ./.github/workflows/called.yml
+    with:
+      gate: layering
+`,
+    '.github/workflows/called.yml': `name: Called
+on:
+  workflow_call:
+    inputs:
+      gate:
+        type: string
+jobs:
+  called:
+    steps:
+      - uses: ./.github/actions/run-gate
+        with:
+          gate: \${{ inputs.gate }}
+`,
+  });
+  assert.deepEqual(lanes.find((lane) => lane.workflow === 'planted.yml')?.gates, ['layering']);
+});
+
+test('a reusable workflow with no jobs fails closed', () => {
+  const lanes = planted({
+    '.github/workflows/planted.yml': `name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    uses: ./.github/workflows/empty.yml
+`,
+    '.github/workflows/empty.yml': `name: Empty
+on:
+  workflow_call:
+`,
+  });
+  assert.equal(lanes.find((lane) => lane.workflow === 'planted.yml')?.unsupported.length, 1);
+});

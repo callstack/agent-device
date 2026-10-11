@@ -38,7 +38,7 @@ type RawStep = {
   with?: Record<string, unknown>;
 };
 
-type Job = { name?: string; steps?: RawStep[]; uses?: string };
+type Job = { name?: string; steps?: RawStep[]; uses?: string; with?: Record<string, unknown> };
 type WorkflowDoc = {
   name?: string;
   on?: Record<string, never>;
@@ -152,13 +152,13 @@ function workflowLanes(
   const qualifying = 'pull_request' in on || 'schedule' in on;
   const { paths, pathsIgnore } = triggerPaths(on);
   return Object.entries(doc.jobs ?? {}).map(([jobId, job]) => {
-    const { steps, files, unsupported } = jobSteps(job, root);
+    const { steps, inputs, files, unsupported } = jobSteps(job, root);
     return {
       workflow: file,
       label: laneLabel(doc.name ?? file, job.name ?? jobId),
       qualifying,
       triggers: Object.keys(on),
-      gates: [...new Set(declaredGates(steps, root))],
+      gates: [...new Set(declaredGates(steps, root, [], inputs))],
       uses: [...new Set([`.github/workflows/${file}`, ...files, ...localActionFiles(steps, root)])],
       verbatim: steps.flatMap((step) =>
         typeof step.run === 'string' ? verbatimScripts(step.run, scripts) : [],
@@ -170,29 +170,36 @@ function workflowLanes(
   });
 }
 
-/** The jobs of a reusable workflow in this repository, or null when it lives elsewhere. */
+/** The jobs of a reusable workflow in this repository, or null when it is elsewhere or jobless. */
 function readLocalWorkflowJobs(uses: string, root: string): Job[] | null {
   if (!uses.startsWith('./.github/workflows/')) return null;
   const file = path.join(root, uses.slice(2));
   if (!fs.existsSync(file)) return null;
-  return Object.values((parse(fs.readFileSync(file, 'utf8')) as WorkflowDoc).jobs ?? {});
+  const jobs = Object.values((parse(fs.readFileSync(file, 'utf8')) as WorkflowDoc).jobs ?? {});
+  return jobs.length > 0 ? jobs : null;
 }
+
+/** What a job runs, with the caller's `with` inputs that the steps' `${{ inputs.* }}` resolve to. */
+type JobSteps = {
+  steps: RawStep[];
+  inputs: Readonly<Record<string, unknown>>;
+  files: string[];
+  unsupported: string[];
+};
 
 /**
  * A job's steps, opening a local reusable workflow so the gates it runs stay visible. A remote,
- * missing, or nested reusable workflow fails closed as unsupported.
+ * missing, jobless, or nested reusable workflow fails closed as unsupported.
  */
-function jobSteps(
-  job: Job,
-  root: string,
-): { steps: RawStep[]; files: string[]; unsupported: string[] } {
-  if (!job.uses) return { steps: job.steps ?? [], files: [], unsupported: [] };
+function jobSteps(job: Job, root: string): JobSteps {
+  if (!job.uses) return { steps: job.steps ?? [], inputs: {}, files: [], unsupported: [] };
   const called = readLocalWorkflowJobs(job.uses, root);
   if (!called || called.some((calledJob) => calledJob.uses)) {
-    return { steps: [], files: [], unsupported: [`\`uses: ${job.uses}\` (reusable workflow)`] };
+    const unsupported = [`\`uses: ${job.uses}\` (reusable workflow)`];
+    return { steps: [], inputs: {}, files: [], unsupported };
   }
   const steps = called.flatMap((calledJob) => calledJob.steps ?? []);
-  return { steps, files: [job.uses.slice(2)], unsupported: [] };
+  return { steps, inputs: job.with ?? {}, files: [job.uses.slice(2)], unsupported: [] };
 }
 
 export function loadLanes(
