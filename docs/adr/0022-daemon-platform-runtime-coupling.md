@@ -6,6 +6,14 @@ Accepted (2026-09-06). Implements the audit deliverables of issue #2278. The cla
 inventory and the structural no-regrowth checks are gate-enforced; this ADR records the decisions
 and points at the gates rather than restating the inventory.
 
+Amended 2026-10-11 by #3431: the daemon-runtime composition edges this
+ADR classified (the gateway/diagnostics/resource-cleanup/lifecycle edges, the provider-runtime
+hubs, and the platform-services and claim-recovery dynamic edges) moved out of `src/daemon/` into
+the process-root composition module `src/daemon-composition.ts`, which R76 does not see because it
+is no longer a daemon-zone importer. The R76 inventory now carries only the leaked
+selector-query edge (`src/daemon/direct-ios-selector.ts`); the section-2 outcomes below remain the
+record of how each was classified.
+
 ## 1. Context
 
 The platform-package migration removed direct production dependencies from `src/daemon/**` to

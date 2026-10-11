@@ -76,54 +76,6 @@ export function computePlatformMechanicsHubs(
  */
 export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[] = [
   {
-    file: 'src/daemon/server/daemon-runtime.ts',
-    target: 'src/platform-runtime.ts',
-    symbols: [
-      'androidObservation',
-      'createPlatformRuntimeGateway',
-      'createPlatformDeviceInventoryGateways',
-      'createRequestPlatformProviders',
-    ],
-    classification: 'composition-essential',
-    rationale:
-      'process-root assembly of the neutral runtime gateway, device-inventory gateways, and ' +
-      'request platform providers (ADR 0019 section 1/2 boundary); the daemon holds no ' +
-      'platform mechanics at this site, only the composition the process root owns.',
-  },
-  {
-    file: 'src/daemon/server/daemon-runtime.ts',
-    target: 'src/platform-runtime-host-diagnostics.ts',
-    symbols: ['createHostDiagnostics'],
-    classification: 'composition-essential',
-    rationale:
-      'process-root assembly of the neutral HostDiagnostics contract capability; the ' +
-      'per-family probes load lazily inside the root module, so the daemon consumes only ' +
-      'the contract surface.',
-  },
-  {
-    file: 'src/daemon/server/daemon-runtime.ts',
-    target: 'src/platform-runtime-resource-cleanup.ts',
-    symbols: ['platformResourceCleanup'],
-    classification: 'composition-essential',
-    rationale:
-      'process-root assembly of the neutral PlatformResourceCleanup contract capability; the ' +
-      'Android snapshot-helper reset and Web orphan cleanup that used to be named directly on ' +
-      'this edge now sit behind the typed lifecycle-participation surface (#2333, see the ' +
-      'platform-runtime-daemon-lifecycle.ts edge below).',
-  },
-  {
-    file: 'src/daemon/server/daemon-runtime.ts',
-    target: 'src/platform-runtime-daemon-lifecycle.ts',
-    symbols: ['platformDaemonLifecycleOwners'],
-    classification: 'composition-essential',
-    rationale:
-      'process-root assembly of the typed PlatformOwnerLifecycle contract capability (#2333): ' +
-      'the daemon keeps ordering, cancellation, and best-effort failure policy for its ' +
-      'startup/shutdown platform-owner participation, while this composition module is the ' +
-      'sole place that names the Apple runner owner, the Android snapshot-helper and Web ' +
-      'orphan cleanups, and legacy app-log marker recovery.',
-  },
-  {
     file: 'src/daemon/direct-ios-selector.ts',
     target: 'src/platform-runtime-apple-resources.ts',
     symbols: ['queryAppleRuntimeSelector'],
@@ -133,60 +85,6 @@ export const DAEMON_PLATFORM_RUNTIME_EDGES: readonly DaemonPlatformRuntimeEdge[]
       'selector-producer seam owned by #2273/#2274 is the accepted deepening, and this ' +
       'audit deliberately adds no second selector producer.',
     deepenedBy: '#2273, #2274',
-  },
-  {
-    file: 'src/daemon/server/daemon-runtime.ts',
-    target: 'src/core/interactors.ts',
-    symbols: ['getInteractor'],
-    classification: 'composition-essential',
-    rationale:
-      'process-root assembly of the neutral InteractorResolution capability the legacy snapshot ' +
-      'capture consumes (#2555): this site hands the shared interactor lookup to the daemon next ' +
-      "to the provider-device admission it shares a request scope with, and is the daemon zone's " +
-      'only edge into src/core/interactors.ts. The lookup it replaced was a dynamic import out of ' +
-      'the daemon zone, a direction the ranked spine cannot see.',
-  },
-  {
-    file: 'src/daemon/server/daemon-runtime.ts',
-    target: 'src/provider-device-runtimes.ts',
-    symbols: ['createDaemonProviderRuntimeComposition', 'DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS'],
-    classification: 'composition-essential',
-    rationale:
-      'process-root assembly of the default provider runtime composition and the ids whose runtime ' +
-      'must be present for a request, which is what makes a cloud or remote lease holder visible to ' +
-      'the daemon at all; the daemon holds no provider mechanics at this site.',
-  },
-  {
-    file: 'src/daemon/server/daemon-runtime.ts',
-    target: 'src/provider-device-runtime.ts',
-    symbols: ['createProviderDeviceRuntimeRequestProviders', 'isActiveProviderDevice'],
-    classification: 'composition-essential',
-    rationale:
-      'process-root assembly of the request-scoped provider runtime providers, and the one site that ' +
-      'hands the resulting device-ownership fact to the daemon through its own typed admission seam ' +
-      '(#2541); the ten leaf call sites that used to name this hub now read ' +
-      'src/daemon/provider-device-admission.ts, so this edge is the composition and nothing else.',
-  },
-  {
-    file: 'src/daemon/server/daemon-runtime.ts',
-    target: 'src/platform-runtime-daemon-services.ts',
-    symbols: ['createDaemonPlatformServices'],
-    classification: 'composition-essential',
-    rationale:
-      'process-root assembly of the daemon platform-services port (ADR 0019): local readiness, ' +
-      'boot and runner-session observation, and open-target classification reach the request ' +
-      'path only as this frozen object, so no daemon module names a platform adapter. Device ' +
-      'execution never enters the port; it stays behind the request-bound runtime binding.',
-  },
-  {
-    file: 'src/daemon/server/daemon-runtime.ts',
-    target: 'src/platform-runtime-claim-recovery.ts',
-    symbols: ['createClaimRecoveryGateway'],
-    classification: 'composition-essential',
-    rationale:
-      'process-root assembly of the per-transaction recovery gateway factory (#2168): the daemon ' +
-      'owns which dead owner state dir a recovery is rebuilt from and when the gateway is ' +
-      'disposed, and this composition module is the sole place that assembles the gateway itself.',
   },
 ] as const;
 
@@ -210,7 +108,10 @@ function sorted(symbols: readonly string[]): string[] {
  * Evidence: #2278 measured 14 production edges in 9 daemon files at origin/main 6e22e266d7;
  *   this table is that measurement, classified per ADR 0022, plus the 3 edges the hub widening and
  *   dynamic-edge pass made visible at #2541 (2 provider-runtime hubs, 1 dynamic interactor lookup
- *   that #2555 has since composed away into the daemon-runtime edge above).
+ *   that #2555 has since composed away). The daemon-runtime composition edges this table carried
+ *   through #3402 moved to the process root with the PR-6 extraction (`src/daemon-composition.ts`
+ *   is outside the daemon zone, so R76 no longer sees them); only the leaked selector-query edge
+ *   below remains.
  * Cost: attributed to the R76 rule registration in check.ts; not a standalone CI job.
  * Kill criterion: the daemon reaches the platform only through the gateway and declared
  *   contract capabilities (the inventory empty), or a maintainer decision retires the
