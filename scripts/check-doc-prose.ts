@@ -90,7 +90,8 @@ function proseOnly(text: string): string {
 
 /** Violations in one Markdown or MDX file. `fileName` prefixes each message. */
 export function checkDocProse(fileName: string, text: string): ProseViolation[] {
-  const prose = proseOnly(text);
+  // A Windows checkout with core.autocrlf has CRLF endings; the scan assumes LF.
+  const prose = proseOnly(text.replaceAll('\r\n', '\n'));
   const violations = RULE_PATTERNS.flatMap(({ word, reason, pattern }) =>
     [...prose.matchAll(pattern)].map((match) => {
       const line = prose.slice(0, match.index).split('\n').length;

@@ -107,3 +107,11 @@ test('HTML tags, comments, link destinations, and bare URLs are skipped', () => 
 test('link text is prose', () => {
   assert.deepEqual(hits('[Simply start](./start.md)'), ['1:2 simply']);
 });
+
+test('CRLF line endings are scanned like LF', () => {
+  const text = ['---', 'title: Simply the best', '---', '', 'You just run it.', ''].join('\r\n');
+  assert.deepEqual(
+    checkDocProse('page.md', text).map(({ line, word }) => `${line}:${word}`),
+    ['5:just'],
+  );
+});
