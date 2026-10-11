@@ -32,44 +32,55 @@ function gestureDefinition() {
 }
 
 describe('gesture run dispatch', () => {
+  // Each entry pins both halves of the run projection: which
+  // `client.interactions.*` method the kind routes to and how its payload
+  // lands on that method's options (`gesture.test.ts` covers the reader and
+  // daemon writer, not this client-side projection).
   test.for([
-    { argv: ['pan', '10', '20', '5', '6', '300'], method: 'pan' },
-    { argv: ['fling', 'up', '10', '20', '400'], method: 'fling' },
-    { argv: ['swipe', 'left-edge'], method: 'swipeGesture' },
-    { argv: ['pinch', '2', '30', '40'], method: 'pinch' },
-    { argv: ['rotate', '45'], method: 'rotateGesture' },
-    { argv: ['transform', '10', '20', '5', '6', '1.5', '45', '250'], method: 'transformGesture' },
-    { argv: ['drag', 'id="drag-source"', '@e2~s42', '700', '600', '200'], method: 'drag' },
-  ])('%argv routes to client.interactions.%method', async ({ argv, method }) => {
-    const calls: Array<{ method: string; options: unknown }> = [];
-    const input = gestureCliReaders.gesture(argv, NO_FLAGS);
-    await gestureDefinition().invoke(recordingGestureClient(calls), input);
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.method).toBe(method);
-  });
-
-  test('pan projects origin/delta and the timed movement onto client options', async () => {
-    const calls: Array<{ method: string; options: unknown }> = [];
-    const input = gestureCliReaders.gesture(['pan', '10', '20', '5', '6', '300'], NO_FLAGS);
-    await gestureDefinition().invoke(recordingGestureClient(calls), input);
-    expect(calls[0]?.options).toMatchObject({ x: 10, y: 20, dx: 5, dy: 6, durationMs: 300 });
-  });
-
-  test('drag projects selectors and hold durations onto client options', async () => {
-    const calls: Array<{ method: string; options: unknown }> = [];
-    const input = gestureCliReaders.gesture(
-      ['drag', 'id="drag-source"', '@e2~s42', '700', '600', '200'],
-      NO_FLAGS,
-    );
-    await gestureDefinition().invoke(recordingGestureClient(calls), input);
-    expect(calls[0]?.options).toMatchObject({
-      source: 'id="drag-source"',
-      destination: '@e2~s42',
-      sourceHoldMs: 700,
-      moveMs: 600,
-      destinationHoldMs: 200,
-    });
-  });
+    {
+      argv: ['pan', '10', '20', '5', '6', '300'],
+      method: 'pan',
+      options: { x: 10, y: 20, dx: 5, dy: 6, durationMs: 300 },
+    },
+    {
+      argv: ['fling', 'up', '10', '20', '400'],
+      method: 'fling',
+      options: { direction: 'up', x: 10, y: 20, distance: 400 },
+    },
+    { argv: ['swipe', 'left-edge'], method: 'swipeGesture', options: { preset: 'left-edge' } },
+    { argv: ['pinch', '2', '30', '40'], method: 'pinch', options: { scale: 2, x: 30, y: 40 } },
+    {
+      argv: ['rotate', '45', '10', '20'],
+      method: 'rotateGesture',
+      options: { degrees: 45, x: 10, y: 20 },
+    },
+    {
+      argv: ['transform', '10', '20', '5', '6', '1.5', '45', '250'],
+      method: 'transformGesture',
+      options: { x: 10, y: 20, dx: 5, dy: 6, scale: 1.5, degrees: 45, durationMs: 250 },
+    },
+    {
+      argv: ['drag', 'id="drag-source"', '@e2~s42', '700', '600', '200'],
+      method: 'drag',
+      options: {
+        source: 'id="drag-source"',
+        destination: '@e2~s42',
+        sourceHoldMs: 700,
+        moveMs: 600,
+        destinationHoldMs: 200,
+      },
+    },
+  ])(
+    '%argv routes to client.interactions.%method with projected options',
+    async ({ argv, method, options }) => {
+      const calls: Array<{ method: string; options: unknown }> = [];
+      const input = gestureCliReaders.gesture(argv, NO_FLAGS);
+      await gestureDefinition().invoke(recordingGestureClient(calls), input);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.method).toBe(method);
+      expect(calls[0]?.options).toMatchObject(options);
+    },
+  );
 
   test('pinch without an origin still projects the scale', async () => {
     const calls: Array<{ method: string; options: unknown }> = [];

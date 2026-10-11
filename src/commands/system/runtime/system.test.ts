@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import type {
   AgentDeviceBackend,
   BackendAlertAction,
+  BackendAlertResult,
   BackendDeviceOrientation,
   BackendKeyboardOptions,
   BackendTvRemoteOptions,
@@ -116,16 +117,20 @@ test('runtime system commands validate options before backend calls', async () =
 
 test('runtime alert wait projects the backend alert, timing, and timeout verdict', async () => {
   const alert = { title: 'Location', message: 'Allow access?', buttons: ['Allow', 'Deny'] };
-  const outcomes: Array<{ alert: unknown; waitedMs?: number; timedOut?: boolean }> = [
-    { alert, waitedMs: 250 },
-    { alert: null, waitedMs: 5_000, timedOut: true },
-    { alert },
+  const outcomes: BackendAlertResult[] = [
+    { kind: 'alertWait', alert, waitedMs: 250 },
+    { kind: 'alertWait', alert: null, waitedMs: 5_000, timedOut: true },
+    { kind: 'alertWait', alert },
   ];
   let next = 0;
   const device = createAgentDevice({
     backend: {
       platform: 'ios',
-      handleAlert: async () => ({ kind: 'alertWait', ...outcomes[next++] }) as never,
+      handleAlert: async (): Promise<BackendAlertResult> => {
+        const result = outcomes[next++];
+        if (!result) throw new Error('alert backend double exhausted');
+        return result;
+      },
     },
     artifacts: createLocalArtifactAdapter(),
     policy: localCommandPolicy(),
@@ -155,10 +160,14 @@ test('runtime alert wait projects the backend alert, timing, and timeout verdict
 });
 
 test('runtime alert wait refuses a backend result of the wrong kind', async () => {
+  // Typed as the union the backend contract allows: a wrong `kind` is a legal
+  // backend result the normalizer must refuse with the typed COMMAND_FAILED
+  // code, not just the message.
+  const wrongKind: BackendAlertResult = { kind: 'alertStatus', alert: null };
   const device = createAgentDevice({
     backend: {
       platform: 'ios',
-      handleAlert: async () => ({ kind: 'alertStatus', alert: null }) as never,
+      handleAlert: async () => wrongKind,
     },
     artifacts: createLocalArtifactAdapter(),
     policy: localCommandPolicy(),
@@ -166,7 +175,12 @@ test('runtime alert wait refuses a backend result of the wrong kind', async () =
 
   await assert.rejects(
     () => device.system.alert({ action: 'wait' }),
-    /system\.alert wait returned an invalid backend result/,
+    (error: unknown) => {
+      const appError = error as { code?: string; message?: string };
+      assert.equal(appError.code, 'COMMAND_FAILED');
+      assert.match(appError.message ?? '', /system\.alert wait returned an invalid backend result/);
+      return true;
+    },
   );
 });
 
