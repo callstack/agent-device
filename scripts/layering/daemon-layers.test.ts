@@ -119,13 +119,9 @@ test('a dynamic cross-layer edge is reported, not rejected', () => {
 });
 
 test('a production daemon file missing from the manifest fails', () => {
-  const manifest = {
-    ...FIXTURE_MANIFEST,
-    'daemon-server': [],
-  };
-  const violations = driftFor(manifest);
+  const violations = driftFor(FIXTURE_MANIFEST, [...FIXTURE_FILES, 'src/daemon/server2.ts']);
   assert.equal(violations.length, 1);
-  assert.equal(violations[0]!.file, 'src/daemon/server.ts');
+  assert.equal(violations[0]!.file, 'src/daemon/server2.ts');
   assert.match(violations[0]!.message, /production daemon file is in no layer/);
 });
 
@@ -186,4 +182,13 @@ test('a layer key missing from the manifest fails even when no file is orphaned'
   );
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /layer "daemon-resources" is missing from the manifest/);
+});
+
+test('a declared layer whose array is empty fails, so it cannot linger after its last file moves', () => {
+  const violations = driftFor(
+    { ...FIXTURE_MANIFEST, 'daemon-resources': [] },
+    FIXTURE_FILES.filter((file) => file !== 'src/daemon/resources.ts'),
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0]!.message, /layer "daemon-resources" owns no files/);
 });

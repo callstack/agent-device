@@ -99,10 +99,17 @@ export function daemonLayerManifestDrift(
     }
   }
   for (const layer of DAEMON_LAYER_ORDER) {
-    if (manifest[layer] === undefined) {
+    const owned = manifest[layer];
+    if (owned === undefined) {
       violations.push(
         manifestFileViolation(
           `layer "${layer}" is missing from the manifest. Every declared layer must own files or leave the order.`,
+        ),
+      );
+    } else if (owned.length === 0) {
+      violations.push(
+        manifestFileViolation(
+          `layer "${layer}" owns no files. A layer that lost its last file leaves the order; an empty entry keeps a phantom position in it.`,
         ),
       );
     }
