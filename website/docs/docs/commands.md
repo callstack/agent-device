@@ -892,33 +892,21 @@ agent-device perf trace start --kind perfetto --out app.perfetto-trace
 agent-device perf trace stop --kind perfetto --out app.perfetto-trace
 ```
 
-- Use an explicit `frames`, `memory`, `cpu`, or `trace` area so each request answers one profiling question. Bare `perf`, `perf sample`, `perf metrics`, and the `metrics` alias fail with guidance to the focused replacements.
-- `perf frames` returns bounded frame/jank health; `perf memory sample` returns a compact native/process memory sample; `perf memory snapshot` writes a heap/memgraph artifact and returns its path.
+- Name one area: `frames`, `memory`, `cpu`, or `trace`. Bare `perf`, `perf sample`, `perf metrics`, and the `metrics` alias fail with guidance to the focused replacements.
+- `perf frames` returns frame/jank health (`droppedFramePercent`, `worstWindows`). `perf memory sample` returns a compact process memory sample in kilobytes. `perf memory snapshot` writes a heap or memgraph artifact and returns its path.
+- `perf cpu profile` and `perf trace` record Apple (`--kind xctrace`) or Android (`--kind simpleperf`, `--kind perfetto`) profiles and traces, and return artifact paths plus compact metadata; raw contents stay on disk.
 - `cdp` samples and snapshots the React Native JavaScript heap through Metro CDP; see [Debugging & Profiling](/docs/debugging-profiling#react-native-js-memory-through-cdp).
-- `perf cpu profile ... --kind xctrace` and `perf trace ... --kind xctrace` record an Apple `.trace`; `perf cpu profile ... --kind simpleperf` and `perf trace ... --kind perfetto` capture Android native profiles and traces for the active session package. These commands return artifact paths and compact metadata; raw profile and trace contents stay on disk. See [Performance snapshots](/docs/debugging-profiling#performance-snapshots).
-- The `simpleperf` report artifact keeps up to 50 parsed rows, while the response returns at most ten top functions and the CLI prints at most five.
-- Without `--json`, each explicit perf area prints a compact focused summary.
 - App startup duration is returned in `open`'s `startup` result.
-- Android app sessions with an active package support:
-  - `fps` frame health from `adb shell dumpsys gfxinfo <package> framestats`, with `droppedFramePercent` as the primary value and `worstWindows` for dropped-frame clusters
-  - `memory` from `adb shell dumpsys meminfo <package>` with values reported in kilobytes (`kB`)
-- Apple app sessions with an active bundle ID support:
-  - `fps` frame health from `xcrun xctrace` Animation Hitches on connected iOS devices, with `droppedFramePercent` as the primary value and `worstWindows` for hitch clusters
-  - `memory` from process RSS snapshots reported in kilobytes (`kB`)
+- Perf commands need an app session with a package or bundle ID; run `open <app>` first.
 - Platform support:
-  - `memory`: Android emulator/device, HarmonyOS device, macOS app sessions, iOS simulators with an active app session (`open <app>` first), and iOS physical devices with an active app session
-  - `fps`: Android emulator/device app sessions and connected iOS device app sessions. iOS simulator and macOS frame health is reported unavailable because Apple tooling does not expose trustworthy app hitch data there.
-  - `perf memory snapshot --kind android-hprof`: Android emulator/device app sessions with a running debuggable/profileable process and permitted heap dumping
-  - `perf memory snapshot --kind memgraph`: iOS simulator and macOS app sessions with a running app process. Physical iOS devices report memgraph unavailable with a recovery hint.
-  - `perf memory trace --kind heapprofd`: not available.
-  - `perf cpu profile --kind xctrace`: iOS simulator app sessions, connected iOS device app sessions where xctrace can attach to the active process, and macOS app sessions when the app process can be resolved from the bundle ID.
-  - `perf trace --kind xctrace`: iOS simulator app sessions, connected iOS device app sessions where xctrace can attach to the active process, and macOS app sessions when the selected xctrace template supports the target.
-  - `--kind xctrace` does not profile Android; use `--kind simpleperf` or `--kind perfetto` there.
-- HarmonyOS performance evidence is memory-only on the public HDC surface: CPU profiling, frame sampling, and memory-snapshot artifacts are unavailable.
-- Android URL/deep-link opens infer the foreground package after launch when possible, including Expo Go/dev-client shells. If the session still has no app package/bundle ID, package-bound metrics remain unavailable until you `open <app>`.
-- Android frame health is reset after each successful `perf frames` read and after `open <app>`, so run `perf frames`, perform the interaction, then run `perf frames` again for a focused window.
-- Android Simpleperf and Perfetto collectors require an active Android app session with a running package process. iOS native Simpleperf/Perfetto support is not provided by these commands.
-- On CoreDevice-backed physical iOS devices, `perf frames` records a short `xcrun xctrace` sample. Keep the device unlocked, connected, and the app active in the foreground while sampling.
+  - `perf frames`: Android emulators and devices, and connected iOS devices. iOS simulators and macOS report it unavailable because Apple tooling exposes no trustworthy hitch data there.
+  - `perf memory sample`: Android, HarmonyOS devices, iOS simulators and devices, and macOS.
+  - `perf memory snapshot --kind android-hprof`: Android, for a running debuggable or profileable process that permits heap dumps. `--kind memgraph`: iOS simulators and macOS; physical iOS devices report it unavailable with a recovery hint. Native heap tracing (`perf memory trace --kind heapprofd`) is not available.
+  - `--kind xctrace`: iOS simulators, connected iOS devices where xctrace can attach to the app process, and macOS when the app process resolves from the bundle ID (for `perf trace`, when the template supports the target). It does not profile Android.
+  - `--kind simpleperf` and `--kind perfetto`: Android app sessions with a running package process only.
+  - HarmonyOS is memory-only: CPU profiling, frame sampling, and memory snapshots are unavailable.
+
+For the measurement workflow, data sources, and output examples, see [Performance snapshots](/docs/debugging-profiling#performance-snapshots).
 
 ## React Native component internals
 
@@ -936,30 +924,23 @@ agent-device react-devtools profile timeline --limit 20
 agent-device react-devtools profile report @c5
 ```
 
-- `react-devtools` runs the pinned `agent-react-devtools@0.5.0` package through npm and passes arguments through unchanged.
-- The first run may download the pinned package from npm; later runs can reuse the npm cache.
-- `agent-device` global flags work before or after `react-devtools`. Use `--` before downstream flags only when they intentionally share an `agent-device` global flag name.
-- Use it when a React Native workflow needs component hierarchy, props, state, hooks, render causes, slow components, or re-render counts.
-- For the bounded profiling workflow, see [Debugging & Profiling](/docs/debugging-profiling#react-native-component-internals).
-- React Native development builds can connect to the DevTools daemon on port 8097. For Android emulators or physical devices, run `adb reverse tcp:8097 tcp:8097` if the app cannot reach the host.
-- Direct Android `open` URL targets for local Metro hosts with a port auto-configure host reachability. For app/package launches or unsupported flows, run `adb reverse tcp:8081 tcp:8081` if the app cannot reach local Metro.
-- For Android and iOS sessions connected through a remote bridge profile, `react-devtools` registers a lease-scoped companion tunnel to the sandbox-local DevTools daemon at `127.0.0.1:8097`. Android bridge profiles use the bridge-owned remote `adb reverse` mapping; iOS bridge profiles use the bridge-owned wildcard Metro host tunnel. The CLI keeps the companion alive until `agent-device react-devtools stop` or `agent-device disconnect`.
-- For remote iOS bridge sessions, open the app once to create the bridge session, run `agent-device react-devtools start`, then relaunch the same bundle id with `agent-device open <bundle-id> --platform ios --relaunch` before `wait --connected`. React Native attempts the legacy DevTools websocket during JavaScript startup, so starting DevTools after the first launch can miss that connection attempt.
-- Remote bridge React DevTools assumes the React Native-bundled DevTools behavior in React Native 0.83+. Older browser/Chromium DevTools workflows are not assumed to exist inside remote sandboxes. Verify Expo projects against the SDK's bundled React Native version before relying on this path; no Expo SDK version has been verified separately.
-- For cross-platform validation with explicit target selectors, use separate sessions/devices and restart `react-devtools` between iOS and Android runs.
+- `react-devtools` runs the pinned `agent-react-devtools@0.5.0` package through npm and passes arguments through unchanged. The first run may download it; later runs can reuse the npm cache.
+- Use it for component hierarchy, props, state, hooks, render causes, slow components, and re-render counts. For the profiling workflow, see [Debugging & Profiling](/docs/debugging-profiling#react-native-component-internals) and `agent-device help react-devtools`.
+- `agent-device` global flags work before or after `react-devtools`. Put `--` before downstream flags only when they share an `agent-device` global flag name.
+- Development builds connect to the DevTools daemon on port 8097. If an Android emulator or device cannot reach the host, run `adb reverse tcp:8097 tcp:8097`. Android `open` of a local Metro URL with a port sets up host reachability; for app/package launches, run `adb reverse tcp:8081 tcp:8081` if the app cannot reach Metro.
+- Remote bridge sessions (Android and iOS) work through the same command; the CLI keeps a tunnel to the remote DevTools daemon alive until `react-devtools stop` or `disconnect`. See [Remote bridge sessions](/docs/debugging-profiling#remote-bridge-sessions) for the iOS relaunch order and supported React Native versions.
+- For cross-platform validation, use separate sessions/devices and restart `react-devtools` between iOS and Android runs.
 
 ```bash
 agent-device react-native dismiss-overlay
 agent-device react-native dismiss-overlay --platform android
 ```
 
-- `react-native dismiss-overlay` clears a React Native development overlay (a redbox/LogBox error or a collapsed warning banner) that is blocking interaction, then returns without changing app state otherwise.
-- Use it when a snapshot or interaction is blocked by a dev-only overlay; it is a no-op when no overlay is present.
-- It is supported on iOS simulators/devices and Android emulators/devices. `dismiss-overlay` is the only `react-native` subcommand.
+- `react-native dismiss-overlay` clears a development overlay (redbox/LogBox error or collapsed warning banner) that blocks interaction, and is a no-op when none is present. It works on iOS simulators/devices and Android emulators/devices, and is the only `react-native` subcommand.
 
 ## Multiple React Native worktrees
 
-You can reuse one installed iOS simulator debug build across multiple local worktrees when the native binary is compatible with both JavaScript trees. Run one Metro server per worktree on a unique port, then open the same app on different simulators with explicit Metro runtime hints:
+You can reuse one installed iOS simulator debug build across local worktrees when its native binary is compatible with both JavaScript trees. Run one Metro server per worktree on its own port, then open the app on different simulators with explicit Metro hints:
 
 ```bash
 # Worktree A terminal
@@ -972,10 +953,11 @@ agent-device open "React Navigation Example" --platform ios --device "iPhone 17"
 agent-device open "React Navigation Example" --platform ios --device "iPhone 17 Pro" --session rn-b --metro-host 127.0.0.1 --metro-port 8082 --relaunch
 ```
 
-- Use different simulators and sessions for each worktree. One simulator cannot run two copies of the same bundle id at the same time.
-- On iOS simulators, `open` writes React Native's per-simulator debug server settings before launching, so `rn-a` can use port `8081` while `rn-b` uses port `8082`. An expo-dev-client ignores those settings, so `open` skips writing them and, when the app registers a single `exp+<slug>` URL scheme, `open` launches it through `exp+<slug>://expo-development-client/?url=<server>` instead of a plain launch. `--launch-url` takes precedence over automatic Expo connection and does not choose the server used by `metro reload`. If the scheme check is inconclusive, the app opens normally. A dev build that boots straight into its embedded bundle still needs a native rebuild. Each session also remembers its dev server for a flagless `metro reload --session <name>`; see [Metro reload](#metro-reload).
-- This covers JavaScript and Metro-resolved workspace changes. Rebuild/reinstall the app when native code, native dependencies, bundle identifiers, entitlements, or generated native project files change.
-- Close every manually opened session when done:
+- Use a different simulator and session per worktree; one simulator cannot run two copies of the same bundle id.
+- On iOS simulators, `open` writes React Native's per-simulator debug server settings before launch. Expo dev clients ignore those settings, so when the app registers a single `exp+<slug>` URL scheme, `open` launches `exp+<slug>://expo-development-client/?url=<server>` instead; if the scheme check is inconclusive, the app opens normally. `--launch-url` overrides this. A dev build that boots straight into its embedded bundle still needs a native rebuild.
+- Each session remembers its dev server for a flagless `metro reload --session <name>`; see [Metro reload](#metro-reload).
+- This covers JavaScript and Metro-resolved changes. Rebuild and reinstall when native code, native dependencies, bundle identifiers, entitlements, or generated native project files change.
+- Close every session when done:
 
 ```bash
 agent-device close --platform ios --session rn-a
@@ -990,14 +972,11 @@ agent-device metro reload --metro-host localhost --metro-port 8081
 agent-device metro reload --bundle-url "http://localhost:8081/index.bundle?platform=ios"
 ```
 
-- `metro reload` triggers a dev-server reload, the same mechanism used by pressing `r` in the Metro terminal.
-- Use it for React Native dev builds that are already connected to Metro when JS changes should be loaded without restarting the native app process.
-- A flagless `metro reload --session <s>` resolves against the dev server that session last bound — via `metro prepare` or `open`'s `--metro-host`/`--metro-port`/`--bundle-url` hint flags — so it never silently reloads a different project's server on the default port. Resolution priority is per-call flags, then that session's saved binding, then `http://localhost:8081/reload`; a host or port flag overrides only that field, while `--bundle-url` supplies the target bundle origin and route.
-- Session bindings are updated by each hinted `open` or `metro prepare`, cleared by `close`, and also cleared when a fresh same-name `open` has no Metro hint flags. This prevents a reused session name from reloading a previous project's dev server.
-- After `metro prepare`, reload uses the local server address, even when the device loads its bundle through a public or proxy URL. Explicit reload flags override that binding. A fresh `open` with client-config runtime defaults preserves a prepared binding only when those defaults point to its device-facing server; otherwise it replaces the binding. An open that reuses the session keeps the binding unless given explicit runtime hints.
-- For a binding supplied through `open` or `--bundle-url`, the reload URL keeps the bundle URL's mount prefix instead of collapsing to the host root. It removes a `.bundle`, `.jsbundle`, or `.js` entry filename, including Expo's virtual entry: `http://host/tenant-42/.expo/.virtual-metro-entry.bundle` maps to `http://host/tenant-42/reload`. A path without an entry filename is the server mount: `http://host/tenant-42` maps to `http://host/tenant-42/reload`.
-- When the dev server has no HTTP `/reload` route and answers with the app page instead (Expo does this), `metro reload` broadcasts `{"version":2,"method":"reload"}` over the server's `/message` websocket — the channel the dev-server CLIs use for the `r` key — instead of reporting the app-page response as a successful reload. The result's `transport` field says which channel delivered the reload.
-- Fall back to `open <app> --relaunch` when the app is not connected to Metro, reload fails, or the native process itself must restart.
+- `metro reload` asks connected React Native dev builds to reload JavaScript without restarting the native process, like pressing `r` in the Metro terminal.
+- The target server comes from per-call flags first, then the dev server the session last bound through `metro prepare` or `open`'s `--metro-host`/`--metro-port`/`--bundle-url`, then `http://localhost:8081/reload`. A host or port flag overrides only that field. A reused session name never reloads a previous project's server: `close` clears the binding, and so does a fresh `open` without Metro hints. After `metro prepare`, reload uses the local server address even when the device loads through a public or proxy URL.
+- A bundle URL keeps its mount prefix: `http://host/tenant-42/.expo/.virtual-metro-entry.bundle` reloads `http://host/tenant-42/reload`.
+- When the server has no HTTP `/reload` route (Expo), the reload is broadcast over the server's `/message` websocket. The result's `transport` field says which channel delivered it.
+- Use `open <app> --relaunch` instead when the app is not connected to Metro, reload fails, or the native process must restart. See `agent-device help metro` for the full binding rules.
 
 ## Media and logs
 
@@ -1025,40 +1004,35 @@ agent-device record start session.mp4 --quality high # Higher-quality export (sl
 agent-device record stop                # Stop active recording
 ```
 
-- Recordings always produce a video artifact. `record start` defaults to app scope and requires an active session from `open <app>`; use `--scope device` or `--scope system` to explicitly request whole-screen capture where the selected backend supports it, such as recordings that intentionally span the full screen, multiple apps, settings, home screen, or app transitions. When touch visualization is enabled, recordings also produce a gesture telemetry sidecar that can be used for post-processing or inspection.
-- iOS `record` works on simulators and CoreDevice-backed physical devices.
-- iOS simulator recording uses native `simctl io ... recordVideo`.
-- Physical iOS device capture is runner-based and built from repeated `XCUIScreen.main.screenshot()` frames (no native video stream/audio capture).
-- Physical iOS device capture is best-effort: dropped frames are expected and true 60 FPS is not guaranteed even with `--fps 60`.
-- Physical-device capture defaults to 15 FPS.
-- `--fps <n>` (1-120) applies to physical iOS device recording as an explicit FPS cap.
-- `--quality <medium|high>` controls recording output quality. Android maps it to `adb shell screenrecord --bit-rate`; Limrun sessions map it to the provider recorder's quality (`medium` to 5, `high` to 8). Apple export always preserves the captured resolution, so `--quality` has no effect on Apple output size. `medium` is the default; pass `high` for evidence, release notes, or debugging visual artifacts. Numeric values are also accepted: `5`-`7` map to `medium`, and `8`-`10` map to `high`.
-- `screenshot --scale <factor>` proportionally resizes both dimensions. The accepted range is `0.01` through `1`; use `1` for full resolution. `--max-size <px>` is refused with guidance to use `--scale` wherever it appears (CLI, `.ad` scripts, Node options, config, and the `AGENT_DEVICE_SCREENSHOT_MAX_SIZE` env var).
-- Set `AGENT_DEVICE_SCREENSHOT_SCALE=0.3` (or `screenshotScale` in config) as a token-conscious screenshot default for agent workflows. An explicit `--scale` overrides it.
-- Keep the scale default unset, or use `--scale 1`, when full-resolution screenshots are required for reusable pixel-diff baselines.
-- On single-display iOS simulators and Android devices, the screenshot result reports `displayRotation` (`portrait`, `portrait-upside-down`, `landscape-left`, or `landscape-right`): the rotation the display rendered the capture in. The field is best-effort. It is absent when the device returns no reading in time, on other targets, and on devices with more than one display, such as foldables, where no single rotation is known to pair with the image. The saved image is always upright, so a landscape value pairs with a landscape image. The daemon `/artifacts` inventory reports the same value on the screenshot entry, including the fallback screenshot a sparse `snapshot` takes.
-- `screenshot --overlay-refs` captures a fresh full snapshot and burns visible `@eN` refs plus their target rectangles into the saved PNG.
-- `screenshot --crop-on <selector>` captures a fresh full snapshot of the same screen and crops the saved PNG to the frame the selector resolves to. The crop is re-encoded, so byte-comparing it against an older crop of the same frame is unreliable; a crop whose pixels are all opaque is written as truecolor RGB, while one containing transparency keeps RGBA. The selector must resolve to exactly one framed node; the result carries a `warnings` entry when the frame is clipped to the image. Supported only on iOS simulators and Android emulators — every other target is refused before any device work, and the flag cannot be combined with `--overlay-refs` or `--fullscreen` because both move the captured frame away from the snapshot viewport the crop is measured against.
-- `screenshot --fullscreen` on macOS applies only to app sessions. Every other `--surface` (`desktop`, `menubar`, `frontmost-app`) captures through the macOS helper, which always captures the main display, so an explicit `--fullscreen` on any of them names a frame the capture cannot vary; it is refused with `INVALID_ARGS` before any capture runs, rather than accepted and ignored.
-- `screenshot --normalize-status-bar` temporarily normalizes iOS simulator status-bar chrome for deterministic screenshot baselines; ordinary screenshots leave the simulator's current chrome visible.
-- `screenshot --scale <factor> --overlay-refs` writes a smaller image and draws refs for that final image size; avoid very small scales when text, icons, or labels need to remain readable.
-- `diff screenshot` compares the current live screenshot to `--baseline`, or compares `--baseline` to an optional saved `current.png` path without requiring an active session. Each input is decoded from its own bytes, so `--baseline` and a saved current image may be PNG or JPEG whatever their extension says. Most `agent-device screenshot` artifacts are PNG; a HarmonyOS capture is the JPEG its device serves, stored under the requested name. Its text output reports ranked changed regions with screen-space rectangles, changed-pixel counts, and each region's share of the diff; JSON also includes normalized rectangles. The `ocr` and `nonTextDeltas` result fields are never populated; for qualitative interpretation, read the baseline, current, and diff images with vision. It writes a diff PNG with a light grayscale current-screen context, red-tinted changed pixels, and outlined changed regions when `--out` is provided. Live iOS simulator diffs normalize status-bar chrome by default; use `screenshot --normalize-status-bar` when capturing reusable baselines.
-- `diff screenshot --overlay-refs` additionally writes a separate current-screen overlay guide for live captures without using that annotated image for the pixel comparison. If current-screen refs intersect changed regions, the output lists the best ref matches under those regions. Saved-image comparisons do not have live accessibility refs, so `--overlay-refs` is unavailable when a `current.png` path is provided.
-- `diff screenshot --threshold <0-1>` sets the per-pixel RGB tolerance (default `0.1`): `0` requires exact colors and `1` ignores all color differences. Image dimensions must still match at every threshold. JPEG is lossy and shifts pixels around hard edges, so keep the threshold above `0` when comparing a JPEG against anything it was not encoded from.
-- In `--json` mode, each overlay ref also includes a screenshot-space `center` point for coordinate fallback like `press <x> <y>`.
-- Burned-in touch overlays are exported only on macOS hosts.
-- On Linux or other non-macOS hosts, `record stop` still succeeds and returns the raw video plus telemetry sidecar, and includes `overlayWarning` when burn-in overlays were skipped.
-- The touch overlay renders at most 30 frames a second, or at `--fps` when it is lower, so a lower `--fps` makes a long recording's `record stop` faster. The overlay has a fixed budget inside the `record stop` request; an export that runs past it returns the raw video and telemetry with an `overlayWarning` naming the budget.
-- On iOS simulators, a busy CoreSimulator host recording slot makes `record start` return non-retriable `DEVICE_IN_USE` with `details.reason: apple_simulator_recording_busy`. Use `record stop` in the session that owns the active recording. If a previous recorder died and no recording is active, ask the host operator to restart the CoreSimulator stream service before retrying.
-- When the Apple runner records (`--fps` sets its frame rate), it captures a frame only while no command is using the runner's main thread; a frame that falls during that work is skipped instead of queued behind it. A capture slower than the frame interval lowers the frame rate, and a capture still running after one second is dropped. A busy app or a long command can therefore yield fewer frames than `--fps` requests.
-- Android uses `adb shell screenrecord`, which has a 180s platform limit. `record start` publishes a durable device manifest. Longer recordings are split into MP4 chunks while the daemon stays alive; after daemon restart, `record stop` recovers only manifest-owned chunks and warns when gesture overlay telemetry was lost.
-- Android `screenrecord` encodes a frame only when the screen changes, so a clip ends at the last frame the recorder encoded instead of at `record stop`: a window that ends on an unchanged screen yields a shorter video, while every on-screen change inside the window stays at its real offset in it. `record stop` reports `durationMs` as host wall clock from `record start` until the export finished, and when the video can be measured it also reports `capturedDurationMs` and warns with how much of the window that video covers.
-- Limrun iOS and Android direct sessions record the whole simulator or emulator screen through the provider's server-side recorder, so every `--scope` captures the same frame and `--fps` and `--hide-touches` are refused with `INVALID_ARGS` before any device work. `record stop` asks the instance to stop once and then downloads the served MP4 to the output path; that download is bounded to end inside the request window, so a slow or dropped transfer ends typed, leaves no file behind, and is retried by the next `record stop` from the same URL while the instance lives. Nothing survives a daemon restart: the recording is `unreattachable` and the instance disposes the file when the lease is released.
-- `record stop` is safe to repeat. When its request window ends while the daemon is still exporting, on a local or remote daemon, the export keeps running there, and a second `record stop` in the same session returns that completed recording, including the caller-side output path, without starting another recording. A finished recording whose video file is already gone reports `no active recording`.
-- A recording answers two independent questions, and `record stop` reports both: whether a playable export exists, and whether the recorder stopped. `recorder` is `confirmed` when the recorder exited or acknowledged a stop meant for this recording, and `lost` when the session holding it died — an Apple recording invalidated by a runner restart. `nativePathDisposition` says what became of the artifact path the recorder itself writes to: `retirable` while that file still sits there owed a removal, and `retired` once its removal was verified. Both are optional disclosures — the export is served either way, a replay of a recording stopped before they existed omits them, and so does a backend whose recorder writes the served file itself. The schema also declares values that no stop reports: `recorder: unconfirmed` (a probe that could not be read, or no exit inside the stop budget), the identity-mismatch reasons under `lost`, and `nativePathDisposition: pending` (see [ADR 0024](https://github.com/callstack/agent-device/blob/main/docs/adr/0024-screen-recording-provable-signal.md)).
+**Screenshots**
 
-- `record contact-sheet <video.mp4> [--out <sheet.png>]` turns a recording you already exported into one PNG: the frames where the screen visibly changed, laid out in a grid and each labeled with its elapsed time (`HH:MM:SS.mmm`) on the clip timeline. It is how an agent reads a recording it cannot play. It reads the file you pass — no session, no device, no daemon — so it can rebuild an old take and the sheet can only describe screens that export contains. Any backend that exports MP4 works (Apple, Android, HarmonyOS, Limrun); a WebM recording from the web backend is refused with `details.reason: contact_sheet_container_unsupported`. The default output is `<recording>.contact-sheet.png`, and `--out` is refused when it points back at the recording itself, because a sheet is derived from a take and never replaces it. `--json` reports each cell's time and changed-pixel share alongside `sampledFrameCount`, `decodedFrameCount`, and `skippedSampleCount`.
-- A contact sheet is coverage, not a review. The sample grid is bounded and spread across the whole clip (every 250ms until 48 samples, then those 48 spread over the length) and at most 24 cells are printed, so a two-hour take costs no more than a five-second one. A transient that opens and closes entirely between two sample times is not in the returned frames and no threshold recovers it; when the sheet had to thin kept cells or the decoder declined sample times, `warning` says so. Frame decoding is Apple AVFoundation tooling, so the command is macOS-host only and refuses elsewhere with `details.reason: contact_sheet_unsupported_host`.
+- `--scale <factor>` resizes both dimensions, from `0.01` to `1` (full resolution). Set `AGENT_DEVICE_SCREENSHOT_SCALE=0.3` or `screenshotScale` in config as a token-conscious default; an explicit `--scale` overrides it. Leave it unset or pass `--scale 1` for pixel-diff baselines. `--max-size` is refused everywhere (CLI, `.ad` scripts, Node options, config, `AGENT_DEVICE_SCREENSHOT_MAX_SIZE`) with guidance to use `--scale`.
+- `--overlay-refs` takes a fresh snapshot and burns visible `@eN` refs and their rectangles into the PNG. With `--scale`, refs are drawn at the final size, so avoid scales where labels become unreadable. In `--json` mode each ref also has a screenshot-space `center` for `press <x> <y>` fallback.
+- `--crop-on <selector>` crops the capture to the frame the selector resolves on the same screen. It works only on iOS simulators and Android emulators, needs exactly one framed node, cannot be combined with `--overlay-refs` or `--fullscreen`, and warns when the frame is clipped. The crop is re-encoded, so do not byte-compare it with an older crop.
+- `--fullscreen` on macOS applies only to app sessions. Other surfaces (`desktop`, `menubar`, `frontmost-app`) always capture the main display and refuse `--fullscreen` with `INVALID_ARGS`.
+- `--normalize-status-bar` temporarily normalizes iOS simulator status-bar chrome for reusable baselines.
+- On single-display iOS simulators and Android devices, the result may report `displayRotation` (`portrait`, `portrait-upside-down`, `landscape-left`, or `landscape-right`). It is absent when the device returns no reading in time, on other targets, and on multi-display devices such as foldables. The saved image is always upright.
+
+**Screenshot diffs**
+
+- `diff screenshot` compares a live capture, or a saved `current.png` (no session needed), against `--baseline`. Inputs may be PNG or JPEG regardless of extension; HarmonyOS captures are JPEG. Output ranks changed regions with rectangles, changed-pixel counts, and share of the diff; `--out` writes a diff PNG with changed pixels tinted red. `ocr` and `nonTextDeltas` are never populated, so read the images yourself for qualitative review.
+- `--threshold <0-1>` sets the per-pixel RGB tolerance (default `0.1`). Image dimensions must match. Keep it above `0` when either input is JPEG.
+- `--overlay-refs` also writes a separate current-screen ref overlay and lists refs under changed regions. It needs a live capture, so it is unavailable with a saved `current.png`.
+- Live iOS simulator diffs normalize status-bar chrome by default.
+
+**Recordings**
+
+- `record start` defaults to app scope and needs a session from `open <app>`. Use `--scope device` or `--scope system` for whole-screen capture (multiple apps, settings, home screen) where the backend supports it.
+- iOS recording works on simulators and CoreDevice-backed physical devices. Physical devices capture runner screenshots, not a native video stream: no audio, dropped frames are expected, and the default is 15 FPS. `--fps <n>` (1-120) caps the rate; a busy app or long command yields fewer frames.
+- `--quality medium|high` (default `medium`) sets export quality on Android and Limrun; Apple export always keeps the captured resolution. Numeric `5`-`7` map to `medium` and `8`-`10` to `high`.
+- With touch visualization on, recordings also produce a gesture telemetry sidecar. Burned-in touch overlays export only on macOS hosts; elsewhere `record stop` returns the raw video and telemetry with `overlayWarning`. The overlay renders at most 30 FPS (or `--fps` if lower) within a fixed budget; an export past the budget returns the raw video with `overlayWarning`.
+- Android uses `adb shell screenrecord` (180s limit per clip). Longer recordings are split into MP4 chunks while the daemon stays alive; after a daemon restart, `record stop` recovers only chunks listed in the device manifest. A clip can end before `record stop` when the screen stopped changing; `durationMs` is wall-clock time, and `capturedDurationMs` plus a warning report how much the video covers.
+- Limrun sessions always record the whole screen and refuse `--fps` and `--hide-touches` with `INVALID_ARGS`. A failed download is retried by the next `record stop`; nothing survives a daemon restart.
+- A busy iOS simulator recording slot returns non-retriable `DEVICE_IN_USE` with `details.reason: apple_simulator_recording_busy`. Run `record stop` in the session that owns the recording; if no recording is active, ask the host operator to restart the CoreSimulator stream service.
+- `record stop` is safe to repeat. If the request window ends during export, a second `record stop` in the same session returns the finished recording. A recording whose video file is gone reports `no active recording`.
+- `record stop` may also report `recorder` (`confirmed` or `lost`) and `nativePathDisposition` (`retirable` or `retired`). See `agent-device help record` and [ADR 0024](https://github.com/callstack/agent-device/blob/main/docs/adr/0024-screen-recording-provable-signal.md).
+- `record contact-sheet <video.mp4> [--out <sheet.png>]` turns an exported MP4 into one PNG grid of the frames where the screen visibly changed, each labeled with its elapsed time. It needs no session or device. The default output is `<recording>.contact-sheet.png`, and `--out` cannot point at the recording itself. `--json` adds per-cell times and change shares plus `sampledFrameCount`, `decodedFrameCount`, and `skippedSampleCount`.
+- A contact sheet samples at most 48 times across the clip (every 250ms for short clips) and prints at most 24 cells, so a transient between samples can be missing; `warning` says when cells were thinned or samples skipped. It runs only on macOS hosts (`details.reason: contact_sheet_unsupported_host` elsewhere) and refuses WebM with `contact_sheet_container_unsupported`.
 
 **Session app logs:** See [Debugging & Profiling](/docs/debugging-profiling#logs) for the clean-repro and grep workflow.
 
@@ -1077,24 +1051,12 @@ agent-device network dump 25 --include all # Include parsed headers/body when av
 agent-device network dump 25 --include headers --platform web # Browser requests via managed agent-browser
 ```
 
-- Supported on iOS simulator, iOS physical device, and Android.
-- `logs start` appends to `app.log` and rotates to `app.log.1` when the file exceeds 5 MB.
+- `logs` works on iOS simulators, iOS physical devices, Android, and macOS (app-scoped Unified Logging). On iOS, capture relies on Unified Logging (`os_log`); plain stdout/stderr may be limited.
+- `logs start` appends to `app.log` and rotates at 5 MB. Override with `AGENT_DEVICE_APP_LOG_MAX_BYTES` and `AGENT_DEVICE_APP_LOG_MAX_FILES`; set `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS` to a comma-separated regex list for write-time redaction.
 - `open` prints `Session state: <path>`; see [Sessions](/docs/sessions#find-a-sessions-logs-and-artifacts) for the files it contains.
-- `events.ndjson` rotates to `events.ndjson.1` when it exceeds 5 MB (`AGENT_DEVICE_EVENT_LOG_MAX_BYTES` overrides, in whole bytes); one rotated generation is kept. `events` cursors stay absolute across rotation, so `nextCursor` still resumes; a cursor older than the retained window fails with `COMMAND_FAILED` and `details.reason: "EVENT_LOG_CURSOR_EXPIRED"`, with `details.earliestCursor` naming the oldest cursor that still resolves. If the retained files and their window record disagree — a hand-deleted generation, an edited file, a corrupt `events.ndjson.window.json` — `events` fails with `details.reason: "EVENT_LOG_WINDOW_UNVERIFIED"` rather than answering from a guessed offset; appends continue regardless.
-- The event timeline leaves out user-entered content; see [Sessions](/docs/sessions#find-a-sessions-logs-and-artifacts). `--no-record` suppresses `action.recorded` entries.
-- `network dump [limit] [summary|headers|body|all]` parses recent HTTP(s) entries from `app.log` for app/device sessions and from managed `agent-browser` request history for web sessions; `network log ...` is an alias.
-- Prefer `--include headers|body|all` when you want explicit detail level without relying on positional ordering.
-- On macOS, `logs` and `network dump` are app-scoped and parse Unified Logging output associated with the active session app.
-- Network dump limits: scans up to 4000 recent log lines, returns up to 200 entries, and truncates payload/header fields at 2048 characters.
-- On web, `network dump` uses `agent-browser network requests`; request/response bodies are not exposed by that backend path, so use direct `agent-browser` HAR workflows for browser-specific body capture.
-- Android `network dump` also surfaces logcat timestamps and can backfill status and duration from adjacent GIBSDK packet lines when the URL is logged separately.
-- Android log streaming automatically rebinds to the app PID after process restarts.
-- iOS simulator log capture streams from inside the simulator with `simctl spawn <udid> log ...`, and `network dump` can recover recent simulator log history with `simctl log show` when the live app-log window is sparse.
-- iOS log capture still relies on Unified Logging signals (for example `os_log`); plain stdout/stderr output may be limited depending on app/runtime.
-- On iOS, `network dump` can return zero HTTP entries for real app activity when the app does not emit request metadata into Unified Logging. The response notes distinguish an empty repro window from a non-network app log window.
-- On iOS, CFNetwork logs a request URL only on the line that opens a connection, so a request that reused a keep-alive connection has no URL anywhere in the log. Those requests are reported against the origin their connection was opened for, with `pathUnavailable: true`, their status, and their timing; ones whose connection was opened before the scanned window are counted in `unnamedRequests` instead, since they cannot be named at all. Treat a missing endpoint in an iOS dump as unproven rather than as evidence it was not called.
-- Retention knobs: set `AGENT_DEVICE_APP_LOG_MAX_BYTES` and `AGENT_DEVICE_APP_LOG_MAX_FILES` to override rotation limits.
-- Optional write-time redaction patterns: set `AGENT_DEVICE_APP_LOG_REDACT_PATTERNS` to a comma-separated regex list.
+- `events` reads the session timeline, which leaves out user-entered content; `--no-record` suppresses `action.recorded` entries. `events.ndjson` rotates at 5 MB (`AGENT_DEVICE_EVENT_LOG_MAX_BYTES`) and keeps one generation. Cursors stay valid across rotation; a cursor older than the retained window fails with `details.reason: "EVENT_LOG_CURSOR_EXPIRED"` and `details.earliestCursor`. If the retained files were edited or deleted, `events` fails with `details.reason: "EVENT_LOG_WINDOW_UNVERIFIED"`.
+- `network dump [limit] [summary|headers|body|all]` parses recent HTTP(s) entries from `app.log`, or from managed `agent-browser` request history on web; `network log` is an alias. Prefer `--include` over the positional detail level. It scans up to 4000 log lines, returns up to 200 entries, and truncates fields at 2048 characters. Web does not expose bodies.
+- On iOS, `network dump` can miss requests the app does not log and cannot name every request on a reused connection, so treat a missing endpoint as unproven. See [Network inspection](/docs/debugging-profiling#network-inspection) for per-platform behavior.
 
 **Crash symbols:** `debug symbols` symbolicates an Apple crash artifact against local dSYMs, writes the symbolicated artifact to `--out`, and prints a compact crash report. See [Crash symbolication](/docs/debugging-profiling#crash-symbolication).
 
@@ -1112,8 +1074,7 @@ agent-device trace stop
 agent-device trace stop session.trace
 ```
 
-- `trace start [path]` begins trace-log capture for the active session.
-- `trace stop [path]` stops capture and optionally writes or finalizes the trace artifact at the provided path.
+- `trace start [path]` begins trace-log capture for the active session; `trace stop [path]` stops it and writes or finalizes the artifact at that path.
 - Use `trace` for lower-level session diagnostics than `record` or `logs` provide.
 
 ## Remote Metro workflow
@@ -1160,25 +1121,13 @@ agent-device snapshot --remote-config ./agent-device.remote.json -i
 agent-device disconnect --remote-config ./agent-device.remote.json
 ```
 
-- `connect` without `--remote-config` authenticates to cloud when needed, fetches the connection profile, writes a generated local profile, stores the remote scope locally, and defers tenant lease allocation plus Metro preparation until a later command needs them.
-- Both `connect` forms refresh a stored CLI session into a short-lived `adc_agent_...` token when needed. If no CLI session exists, interactive shells start login automatically; CI and non-interactive shells fail with API-token setup instructions. Use `--no-login` to disable implicit login.
-- `connect` rejects a cloud connection profile returned in the older `connection.remoteConfig` JSON string shape; the profile must be a JSON object at `connection.remoteConfigProfile`.
-- `--remote-config <path>` points to a local remote workflow profile that captures stable host, tenant/run, and any optional session, platform, lease backend, or Metro overrides for `connect`.
-- `connect --remote-config ...` follows the same verification, state, and deferred-preparation flow using the local profile instead of cloud discovery. Direct-provider profiles therefore require their provider credentials when `connect` runs; no device lease is created until a later device command.
-- Inspect or recover cloud auth with `agent-device auth status`, `agent-device auth login`, and `agent-device auth logout`. Human login stores a revocable CLI session locally; it does not create or persist an `adc_live_...` service token.
-- Cloud auth uses three credential classes: `adc_agent_...` short-lived command tokens, revocable CLI session refresh credentials, and explicit `adc_live_...` service/API tokens for CI.
-- `AGENT_DEVICE_CLOUD_BASE_URL` should point at the bridge/control-plane API origin, not necessarily the dashboard origin; its `/api-keys` route may redirect to the dashboard for token creation.
-- Deferred Metro preparation also applies to `batch` when any step opens an app and the batch does not provide its own per-step runtime.
-- `connect` without `--session` always creates a fresh remote session. Its human and JSON next steps include the generated `--session`; concurrent processes must preserve that value on every command so they cannot adopt another process's ambient connection. The active connection fallback remains a convenience for one sequential workflow only. To replace a connection, pass its returned session explicitly with `--session <name> --force`; `--force` without a session creates another connection without overwriting or releasing the previous one.
-- After `connect`, `install-from-source`, `open`, `snapshot`, `devices`, `press`, `fill`, `screenshot`, and other normal commands can reuse active connection state in a single sequential workflow so agents do not repeat remote host/session/lease selectors inline. If `connection status` shows `leaseId=pending`, the first platform-bound command allocates or refreshes the lease. Passing the same `--remote-config` to a normal command is also supported for self-contained scripts; the CLI reuses matching saved state or creates it before dispatch.
-- Self-contained remote scripts should end with `disconnect --remote-config <path>` or `disconnect` to release the lease and stop the owned Metro companion.
-- Explicit command-line flags override connected defaults. When `open` uses explicit remote daemon or tenant flags without saved runtime hints, the CLI warns because React Native apps may launch without Metro bundle/runtime hints.
-- `metroProxyBaseUrl` is the bridge origin. Do not prebuild `/api/metro/...` paths in the client profile; the CLI calls the bridge endpoints itself.
-- For cloud stock React Native iOS, the bridge descriptor supplies direct wildcard HTTPS Metro hints such as `<runtime>.metro.agent-device.dev:443`. The Apple runner is still used for runner-backed device commands, not for Metro reachability.
-- Android keeps using bridge-provided runtime routes such as `/api/metro/runtimes/<runtimeId>/...`.
-- `metroPublicBaseUrl` is only needed for direct/non-bridge bundle hints. Bridged profiles can omit it and rely on `metroProxyBaseUrl`.
-- `metro prepare --remote-config ...` is an advanced inspection/debug path and can still write a `--runtime-file <path>` artifact when needed.
-- The local Metro companion runs on the same machine as the React Native project and Metro. `disconnect` stops the companion owned by the connection, but it does not stop the user’s Metro server.
+- `connect` fetches the cloud connection profile; `connect --remote-config <path>` uses a local profile with the host, tenant/run, and optional session, platform, lease backend, and Metro settings. Both save connection state and defer the device lease and Metro preparation until a command needs them (including a `batch` step that opens an app). Direct-provider profiles need their provider credentials when `connect` runs. Cloud profiles must be a JSON object at `connection.remoteConfigProfile`; the older `connection.remoteConfig` string is rejected.
+- Cloud auth: `connect` refreshes a stored CLI session into a short-lived `adc_agent_...` token. Without a session, interactive shells start login; CI and non-interactive shells fail with API-token setup instructions. `--no-login` disables implicit login. Use `adc_live_...` service tokens for CI. Manage the CLI session with `agent-device auth status`, `auth login`, and `auth logout`; login never stores an `adc_live_...` token.
+- `AGENT_DEVICE_CLOUD_BASE_URL` is the bridge/control-plane API origin, not necessarily the dashboard; its `/api-keys` route may redirect to the dashboard.
+- `connect` without `--session` always creates a fresh remote session and prints the generated `--session`. Concurrent processes must pass that value on every command; the active-connection fallback is only for one sequential workflow. To replace a connection, pass `--session <name> --force`; `--force` without a session adds a connection without releasing the previous one.
+- After `connect`, normal commands (`install-from-source`, `open`, `snapshot`, `press`, `screenshot`, and others) reuse the connection state. `connection status` shows `leaseId=pending` until the first platform-bound command allocates the lease. Explicit flags override connected defaults; `open` with explicit remote flags but no saved runtime hints warns that React Native apps may launch without Metro hints.
+- End with `disconnect` (or `disconnect --remote-config <path>`) to release the lease and stop the Metro companion owned by the connection. It does not stop your Metro server.
+- `metroProxyBaseUrl` is the bridge origin; do not add `/api/metro/...` paths. The bridge supplies iOS wildcard HTTPS hints and Android runtime routes. `metroPublicBaseUrl` is only needed for direct, non-bridge bundle hints. `metro prepare --remote-config ...` is an inspection/debug path that can write `--runtime-file <path>`.
 
 ## Session inspection
 
@@ -1187,8 +1136,7 @@ agent-device session list
 agent-device session list --json
 ```
 
-- `session list` shows active daemon sessions for the caller's implicit workspace scope, or the explicitly named session scope when `--session` / `AGENT_DEVICE_SESSION` is configured.
-- Use `--json` when you want to inspect or script against the raw session metadata.
+- `session list` shows active daemon sessions for your workspace, or for the named session scope when `--session` or `AGENT_DEVICE_SESSION` is set. Add `--json` for raw session metadata.
 
 ## Cloud provider artifacts
 
@@ -1197,12 +1145,9 @@ agent-device artifacts --provider browserstack --provider-session <webdriver-ses
 agent-device artifacts --provider aws-device-farm --provider-session <remote-access-session-arn> --json
 ```
 
-- `artifacts` lists provider-hosted cloud artifacts such as videos, Appium logs, device logs, automation logs, and provider dashboard links.
-- The response uses `cloudArtifacts` so it stays separate from daemon-managed local `artifacts` returned by screenshot, recording, install, replay, and remote materialization flows.
-- Plain text output prints ready provider URLs. Use `--json` when scripts need the structured `cloudArtifacts` array.
-- Historical lookup requires `--provider-session <id>` and `--provider <name>`. BrowserStack uses `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY`. TestMu AI uses `LT_USERNAME` and `LT_ACCESS_KEY`. AWS Device Farm uses the AWS CLI credential chain and infers the region from the session ARN when possible. See [BrowserStack](/docs/browserstack), [AWS Device Farm](/docs/aws-device-farm), and [TestMu AI](/docs/testmu) for CI credential setup.
-- When a cloud runtime is registered in-process by an embedding host, `artifacts` can infer the active provider session from the current lease before disconnect.
-- `disconnect --json` and `close --json` include provider release data when the runtime returns final cloud artifacts after session teardown. Some providers only finalize video/log URLs after the remote session is stopped, so retry `agent-device artifacts <provider-session-id> --provider <name> --json` if the first response is `pending`.
+- `artifacts` lists provider-hosted videos, Appium, device, and automation logs, and dashboard links as `cloudArtifacts`, separate from the local `artifacts` that screenshot, record, install, and replay return. Plain text prints ready URLs.
+- Looking up a past session needs `--provider-session <id>` and `--provider <name>`. For credentials, see [Device Clouds](/docs/device-clouds#compare-providers). AWS Device Farm infers the region from the session ARN when possible. When an embedding host registers the cloud runtime in-process, `artifacts` infers the active provider session before disconnect.
+- `disconnect --json` and `close --json` include provider release data when the runtime returns final artifacts. Providers may finalize URLs only after the session stops, so retry `artifacts` if the first response is `pending`.
 
 ## iOS physical-device prerequisites
 
