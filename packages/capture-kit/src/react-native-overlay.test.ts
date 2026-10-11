@@ -66,7 +66,7 @@ describe('React Native collapsed warning dismissal', () => {
     expect(state.primaryAction?.ref).toBe('e2');
   });
 
-  test('two banners with no ref and no hittable fact fall back to the lower position', () => {
+  test('two banners without a hittable fact fall back to width and then the lower position', () => {
     const state = analyzeReactNativeOverlay([
       node({
         index: 0,

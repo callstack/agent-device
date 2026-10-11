@@ -178,7 +178,7 @@ describe('Maestro failure suggestion queries', () => {
     expect(suggestions).toEqual([]);
   });
 
-  test('a text selector labels a label-matched candidate and calls a text-in-identifier hit `id`', async () => {
+  test('a text selector against a label match reports the `label` basis', async () => {
     const suggestions = await suggestionsFor(
       ['appId: com.example.app', '---', '- assertVisible:', '    text: Save', ''].join('\n'),
       'android',
@@ -186,6 +186,25 @@ describe('Maestro failure suggestion queries', () => {
     );
     // With no identifier to match, the candidate matches on its label, so the basis is `label`.
     expect(suggestions.map(({ basis }) => basis)).toEqual(['label']);
+  });
+
+  test('a text selector the candidate carries as visible text reports the `id` basis', async () => {
+    const suggestions = await suggestionsFor(
+      ['appId: com.example.app', '---', '- assertVisible:', '    text: Save', ''].join('\n'),
+      'android',
+      [
+        {
+          ref: 'e1',
+          index: 0,
+          type: 'Button',
+          // No label: the text "Save" is the node's identifier, i.e. its visible text.
+          identifier: 'Save',
+          rect: { x: 0, y: 0, width: 100, height: 40 },
+          hittable: true,
+        },
+      ],
+    );
+    expect(suggestions.map(({ basis }) => basis)).toEqual(['id']);
   });
 
   test('a selector with neither text nor id still ranks nodes under the `other` basis', async () => {
