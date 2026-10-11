@@ -117,6 +117,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('fixture-fallback', 'Fixture-app cache-failure fallback', 'test:fixture-fallback'),
   gate('command-docs', 'Command reference doc coverage', 'check:command-docs'),
   gate('docs-links', 'Docs internal links and heading anchors', 'check:doc-links'),
+  gate('docs-prose', 'Docs filler, marketing, and time-relative words', 'check:doc-prose'),
   gate('agent-guidance', 'Agent guidance ownership and context budgets', 'check:agent-guidance'),
   // Parses ios.yml and the Swift sources; no Xcode, no simulator, so it runs anywhere.
   gate(

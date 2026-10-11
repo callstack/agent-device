@@ -76,6 +76,7 @@ export const ALL_CHECKS = [
   'fixture-fallback',
   'command-docs',
   'docs-links',
+  'docs-prose',
   'agent-guidance',
   'xctest-selection',
   'packaged-runner-swift',
@@ -543,16 +544,13 @@ function isAgentGuidance(file: string): boolean {
   return AGENT_GUIDANCE.has(file) || file.startsWith('docs/agents/');
 }
 
-// The pages and README whose internal links and heading anchors `check:doc-links` resolves, and
-// the website manifest and config that decide what the built site renders.
-const DOC_LINKS_INPUTS = new Set([
-  'README.md',
-  'website/package.json',
-  'website/rspress.config.ts',
-]);
+// The user docs: README and the docs site pages. `check:doc-prose` reads them; `check:doc-links`
+// resolves their links and also reruns when the website manifest or config that decide what the
+// built site renders change.
+const SITE_BUILD_INPUTS = new Set(['website/package.json', 'website/rspress.config.ts']);
 
-function isLinkedDoc(file: string): boolean {
-  return DOC_LINKS_INPUTS.has(file) || (file.startsWith('website/docs/') && /\.mdx?$/.test(file));
+function isUserDocPage(file: string): boolean {
+  return file === 'README.md' || (file.startsWith('website/docs/') && /\.mdx?$/.test(file));
 }
 
 const docsOwnership: OwnershipRule = ({ file }) => {
@@ -577,13 +575,23 @@ const docsOwnership: OwnershipRule = ({ file }) => {
       ),
     );
   }
-  if (isLinkedDoc(file)) {
+  if (isUserDocPage(file) || SITE_BUILD_INPUTS.has(file)) {
     selections.push(
       reason(
         'docs-links',
         file,
         'own:docs-links',
         'internal docs links must land on an existing page and heading',
+      ),
+    );
+  }
+  if (isUserDocPage(file)) {
+    selections.push(
+      reason(
+        'docs-prose',
+        file,
+        'own:docs-prose',
+        'user docs avoid filler, marketing, and time-relative words',
       ),
     );
   }

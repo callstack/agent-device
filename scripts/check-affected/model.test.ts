@@ -205,20 +205,25 @@ test('docs-only change selects no checks and records the docs paths', () => {
   assert.equal(result.docsOnlyPaths.length, 3);
 });
 
-test('user docs pages and README select the docs-links check', () => {
+test('user docs pages and README select the docs-links and docs-prose checks', () => {
   for (const file of [
     'README.md',
     'website/docs/index.md',
     'website/docs/docs/sessions.md',
     'website/docs/404.mdx',
-    'website/package.json',
-    'website/rspress.config.ts',
   ]) {
     const result = plan([file]);
-    assert.deepEqual(result.checks, ['docs-links'], file);
+    assert.deepEqual(result.checks, ['docs-links', 'docs-prose'], file);
     assert.deepEqual(result.docsOnlyPaths, []);
   }
-  assert.deepEqual(plan(['website/docs/docs/commands.md']).checks, ['command-docs', 'docs-links']);
+  for (const file of ['website/package.json', 'website/rspress.config.ts']) {
+    assert.deepEqual(plan([file]).checks, ['docs-links'], file);
+  }
+  assert.deepEqual(plan(['website/docs/docs/commands.md']).checks, [
+    'command-docs',
+    'docs-links',
+    'docs-prose',
+  ]);
   assert.deepEqual(plan(['website/docs/public/logo.svg']).checks, []);
 });
 
