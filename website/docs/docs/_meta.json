@@ -157,7 +157,7 @@
       },
       {
         "type": "custom-link",
-        "label": "Migrating Gestures",
+        "label": "Rewrite Old Gesture Commands",
         "link": "/docs/migrating-gestures"
       }
     ]

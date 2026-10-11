@@ -52,7 +52,7 @@ Notes:
 
 - `input` is required and takes the same fields as the matching MCP or Node client command.
 - A step can only have `command`, `input`, and `runtime` keys; any other key is rejected.
-- Steps written as `positionals`/`flags` are rejected (that shape was removed in 0.21). Rewrite each step with structured input, for example `{"command":"open","input":{"app":"settings","platform":"ios"}}`.
+- Steps written as `positionals`/`flags` are rejected. Rewrite each step with structured input, for example `{"command":"open","input":{"app":"settings","platform":"ios"}}`.
 - `batch` and `replay` steps can't be nested inside a batch.
 - `--on-error stop` is the only error mode: the batch stops at the first failing step.
 - A batch runs at most 100 steps by default. Pass `--max-steps <n>` to raise or lower the limit, up to 1000.

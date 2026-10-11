@@ -378,9 +378,9 @@ For how `--from` counts steps in a Maestro flow, see [Resume a failed Maestro fl
 
 Passing `--plan-digest` that no longer matches the current script — because you edited it, an include changed, or platform-conditioned expansion differs — fails `INVALID_ARGS` before any action; run a fresh full replay to get a new digest. `--from` is `replay`-only; `test` rejects it (a suite run must stay full and deterministic).
 
-## `--update`/`-u` (retired)
+## `--update`/`-u`
 
-`--update`/`-u` does not rewrite `.ad` files. The flag is accepted and does nothing: every replay divergence carries ranked `suggestions` whether or not you pass it. Review a suggestion, then edit the `.ad` file yourself if it's right. [ADR 0012](https://github.com/callstack/agent-device/blob/main/docs/adr/0012-interactive-replay.md) explains why automatic rewriting was retired.
+`--update`/`-u` does not rewrite `.ad` files. The flag is accepted and does nothing: every replay divergence carries ranked `suggestions` whether or not you pass it. Review a suggestion, then edit the `.ad` file yourself if it's right. [ADR 0012](https://github.com/callstack/agent-device/blob/main/docs/adr/0012-interactive-replay.md) explains why replay does not rewrite scripts automatically.
 
 ## Troubleshooting
 

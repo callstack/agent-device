@@ -133,13 +133,10 @@ On iOS, `role` (when present) is the native AX class (`UIButton`), carried only 
 
 `role=` selectors (and `find role=...`) match the `kind` vocabulary: a node whose `kind` is `text`
 or `text-field` always matches `role=text` / `role=text-field`, the bracketed word a snapshot
-shows for that node
-([#3021](https://github.com/callstack/agent-device/issues/3021)). Older spellings — the raw leaf
-classes `role=statictext`, `role=edittext`, `role=textview`, `role=searchfield`, and the rest of the
-leaf vocabulary — still match during a deprecation window, each only on nodes that carried that
-class (so `role=linearlayout` never matches a `FrameLayout` row the way a shared `group` alias
-would). Use the `kind` spelling in your selectors; the leaf aliases are deprecated and will be
-removed in a future breaking release.
+shows for that node. The raw leaf classes — `role=statictext`, `role=edittext`, `role=textview`,
+`role=searchfield`, and the rest of the leaf vocabulary — also match as deprecated aliases, each only
+on nodes that carried that class (so `role=linearlayout` never matches a `FrameLayout` row the way a
+shared `group` alias would). Use the `kind` spelling in your selectors.
 
 ## Scope a snapshot
 
