@@ -130,8 +130,8 @@ export function renderCrapReport(input: {
     lines.push(
       '',
       `Unscored: ${dropped.length} file(s) with counts no execution can produce ` +
-        `(unresolved script wrapper offset, or a negative branch path count; see patches/): ` +
-        `${dropped.map((file) => `\`${file}\``).join(', ')}`,
+        `(for example, an unresolved script wrapper offset or a negative branch path count, ` +
+        `both fixed under patches/): ${dropped.map((file) => `\`${file}\``).join(', ')}`,
     );
   }
   return `${lines.join('\n')}\n`;

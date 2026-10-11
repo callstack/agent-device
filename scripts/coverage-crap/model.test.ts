@@ -82,6 +82,9 @@ test('the report names touched functions and unscored files', () => {
   assert.match(report, /1 touched function\(s\) at or above 30/);
   assert.match(report, /\| `src\/a\.ts:10` run \| 42\.0 \| 6 \| 20% \|/);
   assert.match(report, /Unscored: 1 file\(s\).*`src\/odd\.ts`/);
+  // The known upstream causes are examples, not the whole rule: any negative, null, or fractional
+  // count is dropped, and naming only the two would misdiagnose a new one.
+  assert.match(report, /Unscored: 1 file\(s\).*for example/);
 });
 
 test('an empty report says none and lists no table', () => {
