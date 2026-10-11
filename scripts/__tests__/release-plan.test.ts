@@ -163,6 +163,35 @@ test('each missing protection is named on its own', () => {
     tagRulesets: [{ ...setup.tagRulesets[0], enforcement: 'evaluate' }],
   };
   assert.match(repositorySetupGaps(evaluating).join(), /tag ruleset/);
+  const anyBranchToggle = {
+    ...setup,
+    npmPublish: { deployment_branch_policy: { custom_branch_policies: false } },
+  };
+  assert.match(repositorySetupGaps(anyBranchToggle).join(), /npm-publish environment/);
+  const excluding = {
+    ...setup,
+    tagRulesets: [
+      {
+        ...setup.tagRulesets[0],
+        conditions: { ref_name: { include: ['refs/tags/v*'], exclude: ['refs/tags/v9*'] } },
+      },
+    ],
+  };
+  assert.match(repositorySetupGaps(excluding).join(), /tag ruleset/);
+  const writerBypass = {
+    ...setup,
+    tagRulesets: [
+      { ...setup.tagRulesets[0], bypass_actors: [{ actor_type: 'RepositoryRole', actor_id: 4 }] },
+    ],
+  };
+  assert.match(repositorySetupGaps(writerBypass).join(), /tag ruleset/);
+  const adminBypass = {
+    ...setup,
+    tagRulesets: [
+      { ...setup.tagRulesets[0], bypass_actors: [{ actor_type: 'RepositoryRole', actor_id: 5 }] },
+    ],
+  };
+  assert.deepEqual(repositorySetupGaps(adminBypass), []);
   const creatable = {
     ...setup,
     tagRulesets: [{ ...setup.tagRulesets[0], rules: [{ type: 'deletion' }] }],
