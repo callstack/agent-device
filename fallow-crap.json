@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "extends": ["./.fallowrc.json"],
+  // Coverage-based CRAP only: scripts/coverage-crap/run.ts passes the threshold (--max-crap), the
+  // Vitest coverage map and the PR diff. Cyclomatic and cognitive findings stay with check:fallow.
+  "rules": {
+    "complexity-cyclomatic": "off",
+    "complexity-cognitive": "off"
+  }
+}

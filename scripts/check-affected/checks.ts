@@ -66,6 +66,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('unit', 'Unit + smoke suite', 'check:unit'),
   // CI owns the default coverage run; the scripts remain available for explicit local diagnosis.
   gate('coverage', 'Changed-line coverage', 'check:coverage-changed', false),
+  gate('coverage-crap', 'Coverage-based CRAP report', 'check:coverage-crap', false),
   gate('provider-integration', 'Provider-backed integration suite', 'test:integration:provider'),
   gate(
     'integration-progress',
@@ -104,6 +105,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('tmpdir-leaks', 'Leaked test tmpdir detector', 'check:tmpdir-leaks'),
   gate('tmpdir-leaks-model', 'TMPDIR redirection model', 'check:tmpdir-leaks:test'),
   gate('coverage-model', 'Changed-line coverage model', 'check:coverage-changed:test'),
+  gate('coverage-crap-model', 'Coverage-based CRAP report model', 'check:coverage-crap:test'),
   gate('wire-compat-model', 'Wire-compat rules model', 'check:daemon-wire-compat:test'),
   gate('production-exports', 'Production-unused exports', 'check:production-exports'),
   gate('bundle-owner-files', 'Bundle owner-file manifest', 'check:bundle-owner-files'),

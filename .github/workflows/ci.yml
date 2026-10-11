@@ -298,6 +298,10 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: coverage-model }
 
+      - name: Test coverage-based CRAP report
+        uses: ./.github/actions/run-gate
+        with: { gate: coverage-crap-model }
+
       - name: Run coverage
         id: run-coverage
         env:
@@ -330,6 +334,29 @@ jobs:
           args: |
             --base
             ${{ github.event.pull_request.base.sha }}
+
+      # Report-only: scores the functions this PR touches with the coverage map the coverage step
+      # wrote (fallow-crap.json), as a job summary and warning annotations. It never fails the job:
+      # a tooling error marks only this step. `!cancelled()` keeps it running after a failed
+      # changed-line gate.
+      - name: Report coverage-based CRAP
+        if: ${{ !cancelled() && steps.run-coverage.outcome == 'success' && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        uses: ./.github/actions/run-gate
+        with:
+          gate: coverage-crap
+          args: |
+            --base
+            ${{ github.event.pull_request.base.sha }}
+
+      # On main, the same report covers every function: the backlog of untested complex code.
+      - name: Report coverage-based CRAP for the whole repository
+        if: ${{ !cancelled() && steps.run-coverage.outcome == 'success' && github.event_name == 'push' }}
+        continue-on-error: true
+        uses: ./.github/actions/run-gate
+        with:
+          gate: coverage-crap
+          args: --all
 
   integration:
     name: Integration Tests

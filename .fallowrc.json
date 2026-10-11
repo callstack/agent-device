@@ -627,6 +627,9 @@
     "deadCodeBaseline": "fallow-baselines/dead-code.json",
     "healthBaseline": "fallow-baselines/health.json"
   },
+  // CRAP needs measured coverage: estimated from imports it disagrees with measured scores on most
+  // findings. fallow-crap.json re-enables it for the CI Coverage job, which supplies the coverage map.
+  "health": { "maxCrap": 0 },
   "includeEntryExports": true,
   "ignoreExportsUsedInFile": {
     "type": true,
