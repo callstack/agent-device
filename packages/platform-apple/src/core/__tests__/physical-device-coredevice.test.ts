@@ -5,12 +5,15 @@ import { test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { IOS_DEVICECTL_MIN_TIMEOUT_SECONDS } from '../config.ts';
 import {
+  ensureCoreDeviceReady,
   launchCoreDeviceApp,
   parseIosDeviceDetailsPayload,
   readIosDeviceReadiness,
   resolveIosReadyHint,
   type IosDeviceReadiness,
 } from '../physical-device-coredevice.ts';
+import { IOS_DEVICE_READY_TIMEOUT_MS } from '../physical-device-constants.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   IOS_DEVICE_DEVELOPER_DISK_IMAGE_HINT,
   IOS_DEVICE_DEVELOPER_MODE_OFF_HINT,
@@ -561,6 +564,150 @@ async function readDeviceDetails(
       },
     }),
     async () => await readIosDeviceReadiness(IOS_DEVICE),
+  );
+}
+
+/**
+ * `ensureCoreDeviceReady` asks the same details command as a timed probe and turns every way it can
+ * fail into a typed COMMAND_FAILED with an actionable hint. The shapes below pin each normalizer
+ * branch at the boundary that reaches it: a pass-through verdict, a tool failure, a killed timeout,
+ * a successful run with unreadable JSON, and a failure that is not a probe at all.
+ */
+test('ensureCoreDeviceReady passes a connected device through', async () => {
+  await withCoreDeviceProbe(
+    () => readyPayload('connected'),
+    async () => {
+      await ensureCoreDeviceReady(IOS_DEVICE);
+    },
+  );
+});
+
+test('ensureCoreDeviceReady names the connecting tunnel state as the reason it refuses', async () => {
+  const error = await expectReadyFailure(() => readyPayload('connecting'));
+  assert.equal(error.details?.kind, 'not_ready');
+  assert.equal(error.details?.tunnelState, 'connecting');
+  assert.match(error.message, /not ready for automation/i);
+});
+
+test('ensureCoreDeviceReady reports a failed details command with the device hint', async () => {
+  const error = await expectReadyFailure(() => ({
+    exitCode: 1,
+    stderr: 'ERROR: The device could not be contacted.',
+  }));
+  // The probe failed with a tool complaint, so the hint is the guidance for that text, not the
+  // did-not-respond guidance a killed probe gets.
+  assert.match(String(error.details?.hint), /trusted/i);
+  assert.doesNotMatch(String(error.details?.hint), /did not respond/);
+  assert.match(String(error.details?.stderr), /could not be contacted/);
+});
+
+test('ensureCoreDeviceReady names the developer mode hint a failing probe reports', async () => {
+  // The hint on a failed probe comes from the tool's own text, and the two device failure states
+  // keep separate wordings (#2683).
+  const error = await expectReadyFailure(() => ({
+    exitCode: 1,
+    stderr: 'The operation failed because Developer Mode is disabled.',
+  }));
+  assert.match(String(error.details?.hint), /Enable Developer Mode/i);
+});
+
+test('ensureCoreDeviceReady turns a killed probe into the timeout hint', async () => {
+  // exec's timeout error carries its own stdout/stderr/timeoutMs; with no output to read the
+  // hint is the did-not-respond guidance naming the budget the probe ran under.
+  const error = await expectReadyFailure(() => {
+    throw new AppError('COMMAND_FAILED', 'xcrun timed out after 12345ms', {
+      timeoutMs: 12345,
+      stdout: '',
+      stderr: '',
+    });
+  });
+  assert.match(String(error.details?.hint), /did not respond within 12345ms/);
+  assert.equal(error.details?.timeoutMs, 12345);
+});
+
+test('ensureCoreDeviceReady defaults the timeout hint to the ready budget when the error reports none', async () => {
+  const error = await expectReadyFailure(() => {
+    throw new AppError('COMMAND_FAILED', 'xcrun was killed', { stdout: '', stderr: '' });
+  });
+  assert.match(String(error.details?.hint), new RegExp(`within ${IOS_DEVICE_READY_TIMEOUT_MS}ms`));
+});
+
+test('ensureCoreDeviceReady reports a successful run without readable JSON as inconclusive', async () => {
+  // The inner probe error says the JSON was invalid, but the normalizer rebuilds the hint from the
+  // tool's own output, so what survives is the raw stdout and the guidance derived from it — not
+  // the did-not-respond guidance reserved for a probe that never answered.
+  const error = await expectReadyFailure(() => ({ stdout: 'not json at all' }));
+  assert.equal(error.message, 'iOS device readiness probe failed');
+  assert.equal(error.details?.stdout, 'not json at all');
+  assert.match(String(error.details?.hint), /Xcode/i);
+  assert.doesNotMatch(String(error.details?.hint), /did not respond/);
+});
+
+test('ensureCoreDeviceReady normalizes a failure that is not a command failure', async () => {
+  // A provider that cannot run at all is not a verdict about the device: the error keeps its
+  // cause but becomes the probe-failure shape with the reconnect hint.
+  const cause = new AppError('INVALID_ARGS', 'simulator-set scope is required');
+  const error = await expectReadyFailure(() => {
+    throw cause;
+  });
+  assert.equal(error.message, 'iOS device readiness probe failed');
+  assert.match(String(error.details?.hint), /reconnect/i);
+  assert.equal(error.cause, cause);
+});
+
+test('ensureCoreDeviceReady keeps a plain error as the probe-failure cause', async () => {
+  const cause = new Error('boom');
+  const error = await expectReadyFailure(() => {
+    throw cause;
+  });
+  assert.equal(error.cause, cause);
+});
+
+async function expectReadyFailure(answer: ReadyProbeAnswer): Promise<AppError> {
+  let failure: unknown;
+  try {
+    await withCoreDeviceProbe(answer, async () => {
+      await ensureCoreDeviceReady(IOS_DEVICE);
+    });
+  } catch (error) {
+    failure = error;
+  }
+  assert.ok(failure instanceof AppError, 'expected ensureCoreDeviceReady to fail');
+  assert.equal(failure.code, 'COMMAND_FAILED');
+  return failure;
+}
+
+function readyPayload(tunnelState: string): { exitCode: number; json: unknown } {
+  return {
+    exitCode: 0,
+    json: {
+      info: { outcome: 'success' },
+      result: { connectionProperties: { tunnelState } },
+    },
+  };
+}
+
+type ReadyProbeAnswer = (
+  args: string[],
+) => { exitCode?: number; stdout?: string; stderr?: string; json?: unknown } | Error;
+
+/**
+ * One details-probe session with a scripted `xcrun devicectl` answer. A `json` key is written to
+ * the `--json-output` path the probe asked for, exactly as devicectl does.
+ */
+async function withCoreDeviceProbe<T>(answer: ReadyProbeAnswer, run: () => Promise<T>): Promise<T> {
+  return await withAppleToolProvider(
+    createLocalAppleToolProvider({
+      runCommand: async (_cmd, args) => {
+        const response = answer(args);
+        if (response instanceof Error) throw response;
+        const { exitCode = 0, stdout = '', stderr = '', json } = response;
+        const outputPath = jsonOutputPath(args);
+        if (json !== undefined && outputPath) fs.writeFileSync(outputPath, JSON.stringify(json));
+        return { exitCode, stdout, stderr };
+      },
+    }),
+    run,
   );
 }
 

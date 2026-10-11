@@ -4,8 +4,11 @@ import {
   isSimulatorLaunchFBSError,
   classifyLaunchFailure,
   launchFailureHint,
+  probeSimulatorLaunchContext,
 } from '../launch-diagnostics.ts';
 import { AppError } from '@agent-device/kernel/errors';
+import { IOS_SIMULATOR } from '../../__tests__/device-fixtures.ts';
+import { withFakeAppleTool, type FakeAppleToolScript } from '../../__tests__/fake-apple-tool.ts';
 
 test('isSimulatorLaunchFBSError identifies FBS code=4 errors', () => {
   const error = new AppError('COMMAND_FAILED', 'xcrun exited with code 4', {
@@ -88,3 +91,85 @@ test('launchFailureHint returns actionable string for UNKNOWN', () => {
   const hint = launchFailureHint('UNKNOWN');
   assert.ok(hint.length > 0);
 });
+
+/**
+ * `probeSimulatorLaunchContext` answers why an FBS launch refusal happened by asking three tools:
+ * `simctl get_app_container` for the installed bundle, `plutil` for its executable name, and
+ * `otool` for the platform marker the binary carries. Each refusal to answer narrows the diagnosis
+ * one step and stops there; a probe that inferred past a missing answer is what the tiered
+ * early-returns prevent, so every tier is pinned at its own boundary.
+ */
+test('probeSimulatorLaunchContext reports a missing container as not installed', async () => {
+  const probe = await probeLaunchContext(() => ({ exitCode: 4, stderr: 'container not found' }));
+  assert.deepEqual(probe, { installed: false });
+});
+
+test('probeSimulatorLaunchContext reports a successful but empty container lookup as not installed', async () => {
+  const probe = await probeLaunchContext(() => '   ');
+  assert.deepEqual(probe, { installed: false });
+});
+
+test('probeSimulatorLaunchContext reports installed when the Info.plist has no executable name', async () => {
+  // An unreadable Info.plist proves installation but says nothing about the platform, so the
+  // probe stops with `installed: true` and no compatibility claim.
+  for (const plistAnswer of [{ exitCode: 1 }, { exitCode: 0, stdout: '' }]) {
+    const probe = await probeLaunchContext((args) => {
+      if (args[0] === 'plutil') return plistAnswer;
+      return '/Bundle';
+    });
+    assert.deepEqual(probe, { installed: true });
+  }
+});
+
+test('probeSimulatorLaunchContext reports installed when otool cannot read the binary', async () => {
+  const probe = await probeLaunchContext((args) => {
+    if (args[0] === 'otool') return { exitCode: 1 };
+    return '/Bundle';
+  });
+  assert.deepEqual(probe, { installed: true });
+});
+
+test('probeSimulatorLaunchContext reads the simulator platform marker from otool', async () => {
+  const probe = await probeLaunchContext(otoolScript('Platform iOSSimulator, iOS, Version 17.0'));
+  assert.deepEqual(probe, { installed: true, simulatorCompatible: true });
+
+  // LC_BUILD_VERSION spells the simulator platform both ways across toolchain versions.
+  assert.deepEqual(await probeLaunchContext(otoolScript('platform 7')), {
+    installed: true,
+    simulatorCompatible: true,
+  });
+});
+
+test('probeSimulatorLaunchContext reports a device binary as not simulator compatible', async () => {
+  const probe = await probeLaunchContext(otoolScript('Platform iOS, Version 17.0'));
+  assert.deepEqual(probe, { installed: true, simulatorCompatible: false });
+});
+
+test('probeSimulatorLaunchContext scopes the container lookup to the simulator', async () => {
+  await withFakeAppleTool(
+    () => '',
+    async ({ calls }) => {
+      await probeSimulatorLaunchContext(IOS_SIMULATOR, 'com.example.app');
+      assert.deepEqual(calls[0], [
+        'simctl',
+        'get_app_container',
+        IOS_SIMULATOR.id,
+        'com.example.app',
+      ]);
+    },
+    { device: IOS_SIMULATOR },
+  );
+});
+
+/** A script where everything up to `otool` answers with the bundle path and `otool` answers itself. */
+function otoolScript(otoolStdout: string): FakeAppleToolScript {
+  return (args) => (args[0] === 'otool' ? otoolStdout : '/Path/To/Demo.app');
+}
+
+async function probeLaunchContext(script: FakeAppleToolScript) {
+  return await withFakeAppleTool(
+    script,
+    async () => await probeSimulatorLaunchContext(IOS_SIMULATOR, 'com.example.app'),
+    { device: IOS_SIMULATOR },
+  );
+}
