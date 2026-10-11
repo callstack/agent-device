@@ -98,6 +98,17 @@ test('annotations put each finding on its file and line', () => {
   const findings = readCrapFindings({ findings: [finding({})] }, 30);
   assert.equal(
     renderCrapAnnotations(findings),
-    '::warning file=src/a.ts,line=10,title=CRAP 42.0::run has cyclomatic 6 at 20% coverage.\n',
+    '::warning file=src/a.ts,line=10,title=CRAP 42.0::run has cyclomatic 6 at 20%25 coverage.\n',
+  );
+});
+
+test('annotations escape a path or name that would end the workflow command', () => {
+  const findings = readCrapFindings(
+    { findings: [finding({ path: 'src/a,b:c.ts', name: 'run\n::error::forged 100%' })] },
+    30,
+  );
+  assert.equal(
+    renderCrapAnnotations(findings),
+    '::warning file=src/a%2Cb%3Ac.ts,line=10,title=CRAP 42.0::run%0A::error::forged 100%25 has cyclomatic 6 at 20%25 coverage.\n',
   );
 });

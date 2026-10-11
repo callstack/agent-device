@@ -121,12 +121,27 @@ export function renderCrapReport(input: {
   return `${lines.join('\n')}\n`;
 }
 
+// Workflow-command escaping (actions/toolkit `command.ts`): data may not carry `%`, CR, or LF, and
+// a property additionally may not carry `:` or `,`, or a path or name could end the command early.
+function escapeCommandData(value: string): string {
+  return value.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
+}
+
+function escapeCommandProperty(value: string): string {
+  return escapeCommandData(value).replaceAll(':', '%3A').replaceAll(',', '%2C');
+}
+
 /** GitHub Actions warning annotations, one per finding, so the score shows on the diff. */
 export function renderCrapAnnotations(findings: readonly CrapFinding[]): string {
   return findings
-    .map(
-      (finding) =>
-        `::warning file=${finding.path},line=${finding.line},title=CRAP ${finding.crap.toFixed(1)}::${finding.name} has cyclomatic ${finding.cyclomatic} at ${formatCoverage(finding.coveragePct)} coverage.\n`,
-    )
+    .map((finding) => {
+      const properties = [
+        `file=${escapeCommandProperty(finding.path)}`,
+        `line=${finding.line}`,
+        `title=${escapeCommandProperty(`CRAP ${finding.crap.toFixed(1)}`)}`,
+      ].join(',');
+      const message = `${finding.name} has cyclomatic ${finding.cyclomatic} at ${formatCoverage(finding.coveragePct)} coverage.`;
+      return `::warning ${properties}::${escapeCommandData(message)}\n`;
+    })
     .join('');
 }

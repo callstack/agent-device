@@ -71,6 +71,8 @@ export function run(argv: readonly string[], cwd?: string): number {
       '--config',
       FALLOW_CONFIG,
       '--complexity',
+      '--max-crap',
+      String(CRAP_THRESHOLD),
       '--coverage',
       SANITIZED_PATH,
       ...(scope === 'touched' ? ['--diff-file', DIFF_PATH] : []),
@@ -101,13 +103,14 @@ export function run(argv: readonly string[], cwd?: string): number {
   return 0;
 }
 
+// exitCode, not exit(): a large report written to a pipe must drain before the process ends.
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   try {
-    process.exit(run(process.argv.slice(2)));
+    process.exitCode = run(process.argv.slice(2));
   } catch (error: unknown) {
     process.stderr.write(
       `check:coverage-crap: ${error instanceof Error ? error.message : String(error)}\n`,
     );
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
