@@ -7,9 +7,10 @@ import { pathToFileURL } from 'node:url';
 // it is building towards; a nightly publishes that base as `X.Y.Z-nightly.<YYYYMMDD>.<run>`; a
 // stable release publishes a tagged commit on `main` as `X.Y.Z`. Registry scanners diff the tool surface
 // per version string, so neither `main` nor a nightly may ever carry a published stable version.
-const RELEASE = /^(\d+)\.(\d+)\.(\d+)$/;
-const DEVELOPMENT = /^(\d+)\.(\d+)\.(\d+)-dev$/;
-const NIGHTLY = /^(\d+)\.(\d+)\.(\d+)-nightly\.(\d{8})\.(\d+)$/;
+const N = String.raw`(0|[1-9]\d*)`;
+const RELEASE = new RegExp(`^${N}\\.${N}\\.${N}$`);
+const DEVELOPMENT = new RegExp(`^${N}\\.${N}\\.${N}-dev$`);
+const NIGHTLY = new RegExp(`^${N}\\.${N}\\.${N}-nightly\\.(\\d{8})\\.([1-9]\\d*)$`);
 
 export function isReleaseVersion(version) {
   return RELEASE.test(version);

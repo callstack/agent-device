@@ -19,6 +19,7 @@ test('a nightly is refused unless main carries a -dev version', () => {
   assert.throws(() => nightlyVersion('0.21.25', '20261010', 1), /X\.Y\.Z-dev/);
   assert.throws(() => nightlyVersion('0.21.25-dev', '2026-10-10', 1), /YYYYMMDD/);
   assert.throws(() => nightlyVersion('0.21.25-dev', '20261010', 0), /positive integer/);
+  assert.throws(() => nightlyVersion('0.21.025-dev', '20261010', 1), /X\.Y\.Z-dev/);
 });
 
 test('the latest nightly orders by base, then date, then run number', () => {
@@ -54,4 +55,5 @@ test('release versions compare numerically per segment', () => {
   assert.ok(compareReleaseVersions('1.0.0', '0.99.99') > 0);
   assert.equal(compareReleaseVersions('0.21.25', '0.21.25'), 0);
   assert.throws(() => compareReleaseVersions('0.21.25-dev', '0.21.25'), /release version/);
+  assert.throws(() => compareReleaseVersions('01.2.3', '0.21.25'), /release version/);
 });

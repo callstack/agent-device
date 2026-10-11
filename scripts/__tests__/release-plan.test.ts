@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { planRelease } from '../release-plan.mjs';
+import { isVersionOnlyCommit, planRelease } from '../release-plan.mjs';
 
 const MAIN = 'a'.repeat(40);
 const NIGHTLY_COMMIT = 'b'.repeat(40);
@@ -44,6 +44,8 @@ test('a scheduled nightly waits for new commits, a new day, and green CI', () =>
   assert.match(planRelease(run({ sha: NIGHTLY_COMMIT })).reason, /already ships/);
   assert.match(planRelease(run({ today: '20261010' })).reason, /shipped today/);
   assert.match(planRelease(run({ ciConclusion: 'in_progress' })).reason, /is in_progress/);
+  const published = run({ publishedNightly: '0.21.25-nightly.20261011.40' });
+  assert.match(planRelease(published).reason, /20261011\.40 shipped today/);
 });
 
 test('a dispatched nightly skips the cadence checks but still requires green CI', () => {
@@ -77,4 +79,39 @@ test('a stable tag publishes its own commit once it is on main and its CI passed
 
 test('releases refuse to run from any other branch', () => {
   assert.throws(() => planRelease(run({ ref: 'refs/heads/feature' })), /main or a vX\.Y\.Z tag/);
+});
+
+test("the workflow's -dev bump stands on its parent's CI, and nothing else does", () => {
+  const bump = {
+    parents: [{ sha: MAIN }],
+    files: [
+      {
+        filename: 'package.json',
+        patch: '@@ -2 +2 @@\n-  "version": "0.21.25",\n+  "version": "0.21.26-dev",',
+      },
+      {
+        filename: 'packages/proxy/package.json',
+        patch: '-  "version": "0.21.25",\n+  "version": "0.21.26-dev",',
+      },
+      {
+        filename: 'server.json',
+        patch: '-      "version": "0.21.25"\n+      "version": "0.21.26-dev"',
+      },
+    ],
+  };
+  assert.equal(isVersionOnlyCommit(bump), true);
+  const dependency = {
+    ...bump,
+    files: [
+      { filename: 'package.json', patch: '-    "undici": "7.29.0",\n+    "undici": "8.0.0",' },
+    ],
+  };
+  assert.equal(isVersionOnlyCommit(dependency), false);
+  const source = { ...bump, files: [...bump.files, { filename: 'src/index.ts', patch: '+x' }] };
+  assert.equal(isVersionOnlyCommit(source), false);
+  assert.equal(
+    isVersionOnlyCommit({ ...bump, parents: [{ sha: MAIN }, { sha: NIGHTLY_COMMIT }] }),
+    false,
+  );
+  assert.equal(isVersionOnlyCommit({ ...bump, files: [] }), false);
 });

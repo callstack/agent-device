@@ -37,7 +37,8 @@ jobs:
   plan:
     name: Plan
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # A stable tag waits up to 20 minutes for its commit's CI to finish.
+    timeout-minutes: 25
     permissions:
       actions: read
       contents: read

@@ -34,9 +34,11 @@ function planNightly(run) {
   if (scheduled && latest && run.tags.get(latest) === run.sha) {
     return skip(`${latest} already ships ${run.sha}.`);
   }
-  if (scheduled && latest?.includes(`-nightly.${run.today}.`)) {
-    return skip(`${latest} shipped today.`);
-  }
+  // The npm dist-tag is the durable record: a nightly can publish and then fail to tag.
+  const shippedToday = [latest, run.publishedNightly].find((shipped) =>
+    shipped?.includes(`-nightly.${run.today}.`),
+  );
+  if (scheduled && shippedToday) return skip(`${shippedToday} shipped today.`);
   if (run.ciConclusion !== 'success') {
     const reason = `CI on ${run.sha} is ${run.ciConclusion}; a nightly ships only a commit whose CI passed.`;
     if (scheduled) return skip(reason);
@@ -66,6 +68,28 @@ function planStable(run, tag) {
   return { mode: 'stable', version, distTag: 'latest', commit: run.sha, previousTag };
 }
 
+const VERSION_FILE = /^(packages\/[^/]+\/)?package\.json$|^server\.json$/;
+
+/**
+ * Whether a single-parent commit only rewrites `"version"` fields, as the release workflow's
+ * `-dev` bump does. Its push runs no workflows, so the parent's CI stands for it.
+ */
+export function isVersionOnlyCommit(commit) {
+  return (
+    commit.parents.length === 1 &&
+    commit.files.length > 0 &&
+    commit.files.every(
+      (file) =>
+        VERSION_FILE.test(file.filename) &&
+        typeof file.patch === 'string' &&
+        file.patch
+          .split('\n')
+          .filter((line) => /^[+-]/.test(line))
+          .every((line) => /^[+-]\s*"version": "[^"]*",?$/.test(line)),
+    )
+  );
+}
+
 function skip(reason) {
   return { mode: 'skip', reason };
 }
@@ -93,13 +117,25 @@ function remoteTags() {
   return tags;
 }
 
-async function ciConclusion(env) {
+async function ciConclusion(env, sha) {
   const { workflow_runs: runs } = await github(
     env,
-    `actions/workflows/ci.yml/runs?head_sha=${env.GITHUB_SHA}&event=push&per_page=1`,
+    `actions/workflows/ci.yml/runs?head_sha=${sha}&event=push&per_page=1`,
   );
-  if (runs.length === 0) return 'missing';
-  return runs[0].status === 'completed' ? runs[0].conclusion : runs[0].status;
+  if (runs.length > 0) return runs[0].status === 'completed' ? runs[0].conclusion : runs[0].status;
+  const commit = await github(env, `commits/${sha}`);
+  return isVersionOnlyCommit(commit) ? ciConclusion(env, commit.parents[0].sha) : 'missing';
+}
+
+/** A tag pushed right after a merge waits, within the Plan job's budget, for that merge's CI. */
+async function settledCiConclusion(env, sha) {
+  for (let attempt = 0; ; attempt += 1) {
+    const conclusion = await ciConclusion(env, sha);
+    if (!['queued', 'in_progress', 'waiting', 'pending'].includes(conclusion) || attempt >= 40) {
+      return conclusion;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 30_000));
+  }
 }
 
 async function isOnMain(env) {
@@ -107,8 +143,8 @@ async function isOnMain(env) {
   return status === 'identical' || status === 'behind';
 }
 
-async function latestStable() {
-  const response = await fetch('https://registry.npmjs.org/agent-device/latest');
+async function publishedVersion(distTag) {
+  const response = await fetch(`https://registry.npmjs.org/agent-device/${distTag}`);
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`npm registry lookup failed: ${response.status}`);
   return (await response.json()).version;
@@ -138,8 +174,13 @@ async function readRun(env) {
     today: new Date().toISOString().slice(0, 10).replaceAll('-', ''),
     runNumber: env.GITHUB_RUN_NUMBER,
     tags: event === 'pull_request' ? new Map() : remoteTags(),
-    latestStable: onBranch || onTag ? await latestStable() : null,
-    ciConclusion: onBranch || onTag ? await ciConclusion(env) : undefined,
+    latestStable: onBranch || onTag ? await publishedVersion('latest') : null,
+    publishedNightly: onBranch ? await publishedVersion('nightly') : null,
+    ciConclusion: onTag
+      ? await settledCiConclusion(env, env.GITHUB_SHA)
+      : onBranch
+        ? await ciConclusion(env, env.GITHUB_SHA)
+        : undefined,
     onMain: onTag ? await isOnMain(env) : undefined,
   };
 }

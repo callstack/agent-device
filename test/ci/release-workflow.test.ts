@@ -49,7 +49,7 @@ test('a stable publish waits for the release environment approval', () => {
   expect(workflow.jobs.approve?.environment).toBe('release');
   expect(workflow.jobs.approve?.if).toBe("needs.plan.outputs.mode == 'stable'");
   expect(workflow.jobs.publish?.needs).toContain('approve');
-  expect(workflow.jobs.publish?.if).toMatch(
-    /needs\.plan\.outputs\.mode == 'nightly' \|\| needs\.approve\.result == 'success'/,
+  expect(workflow.jobs.publish?.if?.replaceAll(/\s+/g, ' ').trim()).toBe(
+    "!cancelled() && needs.build.result == 'success' && (needs.plan.outputs.mode == 'nightly' || needs.approve.result == 'success')",
   );
 });
