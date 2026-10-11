@@ -28,10 +28,17 @@ function countsAreValid(record: IstanbulCounters): boolean {
 }
 
 /**
- * Drops file records with a negative or non-integer hit count. Vitest's v8 provider can merge a
- * module loaded both through its runner and natively into negative counts (vitest#11541), and
- * fallow refuses the whole map on one. Zeroed counts from the same bug are indistinguishable from
- * untested code and stay. A dropped file gets no CRAP score rather than a wrong one.
+ * Drops file records with a negative, null, or non-integer hit count, which fallow refuses the
+ * whole map over.
+ *
+ * Two upstream defects produced those counts on real runs, both fixed by the patches under
+ * `patches/`: the v8 provider resolved a module's script wrapper length from whichever coverage
+ * file it read last, so an unmeasured one shifted every offset off its source, and
+ * `ast-v8-to-istanbul` subtracted located branch paths from a region that did not contain them,
+ * which an awaited continuation can make negative. Either can also merge into a record measured
+ * correctly and pull its counts down, so a record is dropped whole rather than repaired; zeroed
+ * counts from the same shift are indistinguishable from untested code and stay. A dropped file
+ * gets no CRAP score rather than a wrong one.
  */
 export function sanitizeIstanbulCoverage(map: IstanbulCoverageMap): SanitizedCoverage {
   const kept: Record<string, IstanbulCounters> = {};
@@ -122,7 +129,9 @@ export function renderCrapReport(input: {
   if (dropped.length > 0) {
     lines.push(
       '',
-      `Unscored: ${dropped.length} file(s) with invalid coverage counts (vitest#11541): ${dropped.map((file) => `\`${file}\``).join(', ')}`,
+      `Unscored: ${dropped.length} file(s) with counts no execution can produce ` +
+        `(unresolved script wrapper offset, or a negative branch path count; see patches/): ` +
+        `${dropped.map((file) => `\`${file}\``).join(', ')}`,
     );
   }
   return `${lines.join('\n')}\n`;
