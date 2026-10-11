@@ -79,6 +79,9 @@ export async function waitForRunner(
   // Every attempt posts the command itself, so the loop gives up "before send" only when no
   // attempt could have written it.
   let commandMayHaveBeenWritten = false;
+  const recordAttemptWriteEvidence = (error: unknown): void => {
+    if (!isRunnerCommandProvablyUnwritten(error)) commandMayHaveBeenWritten = true;
+  };
   const maxAttempts = Math.max(1, Math.ceil(timeoutMs / RUNNER_CONNECT_ATTEMPT_INTERVAL_MS));
   try {
     return await retryWithPolicy(
@@ -100,12 +103,10 @@ export async function waitForRunner(
           },
           setLastError: (err) => {
             lastError = err;
-            if (!isRunnerCommandProvablyUnwritten(err)) commandMayHaveBeenWritten = true;
+            recordAttemptWriteEvidence(err);
           },
         }).catch((error: unknown) => {
-          if (isRequestCanceledError(error) && !isRunnerCommandProvablyUnwritten(error)) {
-            commandMayHaveBeenWritten = true;
-          }
+          if (isRequestCanceledError(error)) recordAttemptWriteEvidence(error);
           throw error;
         });
         if (response) return response;

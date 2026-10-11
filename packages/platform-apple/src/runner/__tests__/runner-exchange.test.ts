@@ -26,6 +26,7 @@ import {
 let server: FakeRunnerServer | undefined;
 
 afterEach(async () => {
+  vi.unstubAllGlobals();
   await server?.close();
   server = undefined;
 });
@@ -406,6 +407,39 @@ test('a drain whose status read fails stops at once and leaves the charge abando
   assert.equal(statusPolls(runner).length, 2);
   assert.ok(settledAfterMs < 2_000, `the drain held for ${settledAfterMs}ms`);
   assert.equal(session.commandCharges.hasAbandonedCharges, true);
+});
+
+test('a read-only command canceled in the connect retry delay withdraws its charge', async () => {
+  const session = sessionFor(await closedLocalPort());
+  session.state = 'starting';
+  const controller = new AbortController();
+  const refusedAttempts: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) => {
+      refusedAttempts.push(url);
+      setTimeout(() => controller.abort(createRequestCanceledError()), 0);
+      throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    }),
+  );
+
+  await assert.rejects(
+    executeRunnerExchange(
+      IOS_SIMULATOR,
+      session,
+      { command: 'snapshot', appBundleId: 'com.example.app' },
+      undefined,
+      10_000,
+      async () => {},
+      controller.signal,
+    ),
+    (error: unknown) =>
+      isRequestCanceledError(error) &&
+      (error as { details?: { dispatched?: string } }).details?.dispatched === 'no',
+  );
+
+  assert.equal(refusedAttempts.length, 1);
+  assert.equal(session.commandCharges.hasOutstandingCharges, false);
 });
 
 test('a refused connection withdraws its charge although nothing canceled it', async () => {
