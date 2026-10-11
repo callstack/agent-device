@@ -27,7 +27,7 @@ jobs:
   publish-mcp-registry:
     name: Publish MCP Registry
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
       MCP_PUBLISHER_VERSION: v1.8.1
       MCP_PUBLISHER_ASSET: mcp-publisher_linux_amd64.tar.gz
@@ -71,6 +71,27 @@ jobs:
           tar -xzf "$PUBLISHER_ARCHIVE" -C "$RUNNER_TEMP" mcp-publisher
           install -m 0755 "$RUNNER_TEMP/mcp-publisher" ./mcp-publisher
           ./mcp-publisher --version
+        shell: bash
+
+      # The registry rejects a server whose npm version it cannot see yet, and npm lists a version it
+      # just accepted only after a few minutes. Wait for the version to appear, bounded.
+      - name: Wait for the npm release to be listed
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          package="$(node -p "require('./package.json').name")"
+          version="${RELEASE_TAG#v}"
+          for _ in $(seq 1 40); do
+            if curl --fail --silent --show-error "https://registry.npmjs.org/${package}" \
+              | node -e 'let s="";process.stdin.on("data",(c)=>(s+=c)).on("end",()=>process.exit(JSON.parse(s).versions?.[process.argv[1]]?0:1))' "$version"; then
+              echo "${package}@${version} is listed on npm."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::${package}@${version} is not listed on npm after 10 minutes."
+          exit 1
         shell: bash
 
       - name: Authenticate to MCP Registry
