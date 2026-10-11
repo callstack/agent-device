@@ -1,0 +1,187 @@
+{
+  "async-fallback-operand": {
+    "wrapperLength": 208,
+    "url": "file:///virtual/target.mjs",
+    "code": "\nasync function f(params) {\n  const release = params.release ?? await probe(params);\n  if (reached.push(\"i1\"), release === \"yes\") {\n    taken.push(\"i1\");\n    return release;\n  }\n  log(release);\n}\n__vite_ssr_exportName__(\"f\", () => f);\n",
+    "functions": [
+      {
+        "functionName": "f",
+        "isBlockCoverage": true,
+        "ranges": [
+          {
+            "startOffset": 209,
+            "endOffset": 403,
+            "count": 8
+          },
+          {
+            "startOffset": 269,
+            "endOffset": 291,
+            "count": 0
+          },
+          {
+            "startOffset": 292,
+            "endOffset": 338,
+            "count": 0
+          },
+          {
+            "startOffset": 338,
+            "endOffset": 385,
+            "count": 6
+          },
+          {
+            "startOffset": 385,
+            "endOffset": 402,
+            "count": 2
+          }
+        ]
+      }
+    ],
+    "branches": {
+      "i1": {
+        "line": 4,
+        "entered": 8,
+        "taken": 6,
+        "counters": [6]
+      }
+    }
+  },
+  "sync-fallback-operand": {
+    "wrapperLength": 208,
+    "url": "file:///virtual/target.mjs",
+    "code": "\nfunction f(params) {\n  const release = params.release ?? \"no\";\n  if (reached.push(\"i1\"), release === \"yes\") {\n    taken.push(\"i1\");\n    return release;\n  }\n  log(release);\n}\n__vite_ssr_exportName__(\"f\", () => f);\n",
+    "functions": [
+      {
+        "functionName": "f",
+        "isBlockCoverage": true,
+        "ranges": [
+          {
+            "startOffset": 209,
+            "endOffset": 382,
+            "count": 8
+          },
+          {
+            "startOffset": 263,
+            "endOffset": 270,
+            "count": 0
+          },
+          {
+            "startOffset": 317,
+            "endOffset": 364,
+            "count": 6
+          },
+          {
+            "startOffset": 364,
+            "endOffset": 381,
+            "count": 2
+          }
+        ]
+      }
+    ],
+    "branches": {
+      "i1": {
+        "line": 4,
+        "entered": 8,
+        "taken": 6,
+        "counters": [6, 2]
+      }
+    }
+  },
+  "plain-async": {
+    "wrapperLength": 208,
+    "url": "file:///virtual/target.mjs",
+    "code": "\nasync function f(params) {\n  const release = params.release;\n  if (reached.push(\"i1\"), release === \"yes\") {\n    taken.push(\"i1\");\n    return release;\n  }\n  log(release);\n}\n__vite_ssr_exportName__(\"f\", () => f);\n",
+    "functions": [
+      {
+        "functionName": "f",
+        "isBlockCoverage": true,
+        "ranges": [
+          {
+            "startOffset": 209,
+            "endOffset": 380,
+            "count": 8
+          },
+          {
+            "startOffset": 315,
+            "endOffset": 362,
+            "count": 6
+          },
+          {
+            "startOffset": 362,
+            "endOffset": 379,
+            "count": 2
+          }
+        ]
+      }
+    ],
+    "branches": {
+      "i1": {
+        "line": 4,
+        "entered": 8,
+        "taken": 6,
+        "counters": [6, 2]
+      }
+    }
+  },
+  "early-return-then-fallback": {
+    "wrapperLength": 208,
+    "url": "file:///virtual/target.mjs",
+    "code": "\nasync function f(params) {\n  if (reached.push(\"i1\"), params.gate) {\n    taken.push(\"i1\");\n    return \"g\";\n  }\n  const release = params.release ?? await probe(params);\n  if (reached.push(\"i2\"), release === \"yes\") {\n    taken.push(\"i2\");\n  }\n  log(release);\n}\n__vite_ssr_exportName__(\"f\", () => f);\n",
+    "functions": [
+      {
+        "functionName": "f",
+        "isBlockCoverage": true,
+        "ranges": [
+          {
+            "startOffset": 209,
+            "endOffset": 466,
+            "count": 8
+          },
+          {
+            "startOffset": 275,
+            "endOffset": 318,
+            "count": 3
+          },
+          {
+            "startOffset": 318,
+            "endOffset": 352,
+            "count": 5
+          },
+          {
+            "startOffset": 352,
+            "endOffset": 374,
+            "count": 0
+          },
+          {
+            "startOffset": 375,
+            "endOffset": 421,
+            "count": 0
+          },
+          {
+            "startOffset": 421,
+            "endOffset": 448,
+            "count": 2
+          },
+          {
+            "startOffset": 448,
+            "endOffset": 465,
+            "count": 5
+          }
+        ]
+      }
+    ],
+    "branches": {
+      "i1": {
+        "line": 3,
+        "entered": 8,
+        "taken": 3,
+        "counters": [3, 5]
+      },
+      "i2": {
+        "line": 8,
+        "entered": 5,
+        "taken": 2,
+        "counters": [2]
+      }
+    }
+  }
+}

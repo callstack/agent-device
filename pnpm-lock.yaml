@@ -12,6 +12,10 @@ overrides:
   react-router: 7.18.2
   react-router-dom: 7.18.2
 
+patchedDependencies:
+  '@vitest/coverage-v8@4.1.11': 9c8a14435f152f76c2092d5212a3a200e7e48efd93d48eddea8b788d95247dd1
+  ast-v8-to-istanbul@1.0.5: 1033b65c551f1e34f0852288a94128e9f39f596fccdd9aff984f26f0486ab050
+
 importers:
 
   .:
@@ -135,7 +139,7 @@ importers:
         version: 3.4.0
       '@vitest/coverage-v8':
         specifier: 4.1.11
-        version: 4.1.11(vitest@4.1.11)
+        version: 4.1.11(patch_hash=9c8a14435f152f76c2092d5212a3a200e7e48efd93d48eddea8b788d95247dd1)(vitest@4.1.11)
       ai:
         specifier: ^7.0.68
         version: 7.0.68(zod@4.4.3)
@@ -5556,11 +5560,11 @@ snapshots:
 
   '@vercel/oidc@3.2.0': {}
 
-  '@vitest/coverage-v8@4.1.11(vitest@4.1.11)':
+  '@vitest/coverage-v8@4.1.11(patch_hash=9c8a14435f152f76c2092d5212a3a200e7e48efd93d48eddea8b788d95247dd1)(vitest@4.1.11)':
     dependencies:
       '@bcoe/v8-coverage': 1.0.2
       '@vitest/utils': 4.1.11
-      ast-v8-to-istanbul: 1.0.5
+      ast-v8-to-istanbul: 1.0.5(patch_hash=1033b65c551f1e34f0852288a94128e9f39f596fccdd9aff984f26f0486ab050)
       istanbul-lib-coverage: 3.2.2
       istanbul-lib-report: 3.0.1
       istanbul-reports: 3.2.0
@@ -5736,7 +5740,7 @@ snapshots:
 
   assertion-error@2.0.1: {}
 
-  ast-v8-to-istanbul@1.0.5:
+  ast-v8-to-istanbul@1.0.5(patch_hash=1033b65c551f1e34f0852288a94128e9f39f596fccdd9aff984f26f0486ab050):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       estree-walker: 3.0.3
@@ -7841,7 +7845,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.20.1
-      '@vitest/coverage-v8': 4.1.11(vitest@4.1.11)
+      '@vitest/coverage-v8': 4.1.11(patch_hash=9c8a14435f152f76c2092d5212a3a200e7e48efd93d48eddea8b788d95247dd1)(vitest@4.1.11)
     transitivePeerDependencies:
       - msw
 
