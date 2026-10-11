@@ -31,7 +31,7 @@ const RECORDING_ACTION_VALUES = ['start', 'stop'] as const;
 const recordCommandDescription =
   'Start or stop a screen recording for the active app session or, where supported, the selected device, or build a contact-sheet PNG from a recording already exported. Long Android recordings can return multiple video artifacts; HarmonyOS supports whole-screen recording on physical devices.';
 const traceCommandDescription =
-  'Start or stop trace-log capture and return the resulting artifact when capture ends. Use the same artifact path for the matching start and stop requests when an explicit path is required.';
+  'Start or stop trace-log capture and return the resulting artifact when capture ends. Without a path, start writes a timestamped trace log named after the session in the sessions directory of the daemon state; a path on stop moves the finished trace there.';
 
 // `record stop` prints the artifact path, which callers capture into a variable.
 const recordCommandOptions = { parseableOutput: true } as const;
@@ -89,8 +89,8 @@ const recordCliSchema = {
 } as const satisfies CommandSchemaOverride;
 
 const traceCliSchema = {
-  usageOverride: 'trace start <path> | trace stop <path>',
-  listUsageOverride: 'trace start <path> | trace stop <path>',
+  usageOverride: 'trace start [path] | trace stop [path]',
+  listUsageOverride: 'trace start [path] | trace stop [path]',
   positionalArgs: ['start|stop', 'path?'],
 } as const satisfies CommandSchemaOverride;
 
@@ -142,7 +142,6 @@ export const traceCommandFacet = defineCommandFacet({
   name: TRACE_COMMAND_NAME,
   text: {
     summary: 'Start or stop trace capture',
-    cliDetail: 'Pass that path as the same positional argument to start and stop.',
   },
   metadata: traceCommandMetadata,
   run: (client, input) => client.recording.trace(input),

@@ -28,7 +28,7 @@ test('commands topic includes concise command catalog entries', async () => {
   assert.doesNotMatch(usageText, /^ {2}rotate-gesture <degrees>/m);
   assert.match(usageText, /orientation <orientation>/);
   assert.match(usageText, /record start \[path\] \| record stop/);
-  assert.match(usageText, /trace start <path> \| trace stop <path>/);
+  assert.match(usageText, /trace start \[path\] \| trace stop \[path\]/);
 });
 
 test('gesture help documents selectors and pinned refs for both drag endpoints', async () => {
