@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { runCliCapture } from './cli-capture.ts';
-import { writeCliSession } from '../cli/auth-session.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { runCliCapture } from '../../../__tests__/cli-capture.ts';
+import { writeCliSession } from '../../auth-session.ts';
+import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 
 afterEach(() => {
   vi.unstubAllGlobals();

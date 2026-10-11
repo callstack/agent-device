@@ -43,7 +43,16 @@ vi.mock('@agent-device/proxy', async (importOriginal) => {
 });
 vi.mock('../shared.ts', () => ({ writeCommandOutput: mocks.writeCommandOutput }));
 
-import { proxyCommand } from '../proxy.ts';
+import { proxyCommand, renderProxyStartup } from '../proxy.ts';
+import type { AgentDeviceClient } from '../../../agent-device-client.ts';
+
+// The proxy command never reads the client; a typed stub that throws on any access proves it
+// without the `{} as never` blind cast.
+const unreferencedClient = new Proxy({} as AgentDeviceClient, {
+  get: () => {
+    throw new Error('proxy must not touch the client');
+  },
+});
 
 afterEach(async () => {
   vi.clearAllMocks();
@@ -60,7 +69,7 @@ function runProxy(flags: Partial<Parameters<typeof proxyCommand>[0]['flags']> = 
   void proxyCommand({
     positionals: [],
     flags: { json: true, help: false, version: false, ...flags },
-    client: {} as never,
+    client: unreferencedClient,
   });
 }
 
@@ -83,7 +92,7 @@ test('proxy rejects positional arguments', async () => {
     proxyCommand({
       positionals: ['extra'],
       flags: { json: true, help: false, version: false },
-      client: {} as never,
+      client: unreferencedClient,
     }),
     (error: { code?: string }) => error.code === 'INVALID_ARGS',
   );
@@ -100,7 +109,7 @@ test('proxy refuses to start when the local daemon has no HTTP endpoint', async 
     proxyCommand({
       positionals: [],
       flags: { json: true, help: false, version: false },
-      client: {} as never,
+      client: unreferencedClient,
     }),
     (error: { code?: string; details?: { hint?: string } }) =>
       error.code === 'COMMAND_FAILED' && /fresh --state-dir/.test(String(error.details?.hint)),
@@ -131,6 +140,11 @@ test('proxy binds a loopback listener and reports the supplied client token', as
   assert.match(proxyBaseUrl, /^http:\/\/(127\.0\.0\.1|\[::1\]):\d+$/);
   assert.equal(data.agentDeviceBaseUrl, `${proxyBaseUrl}/agent-device`);
   const startupCard = render();
+  // The human render is the exported startup-card renderer applied to the emitted payload.
+  assert.equal(
+    startupCard,
+    renderProxyStartup(data as unknown as Parameters<typeof renderProxyStartup>[0]),
+  );
   assert.match(startupCard, /Proxy listening at/);
   assert.ok(startupCard.includes(proxyBaseUrl));
   // The daemon the proxy fronts is the local one of the resolved state dir, never a remote URL.
