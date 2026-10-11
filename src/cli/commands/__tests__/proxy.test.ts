@@ -8,6 +8,7 @@ import { afterEach, test, vi } from 'vitest';
 import {
   skipWhenLoopbackUnavailable,
   closeLoopbackServer,
+  listenOnLoopback,
 } from '../../../__tests__/test-utils/loopback.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   ensureDaemon: vi.fn(),
   writeCommandOutput: vi.fn(async (..._args: unknown[]) => undefined),
   createdServers: [] as http.Server[],
+  listenArgs: [] as { port: number; host: string }[],
 }));
 
 vi.mock('../../../daemon-client/daemon-client-lifecycle.ts', async (importOriginal) => ({
@@ -28,6 +30,12 @@ vi.mock('@agent-device/proxy', async (importOriginal) => {
     ...actual,
     createDaemonProxyServer: (options: Parameters<typeof actual.createDaemonProxyServer>[0]) => {
       const server = actual.createDaemonProxyServer(options);
+      // Record what the command asks the real server to bind; the bind itself stays real.
+      const listen = server.listen.bind(server);
+      server.listen = ((port?: number, host?: string, callback?: () => void) => {
+        mocks.listenArgs.push({ port: port ?? 0, host: String(host) });
+        return listen(port, host, callback);
+      }) as typeof server.listen;
       mocks.createdServers.push(server);
       return server;
     },
@@ -39,6 +47,7 @@ import { proxyCommand } from '../proxy.ts';
 
 afterEach(async () => {
   vi.clearAllMocks();
+  mocks.listenArgs.splice(0, mocks.listenArgs.length);
   const servers = mocks.createdServers.splice(0, mocks.createdServers.length);
   for (const server of servers) {
     await closeLoopbackServer(server);
@@ -114,6 +123,7 @@ test('proxy binds a loopback listener and reports the supplied client token', as
   });
   const { data, render } = await waitForStartupOutput();
 
+  assert.deepEqual(mocks.listenArgs, [{ port: 0, host: '127.0.0.1' }]);
   assert.equal(data.upstreamBaseUrl, 'http://127.0.0.1:54321');
   assert.equal(data.token, 'proxy-token');
   assert.equal(data.stateDir, resolveDaemonPaths(stateDir).baseDir);
@@ -135,10 +145,18 @@ test('proxy honors proxy host and port flags and mints a token when none is supp
     info: { httpPort: 54322, token: 'daemon-secret', pid: 4242 },
     startedByClient: false,
   });
+  // Reserve a real port through an ephemeral bind so the flag value is distinguishable
+  // from the `0` default the command would otherwise pass to listen.
+  const sentinel = http.createServer();
+  const reservedPort = await listenOnLoopback(sentinel);
+  await closeLoopbackServer(sentinel);
 
-  runProxy({ proxyHost: ' localhost ', proxyPort: 0 });
+  runProxy({ proxyHost: ' localhost ', proxyPort: reservedPort });
   const { data } = await waitForStartupOutput();
 
-  assert.match(String(data.proxyBaseUrl), /^http:\/\/(localhost|\[::1\]|127\.0\.0\.1):\d+$/);
+  assert.deepEqual(mocks.listenArgs, [{ port: reservedPort, host: 'localhost' }]);
+  // The reported URL carries the bound address, which names the reserved port either way.
+  assert.match(String(data.proxyBaseUrl), /^http:\/\/(localhost|127\.0\.0\.1|\[::1\]):\d+$/);
+  assert.ok(String(data.proxyBaseUrl).endsWith(`:${reservedPort}`));
   assert.match(String(data.token), /^[0-9a-f]{64}$/);
 });

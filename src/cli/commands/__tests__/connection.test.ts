@@ -120,6 +120,7 @@ test('connection status renders a bound lease and a prepared runtime without not
   assert.match(result.stdout, /tenant=acme runId=run-123 leaseId=lease-1 backend=android-instance/);
   assert.match(result.stdout, /metro=prepared/);
   assert.doesNotMatch(result.stdout, /No live device session has been created/);
+  assert.doesNotMatch(result.stdout, /Metro runtime is not prepared yet/);
 });
 
 test('connection status re-emits the deferred Metro notice for a bound lease', async () => {
