@@ -94,7 +94,6 @@ for (const initialSession of ['published', 'draft'] as const) {
         ref: shutdownRef,
         sessionStore,
         stderr: { write: (chunk) => stderr.push(chunk) },
-
         platformCleanup: platformResourceCleanup,
       });
       await cleanupEntered.promise;

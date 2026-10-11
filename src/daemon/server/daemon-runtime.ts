@@ -9,7 +9,11 @@ import {
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
 import { installProviderDeviceAdmission } from '../provider-device-admission.ts';
-import { type DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
+import {
+  loadDaemonPolicy,
+  type DaemonPolicy,
+} from '@agent-device/daemon-contracts/daemon-policy-file';
+import { assertDaemonPolicyAllowsCapability } from '../daemon-policy.ts';
 import { installInteractorResolution } from '../interactor-resolution.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
@@ -70,10 +74,12 @@ import { openWebSessionNames } from '../web-session-names.ts';
 import { recoverAppLogResourcesAfterDaemonLock } from '../app-log-resource-recovery.ts';
 import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
+import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
 import type { InteractorResolution } from '../interactor-resolution.ts';
 import type { ProviderDeviceAdmission } from '../provider-device-admission.ts';
 import type { PlatformOwnerLifecycle } from '../platform-owner-lifecycle.ts';
 import type { PlatformResourceCleanup } from '../platform-resource-cleanup.ts';
+import type { ClaimRecoveryGatewayFactory } from '../device/claim-recovery-gateway.ts';
 import type {
   LeaseLifecycleProvider,
   ProviderDeviceRuntime,
@@ -96,19 +102,23 @@ type WritableOutput = {
 /**
  * Every capability the daemon runtime cannot construct for itself: the platform and provider
  * runtimes, host diagnostics, credential fingerprinting, resource cleanup, the platform lifecycle
- * owners, and the request-router inputs that name them. The process root builds all of it in
- * `src/daemon-composition.ts` and passes it in; the server here owns only sequencing (ADR 0019).
- * All members are required: a daemon process either receives the root's composition or cannot
- * start, and a test passes the same shared fixture.
+ * owners, and the request-router inputs that name them. The server owns the paths, the policy, and
+ * the session store, and asks the root for the rest through a `composeDeps` factory — the process
+ * root's implementation is `src/daemon-composition.ts` (ADR 0019). All members are required: a
+ * daemon process either receives the root's composition or cannot start, and a test passes the
+ * same factory, so the production assembly is the one every runtime test boots.
  */
 export type DaemonRuntimeDeps = Readonly<{
-  daemonPolicy: DaemonPolicy | undefined;
   ownedProcessRecords: OwnedProcessRecordStore;
   hostDiagnostics: HostDiagnostics;
   ownerLifecycle: PlatformOwnerLifecycle;
   providerDeviceRuntimes: readonly ProviderDeviceRuntime[];
-  /** Records provider runtimes the composition skipped, after this daemon publishes its record. */
-  notifySkippedProviderRuntimes: (logPath: string) => Promise<void>;
+  /**
+   * Provider runtimes the composition skipped. Data only: this server records each one as a
+   * `provider_runtime_skipped` diagnostic after publishing its registration, so log emission
+   * stays in this module.
+   */
+  skippedProviderRuntimes: readonly Readonly<{ provider: string; error: AppError }>[];
   interactorResolution: InteractorResolution;
   providerDeviceAdmission: ProviderDeviceAdmission;
   cleanupManagedWebOrphans: (
@@ -118,39 +128,58 @@ export type DaemonRuntimeDeps = Readonly<{
       ownedProcessRecords?: OwnedProcessRecordStore;
     }>,
   ) => Promise<void>;
-  providerRuntimeProviders: Readonly<{
-    leaseLifecycleProvider?: LeaseLifecycleProvider;
-    providerRuntimeIds: readonly string[];
-    recoverExpiredLease?: ProviderExpiredLeaseRecovery;
-    recoverableProviderIds: readonly string[];
-  }>;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
+  providerRuntimeIds: readonly string[];
+  recoverExpiredLease?: ProviderExpiredLeaseRecovery;
+  recoverableProviderIds: readonly string[];
+  /** The runtime gateway every lifecycle and recovery step in this server runs through. */
+  deviceRuntimeGateway: RequestRouterDeps['deviceRuntimeGateway'];
+  /** The resource-cleanup surface the session teardowns run through. */
+  platformResourceCleanup: NonNullable<RequestRouterDeps['platformResourceCleanup']>;
+  /** The owner-scoped gateway factory the startup claim reconciliation composes. */
+  claimRecoveryGateway: ClaimRecoveryGatewayFactory;
   /**
    * The root-composed half of `createRequestHandler`'s inputs; the server adds the rest.
-   * Optionality mirrors `RequestRouterDeps`, except the capabilities this composition always
-   * builds (the runtime gateway and the resource-cleanup surface), which the deps require.
+   * Optionality mirrors `RequestRouterDeps`. Facts the server also reads outside any request —
+   * the gateway, the cleanup surface, the claim-recovery factory, and the lease-provider facts —
+   * are declared once at the top level of the deps, not here.
    */
   requestRouter: Pick<
     RequestRouterDeps,
     | 'requestPlatformProviders'
     | 'deviceInventoryGateways'
-    | 'deviceRuntimeGateway'
     | 'platformServices'
-    | 'claimRecoveryGateway'
     | 'androidObservation'
     | 'providerCredentials'
     | 'createCommandSurface'
     | 'cloudArtifactProvider'
     | 'providerAppCatalog'
-    | 'leaseLifecycleProvider'
-    | 'providerRuntimeIds'
     | 'providerRuntimeRequiredIds'
     | 'providerDeviceRuntimeScope'
-  > &
-    Readonly<{
-      deviceRuntimeGateway: RequestRouterDeps['deviceRuntimeGateway'];
-      platformResourceCleanup: NonNullable<RequestRouterDeps['platformResourceCleanup']>;
-    }>;
+  >;
 }>;
+
+/** Everything the composition factory needs that the server owns: paths, policy, and the store. */
+export type DaemonRuntimeDepsInput = Readonly<{
+  env: NodeJS.ProcessEnv;
+  /** The resolved state-dir root; the server resolves daemon paths and passes it down. */
+  baseDir: string;
+  sessionsDir: string;
+  /** Refuses the shutdown capability the operator denied; undefined when no policy names it. */
+  assertShutdownAllowed: (() => void) | undefined;
+  resolveSessionDir(sessionId: string): string;
+  resolveSessionArtifacts(sessionId: string): AppLogSessionArtifacts;
+  openWebSessionNames(): readonly string[];
+}>;
+
+/**
+ * The factory that names this daemon's runtimes. The server calls it once, after resolving its
+ * paths and loading the operator's policy, and before it acquires the registration; the process
+ * root's implementation is `createDaemonRuntimeDeps`.
+ */
+export type ComposeDaemonRuntimeDeps = (
+  input: DaemonRuntimeDepsInput,
+) => Promise<DaemonRuntimeDeps>;
 
 export type DaemonRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
@@ -158,9 +187,8 @@ export type DaemonRuntimeOptions = {
   stderr?: WritableOutput;
   exit?: (code: number) => void;
   registerProcessHandlers?: boolean;
-  /** The session store the deps were composed against; one store owns the sessions dir. */
-  sessionStore: SessionStore;
-  deps: DaemonRuntimeDeps;
+  /** The root's runtime composition, as a factory so the server owns paths, policy, and store. */
+  composeDeps: ComposeDaemonRuntimeDeps;
 };
 
 export type DaemonRuntimeController = {
@@ -354,7 +382,6 @@ export async function teardownDaemonSessionForShutdown(params: {
 export async function startDaemonRuntime(
   options: DaemonRuntimeOptions,
 ): Promise<DaemonRuntimeController | null> {
-  const deps = options.deps;
   const env = options.env ?? process.env;
   const stdout = options.stdout ?? process.stdout;
   const stderr = options.stderr ?? process.stderr;
@@ -364,11 +391,35 @@ export async function startDaemonRuntime(
   const daemonServerMode = resolveDaemonServerMode(env.AGENT_DEVICE_DAEMON_SERVER_MODE);
   const retainArtifacts = isEnvTruthy(env.AGENT_DEVICE_RETAIN_ARTIFACTS);
   // ADR 0029: a policy that cannot be read or validated stops startup; the daemon never runs
-  // with a weaker policy than its operator named. The executable loads it into the deps, so a
-  // policy here was already validated (or there would be no deps to carry it).
-  const daemonPolicy = deps.daemonPolicy;
+  // with a weaker policy than its operator named. The server loads it before composing any
+  // runtime, so no capability is ever built under a policy that failed validation.
+  let daemonPolicy: DaemonPolicy | undefined;
+  try {
+    daemonPolicy = loadDaemonPolicy(env);
+  } catch (error) {
+    stderr.write(`Daemon error: ${asAppError(error).message}\n`);
+    exit(1);
+    return null;
+  }
+  // Derived here, beside the policy it reads: the server hands the same refusal to the root's
+  // composition, so a runtime can never be built without the operator's shutdown gate.
+  const assertShutdownAllowed = daemonPolicy
+    ? () => assertDaemonPolicyAllowsCapability(daemonPolicy, 'device-shutdown')
+    : undefined;
 
-  const sessionStore = options.sessionStore;
+  const sessionStore = new SessionStore(sessionsDir);
+  const deps = await options.composeDeps({
+    env,
+    baseDir,
+    sessionsDir,
+    assertShutdownAllowed,
+    resolveSessionDir: (sessionId) => sessionStore.resolveSessionDir(sessionId),
+    resolveSessionArtifacts: (sessionId) => ({
+      outputPath: sessionStore.resolveAppLogPath(sessionId),
+      pidPath: sessionStore.resolveAppLogPidPath(sessionId),
+    }),
+    openWebSessionNames: () => openWebSessionNames(sessionStore),
+  });
   const appLogAdmissionLedger = createAppLogAdmissionLedger();
   const audioProbeAdmissionLedger = createAudioProbeAdmissionLedger();
   const perfCaptureAdmissionLedger = createPerfCaptureAdmissionLedger();
@@ -379,7 +430,7 @@ export async function startDaemonRuntime(
   const daemonCodeOrigin = resolveDaemonCodeOrigin();
   const daemonCodeSignature = resolveDaemonCodeSignature();
   const providerDeviceRuntimes = deps.providerDeviceRuntimes;
-  const deviceRuntimeGateway = deps.requestRouter.deviceRuntimeGateway;
+  const deviceRuntimeGateway = deps.deviceRuntimeGateway;
   const applicationLifecycle = deviceRuntimeGateway.applicationLifecycle;
   if (!applicationLifecycle) {
     throw new AppError('COMMAND_FAILED', 'Platform lifecycle gateway is not configured.', {
@@ -389,11 +440,11 @@ export async function startDaemonRuntime(
   installProviderDeviceAdmission(deps.providerDeviceAdmission);
   installInteractorResolution(deps.interactorResolution);
   const expiredProviderLeaseReleaser = createExpiredProviderLeaseReleaser({
-    leaseLifecycleProvider: deps.providerRuntimeProviders.leaseLifecycleProvider,
-    providerRuntimeIds: deps.providerRuntimeProviders.providerRuntimeIds,
-    recoverExpiredLease: deps.providerRuntimeProviders.recoverExpiredLease,
+    leaseLifecycleProvider: deps.leaseLifecycleProvider,
+    providerRuntimeIds: deps.providerRuntimeIds,
+    recoverExpiredLease: deps.recoverExpiredLease,
     stateDir: baseDir,
-    recoverableProviderIds: deps.providerRuntimeProviders.recoverableProviderIds,
+    recoverableProviderIds: deps.recoverableProviderIds,
   });
   void expiredProviderLeaseReleaser.retryPending();
   const leaseRegistry = new LeaseRegistry({
@@ -417,6 +468,12 @@ export async function startDaemonRuntime(
     screenRecordingAdmissionLedger,
     daemonPolicy,
     trackDownloadableArtifact,
+    // The facts the deps declare at the top level, offered to the router from that one place.
+    deviceRuntimeGateway,
+    claimRecoveryGateway: deps.claimRecoveryGateway,
+    platformResourceCleanup: deps.platformResourceCleanup,
+    leaseLifecycleProvider: deps.leaseLifecycleProvider,
+    providerRuntimeIds: deps.providerRuntimeIds,
     ...deps.requestRouter,
   });
 
@@ -443,7 +500,7 @@ export async function startDaemonRuntime(
         ref,
         sessionStore,
         stderr,
-        platformCleanup: deps.requestRouter.platformResourceCleanup,
+        platformCleanup: deps.platformResourceCleanup,
         finalizeApplicationLifecycle: async (sessionToFinalize, runtimeHints) =>
           await finalizeDaemonSessionApplicationLifecycle({
             gateway: deviceRuntimeGateway,
@@ -481,7 +538,7 @@ export async function startDaemonRuntime(
       appLog: 'run',
       ref,
       sessionStore,
-      platformCleanup: deps.requestRouter.platformResourceCleanup,
+      platformCleanup: deps.platformResourceCleanup,
     });
     await finalizeDaemonSessionApplicationLifecycle({
       gateway: deviceRuntimeGateway,
@@ -693,14 +750,21 @@ export async function startDaemonRuntime(
     publishDaemonInfo(socketPort, httpPort);
     stopMetadataLossWatch = armDaemonMetadataLossWatch(baseDir, infoPath, logPath, daemonIdentity);
     await flushDaemonStartupDiagnostics(logPath, startupDiagnostics);
-    await deps.notifySkippedProviderRuntimes(logPath);
+    for (const skipped of deps.skippedProviderRuntimes) {
+      await emitDaemonDiagnostic(logPath, 'provider_runtime_skipped', {
+        provider: skipped.provider,
+        code: skipped.error.code,
+        message: skipped.error.message,
+        hint: skipped.error.details?.hint,
+      });
+    }
     // After publication: publishDaemonInfo truncates daemon.log, so anything
     // written before it is lost — including reconciliation diagnostics.
     await reconcileDeviceClaimsForDaemonStartup(
       logPath,
       createOwnerScopedDeviceClaimReconciler({
         scope: createDaemonRecoveryPlatformScope(),
-        composeGateway: deps.requestRouter.claimRecoveryGateway,
+        composeGateway: deps.claimRecoveryGateway,
       }),
       baseDir,
     );

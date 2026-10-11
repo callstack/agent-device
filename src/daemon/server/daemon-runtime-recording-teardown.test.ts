@@ -1,8 +1,8 @@
-import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 import { SessionStore } from '../session-store.ts';
 import { makeRecordingSession } from '../__tests__/session-teardown.fixtures.ts';
 import { teardownDaemonSessionForShutdown } from './daemon-runtime.ts';
@@ -39,7 +39,6 @@ test('daemon shutdown awaits durable recording finalization inside its extended 
     ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
-
     platformCleanup: platformResourceCleanup,
   });
   await vi.advanceTimersByTimeAsync(10_000);
@@ -78,7 +77,6 @@ test('daemon shutdown resolves durable recording resources through the effective
     ref: sessionStore.lookup(effectiveSessionName)!,
     sessionStore,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
-
     platformCleanup: platformResourceCleanup,
   });
 

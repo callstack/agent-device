@@ -1,8 +1,8 @@
-import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 
 const lifecycleEvents = vi.hoisted(() => [] as string[]);
 
@@ -378,7 +378,6 @@ test.each([false, true])(
       sessionStore,
       stderr: { write: () => {} },
       finalizeApplicationLifecycle,
-
       platformCleanup: platformResourceCleanup,
     });
 
