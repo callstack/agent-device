@@ -80,6 +80,7 @@ function leaseFor(derived: string, overrides: Partial<RunnerLease>): RunnerLease
     ownerStartTime: null,
     sessionId: 'session-1',
     runnerPid: null,
+    runnerStartTime: null,
     port: 8100,
     xctestrunPath: path.join(derived, 'Build', 'Products', 'Runner.xctestrun'),
     jsonPath: path.join(derived, 'runner.json'),

@@ -39,20 +39,35 @@ export function runnerOwnerToken(): string {
   return buildRunnerOwnerToken(RUNNER_OWNER_PID, runnerOwnerStartTime());
 }
 
+/**
+ * A lease on disk can come from any earlier release whose daemon or runner still runs on this host.
+ * Each optional field names the release that started writing it and what its absence means. A
+ * fallback that exists only for absence goes once releases before that one are no longer supported
+ * alongside this one.
+ */
 export type RunnerLease = {
   schemaVersion: 1;
   deviceId: string;
   ownerToken: string;
   ownerPid: number;
   ownerStartTime: string | null;
+  /**
+   * The owner's AGENT_DEVICE_STATE_DIR. Absent when the owner had none, and on leases written before
+   * v0.17.10; either way the owner is judged by its pid alone.
+   */
   ownerStateDir?: string;
   sessionId: string;
   runnerPid: number | null;
-  runnerStartTime?: string | null;
+  /**
+   * Null when the start time could not be read, which also stands for a lease written before
+   * v0.20.6. Either way {@link verifyLeaseRunnerPidIdentity} falls back to the command line, so this
+   * fallback outlives every release cutoff.
+   */
+  runnerStartTime: string | null;
   port: number;
   /**
-   * The listener token the leased runner was launched with, so an adopter can reach it. Absent
-   * on leases written before runners required one: such a runner is cleaned up, never adopted.
+   * The listener token the leased runner was launched with, so an adopter can reach it. Written since
+   * v0.21.25; an earlier runner is cleaned up, never adopted ({@link leasedRunnerEndpoint}).
    */
   runnerToken?: string;
   xctestrunPath: string;
@@ -60,25 +75,34 @@ export type RunnerLease = {
   jsonPath: string;
   /**
    * Where the leased runner's own output goes. The runner appends to this file for its whole life,
-   * including across a daemon handoff, so the daemon that adopts it can point at it (#2681).
-   * Absent on leases written before the runner's stdio moved onto a file.
+   * including across a daemon handoff, so the daemon that adopts it can point at it (#2681). Written
+   * since v0.21.9, so every lease that carries a {@link runnerToken}, and with it every adopted
+   * lease, has one.
    */
   runnerLogPath?: string;
   /**
-   * The scoped simulator set that holds the leased runner's simulator; absent for the default set,
-   * and on leases written before a scoped-set runner could be handed off.
+   * The scoped simulator set that holds the leased runner's simulator; absent for the default set.
+   * Written since v0.21.16: an earlier scoped-set lease reads as the default set, so adoption refuses
+   * it as a set mismatch.
    */
   simulatorSetPath?: string;
   createdAtMs: number;
   /**
-   * The owner arbitrates device ownership through host-global device claims
-   * (#1320): while it wants the device it holds the claim, so a daemon that
-   * holds the claim instead may stop and replace this runner. Absent on leases
-   * written before claim arbitration existed — those owners never signal
-   * ownership through claims, so claim authority must not preempt them.
+   * The owner arbitrates device ownership through host-global device claims (#1320). Written since
+   * v0.21.0; see {@link leaseOwnerHoldsDeviceClaims} for what its absence means.
    */
   deviceClaimProtocol?: 1;
 };
+
+/**
+ * Whether the lease owner holds the device claim while it wants the device, so a daemon that holds
+ * the claim instead may stop and replace its runner. An owner from before v0.21.0 never holds a
+ * claim, so claim authority must not preempt it. Delete with support for those releases, and with
+ * it {@link RunnerLease.deviceClaimProtocol}.
+ */
+function leaseOwnerHoldsDeviceClaims(lease: RunnerLease): boolean {
+  return lease.deviceClaimProtocol === 1;
+}
 
 // Why a foreign lease classifies as stale (reclaimable). The distinction is
 // load-bearing: adoption (taking over a still-running runner without killing
@@ -101,16 +125,8 @@ type RunnerLeaseRequiredFields = Pick<
   'createdAtMs' | 'jsonPath' | 'ownerPid' | 'ownerToken' | 'port' | 'sessionId' | 'xctestrunPath'
 >;
 
-/**
- * Which runner xcodebuild launches a cleanup may signal.
- *
- * With `xctestrunPath` — the path a lease recorded — the sweep is scoped to the one launch that
- * artifact names. Without it the caller only knows the device, so the sweep covers that device's
- * launches and must be a reclaim, never a stop of a session this daemon still considers live.
- */
-export type RunnerXcodebuildCleanupTarget = Readonly<
-  { deviceId: string } & ({ xctestrunPath: string } | { xctestrunPath?: undefined })
->;
+/** The one runner xcodebuild launch a cleanup may signal: the launch a lease's artifact names. */
+export type RunnerXcodebuildCleanupTarget = Readonly<{ deviceId: string; xctestrunPath: string }>;
 
 export type RunnerLeaseCleanupAdapter = {
   cleanupRunnerProcessTree(pid: number | undefined, signal: 'SIGTERM' | 'SIGKILL'): Promise<void>;
@@ -178,6 +194,12 @@ function readRunnerLease(deviceId: string): RunnerLease | null {
   }
 }
 
+// A lease owner counts as gone - and its lease reclaimable as stale - when its
+// PID is dead/recycled OR its AGENT_DEVICE_STATE_DIR no longer exists on disk
+// (owner-state-dir-gone). The state-dir check covers daemons left running by a
+// deleted sandbox/worktree: the process is technically still alive, but nothing
+// can ever route a request to it again (its info/lock/session files are gone
+// with the directory), so it can never legitimately contend for the runner.
 function classifyRunnerLease(lease: RunnerLease | null): RunnerLeaseState {
   if (!lease) return { type: 'empty' };
   if (lease.ownerToken === runnerOwnerToken()) return { type: 'owned', lease };
@@ -198,10 +220,7 @@ export async function prepareRunnerLeaseForStartup(
 ): Promise<void> {
   const deviceId = device.id;
   const state = classifyRunnerLease(readRunnerLease(deviceId));
-  if (state.type === 'empty') {
-    await cleanup.cleanupRunnerXcodebuildProcesses({ deviceId });
-    return;
-  }
+  if (state.type === 'empty') return;
   if (state.type === 'busy') {
     if (isSameStateDirRunnerLease(state.lease)) {
       await cleanupLeasedRunnerProcesses(state.lease, 'same-state-dir', cleanup);
@@ -247,16 +266,14 @@ function isSameStateDirRunnerLease(lease: RunnerLease): boolean {
  * #1320 retained-runner rule: device claims are exclusive per device, so this
  * process holding the claim proves the lease owner released or lost it — a
  * retained warm runner, not an active one. Stop-and-recreate is safe because
- * every owner-side cleanup path no-ops once the lease token changes. Gated on
- * the lease declaring claim arbitration, so owners from builds that predate
- * device claims (and therefore never hold one) keep today's refusal. The probe
+ * every owner-side cleanup path no-ops once the lease token changes. The probe
  * receives the full device: claim ownership is canonical family/OS/id, and a
  * bare id could let a same-id claim from another platform family authorize a
  * destructive takeover.
  */
 function canDeviceClaimReclaimRunner(lease: RunnerLease, device: DeviceInfo): boolean {
   return (
-    lease.deviceClaimProtocol === 1 &&
+    leaseOwnerHoldsDeviceClaims(lease) &&
     lease.deviceId === device.id &&
     hasDeviceClaimAuthority(device)
   );
@@ -344,7 +361,11 @@ export type RunnerLeaseAdoptionVerdict =
   | { type: 'absent' }
   | { type: 'refused'; reason: RunnerLeaseAdoptionRefusal; lease: RunnerLease };
 
-/** The leased runner's endpoint, or null for a runner launched before it required a token. */
+/**
+ * The leased runner's endpoint, or null for a runner from before v0.21.25, which takes no token.
+ * Delete the null case with support for those releases, and make {@link RunnerLease.runnerToken}
+ * required.
+ */
 export function leasedRunnerEndpoint(lease: RunnerLease): RunnerEndpoint | null {
   return lease.runnerToken ? { port: lease.port, token: lease.runnerToken } : null;
 }
@@ -518,7 +539,7 @@ function isLeaseProvenDead(lease: RunnerLease): boolean {
   if (state.type !== 'stale' || state.staleReason === 'owner-state-dir-gone') return false;
   if (lease.runnerPid === null) return true;
   const runner = classifyOwnerLiveness({
-    owner: { pid: lease.runnerPid, startTime: lease.runnerStartTime ?? null },
+    owner: { pid: lease.runnerPid, startTime: lease.runnerStartTime },
   });
   return runner === 'owner-process-dead' || runner === 'owner-process-reused';
 }
@@ -597,15 +618,6 @@ function readFiniteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-// A lease owner counts as gone - and its lease reclaimable as stale - when its
-// PID is dead/recycled OR its
-// AGENT_DEVICE_STATE_DIR no longer exists on disk (owner-state-dir-gone). The
-// state-dir check covers daemons left running by a deleted sandbox/worktree:
-// the process is technically still alive, but nothing can ever route a request
-// to it again (its info/lock/session files are gone with the directory), so it
-// can never legitimately contend for the runner. Leases written before this
-// field existed (no ownerStateDir) skip the check and fall back to PID
-// liveness only.
 async function cleanupLeasedRunnerProcesses(
   lease: RunnerLease,
   reason: 'owned' | 'stale' | 'same-state-dir' | 'logical-lease-takeover' | 'device-claim-takeover',
@@ -665,7 +677,7 @@ function resolveVerifiedLeaseRunnerPid(lease: RunnerLease): number | undefined {
     data: {
       deviceId: lease.deviceId,
       runnerPid: pid,
-      runnerStartTime: lease.runnerStartTime ?? null,
+      runnerStartTime: lease.runnerStartTime,
       sessionId: lease.sessionId,
     },
   });
@@ -674,9 +686,8 @@ function resolveVerifiedLeaseRunnerPid(lease: RunnerLease): number | undefined {
 
 /**
  * Is the live process holding `pid` provably still the runner this lease
- * recorded? Matching recorded start time, or — for leases written before
- * `runnerStartTime` existed — a command line that looks like the runner's
- * xcodebuild. Shared with adoption: an unverified pid must never be adopted,
+ * recorded? Matching recorded start time, or — when the lease has none — a
+ * command line that looks like the runner's xcodebuild. Shared with adoption: an unverified pid must never be adopted,
  * because adoption re-stamps the lease with the live pid's start time and
  * would launder a recycled pid into a strongly-verified lease that disposal
  * later kills (#1596).

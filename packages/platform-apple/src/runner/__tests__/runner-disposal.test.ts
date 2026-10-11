@@ -211,21 +211,13 @@ test('a leased cleanup selects the launch named by the artifact the lease record
   expect(selects('/tmp/other/AgentDeviceRunner.xctestrun')).toBe(false);
 });
 
-test('a cleanup with no recorded artifact sweeps that device launches only', async () => {
-  // A reclaim with no lease to read knows the device and nothing else, so it keeps the released
-  // pre-owner-token bytes and stays scoped to that device instead of every xcodebuild on the host.
-  await runnerLeaseCleanupAdapter.cleanupRunnerXcodebuildProcesses({ deviceId: 'SIM-OTHER' });
+test('a lease artifact outside the runner session name signals no xcodebuild', async () => {
+  await runnerLeaseCleanupAdapter.cleanupRunnerXcodebuildProcesses({
+    deviceId: 'SIM-OTHER',
+    xctestrunPath: '/tmp/runner.xctestrun',
+  });
 
-  const pattern = runnerXcodebuildPkillPatterns()[0];
-  expect(pattern).toBeDefined();
-  const selects = (fileName: string): boolean =>
-    new RegExp(pattern ?? '').test(runnerLaunchArgv(`/tmp/${fileName}`));
-  expect(selects('AgentDeviceRunner.env.session-SIM-OTHER-8123.xctestrun')).toBe(true);
-  expect(selects('AgentDeviceRunner.env.session-SIM-VICTIM-8123.xctestrun')).toBe(false);
-  // A launch a lease still names is not this sweep's to take: it is reached by its own lease.
-  expect(
-    selects('AgentDeviceRunner.env.session-SIM-OTHER-owner-4242-ab12cd34-8123.xctestrun'),
-  ).toBe(false);
+  expect(runnerXcodebuildPkillPatterns()).toEqual([]);
 });
 
 function runnerXcodebuildPkillPatterns(): string[] {

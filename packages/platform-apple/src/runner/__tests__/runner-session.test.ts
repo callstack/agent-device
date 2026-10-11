@@ -400,24 +400,13 @@ test('runner session does not require Apple developer mode for iOS simulators', 
   assert.equal(mockRunAppleToolCommand.mock.calls.some(isDevToolsSecurityStatusCall), false);
 });
 
-test('runner session startup kills legacy ownerless xcodebuild before launching a new runner', async () => {
-  const device = { ...IOS_SIMULATOR, id: 'runner-session-startup-stale-sim' };
+test('runner session startup with no lease signals no xcodebuild before launching', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-startup-no-lease-sim' };
 
   await ensureRunnerSession(device, {});
 
-  const pkillCalls = mockRunAppleToolCommand.mock.calls.filter(isXcodebuildPkillCall);
-  assert.equal(pkillCalls.length, 2);
-  assert.deepEqual(pkillCalls[0]?.[1]?.slice(0, 2), ['-TERM', '-f']);
-  assert.deepEqual(pkillCalls[1]?.[1]?.slice(0, 2), ['-KILL', '-f']);
-  assert.match(
-    String(pkillCalls[0]?.[1]?.[2] ?? ''),
-    /xcodebuild\.\*test-without-building\.\*AgentDeviceRunner\\\.env\\\.session-runner-session-startup-stale-sim-\[0-9\]/,
-  );
-  const staleCleanupCallOrder = mockRunAppleToolCommand.mock.invocationCallOrder[0];
-  const runnerLaunchCallOrder = mockRunCmdBackground.mock.invocationCallOrder[0];
-  assert.ok(staleCleanupCallOrder !== undefined);
-  assert.ok(runnerLaunchCallOrder !== undefined);
-  assert.ok(staleCleanupCallOrder < runnerLaunchCallOrder);
+  assert.deepEqual(mockRunAppleToolCommand.mock.calls.filter(isXcodebuildPkillCall), []);
+  assert.equal(mockRunCmdBackground.mock.calls.length, 1);
 });
 
 test('runner session startup rejects live foreign runner lease', async () => {

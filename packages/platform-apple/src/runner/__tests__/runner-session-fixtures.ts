@@ -89,6 +89,7 @@ export function makeRunnerLease(
     ownerStartTime: runnerOwnerStartTime(),
     sessionId: `session-${overrides.deviceId}`,
     runnerPid: 4242,
+    runnerStartTime: null,
     port: 8123,
     runnerToken: RUNNER_TOKEN_FIXTURE,
     xctestrunPath: `/tmp/AgentDeviceRunner.env.session-${overrides.deviceId}-${ownerToken}-8123.xctestrun`,

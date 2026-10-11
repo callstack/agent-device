@@ -419,7 +419,7 @@ function buildAdoptedRunnerSession(
     testPromise: wait,
     child,
     // The runner appends to this file for its whole life, so the log the previous daemon handed over
-    // is still the one worth quoting; a lease from before #2681 has none (#2681).
+    // is still the one worth quoting (#2681).
     runnerLogPath: lease.runnerLogPath,
     // The probe already proved the runner answers commands.
     state: 'ready',

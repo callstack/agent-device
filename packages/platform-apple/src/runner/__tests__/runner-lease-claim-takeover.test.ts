@@ -57,10 +57,7 @@ function recordingCleanupAdapter(): RunnerLeaseCleanupAdapter & { calls: string[
       calls.push(`process-tree:${signal}`);
     },
     cleanupRunnerXcodebuildProcesses: async (target) => {
-      const basename = target.xctestrunPath
-        ? `:${path.basename(target.xctestrunPath)}`
-        : ':device-sweep';
-      calls.push(`xcodebuild:${target.deviceId}${basename}`);
+      calls.push(`xcodebuild:${target.deviceId}:${path.basename(target.xctestrunPath)}`);
     },
     cleanupTempFile: (filePath) => {
       calls.push(`temp:${filePath}`);
@@ -96,10 +93,10 @@ test('device-claim authority reclaims a live foreign claim-aware lease', async (
   assert.equal(probedDevices[0]?.appleOs, 'ios');
   assert.equal(probedDevices[0]?.id, device.id);
   // The lease was released as part of the takeover, so the next classification
-  // sees an empty store instead of the foreign owner.
+  // sees an empty store instead of the foreign owner and signals nothing.
   const emptyCleanup = recordingCleanupAdapter();
   await prepareRunnerLeaseForStartup(device, emptyCleanup);
-  assert.ok(emptyCleanup.calls.includes(`xcodebuild:${device.id}:device-sweep`));
+  assert.deepEqual(emptyCleanup.calls, []);
 });
 
 test('a claim-aware lease still refuses without device-claim authority', async () => {

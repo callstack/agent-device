@@ -13,24 +13,13 @@ type EnvMap = Record<string, string>;
  * The name reaches `xcodebuild`'s argv as `-xctestrun <dir>/<name>.xctestrun`, and runner cleanup
  * selects the live launch by matching that argv with `pkill -f`: a daemon kills the launches it
  * started itself, and a daemon reclaiming a lease kills another daemon's. The name is therefore a
- * durable process-identity contract, not a scratch filename: renaming it, or reordering the
- * suffix, orphans the xcodebuilds an earlier version started. The daemon-client timeout sweep
- * ships separately and cannot follow a rename, so it pins these bytes as a literal instead of
- * deriving them; its test proves the literal still selects both name eras.
+ * durable process-identity contract, not a scratch filename: renaming the stem orphans the
+ * xcodebuilds an earlier version started.
  */
 const RUNNER_SESSION_XCTESTRUN_STEM = 'AgentDeviceRunner.env';
 
 /** First field of the session suffix; {@link prepareXctestrunWithEnv} joins it to the stem. */
 const SESSION_FIELD_PREFIX = 'session';
-
-/**
- * The session-name prefix as extended-regular-expression source for `pkill -f`, including the
- * separator that follows it. Spelled from the same parts the writer joins, so the filename and its
- * matchers cannot disagree about whether a dot is literal.
- */
-const RUNNER_SESSION_XCTESTRUN_NAME_PATTERN = `${escapeForExtendedRegex(
-  `${RUNNER_SESSION_XCTESTRUN_STEM}.${SESSION_FIELD_PREFIX}`,
-)}-`;
 
 /**
  * Builds the suffix the session writes after the stem: `session-<deviceId>-<ownerToken>-<port>`.
@@ -46,29 +35,17 @@ export function buildRunnerSessionXctestrunSuffix(
 }
 
 /**
- * The `pkill -f` pattern selecting one device's runner launches, for a caller that has no lease to
- * read and therefore knows only the device. The device is followed by the port — the pre-owner-token
- * spelling, kept matchable because a released version may still hold such a launch.
- */
-export function buildRunnerSessionXctestrunDeviceCleanupPattern(deviceId: string): string {
-  return `${RUNNER_SESSION_XCTESTRUN_NAME_PATTERN}${escapeForExtendedRegex(
-    sanitizeRunnerSessionNameField(deviceId),
-  )}-[0-9]`;
-}
-
-/**
  * The `pkill -f` pattern selecting the launch a lease describes, from the xctestrun path that lease
  * recorded. The basename is what the launch carries in argv, so a lease that no longer spells its
  * own name — a detached lease rewrites `ownerToken` — still selects exactly the launch it started.
  *
  * Returns `undefined` when the recorded path does not name a runner session artifact: such a
  * basename could be any short string, and a pattern that loose would signal unrelated xcodebuilds.
- * Callers fall back to {@link buildRunnerSessionXctestrunDeviceCleanupPattern} for those leases.
  */
 export function buildRunnerSessionXctestrunPathCleanupPattern(
-  xctestrunPath: string | undefined,
+  xctestrunPath: string,
 ): string | undefined {
-  const basename = xctestrunPath ? path.basename(xctestrunPath) : '';
+  const basename = path.basename(xctestrunPath);
   if (!basename.startsWith(`${RUNNER_SESSION_XCTESTRUN_STEM}.`)) return undefined;
   return escapeForExtendedRegex(basename);
 }

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { test } from 'vitest';
 import {
-  buildRunnerSessionXctestrunDeviceCleanupPattern,
   buildRunnerSessionXctestrunPathCleanupPattern,
   buildRunnerSessionXctestrunSuffix,
 } from '../runner-artifact-env.ts';
@@ -53,28 +52,9 @@ test('the lease cleanup pattern keeps the bytes released daemons pkilled', () =>
   );
 });
 
-test('the device sweep pattern keeps selecting the pre-owner-token name and only that', () => {
-  // A reclaiming daemon with no lease to read knows the device but not the artifact, so it sweeps by
-  // device. The released bytes require a digit right after the device, which is the pre-owner-token
-  // spelling; an owner-token name needs its own path to be selected.
-  const sweep = buildRunnerSessionXctestrunDeviceCleanupPattern('SIM-002');
-
-  assert.equal(sweep, String.raw`AgentDeviceRunner\.env\.session-SIM-002-[0-9]`);
-  assert.equal(
-    new RegExp(sweep).test(argvFor('AgentDeviceRunner.env.session-SIM-002-8123.xctestrun')),
-    true,
-  );
-  assert.equal(
-    new RegExp(sweep).test(argvFor(sessionFileName('SIM-002', 'owner-1-ff'))),
-    false,
-    'a launch a lease still names must not fall to the device sweep',
-  );
-});
-
 test('a flattened name field stays selectable', () => {
-  // A device id is caller-supplied and the writer flattens it onto disk, so both matchers have to
-  // survive that flattening: the recorded path already holds the bytes the launch carries, and the
-  // device sweep has to flatten the id it spells.
+  // A device id is caller-supplied and the writer flattens it onto disk; the recorded path already
+  // holds the bytes the launch carries.
   const suffix = buildRunnerSessionXctestrunSuffix({
     deviceId: 'SIM 01/x',
     ownerToken: 'owner 7',
@@ -86,13 +66,6 @@ test('a flattened name field stays selectable', () => {
   assert.equal(
     new RegExp(buildRunnerSessionXctestrunPathCleanupPattern(flattenedPath) ?? '').test(
       argvFor(`AgentDeviceRunner.env.${suffix}.xctestrun`),
-    ),
-    true,
-  );
-  // The pre-owner-token spelling of the same flattened device, which is the only name a sweep selects.
-  assert.equal(
-    new RegExp(buildRunnerSessionXctestrunDeviceCleanupPattern('SIM 01/x')).test(
-      argvFor('AgentDeviceRunner.env.session-SIM_01_x-8123.xctestrun'),
     ),
     true,
   );
@@ -115,10 +88,9 @@ test('a detached lease still selects the launch it started', () => {
 
 test('a lease artifact path outside the runner session name declines to a pattern', () => {
   // A basename like `runner.xctestrun` would escape into a pattern loose enough to signal unrelated
-  // xcodebuilds, so the caller has to fall back to the device sweep.
+  // xcodebuilds, so no launch is selected by it.
   assert.equal(buildRunnerSessionXctestrunPathCleanupPattern('/tmp/runner.xctestrun'), undefined);
   assert.equal(buildRunnerSessionXctestrunPathCleanupPattern(''), undefined);
-  assert.equal(buildRunnerSessionXctestrunPathCleanupPattern(undefined), undefined);
 });
 
 function sessionFileName(deviceId: string, ownerToken: string): string {
