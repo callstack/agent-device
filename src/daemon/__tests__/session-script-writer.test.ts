@@ -735,6 +735,64 @@ test('write() publishes atomically: no stray temp file survives a successful rep
 // lifecycle alone decides that — a session handed to the writer still recording
 // is refused on the strength of its terminal status ---
 
+// A recorded longpress whose action.result carries no durationMs must recover the duration from the
+// recorded positionals (last entry) when rewriting the ref to its selector chain — and must NOT
+// promote a trailing junk positional into a duration, which would silently change the hold time.
+test('a resolved longpress keeps its recorded duration when rewriting the selector', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-longpress-duration-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeAuthoringSession('default', {
+    actions: [
+      action({
+        command: 'longpress',
+        positionals: ['@e4', '800'],
+        result: { selectorChain: ['id="row"'] },
+      }),
+    ],
+  });
+
+  const { parsed } = writeAndParse(writer, session);
+  expect(parsed.actions).toHaveLength(1);
+  expect(parsed.actions[0]?.command).toBe('longpress');
+  expect(parsed.actions[0]?.positionals).toEqual(['id="row"', '800']);
+});
+
+test('a resolved longpress without a duration positional writes the selector alone', () => {
+  const root = mkdtempForTestSync('agent-device-script-writer-longpress-noduration-');
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeAuthoringSession('default', {
+    actions: [
+      action({
+        command: 'longpress',
+        positionals: ['@e4'],
+        result: { selectorChain: ['id="row"'] },
+      }),
+    ],
+  });
+
+  const { parsed } = writeAndParse(writer, session);
+  expect(parsed.actions[0]?.positionals).toEqual(['id="row"']);
+});
+
+test('a resolved longpress drops a blank or non-numeric trailing positional instead of writing it as a duration', () => {
+  for (const junk of ['   ', 'abc']) {
+    const root = mkdtempForTestSync('agent-device-script-writer-longpress-junk-');
+    const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+    const session = makeAuthoringSession('default', {
+      actions: [
+        action({
+          command: 'longpress',
+          positionals: ['@e4', junk],
+          result: { selectorChain: ['id="row"'] },
+        }),
+      ],
+    });
+
+    const { parsed } = writeAndParse(writer, session);
+    expect(parsed.actions[0]?.positionals).toEqual(['id="row"']);
+  }
+});
+
 test('#1533: write() publishes nothing for an aborted authoring lifecycle that is still recording', () => {
   const root = mkdtempForTestSync('agent-device-script-writer-authoring-aborted-');
   const sessionsDir = path.join(root, 'sessions');

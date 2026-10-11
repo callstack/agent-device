@@ -295,6 +295,100 @@ test('rejects mismatching serial selectors for existing android sessions', () =>
   );
 });
 
+// Fresh-session target ↔ lock-platform matrix (`targetSelectorsConflict`). A fresh session under a
+// platform lock binds its first device from that platform, so a target that cannot exist on it must
+// fail loudly instead of binding the wrong device class (or none).
+test('rejects a desktop target under a mobile-family lock platform on a fresh session', () => {
+  for (const lockPlatform of ['android', 'harmonyos', 'ios'] as const) {
+    assert.throws(
+      () =>
+        applyRequestLockPolicy({
+          token: 'token',
+          session: 'qa-fresh',
+          command: 'snapshot',
+          positionals: [],
+          flags: { target: 'desktop' },
+          meta: { lockPolicy: 'reject', lockPlatform },
+        }),
+      /but this request selected --target=desktop/i,
+      `${lockPlatform} locks cannot host a desktop target`,
+    );
+  }
+});
+
+test('a vega lock accepts only a tv target on a fresh session', () => {
+  const req = applyRequestLockPolicy({
+    token: 'token',
+    session: 'qa-fresh',
+    command: 'snapshot',
+    positionals: [],
+    flags: { target: 'tv' },
+    meta: { lockPolicy: 'reject', lockPlatform: 'vega' },
+  });
+  assert.equal(req.flags?.target, 'tv');
+  assert.equal(req.flags?.platform, 'vega');
+
+  for (const target of ['mobile', 'desktop'] as const) {
+    assert.throws(
+      () =>
+        applyRequestLockPolicy({
+          token: 'token',
+          session: 'qa-fresh',
+          command: 'snapshot',
+          positionals: [],
+          flags: { target },
+          meta: { lockPolicy: 'reject', lockPlatform: 'vega' },
+        }),
+      new RegExp(`--target=${target}`, 'i'),
+      'a vega lock cannot bind a non-tv target',
+    );
+  }
+});
+
+test('desktop-family locks (macos/linux/web) accept only a desktop target on a fresh session', () => {
+  for (const lockPlatform of ['macos', 'linux', 'web'] as const) {
+    const req = applyRequestLockPolicy({
+      token: 'token',
+      session: 'qa-fresh',
+      command: 'snapshot',
+      positionals: [],
+      flags: { target: 'desktop' },
+      meta: { lockPolicy: 'reject', lockPlatform },
+    });
+    assert.equal(req.flags?.target, 'desktop');
+
+    for (const target of ['mobile', 'tv'] as const) {
+      assert.throws(
+        () =>
+          applyRequestLockPolicy({
+            token: 'token',
+            session: 'qa-fresh',
+            command: 'snapshot',
+            positionals: [],
+            flags: { target },
+            meta: { lockPolicy: 'reject', lockPlatform },
+          }),
+        new RegExp(`--target=${target}`, 'i'),
+        `${lockPlatform} locks cannot host a ${target} target`,
+      );
+    }
+  }
+});
+
+test('an Apple lock accepts every target because Apple spans mobile, tv, and desktop', () => {
+  for (const target of ['mobile', 'tv', 'desktop'] as const) {
+    const req = applyRequestLockPolicy({
+      token: 'token',
+      session: 'qa-fresh',
+      command: 'snapshot',
+      positionals: [],
+      flags: { target },
+      meta: { lockPolicy: 'reject', lockPlatform: 'apple' },
+    });
+    assert.equal(req.flags?.target, target);
+  }
+});
+
 test('strips only conflicting scope selectors for existing sessions, keeping matching identity', () => {
   const req = applyRequestLockPolicy(
     {
