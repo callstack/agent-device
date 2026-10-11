@@ -5,12 +5,14 @@ import { PNG } from './png.ts';
 import {
   computePngRgbDifferenceAsync,
   computeScreenshotDiffPixelsAsync,
+  cropPngBytesAsync,
   decodePngAsync,
   decodeScreenshotImageAsync,
   encodePngAsync,
   terminatePngWorker,
   transcodeScreenshotToPngAsync,
 } from './png-worker-client.ts';
+import { cropPngBytes } from './png-crop-bytes.ts';
 import { computeScreenshotDiffPixels } from './screenshot-diff-pixels.ts';
 
 afterAll(async () => {
@@ -30,10 +32,25 @@ function buildPatternPng(width: number, height: number, seed: number): PNG {
   return png;
 }
 
+/**
+ * Runs one job and proves it reached the worker thread. While a job is pending the client
+ * `ref()`s the worker, which holds a MessagePort resource on this event loop; the in-process
+ * synchronous fallback the client takes silently when the worker cannot start holds none.
+ */
+async function runOnWorkerThread<T>(label: string, start: () => Promise<T>): Promise<T> {
+  const pending = start();
+  const resources = process.getActiveResourcesInfo();
+  assert.ok(
+    resources.includes('MessagePort'),
+    `${label} did not run on the PNG worker thread (event-loop resources: ${resources.join(', ')})`,
+  );
+  return await pending;
+}
+
 test('decodePngAsync matches the synchronous decoder byte for byte', async () => {
   const encoded = PNG.sync.write(buildPatternPng(13, 9, 1));
 
-  const fromWorker = await decodePngAsync(encoded, 'fixture');
+  const fromWorker = await runOnWorkerThread('decode', () => decodePngAsync(encoded, 'fixture'));
   const fromSync = PNG.sync.read(encoded);
 
   assert.equal(fromWorker.width, fromSync.width);
@@ -44,7 +61,7 @@ test('decodePngAsync matches the synchronous decoder byte for byte', async () =>
 test('encodePngAsync matches the synchronous encoder byte for byte', async () => {
   const png = buildPatternPng(13, 9, 2);
 
-  const fromWorker = await encodePngAsync(png);
+  const fromWorker = await runOnWorkerThread('encode', () => encodePngAsync(png));
   const fromSync = PNG.sync.write(png);
 
   assert.deepEqual(fromWorker, fromSync);
@@ -67,10 +84,13 @@ test('computeScreenshotDiffPixelsAsync matches the synchronous diff', async () =
     maxColorDistance: 0.1 * 255 * Math.sqrt(3),
   };
 
-  const fromWorker = await computeScreenshotDiffPixelsAsync(job);
+  const fromWorker = await runOnWorkerThread('diff-pixels', () =>
+    computeScreenshotDiffPixelsAsync(job),
+  );
   const fromSync = computeScreenshotDiffPixels(job);
 
   assert.equal(fromWorker.differentPixels, fromSync.differentPixels);
+  assert.ok(fromWorker.differentPixels > 0);
   assert.deepEqual(fromWorker.diffMask, fromSync.diffMask);
   assert.deepEqual(fromWorker.diffData, fromSync.diffData);
 });
@@ -81,10 +101,8 @@ test('computePngRgbDifferenceAsync preserves the normalized absolute RGB metric'
   const white = new PNG({ width: 1, height: 1 });
   white.data.set([255, 255, 255, 255]);
 
-  const result = await computePngRgbDifferenceAsync(
-    PNG.sync.write(black),
-    PNG.sync.write(white),
-    'fixture',
+  const result = await runOnWorkerThread('rgb-difference', () =>
+    computePngRgbDifferenceAsync(PNG.sync.write(black), PNG.sync.write(white), 'fixture'),
   );
 
   assert.deepEqual(result, {
@@ -93,6 +111,21 @@ test('computePngRgbDifferenceAsync preserves the normalized absolute RGB metric'
     first: { width: 1, height: 1, dataLength: 4 },
     second: { width: 1, height: 1, dataLength: 4 },
   });
+});
+
+test('cropPngBytesAsync matches the synchronous crop and keeps a full-frame box as a no-op', async () => {
+  const source = PNG.sync.write(buildPatternPng(6, 6, 6));
+  const box = { x: 1, y: 2, width: 4, height: 3 };
+
+  const cropped = await runOnWorkerThread('crop', () => cropPngBytesAsync(source, box, 'fixture'));
+  assert.notEqual(cropped, null);
+  assert.deepEqual(cropped, cropPngBytes(source, box, 'fixture'));
+  const croppedSize = PNG.sync.read(cropped as Buffer);
+  assert.deepEqual([croppedSize.width, croppedSize.height], [4, 3]);
+
+  // A box that already covers the image answers null so the caller keeps its own bytes.
+  const fullFrame = await cropPngBytesAsync(source, { x: 0, y: 0, width: 6, height: 6 }, 'fixture');
+  assert.equal(fullFrame, null);
 });
 
 test('decodePngAsync rejects invalid PNG data with the canonical decode AppError', async () => {
@@ -115,7 +148,9 @@ test('transcodeScreenshotToPngAsync matches the synchronous transcoder byte for 
   const rgba = Buffer.alloc(9 * 7 * 4, 0x66);
   const jpeg = encode({ width: 9, height: 7, data: rgba }, 90).data;
 
-  const fromWorker = await transcodeScreenshotToPngAsync(jpeg, 'fixture');
+  const fromWorker = await runOnWorkerThread('jpeg-to-png', () =>
+    transcodeScreenshotToPngAsync(jpeg, 'fixture'),
+  );
 
   assert.deepEqual(fromWorker, transcodeScreenshotToPng(jpeg, 'fixture'));
   assert.equal(PNG.sync.read(fromWorker).width, 9);
@@ -147,7 +182,9 @@ test('decodeScreenshotImageAsync answers the synchronous decoder for both contai
   const jpeg = encode({ width: 11, height: 8, data: buildPatternPng(11, 8, 4).data }, 90).data;
 
   for (const bytes of [png, jpeg]) {
-    const fromWorker = await decodeScreenshotImageAsync(bytes, 'fixture');
+    const fromWorker = await runOnWorkerThread('decode-image', () =>
+      decodeScreenshotImageAsync(bytes, 'fixture'),
+    );
     const fromSync = decodeScreenshotImage(bytes, 'fixture');
 
     assert.deepEqual([fromWorker.width, fromWorker.height], [fromSync.width, fromSync.height]);
@@ -159,7 +196,9 @@ test('decodeScreenshotImageAsync decodes a JPEG by its bytes, not its label', as
   const { encode } = await import('jpeg-js');
   const jpeg = encode({ width: 9, height: 7, data: buildPatternPng(9, 7, 5).data }, 90).data;
 
-  const decoded = await decodeScreenshotImageAsync(jpeg, 'fixture.png');
+  const decoded = await runOnWorkerThread('decode-image', () =>
+    decodeScreenshotImageAsync(jpeg, 'fixture.png'),
+  );
 
   assert.deepEqual([decoded.width, decoded.height], [9, 7]);
   assert.equal(decoded.data.length, 9 * 7 * 4);

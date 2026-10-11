@@ -321,6 +321,136 @@ test('state sentinel exists before spawning companion worker', async () => {
   }
 });
 
+function writeOwnCompanionState(projectRoot: string, pid: number): string {
+  const statePath = path.join(projectRoot, '.agent-device', 'metro-companion.json');
+  fs.mkdirSync(path.dirname(statePath), { recursive: true });
+  fs.writeFileSync(
+    statePath,
+    `${JSON.stringify({
+      pid,
+      serverBaseUrl: 'https://bridge.example.test',
+      localBaseUrl: 'http://127.0.0.1:8081',
+      tokenHash: 'token-hash',
+      consumers: [],
+    })}\n`,
+  );
+  return statePath;
+}
+
+function errnoException(code: string): NodeJS.ErrnoException {
+  return Object.assign(new Error(`simulated ${code}`), { code });
+}
+
+test('stopping a companion survives every process-teardown race', async () => {
+  const projectRoot = mkdtempForTestSync('agent-device-metro-companion-teardown-');
+  const companionCommand = `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`;
+  try {
+    // 1. The recorded pid is already gone: nothing to signal, and the artifacts are cleared.
+    vi.mocked(isProcessAlive).mockReturnValueOnce(false);
+    let statePath = writeOwnCompanionState(projectRoot, 4001);
+    let killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+    assert.equal((await stopMetroCompanion({ projectRoot })).stopped, true);
+    assert.equal(killSpy.mock.calls.length, 0);
+    assert.equal(fs.existsSync(statePath), false);
+    killSpy.mockRestore();
+
+    // 2. The process is alive but its command line is unreadable: never signal an unknown pid.
+    vi.mocked(isProcessAlive).mockReturnValueOnce(true);
+    vi.mocked(readProcessCommand).mockReturnValueOnce(null);
+    statePath = writeOwnCompanionState(projectRoot, 4002);
+    killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+    assert.equal((await stopMetroCompanion({ projectRoot })).stopped, true);
+    assert.equal(killSpy.mock.calls.length, 0);
+    killSpy.mockRestore();
+
+    // 3. SIGTERM loses the race (EPERM): the companion is treated as stopped without escalating.
+    vi.mocked(isProcessAlive).mockReturnValueOnce(true);
+    vi.mocked(readProcessCommand).mockReturnValueOnce(companionCommand);
+    killSpy = vi.spyOn(process, 'kill').mockImplementationOnce(() => {
+      throw errnoException('EPERM');
+    });
+    vi.mocked(waitForProcessExit).mockResolvedValueOnce(true);
+    statePath = writeOwnCompanionState(projectRoot, 4003);
+    assert.equal((await stopMetroCompanion({ projectRoot })).stopped, true);
+    assert.deepEqual(killSpy.mock.calls, [[4003, 'SIGTERM']]);
+    assert.equal(vi.mocked(waitForProcessExit).mock.calls.length, 0);
+    killSpy.mockRestore();
+
+    // 4. SIGTERM is ignored: escalate to SIGKILL and wait for the exit again.
+    vi.mocked(waitForProcessExit).mockReset();
+    vi.mocked(isProcessAlive).mockReturnValueOnce(true);
+    vi.mocked(readProcessCommand).mockReturnValueOnce(companionCommand);
+    killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
+    vi.mocked(waitForProcessExit).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    statePath = writeOwnCompanionState(projectRoot, 4004);
+    assert.equal((await stopMetroCompanion({ projectRoot })).stopped, true);
+    assert.deepEqual(killSpy.mock.calls, [
+      [4004, 'SIGTERM'],
+      [4004, 'SIGKILL'],
+    ]);
+    assert.deepEqual(
+      vi.mocked(waitForProcessExit).mock.calls.map((call) => [call[0], call[1]]),
+      [
+        [4004, 1_000],
+        [4004, 1_000],
+      ],
+    );
+    killSpy.mockRestore();
+
+    // 5. SIGKILL loses the race (ESRCH): stop without waiting on a pid that is already gone.
+    vi.mocked(waitForProcessExit).mockReset().mockResolvedValueOnce(false);
+    vi.mocked(isProcessAlive).mockReturnValueOnce(true);
+    vi.mocked(readProcessCommand).mockReturnValueOnce(companionCommand);
+    killSpy = vi
+      .spyOn(process, 'kill')
+      .mockReturnValueOnce(true)
+      .mockImplementationOnce(() => {
+        throw errnoException('ESRCH');
+      });
+    statePath = writeOwnCompanionState(projectRoot, 4005);
+    assert.equal((await stopMetroCompanion({ projectRoot })).stopped, true);
+    assert.deepEqual(killSpy.mock.calls, [
+      [4005, 'SIGTERM'],
+      [4005, 'SIGKILL'],
+    ]);
+    assert.equal(vi.mocked(waitForProcessExit).mock.calls.length, 1);
+    killSpy.mockRestore();
+
+    // 6. A signalling failure that is not a race is reported, and the state file survives so the
+    //    companion can be retried instead of being orphaned silently.
+    vi.mocked(isProcessAlive).mockReturnValueOnce(true);
+    vi.mocked(readProcessCommand).mockReturnValueOnce(companionCommand);
+    killSpy = vi.spyOn(process, 'kill').mockImplementationOnce(() => {
+      throw errnoException('EACCES');
+    });
+    statePath = writeOwnCompanionState(projectRoot, 4006);
+    await assert.rejects(() => stopMetroCompanion({ projectRoot }), /simulated EACCES/);
+    assert.equal(fs.existsSync(statePath), true);
+    killSpy.mockRestore();
+
+    // 7. The same holds when only the escalation fails for a non-race reason: the retry stops the
+    //    same still-recorded companion and fails on SIGKILL.
+    vi.mocked(isProcessAlive).mockReturnValueOnce(true);
+    vi.mocked(readProcessCommand).mockReturnValueOnce(companionCommand);
+    killSpy = vi
+      .spyOn(process, 'kill')
+      .mockReturnValueOnce(true)
+      .mockImplementationOnce(() => {
+        throw errnoException('EACCES');
+      });
+    vi.mocked(waitForProcessExit).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    await assert.rejects(() => stopMetroCompanion({ projectRoot }), /simulated EACCES/);
+    assert.deepEqual(killSpy.mock.calls, [
+      [4006, 'SIGTERM'],
+      [4006, 'SIGKILL'],
+    ]);
+    assert.equal(fs.existsSync(statePath), true);
+    killSpy.mockRestore();
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
 test('legacy state without bridge scope is stopped before respawn', async () => {
   const projectRoot = mkdtempForTestSync('agent-device-metro-companion-legacy-');
   const statePath = path.join(projectRoot, '.agent-device', 'metro-companion.json');

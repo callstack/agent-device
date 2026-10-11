@@ -1,6 +1,5 @@
 import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -9,8 +8,24 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, test } from 'vitest';
 import {
   buildCompanionPayload,
+  runCompanionTunnelProcessFromEnv,
   runCompanionTunnelWorker,
 } from '../client/client-companion-tunnel-worker.ts';
+import {
+  METRO_COMPANION_RUN_ARG,
+  MissingCompanionEnvError,
+} from '../client/client-companion-tunnel-contract.ts';
+import {
+  acceptWebSocketUpgrade,
+  attachWebSocketFrameParser,
+  companionEnv,
+  createCompanionBridgeServer,
+  encodeCloseFrame,
+  encodeTextFrame,
+  writeNotFound,
+  writeSuccessfulRegistration,
+  type CloseFrame,
+} from './client-companion-tunnel-worker.fixtures.ts';
 import { closeLoopbackServer, listenOnLoopback } from './test-utils/loopback.ts';
 import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
 
@@ -18,17 +33,6 @@ type Deferred<T> = {
   promise: Promise<T>;
   resolve: (value: T) => void;
   reject: (error: unknown) => void;
-};
-
-type CloseFrame = {
-  code?: number;
-  reason?: string;
-};
-
-type ParsedWebSocketFrame = {
-  opcode: number;
-  payload: Buffer;
-  nextOffset: number;
 };
 
 type CompanionWorkerProcess = {
@@ -61,148 +65,6 @@ function waitFor<T>(promise: Promise<T>, timeoutMs: number, label: string): Prom
   return Promise.race([promise, timeoutPromise]).finally(() => {
     if (timeout) clearTimeout(timeout);
   });
-}
-
-function encodeTextFrame(text: string): Buffer {
-  const payload = Buffer.from(text, 'utf8');
-  if (payload.length < 126) {
-    return Buffer.concat([Buffer.from([0x81, payload.length]), payload]);
-  }
-  return Buffer.concat([
-    Buffer.from([0x81, 126, payload.length >> 8, payload.length & 0xff]),
-    payload,
-  ]);
-}
-
-function encodeCloseFrame(code = 1000, reason = ''): Buffer {
-  const reasonBuffer = Buffer.from(reason, 'utf8');
-  const payload = Buffer.allocUnsafe(2 + reasonBuffer.length);
-  payload.writeUInt16BE(code, 0);
-  reasonBuffer.copy(payload, 2);
-  if (payload.length < 126) {
-    return Buffer.concat([Buffer.from([0x88, payload.length]), payload]);
-  }
-  return Buffer.concat([
-    Buffer.from([0x88, 126, payload.length >> 8, payload.length & 0xff]),
-    payload,
-  ]);
-}
-
-function parseWebSocketFrame(pending: Buffer, startOffset: number): ParsedWebSocketFrame | null {
-  if (startOffset + 2 > pending.length) return null;
-
-  const first = pending[startOffset]!;
-  const second = pending[startOffset + 1]!;
-  const opcode = first & 0x0f;
-  let offset = startOffset + 2;
-  let length = second & 0x7f;
-
-  if (length === 126) {
-    if (offset + 2 > pending.length) return null;
-    length = pending.readUInt16BE(offset);
-    offset += 2;
-  } else if (length === 127) {
-    throw new Error('Large WebSocket frames are not supported in this test.');
-  }
-
-  const masked = (second & 0x80) !== 0;
-  const maskLength = masked ? 4 : 0;
-  if (offset + maskLength + length > pending.length) return null;
-
-  const mask = masked ? pending.subarray(offset, offset + 4) : null;
-  offset += maskLength;
-  const payload = decodeWebSocketPayload(pending.subarray(offset, offset + length), mask);
-
-  return { opcode, payload, nextOffset: offset + length };
-}
-
-function decodeWebSocketPayload(payload: Buffer, mask: Buffer | null): Buffer {
-  if (!mask) return payload;
-
-  const decoded = Buffer.from(payload);
-  for (let index = 0; index < decoded.length; index += 1) {
-    decoded[index]! ^= mask[index % 4]!;
-  }
-  return decoded;
-}
-
-function parseCloseFrame(payload: Buffer): CloseFrame {
-  if (payload.length < 2) return {};
-
-  return {
-    code: payload.readUInt16BE(0),
-    reason: payload.subarray(2).toString('utf8'),
-  };
-}
-
-function emitWebSocketFrame(
-  frame: ParsedWebSocketFrame,
-  onText: (text: string) => void,
-  onClose?: (frame: CloseFrame) => void,
-): void {
-  if (frame.opcode === 0x1) {
-    onText(frame.payload.toString('utf8'));
-    return;
-  }
-  if (frame.opcode === 0x8 && onClose) {
-    onClose(parseCloseFrame(frame.payload));
-  }
-}
-
-function attachWebSocketFrameParser(
-  socket: NodeJS.WritableStream & NodeJS.EventEmitter,
-  onText: (text: string) => void,
-  onClose?: (frame: CloseFrame) => void,
-): void {
-  let pending = Buffer.alloc(0);
-  socket.on('data', (chunk: Buffer) => {
-    pending = Buffer.concat([pending, chunk]);
-    let offset = 0;
-    for (;;) {
-      const frame = parseWebSocketFrame(pending, offset);
-      if (!frame) break;
-      offset = frame.nextOffset;
-      emitWebSocketFrame(frame, onText, onClose);
-    }
-    pending = pending.subarray(offset);
-  });
-}
-
-function acceptWebSocketUpgrade(req: http.IncomingMessage, socket: Duplex): boolean {
-  const key = req.headers['sec-websocket-key'];
-  if (typeof key !== 'string') {
-    socket.destroy();
-    return false;
-  }
-  const accept = crypto
-    .createHash('sha1')
-    .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
-    .digest('base64');
-  socket.write(
-    [
-      'HTTP/1.1 101 Switching Protocols',
-      'Upgrade: websocket',
-      'Connection: Upgrade',
-      `Sec-WebSocket-Accept: ${accept}`,
-      '\r\n',
-    ].join('\r\n'),
-  );
-  return true;
-}
-
-function writeNotFound(res: http.ServerResponse): void {
-  res.writeHead(404);
-  res.end('not found');
-}
-
-function writeSuccessfulRegistration(res: http.ServerResponse, bridgePort: number): void {
-  res.writeHead(200, { 'content-type': 'application/json' });
-  res.end(
-    JSON.stringify({
-      ok: true,
-      data: { ws_url: `ws://127.0.0.1:${bridgePort}/bridge` },
-    }),
-  );
 }
 
 async function listenNotFoundServer(): Promise<number> {
@@ -789,4 +651,292 @@ test('companion tunnel entrypoint reads neutral env and exits when state file is
 
   assert.equal(exit.signal, null, `unexpected worker stderr: ${companion.readStderr()}`);
   assert.equal(exit.code, 0, `unexpected worker stderr: ${companion.readStderr()}`);
+});
+
+test('companion tunnel entrypoint runs only for its own run args and refuses incomplete env', async () => {
+  // The worker module is also loaded by unrelated entrypoints: it must decline, not throw.
+  assert.equal(await runCompanionTunnelProcessFromEnv([], companionEnv()), false);
+  assert.equal(await runCompanionTunnelProcessFromEnv(['--help'], companionEnv()), false);
+
+  const requiredEnvKeys = [
+    'AGENT_DEVICE_COMPANION_TUNNEL_SERVER_BASE_URL',
+    'AGENT_DEVICE_COMPANION_TUNNEL_BEARER_TOKEN',
+    'AGENT_DEVICE_COMPANION_TUNNEL_LOCAL_BASE_URL',
+    'AGENT_DEVICE_COMPANION_TUNNEL_SCOPE_TENANT_ID',
+    'AGENT_DEVICE_COMPANION_TUNNEL_SCOPE_RUN_ID',
+    'AGENT_DEVICE_COMPANION_TUNNEL_SCOPE_LEASE_ID',
+    'AGENT_DEVICE_COMPANION_TUNNEL_REGISTER_PATH',
+  ] as const;
+  for (const key of requiredEnvKeys) {
+    await assert.rejects(
+      () =>
+        runCompanionTunnelProcessFromEnv([METRO_COMPANION_RUN_ARG], companionEnv({ [key]: '  ' })),
+      MissingCompanionEnvError,
+      `expected blank ${key} to be refused`,
+    );
+  }
+});
+
+test('companion tunnel entrypoint validates the device port before serving', async () => {
+  for (const devicePort of ['0', 'abc', '70000']) {
+    await assert.rejects(
+      () =>
+        runCompanionTunnelProcessFromEnv(
+          [METRO_COMPANION_RUN_ARG],
+          companionEnv({ AGENT_DEVICE_COMPANION_TUNNEL_DEVICE_PORT: devicePort }),
+        ),
+      /invalid device port/i,
+      `expected device port ${devicePort} to be rejected`,
+    );
+  }
+
+  // Both accepted shapes of the optional port: absent, and a valid number. Once its lease file is
+  // gone the worker returns without registering, so the entrypoint answers true without a bridge.
+  const tempRoot = mkdtempForTestSync('agent-device-companion-entrypoint-');
+  cleanupTasks.push(async () => {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  });
+  const withoutPort = await runCompanionTunnelProcessFromEnv(
+    [METRO_COMPANION_RUN_ARG],
+    companionEnv({ AGENT_DEVICE_COMPANION_TUNNEL_STATE_PATH: path.join(tempRoot, 'a.json') }),
+  );
+  const withPort = await runCompanionTunnelProcessFromEnv(
+    ['--agent-device-run-react-devtools-companion'],
+    companionEnv({
+      AGENT_DEVICE_COMPANION_TUNNEL_DEVICE_PORT: '8097',
+      AGENT_DEVICE_COMPANION_TUNNEL_SESSION: 'default',
+      AGENT_DEVICE_COMPANION_TUNNEL_LAUNCH_URL: 'myapp://open',
+      AGENT_DEVICE_COMPANION_TUNNEL_UNREGISTER_PATH: '/api/react-devtools/companion/unregister',
+      AGENT_DEVICE_COMPANION_TUNNEL_STATE_PATH: path.join(tempRoot, 'b.json'),
+    }),
+  );
+  assert.deepEqual([withoutPort, withPort], [true, true]);
+});
+
+test('metro companion worker proxies bridge http requests to the local server', async () => {
+  const requests = [
+    { requestId: 'req-text', method: 'GET', path: '/text' },
+    { requestId: 'req-empty', method: 'GET', path: '/empty' },
+    {
+      requestId: 'req-echo',
+      method: 'POST',
+      path: '/echo',
+      headers: { 'content-type': 'text/plain' },
+      bodyBase64: Buffer.from('payload', 'utf8').toString('base64'),
+    },
+    // A local server that drops the connection: the bridge must see http-error, not a crash.
+    { requestId: 'req-boom', method: 'GET', path: '/boom' },
+  ];
+  const answers = new Map<string, Deferred<Record<string, unknown>>>();
+  for (const request of requests) {
+    answers.set(request.requestId, createDeferred());
+  }
+  const bridgeSocketReady = createDeferred<Duplex>();
+  let bridgeSocketRef: Duplex | null = null;
+
+  const localServer = http.createServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/text') {
+      res.writeHead(200, { 'content-type': 'text/plain', 'x-served-by': 'local' });
+      res.end('hello local');
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/empty') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/echo') {
+      const chunks: Buffer[] = [];
+      req.on('data', (chunk) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      req.on('end', () => {
+        res.writeHead(200, { 'content-type': 'text/plain' });
+        res.end(`echoed:${Buffer.concat(chunks).toString('utf8')}`);
+      });
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/boom') {
+      req.socket.destroy();
+      return;
+    }
+    writeNotFound(res);
+  });
+  cleanupTasks.push(() => closeLoopbackServer(localServer));
+  const localPort = await listenOnLoopback(localServer);
+
+  const bridge = createCompanionBridgeServer();
+  bridge.serveBridgeUpgrade((socket) => {
+    bridgeSocketRef = socket;
+    bridgeSocketReady.resolve(socket);
+    attachWebSocketFrameParser(socket, (text) => {
+      const message = JSON.parse(text) as Record<string, unknown>;
+      if (typeof message.requestId === 'string') {
+        answers.get(message.requestId)?.resolve(message);
+      }
+    });
+  });
+  cleanupTasks.push(() => closeLoopbackServer(bridge.server));
+  cleanupTasks.push(async () => {
+    bridgeSocketRef?.destroy();
+  });
+  const bridgePort = await bridge.listen();
+
+  const { earlyExit } = startMetroCompanionWorker({ bridgePort, localPort });
+  const bridgeSocket = await Promise.race([
+    waitFor(bridgeSocketReady.promise, 5_000, 'bridge websocket connection'),
+    earlyExit,
+  ]);
+  for (const request of requests) {
+    bridgeSocket.write(encodeTextFrame(JSON.stringify({ type: 'http-request', ...request })));
+  }
+  const answered = async (requestId: string) =>
+    await Promise.race([
+      waitFor(answers.get(requestId)!.promise, 5_000, `http response ${requestId}`),
+      earlyExit,
+    ]);
+  const textResponse = await answered('req-text');
+  const emptyResponse = await answered('req-empty');
+  const echoResponse = await answered('req-echo');
+  const errorResponse = await answered('req-boom');
+
+  assert.equal(textResponse.type, 'http-response');
+  assert.equal(textResponse.status, 200);
+  assert.equal(
+    (textResponse.headers as Record<string, string>)['x-served-by'],
+    'local',
+    `bridge headers: ${JSON.stringify(textResponse.headers)}`,
+  );
+  assert.equal(
+    Buffer.from(String(textResponse.bodyBase64), 'base64').toString('utf8'),
+    'hello local',
+  );
+  // An empty local body must not be answered as a base64 payload.
+  assert.equal(emptyResponse.type, 'http-response');
+  assert.equal(emptyResponse.status, 204);
+  assert.equal('bodyBase64' in emptyResponse, false);
+  // A request body crosses as base64 and comes back from the local server intact.
+  assert.equal(echoResponse.status, 200);
+  assert.equal(
+    Buffer.from(String(echoResponse.bodyBase64), 'base64').toString('utf8'),
+    'echoed:payload',
+  );
+  assert.equal(errorResponse.type, 'http-error');
+  assert.equal(errorResponse.requestId, 'req-boom');
+  assert.ok(String(errorResponse.message).length > 0);
+});
+
+test('metro companion worker normalizes close codes the websocket client cannot send', async () => {
+  // A WebSocket client may only close with 1000 or 3000-4999. Every other bridge code must reach
+  // upstream as 3001 instead of throwing inside the worker and stranding the tunnel.
+  const closeCodes: Record<string, number | undefined> = {
+    'stream-1000': 1000,
+    'stream-4000': 4000,
+    'stream-1005': 1005,
+    'stream-1001': 1001,
+    'stream-none': undefined,
+  };
+  const streamIds = Object.keys(closeCodes);
+  const upstreamCloses: CloseFrame[] = [];
+  const upstreamClosed = createDeferred<void>();
+  let upstreamSocketRef: Duplex | null = null;
+
+  const upstreamServer = http.createServer((_, res) => writeNotFound(res));
+  upstreamServer.on('upgrade', (req, socket) => {
+    if (!req.url?.startsWith('/echo/')) {
+      socket.destroy();
+      return;
+    }
+    upstreamSocketRef = socket;
+    if (!acceptWebSocketUpgrade(req, socket)) return;
+    attachWebSocketFrameParser(
+      socket,
+      () => {
+        // This probe only answers close frames; text frames are not proxied here.
+      },
+      (frame) => {
+        upstreamCloses.push(frame);
+        if (upstreamCloses.length === streamIds.length) upstreamClosed.resolve();
+      },
+    );
+  });
+  cleanupTasks.push(() => closeLoopbackServer(upstreamServer));
+  cleanupTasks.push(async () => {
+    upstreamSocketRef?.destroy();
+  });
+  const upstreamPort = await listenOnLoopback(upstreamServer);
+
+  const bridgeSocketReady = createDeferred<Duplex>();
+  const pongs = createDeferred<void>();
+  let pongCount = 0;
+  let bridgeSocketRef: Duplex | null = null;
+  const bridge = createCompanionBridgeServer();
+  bridge.serveBridgeUpgrade((socket) => {
+    bridgeSocketRef = socket;
+    bridgeSocketReady.resolve(socket);
+    const opened = new Set<string>();
+    attachWebSocketFrameParser(socket, (text) => {
+      const message = JSON.parse(text) as
+        | { type: 'pong' }
+        | { type: 'ws-open-result'; streamId: string; success: boolean };
+      if (message.type === 'pong') {
+        pongCount += 1;
+        if (pongCount === 2) pongs.resolve();
+        return;
+      }
+      if (message.type !== 'ws-open-result' || !message.success) return;
+      opened.add(message.streamId);
+      if (opened.size !== streamIds.length) return;
+      for (const streamId of streamIds) {
+        const code = closeCodes[streamId];
+        socket.write(
+          encodeTextFrame(
+            JSON.stringify({
+              type: 'ws-close',
+              streamId,
+              ...(code === undefined ? {} : { code }),
+              ...(streamId === 'stream-1000' ? { reason: 'bridge done' } : {}),
+            }),
+          ),
+        );
+      }
+      socket.write(encodeTextFrame(JSON.stringify({ type: 'ping', timestamp: Date.now() })));
+    });
+    for (const streamId of streamIds) {
+      socket.write(
+        encodeTextFrame(
+          JSON.stringify({ type: 'ws-open', streamId, path: `/echo/${streamId}`, headers: {} }),
+        ),
+      );
+    }
+  });
+  cleanupTasks.push(() => closeLoopbackServer(bridge.server));
+  cleanupTasks.push(async () => {
+    bridgeSocketRef?.destroy();
+  });
+  const bridgePort = await bridge.listen();
+
+  const { earlyExit } = startMetroCompanionWorker({ bridgePort, localPort: upstreamPort });
+  await Promise.race([
+    waitFor(upstreamClosed.promise, 5_000, 'every upstream close frame'),
+    earlyExit,
+  ]);
+
+  assert.deepEqual(
+    upstreamCloses.map((frame) => frame.code).sort((left, right) => left! - right!),
+    [1000, 3001, 3001, 3001, 4000],
+  );
+  assert.ok(
+    upstreamCloses.some((frame) => frame.reason === 'bridge done'),
+    'a bridge-provided reason must survive normalization',
+  );
+  assert.ok(
+    upstreamCloses.some((frame) => frame.reason === 'bridge requested close'),
+    'a missing bridge reason must fall back to the default',
+  );
+
+  // The worker keeps serving after the normalized closes.
+  const bridgeSocket = await bridgeSocketReady.promise;
+  bridgeSocket.write(encodeTextFrame(JSON.stringify({ type: 'ping', timestamp: Date.now() })));
+  await Promise.race([waitFor(pongs.promise, 5_000, 'two bridge pongs'), earlyExit]);
 });
