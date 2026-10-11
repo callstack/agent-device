@@ -4,7 +4,6 @@ import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import {
   appStateUse,
-  resolveDeviceReadinessRuntimePlan,
   shutdownTargetUse,
 } from '@agent-device/contracts/platform-runtime-operations';
 import {
@@ -16,7 +15,6 @@ import {
 } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { SessionStore } from '../session-store.ts';
-import { startupDeadlineAtMs } from '../startup-deadline.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { AppleApplicationState } from '@agent-device/kernel/snapshot';
 import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
@@ -27,35 +25,19 @@ import {
   selectorTargetsSessionDevice,
 } from '../session-device-resolution.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import {
-  admitRuntimeOperations,
-  admitRuntimeUse,
-  type UnavailableRuntimeResponse,
-} from '../runtime-admission.ts';
+import { admitRuntimeUse } from '../runtime-admission.ts';
 import {
   requireRuntimeBinding,
   requireRuntimeFacts,
   type RuntimeCommandHandlerParams,
 } from '../session-runtime-admission.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
+import { handleBootCommand } from './session-boot.ts';
 
 const IOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
   'iOS appstate requires an active session on the target device. Run open first (for example: open --session sim --platform ios --device "<name>" <app>).';
 const MACOS_APPSTATE_SESSION_REQUIRED_MESSAGE =
   'macOS appstate requires an active session on the target device. Run open first (for example: open --session macos --platform macos "System Settings").';
-
-/** `boot --headless` reports an unsupported cell as a request error, not a device capability gap. */
-function bootUnavailableResponse(headless: boolean): UnavailableRuntimeResponse {
-  return (unavailable) =>
-    errorResponse(
-      headless ? 'INVALID_ARGS' : 'UNSUPPORTED_OPERATION',
-      headless
-        ? 'boot --headless is supported only for Android emulators.'
-        : 'boot is not supported on this device',
-      undefined,
-      unavailable.hint ? { hint: unavailable.hint } : undefined,
-    );
-}
 
 function shutdownUnavailableResponse(fact: RuntimeOperationFact) {
   if (fact.available) return null;
@@ -64,16 +46,6 @@ function shutdownUnavailableResponse(fact: RuntimeOperationFact) {
     'shutdown is supported only for Apple simulators and Android emulators.',
     undefined,
     fact.hint ? { hint: fact.hint } : undefined,
-  );
-}
-
-function hasAndroidAvdIdentity(
-  selectedName: string | undefined,
-  sessionDevice: DeviceInfo | undefined,
-): boolean {
-  return Boolean(
-    selectedName?.trim() ||
-    (sessionDevice?.platform === 'android' && sessionDevice.kind === 'emulator'),
   );
 }
 
@@ -244,86 +216,14 @@ export async function handleSessionStateCommands(params: {
   const { req, sessionName, sessionStore } = params;
 
   if (req.command === 'boot') {
-    const session = sessionStore.get(sessionName);
-    const flags = req.flags ?? {};
-    const guard = requireSessionOrExplicitSelector(req.command, session, flags);
-    if (guard) return guard;
-
-    const resolvedAndroidSerialAllowlist = resolveAndroidSerialAllowlist(
-      flags.androidDeviceAllowlist,
-    );
-    const androidSerialAllowlist = resolvedAndroidSerialAllowlist
-      ? [...resolvedAndroidSerialAllowlist].sort()
-      : undefined;
-    const plan = resolveDeviceReadinessRuntimePlan({ headless: flags.headless === true });
-
-    let device: DeviceInfo;
-    try {
-      device = await resolveCommandDevice({
-        session,
-        flags,
-        androidAvdSelection: 'include-stopped',
-        platformServices: params.platformServices,
-      });
-    } catch (error) {
-      const appErr = asAppError(error);
-      if (
-        plan.kind === 'boot-target-headless' &&
-        !hasAndroidAvdIdentity(flags.device, session?.device) &&
-        appErr.code === 'DEVICE_NOT_FOUND'
-      ) {
-        return errorResponse(
-          'INVALID_ARGS',
-          'boot --headless requires --device <avd-name> (or an Android emulator session target).',
-        );
-      }
-      throw error;
-    }
-
-    if (flags.target && (device.target ?? 'mobile') !== flags.target) {
-      return errorResponse(
-        'DEVICE_NOT_FOUND',
-        `No ${device.platform} device found matching --target ${flags.target}.`,
-      );
-    }
-
-    const admitted = await admitRuntimeOperations({
-      command: 'boot',
-      device,
-      required: plan.use.required,
+    return await handleBootCommand({
+      req,
+      sessionName,
+      sessionStore,
       inspectFacts: params.inspectFacts,
       platformServices: params.platformServices,
       bindDevice: params.bindDevice,
-      unavailableResponse: bootUnavailableResponse(plan.kind === 'boot-target-headless'),
     });
-    if (admitted.type === 'response') return admitted.response;
-
-    const input = {
-      serial: flags.serial,
-      androidSerialAllowlist,
-      deadlineAtMs: startupDeadlineAtMs(flags.timeoutMs),
-    };
-    if (plan.kind === 'boot-target-headless') {
-      device = await (await admitted.bind(device, plan.use)).operations.bootTargetHeadless(input);
-    } else {
-      device = await (await admitted.bind(device, plan.use)).operations.bootTarget(input);
-    }
-
-    return {
-      ok: true,
-      data: {
-        platform: publicPlatformString(device),
-        target: device.target ?? 'mobile',
-        device: device.name,
-        id: device.id,
-        kind: device.kind,
-        booted: true,
-        // Additive Apple-OS discriminant; Apple devices only. Gate on the platform
-        // (not just field presence) so a non-Apple record with a stray appleOs never
-        // surfaces it.
-        ...(isApplePlatform(device.platform) && device.appleOs ? { appleOs: device.appleOs } : {}),
-      },
-    };
   }
 
   if (req.command === 'shutdown') {

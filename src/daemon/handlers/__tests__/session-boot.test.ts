@@ -18,6 +18,10 @@ import {
   mockInspectDeviceRuntimeFacts,
   mockShutdownTargetRuntime,
 } from './session-command-harness.ts';
+import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
+import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { handleSessionStateCommands } from '../session-state.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
@@ -664,5 +668,80 @@ test('shutdown returns an error response when selected target shutdown fails', a
       stdout: '',
       stderr: 'simctl shutdown failed',
     });
+  }
+});
+
+test('boot rejects --headless outside Android directly', async () => {
+  const device = {
+    platform: 'apple' as const,
+    appleOs: 'ios' as const,
+    id: 'sim-1',
+    name: 'iPhone',
+    kind: 'simulator' as const,
+    target: 'mobile' as const,
+    booted: false,
+  };
+  mockResolveTargetDevice.mockResolvedValue(device);
+  const response = await handleSessionStateCommands({
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'boot',
+      positionals: [],
+      flags: { platform: 'ios', headless: true },
+    },
+    sessionName: 'default',
+    sessionStore: makeSessionStore(),
+    inspectFacts: async () =>
+      createUnavailablePlatformRuntimeFacts(device, localRuntimeOwner('apple'), {
+        appLog: { available: false, reason: 'owner-capability-missing' },
+        network: { available: false, reason: 'owner-capability-missing' },
+        screenshot: { available: false, reason: 'owner-capability-missing' },
+        viewport: { available: false, reason: 'owner-capability-missing' },
+        focus: { available: false, reason: 'owner-capability-missing' },
+        gesture: { available: false, reason: 'owner-capability-missing' },
+        scroll: { available: false, reason: 'owner-capability-missing' },
+        typeText: { available: false, reason: 'owner-capability-missing' },
+        touch: { available: false, reason: 'owner-capability-missing' },
+        elementText: { available: false, reason: 'owner-capability-missing' },
+        back: { available: false, reason: 'owner-capability-missing' },
+        orientation: { available: false, reason: 'owner-capability-missing' },
+        tvRemote: { available: false, reason: 'owner-capability-missing' },
+        keyboard: { available: false, reason: 'owner-capability-missing' },
+        clipboard: { available: false, reason: 'owner-capability-missing' },
+        systemButton: { available: false, reason: 'owner-capability-missing' },
+        fold: { available: false, reason: 'owner-capability-missing' },
+        triggerAppEvent: { available: false, reason: 'owner-capability-missing' },
+        settings: { available: false, reason: 'owner-capability-missing' },
+        readAlert: { available: false, reason: 'owner-capability-missing' },
+        awaitAlert: { available: false, reason: 'owner-capability-missing' },
+        acceptAlert: { available: false, reason: 'owner-capability-missing' },
+        dismissAlert: { available: false, reason: 'owner-capability-missing' },
+        audioProbeCapture: { available: false, reason: 'owner-capability-missing' },
+        audioProbeQuery: { available: false, reason: 'owner-capability-missing' },
+        readiness: { available: false, reason: 'unsupported-device-kind' },
+        lifecycle: applicationLifecycleOperationFacts({
+          resolveOpenTarget: { available: false, reason: 'owner-capability-missing' },
+          prepareApplicationOpen: { available: false, reason: 'owner-capability-missing' },
+          openApplication: { available: false, reason: 'owner-capability-missing' },
+          applyRuntimeHints: { available: false, reason: 'owner-capability-missing' },
+          clearRuntimeHints: { available: false, reason: 'owner-capability-missing' },
+          closeApplication: { available: false, reason: 'owner-capability-missing' },
+          finalizeApplicationClose: { available: false, reason: 'owner-capability-missing' },
+          prepareAppleRunner: { available: false, reason: 'owner-capability-missing' },
+          configureProviderPortReverse: {
+            available: false,
+            reason: 'owner-capability-missing',
+          },
+        }),
+      }),
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.message).toMatch(/supported only for Android emulators/i);
   }
 });
