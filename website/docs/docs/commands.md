@@ -79,7 +79,7 @@ Select a device:
 Device claims and the daemon:
 
 - `device status` lists host-local device claims without starting or contacting a daemon; `--stale` shows the claims whose owner is provably gone. Scope it with `--platform` plus `--udid` (Apple) or `--serial` (Android). Another live owner's claim blocks `open`.
-- `device release --stale` clears a provably dead owner's claim and resources. Live and uncertain claims are refused with the reason. See [Sessions](/docs/sessions#release-a-device-another-workspace-holds).
+- `device release --stale` settles a provably dead owner's durable resources, then clears its claim. Live and uncertain claims are refused with the reason. See [Sessions](/docs/sessions#release-a-device-another-workspace-holds).
 - `daemon stop --state-dir <path>` stops a local daemon after verifying its identity. `--clean` also removes the Apple runner processes and leases that daemon retained.
 
 Open apps and links:

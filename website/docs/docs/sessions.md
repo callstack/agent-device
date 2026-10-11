@@ -169,10 +169,10 @@ To free a device:
 
 - If the owner is still running, close its session from its own workspace, or stop its daemon with
   `agent-device daemon stop --state-dir <owner state dir>`.
-- If the owner is gone, run `agent-device device release --stale`. It cleans up the resources that owner
+- If the owner is gone, run `agent-device device release --stale`. It settles the durable resources that owner
   left behind, then clears the claim. Live, uncertain, PID-reused, and corrupt claims are
   refused with the reason; `device release` never forces them.
-- `open` replaces a dead owner's claim itself once that owner's resources are cleaned up.
+- `open` replaces a dead owner's claim itself once that owner's durable resources are settled.
 - If the device rebooted after the claim was taken, the reboot already ended that owner's app, runner,
   and accessibility session. `open` takes the claim and reports the release in `warnings`;
   `device release --stale` doesn't check for reboots and keeps refusing such a claim.
