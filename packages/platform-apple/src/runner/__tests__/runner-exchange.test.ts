@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import net from 'node:net';
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { createRequestCanceledError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
@@ -15,6 +16,7 @@ vi.mock('../runner-transport.ts', async (importOriginal) => {
 import { executeRunnerExchange } from '../runner-exchange.ts';
 import { RunnerCommandAccounting, type RunnerSession } from '../runner-session-types.ts';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
+import { captureDiagnostics } from './runner-session-fixtures.ts';
 import {
   startFakeRunnerServer,
   type FakeRunnerResponse,
@@ -373,6 +375,59 @@ test('a canceled command the journal never accepted releases after one read and 
   assert.equal(statusPolls(server).length, 1);
   assert.equal(session.commandCharges.hasAbandonedCharges, true);
 });
+
+test('a drain whose status read fails stops at once and leaves the charge abandoned', async () => {
+  server = await startFakeRunnerServer({
+    longPress: [{ kind: 'hold' }],
+    status: [journalState('started'), { kind: 'exit' }],
+  });
+  const runner = server;
+  const session = sessionFor(runner.port);
+  const controller = new AbortController();
+  const startedAtMs = Date.now();
+  let settledAfterMs = -1;
+
+  const diagnostics = await captureDiagnostics(async () => {
+    const exchange = executeRunnerExchange(
+      IOS_SIMULATOR,
+      session,
+      LONG_PRESS,
+      undefined,
+      10_000,
+      async () => {},
+      controller.signal,
+    );
+    await abortOnceReceived(runner, 'longPress', controller);
+    await assert.rejects(exchange, isRequestCanceledError);
+    settledAfterMs = Date.now() - startedAtMs;
+  });
+
+  assert.ok(diagnostics.includes('"outcome":"status_unavailable"'), diagnostics);
+  assert.equal(statusPolls(runner).length, 2);
+  assert.ok(settledAfterMs < 2_000, `the drain held for ${settledAfterMs}ms`);
+  assert.equal(session.commandCharges.hasAbandonedCharges, true);
+});
+
+test('a refused connection withdraws its charge although nothing canceled it', async () => {
+  const port = await closedLocalPort();
+  const session = sessionFor(port);
+  session.lastHealthyMutation = { atMs: Date.now(), appBundleId: LONG_PRESS.appBundleId };
+
+  await assert.rejects(
+    executeRunnerExchange(IOS_SIMULATOR, session, LONG_PRESS, undefined, 10_000, async () => {}),
+    (error: unknown) => !isRequestCanceledError(error),
+  );
+
+  assert.equal(session.commandCharges.hasOutstandingCharges, false);
+});
+
+async function closedLocalPort(): Promise<number> {
+  const listener = net.createServer();
+  await new Promise<void>((resolve) => listener.listen(0, '127.0.0.1', resolve));
+  const { port } = listener.address() as net.AddressInfo;
+  await new Promise<void>((resolve) => listener.close(() => resolve()));
+  return port;
+}
 
 test('a drain that outlives the command deadline settles and leaves the charge abandoned', async () => {
   server = await startFakeRunnerServer({

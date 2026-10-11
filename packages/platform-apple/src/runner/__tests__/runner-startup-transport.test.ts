@@ -2,7 +2,11 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import type { ExecBackgroundResult } from '@agent-device/host-kit/command';
 import { appleRunnerTestHost } from '../test-host.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  createRequestCanceledError,
+  isRequestCanceledError,
+} from '@agent-device/kernel/errors';
 import { RunnerCommandAccounting, type RunnerSession } from '../runner-session-types.ts';
 import {
   iosDevice,
@@ -80,6 +84,50 @@ test('waitForRunner propagates request cancellation without fallback', async () 
       assert.equal(appError.message.includes('Runner did not accept connection'), false);
       return true;
     },
+  );
+});
+
+test('waitForRunner discloses whether a canceled command could have been written', async () => {
+  const canceledBeforeAnyAttempt = AbortSignal.abort(createRequestCanceledError());
+  await assert.rejects(
+    () =>
+      waitForRunner(
+        iosSimulator,
+        8100,
+        { command: 'snapshot' },
+        undefined,
+        5_000,
+        undefined,
+        canceledBeforeAnyAttempt,
+      ),
+    (error: unknown) =>
+      isRequestCanceledError(error) && (error as AppError).details?.dispatched === 'no',
+  );
+
+  const controller = new AbortController();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+          controller.abort(createRequestCanceledError());
+        }),
+    ),
+  );
+  await assert.rejects(
+    () =>
+      waitForRunner(
+        iosSimulator,
+        8100,
+        { command: 'snapshot' },
+        undefined,
+        5_000,
+        undefined,
+        controller.signal,
+      ),
+    (error: unknown) =>
+      isRequestCanceledError(error) && (error as AppError).details?.dispatched === 'unknown',
   );
 });
 

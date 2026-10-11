@@ -260,7 +260,10 @@ export class RunnerCommandAccounting {
     if (index !== -1) this.charges[index]!.abandoned = true;
   }
 
-  /** Withdraw the charge of a send that provably wrote nothing: the runner holds no such command. */
+  /**
+   * Withdraw the charge of a send that provably wrote nothing — a refused connection, or a cancellation
+   * seen before the POST (`dispatched: no`). The runner holds no such command, canceled or not.
+   */
   withdrawUnsent(commandId: string | undefined): void {
     const index = this.findChargeIndex(commandId);
     if (index !== -1) this.charges.splice(index, 1);

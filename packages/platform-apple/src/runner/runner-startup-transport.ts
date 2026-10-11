@@ -102,6 +102,10 @@ export async function waitForRunner(
             lastError = err;
             if (!isRunnerCommandProvablyUnwritten(err)) commandMayHaveBeenWritten = true;
           },
+        }).catch((error: unknown) => {
+          // A cancellation that interrupts an attempt may land after its POST was written.
+          if (isRequestCanceledError(error)) commandMayHaveBeenWritten = true;
+          throw error;
         });
         if (response) return response;
         throw buildRunnerEndpointProbeError({
@@ -127,7 +131,7 @@ export async function waitForRunner(
     );
   } catch (error) {
     if (signal?.aborted || isRequestCanceledError(error)) {
-      throw createRequestCanceledError();
+      throw canceledRunnerConnect(commandMayHaveBeenWritten);
     }
     if (isUsbmuxDeviceUnattachedError(error)) throw error;
     if (!lastError) {
@@ -136,7 +140,7 @@ export async function waitForRunner(
   }
 
   if (signal?.aborted) {
-    throw createRequestCanceledError();
+    throw canceledRunnerConnect(commandMayHaveBeenWritten);
   }
 
   if (device.kind === 'simulator') {
@@ -154,6 +158,7 @@ export async function waitForRunner(
       remainingMs,
       signal,
     ).catch((error: unknown) => {
+      if (signal?.aborted || isRequestCanceledError(error)) throw canceledRunnerConnect(true);
       throw withRunnerWriteEvidence(error, commandMayHaveBeenWritten);
     });
     return new Response(simResponse.body, { status: simResponse.status });
@@ -175,6 +180,10 @@ export async function waitForRunner(
     }),
     commandMayHaveBeenWritten,
   );
+}
+
+function canceledRunnerConnect(commandMayHaveBeenWritten: boolean): AppError {
+  return createRequestCanceledError({ dispatched: commandMayHaveBeenWritten ? 'unknown' : 'no' });
 }
 
 /**

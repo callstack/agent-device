@@ -302,7 +302,8 @@ async function sendRunnerCommandAfterPreflight(params: {
 }
 
 /**
- * A send that provably wrote nothing withdraws its charge. Otherwise this process stopped waiting on
+ * A send that provably wrote nothing withdraws its charge, whether or not it was canceled: a refused
+ * connection, or a cancellation the transport saw before its POST. Otherwise this process stopped waiting on
  * a command the runner may hold, so the charge stays as abandoned, and a canceled request also waits
  * out the command's execution before it settles (#3383).
  */
