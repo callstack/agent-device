@@ -9,7 +9,7 @@
  * This reduces `(root)` in the logical graph only: the declared modules still live directly under
  * `src/`, and classifying them is not collocating them. The table bridges that layout and should
  * shrink. When a group moves into a folder named for its zone (`src/command-runtime/`,
- * `src/command-runtime/`, ...) or into a package, `topFolder` derives the same zone and the
+ * `packages/daemon-contracts/`, ...) or into a package, `topFolder` derives the same zone and the
  * group's rows are deleted. The end state: renaming a module within its owner needs no edit here,
  * while a forbidden dependency still fails R5 or R80.
  *
