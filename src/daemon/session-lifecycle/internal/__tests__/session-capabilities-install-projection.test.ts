@@ -155,8 +155,8 @@ async function dispatchCapabilities(params: {
   inspectFacts: InspectDeviceRuntimeFacts;
 }) {
   return await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: params.sessionName,

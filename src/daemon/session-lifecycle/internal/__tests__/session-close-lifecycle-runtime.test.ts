@@ -65,8 +65,8 @@ async function close(params: {
   internal?: DaemonRequest['internal'];
 }) {
   return await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: closeRequest(params.sessionName, params.positionals ?? [], params.internal),
     sessionName: params.sessionName,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

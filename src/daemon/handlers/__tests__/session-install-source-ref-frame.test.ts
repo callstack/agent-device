@@ -116,8 +116,8 @@ async function dispatchInstallSource(params: {
     meta: { installSource: { kind: 'path', path: '/tmp/App.apk' } },
   };
   return await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: 'default',
     logPath: '/tmp/daemon.log',

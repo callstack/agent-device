@@ -71,7 +71,7 @@ type ResolvedSelectorRuntime =
   | {
       ok: true;
       ref: SessionRef | undefined;
-      runtime: ReturnType<typeof createSelectorRuntimeForDevice>;
+      runtime: Awaited<ReturnType<typeof createSelectorRuntimeForDevice>>;
     }
   | { ok: false; response: DaemonResponse };
 
@@ -84,8 +84,8 @@ type ResolvedSelectorDevice =
     }
   | { ok: false; response: DaemonResponse };
 
-export function createSelectorRuntimeForDevice(params: SelectorRuntimeDeviceParams) {
-  return params.createCommandSurface({
+export async function createSelectorRuntimeForDevice(params: SelectorRuntimeDeviceParams) {
+  return await params.createCommandSurface({
     backend: createSelectorBackend(params),
     ...createDaemonRuntimePolicy('selector commands', { plural: true }),
     sessions: createDaemonRuntimeSessionStore({
@@ -147,7 +147,7 @@ export async function createBoundSelectorRuntime(
   return {
     ok: true,
     ref: resolved.ref,
-    runtime: createSelectorRuntimeForDevice({
+    runtime: await createSelectorRuntimeForDevice({
       ...params,
       ref: resolved.ref,
       session: resolved.session,

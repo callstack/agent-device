@@ -66,14 +66,14 @@ export const captureSnapshotForSession: CaptureSnapshotForSession = async (
   });
 };
 
-export function createInteractionRuntime(
+export async function createInteractionRuntime(
   params: InteractionRouteInput & {
     pairedGestureViewport?: Rect;
     touchExecutor?: import('../touch-runtime.ts').BoundTouchExecutor;
     gestures?: import('../gesture-runtime.ts').BoundGestureExecutor;
   },
 ) {
-  return createInteractionRuntimeForRoute({
+  return await createInteractionRuntimeForRoute({
     ...bindInteractionSession(params),
     captureSnapshotForSession: params.captureSnapshotForSession ?? captureSnapshotForSession,
   });

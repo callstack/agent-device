@@ -74,14 +74,14 @@ for (const command of ['snapshot', 'diff snapshot'] as const) {
       const running =
         command === 'snapshot'
           ? dispatchSnapshotViaRuntime({
-              
-              createCommandSurface: testCreateCommandSurface,...input,
+              createCommandSurface: testCreateCommandSurface,
+              ...input,
               ...snapshotRuntimeFixture(requestId),
               platformServices: daemonPlatformServicesFixture(),
             })
           : dispatchSnapshotDiffViaRuntime({
-              
-              createCommandSurface: testCreateCommandSurface,...input,
+              createCommandSurface: testCreateCommandSurface,
+              ...input,
               ...snapshotRuntimeFixture(requestId),
               platformServices: daemonPlatformServicesFixture(),
             });
@@ -117,8 +117,8 @@ for (const change of ['unchanged', 'rebuild', 'replace'] as const) {
       };
     });
     const running = dispatchSnapshotViaRuntime({
-      
-      createCommandSurface: testCreateCommandSurface,req: { command: 'snapshot', positionals: [], token: 't', session: address },
+      createCommandSurface: testCreateCommandSurface,
+      req: { command: 'snapshot', positionals: [], token: 't', session: address },
       sessionName: address,
       logPath: '/dev/null',
       sessionStore,
@@ -173,8 +173,8 @@ test('a composed snapshot refuses its supplied retired lifetime before facts or 
   captureMock.mockResolvedValue({ nodes: [], truncated: false, backend: 'uiautomator' });
   await expect(
     dispatchSnapshotViaRuntime({
-      
-      createCommandSurface: testCreateCommandSurface,req: { command: 'snapshot', positionals: [], token: 't', session: 'default' },
+      createCommandSurface: testCreateCommandSurface,
+      req: { command: 'snapshot', positionals: [], token: 't', session: 'default' },
       sessionName: address,
       sessionRef: ref,
       logPath: '/dev/null',

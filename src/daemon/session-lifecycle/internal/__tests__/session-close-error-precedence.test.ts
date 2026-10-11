@@ -50,8 +50,8 @@ test('targeted close preserves the platform-close AppError and still runs later 
 
   await expect(
     handleSessionCommands({
-      
-      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -130,8 +130,8 @@ test('a failed platform close retains the device claim and reports it', async ()
         let caught: unknown;
         try {
           await handleSessionCommands({
-            
-            createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+            createCommandSurface: testCreateCommandSurface,
+            platformServices: daemonPlatformServicesFixture(),
             req: {
               token: 't',
               session: sessionName,
@@ -245,8 +245,8 @@ test('a failing best-effort cleanup also retains the device claim and reports it
         let caught: unknown;
         try {
           await handleSessionCommands({
-            
-            createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+            createCommandSurface: testCreateCommandSurface,
+            platformServices: daemonPlatformServicesFixture(),
             req: {
               token: 't',
               session: sessionName,
@@ -332,8 +332,8 @@ test('a successful close clears the device claim', async () => {
     sessionStore.publish(sessionName, session);
 
     const response = await handleSessionCommands({
-      
-      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -386,8 +386,8 @@ test('targeted close skips platform dispatch and preserves the error when the re
 
   await expect(
     handleSessionCommands({
-      
-      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,

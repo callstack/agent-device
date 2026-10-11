@@ -53,8 +53,8 @@ const IOS_SIM: SessionState['device'] = {
 
 async function closeAtAddress(sessionStore: ReturnType<typeof makeSessionStore>) {
   return await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: ADDRESS, command: 'close', positionals: [], flags: {} },
     sessionName: ADDRESS,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

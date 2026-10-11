@@ -52,8 +52,8 @@ function request(command: DaemonRequest['command']): DaemonRequest {
 
 async function run(command: DaemonRequest['command']): Promise<DaemonResponse | null> {
   return await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: request(command),
     sessionName: 'default',
     logPath: '/tmp/agent-device-session-lifecycle-route.log',

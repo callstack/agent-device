@@ -23,8 +23,8 @@ test('test --json marks a typed live device claim as infrastructure without retr
 
   let attempts = 0;
   const response = await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -72,8 +72,8 @@ test('test --json retries DEVICE_IN_USE without typed device-claim provenance', 
 
   let attempts = 0;
   const response = await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

@@ -44,7 +44,7 @@ export type SnapshotRuntimeRecord =
 type SnapshotRuntimeCommandParams = SnapshotRuntimeRouteParams & {
   command: 'snapshot' | 'diff';
   execute(params: {
-    runtime: ReturnType<typeof createSnapshotRuntime>['runtime'];
+    runtime: Awaited<ReturnType<typeof createSnapshotRuntime>>['runtime'];
     sessionName: string;
     req: DaemonRequest;
     snapshotScope: string | undefined;
@@ -66,7 +66,7 @@ export async function dispatchSnapshotRuntimeCommand(
       const { req, logPath, sessionStore } = params;
       const sessionName = ref?.address ?? params.sessionName;
       const capturedQuality: CapturedSnapshotQuality = {};
-      const { runtime, sessions } = createSnapshotRuntime({
+      const { runtime, sessions } = await createSnapshotRuntime({
         createCommandSurface: params.createCommandSurface,
         req,
         sessionName,
@@ -123,7 +123,7 @@ export async function dispatchSnapshotRuntimeCommand(
   );
 }
 
-function createSnapshotRuntime(params: {
+async function createSnapshotRuntime(params: {
   createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
   sessionName: string;
@@ -178,7 +178,7 @@ function createSnapshotRuntime(params: {
       return ref ?? sessionStore.publish(sessionName, nextSession);
     },
   });
-  const runtime = params.createCommandSurface({
+  const runtime = await params.createCommandSurface({
     backend: createDaemonSnapshotBackend({
       req,
       logPath,

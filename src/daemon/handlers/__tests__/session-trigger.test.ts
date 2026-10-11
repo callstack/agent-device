@@ -16,8 +16,8 @@ const invoke = async (_req: DaemonRequest): Promise<DaemonResponse> => {
 test('trigger-app-event requires active session or explicit device selector', async () => {
   const sessionStore = makeSessionStore('agent-device-session-trigger-');
   const response = await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

@@ -53,7 +53,7 @@ test('daemon startup reaps orphaned simctl recorders with a graceful finalize wi
   const stateDir = mkdtempForTestSync('agent-device-daemon-recording-reaper-');
   try {
     const runtime = await startDaemonRuntime({
-      loadCommandSurface: async () => testCreateCommandSurface,
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,

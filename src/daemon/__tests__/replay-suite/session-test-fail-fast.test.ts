@@ -16,8 +16,8 @@ test('test --fail-fast continues after passing scripts', async () => {
 
   const invokedPaths: string[] = [];
   const response = await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

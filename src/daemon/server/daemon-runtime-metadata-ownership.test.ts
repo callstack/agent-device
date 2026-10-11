@@ -69,8 +69,8 @@ const SUCCESSOR_PID = 999_999_999;
 
 function startRuntime(stateDir: string, exit: (code: number) => void) {
   return startDaemonRuntime({
-    
-    createCommandSurface: testCreateCommandSurface,env: {
+    createCommandSurface: testCreateCommandSurface,
+    env: {
       ...process.env,
       AGENT_DEVICE_STATE_DIR: stateDir,
       AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '0',

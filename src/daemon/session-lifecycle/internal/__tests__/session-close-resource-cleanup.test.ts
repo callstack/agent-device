@@ -44,8 +44,8 @@ test('close stops Android snapshot helper session before deleting session', asyn
   });
 
   const response = await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -141,8 +141,8 @@ test('close stops active host audio probe before deleting session', async () => 
   );
 
   const response = await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -167,8 +167,8 @@ test('close dispatches web session cleanup without a positional target', async (
   sessionStore.publish(sessionName, makeSession(sessionName, WEB_DESKTOP_DEVICE));
 
   const response = await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -300,8 +300,8 @@ test('close cannot retire a replacement session while its provider release waits
     return { releasedBy: 'provider' };
   });
   const closing = handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: address, command: 'close', positionals: [], flags: {} },
     sessionName: address,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

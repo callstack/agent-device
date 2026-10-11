@@ -113,8 +113,8 @@ test('interaction runtime inherits the registered daemon request signal', async 
 
   try {
     const runtime = await createInteractionRuntime({
-      
-      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -218,8 +218,8 @@ test('press --settle responds with the settled diff, refsGeneration, and activat
   mockCommandDispatch({ snapshots: [BEFORE_NODES, AFTER_NODES, AFTER_NODES, AFTER_NODES] });
 
   const response = await handleInteractionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,req: {
+    createCommandSurface: testCreateCommandSurface,
+    req: {
       token: 't',
       session: sessionName,
       command: 'press',
@@ -281,8 +281,8 @@ test('held touch settle publishes refs into the current record of its scoped lif
     };
   });
   const running = handleInteractionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,req: {
+    createCommandSurface: testCreateCommandSurface,
+    req: {
       token: 't',
       session: address,
       command: 'press',
@@ -356,8 +356,8 @@ test('press --settle on a removals-only diff attaches the unchanged interactive 
   });
 
   const response = await handleInteractionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,req: {
+    createCommandSurface: testCreateCommandSurface,
+    req: {
       token: 't',
       session: sessionName,
       command: 'press',
@@ -393,8 +393,8 @@ test('press --settle rejects an expired-frame ref before dispatch or observation
   );
 
   const response = await handleInteractionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,req: {
+    createCommandSurface: testCreateCommandSurface,
+    req: {
       token: 't',
       session: sessionName,
       command: 'press',
@@ -435,8 +435,8 @@ test('a settle observation without a diff leaves ref staleness untouched', async
   });
 
   const response = await handleInteractionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,req: {
+    createCommandSurface: testCreateCommandSurface,
+    req: {
       token: 't',
       session: sessionName,
       command: 'press',
@@ -501,8 +501,8 @@ test('a stalled settle capture receives its deadline signal and leaves the inter
 
   const startedAt = Date.now();
   const response = await handleInteractionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,req: {
+    createCommandSurface: testCreateCommandSurface,
+    req: {
       token: 't',
       session: sessionName,
       command: 'press',
@@ -532,8 +532,8 @@ test('bare timeout without --settle stays compatible', async () => {
   mockCommandDispatch({ snapshots: [BEFORE_NODES] });
 
   const compatible = await handleInteractionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,req: {
+    createCommandSurface: testCreateCommandSurface,
+    req: {
       token: 't',
       session: sessionName,
       command: 'press',
@@ -558,8 +558,8 @@ test('settle-specific tuning flags without --settle are rejected', async () => {
   mockCommandDispatch({ snapshots: [BEFORE_NODES] });
 
   const response = await handleInteractionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,req: {
+    createCommandSurface: testCreateCommandSurface,
+    req: {
       token: 't',
       session: sessionName,
       command: 'press',
@@ -584,8 +584,8 @@ test('fill @ref --settle carries the settle payload on the ref wire shape', asyn
   mockCommandDispatch({ snapshots: [AFTER_NODES, AFTER_NODES] });
 
   const response = await handleInteractionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,req: {
+    createCommandSurface: testCreateCommandSurface,
+    req: {
       token: 't',
       session: sessionName,
       command: 'fill',

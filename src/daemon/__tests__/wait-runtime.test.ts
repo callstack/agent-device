@@ -160,8 +160,8 @@ test.each(['rebuild', 'retire'] as const)(
       const address = 'cwd:sleep-wait:default';
       const ref = sessionStore.publish(address, makeSession('default', { device: harness.device }));
       const running = handleSnapshotCommands({
-        
-        createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+        createCommandSurface: testCreateCommandSurface,
+        platformServices: daemonPlatformServicesFixture(),
         req: waitRequest(['100']),
         sessionName: address,
         logPath: '/tmp/daemon.log',
@@ -216,8 +216,8 @@ async function runWait(
   }
   sessionStore.publish(session.name, session);
   const response = await handleSnapshotCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: waitRequest(positionals, flags),
     sessionName: session.name,
     logPath: '/tmp/daemon.log',
@@ -472,8 +472,8 @@ test('a read after a natively satisfied text wait captures instead of reusing th
   expect(harness.captureSnapshot).toHaveBeenCalledOnce();
 
   const read = await dispatchGetViaRuntime({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       command: 'get',
       positionals: ['text', 'label="cold.start"'],

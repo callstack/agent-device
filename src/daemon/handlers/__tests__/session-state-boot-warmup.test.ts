@@ -21,8 +21,8 @@ test('boot leaves Apple keep-hot policy inside the platform runtime', async () =
   });
 
   const response = await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

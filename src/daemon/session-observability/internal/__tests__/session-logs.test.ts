@@ -298,8 +298,8 @@ async function runLogs(
   throwIfCanceled?: () => void,
 ) {
   return await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'logs', positionals, flags },
     sessionName,
     logPath: '/tmp/daemon.log',

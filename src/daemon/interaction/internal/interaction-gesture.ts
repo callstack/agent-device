@@ -49,7 +49,7 @@ type GestureHandlerParams = InteractionRouteInput & {
   captureSnapshotForSession: CaptureSnapshotForSession;
 };
 
-type GestureRuntime = ReturnType<typeof createInteractionRuntimeForRoute>;
+type GestureRuntime = Awaited<ReturnType<typeof createInteractionRuntimeForRoute>>;
 type GestureRuntimeResult = Awaited<ReturnType<GestureRuntime['interactions']['gesture']>>;
 
 type GestureInteractionOutcome = {
@@ -102,7 +102,7 @@ async function runGestureInteraction(
     bindDevice: params.bindDevice,
   });
   if (!bound.ok) return { refused: bound.response };
-  const runtime = createGestureRuntime(params, bound.gestures);
+  const runtime = await createGestureRuntime(params, bound.gestures);
   const context = { session: params.sessionName, requestId: params.req.meta?.requestId };
   const result = await runPreparedGesture(runtime, context, gesture, params.req.internal);
   return buildGestureOutcome(input, gesture, result, params.req.flags);
@@ -180,7 +180,7 @@ export async function dispatchSwipeViaRuntime(
     const count = input.count ?? 1;
     const pauseMs = input.pauseMs ?? 0;
     const pattern = input.pattern ?? 'one-way';
-    const runtime = createGestureRuntime(params, bound.gestures);
+    const runtime = await createGestureRuntime(params, bound.gestures);
     const result = await runSwipeRepetitions(runtime, params, input, count, pauseMs, pattern);
     return {
       positionals: swipeReplayPositionals(input),
@@ -203,7 +203,10 @@ export async function dispatchSwipeViaRuntime(
   });
 }
 
-function createGestureRuntime(params: GestureHandlerParams, gestures: BoundGestureExecutor) {
+function createGestureRuntime(
+  params: GestureHandlerParams,
+  gestures: BoundGestureExecutor,
+): Promise<GestureRuntime> {
   return createInteractionRuntimeForRoute({
     ...params,
     gestures,
@@ -391,7 +394,7 @@ function swipeReplayPositionals(input: SwipePayload): string[] {
 }
 
 async function runSwipeRepetitions(
-  runtime: ReturnType<typeof createInteractionRuntimeForRoute>,
+  runtime: GestureRuntime,
   params: InteractionRouteInput,
   input: SwipePayload,
   count: number,

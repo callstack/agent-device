@@ -33,7 +33,7 @@ import type { BoundTouchExecutor } from '../../touch-runtime.ts';
 import type { BoundGestureExecutor } from '../../gesture-runtime.ts';
 import { NO_ACTIVE_SESSION_MESSAGE } from '@agent-device/kernel/contracts';
 
-export function createInteractionRuntimeForRoute(
+export async function createInteractionRuntimeForRoute(
   params: InteractionRouteInput & {
     captureSnapshotForSession: CaptureSnapshotForSession;
     pairedGestureViewport?: Rect;
@@ -52,7 +52,7 @@ export function createInteractionRuntimeForRoute(
   const ref = bindInteractionSession(params).sessionRef;
   if (!ref) throw new KernelAppError('SESSION_NOT_FOUND', NO_ACTIVE_SESSION_MESSAGE);
   const session = params.sessionStore.requireCurrent(ref);
-  return createInteractionAgentDevice({
+  return await createInteractionAgentDevice({
     createCommandSurface: params.createCommandSurface,
     requestId: params.req.meta?.requestId,
     flags: params.req.flags,

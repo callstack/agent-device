@@ -77,8 +77,8 @@ test('the android adb executor from the generic provider scope reaches the sessi
   });
 
   await runRequestHandlerChain({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     ...baseChainParams('provider-scope-test'),
     providerScope: { androidAdbExecutor },
   });
@@ -94,8 +94,8 @@ test('an empty provider scope forwards no android adb executor to the session ha
   handleSessionCommandsMock.mockClear();
 
   await runRequestHandlerChain({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     ...baseChainParams('provider-scope-empty'),
     providerScope: {},
   });

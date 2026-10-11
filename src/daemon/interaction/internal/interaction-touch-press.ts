@@ -153,7 +153,7 @@ function buildTargetedRuntimeOptions(
 }
 
 async function runTargetedTouchInteraction(params: {
-  runtime: ReturnType<typeof createInteractionRuntimeForRoute>;
+  runtime: Awaited<ReturnType<typeof createInteractionRuntimeForRoute>>;
   command: TargetedTouchCommand;
   target: InteractionTarget;
   sessionName: string;

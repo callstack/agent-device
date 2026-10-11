@@ -91,8 +91,8 @@ async function dispatchPush(params: {
     flags: {},
   };
   return await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: 'default',
     logPath: '/tmp/daemon.log',

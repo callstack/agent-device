@@ -39,8 +39,8 @@ test('snapshot route forwards the request runtime facts and binding seams exactl
 
   const platformServices = daemonPlatformServicesFixture();
   await handleSnapshotCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices,
+    createCommandSurface: testCreateCommandSurface,
+    platformServices,
     req,
     sessionName: 'snapshot-route',
     logPath: '/tmp/snapshot-route.log',
@@ -76,8 +76,8 @@ test('diff route forwards the request runtime facts and binding seams exactly on
 
   const platformServices = daemonPlatformServicesFixture();
   await handleSnapshotCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices,
+    createCommandSurface: testCreateCommandSurface,
+    platformServices,
     req,
     sessionName: 'diff-route',
     logPath: '/tmp/diff-route.log',

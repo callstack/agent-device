@@ -75,7 +75,7 @@ function loggedEvents(logPath: string): Array<{ phase: string; data?: Record<str
 function startDarwinDaemon(stateDir: string) {
   return withMockedPlatform('darwin', () =>
     startDaemonRuntime({
-      loadCommandSurface: async () => testCreateCommandSurface,
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,

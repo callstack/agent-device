@@ -73,8 +73,8 @@ async function runWithNetworkFlag(publicNetworkOnly: boolean | undefined) {
   // the asserted path: dropping it in the handler must fail this test, since an
   // unset field reads as trusted and a remote flow would run evalScript.
   const response = await handleReplayCommand({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req,
     sessionName: 'default',
     logPath: path.join(root, 'daemon.log'),

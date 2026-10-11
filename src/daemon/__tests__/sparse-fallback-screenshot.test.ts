@@ -58,8 +58,8 @@ async function dispatch(
   internalObservation = false,
 ) {
   const response = await dispatchSnapshotViaRuntime({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       command: 'snapshot',
       positionals: [],

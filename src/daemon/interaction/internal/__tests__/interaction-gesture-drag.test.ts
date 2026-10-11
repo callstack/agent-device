@@ -63,8 +63,8 @@ function makeDragSession(sessionName: string) {
 
 async function runDrag(sessionStore: ReturnType<typeof makeSessionStore>, sessionName: string) {
   return await handleInteractionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,

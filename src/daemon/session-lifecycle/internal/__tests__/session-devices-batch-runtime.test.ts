@@ -390,8 +390,8 @@ test('close clears retained materialized install paths bound to the session', as
   mockCleanupRetainedMaterializedPaths.mockImplementation(realCleanup);
 
   const response = await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
     sessionName,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

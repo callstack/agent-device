@@ -103,8 +103,8 @@ test.each(['rebuild', 'retire'] as const)(
       [Symbol.asyncDispose]: async () => {},
     };
     const running = dispatchGetViaRuntime({
-      
-      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: 'default',

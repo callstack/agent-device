@@ -104,8 +104,8 @@ async function runSuiteThroughReporter(params: {
       (event) => runReplayTestReporterProgress(reporters, event, reporterContext),
       async () =>
         await handleSessionCommands({
-          
-          createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+          createCommandSurface: testCreateCommandSurface,
+          platformServices: daemonPlatformServicesFixture(),
           req: {
             token: 't',
             session: 'default',

@@ -147,8 +147,8 @@ test('the bound construction path admits and binds before it builds a runtime', 
 
   const resolved = await createBoundSelectorRuntime(
     {
-      
-      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req: { token: 't', session: 'bound', command: 'get', positionals: [], flags: {} },
       sessionName: 'bound',
       logPath: '/tmp/bound.log',
@@ -173,8 +173,8 @@ test('the bound construction path refuses an unavailable operation without build
 
   const resolved = await createBoundSelectorRuntime(
     {
-      
-      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req: { token: 't', session: 'bound', command: 'is', positionals: [], flags: {} },
       sessionName: 'bound',
       logPath: '/tmp/bound.log',

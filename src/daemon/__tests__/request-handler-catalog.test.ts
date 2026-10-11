@@ -508,8 +508,8 @@ async function runCatalogCommandThroughHandlerChain(
       async () => [],
       async () =>
         await runRequestHandlerChain({
-          
-          createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+          createCommandSurface: testCreateCommandSurface,
+          platformServices: daemonPlatformServicesFixture(),
           req,
           sessionName: req.session,
           logPath: '/tmp/agent-device-catalog-route.log',

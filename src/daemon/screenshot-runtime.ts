@@ -120,7 +120,7 @@ export async function captureScreenshotArtifact(
   }>,
 ): Promise<CapturedScreenshot> {
   const { session, sessionName, outPath, dispatchContext } = params;
-  const runtime = params.createCommandSurface({
+  const runtime = await params.createCommandSurface({
     backend: createBoundScreenshotBackend(params),
     artifacts: createDaemonScreenshotArtifactAdapter(),
     sessions: createReadonlyRuntimeSessionStore(sessionName, session),

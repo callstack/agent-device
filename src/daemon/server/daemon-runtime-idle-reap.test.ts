@@ -38,7 +38,7 @@ test('daemon runtime self-reaps after the idle window when nothing ever uses it'
 
   try {
     const runtime = await startDaemonRuntime({
-      loadCommandSurface: async () => testCreateCommandSurface,
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -78,7 +78,7 @@ test('daemon runtime never self-reaps when AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS i
 
   try {
     const runtime = await startDaemonRuntime({
-      loadCommandSurface: async () => testCreateCommandSurface,
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -116,7 +116,7 @@ test('only a retained lease keeps the daemon runtime from self-reaping', async (
 
   try {
     const runtime = await startDaemonRuntime({
-      loadCommandSurface: async () => testCreateCommandSurface,
+      createCommandSurface: testCreateCommandSurface,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,

@@ -43,8 +43,8 @@ test('close finalizes an active iOS simulator recording before deleting the sess
   sessionStore.publish(sessionName, session);
 
   const response = await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -83,8 +83,8 @@ test('close surfaces a recording finalization failure through the cleanup-failur
 
   await expect(
     handleSessionCommands({
-      
-      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,

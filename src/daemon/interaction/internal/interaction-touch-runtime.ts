@@ -60,7 +60,7 @@ export async function dispatchRuntimeInteraction<
       target: InteractionTarget;
       extra: Record<string, unknown>;
     };
-    run(runtime: ReturnType<typeof createInteractionRuntimeForRoute>): Promise<TResult>;
+    run(runtime: Awaited<ReturnType<typeof createInteractionRuntimeForRoute>>): Promise<TResult>;
     /** May return a warning to append to the successful response (e.g. a pending Android permission dialog). */
     afterRun?(result: TResult): Promise<string | undefined>;
     buildPayloads(
@@ -72,7 +72,7 @@ export async function dispatchRuntimeInteraction<
   if (!params.sessionRef) return noActiveSessionError();
   const session = params.sessionStore.requireCurrent(params.sessionRef);
   const consumedCapture: { state?: SnapshotState } = {};
-  const runtime = createInteractionRuntimeForRoute({
+  const runtime = await createInteractionRuntimeForRoute({
     ...params,
     touchExecutor: options.touchExecutor,
     consumedCapture,

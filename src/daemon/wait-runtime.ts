@@ -156,7 +156,7 @@ async function executeWaitRequest(
   recordedLandmark: TargetAnnotationV1 | undefined,
 ): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
-  const runtime = createSelectorRuntimeForDevice({
+  const runtime = await createSelectorRuntimeForDevice({
     ...params,
     ref: params.ref,
     session,

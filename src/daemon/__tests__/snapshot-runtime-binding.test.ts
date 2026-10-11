@@ -44,8 +44,8 @@ test('the owning interface binds exactly the session device the facts were admit
 
   const resolved = await resolveBoundSnapshotCaptureRuntime(
     {
-      
-      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req,
       sessionName: 'bind-test',
       logPath: '/tmp/bind-test.log',

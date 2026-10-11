@@ -103,7 +103,7 @@ async function observeSettled(
   settle: SettleParams,
   baseline: SurfaceScopedNodes,
 ): Promise<SettleObservation | undefined> {
-  const runtime = createGenericSettleRuntime(context);
+  const runtime = await createGenericSettleRuntime(context);
   if (!runtime) return undefined;
   // R2: the daemon reaches the settle engine through the runtime command
   // surface, never by importing `commands/` — the same seam the touch handlers
@@ -120,11 +120,11 @@ async function observeSettled(
   return refsGeneration === undefined ? observation : { ...observation, refsGeneration };
 }
 
-function createGenericSettleRuntime(
+async function createGenericSettleRuntime(
   context: GenericSettleContext,
-): ReturnType<typeof createInteractionRuntime> | undefined {
+): Promise<Awaited<ReturnType<typeof createInteractionRuntime>> | undefined> {
   try {
-    return createInteractionRuntime({
+    return await createInteractionRuntime({
       createCommandSurface: context.createCommandSurface,
       req: context.req,
       sessionName: context.sessionName,

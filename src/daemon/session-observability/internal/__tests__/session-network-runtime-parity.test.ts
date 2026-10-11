@@ -61,8 +61,8 @@ test.each(NETWORK_RUNTIME_PROJECTION_PARITY)(
     const runtime = createNetworkRuntime(session.device, async () => result);
 
     const response = await handleSessionCommands({
-      
-      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -116,8 +116,8 @@ test('network admission remains fail-closed before parsing invalid input', async
   });
 
   const response = await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,
@@ -215,8 +215,8 @@ async function runNetwork(
   bindDevice: BindDeviceRuntime,
 ) {
   return await handleSessionCommands({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,

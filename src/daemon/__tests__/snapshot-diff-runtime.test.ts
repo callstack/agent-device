@@ -128,8 +128,8 @@ test.each([
     });
 
     const response = await dispatchSnapshotDiffViaRuntime({
-      
-      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         command: 'diff',
         positionals: ['snapshot'],
@@ -189,8 +189,8 @@ test('preserves initialized, unchanged, and changed diff results through one bou
 
   const run = async () =>
     await dispatchSnapshotDiffViaRuntime({
-      
-      createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+      createCommandSurface: testCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         command: 'diff',
         positionals: ['snapshot'],
@@ -239,8 +239,8 @@ test('a sparse internal diff capture returns no screenshot fallback artifact', a
   sessionStore.publish('diff-runtime', { ...harness.session, appBundleId: 'com.example.app' });
 
   const response = await dispatchSnapshotDiffViaRuntime({
-    
-    createCommandSurface: testCreateCommandSurface,platformServices: daemonPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: { command: 'diff', positionals: ['snapshot'], token: 't', session: 'diff-runtime' },
     sessionName: 'diff-runtime',
     logPath: '/tmp/diff-runtime.log',

@@ -362,13 +362,9 @@ export type DaemonCommandSurface = Readonly<{
 
 /**
  * The injection seam: one command surface per request-bound runtime config. The composition root
- * supplies `createCommandSurfaceAgentDevice`; a test supplies a fake through the same seam.
+ * supplies `createCommandSurfaceAgentDevice` behind an async lambda so the surface loads on the
+ * first request that needs it; a test supplies a fake through the same seam.
  */
-export type CreateDaemonCommandSurface = (config: AgentDeviceRuntimeConfig) => DaemonCommandSurface;
-
-/**
- * How the composition root hands the factory to the daemon: the daemon awaits this once at
- * startup, so the entry executable can keep the surface behind `await import` and out of its
- * eager closure (ADR 0019).
- */
-export type LoadDaemonCommandSurface = () => Promise<CreateDaemonCommandSurface>;
+export type CreateDaemonCommandSurface = (
+  config: AgentDeviceRuntimeConfig,
+) => Promise<DaemonCommandSurface>;
