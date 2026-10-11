@@ -1,6 +1,4 @@
-// The published `agent-device/io` façade. The artifact-adapter vocabulary now lives in
-// @agent-device/contracts/artifact-adapter; re-exporting it here keeps the published surface
-// unchanged for consumers (a public package entry may re-export its package boundary).
+// Published `agent-device/io` entry: local artifact I/O plus the contracts artifact-adapter types.
 export * from '../io.ts';
 export type {
   ArtifactAdapter,
