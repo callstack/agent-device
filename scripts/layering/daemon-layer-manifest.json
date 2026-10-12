@@ -196,6 +196,7 @@
     "src/daemon/handlers/session-appstate.ts",
     "src/daemon/handlers/session-boot.ts",
     "src/daemon/handlers/session-command-input.ts",
+    "src/daemon/handlers/session-device-status-response.ts",
     "src/daemon/handlers/session-doctor-app.ts",
     "src/daemon/handlers/session-doctor-device.ts",
     "src/daemon/handlers/session-doctor-metro.ts",
