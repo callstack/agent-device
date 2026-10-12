@@ -276,9 +276,9 @@ function targetStillMovingHint(params: { selector: string | undefined }): string
     ? `Run wait ${shellQuoteIfNeeded(params.selector)} and retry with the same selector`
     : 'Run snapshot -i and retry with a selector (text=/id=) rather than this @ref — re-observing retires the ref frame';
   return (
-    'The target was still moving when the transition window after the previous action ran out, so no resting ' +
-    `position could be confirmed and nothing was tapped. ${reobserve}; or pass --settle to have the action itself ` +
-    'wait for the UI to go quiet.'
+    'The target had no confirmed resting position when the transition window after the previous action ran ' +
+    `out, so nothing was dispatched. ${reobserve}; or pass --settle to have the action itself wait for the ` +
+    'UI to go quiet.'
   );
 }
 
@@ -301,8 +301,8 @@ function motionRefusal(
     new AppError(
       'COMMAND_FAILED',
       selector
-        ? `Selector ${selector} is still moving, so no resting position could be confirmed to press`
-        : `Ref ${ref} is still moving, so no resting position could be confirmed to press`,
+        ? `Selector ${selector} had no confirmed resting position when the transition window ran out`
+        : `Ref ${ref} had no confirmed resting position when the transition window ran out`,
       {
         reason: INTERACTION_ERROR_REASONS.targetStillMoving,
         ...(selector !== undefined ? { selector } : { ref }),

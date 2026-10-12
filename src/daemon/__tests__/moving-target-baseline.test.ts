@@ -223,10 +223,9 @@ function settleMark(params: { settled: boolean; diff: boolean }): SettleObservat
 }
 
 test('a settle that stored its settled tree records that tree, not the tree the press started from', () => {
-  // The loop stopped because two reads agreed, and the tree it published became the session
-  // snapshot. That tree IS the resting surface, and the follow-up press is contractually supposed to
-  // spend a tap and nothing else (test/integration/provider-scenarios/settle-observation.test.ts);
-  // screening it against the pre-action tree re-observes a surface the settle already proved quiet.
+  // The loop stopped because two reads agreed and that tree became the session snapshot, so it IS
+  // the resting surface — and the follow-up press is contractually supposed to spend a tap and
+  // nothing else (provider-scenarios/settle-observation.test.ts).
   const session = makeSession('android');
   const settled = appTree('Settled');
   session.snapshot = settled;

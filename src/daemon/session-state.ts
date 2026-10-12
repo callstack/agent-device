@@ -85,9 +85,8 @@ export type InteractionSurfaceEntry = {
  *   animating (#3471). The next action that resolves a target asks the tree it recorded whether its
  *   coordinates are still in play; captures stay plain, because nothing here is owed a wait.
  *
- * `markedAt` is the instant the mutation finished, not when it began, so the moving-target window
- * waits out only what is LEFT of it. Writing either variant retires the other, which is also how a
- * gesture takes over a surface a press had left mid-animation.
+ * `markedAt` is when the mutation FINISHED, so the window waits out only what is left of it, and
+ * writing either variant retires the other.
  */
 export type DeferredSurface =
   | {

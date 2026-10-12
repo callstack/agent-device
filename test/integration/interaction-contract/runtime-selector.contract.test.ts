@@ -291,7 +291,11 @@ test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'targetStability')[1]!, async () =
     () => device.interactions.press(selector('label=Continue'), { session: 'default' }),
     (error: unknown) => {
       assert.ok(error instanceof Error);
-      assert.match(error.message, /label=Continue is still moving/);
+      // Names the failed confirmation, not motion: the unmeasured shape cannot claim that.
+      assert.match(
+        error.message,
+        /label=Continue had no confirmed resting position when the transition window ran out/,
+      );
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
       assert.equal(details?.dispatched, 'no');

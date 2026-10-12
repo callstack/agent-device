@@ -278,6 +278,9 @@ test('a ref the second observation cannot re-measure is refused, never self-agre
       // hint's only test was the contracts unit suite, and the hint now lives beside this refusal.
       assert.match(String(details?.hint), /snapshot -i/);
       assert.match(String(details?.hint), /ref frame/);
+      // And no motion claim: this is the shape that measured NOTHING.
+      assert.match(String(details?.hint), /no confirmed resting position/);
+      assert.doesNotMatch(String(details?.hint), /was still moving/);
       return true;
     },
   );

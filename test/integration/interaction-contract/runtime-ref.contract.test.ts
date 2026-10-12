@@ -151,7 +151,11 @@ test(scenarioNames(RUNTIME_REF_COVERAGE, 'targetStability')[0]!, async () => {
     () => device.interactions.click(ref('@e1'), { session: 'default' }),
     (error: unknown) => {
       assert.ok(error instanceof Error);
-      assert.match(error.message, /still moving/);
+      // One message for both refusal shapes: the confirmation that failed, not motion.
+      assert.match(
+        error.message,
+        /Ref @e1 had no confirmed resting position when the transition window ran out/,
+      );
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.reason, 'target_still_moving');
       assert.equal(details?.dispatched, 'no');
