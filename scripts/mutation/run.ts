@@ -171,7 +171,10 @@ async function runStryker(
   const globs = mutateGlobs(modules);
   const all = expandMutateFiles(globs, repoRoot);
   // Source ranges keep single-file kernels inside the same shard budget.
-  const mutate = shard ? shardFiles(all, shard, repoRoot) : globs;
+  const excludedMutations =
+    JSON.parse(fs.readFileSync(path.join(repoRoot, CONFIG_PATH), 'utf8')).mutator
+      ?.excludedMutations ?? [];
+  const mutate = shard ? await shardFiles(all, shard, repoRoot, excludedMutations) : globs;
   const scopePath = path.join(repoRoot, TEST_SCOPE_PATH);
   const testFiles = await relatedTestFiles(
     shard ? [...new Set(mutate.map((file) => file.split(':')[0]!))] : all,
