@@ -2,16 +2,12 @@ import { daemonPlatformServicesFixture } from '../../__tests__/platform-services
 import { test, expect, vi, afterEach, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
-import {
-  isActiveProviderDevice,
-  setActiveProviderDeviceRuntimes,
-} from '../../../provider-device-runtime.ts';
-import { installProviderDeviceAdmission } from '../../provider-device-admission.ts';
+import { providerDeviceAdmissionFixture } from '../../__tests__/support/provider-device-admission-fixture.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
-// The daemon reads provider ownership through its own typed admission seam; production
-// installs it from root composition, and these tests compose it the same way.
-installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
+// The daemon reads provider ownership through its own typed admission seam; these suites
+// install the seam over runtime fakes, the way root composition installs the real one.
+const providerAdmission = providerDeviceAdmissionFixture();
 import { noopPlatformResourceCleanup as platformResourceCleanup } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import {
   fixtureSettingsMutations,
@@ -68,7 +64,7 @@ function handleSnapshotCommands(
 }
 
 afterEach(() => {
-  setActiveProviderDeviceRuntimes([]);
+  providerAdmission.setActive([]);
 });
 
 beforeEach(() => {

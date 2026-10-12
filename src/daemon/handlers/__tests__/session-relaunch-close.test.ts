@@ -1,16 +1,12 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import * as path from 'node:path';
 import { LeaseRegistry } from '../../lease-registry.ts';
-import {
-  isActiveProviderDevice,
-  setActiveProviderDeviceRuntimes,
-} from '../../../provider-device-runtime.ts';
-import { installProviderDeviceAdmission } from '../../provider-device-admission.ts';
+import { providerDeviceAdmissionFixture } from '../../__tests__/support/provider-device-admission-fixture.ts';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
-// The daemon reads provider ownership through its own typed admission seam; production
-// installs it from root composition, and these tests compose it the same way.
-installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
+// The daemon reads provider ownership through its own typed admission seam; these suites
+// install the seam over runtime fakes, the way root composition installs the real one.
+const providerAdmission = providerDeviceAdmissionFixture();
 import { createTestDeviceInventoryGateways } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeSession } from '../../__tests__/support/session-factories.ts';
@@ -238,7 +234,7 @@ test('open --relaunch does not let an ambient provider claim suppress a local pr
     kind: 'emulator' as const,
     booted: true,
   };
-  setActiveProviderDeviceRuntimes([
+  providerAdmission.setActive([
     {
       provider: 'fake-provider',
       leaseLifecycle: {},
@@ -270,7 +266,7 @@ test('open --relaunch does not let an ambient provider claim suppress a local pr
       { command: 'open', positionals: ['com.example.app'] },
     ]);
   } finally {
-    setActiveProviderDeviceRuntimes([]);
+    providerAdmission.setActive([]);
   }
 });
 

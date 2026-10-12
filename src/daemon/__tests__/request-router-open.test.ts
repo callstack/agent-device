@@ -77,7 +77,7 @@ import {
   lifecycleDeviceRuntimeGateway,
 } from './test-device-runtime-gateway.ts';
 import { createRequestHandler as createProductionRequestHandler } from '../request-router.ts';
-import { readDaemonProviderCredentials } from '../../provider-credential-fingerprint.ts';
+import { providerCredentialsFixture } from './support/provider-credentials-fixture.ts';
 import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { ensureDeviceReady } from '../device/device-ready.ts';
@@ -507,7 +507,7 @@ test('close fails synchronously when root composition omits platform resource cl
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
-    providerCredentials: readDaemonProviderCredentials({}, '/tmp'),
+    providerCredentials: providerCredentialsFixture({}, '/tmp'),
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',

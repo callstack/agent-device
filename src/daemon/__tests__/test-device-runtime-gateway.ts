@@ -28,7 +28,7 @@ import { clearAndroidObservationFixture } from './android-observation-fixture.ts
 import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';
 import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
-import { readDaemonProviderCredentials } from '../../provider-credential-fingerprint.ts';
+import { providerCredentialsFixture } from './support/provider-credentials-fixture.ts';
 
 const unavailable = Object.freeze({
   available: false as const,
@@ -237,7 +237,7 @@ export function createRequestHandler(
 ) {
   const {
     deviceRuntimeGateway = unavailableDeviceRuntimeGateway,
-    providerCredentials = readDaemonProviderCredentials({}, path.dirname(deps.logPath)),
+    providerCredentials = providerCredentialsFixture({}, path.dirname(deps.logPath)),
     platformServices = daemonPlatformServicesFixture(),
     claimRecoveryGateway = createClaimRecoveryGateway,
     ...rest
