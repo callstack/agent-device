@@ -71,6 +71,33 @@ describe('find CLI output', () => {
     );
   });
 
+  // The web backend's capture reports on-screen content it cannot address (static text, a status
+  // region). Such a match is still a match, so the row says it has no ref instead of printing an
+  // `@undefined` the daemon would reject.
+  test('list marks a match the capture issued no ref for', () => {
+    const output = formatFind({
+      matches: [
+        { ref: '@e5', node: { ref: 'e5', type: 'button', label: 'Add' } },
+        { node: { type: 'StaticText', value: 'Item saved' } },
+      ],
+      refsGeneration: 500014,
+    });
+
+    expect(output.text).toBe(
+      ['2 matches:', '= @e5~s500014 [button] "Add"', '= (no ref) [text] "Item saved"'].join('\n'),
+    );
+  });
+
+  test('get text of a ref-less match prints its text and offers no ref', () => {
+    const output = formatFind({
+      text: 'Item saved',
+      node: { type: 'StaticText', value: 'Item saved' },
+    });
+
+    expect(output.text).toBe('Item saved');
+    expect('ref' in (output.data as Record<string, unknown>)).toBe(false);
+  });
+
   test('list without a generation still lists refs unpinned rather than hiding them', () => {
     const output = formatFind({
       matches: [{ ref: '@e5', node: { ref: 'e5', type: 'Button', label: 'Add' } }],

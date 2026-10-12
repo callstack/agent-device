@@ -230,7 +230,11 @@ test('the real interactive keyboard capture collapses to one [Keyboard] diff lin
       node.role === 'TUISystemInputAssistantView' ||
       node.role === 'TUIPredictionViewCell' ||
       node.role === 'UIKeyboardDockItemButton';
-    if (isKeyboardSurface) assert.equal(chromeRefs.has(node.ref), true, `node ${node.index}`);
+    if (isKeyboardSurface) {
+      // An iOS capture mints refs densely, so a keyboard surface always has one to be chrome under.
+      assert.ok(node.ref, `keyboard surface ${node.index} carries no ref`);
+      assert.equal(chromeRefs.has(node.ref), true, `node ${node.index}`);
+    }
   }
 
   // The stripped set collapses the ~50 keyboard-surface nodes; what survives is

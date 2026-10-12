@@ -8,6 +8,7 @@ import {
   attachRefs,
   buildSnapshotPresentationKey,
   snapshotPresentationOptionsFromFlags,
+  snapshotRefMinting,
   type IosTargetActivation,
   type RawSnapshotNode,
   type SnapshotBackend,
@@ -79,6 +80,7 @@ export function buildSnapshotState(
     snapshotRaw
       ? scopedNodes
       : annotateCoveredSnapshotNodes(scopedNodes, overlayOptionsForBackend(data?.backend)),
+    snapshotRefMinting(data),
   );
   return {
     nodes,

@@ -106,7 +106,7 @@ test('split resolver: verification verifies the covered deeper node while dispat
   // isolates A; the unfiltered disambiguation winner is also A (deepest) —
   // path 4 verified. Dispatch would resolve B: exactly the split the
   // post-resolution guard exists to catch.
-  assertVerified(result, { winnerRef: nodeA.ref, matchCount: 2 });
+  assertVerified(result, { winnerRef: nodeA.ref!, matchCount: 2 });
 });
 
 test('split resolver: the post-resolution guard refuses pre-action when dispatch resolves a different element', async () => {
@@ -275,7 +275,7 @@ test('same-identity duplicates: verification denotes the covered member A among 
   });
   // matchCount 2 (both match); path 6 sibling ordinal isolates A, which is
   // also the unfiltered disambiguation winner → verified on A.
-  assertVerified(result, { winnerRef: nodeA.ref, matchCount: 2 });
+  assertVerified(result, { winnerRef: nodeA.ref!, matchCount: 2 });
 });
 
 test('same-identity duplicates: the structural guard refuses pre-action when dispatch resolves the OTHER duplicate (P1 regression)', async () => {

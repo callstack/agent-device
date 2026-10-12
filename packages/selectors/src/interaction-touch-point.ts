@@ -9,13 +9,17 @@ import { isSemanticTouchTarget } from './touch-semantics.ts';
 
 export type InteractionTouchPointResolution =
   | { kind: 'resolved'; point: Point; strategy: 'center' | 'parent-owned' }
-  | { kind: 'blocked'; competitorRefs: string[] }
+  /**
+   * The descendants that own the blocked area: `competitorCount` is the total, and
+   * `competitorRefs` names them as far as the capture made that possible.
+   */
+  | { kind: 'blocked'; competitorCount: number; competitorRefs: string[] }
   | { kind: 'invalid' };
 
 const MIN_COMPETITOR_CLEARANCE = 12;
 const MAX_PARENT_EDGE_CLEARANCE = 12;
 
-type InteractiveDescendantRect = { ref: string; index: number; rect: Rect };
+type InteractiveDescendantRect = { ref?: string; index: number; rect: Rect };
 type RankedPoint = { point: Point; distanceSquared: number; clearance: number };
 type PointClearance = { parentEdge: number; competitor: number };
 
@@ -43,7 +47,10 @@ export function resolveInteractionTouchPoint(
   if (!point) {
     return {
       kind: 'blocked',
-      competitorRefs: competitors.map((competitor) => competitor.ref),
+      competitorRefs: competitors.flatMap((competitor) =>
+        competitor.ref === undefined ? [] : [competitor.ref],
+      ),
+      competitorCount: competitors.length,
     };
   }
   return { kind: 'resolved', point, strategy: 'parent-owned' };

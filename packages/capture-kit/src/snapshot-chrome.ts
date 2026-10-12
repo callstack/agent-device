@@ -11,7 +11,7 @@ import {
   IOS_KEYBOARD_SURFACE_ROLES,
   isAndroidInputMethodNode,
 } from '@agent-device/contracts/android-input-ownership';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { snapshotRefBodies, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 
 /**
@@ -143,9 +143,7 @@ function collectKeyboardChrome(nodes: SnapshotNode[]): SettleChrome {
     chromeIndexes.add(index);
   }
   for (const index of markerIndexes) chromeIndexes.add(index);
-  const refs = new Set(
-    nodes.filter((node) => node.ref && chromeIndexes.has(node.index)).map((node) => node.ref),
-  );
+  const refs = new Set(snapshotRefBodies(nodes.filter((node) => chromeIndexes.has(node.index))));
   // The [Keyboard] container line itself survives the diff so "keyboard
   // appeared/left" stays one visible signal line; everything else collapses.
   const strippedIndexes = new Set(
@@ -307,11 +305,9 @@ function collectAndroidSettleChrome(
   );
   for (const index of systemChromeIndexes) strippedIndexes.add(index);
   const refs = new Set(
-    nodes
-      .filter(
-        (node) => node.ref && (imeIndexes.has(node.index) || systemChromeIndexes.has(node.index)),
-      )
-      .map((node) => node.ref),
+    snapshotRefBodies(
+      nodes.filter((node) => imeIndexes.has(node.index) || systemChromeIndexes.has(node.index)),
+    ),
   );
   if (strippedIndexes.size === 0 && refs.size === 0) return EMPTY_SETTLE_CHROME;
   return { strippedIndexes, refs };

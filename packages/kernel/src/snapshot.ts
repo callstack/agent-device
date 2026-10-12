@@ -386,7 +386,20 @@ export type SnapshotViewportSizeBrand = {
 };
 
 export type SnapshotNode = RawSnapshotNode & {
-  ref: string;
+  /**
+   * The ref an agent addresses this node by, or absent when nothing can address it.
+   *
+   * A backend that mints its own refs (web/agent-browser) owns that namespace and can only act on
+   * the refs it minted, so {@link attachRefs} mints nothing into it — a node the backend left
+   * unaddressed stays ref-less in the tree, which is how on-screen-but-not-actionable content
+   * (static text, a status region) reaches a reader without ever being offered as a tap target.
+   * Backends that mint no refs (Apple, Android, Linux) keep dense `e${index}` numbering, so every
+   * node of their trees carries a ref, as before.
+   *
+   * Every consumer that offers a node as an address must read this as an absence rather than print
+   * one: a ref-less node is selectable by text and by `find`/`wait`/`get`, and refused as a target.
+   */
+  ref?: string;
   /**
    * Normalized role, from the same table the text presenter reads (`formatRole` below). `type`
    * stays the raw platform class; `kind` is the presenter's own answer, published so a `--json`
@@ -758,18 +771,66 @@ export type ScreenshotOverlayRef = {
 };
 
 /**
- * Assign a display ref to every node. A node that already carries a backend-minted
- * `ref` keeps it (see `RawSnapshotNode.ref`) — the web/agent-browser backend resolves
- * actions against its own refs, so re-minting a dense positional ref here would make
- * the snapshot show one ref while actions act on a different element. Backends that do
- * not mint refs get dense `e${index}` numbering, matching the historical behavior.
+ * How a capture's nodes get the ref an agent addresses them by.
+ *
+ * - `dense` — the capture's producer mints no refs, so this layer numbers the tree `e1…eN` and
+ *   every node becomes addressable by its position.
+ * - `backend-issued` — the producer resolves actions against refs of its own (`e${n}` minted by
+ *   the backend, in tree order and not dense), so a ref this layer invented would name nothing.
+ *   A node the producer did not issue a ref for stays ref-less: present to a reader, absent from
+ *   the addressable namespace.
  */
-export function attachRefs(nodes: RawSnapshotNode[]): SnapshotNode[] {
+export type SnapshotRefMinting = 'dense' | 'backend-issued';
+
+/**
+ * Assign a display ref to every node, in the mode the capture's producer needs (see
+ * `SnapshotRefMinting`).
+ *
+ * A node that already carries a backend-minted `ref` keeps it (see `RawSnapshotNode.ref`) — the
+ * web/agent-browser backend resolves actions against its own refs, so re-minting a dense positional
+ * ref here would make the snapshot show one ref while actions act on a different element.
+ *
+ * Under `dense` every node ends up addressable, as it always has. Under `backend-issued` only the
+ * nodes the producer issued a ref for do: the rest stay ref-less, readable and searchable by their
+ * text and tree position, and never an address — which is what `hasSnapshotRef` and
+ * `snapshotRefBodies` report, and what a caller publishing an address must check.
+ */
+export function attachRefs(
+  nodes: RawSnapshotNode[],
+  minting: SnapshotRefMinting = 'dense',
+): SnapshotNode[] {
   return nodes.map((node, idx) => ({
     ...node,
-    ref: node.ref ?? `e${idx + 1}`,
+    ...(node.ref === undefined && minting !== 'dense' ? {} : { ref: node.ref ?? `e${idx + 1}` }),
     kind: formatRole(node.type ?? 'Element'),
   }));
+}
+
+/**
+ * Whether a node can be addressed by ref, narrowing the ref for callers that publish it as an
+ * address (an overlay label, a settle tail entry, a ref pin). A ref-less node is readable and
+ * searchable, never addressable.
+ */
+export function hasSnapshotRef(node: SnapshotNode): node is SnapshotNode & { ref: string } {
+  return node.ref !== undefined;
+}
+
+/** The refs a node set can be re-addressed by; ref-less nodes contribute no ref evidence. */
+export function snapshotRefBodies(nodes: readonly SnapshotNode[]): string[] {
+  return nodes.flatMap((node) => (node.ref === undefined ? [] : [node.ref]));
+}
+
+/**
+ * The ref-minting mode of a capture, from the pair that produced it. This is the one place that
+ * knows which producers own their ref namespace, so the projection that publishes a tree and the
+ * projection that later re-attaches refs to it cannot disagree.
+ */
+export function snapshotRefMinting(
+  provenance: Partial<SnapshotProvenance> | undefined,
+): SnapshotRefMinting {
+  // agent-browser resolves click/fill/hover against refs it minted itself, in tree order and not
+  // densely (#2283). A ref minted beside it would either name a different element or nothing.
+  return provenance?.backend === 'web' ? 'backend-issued' : 'dense';
 }
 
 /**

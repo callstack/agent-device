@@ -64,7 +64,8 @@ async function main(): Promise<void> {
 
     const snapshot = await client.capture.snapshot({ interactiveOnly: true });
     const target = snapshot.nodes.find((node) => node.role === 'button');
-    if (target) {
+    // A node carries a ref only when something can address it, and press needs that address.
+    if (target?.ref !== undefined) {
       await client.interactions.press({ ref: target.ref });
     }
   } catch (error) {

@@ -25,6 +25,9 @@ test('web provider is scoped through the request router and dispatch path', asyn
         nodes: [
           {
             index: 0,
+            // Refs the way agent-browser issues them: a web capture publishes its producer's refs
+            // and mints no replacement for a node it left unaddressed.
+            ref: 'e1',
             type: 'section',
             role: 'main',
             label: 'main',
@@ -33,6 +36,7 @@ test('web provider is scoped through the request router and dispatch path', asyn
           },
           {
             index: 1,
+            ref: 'e2',
             type: 'button',
             role: 'button',
             label: 'Launch',

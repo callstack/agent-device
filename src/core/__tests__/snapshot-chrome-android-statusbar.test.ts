@@ -1,6 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { attachRefs, type RawSnapshotNode, type SnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  attachRefs,
+  snapshotRefBodies,
+  type RawSnapshotNode,
+  type SnapshotNode,
+} from '@agent-device/kernel/snapshot';
 import {
   collectSettleChromeRefs,
   withoutSettleChrome,
@@ -79,9 +84,9 @@ test('Android non-raw capture: status-bar leaves stay chrome after the walk drop
   // The whole systemui run drops together, including the anonymous Compose
   // plumbing nodes above/around the leaves that carry no identifier at all
   // (and the re-parented, now-anonymous battery leaf).
-  const systemUiRefs = nodes
-    .filter((node) => node.bundleId === 'com.android.systemui')
-    .map((node) => node.ref);
+  const systemUiRefs = snapshotRefBodies(
+    nodes.filter((node) => node.bundleId === 'com.android.systemui'),
+  );
   assert.equal(systemUiRefs.length > 0, true);
   for (const ref of systemUiRefs) {
     assert.equal(chromeRefs.has(ref), true, 'expected every systemui-owned node to be chrome');
@@ -93,9 +98,9 @@ test('Android non-raw capture: status-bar leaves stay chrome after the walk drop
   assert.equal(chromeRefs.has(refForIdentifier(nodes, 'field-name')), false);
   assert.equal(chromeRefs.has(refForIdentifier(nodes, 'field-email')), false);
   assert.equal(chromeRefs.has(refForIdentifier(nodes, 'field-phone')), false);
-  const imeRefs = nodes
-    .filter((node) => node.bundleId === 'com.google.android.inputmethod.latin')
-    .map((node) => node.ref);
+  const imeRefs = snapshotRefBodies(
+    nodes.filter((node) => node.bundleId === 'com.google.android.inputmethod.latin'),
+  );
   assert.equal(imeRefs.length > 0, true);
   for (const ref of imeRefs) {
     assert.equal(chromeRefs.has(ref), true, 'expected every IME-owned node to be chrome');

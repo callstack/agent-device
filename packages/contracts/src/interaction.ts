@@ -283,10 +283,10 @@ export type SettleParams = {
  */
 export type FindReadResult =
   | { kind: 'found'; found: true; waitedMs?: number }
-  | { kind: 'text'; ref: string; text: string; node: SnapshotNode }
-  | { kind: 'attrs'; ref: string; node: SnapshotNode }
+  | { kind: 'text'; ref?: string; text: string; node: SnapshotNode }
+  | { kind: 'attrs'; ref?: string; node: SnapshotNode }
   /** #1625: the read-only inspection surface — every match, never a tap. */
-  | { kind: 'list'; matches: Array<{ ref: string; node: SnapshotNode }> };
+  | { kind: 'list'; matches: Array<{ ref?: string; node: SnapshotNode }> };
 
 export type SettleObservation = {
   settled: boolean;
@@ -513,8 +513,9 @@ export type FindCommandResponseData = {
   waitedMs?: number;
   text?: string;
   node?: SnapshotNode;
-  /** Every match of the read-only `list` action (#1625), each ref pinnable at `refsGeneration`. */
-  matches?: Array<{ ref: string; node: SnapshotNode }>;
+  /** Every match of the read-only `list` action (#1625), each ref pinnable at `refsGeneration`. A
+   * match on content the capture's producer issued no ref for carries none: readable, not pinnable. */
+  matches?: Array<{ ref?: string; node: SnapshotNode }>;
   locator?: string;
   query?: string;
   x?: number;

@@ -143,10 +143,9 @@ export const findCommand: RuntimeCommand<FindReadCommandOptions, FindReadCommand
   }
 
   if (options.action === 'exists') return { kind: 'found', found: true };
-  const ref = `@${match.ref}`;
-  if (options.action === 'get_attrs') return { kind: 'attrs', ref, node: match };
+  if (options.action === 'get_attrs') return { kind: 'attrs', ...refAddress(match), node: match };
   const text = await readText(runtime, capture, match);
-  return { kind: 'text', ref, text, node: match };
+  return { kind: 'text', ...refAddress(match), text, node: match };
 };
 
 export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = async (
@@ -313,8 +312,13 @@ async function listFindMatches(
     : findBestMatchesByLocator(capture.snapshot.nodes, locator, options.query, {}).matches;
   return {
     kind: 'list',
-    matches: matched.map((node) => ({ ref: `@${node.ref}`, node })),
+    matches: matched.map((node) => ({ ...refAddress(node), node })),
   };
+}
+
+/** The address an agent acts on, for a match the capture's producer issued a ref for. */
+function refAddress(node: SnapshotNode): { ref?: string } {
+  return node.ref === undefined ? {} : { ref: `@${node.ref}` };
 }
 
 async function findFirstLocatorMatch(
@@ -362,7 +366,7 @@ async function resolveSelectorNode(
   options: GetCommandOptions,
   sessionName: string,
   params: { selector: string; policy: GetPipelinePolicy; hooks?: SelectorPipelineHooks },
-): Promise<{ capture: CapturedSnapshot; node: SnapshotNode; selector: string; ref: string }> {
+): Promise<{ capture: CapturedSnapshot; node: SnapshotNode; selector: string; ref?: string }> {
   const capture = await captureSelectorSnapshot(
     runtime,
     { ...options, session: sessionName },
@@ -389,6 +393,6 @@ async function resolveSelectorNode(
     capture,
     node: outcome.node,
     selector: outcome.selector,
-    ref: `@${outcome.node.ref}`,
+    ...refAddress(outcome.node),
   };
 }

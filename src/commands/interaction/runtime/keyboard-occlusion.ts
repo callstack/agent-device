@@ -1,9 +1,9 @@
-import type {
-  Point,
-  Rect,
-  SnapshotKeyboardBandFact,
-  SnapshotNode,
-  SnapshotState,
+import {
+  type Point,
+  type Rect,
+  type SnapshotKeyboardBandFact,
+  type SnapshotNode,
+  type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
@@ -106,7 +106,8 @@ function keyboardOcclusionWarning(point: Point, surface: KeyboardSurface): strin
 function buildKeyboardOcclusionError(params: {
   label: string;
   action: InteractionAction;
-  ref: string;
+  /** The ref the target was named by; omitted with the detail when nothing addresses the node. */
+  ref: string | undefined;
   targetRect: NonNullable<SnapshotNode['rect']>;
   surface: KeyboardSurface;
 }): AppError {
@@ -116,7 +117,7 @@ function buildKeyboardOcclusionError(params: {
       `${params.label} is behind the visible keyboard and cannot ${interactionVerb(params.action)} safely`,
       {
         ...TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS,
-        ref: `@${params.ref}`,
+        ...(params.ref === undefined ? {} : { ref: `@${params.ref}` }),
         rect: params.targetRect,
         keyboardFrame: params.surface.frame,
       },
