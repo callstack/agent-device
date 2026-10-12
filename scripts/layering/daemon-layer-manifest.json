@@ -55,6 +55,7 @@
     "src/daemon/session-state.ts",
     "src/daemon/session-store.ts",
     "src/daemon/session-tenant-scope.ts",
+    "src/daemon/settle-observation-capture.ts",
     "src/daemon/snapshot-capture.ts",
     "src/daemon/snapshot-interactor-capture.ts",
     "src/daemon/snapshot-runtime-binding.ts",
