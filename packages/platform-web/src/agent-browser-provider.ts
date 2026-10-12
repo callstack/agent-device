@@ -23,10 +23,11 @@ import {
   mapManagedAgentBrowserError,
   runManagedAgentBrowser,
 } from './agent-browser-tool.ts';
+import { cleanupManagedAgentBrowserOrphansForProviderStartup } from './agent-browser-lifecycle.ts';
 import {
-  cleanupManagedAgentBrowserOrphansForProviderStartup,
+  managedWebBrowserProcessRecordIsLive,
   recordManagedAgentBrowserProcesses,
-} from './agent-browser-lifecycle.ts';
+} from './agent-browser-process-record.ts';
 import { DEFAULT_SCROLL_AMOUNT } from '@agent-device/contracts/scroll-gesture';
 
 const AGENT_BROWSER = 'agent-browser';
@@ -355,7 +356,9 @@ async function finalizeAgentBrowserProcessRecord(params: {
     const otherOpenSessions = remainingSessions.filter((name) => name !== currentSession);
     if (canClearAgentBrowserRecord(params, otherOpenSessions.length)) {
       store.clear({ kind: 'daemon' });
-    } else {
+      return;
+    }
+    if (await shouldRefreshAgentBrowserProcessRecord(params, store)) {
       await recordManagedAgentBrowserProcesses(params.status, store);
     }
   } catch (error) {
@@ -365,6 +368,39 @@ async function finalizeAgentBrowserProcessRecord(params: {
       data: { error: error instanceof Error ? error.message : String(error) },
     });
   }
+}
+
+/**
+ * The agent-browser commands that can change the owned browser fleet: `open` may launch the
+ * agent-browser daemon and its Chrome, and `close` can end them.
+ */
+const AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS: ReadonlySet<string> = new Set(['open', 'close']);
+
+/**
+ * Whether the process-table scan that rewrites the owned-process record has to run for one
+ * agent-browser call.
+ *
+ * Any failure may be the first command that finds the fleet died or restarted between calls, so
+ * it refreshes; so do `open` and `close`, which launch and end the fleet. A plain successful call
+ * acts on a fleet the record already describes, and re-deriving that fleet means a process-tool
+ * snapshot of every host process, which is the cost this seam exists to avoid.
+ * {@link managedWebBrowserProcessRecordIsLive} answers for the recorded pids from one same-pid
+ * probe instead. It is fail-closed: an empty, undecodable, or unanswered probe falls back to the
+ * scan, so a live fleet this daemon adopted from a predecessor becomes owned through the record
+ * again, and a fleet that died or restarted outside a lifecycle boundary is caught by the next
+ * command that can no longer name every process the record still claims is alive.
+ */
+async function shouldRefreshAgentBrowserProcessRecord(
+  params: Pick<
+    Parameters<typeof finalizeAgentBrowserProcessRecord>[0],
+    'cliArgs' | 'commandCompleted' | 'semanticSuccess'
+  >,
+  store: OwnedProcessRecordStore,
+): Promise<boolean> {
+  if (!params.commandCompleted || !params.semanticSuccess) return true;
+  const command = params.cliArgs[0];
+  if (command !== undefined && AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS.has(command)) return true;
+  return !(await managedWebBrowserProcessRecordIsLive(store));
 }
 
 function canClearAgentBrowserRecord(

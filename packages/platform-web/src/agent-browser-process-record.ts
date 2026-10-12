@@ -7,6 +7,7 @@ import {
   expandProcessTree,
   hostProcessId,
   listHostProcesses,
+  readHostProcessIdentityObservationsAsync,
   readProcessCommand,
   readProcessStartTime,
   type HostProcessInfo,
@@ -17,6 +18,9 @@ import type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
 
 const HOST_PROCESS_LIST_TIMEOUT_MS = 1_500;
 const AGENT_DEVICE_BROWSER_MARKER_PREFIX = '--agent-device-managed-web=';
+
+/** The `purpose` every owned-process record for the managed web fleet carries. */
+export const MANAGED_WEB_BROWSER_PROCESS_PURPOSE = 'managed-web-browser';
 
 export type AgentBrowserProcessMatch = {
   process: HostProcessInfo;
@@ -116,11 +120,49 @@ export async function recordManagedAgentBrowserProcesses(
     const startTime = readProcessStartTime(processInfo.pid);
     const command = readProcessCommand(processInfo.pid);
     return startTime && command
-      ? [{ pid: processInfo.pid, startTime, command, purpose: 'managed-web-browser' }]
+      ? [{ pid: processInfo.pid, startTime, command, purpose: MANAGED_WEB_BROWSER_PROCESS_PURPOSE }]
       : [];
   });
   if (records.length > 0) store.replace({ kind: 'daemon' }, records);
   return summary;
+}
+
+/**
+ * Whether the daemon-scoped record still describes a live managed fleet.
+ *
+ * `true` only when every process the record names is alive under the identity the record carries:
+ * named by one same-pid snapshot, not a zombie, started at the recorded time. Unknown evidence —
+ * an unanswered probe, an undecodable or empty record — reads as not-live, so the caller rescans
+ * and re-owns. This vouches for the recorded pids, not for fleet membership: a browser child the
+ * fleet minted after the last scan stays unrecorded, and dies with the recorded browser process
+ * that parents it. Liveness-and-lifetime is the whole question here; the reaper that signals
+ * proves identity per pid with its own facts.
+ */
+export async function managedWebBrowserProcessRecordIsLive(
+  store: OwnedProcessRecordStore,
+): Promise<boolean> {
+  const records = readDaemonManagedWebBrowserRecords(store);
+  if (records.length === 0) return false;
+  const observations = await readHostProcessIdentityObservationsAsync(
+    records.map((record) => record.pid),
+  );
+  return records.every((record) => {
+    const observation = observations.get(record.pid);
+    return (
+      observation !== undefined &&
+      !observation.state.startsWith('Z') &&
+      observation.startTime === record.startTime
+    );
+  });
+}
+
+/** The daemon-scoped managed browser records. A store that cannot answer simply has none. */
+function readDaemonManagedWebBrowserRecords(store: OwnedProcessRecordStore): OwnedProcessRecord[] {
+  return store
+    .read()
+    .filter((entry) => entry.scope.kind === 'daemon' && entry.status === 'decoded')
+    .flatMap((entry) => entry.records)
+    .filter((record) => record.purpose === MANAGED_WEB_BROWSER_PROCESS_PURPOSE);
 }
 
 async function listRealHostProcesses(): Promise<HostProcessInfo[]> {

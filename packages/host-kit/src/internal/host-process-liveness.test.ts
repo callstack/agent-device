@@ -14,6 +14,7 @@ vi.mock('./exec.ts', async () => {
 import {
   isProcessZombie,
   readHostProcessIdentityObservations,
+  readHostProcessIdentityObservationsAsync,
   readProcessIdentityFacts,
 } from './host-process.ts';
 
@@ -77,6 +78,46 @@ test('reads many process identities from one ps snapshot', () => {
     '-o',
     'pid=,state=,lstart=',
   ]);
+});
+
+test('the async snapshot answers the same observations from one awaited ps run', async () => {
+  mockRunCmd.mockImplementation(async (_cmd: string, args: readonly string[]) => {
+    assert.deepEqual(args, ['-p', '4242,4343', '-o', 'pid=,state=,lstart=']);
+    return {
+      stdout: `4242 Ss   Mon Aug 10 20:00:00 2026
+4343 ZN   Mon Aug 10 20:01:00 2026
+`,
+      stderr: '',
+      exitCode: 0,
+    };
+  });
+
+  const observations = await readHostProcessIdentityObservationsAsync([4242, 4343, 4242]);
+
+  assert.deepEqual(observations.get(4242), {
+    state: 'Ss',
+    startTime: 'Mon Aug 10 20:00:00 2026',
+  });
+  assert.deepEqual(observations.get(4343), {
+    state: 'ZN',
+    startTime: 'Mon Aug 10 20:01:00 2026',
+  });
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+  assert.equal(mockRunCmdSync.mock.calls.length, 0, 'the async probe never blocks the loop');
+});
+
+test('an async snapshot that is not answered is unknown evidence, not an empty fleet', async () => {
+  mockRunCmd.mockResolvedValue({ stdout: '', stderr: '', exitCode: 1 });
+  assert.equal((await readHostProcessIdentityObservationsAsync([4242])).size, 0);
+  mockRunCmd.mockRejectedValue(new Error('ps timed out'));
+  assert.equal((await readHostProcessIdentityObservationsAsync([4242])).size, 0);
+});
+
+test('no pid to ask about means no process tool runs at all', async () => {
+  assert.equal((await readHostProcessIdentityObservationsAsync([])).size, 0);
+  assert.equal((await readHostProcessIdentityObservationsAsync([-1, 0])).size, 0);
+  assert.equal(mockRunCmd.mock.calls.length, 0);
+  assert.equal(mockRunCmdSync.mock.calls.length, 0);
 });
 
 test('the ownership read spends the budget its caller names on every field', async () => {

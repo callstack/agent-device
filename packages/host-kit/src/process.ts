@@ -17,6 +17,7 @@ export {
   readHostCpuArchSync,
   readHostEnvironmentVariable,
   readHostProcessIdentityObservations,
+  readHostProcessIdentityObservationsAsync,
   readProcessCommand,
   readProcessIdentityFacts,
   readProcessStartTime,

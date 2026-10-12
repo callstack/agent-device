@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeEach, test, vi } from 'vitest';
 import {
-  installFakeManagedAgentBrowser,
+  agentBrowserJsonResult,
+  managedAgentBrowserCliArgs,
   mkdtempForTestSync,
+  withManagedAgentBrowserProvider,
   withNodeRuntime,
 } from './__tests__/test-utils.ts';
 
@@ -22,7 +24,6 @@ vi.mock('./agent-browser-lifecycle.ts', async (importOriginal) => {
 import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 import type { WebSnapshotResult } from './provider.ts';
 import { withCommandExecutorOverride, type ExecResult } from '@agent-device/host-kit/command';
-import { type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
@@ -115,8 +116,8 @@ test('agent-browser provider runs provider-startup cleanup before the first mana
     async (provider) => {
       await withCommandExecutorOverride(
         async (_cmd, args) => {
-          events.push(`agent-browser ${agentBrowserCliArgs(args)[0] ?? ''}`);
-          return jsonResult({ success: true, data: {} });
+          events.push(`agent-browser ${managedAgentBrowserCliArgs(args)[0] ?? ''}`);
+          return agentBrowserJsonResult({ success: true, data: {} });
         },
         async () => await provider.open('https://example.test'),
       );
@@ -128,83 +129,6 @@ test('agent-browser provider runs provider-startup cleanup before the first mana
   assert.deepEqual(mockProviderStartupCleanup.mock.calls[0]?.[1], {
     openWebSessionNames: [],
   });
-});
-
-test('agent-browser close clears the daemon-owned record after its own session closes', async () => {
-  const ownedProcessRecords: OwnedProcessRecordStore = {
-    replace: vi.fn(),
-    clear: vi.fn(),
-    read: vi.fn(() => []),
-  };
-
-  await withManagedAgentBrowserProvider(
-    {
-      session: 'web-session',
-      openWebSessionNames: () => ['web-session'],
-      ownedProcessRecords,
-    },
-    async (provider) => {
-      await withCommandExecutorOverride(recordingExecutor([]), async () => await provider.close());
-    },
-  );
-
-  expect(ownedProcessRecords.clear).toHaveBeenCalledWith({ kind: 'daemon' });
-  expect(ownedProcessRecords.replace).not.toHaveBeenCalled();
-});
-
-test('agent-browser close failure does not clear the daemon-owned record', async () => {
-  const ownedProcessRecords: OwnedProcessRecordStore = {
-    replace: vi.fn(),
-    clear: vi.fn(),
-    read: vi.fn(() => []),
-  };
-
-  await withManagedAgentBrowserProvider(
-    {
-      session: 'web-session',
-      openWebSessionNames: () => ['web-session'],
-      ownedProcessRecords,
-    },
-    async (provider) => {
-      await withCommandExecutorOverride(
-        async () => {
-          throw new Error('close failed before execution');
-        },
-        async () => await assert.rejects(async () => await provider.close()),
-      );
-    },
-  );
-
-  expect(ownedProcessRecords.clear).not.toHaveBeenCalled();
-});
-
-test('agent-browser semantic close failure does not clear the daemon-owned record', async () => {
-  const ownedProcessRecords: OwnedProcessRecordStore = {
-    replace: vi.fn(),
-    clear: vi.fn(),
-    read: vi.fn(() => []),
-  };
-
-  await withManagedAgentBrowserProvider(
-    {
-      session: 'web-session',
-      openWebSessionNames: () => ['web-session'],
-      ownedProcessRecords,
-    },
-    async (provider) => {
-      await withCommandExecutorOverride(
-        async () =>
-          jsonResult({
-            success: false,
-            code: 'CLOSE_FAILED',
-            error: 'browser stayed open',
-          }),
-        async () => await assert.rejects(async () => await provider.close()),
-      );
-    },
-  );
-
-  expect(ownedProcessRecords.clear).not.toHaveBeenCalled();
 });
 
 test('agent-browser provider ignores provider-startup cleanup failures', async () => {
@@ -261,7 +185,7 @@ test('agent-browser provider passes snapshot cancellation to the CLI process', a
     await withCommandExecutorOverride(
       async (_cmd, _args, options) => {
         receivedSignal = options?.signal;
-        return jsonResult({
+        return agentBrowserJsonResult({
           success: true,
           data: { nodes: [], refs: [], truncated: false },
         });
@@ -302,7 +226,7 @@ test('agent-browser provider dumps session network requests', async () => {
     const calls: AgentBrowserCall[] = [];
     const executor = async (cmd: string, args: readonly string[]): Promise<ExecResult> => {
       recordAgentBrowserCall(calls, cmd, args);
-      return jsonResult({
+      return agentBrowserJsonResult({
         success: true,
         data: {
           requests: [
@@ -368,7 +292,7 @@ test('agent-browser provider probes page audio through eval', async () => {
     const audio = await withCommandExecutorOverride(
       async (cmd, args) => {
         recordAgentBrowserCall(calls, cmd, args);
-        return jsonResult({
+        return agentBrowserJsonResult({
           success: true,
           data: {
             origin: 'http://localhost:19006',
@@ -437,7 +361,7 @@ test('agent-browser provider generated audio probe script samples streams discov
       const script = cliArgs[1];
       if (typeof script !== 'string') throw new Error('Expected generated eval script');
       if (calls.length === 2) page.audio.srcObject = page.stream;
-      return jsonResult({
+      return agentBrowserJsonResult({
         success: true,
         data: {
           origin: 'http://localhost:19006',
@@ -488,8 +412,8 @@ test('agent-browser provider surfaces stale ref failures during requested snapsh
       () =>
         withCommandExecutorOverride(
           async (_cmd, args) => {
-            if (agentBrowserCliArgs(args)[0] === 'snapshot') {
-              return jsonResult({
+            if (managedAgentBrowserCliArgs(args)[0] === 'snapshot') {
+              return agentBrowserJsonResult({
                 success: true,
                 data: {
                   refs: { e1: { role: 'button', name: 'Save' } },
@@ -497,7 +421,7 @@ test('agent-browser provider surfaces stale ref failures during requested snapsh
                 },
               });
             }
-            return jsonResult({ success: false, error: 'Stale ref @e1' });
+            return agentBrowserJsonResult({ success: false, error: 'Stale ref @e1' });
           },
           async () => await provider.snapshot({ includeRects: true }),
         ),
@@ -565,41 +489,11 @@ test('agent-browser provider preserves Node version guidance for missing managed
   });
 });
 
-async function withManagedAgentBrowserProvider(
-  options: {
-    session?: string;
-    openWebSessionNames?: () => readonly string[];
-    ownedProcessRecords?: OwnedProcessRecordStore;
-  },
-  testFn: (
-    provider: ReturnType<typeof createAgentBrowserWebProvider>,
-    install: ReturnType<typeof installFakeManagedAgentBrowser>,
-  ) => void | Promise<void>,
-): Promise<void> {
-  const stateDir = mkdtempForTestSync('agent device web provider ');
-  try {
-    const install = installFakeManagedAgentBrowser(stateDir);
-    const provider = createAgentBrowserWebProvider({ ...options, stateDir });
-    await testFn(provider, install);
-  } finally {
-    fs.rmSync(stateDir, { recursive: true, force: true });
-  }
-}
-
 function recordingExecutor(calls: AgentBrowserCall[]) {
   return async (cmd: string, args: readonly string[]): Promise<ExecResult> => {
     recordAgentBrowserCall(calls, cmd, args);
-    return jsonResult({ success: true, data: {} });
+    return agentBrowserJsonResult({ success: true, data: {} });
   };
-}
-
-/**
- * The backend runs as `node <entry> <agent-browser args>`; that shape is owned
- * and asserted by agent-browser-tool. Here it is only stripped, so provider
- * tests read as the agent-browser CLI arguments they are about.
- */
-function agentBrowserCliArgs(args: readonly string[]): string[] {
-  return args.slice(1);
 }
 
 function recordAgentBrowserCall(
@@ -607,7 +501,7 @@ function recordAgentBrowserCall(
   cmd: string,
   args: readonly string[],
 ): string[] {
-  const cliArgs = agentBrowserCliArgs(args);
+  const cliArgs = managedAgentBrowserCliArgs(args);
   calls.push({ cmd, args: cliArgs });
   return cliArgs;
 }
@@ -618,10 +512,10 @@ function snapshotExecutor(calls: AgentBrowserCall[]) {
     if (cliArgs[0] === 'snapshot') return snapshotPayload();
     if (cliArgs.slice(0, 3).join(' ') === 'get box @e3') {
       assert.equal(options.allowFailure, true);
-      return jsonResult({ success: false, error: 'No box for element' }, 1);
+      return agentBrowserJsonResult({ success: false, error: 'No box for element' }, 1);
     }
     if (cliArgs[0] === 'get' && cliArgs[1] === 'box') return boxPayload(cliArgs[2]);
-    return jsonResult({ success: true, data: {} });
+    return agentBrowserJsonResult({ success: true, data: {} });
   };
 }
 
@@ -686,7 +580,7 @@ function expectedNode(
 }
 
 function snapshotPayload(): ExecResult {
-  return jsonResult({
+  return agentBrowserJsonResult({
     success: true,
     data: {
       refs: {
@@ -708,14 +602,10 @@ function snapshotPayload(): ExecResult {
 
 function boxPayload(ref: string | undefined): ExecResult {
   const offset = ref === '@e1' ? 0 : ref === '@e2' ? 10 : 30;
-  return jsonResult({
+  return agentBrowserJsonResult({
     success: true,
     data: { x: offset + 1, y: offset + 2, width: 100, height: 20 },
   });
-}
-
-function jsonResult(value: unknown, exitCode = 0): ExecResult {
-  return { stdout: JSON.stringify(value), stderr: '', exitCode };
 }
 
 function expectedSelectAllShortcut(): string {

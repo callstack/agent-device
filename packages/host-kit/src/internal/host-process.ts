@@ -1,5 +1,5 @@
 import type { ExecOptions, ExecResult } from './exec.ts';
-import { runCmd, runCmdSync } from './exec.ts';
+import { runCmd, runCmdSync, withoutCommandExecutorOverride } from './exec.ts';
 import { sleep } from './retry.ts';
 
 const PS_TIMEOUT_MS = 1_000;
@@ -143,43 +143,124 @@ export function isProcessZombie(pid: number): boolean {
   return readProcessField(pid, 'state=')?.startsWith('Z') ?? false;
 }
 
+/**
+ * What the host says about each pid named, from one process-tool snapshot. An unanswered pid is
+ * missing from the map, which is unknown evidence rather than absence: a caller that signals on
+ * the answer must stay fail-closed. Use {@link readHostProcessIdentityObservationsAsync} from a
+ * path that is already waiting; this one blocks the event loop for the whole snapshot.
+ */
 export function readHostProcessIdentityObservations(
   pids: Iterable<number>,
 ): ReadonlyMap<number, HostProcessIdentityObservation> {
-  const observations = new Map<number, HostProcessIdentityObservation>();
   const selected = uniquePositivePids(pids);
-  if (selected.length === 0) return observations;
-  if (isWindowsHostPlatform()) {
-    for (const row of readWindowsProcessRows(selected, WINDOWS_PS_TIMEOUT_MS)) {
-      if (row.startTime === null) continue;
-      // A live row is never a zombie: a terminated Windows process leaves the
-      // CIM table, it does not linger in it unreaped, so no row state exposes
-      // one. Exit proof stays liveness-and-lifetime, as on every other platform.
-      observations.set(row.pid, { state: 'R', startTime: row.startTime });
-    }
-    return observations;
-  }
-  try {
-    const result = runCmdSync(
-      HOST_PS_COMMAND,
-      ['-p', selected.join(','), '-o', 'pid=,state=,lstart='],
-      {
-        allowFailure: true,
-        timeoutMs: PS_TIMEOUT_MS,
-      },
-    );
-    if (result.exitCode !== 0) return observations;
-    for (const line of result.stdout.split('\n')) {
-      const match = /^\s*(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(line);
-      if (!match) continue;
-      const pid = Number.parseInt(match[1]!, 10);
-      if (!Number.isInteger(pid) || pid <= 0) continue;
-      observations.set(pid, { state: match[2]!, startTime: match[3]! });
-    }
-  } catch {
-    // A failed ps snapshot is unknown evidence; callers remain fail-closed.
+  if (selected.length === 0) return new Map();
+  return readHostProcessIdentitySnapshot(selected, readHostProcessIdentityRowsSync(selected));
+}
+
+/**
+ * {@link readHostProcessIdentityObservations} off the event loop, with the same one-snapshot
+ * guarantee and the same fail-closed answer. A daemon request path that only decides whether to
+ * pay a cost must not stall every other request, timer, and abort handler behind a
+ * `spawnSync` of the host process tool.
+ */
+export async function readHostProcessIdentityObservationsAsync(
+  pids: Iterable<number>,
+): Promise<ReadonlyMap<number, HostProcessIdentityObservation>> {
+  const selected = uniquePositivePids(pids);
+  if (selected.length === 0) return new Map();
+  // What a host says about a pid is never a toolchain command to route elsewhere, so the
+  // snapshot leaves the executor scope the way the synchronous probe already ignores it.
+  const rows = await withoutCommandExecutorOverride(() =>
+    readHostProcessIdentityRowsAsync(selected),
+  );
+  return readHostProcessIdentitySnapshot(selected, rows);
+}
+
+function readHostProcessIdentitySnapshot(
+  pids: Iterable<number>,
+  rows: readonly HostProcessIdentityRow[],
+): ReadonlyMap<number, HostProcessIdentityObservation> {
+  const selected = uniquePositivePids(pids);
+  const observations = new Map<number, HostProcessIdentityObservation>();
+  if (selected.length === 0 || rows.length === 0) return observations;
+  const named = new Set(selected);
+  for (const row of rows) {
+    // A live row is never a zombie on Windows, and a zombie keeps its recorded start time, so
+    // the row the process tool answers is where both facts are.
+    if (!named.has(row.pid)) continue;
+    observations.set(row.pid, { state: row.state, startTime: row.startTime });
   }
   return observations;
+}
+
+type HostProcessIdentityRow = Readonly<{ pid: number; state: string; startTime: string }>;
+
+const HOST_PROCESS_IDENTITY_PS_ARGS = (pids: readonly number[]): string[] => [
+  '-p',
+  pids.join(','),
+  '-o',
+  'pid=,state=,lstart=',
+];
+
+function readHostProcessIdentityRowsSync(
+  pids: readonly number[],
+): readonly HostProcessIdentityRow[] {
+  if (isWindowsHostPlatform()) {
+    return windowsProcessIdentityRows(readWindowsProcessRows(pids, WINDOWS_PS_TIMEOUT_MS));
+  }
+  try {
+    const result = runCmdSync(HOST_PS_COMMAND, HOST_PROCESS_IDENTITY_PS_ARGS(pids), {
+      allowFailure: true,
+      timeoutMs: PS_TIMEOUT_MS,
+    });
+    return result.exitCode !== 0 ? [] : parseHostProcessIdentityRows(result.stdout);
+  } catch {
+    // A failed ps snapshot is unknown evidence; callers remain fail-closed.
+    return [];
+  }
+}
+
+async function readHostProcessIdentityRowsAsync(
+  pids: Iterable<number>,
+): Promise<readonly HostProcessIdentityRow[]> {
+  const selected = uniquePositivePids(pids);
+  if (selected.length === 0) return [];
+  if (isWindowsHostPlatform()) {
+    return windowsProcessIdentityRows(
+      await readWindowsProcessRowsAsync(selected, WINDOWS_PS_TIMEOUT_MS),
+    );
+  }
+  try {
+    const result = await runCmd(HOST_PS_COMMAND, HOST_PROCESS_IDENTITY_PS_ARGS(selected), {
+      allowFailure: true,
+      timeoutMs: PS_TIMEOUT_MS,
+    });
+    return result.exitCode !== 0 ? [] : parseHostProcessIdentityRows(result.stdout);
+  } catch {
+    return [];
+  }
+}
+
+function parseHostProcessIdentityRows(stdout: string): HostProcessIdentityRow[] {
+  const rows: HostProcessIdentityRow[] = [];
+  for (const line of stdout.split('\n')) {
+    const match = /^\s*(\d+)\s+(\S+)\s+(.+?)\s*$/.exec(line);
+    if (!match) continue;
+    const pid = Number.parseInt(match[1]!, 10);
+    if (!Number.isInteger(pid) || pid <= 0) continue;
+    rows.push({ pid, state: match[2]!, startTime: match[3]! });
+  }
+  return rows;
+}
+
+function windowsProcessIdentityRows(
+  rows: readonly WindowsProcessRow[],
+): readonly HostProcessIdentityRow[] {
+  return rows.flatMap((row) =>
+    // A terminated Windows process leaves the CIM table rather than lingering in it unreaped,
+    // so no live row can be a zombie: exit proof stays liveness-and-lifetime.
+    row.startTime === null ? [] : [{ pid: row.pid, state: 'R', startTime: row.startTime }],
+  );
 }
 
 type HostProcessField = 'lstart=' | 'command=' | 'state=';
@@ -331,6 +412,22 @@ function readWindowsProcessRows(pids: readonly number[], timeoutMs: number): Win
     return parseWindowsProcessRows(result.stdout);
   } catch {
     // A failed CIM snapshot is unknown evidence; callers remain fail-closed.
+    return [];
+  }
+}
+
+async function readWindowsProcessRowsAsync(
+  pids: readonly number[],
+  timeoutMs: number,
+): Promise<WindowsProcessRow[]> {
+  try {
+    const result = await runCmd(WINDOWS_PROCESS_TOOL, windowsProcessQueryArgs(pids), {
+      allowFailure: true,
+      timeoutMs,
+    });
+    if (result.exitCode !== 0) return [];
+    return parseWindowsProcessRows(result.stdout);
+  } catch {
     return [];
   }
 }
