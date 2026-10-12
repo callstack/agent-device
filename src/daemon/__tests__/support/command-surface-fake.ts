@@ -13,7 +13,7 @@ import type {
  * `src/__tests__/daemon-composition/` behind the real `testCreateCommandSurface`, where its
  * assertions keep their meaning.
  */
-export const fakeCommandSurface: DaemonCommandSurface = {
+const fakeCommandSurface: DaemonCommandSurface = {
   capture: {
     screenshot: vi.fn(async () => ({ path: '/tmp/fake-screenshot.png' })),
     snapshot: vi.fn(async () => ({ nodes: [] })),

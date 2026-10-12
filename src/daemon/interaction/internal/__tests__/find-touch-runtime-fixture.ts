@@ -12,6 +12,7 @@ import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { makeIosSession as makeSession } from '../../../__tests__/support/session-factories.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import type { SessionState } from '../../../session-state.ts';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { handleFindCommands } from '../find.ts';
 import { invokeFindHandler } from './find-handler-fixture.ts';
 
@@ -61,6 +62,7 @@ export async function runFindClickScenario(options: {
   nodes?: Array<Record<string, unknown>>;
   flags?: DaemonRequest['flags'];
   session?: SessionState;
+  createCommandSurface?: CreateDaemonCommandSurface;
   invoke?: (req: DaemonRequest) => Promise<Record<string, unknown>>;
 }): Promise<{
   response: NonNullable<Awaited<ReturnType<typeof handleFindCommands>>>;
@@ -83,6 +85,7 @@ export async function runFindClickScenario(options: {
 
   const invokeCalls: DaemonRequest[] = [];
   const response = await invokeFindHandler({
+    createCommandSurface: options.createCommandSurface,
     sessionName,
     sessionStore,
     positionals: options.positionals,

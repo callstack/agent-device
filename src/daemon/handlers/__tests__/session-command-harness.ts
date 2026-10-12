@@ -25,7 +25,7 @@ import { beforeEach, vi } from 'vitest';
 import { applicationLifecycleRuntimeFixture } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
 import { withClientReplayScriptSources } from '../../../__tests__/test-utils/replay-script-source.ts';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
-import { noopPlatformResourceCleanup as platformResourceCleanup } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 const unavailable = Object.freeze({
   available: false,
@@ -101,7 +101,7 @@ export async function handleSessionCommands(
     req: await withClientReplayScriptSources(params.req),
     inspectFacts: params.inspectFacts ?? mockInspectDeviceRuntimeFacts,
     bindDevice: params.bindDevice ?? mockBindDeviceRuntime,
-    platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanup,
+    platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanupFixture(),
     reconcileOrphanedDeviceClaim: async () => ({
       status: 'retained',
       reason: 'test-harness-has-no-exact-owner-recovery',

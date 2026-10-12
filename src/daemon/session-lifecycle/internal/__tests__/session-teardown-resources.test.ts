@@ -4,9 +4,9 @@ import {
   sessionCloseShutdownFixture,
   type SessionState,
 } from './session-close-shutdown.fixtures.ts';
-import { installFakeManagedAgentBrowser } from '@agent-device/test-kit/web-managed-agent-browser';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 const {
   AppError,
@@ -14,9 +14,7 @@ const {
   makeIosSimulatorRecordingSession,
   makeSession,
   makeSessionStore,
-  mockRunCmd,
   mockReleaseRunnerOnClose,
-  mockStopAndroidSnapshotHelperSessionForDevice,
   mockStopIosRunnerSession,
   mockStopIosRunnerSession: stopIosRunnerSession,
   noopInvoke,
@@ -30,10 +28,6 @@ const {
 } = sessionCloseShutdownFixture;
 
 beforeEach(resetSessionCloseShutdownMocks);
-
-function agentBrowserJsonResult(value: unknown, exitCode = 0) {
-  return { stdout: JSON.stringify(value), stderr: '', exitCode };
-}
 
 test('close finalizes an active iOS simulator recording before deleting the session', async () => {
   const sessionStore = makeSessionStore();
@@ -209,9 +203,15 @@ test('daemon session teardown stops Android snapshot helper session', async () =
 
   const sessionStore = makeSessionStore();
   const ref = sessionStore.publish(sessionName, session);
-  await teardownSessionResources({ appLog: 'already-settled', ref, sessionStore });
+  const platformCleanup = platformResourceCleanupFixture();
+  await teardownSessionResources({
+    appLog: 'already-settled',
+    ref,
+    sessionStore,
+    platformCleanup,
+  });
 
-  expect(mockStopAndroidSnapshotHelperSessionForDevice).toHaveBeenCalledWith(session.device);
+  expect(platformCleanup.stopSnapshotHelper).toHaveBeenCalledWith(session.device);
 });
 
 test('daemon session teardown attempts every resource after an earlier cleanup rejects', async () => {
@@ -236,12 +236,14 @@ test('daemon session teardown attempts every resource after an earlier cleanup r
   // Perf cleanup runs before the snapshot-helper cleanup.
   const sessionStore = makeSessionStore();
   sessionStore.publish(sessionName, session);
+  const platformCleanup = platformResourceCleanupFixture();
 
   await expect(
     teardownSessionResources({
       appLog: 'already-settled',
       ref: sessionStore.lookup(sessionName)!,
       sessionStore,
+      platformCleanup,
     }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
@@ -252,7 +254,7 @@ test('daemon session teardown attempts every resource after an earlier cleanup r
   });
 
   // The later resource still runs despite the earlier rejection.
-  expect(mockStopAndroidSnapshotHelperSessionForDevice).toHaveBeenCalledWith(session.device);
+  expect(platformCleanup.stopSnapshotHelper).toHaveBeenCalledWith(session.device);
 });
 
 function attachPerfCapture(
@@ -280,45 +282,50 @@ function attachPerfCapture(
 test('daemon session teardown closes an open web session immediately, not on agent-browser idle timeout', async () => {
   const sessionName = 'web-active-session-teardown-session';
   const sessionStore = makeSessionStore();
-  await installFakeManagedAgentBrowser(sessionStore.resolveDaemonStateDir());
   const session = makeSession(sessionName, WEB_DESKTOP_DEVICE);
   // Teardown always runs while the session it is tearing down is still in the store (session
   // deletion happens after), which is what keeps the provider-startup orphan sweep from treating
   // this session's own browser as an orphan and scanning real host processes for it.
   sessionStore.publish(sessionName, session);
-  mockRunCmd.mockResolvedValue(agentBrowserJsonResult({ success: true, data: {} }));
+  const platformCleanup = platformResourceCleanupFixture();
 
   await teardownSessionResources({
     appLog: 'already-settled',
     ref: sessionStore.lookup(sessionName)!,
     sessionStore,
+    platformCleanup,
   });
 
-  // A SIGTERM daemon shutdown (or an expired-session reap) tells agent-browser to close its
-  // fleet right away, the same way an explicit `session close` does, instead of leaving the
-  // Chrome processes to agent-browser's own multi-minute idle timer.
-  expect(mockRunCmd).toHaveBeenCalledTimes(1);
-  const [cmd, args] = mockRunCmd.mock.calls[0] as [string, string[]];
-  // `node <entry> close ...`: the managed backend never runs through its `.bin` shim (#2022).
-  expect(cmd).toBe(process.execPath);
-  expect(args.slice(1)).toEqual(['close', '--json', '--session', sessionName]);
+  // A SIGTERM daemon shutdown (or an expired-session reap) asks the platform to close the
+  // session's browser right away, the same way an explicit `session close` does, instead of
+  // leaving the Chrome processes to agent-browser's own multi-minute idle timer. That the close
+  // reaches the agent-browser process is real mechanics, pinned root-owned in
+  // daemon-composition/server/daemon-runtime-web-close-teardown.
+  expect(platformCleanup.closeManagedBrowser).toHaveBeenCalledWith({
+    device: WEB_DESKTOP_DEVICE,
+    sessionName,
+    stateDir: sessionStore.resolveDaemonStateDir(),
+    openSessionNames: expect.any(Function),
+  });
 });
 
 test('daemon session teardown surfaces a web close failure through the cleanup-failure channel', async () => {
   const sessionName = 'web-close-failure-teardown-session';
   const sessionStore = makeSessionStore();
-  await installFakeManagedAgentBrowser(sessionStore.resolveDaemonStateDir());
   const session = makeSession(sessionName, WEB_DESKTOP_DEVICE);
   sessionStore.publish(sessionName, session);
-  mockRunCmd.mockResolvedValue(
-    agentBrowserJsonResult({ success: false, error: 'no active browser session' }),
-  );
+  const platformCleanup = platformResourceCleanupFixture({
+    closeManagedBrowser: async () => {
+      throw new AppError('COMMAND_FAILED', 'no active browser session');
+    },
+  });
 
   await expect(
     teardownSessionResources({
       appLog: 'already-settled',
       ref: sessionStore.lookup(sessionName)!,
       sessionStore,
+      platformCleanup,
     }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
@@ -327,25 +334,4 @@ test('daemon session teardown surfaces a web close failure through the cleanup-f
       failedSteps: ['web_browser'],
     }),
   });
-});
-
-test('daemon session teardown never dispatches a web close for a non-web session', async () => {
-  const sessionName = 'android-non-web-teardown-session';
-  const session = makeSession(sessionName, {
-    platform: 'android',
-    id: 'emulator-5554',
-    name: 'Pixel',
-    kind: 'emulator',
-    booted: true,
-  });
-
-  const sessionStore = makeSessionStore();
-  const ref = sessionStore.publish(sessionName, session);
-  await teardownSessionResources({
-    appLog: 'already-settled',
-    ref,
-    sessionStore,
-  });
-
-  expect(mockRunCmd).not.toHaveBeenCalled();
 });

@@ -13,7 +13,7 @@ import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
-import { noopPlatformResourceCleanup as platformResourceCleanup } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 export function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-snapshot-handler-');
@@ -221,7 +221,7 @@ export function handleSnapshotCommands(
   if (!SNAPSHOT_ROUTE_RUNTIME_COMMANDS.has(params.req.command)) {
     return handleProductionSnapshotCommands({
       ...params,
-      platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanup,
+      platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanupFixture(),
     });
   }
   const runtime = snapshotRuntimeFixture(params.req.meta?.requestId);
@@ -229,6 +229,6 @@ export function handleSnapshotCommands(
     ...params,
     inspectFacts: params.inspectFacts ?? runtime.inspectFacts,
     bindDevice: params.bindDevice ?? runtime.bindDevice,
-    platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanup,
+    platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanupFixture(),
   });
 }

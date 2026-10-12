@@ -372,7 +372,6 @@ test('a repeat allocation canceled by its requester releases the reused lease', 
   assert.deepEqual(registry.listActiveLeases(), []);
 });
 
-
 test('a tenant cannot allocate a macos-app lease', async () => {
   const registry = new LeaseRegistry();
   const request: DaemonRequest = {

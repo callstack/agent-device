@@ -127,3 +127,33 @@ test('daemon shutdown reports a web close failure on stderr instead of losing it
   expect(stderrChunks.join('')).toMatch(/web_browser/);
   expect(sessionStore.get(session.name)).toBeUndefined();
 });
+
+// The platform filter lives in the composed adapter, not in the neutral teardown: the daemon
+// asks the port for every session, and only a web device reaches the agent-browser process.
+test('daemon session teardown never dispatches a web close for a non-web session', async () => {
+  const root = mkdtempForTestSync('agent-device-non-web-teardown-');
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  sessionStore.publish('android-non-web-teardown-session', {
+    name: 'android-non-web-teardown-session',
+    device: {
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Pixel',
+      kind: 'emulator',
+      booted: true,
+    },
+    createdAt: Date.now(),
+    actions: [],
+  });
+
+  await teardownDaemonSessionForShutdown({
+    ref: sessionStore.lookup('android-non-web-teardown-session')!,
+    sessionStore,
+    stderr: { write: () => {} },
+    platformCleanup: platformResourceCleanup,
+  });
+
+  // The snapshot-helper leg is a real-mechanics no-op for a device with no registered helper
+  // session; the process seam below is what a mistaken web close would have shown up on.
+  expect(mockRunCmd).not.toHaveBeenCalled();
+});

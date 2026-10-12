@@ -1,4 +1,4 @@
-import { noopPlatformResourceCleanup as platformResourceCleanup } from './support/platform-resource-cleanup-fixture.ts';
+import { platformResourceCleanupFixture } from './support/platform-resource-cleanup-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -132,7 +132,7 @@ test('daemon shutdown settles fenced app-log cleanup before finalization can rel
     sessionStore,
     stderr: { write: () => {} },
 
-    platformCleanup: platformResourceCleanup,
+    platformCleanup: platformResourceCleanupFixture(),
   });
   await cleanupStarted;
 

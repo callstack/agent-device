@@ -10,6 +10,7 @@ import {
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 const {
   AppError,
@@ -19,7 +20,6 @@ const {
   makeSession,
   makeSessionStore,
   mockDispatchCommand,
-  mockStopAndroidSnapshotHelperSessionForDevice,
   noopInvoke,
   path,
   resetSessionCloseShutdownMocks,
@@ -42,10 +42,12 @@ test('close stops Android snapshot helper session before deleting session', asyn
     ...makeSession(sessionName, device),
     appBundleId: 'com.example.app',
   });
+  const platformCleanup = platformResourceCleanupFixture();
 
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
+    platformResourceCleanup: platformCleanup,
     req: {
       token: 't',
       session: sessionName,
@@ -60,7 +62,7 @@ test('close stops Android snapshot helper session before deleting session', asyn
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockStopAndroidSnapshotHelperSessionForDevice).toHaveBeenCalledWith(device);
+  expect(platformCleanup.stopSnapshotHelper).toHaveBeenCalledWith(device);
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 

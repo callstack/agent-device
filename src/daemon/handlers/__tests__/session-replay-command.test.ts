@@ -6,7 +6,7 @@ import {
   unavailableBindExactDevice,
 } from '../../__tests__/test-device-runtime-gateway.ts';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
-import { noopPlatformResourceCleanup as platformResourceCleanup } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import type { SessionCommandParams } from '../session-command-input.ts';
 import { handleReplayTestCommand } from '../session-replay-command.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
@@ -46,7 +46,7 @@ test('replay test handler threads the complete video owner into the application 
       status: 'retained' as const,
       reason: 'handler-test' as const,
     }),
-    platformResourceCleanup,
+    platformResourceCleanup: platformResourceCleanupFixture(),
   };
 
   const response = await handleReplayTestCommand(params);

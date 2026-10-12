@@ -8,7 +8,7 @@ import { fakeCreateCommandSurface } from '../../__tests__/support/command-surfac
 // The daemon reads provider ownership through its own typed admission seam; these suites
 // install the seam over runtime fakes, the way root composition installs the real one.
 const providerAdmission = providerDeviceAdmissionFixture();
-import { noopPlatformResourceCleanup as platformResourceCleanup } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import {
   fixtureSettingsMutations,
   fixtureSettingsReads,
@@ -59,7 +59,7 @@ function handleSnapshotCommands(
     ...params,
     inspectFacts: params.inspectFacts ?? runtime.inspectFacts,
     bindDevice: params.bindDevice ?? runtime.bindDevice,
-    platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanup,
+    platformResourceCleanup: params.platformResourceCleanup ?? platformResourceCleanupFixture(),
   });
 }
 

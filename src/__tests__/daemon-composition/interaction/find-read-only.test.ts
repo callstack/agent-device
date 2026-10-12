@@ -1,11 +1,11 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import type { SessionState } from '../../../session-state.ts';
+import type { SessionState } from '../../../daemon/session-state.ts';
 import { buildSnapshotSignatures } from '@agent-device/capture-kit/snapshot-freshness';
-import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
 import {
   makeAuthoringSession,
   makeIosSession as makeSession,
-} from '../../../__tests__/support/session-factories.ts';
+} from '../../../daemon/__tests__/support/session-factories.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
@@ -14,8 +14,8 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
     resolveTargetDevice: actual.resolveTargetDevice,
   };
 });
-vi.mock('../../../snapshot-interactor-capture.ts', async () => {
-  const fixture = await import('../../../__tests__/legacy-snapshot-capture-fixture.ts');
+vi.mock('../../../daemon/snapshot-interactor-capture.ts', async () => {
+  const fixture = await import('../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
@@ -23,8 +23,9 @@ import {
   mockDispatch,
   resetFindTouchRuntimeFixture,
   runFindClickScenario,
-} from './find-touch-runtime-fixture.ts';
-import { invokeFindHandler } from './find-handler-fixture.ts';
+} from '../../../daemon/interaction/internal/__tests__/find-touch-runtime-fixture.ts';
+import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+import { invokeFindHandler } from '../../../daemon/interaction/internal/__tests__/find-handler-fixture.ts';
 
 beforeEach(() => {
   resetFindTouchRuntimeFixture();
@@ -89,6 +90,7 @@ test('handleFindCommands wait bypasses snapshot cache while Android freshness re
     });
 
   const { response } = await runFindClickScenario({
+    createCommandSurface: testCreateCommandSurface,
     positionals: ['text', 'Create document', 'wait', '700'],
     session,
   });
@@ -136,6 +138,7 @@ test('handleFindCommands wait reports sparse verdict through selector runtime ro
   });
 
   const { response } = await runFindClickScenario({
+    createCommandSurface: testCreateCommandSurface,
     positionals: ['text', 'Never appears', 'wait', '350'],
     session,
   });
@@ -154,6 +157,7 @@ test('handleFindCommands wait reports sparse verdict through selector runtime ro
 
 test('handleFindCommands wait captures fresh snapshots while polling', async () => {
   const { response } = await runFindClickScenario({
+    createCommandSurface: testCreateCommandSurface,
     positionals: ['text', 'Never appears', 'wait', '350'],
     nodes: [{ index: 0, depth: 0, type: 'StaticText', label: 'Other text' }],
   });
@@ -196,6 +200,7 @@ test('read-only find while recording is intentionally deferred from target-v1 ev
   });
 
   const response = await invokeFindHandler({
+    createCommandSurface: testCreateCommandSurface,
     sessionName,
     sessionStore,
     positionals: ['text', 'Save', 'exists'],

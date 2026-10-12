@@ -12,8 +12,7 @@ import { installProviderDeviceAdmission } from '../../provider-device-admission.
 export function providerDeviceAdmissionFixture(runtimes: ProviderDeviceRuntime[] = []) {
   let activeRuntimes = [...runtimes];
   const admission = {
-    isActive: (device: DeviceInfo) =>
-      activeRuntimes.some((runtime) => runtime.ownsDevice(device)),
+    isActive: (device: DeviceInfo) => activeRuntimes.some((runtime) => runtime.ownsDevice(device)),
   };
   installProviderDeviceAdmission(admission);
   return {
