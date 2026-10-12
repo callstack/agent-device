@@ -135,10 +135,12 @@ test('fingerprint invalidates source helpers, fixtures, setup, configs, new/dele
   fs.unlinkSync(path.join(fixture, 'test.test.ts'));
   assert.notEqual(scopeFingerprint(fixture), before);
   const withoutEnv = scopeFingerprint(fixture);
-  process.env.MUTATION_SCOPE_INPUT_TEST = 'changed';
+  const previous = process.env.MUTATION_SCOPE_INPUT_TEST;
+  process.env.MUTATION_SCOPE_INPUT_TEST = previous === 'changed' ? 'changed-again' : 'changed';
   try {
     assert.notEqual(scopeFingerprint(fixture), withoutEnv);
   } finally {
-    delete process.env.MUTATION_SCOPE_INPUT_TEST;
+    if (previous === undefined) delete process.env.MUTATION_SCOPE_INPUT_TEST;
+    else process.env.MUTATION_SCOPE_INPUT_TEST = previous;
   }
 });

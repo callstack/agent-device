@@ -427,7 +427,7 @@ type LaneState = {
   recoveryOnly: boolean;
   seed?: number;
   scope?: ScopeMeasurement;
-  scopeProbe?: boolean;
+  pilotScope?: 'coverage-probe' | 'coverage-scoped';
 };
 
 /** The result of an envelope already on disk, if there is a readable one. */
@@ -493,7 +493,7 @@ function writeEnvelope(state: LaneState, startedAtMs: number): void {
     // produced a report at all.
     result: state.stage === 'complete' ? 'pass' : 'fail',
     data: {
-      scope: state.scopeProbe ? 'coverage-probe' : state.affected ? 'affected' : 'full-sweep',
+      scope: state.pilotScope ?? (state.affected ? 'affected' : 'full-sweep'),
       testScope: state.scope ?? null,
       stage: state.stage,
       error: state.error ?? null,
@@ -705,7 +705,11 @@ async function run(argv: readonly string[], state: LaneState): Promise<number> {
   state.provenance = readProvenance();
   state.modules = args.modules;
   state.seed = args.seed;
-  state.scopeProbe = args.scopeProbe;
+  state.pilotScope = args.scopeProbe
+    ? 'coverage-probe'
+    : args.scopeIndex
+      ? 'coverage-scoped'
+      : undefined;
   if (args.failEnvelope) {
     // A step that ran before the sweep failed (the weekly self-test, setup): the
     // lane produced no measurement, and that is what the envelope must say.

@@ -17,6 +17,7 @@ test('the worker setup reproduces property samples across separate processes', (
     runCmdSync(
       'node',
       [
+        '--experimental-strip-types',
         '--input-type=module',
         '-e',
         'import fc from "fast-check"; import "./scripts/mutation/seed-setup.ts"; console.log(JSON.stringify(fc.sample(fc.integer(), 10)));',

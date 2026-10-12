@@ -30,10 +30,8 @@ test('invalid scope pilots and missing indexes fail before producing a measureme
       'test',
     ],
   ]) {
-    const result = runCmdSync('node', ['scripts/mutation/run.ts', ...args], {
-      cwd: repoRoot,
-      allowFailure: true,
-    });
+    fs.rmSync(envelopePath, { force: true });
+    const result = runMutation(args);
     assert.notEqual(result.exitCode, 0);
     if (args.includes('--list-affected')) continue;
     const envelope = JSON.parse(fs.readFileSync(envelopePath, 'utf8'));
@@ -43,6 +41,7 @@ test('invalid scope pilots and missing indexes fail before producing a measureme
       true,
     );
     assert.match(envelope.data.error, /Scope pilots|missing-index|fresh execution/);
+    if (args.includes('--scope-index')) assert.equal(envelope.data.scope, 'coverage-scoped');
   }
 });
 
