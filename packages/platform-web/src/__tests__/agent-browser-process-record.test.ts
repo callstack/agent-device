@@ -182,13 +182,10 @@ test('an undecodable record is not a live fleet and needs no probe', async () =>
   assert.equal(mockObservations.mock.calls.length, 0);
 });
 
-test('a store that cannot answer surfaces the failure instead of probing the host', async () => {
+test('a store that cannot answer reads as not-live, which sends the caller back to the scan', async () => {
   const store = storeReturning(() => {
     throw new Error('record file unreadable');
   });
-  await assert.rejects(
-    async () => await managedWebBrowserProcessRecordIsLive(store),
-    /record file unreadable/,
-  );
+  assert.equal(await managedWebBrowserProcessRecordIsLive(store), false);
   assert.equal(mockObservations.mock.calls.length, 0);
 });

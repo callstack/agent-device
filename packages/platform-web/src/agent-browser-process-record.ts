@@ -156,10 +156,18 @@ export async function managedWebBrowserProcessRecordIsLive(
   });
 }
 
-/** The daemon-scoped managed browser records. A store that cannot answer simply has none. */
+/**
+ * The daemon-scoped managed browser records. A store that cannot answer has none, which is
+ * unknown evidence: the probe reports not-live and the caller re-derives by scanning.
+ */
 function readDaemonManagedWebBrowserRecords(store: OwnedProcessRecordStore): OwnedProcessRecord[] {
-  return store
-    .read()
+  let entries: ReturnType<OwnedProcessRecordStore['read']>;
+  try {
+    entries = store.read();
+  } catch {
+    return [];
+  }
+  return entries
     .filter((entry) => entry.scope.kind === 'daemon' && entry.status === 'decoded')
     .flatMap((entry) => entry.records)
     .filter((record) => record.purpose === MANAGED_WEB_BROWSER_PROCESS_PURPOSE);
