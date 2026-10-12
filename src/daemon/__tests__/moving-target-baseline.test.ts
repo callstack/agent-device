@@ -45,14 +45,17 @@ function markPress(session: SessionState, preActionTree: SurfaceScopedNodes | un
 test('a mutation that resolved a target records its tree at the instant it finished', () => {
   const session = makeSession('android');
   const preAction = appTree();
+  const before = Date.now();
 
   markPress(session, { nodes: preAction.nodes });
 
   const baseline = movingTargetBaseline(session);
   assert.ok(baseline);
   assert.equal(baseline.tree.nodes, preAction.nodes);
+  // Bracketed by the reads around the call rather than by a fixed slack: a CI pause between the mark
+  // and the assertion would blow a "within one second" bound while the recorded instant stayed right.
   assert.ok(
-    baseline.finishedAt >= Date.now() - 1_000 && baseline.finishedAt <= Date.now(),
+    baseline.finishedAt >= before && baseline.finishedAt <= Date.now(),
     'the clock is the mutation END: the gate waits out what is LEFT of the window',
   );
 });
