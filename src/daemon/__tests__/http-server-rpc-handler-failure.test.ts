@@ -6,13 +6,12 @@ import { postRpcCommand, startRpcServer } from './http-server-rpc.fixtures.ts';
 
 const TOKEN = 'throwing-handler-token';
 
-// The property this PR depends on: a `/rpc` request never leaves a rejection for the detached
-// `void handleRpcRequest(...)` call to drop, because the daemon exits on `unhandledRejection`.
-// A rejecting handler is the closest reachable case, and the answer comes from the invocation's own
-// catch (`invokeAdmittedRpcRequest`), which answered it the same way before this PR — so this pins
-// existing behavior and the invariant the new detached `.catch` defends, not that `.catch` itself.
-// The flow's refusal for a body that is not a call has to reach the client with the call's own id
-// and typed reason, and the daemon must still serve the next request.
+// What happens when an admitted call's own handler rejects: the invocation's catch answers it with
+// that call's id, its JSON-RPC -32000, and the typed reason intact, and the request lifecycle stays
+// usable for the call that follows. It is also the closest reachable stand-in for the invariant the
+// detached `.catch` in the server defends — a `/rpc` request never leaves a rejection for the
+// process to find, because the daemon exits on `unhandledRejection` — though the answer here comes
+// from the invocation, exactly as it did before that `.catch` existed.
 test('a rejecting handler is answered for its own call id and never reaches the process', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const rejections: string[] = [];

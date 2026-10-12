@@ -80,6 +80,13 @@ export async function createDaemonHttpServer(options: {
    * rather than handed a daemon-host path.
    */
   resolveRequestDiagnosticsPath?: (ref: DiagnosticsRecordRef) => string;
+  /**
+   * Hears about a `/rpc` flow rejection this server answered itself, because no part of the flow
+   * reached the answer. The daemon-level sinks live in the runtime, outside any request, so the
+   * runtime injects them; an embedded server with no log and no stderr of its own omits this and
+   * still refuses the call.
+   */
+  onUnownedRequestFailure?: (failure: NormalizedError) => void;
 }): Promise<http.Server> {
   const instanceId = randomUUID();
   const hostArch = await readHostCpuArch();
@@ -88,7 +95,13 @@ export async function createDaemonHttpServer(options: {
   );
   const environment = options.env ?? process.env;
   const authHook = await loadHttpAuthHook(environment);
-  const { handleRequest, token, retainArtifacts = false, resolveRequestDiagnosticsPath } = options;
+  const {
+    handleRequest,
+    token,
+    retainArtifacts = false,
+    resolveRequestDiagnosticsPath,
+    onUnownedRequestFailure,
+  } = options;
   return http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
       res.statusCode = 200;
@@ -180,9 +193,9 @@ export async function createDaemonHttpServer(options: {
 
     readRpcRequestBody(req, res, (body) => {
       // The flow owns this request's lifetime, so this call site must neither hold lifetime state
-      // nor re-run it; the `catch` only answers. That answer is load-bearing: the daemon exits on
-      // an `unhandledRejection`, so a rejection dropped here would let any process that reaches
-      // the port stop the daemon with one request body.
+      // nor re-run it; the `catch` reports the failure to the daemon-level sink and answers. That
+      // answer is load-bearing: the daemon exits on an `unhandledRejection`, so a rejection dropped
+      // here would let any process that reaches the port stop the daemon with one request body.
       void handleRpcRequest({
         req,
         res,
@@ -192,7 +205,7 @@ export async function createDaemonHttpServer(options: {
         instanceId,
         handleRequest,
       }).catch((error: unknown) => {
-        sendUnownedRpcRequestFailure(res, normalizeError(error));
+        sendUnownedRpcRequestFailure(res, onUnownedRequestFailure, error);
       });
     });
   });
@@ -661,13 +674,39 @@ async function invokeAdmittedRpcRequest(params: {
 }
 
 /**
- * Last-resort answer for a `/rpc` flow rejection: no call id is known, so the refusal carries none.
- * The reason goes to the daemon's error stream — the sink `unhandledRejection` used, and the only
- * one guaranteed here, since the request's diagnostics scope opens later, inside `handleRequest`.
+ * Last-resort answer for a `/rpc` flow rejection: no call id is trusted, so the refusal carries
+ * none. `reportFailure` is the daemon-level sink the server was constructed with — the one place
+ * these events have a stderr and a log to reach — and it runs before the answer, because a sink is
+ * the caller's code and a sink that cannot take the event must not cost the client its answer.
  */
-function sendUnownedRpcRequestFailure(res: http.ServerResponse, failure: NormalizedError): void {
-  process.stderr.write(`Daemon error: ${failure.message}\n`);
-  if (!res.writableEnded) sendRpcRequestFailure(res, null, failure);
+function sendUnownedRpcRequestFailure(
+  res: http.ServerResponse,
+  reportFailure: ((failure: NormalizedError) => void) | undefined,
+  error: unknown,
+): void {
+  const failure = normalizedRpcFlowFailure(error);
+  try {
+    if (reportFailure) reportFailure(failure);
+  } catch {
+    // A closed stderr throws on write. The answer below is the reason this branch exists.
+  }
+  if (res.writableEnded) return;
+  sendRpcRequestFailure(res, null, failure);
+}
+
+/**
+ * Normalizes a flow rejection for the last-resort answer. Both of the flow's own catches normalize
+ * the reason *while evaluating* their answer, so a reason that cannot be read — a `details` getter
+ * that throws reaches `redactDiagnosticData`'s property walk — throws again inside that catch and
+ * lands here instead, still unreadable. Such a reason gets the same unknown-error failure
+ * `normalizeError` gives nothing; the answer and the record must not depend on reading it.
+ */
+function normalizedRpcFlowFailure(error: unknown): NormalizedError {
+  try {
+    return normalizeError(error);
+  } catch {
+    return normalizeError(undefined);
+  }
 }
 
 /**

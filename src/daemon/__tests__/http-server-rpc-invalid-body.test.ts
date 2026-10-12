@@ -1,6 +1,5 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import http from 'node:http';
 import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
 import { postRpcCommand, postRpcRaw, startRpcServer } from './http-server-rpc.fixtures.ts';
 import type { DaemonResponse } from '../daemon-request.ts';
@@ -69,10 +68,10 @@ test('the daemon keeps serving after the bodies that never became a call', async
     data: {},
   }));
   try {
-    assert.equal(await postRpcWithDeadline(port, 'null'), 400, 'the null root is answered');
+    assert.equal((await postRpcRaw(port, TOKEN, 'null')).status, 400, 'the null root is answered');
     for (const root of ['{oops', '']) {
       assert.equal(
-        await postRpcWithDeadline(port, root),
+        (await postRpcRaw(port, TOKEN, root)).status,
         400,
         `${root}: a body that never parsed is answered`,
       );
@@ -88,27 +87,3 @@ test('the daemon keeps serving after the bodies that never became a call', async
     await closeLoopbackServer(server);
   }
 });
-
-/** `/rpc` POST that gives up after a second: a daemon which never answers fails the caller. */
-async function postRpcWithDeadline(port: number, rawBody: string): Promise<number> {
-  return await new Promise((resolve, reject) => {
-    const req = http.request(
-      {
-        host: '127.0.0.1',
-        port,
-        method: 'POST',
-        path: '/rpc',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${TOKEN}` },
-      },
-      (res) => {
-        res.resume();
-        res.on('end', () => resolve(res.statusCode ?? 0));
-      },
-    );
-    req.setTimeout(1_000, () => {
-      req.destroy(new Error('the daemon never answered the request'));
-    });
-    req.on('error', reject);
-    req.end(rawBody);
-  });
-}

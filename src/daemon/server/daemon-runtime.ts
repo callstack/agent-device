@@ -640,6 +640,21 @@ export async function startDaemonRuntime(
         token,
         retainArtifacts,
         env,
+        // A `/rpc` flow can reject after its own catches failed to answer, leaving this server's
+        // refusal as the only record the failure gets. It has no request scope — that opens later,
+        // inside the handler — so it reports through the pair every other out-of-request daemon
+        // event uses: a diagnostic scoped to the daemon log, and the runtime's error stream.
+        onUnownedRequestFailure: (failure) => {
+          // The record goes first: an injected stream that throws on write must not cost `daemon.log`
+          // the event. The throw itself reaches the server's guard, which is the answer's owner.
+          // `.catch` because a detached diagnostic has nowhere to report its own failure — the same
+          // shape as the metadata-loss watch above.
+          void emitDaemonDiagnostic(logPath, 'daemon_rpc_request_flow_failed', {
+            code: failure.code,
+            message: failure.message,
+          }).catch(() => {});
+          stderr.write(`Daemon error: ${failure.message}\n`);
+        },
         // #1801: the same record `DaemonError.logPath` names, addressed by its
         // locator so a remote caller can fetch what it cannot read by path.
         resolveRequestDiagnosticsPath: daemonPolicy?.requiredLeaseBackend
