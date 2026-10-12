@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
+import {
+  ensureBootedSimulator,
+  openIosSimulatorApp,
+  wasSimulatorRecentlyObservedBooted,
+} from '../simulator.ts';
 import { IOS_BOOT_TIMEOUT_MS, IOS_SIMULATOR_FOCUS_TIMEOUT_MS } from '../config.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
@@ -143,6 +147,16 @@ async function settleBoot(promise: Promise<void>): Promise<void> {
 }
 
 beforeEach(() => {
+  // The boot memo is process-global, and a simulator remembered as Booted makes `ensureBooted`
+  // skip `simctl list` and return before the retry policy is reached — which would turn every
+  // case below into a pass that never booted anything. The unit lane clears process memos after
+  // each case (SETUP_FILES in vitest.config.ts); this asserts it held for the memo that matters
+  // here rather than trusting it across the whole lane.
+  assert.equal(
+    wasSimulatorRecentlyObservedBooted(IOS_TEST_SIMULATOR),
+    false,
+    'the process-global Booted memo survived a previous case',
+  );
   vi.useFakeTimers({ now: 1_000 });
 });
 
