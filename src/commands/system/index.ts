@@ -184,7 +184,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
       ),
       objectSchema(
         {
-          platform: constSchema('android'),
+          platform: enumSchema(['android', 'harmonyos']),
           package: stringSchema(),
           activity: stringSchema(),
         },
