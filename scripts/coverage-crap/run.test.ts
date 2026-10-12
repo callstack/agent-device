@@ -48,8 +48,6 @@ type CoverageOptions = Readonly<{
   hits?: number;
   /** Emit a count no execution can produce, which the sanitizer drops with the whole record. */
   corrupt?: boolean;
-  /** Record the file with no functions in it, as a run over a deleted function's file reports. */
-  noFunctions?: boolean;
 }>;
 
 function istanbulRecord(file: string, options: CoverageOptions): Record<string, unknown> {
@@ -58,19 +56,17 @@ function istanbulRecord(file: string, options: CoverageOptions): Record<string, 
   return {
     path: path.join(repo, file),
     statementMap: { 0: { start: line(from), end: line(to) } },
-    fnMap: options.noFunctions
-      ? {}
-      : {
-          0: {
-            name: 'score',
-            decl: { start: line(from), end: line(from) },
-            loc: { start: line(from), end: line(to) },
-            line: from,
-          },
-        },
+    fnMap: {
+      0: {
+        name: 'score',
+        decl: { start: line(from), end: line(from) },
+        loc: { start: line(from), end: line(to) },
+        line: from,
+      },
+    },
     branchMap: {},
     s: { 0: options.corrupt ? -1 : (options.hits ?? 0) },
-    f: options.noFunctions ? {} : { 0: options.hits ?? 0 },
+    f: { 0: options.hits ?? 0 },
     b: {},
   };
 }
