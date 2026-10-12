@@ -10,6 +10,7 @@ import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { RUNTIME_SELECTOR_COVERAGE } from './runtime-selector.coverage.ts';
 import {
   closedDrawerSnapshot,
+  continueButtonAtRect,
   continueButtonSnapshot,
   coveredButtonSnapshot,
   keyboardCoveredTabBarSnapshot,
@@ -22,7 +23,7 @@ import {
   settledWelcomeSnapshot,
   viewportOnlySnapshot,
 } from './fixtures.ts';
-import { createContractDevice } from './runtime-harness.ts';
+import { createContractClock, createContractDevice } from './runtime-harness.ts';
 import { runnerSnapshotEntry, runnerTapEntry, withIosContractDaemon } from './daemon-harness.ts';
 
 // ADR 0011 Layer 3, runtime-selector path: daemon tree capture, selector
@@ -233,6 +234,107 @@ test(scenario('targetReadiness'), async () => {
   assert.equal(result.kind, 'selector');
   assert.ok(captures >= 3, `expected at least 2 polls (>=3 captures), got ${captures}`);
   assert.deepEqual(taps, [{ x: 60, y: 40 }]);
+});
+
+// #3471 targetStability: the session's last action animated the UI, so the rect this press resolved
+// may be a position the target has already left. The gate re-observes past the window: two agreeing
+// observations are the resting position it taps, and two disagreeing ones are a refusal.
+test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'targetStability')[0]!, async () => {
+  const taps: Point[] = [];
+  let captures = 0;
+  const resting = continueButtonAtRect(10, 20);
+  const device = createContractDevice(continueButtonAtRect(240, 20), {
+    // A slide-in the resolution capture caught mid-flight, at rest by the gate's re-observations.
+    captureSnapshot: async () => ({
+      snapshot: captures++ === 0 ? continueButtonAtRect(240, 20) : resting,
+    }),
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+    clock: createContractClock(),
+    sessionState: {
+      movingTargetBaseline: { finishedAt: 0, tree: { nodes: viewportOnlySnapshot().nodes } },
+    },
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+  });
+
+  assert.equal(result.kind, 'selector');
+  // Tapped at the resting centre (10+50, 20+20), not the mid-flight one it resolved.
+  assert.deepEqual(taps, [{ x: 60, y: 40 }]);
+  assert.equal(captures, 3, 'one resolution capture plus the gate two re-observations');
+});
+
+test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'targetStability')[1]!, async () => {
+  const taps: Point[] = [];
+  let captures = 0;
+  // Still moving when the window ran out: the two re-observations disagree.
+  const positions = [
+    continueButtonAtRect(240, 20),
+    continueButtonAtRect(300, 20),
+    continueButtonAtRect(360, 20),
+  ];
+  const device = createContractDevice(positions[0]!, {
+    captureSnapshot: async () => ({ snapshot: positions[captures++] ?? positions[2]! }),
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+    clock: createContractClock(),
+    sessionState: {
+      movingTargetBaseline: { finishedAt: 0, tree: { nodes: viewportOnlySnapshot().nodes } },
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.press(selector('label=Continue'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /label=Continue is still moving/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+      assert.equal(details?.dispatched, 'no');
+      assert.equal(details?.selector, 'label=Continue');
+      // The position the caller resolved and the one the re-observations found: the pair that says
+      // which way the surface is going.
+      assert.deepEqual(details?.rect, { x: 240, y: 20, width: 100, height: 40 });
+      assert.deepEqual(details?.movedToRect, { x: 360, y: 20, width: 100, height: 40 });
+      assert.equal(typeof details?.waitedMs, 'number');
+      assert.match(String(details?.hint), /label=Continue/);
+      return true;
+    },
+  );
+  assert.deepEqual(taps, []);
+});
+
+// The cost contract, as a scenario: the gate reads a tree the session already holds, so a press
+// whose target the previous action left in place spends the one capture it always spent.
+test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'targetStability')[2]!, async () => {
+  const taps: Point[] = [];
+  let captures = 0;
+  const resting = continueButtonAtRect(10, 20);
+  const device = createContractDevice(resting, {
+    captureSnapshot: async () => {
+      captures += 1;
+      return { snapshot: resting };
+    },
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+    clock: createContractClock(),
+    sessionState: {
+      movingTargetBaseline: { finishedAt: 0, tree: { nodes: resting.nodes } },
+    },
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+  });
+
+  assert.equal(result.kind, 'selector');
+  assert.deepEqual(taps, [{ x: 60, y: 40 }]);
+  assert.equal(captures, 1, 'a stationary target must not pay for a re-observation');
 });
 
 test(scenario('verifyEvidence'), async () => {

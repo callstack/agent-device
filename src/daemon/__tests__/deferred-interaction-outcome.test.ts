@@ -3,6 +3,7 @@ import { afterEach, test, vi } from 'vitest';
 import {
   isPostGestureStabilizationPending,
   markDeferredInteractionOutcome,
+  pendingSurfaceStabilization,
   markPostOpenStabilization,
   resolveDeferredInteractionOutcome,
   stripInternalInteractionFlags,
@@ -105,8 +106,8 @@ test('an Apple open that could not observe its app marks stabilization without a
   markPostOpenStabilization(session, 'unobservable');
 
   assert.equal(isPostGestureStabilizationPending(session), true);
-  assert.equal(session.postGestureStabilization?.action, 'open');
-  assert.equal(session.postGestureStabilization?.baselineSignature, undefined);
+  assert.equal(pendingSurfaceStabilization(session)?.action, 'open');
+  assert.equal(pendingSurfaceStabilization(session)?.baselineSignature, undefined);
 });
 
 test('every open verdict other than observable marks stabilization', () => {

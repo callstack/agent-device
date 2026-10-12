@@ -18,6 +18,7 @@ import {
   inboxBaselineNodes,
   makeAndroidFreshnessSession,
 } from '../handlers/__tests__/snapshot-handler.fixtures.ts';
+import { pendingSurfaceStabilization } from '../deferred-interaction-outcome.ts';
 
 const captureSnapshotWithInteractor = vi.hoisted(() => vi.fn());
 vi.mock('../snapshot-interactor-capture.ts', () => ({ captureSnapshotWithInteractor }));
@@ -115,7 +116,8 @@ test('captureSnapshot composes post-gesture stabilization with Android freshness
     androidTextRows(18, (row) => (row === 1 ? 'album-0' : `Album row ${row}`)),
   );
   const session = makeAndroidFreshnessSession(sessionName, 'click', baselineNodes);
-  session.postGestureStabilization = {
+  session.deferredSurface = {
+    kind: 'stabilize',
     action: 'click',
     positionals: [],
     markedAt: Date.now(),
@@ -150,5 +152,5 @@ test('captureSnapshot composes post-gesture stabilization with Android freshness
     'snapshot',
   ]);
   expect(session.androidSnapshotFreshness).toBeUndefined();
-  expect(session.postGestureStabilization).toBeUndefined();
+  expect(pendingSurfaceStabilization(session)).toBeUndefined();
 });

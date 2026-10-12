@@ -8,6 +8,7 @@ import type {
 } from '@agent-device/contracts/perf-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import type { SessionAction, SessionScope, SessionSurface } from '@agent-device/contracts/session';
+import type { MovingTargetBaseline as ContractsMovingTargetBaseline } from '@agent-device/contracts/moving-target-gate';
 import type {
   LeaseBackend,
   SessionRuntimeHints as PublicSessionRuntimeHints,
@@ -72,32 +73,60 @@ export type InteractionSurfaceEntry = {
   discriminating: boolean;
 };
 
-export type PostGestureStabilization = {
-  action: string;
-  /** The gesture's own positionals — wording input for the #1600 no-effect
-   * warning; never re-dispatched. Always set by every writer. */
-  positionals: string[];
-  markedAt: number;
-  /**
-   * Pre-gesture interaction-surface signature, captured from the session's
-   * last-known snapshot before the gesture dispatched (no extra capture — see
-   * `markPostGestureStabilization`). Populated only when
-   * `requiresPostGestureBaselineDistrust` is true for the session's device
-   * (Apple mobile only, #1542 defect 2): a post-gesture quiet-poll match that
-   * still equals this baseline is a stale-but-internally-consistent AX read,
-   * not proof the screen settled. Android's persistent helper clears its a11y
-   * cache before every capture (#1254/#1259) and needs no baseline check.
-   */
-  baselineSignature?: InteractionSurfaceEntry[];
-  /**
-   * Snapshot backend that produced `baselineSignature`. Backends do not return
-   * comparable views of one screen — on the same iOS screen private AX returns
-   * the scrolled-away content the tree backend prunes — so a quiet capture from
-   * a different backend can only be re-baselined against, never concluded from
-   * (#1569).
-   */
-  baselineBackend?: string;
-};
+/**
+ * What the session still owes because of its last mutation, before its surface can be trusted
+ * again. Two mechanisms own that question and a mutation leaves room for exactly one of them, so
+ * the variants are mutually exclusive by construction rather than by agreement:
+ *
+ * - `stabilize` — the surface is unsettled and the CAPTURE side owns settling it: the next capture
+ *   runs the quiet-window loop before it returns a tree. Gesture-shaped mutations (swipe, scroll, a
+ *   synthesized gesture) and an open that never read its app mark this.
+ * - `recheck` — the mutation dispatched through a captured tree and its own effect may still be
+ *   animating (#3471). The next action that resolves a target asks the tree it recorded whether its
+ *   coordinates are still in play; captures stay plain, because nothing here is owed a wait.
+ *
+ * `markedAt` is the instant the mutation finished, not when it began, so the moving-target window
+ * waits out only what is LEFT of it. Writing either variant retires the other, which is also how a
+ * gesture takes over a surface a press had left mid-animation.
+ */
+export type DeferredSurface =
+  | {
+      kind: 'stabilize';
+      action: string;
+      /** The gesture's own positionals — wording input for the #1600 no-effect
+       * warning; never re-dispatched. Always set by every writer. */
+      positionals: string[];
+      markedAt: number;
+      /**
+       * Pre-gesture interaction-surface signature, captured from the session's
+       * last-known snapshot before the gesture dispatched (no extra capture — see
+       * `markPostGestureStabilization`). Populated only when
+       * `requiresPostGestureBaselineDistrust` is true for the session's device
+       * (Apple mobile only, #1542 defect 2): a post-gesture quiet-poll match that
+       * still equals this baseline is a stale-but-internally-consistent AX read,
+       * not proof the screen settled. Android's persistent helper clears its a11y
+       * cache before every capture (#1254/#1259) and needs no baseline check.
+       */
+      baselineSignature?: InteractionSurfaceEntry[];
+      /**
+       * Snapshot backend that produced `baselineSignature`. Backends do not return
+       * comparable views of one screen — on the same iOS screen private AX returns
+       * the scrolled-away content the tree backend prunes — so a quiet capture from
+       * a different backend can only be re-baselined against, never concluded from
+       * (#1569).
+       */
+      baselineBackend?: string;
+    }
+  | {
+      kind: 'recheck';
+      /**
+       * The tree the mutation resolved its target against, beside the instant the mutation
+       * finished, so the next action can ask whether its own coordinates are still in play
+       * (#3471). The shape is `MovingTargetBaseline` in
+       * `@agent-device/contracts/moving-target-gate`, declared beside the gate that reads it.
+       */
+      baseline: ContractsMovingTargetBaseline;
+    };
 
 /**
  * A session together with the store key that addresses it: `address` is the exact string
@@ -186,7 +215,13 @@ export type SessionState = {
   /** Last broad snapshot safe for Android route-freshness comparisons after interactive snapshots. */
   lastComparisonSafeSnapshot?: SnapshotState;
   androidSnapshotFreshness?: SnapshotFreshnessWindow;
-  postGestureStabilization?: PostGestureStabilization;
+  /**
+   * What this session's last mutation left owed before its surface can be trusted again: the
+   * capture-side quiet-window loop, or the #3471 moving-target baseline the next resolved target is
+   * screened against. One field because one mutation leaves room for one of the two; the transitions
+   * are `deferred-interaction-outcome.ts`'s (R7).
+   */
+  deferredSurface?: DeferredSurface;
   snapshotDiagnostics?: SnapshotDiagnosticsState;
   trace?: {
     outPath: string;

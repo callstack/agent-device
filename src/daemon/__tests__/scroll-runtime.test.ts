@@ -679,7 +679,7 @@ test('bound scroll will not read movement off a tree that predates the last muta
 test('bound scroll will not bill an unread earlier gesture to the scroll it is dispatching', async () => {
   const captures = frozenCaptures([automationScreen(-320)]);
   const session = sessionWithStoredScreen(automationScreen(0), {
-    postGestureStabilization: { action: 'press', positionals: [], markedAt: Date.now() },
+    deferredSurface: { kind: 'stabilize', action: 'press', positionals: [], markedAt: Date.now() },
   });
 
   const result = await runScroll(

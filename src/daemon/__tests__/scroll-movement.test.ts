@@ -684,7 +684,12 @@ test('a tree the session no longer stands behind is refused as a baseline', () =
 
 test('a gesture nobody has read yet may still be moving the stored tree', () => {
   const session = makeSession('movement-plan-pending', { snapshot: state(screen(0)) });
-  session.postGestureStabilization = { action: 'tap', positionals: [], markedAt: Date.now() };
+  session.deferredSurface = {
+    kind: 'stabilize',
+    action: 'tap',
+    positionals: [],
+    markedAt: Date.now(),
+  };
   const plan = planScrollMovement({ device: IOS_SIMULATOR, flags: undefined, session });
   assertPlanKind(plan, 'unobservable');
 

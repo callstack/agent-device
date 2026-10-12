@@ -3,6 +3,7 @@ import type {
   CommandSessionStore,
 } from '@agent-device/contracts/runtime-contract';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { movingTargetBaseline } from './deferred-interaction-outcome.ts';
 import { refFrameTree } from './ref-frame.ts';
 import type { SessionRef, SessionState } from './session-state.ts';
 import type { SessionStore } from './session-store.ts';
@@ -26,6 +27,12 @@ function toRuntimeSessionRecord(
 ): CommandSessionRecord | undefined {
   if (!session) return undefined;
   const frameTree = refFrameTree(session);
+  // #3471: the moving-target gate judges a freshly resolved rect against the tree the PREVIOUS
+  // action acted through, so that tree has to reach the command layer — the `snapshot` beside it is
+  // the newest observation, which is the one thing that cannot show a target having moved. Absent
+  // whenever the session is idle or owes the capture-side loop instead, which is what makes an
+  // ordinary press pay the gate nothing.
+  const baseline = movingTargetBaseline(session);
   return {
     name,
     appBundleId: session.appBundleId,
@@ -39,6 +46,7 @@ function toRuntimeSessionRecord(
           ...(frameTree && options.omitRefFrameSnapshot !== true
             ? { refFrameSnapshot: frameTree }
             : {}),
+          ...(baseline ? { movingTargetBaseline: baseline } : {}),
         }
       : {}),
     metadata: {

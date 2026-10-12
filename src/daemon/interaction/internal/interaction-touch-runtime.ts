@@ -125,6 +125,7 @@ export async function dispatchRuntimeInteraction<
       actionStartedAt,
       actionFinishedAt,
       androidFreshnessBaseline: options.androidFreshnessBaseline,
+      preActionTree: runtimeResult.preAction,
     });
   } catch (error) {
     const appError = publishAmbiguousMatchCandidateRefs(

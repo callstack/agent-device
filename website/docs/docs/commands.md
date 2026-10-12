@@ -422,6 +422,8 @@ agent-device gesture transform 200 420 80 -40 2 35 700 # combined pan, zoom, and
 
 A successful `click` or `press` means the action was sent to where the command found the target. It does not confirm that the element received it or that the screen changed. When the next step depends on it, add `--verify` (reports `changedFromBefore`), add `--settle` (returns the diff once the UI goes quiet), or follow with `wait <selector>`. Before retrying a failed interaction, see [Retry after a failed command](#retry-after-a-failed-command).
 
+A `click` or `press` that follows an action which animated the screen checks the target's position again before tapping, and taps where it came to rest. A target still moving when that check runs out refuses with `target_still_moving` and `dispatched: no`: nothing was tapped, so the point the command resolved is in `error.details.rect` and where the target was last seen is `error.details.movedToRect`. Run `wait <selector>` on the target and retry the same command, or add `--settle` so the action waits for the UI to go quiet. A refused `@ref` press needs a fresh `snapshot -i` and a selector, because the wait retires the ref.
+
 ### Text entry
 
 - `fill` clears then types. `type` appends to the focused field and accepts text only: use `fill @ref "text"` to target a field, or `press @ref` then `type "text"`.

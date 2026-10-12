@@ -15,6 +15,7 @@ import {
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   capturePostGestureStabilizedResult,
+  pendingSurfaceStabilization,
   markDeferredInteractionOutcome,
 } from '../deferred-interaction-outcome.ts';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
@@ -197,7 +198,7 @@ test('no pre-gesture snapshot means no baseline, no rebase, and no no-effect cla
   const session = makeSession('ios');
   session.snapshot = undefined; // nothing captured before the gesture
   markPostGestureStabilization(session, 'scroll', ['up']);
-  assert.equal(session.postGestureStabilization?.baselineSignature, undefined);
+  assert.equal(pendingSurfaceStabilization(session)?.baselineSignature, undefined);
 
   const { result, rebased, vetoed } = await runStabilization(session, () =>
     makeSnapshotState(pickupSnapshot(500).nodes, {

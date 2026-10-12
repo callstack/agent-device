@@ -40,6 +40,7 @@ vi.mock('../interaction/index.ts', async (importOriginal) => {
 
 import { captureSnapshotForSession } from '../interaction/index.ts';
 import { dispatchGenericCommand } from '../request-generic-dispatch.ts';
+import { pendingSurfaceStabilization } from '../deferred-interaction-outcome.ts';
 
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
 
@@ -98,7 +99,7 @@ async function emulateCaptureSnapshotForSession(
 ) {
   captureObservations.push({
     postGestureStabilizationPending:
-      sessionStore.requireCurrent(ref).postGestureStabilization !== undefined,
+      pendingSurfaceStabilization(sessionStore.requireCurrent(ref)) !== undefined,
   });
   const effectiveFlags = { ...(flags ?? {}), snapshotInteractiveOnly: options.interactiveOnly };
   // Same rule the real seam applies: a request-bound capture is the tree this request reads, and

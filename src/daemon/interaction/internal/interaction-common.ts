@@ -1,4 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
+import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { DaemonResponse } from '../../daemon-request.ts';
 import { stripInternalInteractionFlags } from '../../deferred-interaction-outcome.ts';
@@ -28,6 +29,11 @@ export function finalizeTouchInteraction(params: {
   actionStartedAt: number;
   actionFinishedAt: number;
   androidFreshnessBaseline?: SnapshotState | undefined;
+  /**
+   * The tree this action resolved its target against (#3471), forwarded to the moving-target
+   * baseline. Absent for the dispatches that acted without a daemon tree.
+   */
+  preActionTree?: SurfaceScopedNodes | undefined;
 }): DaemonResponse {
   const {
     operations,
@@ -42,6 +48,7 @@ export function finalizeTouchInteraction(params: {
     actionStartedAt,
     actionFinishedAt,
     androidFreshnessBaseline,
+    preActionTree,
   } = params;
   const actionFlags = stripInternalInteractionFlags(flags);
   const [parameterizedResult, parameterizedResponseData] = parameterizeFillPayloads({
@@ -73,6 +80,7 @@ export function finalizeTouchInteraction(params: {
     positionals,
     flags,
     androidFreshnessBaseline,
+    preActionTree,
   });
   operations.recordGestureVisualization(
     actionCommand,

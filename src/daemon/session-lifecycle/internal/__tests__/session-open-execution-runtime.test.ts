@@ -85,6 +85,7 @@ import {
 } from '../../../../platform-runtime-runtime-hints.ts';
 import { resolveAndroidPackageForOpen } from '@agent-device/platform-android/mechanics';
 import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
+import { pendingSurfaceStabilization } from '../../../deferred-interaction-outcome.ts';
 import {
   makeAndroidEmulator,
   makeAppleSimulator,
@@ -520,19 +521,19 @@ async function openReportingObservation(
 test('a fresh iOS open that could not observe its app leaves the next capture to settle', async () => {
   const session = await openReportingObservation('unobserved-open', 'unobservable');
 
-  expect(session?.postGestureStabilization?.action).toBe('open');
+  expect(pendingSurfaceStabilization(session)?.action).toBe('open');
 });
 
 test('a fresh iOS open whose observation probe failed leaves the next capture to settle', async () => {
   const session = await openReportingObservation('probe-failed-open', 'probe-failed');
 
-  expect(session?.postGestureStabilization?.action).toBe('open');
+  expect(pendingSurfaceStabilization(session)?.action).toBe('open');
 });
 
 test('a fresh iOS open that observed its app leaves nothing pending', async () => {
   const session = await openReportingObservation('observed-open', 'observable');
 
-  expect(session?.postGestureStabilization).toBeUndefined();
+  expect(pendingSurfaceStabilization(session)).toBeUndefined();
 });
 
 function holdNativeOpen() {

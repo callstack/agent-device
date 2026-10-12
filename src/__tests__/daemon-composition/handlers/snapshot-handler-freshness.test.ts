@@ -166,7 +166,12 @@ test('snapshot annotations survive a deferred post-gesture capture into CLI JSON
   ];
   const snapshotQuality = { state: 'healthy', backend: 'tree' };
   session.snapshot = { nodes: baselineNodes, createdAt: Date.now(), backend: 'android' };
-  session.postGestureStabilization = { action: 'swipe', positionals: [], markedAt: Date.now() };
+  session.deferredSurface = {
+    kind: 'stabilize',
+    action: 'swipe',
+    positionals: [],
+    markedAt: Date.now(),
+  };
   sessionStore.publish(sessionName, session);
 
   legacyDispatchCapture.mockResolvedValue({

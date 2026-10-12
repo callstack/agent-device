@@ -9,6 +9,7 @@ import {
 import { buildInteractionSurfaceSignature } from '../interaction-surface-signature.ts';
 import {
   capturePostGestureStabilizedResult,
+  pendingSurfaceStabilization,
   markDeferredInteractionOutcome,
 } from '../deferred-interaction-outcome.ts';
 import type { SessionState } from '../session-state.ts';
@@ -51,7 +52,7 @@ test('markPostGestureStabilization marks iOS swipe sessions', () => {
 
   markPostGestureStabilization(session, 'swipe');
 
-  assert.equal(session.postGestureStabilization?.action, 'swipe');
+  assert.equal(pendingSurfaceStabilization(session)?.action, 'swipe');
 });
 
 test('markPostGestureStabilization marks Android swipe sessions', () => {
@@ -59,7 +60,7 @@ test('markPostGestureStabilization marks Android swipe sessions', () => {
 
   markPostGestureStabilization(session, 'swipe');
 
-  assert.equal(session.postGestureStabilization?.action, 'swipe');
+  assert.equal(pendingSurfaceStabilization(session)?.action, 'swipe');
 });
 
 test('markPostGestureStabilization marks gesture swipe sessions', () => {
@@ -67,7 +68,7 @@ test('markPostGestureStabilization marks gesture swipe sessions', () => {
 
   markPostGestureStabilization(session, 'gesture', ['swipe', 'left']);
 
-  assert.equal(session.postGestureStabilization?.action, 'gesture');
+  assert.equal(pendingSurfaceStabilization(session)?.action, 'gesture');
 });
 
 test('markPostGestureStabilization honors an explicit opt-out', () => {
@@ -75,7 +76,7 @@ test('markPostGestureStabilization honors an explicit opt-out', () => {
 
   markPostGestureStabilization(session, 'swipe', [], { postGestureStabilization: false });
 
-  assert.equal(session.postGestureStabilization, undefined);
+  assert.equal(pendingSurfaceStabilization(session), undefined);
 });
 
 test('markPostGestureStabilization ignores non-swipe gesture sessions', () => {
@@ -83,7 +84,7 @@ test('markPostGestureStabilization ignores non-swipe gesture sessions', () => {
 
   markPostGestureStabilization(session, 'gesture', ['pinch', 'in']);
 
-  assert.equal(session.postGestureStabilization, undefined);
+  assert.equal(pendingSurfaceStabilization(session), undefined);
 });
 
 test('markPostGestureStabilization captures the pre-gesture baseline signature on iOS', () => {
@@ -103,10 +104,10 @@ test('markPostGestureStabilization captures the pre-gesture baseline signature o
   markPostGestureStabilization(session, 'scroll');
 
   assert.deepEqual(
-    session.postGestureStabilization?.baselineSignature,
+    pendingSurfaceStabilization(session)?.baselineSignature,
     buildInteractionSurfaceSignature(session.snapshot.nodes),
   );
-  assert.ok((session.postGestureStabilization?.baselineSignature?.length ?? 0) > 0);
+  assert.ok((pendingSurfaceStabilization(session)?.baselineSignature?.length ?? 0) > 0);
 });
 
 test('markPostGestureStabilization does not compute a baseline signature on Android', () => {
@@ -122,7 +123,7 @@ test('markPostGestureStabilization does not compute a baseline signature on Andr
 
   markPostGestureStabilization(session, 'scroll');
 
-  assert.equal(session.postGestureStabilization?.baselineSignature, undefined);
+  assert.equal(pendingSurfaceStabilization(session)?.baselineSignature, undefined);
 });
 
 test('markPostGestureStabilization tolerates a missing pre-gesture snapshot on iOS', () => {
@@ -133,7 +134,7 @@ test('markPostGestureStabilization tolerates a missing pre-gesture snapshot on i
   // "No usable baseline" has exactly one representation: the field is absent,
   // so nothing downstream ever has to distinguish `undefined` from `[]` — and
   // the loop cannot rebase a baseline that was never really there.
-  assert.equal(session.postGestureStabilization?.baselineSignature, undefined);
+  assert.equal(pendingSurfaceStabilization(session)?.baselineSignature, undefined);
 });
 
 // ---------------------------------------------------------------------------
@@ -173,7 +174,7 @@ test('capturePostGestureStabilizedResult keeps polling past the normal deadline 
 
   assert.equal(staleAccepts, 1);
   assert.equal(settled, 0);
-  assert.equal(session.postGestureStabilization, undefined);
+  assert.equal(pendingSurfaceStabilization(session), undefined);
   // #1600: a stale-accept is the daemon PROVING the gesture moved nothing —
   // that verdict must reach the caller, not only the diagnostics stream.
   assert.equal(result.postGestureOutcome?.kind, 'no-effect');
@@ -259,7 +260,7 @@ test('capturePostGestureStabilizedResult trusts an Android baseline match immedi
   const session = makeSession('android');
   session.snapshot = pickupSnapshot(500);
   markPostGestureStabilization(session, 'scroll');
-  assert.equal(session.postGestureStabilization?.baselineSignature, undefined);
+  assert.equal(pendingSurfaceStabilization(session)?.baselineSignature, undefined);
 
   const capture = vi.fn(async () => pickupSnapshot(500)); // identical throughout, like the iOS stale case
 
@@ -379,7 +380,7 @@ test('capturePostGestureStabilizedResult catches a frozen target even when the b
   session.snapshot = pickupSnapshotWithExtraText(500);
   markPostGestureStabilization(session, 'scroll');
   assert.ok(
-    (session.postGestureStabilization?.baselineSignature?.length ?? 0) >
+    (pendingSurfaceStabilization(session)?.baselineSignature?.length ?? 0) >
       buildInteractionSurfaceSignature(pickupSnapshot(500).nodes).length,
     'the baseline must carry the extra text entry the post-gesture reads never see',
   );
@@ -657,7 +658,7 @@ test('capturePostGestureStabilizedResult clears the pending record when a captur
   const session = makeSession('ios');
   session.snapshot = pickupSnapshot(500);
   markPostGestureStabilization(session, 'scroll');
-  assert.ok(session.postGestureStabilization);
+  assert.ok(pendingSurfaceStabilization(session));
 
   let captureCount = 0;
   const capture = vi.fn(async () => {
@@ -679,5 +680,5 @@ test('capturePostGestureStabilizedResult clears the pending record when a captur
 
   assert.ok(outcome instanceof DOMException && outcome.name === 'TimeoutError');
   assert.equal(captureCount, 2);
-  assert.equal(session.postGestureStabilization, undefined);
+  assert.equal(pendingSurfaceStabilization(session), undefined);
 });
