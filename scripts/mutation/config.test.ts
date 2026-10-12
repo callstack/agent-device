@@ -39,3 +39,9 @@ test('the config content hash is stable and content-addressed', () => {
   assert.notEqual(configHash('a'), configHash('b'));
   assert.match(configHash('a'), /^sha256:[0-9a-f]{12}$/);
 });
+
+test('mutant replay uses the derived scope and per-test coverage without rediscovering related files', () => {
+  const config = readConfig();
+  assert.equal((config.vitest as { related: boolean }).related, false);
+  assert.equal(config.coverageAnalysis, 'perTest');
+});

@@ -67,15 +67,22 @@ test('the affected lane triggers on exactly the lane sources that can select mut
   const paths = [
     ...workflow('mutation-affected.yml').matchAll(/^ {6}- (?<q>['"])(?<glob>[^'"]+)\k<q>$/gm),
   ].map((match) => match.groups!.glob);
-  const expected = [
-    ...LANE_TOOLING.map((prefix) => (prefix.endsWith('/') ? `${prefix}**` : prefix)),
-    // The workflow reruns itself so a trigger edit is proven by the lane it edits.
-    '.github/workflows/mutation-affected.yml',
-  ];
+  const expected = LANE_TOOLING.map((prefix) => (prefix.endsWith('/') ? `${prefix}**` : prefix));
   assert.deepEqual(
     [...paths].sort(),
     [...expected].sort(),
     'the PR path filter drifted from LANE_TOOLING in scripts/mutation/run.ts',
   );
   assert.match(workflow('mutation-affected.yml'), /gate: mutation-affected[\s\S]*--list-affected/);
+});
+
+test('mutant steps reserve time for cancellation envelopes and artifact upload', () => {
+  for (const name of ['mutation-weekly.yml', 'mutation-affected.yml']) {
+    const yaml = workflow(name);
+    assert.match(yaml, /name: Run mutants for[^\n]*\n\s+timeout-minutes: 25/);
+    assert.match(
+      yaml,
+      /name: Record a failed shard envelope\n\s+if: failure\(\) \|\| cancelled\(\)/,
+    );
+  }
 });

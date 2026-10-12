@@ -7,17 +7,19 @@
   "plugins_comment": "Named explicitly: the default `@stryker-mutator/*` glob does not resolve under pnpm's non-flat node_modules, so plugin discovery finds no test runner.",
   "plugins": ["@stryker-mutator/vitest-runner"],
   "testRunner": "vitest",
+  "vitest_comment": "The harness derives the related test scope once. Per-test coverage filters each mutant; repeating Vitest related discovery during every mutant adds no coverage.",
   "vitest": {
     "configFile": "vitest.mutation.config.ts",
-    "related": true
+    "related": false
   },
-  "reporters": ["progress", "clear-text", "json"],
+  "reporters": ["progress", "json"],
   "jsonReporter": {
     "fileName": ".tmp/mutation/mutation.json"
   },
   "htmlReporter": {
     "fileName": ".tmp/mutation/mutation.html"
   },
+  "concurrency": 4,
   "coverageAnalysis": "perTest",
   "ignoreStatic": true,
   "tempDirName": ".tmp/stryker",
@@ -38,6 +40,7 @@
     "packages/capture-kit/src/snapshot/scroll-edge-state/**/*.ts",
     "packages/selectors/src/**/*.ts",
     "!packages/selectors/src/**/*.test.ts",
+    "!packages/selectors/src/**/*.fixtures.ts",
     "!packages/selectors/src/internal/__tests__/**",
     "packages/ad-script/src/internal/target-annotation-serde.ts",
     "packages/capture-kit/src/snapshot-occlusion.ts"

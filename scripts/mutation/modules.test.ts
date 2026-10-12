@@ -59,15 +59,18 @@ test('mutate globs default to every module and narrow on request', () => {
 // the shard count is registry data so the workflows and the runner agree on it.
 test('the shard matrix slices only the modules that declare shards', () => {
   assert.deepEqual(shardMatrix(['kernel-errors']), [
-    { name: 'kernel-errors', module: 'kernel-errors' },
+    { name: 'kernel-errors-1', module: 'kernel-errors', shard: '1/2' },
+    { name: 'kernel-errors-2', module: 'kernel-errors', shard: '2/2' },
   ]);
-  assert.deepEqual(shardMatrix(['selectors']), [
-    { name: 'selectors-1', module: 'selectors', shard: '1/4' },
-    { name: 'selectors-2', module: 'selectors', shard: '2/4' },
-    { name: 'selectors-3', module: 'selectors', shard: '3/4' },
-    { name: 'selectors-4', module: 'selectors', shard: '4/4' },
-  ]);
-  assert.equal(shardMatrix().length, ALL_MODULE_IDS.length + 3);
+  assert.deepEqual(
+    shardMatrix(['selectors']),
+    Array.from({ length: 8 }, (_, index) => ({
+      name: `selectors-${index + 1}`,
+      module: 'selectors',
+      shard: `${index + 1}/8`,
+    })),
+  );
+  assert.equal(shardMatrix().length, ALL_MODULE_IDS.length + 8);
   // Every registry module reaches the matrix: an unsharded sweep is not a sweep.
   for (const id of ALL_MODULE_IDS) {
     assert.ok(

@@ -452,6 +452,10 @@ export const LANE_TOOLING = [
   'vitest.mutation.config.ts',
   'vitest.config.ts',
   '.github/workflows/mutation-weekly.yml',
+  '.github/workflows/mutation-affected.yml',
+  'package.json',
+  'pnpm-lock.yaml',
+  'packages/*/package.json',
 ];
 
 /**
@@ -467,7 +471,9 @@ export function affectedMatrixFor(
   root: string = repoRoot,
 ): ShardSpec[] {
   const touchesLane = changed.some((file) =>
-    LANE_TOOLING.some((prefix) => normalizePath(file).startsWith(prefix)),
+    LANE_TOOLING.some((pattern) =>
+      path.matchesGlob(normalizePath(file), pattern.endsWith('/') ? `${pattern}**` : pattern),
+    ),
   );
   if (!touchesLane) return [];
   const modules = new Set(derivedAffectedModules(changed, root));

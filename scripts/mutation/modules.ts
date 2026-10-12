@@ -45,6 +45,7 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
     label: 'Error retriability + hints',
     mutate: ['packages/kernel/src/errors.ts'],
     owns: ['packages/kernel/src/errors.ts'],
+    shards: 2,
   },
   {
     id: 'daemon-ref-frame',
@@ -76,13 +77,12 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
     mutate: [
       'packages/selectors/src/**/*.ts',
       '!packages/selectors/src/**/*.test.ts',
+      '!packages/selectors/src/**/*.fixtures.ts',
       '!packages/selectors/src/internal/__tests__/**',
     ],
     // Selector tests live under the owned package source, so the prefix covers them.
     owns: ['packages/selectors/src/'],
-    // ~1,280 mutants at the observed ~3s/mutant on a 2-core runner is ~64
-    // minutes in one job — past the acceptance budget and its own timeout.
-    shards: 4,
+    shards: 8,
   },
   {
     id: 'target-annotation-serde',
