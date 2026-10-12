@@ -16,7 +16,6 @@ export {
   appendAgentDeviceChromeArgs,
   inspectManagedAgentBrowserProcesses,
   matchAgentBrowserChromeProcess,
-  recordManagedAgentBrowserProcesses,
   summarizeAgentBrowserProcesses,
   summarizeManagedAgentBrowserProcesses,
 } from './agent-browser-process-record.ts';

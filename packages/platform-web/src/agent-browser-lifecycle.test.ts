@@ -31,11 +31,11 @@ import {
   appendAgentDeviceChromeArgs,
   cleanupManagedAgentBrowserOrphans,
   matchAgentBrowserChromeProcess,
-  recordManagedAgentBrowserProcesses,
   resolveAgentBrowserIdleTimeoutMs,
   summarizeManagedAgentBrowserProcesses,
   summarizeAgentBrowserProcesses,
 } from './agent-browser-lifecycle.ts';
+import { recordManagedAgentBrowserProcesses } from './agent-browser-process-record.ts';
 import { getManagedAgentBrowserStatus } from './agent-browser-tool.ts';
 
 const mockRunCmd = vi.mocked(runCmdMock);
