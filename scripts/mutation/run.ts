@@ -18,7 +18,7 @@ import { pathToFileURL } from 'node:url';
 import { runCmdStreaming, runCmdSync } from '@agent-device/host-kit/command';
 import { parseScriptArgs } from '../lib/cli-args.ts';
 import { laneEnvelope } from '../lib/lane-envelope.ts';
-import { COVERAGE_CAPTURE_ENV } from './coverage-reporter.ts';
+import { COVERAGE_CAPTURE_ENV } from './coverage-reporter.mjs';
 import {
   assertCoveragePolicy,
   coverageScope,
@@ -344,7 +344,7 @@ async function runStryker(
     args.push(
       '--dryRunOnly',
       '--appendPlugins',
-      path.join(repoRoot, 'scripts/mutation/coverage-reporter.ts'),
+      path.join(repoRoot, 'scripts/mutation/coverage-reporter.mjs'),
       '--reporters',
       'scope-coverage',
     );
