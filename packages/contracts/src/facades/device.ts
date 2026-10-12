@@ -5,6 +5,8 @@ export type { AppStateCommandResult } from '../app-state.ts';
 export {
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
   WEB_DESKTOP_DEVICE,
+  assertProviderOutcome,
+  assertSourceFamily,
   countDeviceInventoryByGroup,
   filterDeviceInventoryProjection,
   isDeviceClaimConflictReason,

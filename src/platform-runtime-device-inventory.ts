@@ -1,4 +1,6 @@
 import {
+  assertProviderOutcome,
+  assertSourceFamily,
   filterDeviceInventoryProjection,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
   projectProviderDeviceInventoryRequest,
@@ -24,7 +26,6 @@ import {
   type Platform,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
-import { AppError } from '@agent-device/kernel/errors';
 
 export function createComposedDeviceInventoryGateways(
   options: Readonly<{
@@ -209,27 +210,4 @@ async function discoverFamily(
 
 function familyForSelector(selector: PlatformSelector): Platform {
   return isApplePlatform(selector) ? 'apple' : selector;
-}
-
-function assertSourceFamily(family: Platform, devices: readonly DeviceInfo[]): void {
-  const outside = devices.find((device) => device.platform !== family);
-  if (!outside) return;
-  throw new AppError(
-    'COMMAND_FAILED',
-    `Platform inventory source ${family} returned a ${outside.platform} device.`,
-    { expectedFamily: family, actualFamily: outside.platform, deviceId: outside.id },
-  );
-}
-
-function assertProviderOutcome(
-  value: unknown,
-): asserts value is Awaited<ReturnType<ProviderDeviceInventorySource['discover']>> {
-  if (value !== null && typeof value === 'object') {
-    const outcome = value as { kind?: unknown; devices?: unknown };
-    if (outcome.kind === 'declined' && !('devices' in outcome)) return;
-    if (outcome.kind === 'inventory' && Array.isArray(outcome.devices)) return;
-  }
-  throw new AppError('COMMAND_FAILED', 'Provider device inventory returned an invalid outcome.', {
-    reason: 'provider_inventory_contract_violation',
-  });
 }

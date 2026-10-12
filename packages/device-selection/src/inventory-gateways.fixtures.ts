@@ -1,4 +1,5 @@
 import {
+  assertProviderOutcome,
   filterDeviceInventoryProjection,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
   projectProviderDeviceInventoryRequest,
@@ -43,6 +44,8 @@ async function discoverLocalFamily(
 ): Promise<DeviceInfo[]> {
   scope.signal.throwIfAborted();
   const family: Platform = isApplePlatform(platform) ? 'apple' : platform;
+  // `local` is a flat whole-inventory discoverer fanned out per family, so this filter is
+  // the adapter to the per-family source contract, not a place production would assert.
   const devices = (await localDiscover(request)).filter((device) => device.platform === family);
   return filterDeviceInventoryProjection(devices, request);
 }
@@ -93,6 +96,7 @@ export function createTestDeviceInventoryGateways(
         scope.signal,
       );
       scope.signal.throwIfAborted();
+      assertProviderOutcome(result);
       if (result.kind === 'inventory') {
         return {
           devices: filterDeviceInventoryProjection(
