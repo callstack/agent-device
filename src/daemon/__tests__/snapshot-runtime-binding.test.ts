@@ -13,7 +13,7 @@ import {
 import type { DaemonRequest } from '../daemon-request.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
 import { ensureDeviceReady } from '../device/device-ready.ts';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from './support/command-surface-fake.ts';
 
 vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
@@ -44,7 +44,7 @@ test('the owning interface binds exactly the session device the facts were admit
 
   const resolved = await resolveBoundSnapshotCaptureRuntime(
     {
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req,
       sessionName: 'bind-test',

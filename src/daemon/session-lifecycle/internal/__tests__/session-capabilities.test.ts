@@ -27,7 +27,7 @@ import type {
 } from '../../../request-runtime-binding.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 /** The system leaves this owner refuses: the retired fallback listed them unconditionally. */
 const ANDROID_REFUSED_SYSTEM_COMMANDS = ['clipboard', 'alert', 'settings', 'app-switcher'];
@@ -56,7 +56,7 @@ async function projectAndroidCapabilities(sessionName: string) {
     providerMode: 'local',
   });
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -140,7 +140,7 @@ test('capabilities excludes logs from an unavailable provider-mode XCTest runtim
   });
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -185,7 +185,7 @@ test('capabilities excludes network when the runtime fact is unavailable', async
   });
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -231,7 +231,7 @@ test('capabilities includes apps for the available HarmonyOS runtime fact', asyn
     async (request) => (request.platform === 'harmonyos' ? [harmonyDevice] : []),
     async () =>
       await handleSessionCommands({
-        createCommandSurface: testCreateCommandSurface,
+        createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
@@ -311,7 +311,7 @@ test.each(APPS_UNAVAILABLE_CAPABILITY_CASES)(
     });
 
     const response = await handleSessionCommands({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
@@ -347,7 +347,7 @@ test('capabilities excludes appstate when its runtime fact is unavailable', asyn
   });
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -382,7 +382,7 @@ test('capabilities excludes appstate when its readiness fact is unavailable', as
   });
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -459,7 +459,7 @@ test.each([
       async () => [device],
       async () =>
         await handleSessionCommands({
-          createCommandSurface: testCreateCommandSurface,
+          createCommandSurface: fakeCreateCommandSurface,
           platformServices: daemonPlatformServicesFixture(),
           req: {
             token: 't',
@@ -497,7 +497,7 @@ test('capabilities accepts a stopped Android AVD placeholder for explicit platfo
     async (request) => (request.platform === 'android' ? [stoppedAvd] : []),
     async () =>
       await handleSessionCommands({
-        createCommandSurface: testCreateCommandSurface,
+        createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',

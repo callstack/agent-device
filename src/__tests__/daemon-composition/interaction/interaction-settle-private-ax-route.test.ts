@@ -8,7 +8,7 @@ import { handleInteractionCommands } from '../../../daemon/interaction/index.ts'
 import { getRuntimeBindings } from '../../../daemon/__tests__/interaction-get-runtime-fixture.ts';
 import { getInteractor } from '../../../core/interactors.ts';
 import { installInteractorResolution } from '../../../daemon/interactor-resolution.ts';
-import { testCreateCommandSurface } from '../../../daemon/__tests__/command-surface-fixture.ts';
+import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 // Root composition hands the daemon its interactor resolution; this test drives the real
 // settle capture, so it composes the real lookup the way the process root does.

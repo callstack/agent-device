@@ -12,7 +12,7 @@ import {
 } from '../../../handlers/__tests__/session-test-harness.ts';
 import { NETWORK_RUNTIME_PROJECTION_PARITY } from './session-network-runtime-parity-fixtures.ts';
 import { createNetworkRuntime, emptyAppLogResult } from './network-runtime-harness.ts';
-import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 test.each(NETWORK_RUNTIME_PROJECTION_PARITY)(
   'network $action preserves the $include projection through the request runtime',
@@ -61,7 +61,7 @@ test.each(NETWORK_RUNTIME_PROJECTION_PARITY)(
     const runtime = createNetworkRuntime(session.device, async () => result);
 
     const response = await handleSessionCommands({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
@@ -116,7 +116,7 @@ test('network admission remains fail-closed before parsing invalid input', async
   });
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -215,7 +215,7 @@ async function runNetwork(
   bindDevice: BindDeviceRuntime,
 ) {
   return await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',

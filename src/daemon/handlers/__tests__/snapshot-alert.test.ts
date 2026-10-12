@@ -8,7 +8,7 @@ import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { runAppleRunnerCommand } from '@agent-device/platform-apple/runner/operations';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import path from 'node:path';
-import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
@@ -41,7 +41,7 @@ async function handleSnapshotCommands(
 ): Promise<Awaited<ReturnType<typeof handleProductionSnapshotCommands>>> {
   return await withAppleRunnerProvider(mockRunnerCommand, { deviceId: iosSimulatorDevice.id }, () =>
     handleProductionSnapshotCommands({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: fakeCreateCommandSurface,
       req: { token: 't', session: sessionName, command: 'alert', positionals, flags: {} },
       sessionName,
       logPath: '/tmp/daemon.log',

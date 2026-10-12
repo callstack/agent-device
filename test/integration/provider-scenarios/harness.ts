@@ -52,7 +52,7 @@ import { getInteractor } from '../../../src/core/interactors.ts';
 import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/test-device-runtime-gateway.ts';
 
 import { openWebSessionNames } from '../../../src/daemon/web-session-names.ts';
-import { testCreateCommandSurface } from '../../../src/daemon/__tests__/command-surface-fixture.ts';
+import { testCreateCommandSurface } from '../../../src/__tests__/daemon-composition/command-surface-fixture.ts';
 
 // Match daemon composition (src/daemon-composition.ts): the daemon decides on provider
 // ownership through its own admission seam, which root composition installs.

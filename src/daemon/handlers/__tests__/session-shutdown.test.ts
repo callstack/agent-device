@@ -16,7 +16,7 @@ import {
   mockShutdownTargetRuntime,
 } from './session-command-harness.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 test('shutdown turns off selected iOS simulator', async () => {
   const sessionStore = makeSessionStore();
@@ -31,7 +31,7 @@ test('shutdown turns off selected iOS simulator', async () => {
   mockResolveTargetDevice.mockResolvedValue(selectedDevice);
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -79,7 +79,7 @@ test('shutdown rejects active session device and points to close --shutdown', as
   mockResolveTargetDevice.mockResolvedValue(selectedDevice);
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -120,7 +120,7 @@ test('shutdown turns off selected Android emulator', async () => {
   });
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -169,7 +169,7 @@ test('shutdown rejects unsupported physical devices', async () => {
   });
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -214,7 +214,7 @@ test('shutdown returns an error response when selected target shutdown fails', a
   });
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',

@@ -11,7 +11,7 @@ import type {
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
-import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -50,7 +50,7 @@ beforeEach(() => {
 
 test('reinstall requires active session or explicit device selector', async () => {
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -86,7 +86,7 @@ test('reinstall validates required args before runtime admission', async () => {
     }),
   );
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -124,7 +124,7 @@ test('install binds the deployment use exactly once after one facts admission', 
   });
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -189,7 +189,7 @@ test('install fails closed before binding when its provider owner lacks deployme
   };
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -235,7 +235,7 @@ test('reinstall cleans an uploaded artifact after the request-scoped operation',
   vi.mocked(resolveTargetDevice).mockResolvedValue(session.device);
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -271,7 +271,7 @@ test('HarmonyOS reinstall updates the active session identity from the runtime r
   mockDeployAppRuntime.mockResolvedValue({ packageName: 'com.example.application' });
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -322,7 +322,7 @@ test.each(['rebuild', 'retire'] as const)(
       return { packageName: 'com.example.updated' };
     });
     const running = handleSessionCommands({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',

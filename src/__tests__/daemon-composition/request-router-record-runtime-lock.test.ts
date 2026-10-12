@@ -17,7 +17,7 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { LeaseRegistry } from '../../daemon/lease-registry.ts';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
 import { createRequestHandler } from '../../daemon/__tests__/test-device-runtime-gateway.ts';
-import { testCreateCommandSurface } from '../../daemon/__tests__/command-surface-fixture.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const DEVICE: DeviceInfo = {
   platform: 'android',

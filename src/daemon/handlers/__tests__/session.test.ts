@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { handleSessionCommands } from './session-command-harness.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
 
 function request(command: string): DaemonRequest {
@@ -13,7 +13,7 @@ function request(command: string): DaemonRequest {
 
 async function dispatch(command: string) {
   return await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: request(command),
     sessionName: 'default',

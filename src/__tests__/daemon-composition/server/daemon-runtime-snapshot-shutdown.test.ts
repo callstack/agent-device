@@ -13,7 +13,7 @@ import { platformResourceCleanup } from '../../../platform-runtime-resource-clea
 import { DAEMON_SESSION_TEARDOWN_TIMEOUT_MS } from '../../../daemon/session-teardown-budget.ts';
 import { dispatchSnapshotViaRuntime } from '../../../daemon/snapshot-runtime.ts';
 import { teardownDaemonSessionForShutdown } from '../../../daemon/server/daemon-runtime.ts';
-import { testCreateCommandSurface } from '../../../daemon/__tests__/command-surface-fixture.ts';
+import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({
   resolveTargetDevice: vi.fn(async () => ANDROID_EMULATOR),

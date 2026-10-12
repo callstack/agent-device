@@ -7,12 +7,8 @@ import {
 } from '../../../__tests__/support/session-factories.ts';
 import { makeTestScreenRecordingResource } from '../../../__tests__/support/screen-recording-live-handle.ts';
 import { activateCompleteRefFrame } from '../../../ref-frame.ts';
-import type { SessionStore } from '../../../session-store.ts';
 import type { SessionState } from '../../../session-state.ts';
-import { handleInteractionCommands } from '../../index.ts';
-import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 /**
  * Shared factories for the interaction touch handler tests. Named pure
@@ -120,23 +116,6 @@ export function makeStaleRefSession(sessionName: string): SessionState {
   return session;
 }
 
-export async function runInteraction(
-  sessionStore: SessionStore,
-  sessionName: string,
-  command: string,
-  positionals: string[],
-  flags: Record<string, unknown> = {},
-) {
-  return await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
-    req: { token: 't', session: sessionName, command, positionals, flags },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-    ...getRuntimeBindings(),
-  });
-}
-
 // #1654: the tree a mutating `find` matched against, deliberately NOT the tree
 // stored on the session. `@e2` names the "Continue" button in both trees, but
 // at a distinctive point here and at (60, 40) in the session frame tree — so
@@ -162,28 +141,6 @@ export function findResolvedTarget(
   ref = '@e2',
 ) {
   return { ref, node: preresolved.node, nodes: preresolved.nodes };
-}
-
-export async function runFindInternalClick(
-  sessionStore: SessionStore,
-  sessionName: string,
-  internal: Record<string, unknown>,
-) {
-  return await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'click',
-      positionals: ['@e2'],
-      flags: { noRecord: true },
-      internal,
-    },
-    sessionName,
-    sessionStore,
-    contextFromFlags,
-    ...getRuntimeBindings(),
-  });
 }
 
 /** The coordinates the leaf handed to the bound point-tap operation. */

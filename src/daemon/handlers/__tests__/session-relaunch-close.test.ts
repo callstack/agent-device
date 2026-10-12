@@ -6,7 +6,7 @@ import {
   setActiveProviderDeviceRuntimes,
 } from '../../../provider-device-runtime.ts';
 import { installProviderDeviceAdmission } from '../../provider-device-admission.ts';
-import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 // The daemon reads provider ownership through its own typed admission seam; production
 // installs it from root composition, and these tests compose it the same way.
@@ -122,7 +122,7 @@ function createHandler(
   leaseRegistry: LeaseRegistry = new LeaseRegistry(),
 ) {
   return createRequestHandler({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

@@ -14,7 +14,7 @@ import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-d
 import { makeSessionStore } from './support/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from './support/command-surface-fake.ts';
 
 test('request binding disposes once after response while adopted app-log handle survives', async () => {
   const runtime = makeGateway();
@@ -61,7 +61,7 @@ function makeHandler(gateway: DeviceRuntimeGateway<PlatformRuntimeOperations>) {
   return {
     sessionStore,
     handler: createRequestHandler({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: fakeCreateCommandSurface,
       logPath: '/tmp/daemon.log',
       token: 'token',
       sessionStore,

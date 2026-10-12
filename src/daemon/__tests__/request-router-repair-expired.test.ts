@@ -11,7 +11,7 @@ import fs from 'node:fs';
 
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from './support/command-surface-fake.ts';
 
 vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
@@ -31,7 +31,7 @@ const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 function makeHandler(prefix: string) {
   const sessionStore = makeSessionStore(prefix);
   const handler = createRequestHandler({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

@@ -31,7 +31,7 @@ import { refFrameState } from '../../ref-frame.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
-import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 const available = Object.freeze({ available: true } as const);
 const keyboardFamilyDenial = Object.freeze({
@@ -77,7 +77,7 @@ test.each(['rebuild', 'retire'] as const)(
         [Symbol.asyncDispose]: async () => {},
       };
       const running = handleSessionCommands({
-        createCommandSurface: testCreateCommandSurface,
+        createCommandSurface: fakeCreateCommandSurface,
         platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
@@ -179,7 +179,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   // dismiss mutates the device → frame expires.
   const dismissRef = sessionStore.publish(sessionName, makeSession(sessionName, device));
   await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -201,7 +201,7 @@ test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves
   sessionStore.retire(dismissRef);
   sessionStore.publish(sessionName, makeSession(sessionName, device));
   await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -246,7 +246,7 @@ test('keyboard dismiss expires the frame before the invocation runs, even when i
   sessionStore.publish(sessionName, makeSession(sessionName, device));
   await expect(
     handleSessionCommands({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: fakeCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
@@ -269,7 +269,7 @@ test('keyboard dismiss expires the frame before the invocation runs, even when i
 test('keyboard requires an active session or explicit device selector', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -298,7 +298,7 @@ test('keyboard dismiss requires active iOS session for explicit selectors', asyn
   const sessionStore = makeSessionStore();
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',

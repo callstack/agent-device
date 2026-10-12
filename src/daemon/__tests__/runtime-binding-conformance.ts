@@ -36,7 +36,7 @@ import { resolveBoundTvRemoteRuntime } from '../tv-remote-runtime.ts';
 import { resolveBoundTypeTextRuntime } from '../type-text-runtime.ts';
 import { resolveBoundViewportRuntime } from '../viewport-runtime.ts';
 import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from './support/command-surface-fake.ts';
 
 type RuntimeOperation = RuntimeOperationKey<PlatformRuntimeOperations>;
 
@@ -152,7 +152,7 @@ export const conformedRuntimeBindings = {
       const session = makeSession('diff-runtime', { device, appBundleId: 'com.example.app' });
       sessionStore.publish(session.name, session);
       const response = await dispatchSnapshotDiffViaRuntime({
-        createCommandSurface: testCreateCommandSurface,
+        createCommandSurface: fakeCreateCommandSurface,
         req: {
           command: 'diff',
           positionals: ['snapshot'],

@@ -29,7 +29,7 @@ import {
   makeTestAppLogResource,
   noopInvoke,
 } from '../../../handlers/__tests__/session-test-harness.ts';
-import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 const DEVICE: DeviceInfo = {
   platform: 'apple',
@@ -298,7 +298,7 @@ async function runLogs(
   throwIfCanceled?: () => void,
 ) {
   return await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: sessionName, command: 'logs', positionals, flags },
     sessionName,

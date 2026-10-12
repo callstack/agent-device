@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from './support/command-surface-fake.ts';
 
 vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
@@ -49,7 +49,7 @@ function makeHandler(
   const bind = vi.fn(lifecycleDeviceRuntimeGateway.bind);
   const inspectFacts = vi.fn(lifecycleDeviceRuntimeGateway.inspectFacts);
   const handler = createRequestHandler({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon-policy'), 'daemon.log'),
     token: 'test-token',
     sessionStore,

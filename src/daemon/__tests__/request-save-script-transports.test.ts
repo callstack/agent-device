@@ -34,7 +34,7 @@ import {
 } from '@agent-device/test-kit/loopback';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { flushSessionEventLogWrites } from '@agent-device/session-journal/session-event-log';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from './support/command-surface-fake.ts';
 
 const TOKEN = 'save-script-transport-token';
 const SESSION = 'save-script-transport';
@@ -71,7 +71,7 @@ function setup(): Harness {
   const session = makeIosSession(SESSION);
   sessionStore.publish(SESSION, session);
   const handleRequest = createRequestHandler({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(root, 'daemon.log'),
     token: TOKEN,
     sessionStore,

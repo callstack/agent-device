@@ -20,7 +20,7 @@ import { LeaseRegistry } from '../../daemon/lease-registry.ts';
 import { createDaemonHttpServer } from '../../daemon/server/http-server.ts';
 import { createRequestHandler } from '../../daemon/__tests__/test-device-runtime-gateway.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { testCreateCommandSurface } from '../../daemon/__tests__/command-surface-fixture.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const limrunIo = vi.hoisted(() => ({
   listAssets: vi.fn(),

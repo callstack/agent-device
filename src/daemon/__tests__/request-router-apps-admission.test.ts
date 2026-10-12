@@ -9,7 +9,7 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from './support/command-surface-fake.ts';
 
 function createAppsAdmissionHarness(apps: readonly string[] = []) {
   const listProviderApps = vi.fn(async () => apps);
@@ -24,7 +24,7 @@ function createAppsAdmissionHarness(apps: readonly string[] = []) {
     throw new Error('apps catalog must not bind a device');
   });
   const handler = createRequestHandler({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore: makeSessionStore('agent-device-apps-admission-'),

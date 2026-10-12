@@ -20,7 +20,7 @@ import {
 } from '../../daemon/__tests__/support/session-factories.ts';
 import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { testCreateCommandSurface } from '../../daemon/__tests__/command-surface-fixture.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 import { replayScriptSourceBundleFor } from '../test-utils/replay-script-source.ts';
 import {
   createPlatformRuntimeGateway,

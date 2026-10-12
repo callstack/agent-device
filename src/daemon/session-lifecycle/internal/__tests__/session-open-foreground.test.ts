@@ -1,6 +1,6 @@
 import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 const dispatchSnapshotViaRuntime = vi.hoisted(() => vi.fn());
 
@@ -152,7 +152,7 @@ const failedOpenResponse: DaemonResponse = {
 
 test('passes a failed open response through untouched', async () => {
   const result = await composeOpenWithInitialSnapshot({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: baseRequest({ flags: { foreground: true } }),
     ref,
@@ -169,7 +169,7 @@ test('passes a failed open response through untouched', async () => {
 
 test('leaves a successful open response untouched when --foreground was not requested', async () => {
   const result = await composeOpenWithInitialSnapshot({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: baseRequest(),
     ref,
@@ -189,7 +189,7 @@ test('attaches the initial INTERACTIVE snapshot by delegating to the existing sn
 
   const req = baseRequest({ flags: { foreground: true }, positionals: ['xyz.blueskyweb.app'] });
   const result = await composeOpenWithInitialSnapshot({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req,
     ref,
@@ -203,7 +203,7 @@ test('attaches the initial INTERACTIVE snapshot by delegating to the existing sn
   // #1670 P1: the composed dispatch must BE the `snapshot -i` path — the CLI
   // maps `-i` to snapshotInteractiveOnly, the key the snapshot runtime reads.
   expect(dispatchSnapshotViaRuntime).toHaveBeenCalledWith({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     req: {
       ...req,
       command: 'snapshot',
@@ -243,7 +243,7 @@ test('a snapshot-capture failure never masks the successful open', async () => {
   dispatchSnapshotViaRuntime.mockResolvedValue(snapshotFailure);
 
   const result = await composeOpenWithInitialSnapshot({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: baseRequest({ flags: { foreground: true } }),
     ref,
@@ -287,7 +287,7 @@ test('a THROWN snapshot-capture failure never masks the successful open either',
   );
 
   const result = await composeOpenWithInitialSnapshot({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: baseRequest({ flags: { foreground: true } }),
     ref,

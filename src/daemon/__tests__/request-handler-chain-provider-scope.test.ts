@@ -3,7 +3,7 @@ import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 // through the neutral providerScope, and that an empty scope forwards none.
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from './support/command-surface-fake.ts';
 
 const handleSessionCommandsMock = vi.fn(async (_params: unknown) => ({ ok: true, data: {} }));
 vi.mock('../handlers/session.ts', () => ({
@@ -77,7 +77,7 @@ test('the android adb executor from the generic provider scope reaches the sessi
   });
 
   await runRequestHandlerChain({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     ...baseChainParams('provider-scope-test'),
     providerScope: { androidAdbExecutor },
@@ -94,7 +94,7 @@ test('an empty provider scope forwards no android adb executor to the session ha
   handleSessionCommandsMock.mockClear();
 
   await runRequestHandlerChain({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     ...baseChainParams('provider-scope-empty'),
     providerScope: {},

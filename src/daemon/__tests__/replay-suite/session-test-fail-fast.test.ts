@@ -7,7 +7,7 @@ import { makeSessionStore } from '../support/store-factory.ts';
 import { handleSessionCommands } from '../../handlers/__tests__/session-command-harness.ts';
 
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from '../support/command-surface-fake.ts';
 
 test('test --fail-fast continues after passing scripts', async () => {
   const root = mkdtempForTestSync('agent-device-test-fail-fast-pass-');
@@ -16,7 +16,7 @@ test('test --fail-fast continues after passing scripts', async () => {
 
   const invokedPaths: string[] = [];
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',

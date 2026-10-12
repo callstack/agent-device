@@ -9,7 +9,7 @@ import {
 } from './session-close-shutdown.fixtures.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
-import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 const {
   AppError,
@@ -44,7 +44,7 @@ test('close stops Android snapshot helper session before deleting session', asyn
   });
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -141,7 +141,7 @@ test('close stops active host audio probe before deleting session', async () => 
   );
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -167,7 +167,7 @@ test('close dispatches web session cleanup without a positional target', async (
   sessionStore.publish(sessionName, makeSession(sessionName, WEB_DESKTOP_DEVICE));
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -220,7 +220,7 @@ test('close preserves the session and lease when provider release fails so it ca
 
   let releaseAttempts = 0;
   const request = {
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -300,7 +300,7 @@ test('close cannot retire a replacement session while its provider release waits
     return { releasedBy: 'provider' };
   });
   const closing = handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: { token: 't', session: address, command: 'close', positionals: [], flags: {} },
     sessionName: address,

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from '../../daemon/__tests__/request-router-dispatch-mocks.ts';
-import { testCreateCommandSurface } from '../../daemon/__tests__/command-surface-fixture.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 vi.mock('../../daemon/device/device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),

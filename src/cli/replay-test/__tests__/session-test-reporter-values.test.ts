@@ -12,7 +12,7 @@ import { daemonPlatformServicesFixture } from '../../../daemon/__tests__/platfor
 // ADR 0012 attempts a post-failure screen digest through the narrow snapshot interactor seam;
 // these fixtures model no runner, so reject that leaf capture deterministically.
 import { expect, test, vi } from 'vitest';
-import { testCreateCommandSurface } from '../../../daemon/__tests__/command-surface-fixture.ts';
+import { testCreateCommandSurface } from '../../../__tests__/daemon-composition/command-surface-fixture.ts';
 
 vi.mock('../../../daemon/snapshot-interactor-capture.ts', () => ({
   captureSnapshotWithInteractor: vi.fn(async () => {

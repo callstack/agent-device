@@ -6,7 +6,7 @@ import { makeSessionStore } from './support/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from './support/command-surface-fake.ts';
 
 test(
   'a request spawns its commands with its own DEVELOPER_DIR, else the daemon one',
@@ -14,7 +14,7 @@ test(
   async () => {
     const seen: string[] = [];
     const handler = createRequestHandler({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: fakeCreateCommandSurface,
       logPath: path.join(mkdtempForTestSync('agent-device-router-developer-dir-'), 'daemon.log'),
       token: 'test-token',
       sessionStore: makeSessionStore('agent-device-router-developer-dir-store-'),

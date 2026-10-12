@@ -10,7 +10,7 @@ import {
   setActiveProviderDeviceRuntimes,
 } from '../../../provider-device-runtime.ts';
 import { installProviderDeviceAdmission } from '../../../daemon/provider-device-admission.ts';
-import { testCreateCommandSurface } from '../../../daemon/__tests__/command-surface-fixture.ts';
+import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 // The daemon reads provider ownership through its own typed admission seam; production
 // installs it from root composition, and these tests compose it the same way.

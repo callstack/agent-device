@@ -11,7 +11,7 @@ import {
   createPlatformRuntimeGateway,
   createRequestPlatformProviders,
 } from '../../platform-runtime.ts';
-import { testCreateCommandSurface } from '../../daemon/__tests__/command-surface-fixture.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 function makeAndroidSessionStore(name: string): SessionStore {
   const sessionStore = new SessionStore(`/tmp/${name}`);

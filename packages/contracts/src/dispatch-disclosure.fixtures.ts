@@ -37,11 +37,11 @@ export const DISPATCH_DISCLOSURE_TABLE_PATH = path.join(
  * followed by `test(\`${row.id}`, which {@link DISPATCH_DISCLOSURE_ROW_LOOP} matches.
  */
 export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>> = {
-  'daemon.': 'src/daemon/interaction/internal/__tests__/interaction-dispatch-disclosure.test.ts',
+  'daemon.': 'src/__tests__/daemon-composition/interaction/interaction-dispatch-disclosure.test.ts',
   'daemon.scroll-no-progress': 'src/daemon/__tests__/scroll-movement.test.ts',
-  'daemon.route.': 'src/daemon/__tests__/request-dispatch-disclosure.test.ts',
+  'daemon.route.': 'src/__tests__/daemon-composition/request-dispatch-disclosure.test.ts',
   'post-action-guard.':
-    'src/daemon/interaction/internal/__tests__/interaction-dispatch-disclosure.test.ts',
+    'src/__tests__/daemon-composition/interaction/interaction-dispatch-disclosure.test.ts',
   'ios-runner.': 'packages/platform-apple/src/runner/__tests__/runner-dispatch-disclosure.test.ts',
   'ios-runner.pre-send.':
     'packages/platform-apple/src/runner/__tests__/runner-lifecycle-dispatch-disclosure.test.ts',
@@ -56,7 +56,7 @@ export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>>
   'web-agent-browser.':
     'packages/platform-web/src/__tests__/agent-browser-dispatch-disclosure.test.ts',
   'maestro-direct.':
-    'src/daemon/interaction/internal/__tests__/interaction-touch-direct-ios.test.ts',
+    'src/__tests__/daemon-composition/interaction/interaction-touch-direct-ios.test.ts',
 };
 
 /** The per-row driving loop every driver file carries. */

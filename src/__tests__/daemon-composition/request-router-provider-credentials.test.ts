@@ -9,7 +9,7 @@ import {
 } from '../../provider-credential-fingerprint.ts';
 import { LeaseRegistry } from '../../daemon/lease-registry.ts';
 import { createRequestHandler } from '../../daemon/__tests__/test-device-runtime-gateway.ts';
-import { testCreateCommandSurface } from '../../daemon/__tests__/command-surface-fixture.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const DAEMON_ENV = { LIMRUN_API_KEY: 'lim-key' };
 

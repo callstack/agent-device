@@ -1,0 +1,147 @@
+import { createTestDeviceInventoryGateways } from '../test-utils/device-inventory-gateways.ts';
+import { legacyDispatchCapture } from '../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
+import { test, expect, vi, beforeEach } from 'vitest';
+
+import path from 'node:path';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
+
+import { daemonPlatformServicesFixture } from '../../daemon/__tests__/platform-services-fixture.ts';
+import {
+  createRequestHandler,
+  gestureDeviceRuntimeGateway,
+  gestureRuntimeSpies,
+} from '../../daemon/__tests__/test-device-runtime-gateway.ts';
+import type { SessionState } from '../../daemon/session-state.ts';
+import { LeaseRegistry } from '../../daemon/lease-registry.ts';
+import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
+import { makeTestScreenRecordingResource } from '../../daemon/__tests__/support/screen-recording-live-handle.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+
+// The observation spy hangs off the port the router composes with (ADR 0019 section 11), not off
+// the platform module behind it.
+const mockObserveRunnerSession = vi.fn();
+const platformServices = daemonPlatformServicesFixture({
+  appleSessionObservation: {
+    observeRunnerSession: mockObserveRunnerSession,
+    resolveSoleForegroundApp: async () => undefined,
+  },
+});
+
+beforeEach(() => {
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockResolvedValue({});
+  for (const spy of Object.values(gestureRuntimeSpies)) spy.mockClear();
+  mockObserveRunnerSession.mockReset();
+});
+
+test('router blocks non-record commands when recording was invalidated', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-recording-health-');
+  const session: SessionState = {
+    name: 'default',
+    createdAt: Date.now(),
+    actions: [],
+    appBundleId: 'com.apple.Preferences',
+    device: {
+      platform: 'apple',
+      appleOs: 'ios',
+      target: 'mobile',
+      id: 'sim-1',
+      name: 'iPhone 17 Pro',
+      kind: 'simulator',
+      booted: true,
+    },
+  };
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'runner AVAssetWriter',
+    outPath: '/tmp/demo.mp4',
+    startedAt: Date.now() - 1_000,
+    invalidatedReason: 'iOS runner session restarted during recording',
+  });
+  sessionStore.publish('default', session);
+
+  const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    trackDownloadableArtifact: () => 'artifact-id',
+    platformServices,
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'scroll',
+    positionals: ['down'],
+    meta: { requestId: 'req-invalidated-recording' },
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) {
+    return;
+  }
+  expect(response.error.code).toBe('COMMAND_FAILED');
+  expect(response.error.message).toBe('iOS runner session restarted during recording');
+  expect(legacyDispatchCapture).not.toHaveBeenCalled();
+});
+
+test('router allows canonical iOS simulator gestures during overlay recording after runner restart', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-recording-health-');
+  const session: SessionState = {
+    name: 'default',
+    createdAt: Date.now(),
+    actions: [],
+    appBundleId: 'com.apple.Preferences',
+    device: {
+      platform: 'apple',
+      appleOs: 'ios',
+      target: 'mobile',
+      id: 'sim-1',
+      name: 'iPhone 17 Pro',
+      kind: 'simulator',
+      booted: true,
+    },
+  };
+  session.screenRecording = makeTestScreenRecordingResource(session, {
+    backend: 'simctl recordVideo',
+    outPath: '/tmp/demo.mp4',
+    startedAt: Date.now() - 1_000,
+    runnerSessionId: 'runner-before',
+  });
+  sessionStore.publish('default', session);
+  mockObserveRunnerSession.mockResolvedValue({
+    alive: true,
+    sessionId: 'runner-after',
+  });
+  const handler = createRequestHandler({
+    createCommandSurface: testCreateCommandSurface,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    trackDownloadableArtifact: () => 'artifact-id',
+    deviceRuntimeGateway: gestureDeviceRuntimeGateway,
+    platformServices,
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'gesture',
+    positionals: [],
+    input: { kind: 'pinch', scale: 1.2, origin: { x: 100, y: 200 } },
+    meta: { requestId: 'req-simulator-runner-restart' },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(mockObserveRunnerSession).not.toHaveBeenCalled();
+  expect(gestureRuntimeSpies.gestureViewport).toHaveBeenCalledOnce();
+  expect(gestureRuntimeSpies.performMultiTouchGesturePlan).toHaveBeenCalledOnce();
+  const recording = sessionStore.get('default')?.screenRecording?.handle.inspect();
+  expect(recording?.invalidatedReason).toBeUndefined();
+  expect(recording?.gestureEvents).toHaveLength(1);
+  expect(recording?.gestureEvents[0]?.kind).toBe('pinch');
+});

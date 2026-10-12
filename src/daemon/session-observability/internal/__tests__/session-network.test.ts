@@ -8,13 +8,13 @@ import {
   makeSessionStore,
   noopInvoke,
 } from '../../../handlers/__tests__/session-test-harness.ts';
-import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 test('network requires an active session before requesting a runtime binding', async () => {
   const sessionStore = makeSessionStore();
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
@@ -49,7 +49,7 @@ test('network validates the legacy limit after runtime-fact admission', async ()
   );
 
   const response = await handleSessionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',

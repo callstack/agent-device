@@ -4,7 +4,7 @@ import { test, expect, vi } from 'vitest';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { testCreateCommandSurface } from '../../daemon/__tests__/command-surface-fixture.ts';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 let snapshotCalls = 0;
 let snapshotMode: 'blocking-dialog' | 'throws' = 'blocking-dialog';

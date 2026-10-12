@@ -2,7 +2,7 @@ import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/de
 import { test, expect, vi, beforeEach } from 'vitest';
 
 import path from 'node:path';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { fakeCreateCommandSurface } from './support/command-surface-fake.ts';
 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
@@ -69,7 +69,7 @@ function makeHandler() {
   return {
     sessionStore,
     handler: createRequestHandler({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: fakeCreateCommandSurface,
       logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
       token: 'test-token',
       sessionStore,
