@@ -40,7 +40,7 @@ test('the config content hash is stable and content-addressed', () => {
   assert.match(configHash('a'), /^sha256:[0-9a-f]{12}$/);
 });
 
-test('mutant replay uses the derived scope and per-test coverage without rediscovering related files', () => {
+test('stryker disables per-mutant related discovery and uses perTest coverage', () => {
   const config = readConfig();
   assert.equal((config.vitest as { related: boolean }).related, false);
   assert.equal(config.coverageAnalysis, 'perTest');

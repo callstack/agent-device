@@ -260,7 +260,16 @@ function existingResult(file: string): string | undefined {
 function envelopeModule(id: ModuleId, scores: readonly ModuleScore[]) {
   const score = scores.find((entry) => entry.module === id);
   if (!score) {
-    return { id, score: null, killed: null, survived: null, total: null, timeout: null };
+    return {
+      id,
+      score: null,
+      killed: null,
+      survived: null,
+      total: null,
+      timeout: null,
+      noCoverage: null,
+      errors: null,
+    };
   }
   const { module: _module, surviving: _surviving, ...measured } = score;
   return { id, ...measured };
@@ -351,28 +360,28 @@ async function produceReport(
   return readReport(reportPath ?? DEFAULT_REPORT_PATH);
 }
 
-/**
- * A merged shard set is only a sweep if every expected shard reported and every
- * requested module has mutants — sub-sharded modules make the second check too
- * weak alone, since a surviving slice still covers its module. `summarizeReport`
- * scores an absent module as 0, so without this a dead shard would be published
- * as a `complete`/`pass` envelope claiming the sweep happened.
- *
- * Both verdicts run after the table is published: the kernels that did complete
- * are the part of the run still worth reading on a failed-shard day.
- */
-function assertCompleteSweep(state: LaneState, dir: string, shards: number, args: Args): void {
-  if (args.expectShards !== undefined && shards !== args.expectShards) {
-    throw new Error(
-      `Incomplete shard set from ${dir}: ${shards} report(s), expected ${args.expectShards}. ` +
-        'A shard job failed or its artifact is absent; the aggregate is not a sweep.',
+type ShardSummary = { count: number; failed: readonly string[] };
+
+/** Every reported shard must pass; expected counts and module coverage also apply. */
+function incompleteSweepReason(
+  scores: readonly ModuleScore[],
+  shards: ShardSummary,
+  args: Args,
+): string | undefined {
+  if (args.expectShards !== undefined && shards.count !== args.expectShards) {
+    return (
+      `Incomplete shard set from ${args.reportDir}: ${shards.count} report(s), expected ${args.expectShards}. ` +
+      'A shard job failed or its artifact is absent; the aggregate is not a sweep.'
     );
   }
-  const missing = state.scores.filter((score) => score.total === 0).map((score) => score.module);
-  if (missing.length === 0) return;
-  throw new Error(
-    `Incomplete shard set from ${dir}: no mutants for ${missing.join(', ')}. ` +
-      'A shard job failed or its artifact is absent; the aggregate is not a sweep.',
+  if (shards.failed.length > 0) {
+    return `Shard failure or missing envelope: ${shards.failed.join(', ')}`;
+  }
+  const missing = scores.filter((score) => score.total === 0).map((score) => score.module);
+  if (missing.length === 0) return undefined;
+  return (
+    `Incomplete shard set from ${args.reportDir}: no mutants for ${missing.join(', ')}. ` +
+    'A shard job failed or its artifact is absent; the aggregate is not a sweep.'
   );
 }
 
@@ -380,10 +389,7 @@ function assertCompleteSweep(state: LaneState, dir: string, shards: number, args
  * Reads shard reports, an existing report, or runs Stryker — and scores them.
  * Returns the shard count when the source was a shard directory.
  */
-async function scoreModules(
-  args: Args,
-  state: LaneState,
-): Promise<{ count: number; failed: string[] } | undefined> {
+async function scoreModules(args: Args, state: LaneState): Promise<ShardSummary | undefined> {
   state.stage = args.reportDir || args.report ? 'report' : 'stryker';
   const shards = args.reportDir ? readShardedReports(args.reportDir) : undefined;
   const report = shards?.report ?? (await produceReport(state.modules, args.report, args.shard));
@@ -411,29 +417,9 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
   const title = args.affected
     ? 'Mutation score — affected decision kernels'
     : 'Mutation score — decision kernels';
-  let incomplete: Error | undefined;
-  if (args.reportDir) {
-    try {
-      assertCompleteSweep(state, args.reportDir, shards?.count ?? 0, args);
-      if (args.expectShards !== undefined && shards?.failed.length) {
-        throw new Error(`Shard failure or missing envelope: ${shards.failed.join(', ')}`);
-      }
-    } catch (error) {
-      incomplete = error as Error;
-    }
-  }
-  const reason =
-    args.expectShards !== undefined && shards?.count !== args.expectShards
-      ? `${shards?.count} report(s), expected ${args.expectShards}`
-      : incomplete?.message;
-  emit(
-    renderReport(state.scores, state.provenance, {
-      title,
-      incomplete: incomplete ? reason : undefined,
-    }),
-    args.summary,
-  );
-  if (incomplete) throw incomplete;
+  const reason = shards ? incompleteSweepReason(state.scores, shards, args) : undefined;
+  emit(renderReport(state.scores, state.provenance, { title, incomplete: reason }), args.summary);
+  if (reason) throw new Error(reason);
   state.stage = 'complete';
   return 0;
 }

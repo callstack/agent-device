@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { parse } from 'yaml';
 import { shardMatrix } from './modules.ts';
 import { LANE_TOOLING } from './run.ts';
 
@@ -76,13 +77,32 @@ test('the affected lane triggers on exactly the lane sources that can select mut
   assert.match(workflow('mutation-affected.yml'), /gate: mutation-affected[\s\S]*--list-affected/);
 });
 
-test('mutant steps reserve time for cancellation envelopes and artifact upload', () => {
+test('mutant job budgets include setup and unconditional evidence upload', () => {
   for (const name of ['mutation-weekly.yml', 'mutation-affected.yml']) {
-    const yaml = workflow(name);
-    assert.match(yaml, /name: Run mutants for[^\n]*\n\s+timeout-minutes: 25/);
-    assert.match(
-      yaml,
-      /name: Record a failed shard envelope\n\s+if: failure\(\) \|\| cancelled\(\)/,
+    const jobs = parse(workflow(name)).jobs;
+    const job = jobs[name === 'mutation-weekly.yml' ? 'shard' : 'mutants'];
+    assert.equal(job['timeout-minutes'], 30, name);
+    const steps = job.steps as { name: string; 'timeout-minutes'?: number; if?: string }[];
+    const mutantIndex = steps.findIndex((step) => step.name.startsWith('Run mutants for'));
+    assert.ok(mutantIndex > 0, name);
+    const setup = steps.slice(0, mutantIndex);
+    for (const step of setup) {
+      assert.ok(
+        Number.isInteger(step['timeout-minutes']) && step['timeout-minutes']! > 0,
+        `${name}: unbounded setup step ${step.name}`,
+      );
+    }
+    assert.equal(steps[mutantIndex]!['timeout-minutes'], 22, name);
+    const setupBudget = setup.reduce((total, step) => total + step['timeout-minutes']!, 0);
+    assert.ok(
+      job['timeout-minutes'] - setupBudget - steps[mutantIndex]!['timeout-minutes']! >= 5,
+      `${name}: setup and mutants consume the evidence/upload budget`,
     );
+    assert.equal(
+      steps.find((step) => step.name === 'Record a failed shard envelope')?.if,
+      'failure() || cancelled()',
+      name,
+    );
+    assert.equal(steps.find((step) => step.name === 'Upload shard report')?.if, 'always()', name);
   }
 });

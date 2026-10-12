@@ -29,7 +29,7 @@ jobs:
   shard:
     name: Mutants (${{ matrix.name }})
     runs-on: ubuntu-latest
-    # Reserve five minutes after the mutant step for failure evidence and upload.
+    # Bound setup and mutation separately, leaving headroom for evidence and upload.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -55,13 +55,15 @@ jobs:
           - { name: snapshot-occlusion, module: snapshot-occlusion }
     steps:
       - name: Checkout
+        timeout-minutes: 1
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup toolchain
+        timeout-minutes: 2
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run mutants for ${{ matrix.name }}
-        timeout-minutes: 25
+        timeout-minutes: 22
         uses: ./.github/actions/run-gate
         with:
           gate: mutation

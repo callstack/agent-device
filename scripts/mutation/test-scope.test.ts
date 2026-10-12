@@ -64,7 +64,7 @@ test('related scope discovery follows indirect imports without executing tests',
   }
 });
 
-test('an explicit empty or missing scope cannot widen to the whole suite', () => {
+test('a missing scope file is rejected and an empty scope file reads as an empty list', () => {
   const root = fs.realpathSync(mkdtempForTestSync('mutation-empty-scope-'));
   const previous = process.env[TEST_SCOPE_ENV];
   try {

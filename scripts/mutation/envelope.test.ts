@@ -87,6 +87,9 @@ test('a crashed run still writes an envelope naming the stage it died in', () =>
   assert.equal(envelope.data.stage, 'report');
   assert.match(envelope.data.error ?? '', /absent-report\.json/);
   // Provenance is read before the work, so a crash still reports its tool/config.
+  const unmeasured = JSON.parse(fs.readFileSync(envelopePath, 'utf8')).data.modules[0];
+  assert.equal(unmeasured.noCoverage, null);
+  assert.equal(unmeasured.errors, null);
   assert.ok(envelope.tool.stryker);
   assert.match(envelope.configHash, /^sha256:/);
 });
@@ -183,6 +186,7 @@ test('an incomplete shard set fails instead of scoring the missing module as zer
       files: { 'packages/kernel/src/errors.ts': { mutants: [{ status: 'Killed' }] } },
     }),
   );
+  fs.writeFileSync(path.join(shards, 'lane-envelope.json'), JSON.stringify({ result: 'pass' }));
   const result = runMutation([
     '--report-dir',
     '.tmp/mutation/partial-shards',
@@ -223,7 +227,7 @@ test('a short shard set publishes the shards that did report, then fails', () =>
   ]);
   assert.notEqual(result.exitCode, 0, 'a short shard set must fail the aggregate');
   assert.match(result.stderr, /1 report\(s\), expected 10/);
-  assert.match(result.stdout, /Incomplete sweep: 1 report\(s\), expected 10/);
+  assert.match(result.stdout, /Incomplete sweep: Incomplete shard set.*1 report\(s\), expected 10/);
   assert.doesNotMatch(result.stdout, /this lane never fails a build/);
   assert.match(result.stdout, /\| `kernel-errors` — [^|]+\| 100% \|/);
   const envelope = readEnvelope();
@@ -279,6 +283,7 @@ test('--fail-envelope downgrades a passing envelope when a later step fails', ()
       files: { 'packages/kernel/src/errors.ts': { mutants: [{ status: 'Survived' }] } },
     }),
   );
+  fs.writeFileSync(path.join(shards, 'lane-envelope.json'), JSON.stringify({ result: 'pass' }));
   const passing = runMutation([
     '--report-dir',
     '.tmp/mutation/pass-then-fail',
@@ -323,39 +328,23 @@ test('a report from a failed shard cannot make the aggregate pass', () => {
     }),
   );
   try {
-    fs.writeFileSync(path.join(shard, 'lane-envelope.json'), JSON.stringify({ result: 'fail' }));
-    const failed = runMutation([
-      '--report-dir',
-      dir,
-      '--expect-shards',
-      '1',
-      '--modules',
-      'kernel-errors',
-    ]);
-    assert.notEqual(failed.exitCode, 0);
-    assert.match(failed.stdout, /Incomplete sweep/);
-    assert.match(failed.stderr, /shard-a/);
-    fs.writeFileSync(path.join(shard, 'lane-envelope.json'), JSON.stringify({ result: 'pass' }));
-    const passed = runMutation([
-      '--report-dir',
-      dir,
-      '--expect-shards',
-      '1',
-      '--modules',
-      'kernel-errors',
-    ]);
-    assert.equal(passed.exitCode, 0, passed.stderr);
-    assert.doesNotMatch(passed.stdout, /Incomplete sweep/);
-    fs.rmSync(path.join(shard, 'lane-envelope.json'));
-    const missing = runMutation([
-      '--report-dir',
-      dir,
-      '--expect-shards',
-      '1',
-      '--modules',
-      'kernel-errors',
-    ]);
-    assert.notEqual(missing.exitCode, 0);
+    for (const countArgs of [[], ['--expect-shards', '1']]) {
+      const args = ['--report-dir', dir, ...countArgs, '--modules', 'kernel-errors'];
+      fs.writeFileSync(path.join(shard, 'lane-envelope.json'), JSON.stringify({ result: 'fail' }));
+      const failed = runMutation(args);
+      assert.notEqual(failed.exitCode, 0);
+      const reason = 'Shard failure or missing envelope: shard-a';
+      assert.match(failed.stdout, new RegExp(`Incomplete sweep: ${reason}`));
+      assert.equal(failed.stderr.trim(), `mutation: ${reason}`);
+      assert.equal(readEnvelope().data.error, reason);
+      fs.writeFileSync(path.join(shard, 'lane-envelope.json'), JSON.stringify({ result: 'pass' }));
+      const passed = runMutation(args);
+      assert.equal(passed.exitCode, 0, passed.stderr);
+      assert.doesNotMatch(passed.stdout, /Incomplete sweep/);
+      fs.rmSync(path.join(shard, 'lane-envelope.json'));
+      const missing = runMutation(args);
+      assert.notEqual(missing.exitCode, 0);
+    }
   } finally {
     fs.rmSync(path.join(repoRoot, dir), { recursive: true, force: true });
   }
