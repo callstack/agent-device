@@ -103,11 +103,6 @@
         "count": 1
       }
     },
-    "src/daemon/server/http-server.ts": {
-      "complexity_critical": {
-        "count": 1
-      }
-    },
     "src/daemon/session-selector.ts": {
       "complexity_moderate": {
         "count": 1
@@ -232,7 +227,6 @@
     "packages/replay-port/src/daemon-port/session-test-infrastructure.ts:high impact",
     "src/daemon/handlers/session-test-artifacts.ts:high impact",
     "packages/platform-android/src/app-parsers.ts:high impact",
-    "src/daemon/server/http-server.ts:complexity",
     "packages/platform-android/src/ui-hierarchy.ts:high impact",
     "packages/platform-android/src/sdk.ts:high impact",
     "src/daemon-client/daemon-client-lifecycle.ts:complexity",
