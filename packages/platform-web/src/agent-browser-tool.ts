@@ -47,6 +47,8 @@ export type ManagedAgentBrowserRunOptions = {
   timeoutMs: number;
   allowFailure?: boolean;
   signal?: AbortSignal;
+  /** Written to the backend's stdin, for the command that reads its work from it (`batch`). */
+  stdin?: string;
 };
 
 /**
@@ -165,6 +167,7 @@ async function spawnManagedAgentBrowser(
     env: managedAgentBrowserEnv(status, hostEnvironment()),
     timeoutMs: options.timeoutMs,
     signal: options.signal,
+    stdin: options.stdin,
   });
 }
 

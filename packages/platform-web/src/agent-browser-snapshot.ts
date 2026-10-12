@@ -37,17 +37,24 @@ const PRESENTATIONAL_REFLESS_ROLES = new Set(['listmarker']);
  */
 const LABEL_ELEMENT_ROLES = new Set(['labeltext']);
 
-const MAX_CONCURRENT_BOX_FETCHES = 8;
+/**
+ * The bounds of every ref the capture published, in one call.
+ *
+ * Grouping the refs into backend round trips is the fetcher's decision, not the projection's: what
+ * the capture owes this seam is the question, and only the fetcher can weigh how much of it to send
+ * at once. A ref the backend could not measure is simply absent from the returned map.
+ */
+export type SnapshotRectFetch = (refs: readonly string[]) => Promise<Map<string, Rect>>;
 
 export async function normalizeAgentBrowserSnapshot(
   data: unknown,
-  fetchBox?: (ref: string) => Promise<Rect | undefined>,
+  fetchRects?: SnapshotRectFetch,
 ): Promise<WebSnapshotResult> {
   const snapshotText = readStringProperty(data, 'snapshot') ?? '';
   const refs = collectSnapshotRefs(readProperty(data, 'refs'));
   const drafts = parseSnapshotDraftNodes(snapshotText, refs);
 
-  if (fetchBox) await attachDraftRects(drafts, fetchBox);
+  if (fetchRects) await attachDraftRects(drafts, fetchRects);
 
   return {
     // Preserve each draft's backend ref as the node's `ref`. agent-browser resolves
@@ -70,20 +77,17 @@ export async function normalizeAgentBrowserSnapshot(
 
 async function attachDraftRects(
   drafts: SnapshotDraftNode[],
-  fetchBox: (ref: string) => Promise<Rect | undefined>,
+  fetchRects: SnapshotRectFetch,
 ): Promise<void> {
   // Only a node the backend issued a ref for has a box to ask for: a ref-less line is text the
   // backend never measured, and `get box` has no handle for it.
-  const addressable = drafts.flatMap((draft) =>
-    draft.ref === undefined ? [] : [{ draft, ref: draft.ref }],
-  );
-  for (let index = 0; index < addressable.length; index += MAX_CONCURRENT_BOX_FETCHES) {
-    const chunk = addressable.slice(index, index + MAX_CONCURRENT_BOX_FETCHES);
-    const rects = await Promise.all(chunk.map((entry) => fetchBox(entry.ref)));
-    for (const [chunkIndex, rect] of rects.entries()) {
-      const entry = chunk[chunkIndex];
-      if (rect && entry) entry.draft.node.rect = rect;
-    }
+  const addressable = drafts.flatMap((draft) => (draft.ref === undefined ? [] : [draft.ref]));
+  if (addressable.length === 0) return;
+  const rects = await fetchRects(addressable);
+  for (const draft of drafts) {
+    const ref = draft.ref;
+    const rect = ref === undefined ? undefined : rects.get(ref);
+    if (rect) draft.node.rect = rect;
   }
 }
 

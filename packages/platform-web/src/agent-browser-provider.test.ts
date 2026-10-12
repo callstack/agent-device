@@ -196,30 +196,6 @@ test('agent-browser provider passes snapshot cancellation to the CLI process', a
   });
 });
 
-test('agent-browser provider fetches snapshot rects only when requested', async () => {
-  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
-    const calls: AgentBrowserCall[] = [];
-    const snapshot = await withCommandExecutorOverride(
-      snapshotExecutor(calls),
-      async () => await provider.snapshot({ includeRects: true }),
-    );
-
-    assert.deepEqual(
-      calls.map((call) => call.args.slice(0, 3)),
-      [
-        ['snapshot', '--json', '--session'],
-        ['get', 'box', '@e1'],
-        ['get', 'box', '@e2'],
-        ['get', 'box', '@e3'],
-        ['get', 'box', '@e4'],
-      ],
-    );
-    assertNormalizedSnapshot(snapshot);
-    assertSnapshotRects(snapshot);
-    assertRoleSelectorResolves(snapshot);
-  });
-});
-
 test('agent-browser provider dumps session network requests', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     const calls: AgentBrowserCall[] = [];
@@ -405,33 +381,6 @@ test('agent-browser provider generated audio probe script samples streams discov
   });
 });
 
-test('agent-browser provider surfaces stale ref failures during requested snapshot geometry lookup', async () => {
-  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
-    await assert.rejects(
-      () =>
-        withCommandExecutorOverride(
-          async (_cmd, args) => {
-            if (managedAgentBrowserCliArgs(args)[0] === 'snapshot') {
-              return agentBrowserJsonResult({
-                success: true,
-                data: {
-                  refs: { e1: { role: 'button', name: 'Save' } },
-                  snapshot: 'button "Save" [ref=e1]',
-                },
-              });
-            }
-            return agentBrowserJsonResult({ success: false, error: 'Stale ref @e1' });
-          },
-          async () => await provider.snapshot({ includeRects: true }),
-        ),
-      (error: unknown) =>
-        error instanceof AppError &&
-        error.code === 'COMMAND_FAILED' &&
-        error.message === 'Stale ref @e1',
-    );
-  });
-});
-
 test('agent-browser provider adds doctor guidance for missing binary and invalid JSON', async () => {
   // Pin a web-supported Node version so the missing-binary path yields the
   // setup hint instead of the Node upgrade hint on Node <24 hosts.
@@ -505,15 +454,14 @@ function recordAgentBrowserCall(
   return cliArgs;
 }
 
+/**
+ * The capture-only half of the backend's answers. The geometry the capture asks for is answered by
+ * `agent-browser-provider-rects.test.ts`, which owns the batch contract.
+ */
 function snapshotExecutor(calls: AgentBrowserCall[]) {
-  return async (cmd: string, args: readonly string[], options: { allowFailure?: boolean }) => {
+  return async (cmd: string, args: readonly string[]): Promise<ExecResult> => {
     const cliArgs = recordAgentBrowserCall(calls, cmd, args);
     if (cliArgs[0] === 'snapshot') return snapshotPayload();
-    if (cliArgs.slice(0, 3).join(' ') === 'get box @e3') {
-      assert.equal(options.allowFailure, true);
-      return agentBrowserJsonResult({ success: false, error: 'No box for element' }, 1);
-    }
-    if (cliArgs[0] === 'get' && cliArgs[1] === 'box') return boxPayload(cliArgs[2]);
     return agentBrowserJsonResult({ success: true, data: {} });
   };
 }
@@ -526,18 +474,6 @@ function assertNormalizedSnapshot(snapshot: WebSnapshotResult): void {
     expectedNode(2, 'button', 'Save', undefined, 1, undefined, 0),
     expectedNode(3, 'link', 'Docs', undefined, 1, undefined, 0),
   ]);
-}
-
-function assertSnapshotRects(snapshot: WebSnapshotResult): void {
-  assert.deepEqual(
-    snapshot.nodes.map((node) => node.rect),
-    [
-      { x: 1, y: 2, width: 100, height: 20 },
-      { x: 11, y: 12, width: 100, height: 20 },
-      undefined,
-      { x: 31, y: 32, width: 100, height: 20 },
-    ],
-  );
 }
 
 function assertRoleSelectorResolves(snapshot: WebSnapshotResult): void {
@@ -596,14 +532,6 @@ function snapshotPayload(): ExecResult {
       ].join('\n'),
       truncated: false,
     },
-  });
-}
-
-function boxPayload(ref: string | undefined): ExecResult {
-  const offset = ref === '@e1' ? 0 : ref === '@e2' ? 10 : 30;
-  return agentBrowserJsonResult({
-    success: true,
-    data: { x: offset + 1, y: offset + 2, width: 100, height: 20 },
   });
 }
 

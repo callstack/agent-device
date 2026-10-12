@@ -282,8 +282,14 @@ describe('normalizeAgentBrowserSnapshot ref-less content', () => {
   });
 
   test('attaches geometry only to the nodes the backend can measure', async () => {
-    const result = await normalizeAgentBrowserSnapshot(FORM_AFTER_SUBMIT, async (ref) =>
-      ref === 'e2' ? { x: 1, y: 2, width: 10, height: 20 } : undefined,
+    const result = await normalizeAgentBrowserSnapshot(
+      FORM_AFTER_SUBMIT,
+      async (refs) =>
+        new Map(
+          refs.flatMap((ref) =>
+            ref === 'e2' ? [[ref, { x: 1, y: 2, width: 10, height: 20 }] as const] : [],
+          ),
+        ),
     );
 
     expect(result.nodes.find((node) => node.ref === 'e2')?.rect).toEqual({
