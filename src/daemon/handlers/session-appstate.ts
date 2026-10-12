@@ -1,4 +1,4 @@
-import { isApplePlatform } from '@agent-device/kernel/device';
+import { isApplePlatform, type PlatformSelector } from '@agent-device/kernel/device';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import {
   hasExplicitSessionFlag,
@@ -17,12 +17,12 @@ import { queryDeviceRuntimeAppState } from './session-appstate-device-runtime.ts
 
 function appStateSessionNotFoundResponse(
   sessionName: string,
-  platform: string | undefined,
+  platform: PlatformSelector | undefined,
 ): DaemonResponse {
-  // Apple targets answer appstate only from an open session and its runner, so the
-  // "omit --session" route they would otherwise be pointed at just reaches the
-  // session-required refusal. Send them straight to opening the session.
-  if (platform === 'ios' || platform === 'macos') {
+  // Every Apple selector — `apple`, `ios`, or `macos` — answers appstate only from an open
+  // session and its runner, so the "omit --session" route they would otherwise be pointed at
+  // just reaches the session-required refusal. Send them straight to opening the session.
+  if (isApplePlatform(platform)) {
     return errorResponse(
       'SESSION_NOT_FOUND',
       `No active session "${sessionName}". Run open with --session ${sessionName} first.`,
