@@ -324,8 +324,11 @@ jobs:
       # Gated on the coverage step's own outcome (#1781 A5): when `Run coverage`
       # fails, lcov.info is never written, so this step would just re-report that
       # failure as its own red ("no lcov report") instead of a coverage verdict.
+      # `!cancelled()` keeps it running when an unrelated step around it failed;
+      # it still needs `run-coverage` success because without lcov there is no
+      # verdict — only the coverage step's own red.
       - name: Enforce changed-line coverage gate
-        if: steps.run-coverage.outcome == 'success' && github.event_name == 'pull_request'
+        if: ${{ !cancelled() && steps.run-coverage.outcome == 'success' && github.event_name == 'pull_request' }}
         env:
           AGENT_DEVICE_COVERAGE_WAIVER: ${{ contains(github.event.pull_request.labels.*.name, 'coverage-waiver') }}
         uses: ./.github/actions/run-gate

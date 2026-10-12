@@ -236,7 +236,7 @@ Useful direct entry points:
   reports every function and never fails: that is `main`'s backlog. Both list the file-wide
   `fallow-crap.json` exemptions they honoured. `check:fallow` leaves CRAP off without coverage.
 - `pnpm fallow:all` — full-tree audit, including grandfathered baseline findings
-- `pnpm fallow:baseline` — intentionally regenerate both reviewed Fallow baselines
+- `pnpm fallow:baseline` — intentionally regenerate the reviewed Fallow health baseline
 
 See [`docs/agents/testing.md`](docs/agents/testing.md) for gate ownership, shared test utilities,
 mutation/fuzz lanes, contention policy, and test-speed rules. For real devices, follow

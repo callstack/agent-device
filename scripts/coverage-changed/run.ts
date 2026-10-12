@@ -95,11 +95,11 @@ export function run(argv: readonly string[], cwd?: string): number {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   try {
-    process.exit(run(process.argv.slice(2)));
+    process.exitCode = run(process.argv.slice(2));
   } catch (error: unknown) {
     process.stderr.write(
       `check:coverage-changed: ${error instanceof Error ? error.message : String(error)}\n`,
     );
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
