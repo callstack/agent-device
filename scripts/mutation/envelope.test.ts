@@ -317,6 +317,38 @@ test('both mutation lanes publish the envelope', () => {
   assert.match(workflow('mutation-weekly.yml'), /Lane envelope/);
 });
 
+test('an envelope without a report cannot disappear from an otherwise healthy aggregate', () => {
+  const root = fs.realpathSync(mkdtempForTestSync('mutation-envelope-only-'));
+  try {
+    const healthy = path.join(root, 'healthy');
+    const failed = path.join(root, 'failed-without-report');
+    fs.mkdirSync(healthy);
+    fs.mkdirSync(failed);
+    fs.writeFileSync(
+      path.join(healthy, 'mutation.json'),
+      JSON.stringify({
+        files: { 'packages/kernel/src/errors.ts': { mutants: [{ status: 'Killed' }] } },
+      }),
+    );
+    fs.writeFileSync(path.join(healthy, 'lane-envelope.json'), JSON.stringify({ result: 'pass' }));
+    for (const verdict of ['fail', 'pass']) {
+      fs.writeFileSync(
+        path.join(failed, 'lane-envelope.json'),
+        JSON.stringify({ result: verdict }),
+      );
+      const result = runMutation(['--report-dir', root, '--modules', 'kernel-errors']);
+      assert.notEqual(result.exitCode, 0);
+      assert.match(
+        result.stdout,
+        /Incomplete sweep: Shard failure or missing envelope: failed-without-report/,
+      );
+      assert.equal(readEnvelope().result, 'fail');
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('a report from a failed shard cannot make the aggregate pass', () => {
   const dir = '.tmp/mutation/failed-shard';
   const shard = path.join(repoRoot, dir, 'shard-a');

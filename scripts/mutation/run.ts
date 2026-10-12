@@ -343,11 +343,20 @@ function readShardedReports(dir: string): {
     .sort();
   if (files.length === 0) throw new Error(`No Stryker JSON reports found under ${dir}`);
   process.stdout.write(`mutation: merging ${files.length} shard report(s) from ${dir}\n`);
-  const failed = files
+  const shardDirectories = new Set([
+    ...files.map((file) => path.dirname(file)),
+    ...fs
+      .globSync('**/lane-envelope.json', { cwd: root })
+      .map((file) => path.dirname(path.join(root, file))),
+  ]);
+  const failed = [...shardDirectories]
     .filter(
-      (file) => existingResult(path.join(path.dirname(file), 'lane-envelope.json')) !== 'pass',
+      (directory) =>
+        existingResult(path.join(directory, 'lane-envelope.json')) !== 'pass' ||
+        !fs.existsSync(path.join(directory, path.basename(DEFAULT_REPORT_PATH))),
     )
-    .map((file) => path.basename(path.dirname(file)));
+    .map((directory) => path.basename(directory))
+    .sort();
   return { report: mergeReports(files.map(readReport)), count: files.length, failed };
 }
 

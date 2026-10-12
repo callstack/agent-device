@@ -25,7 +25,7 @@ function position(source: string, offset: number): string {
 function slices(
   file: string,
   source: string,
-  statements: readonly { start: number; end: number; weight: number }[],
+  statements: readonly { start: number; weight: number }[],
   budget: number,
 ): Slice[] {
   const result: Slice[] = [];
@@ -52,7 +52,6 @@ export function shardFiles(files: readonly string[], shard: Shard, root: string)
       throw new Error(`Cannot shard ${file}: ${parsed.errors[0]!.message}`);
     const statements = parsed.program.body.map((statement) => ({
       start: statement.start,
-      end: statement.end,
       weight: syntaxWeight(statement),
     }));
     return { file, source, statements };
