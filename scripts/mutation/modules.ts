@@ -45,7 +45,7 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
     label: 'Error retriability + hints',
     mutate: ['packages/kernel/src/errors.ts'],
     owns: ['packages/kernel/src/errors.ts'],
-    shards: 3,
+    shards: 5,
   },
   {
     id: 'daemon-ref-frame',
