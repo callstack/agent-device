@@ -217,6 +217,8 @@ extension RunnerTests {
     mainOwned.bundleId = nil
     mainOwned.processIdentifier = nil
     resetTargetBoundState()
+    // An announced relaunch covers only the binding its reset dropped; any later drop ends that.
+    firstInteractionWindow = firstInteractionWindow?.attributedToActivation()
   }
 
   @MainActor
@@ -523,6 +525,10 @@ extension RunnerTests {
 
     let readyUptime: TimeInterval
     let origin: Origin
+
+    func attributedToActivation() -> FirstInteractionWindow {
+      FirstInteractionWindow(readyUptime: readyUptime, origin: .activation)
+    }
   }
 
   /// Start the post-activation settling window. Measured from now, so the time the caller spends

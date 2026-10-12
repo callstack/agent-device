@@ -176,6 +176,27 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testAnnouncedRelaunchWindowDoesNotSurviveALaterInvalidation() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningForeground
+      mainOwned.app = app
+      mainOwned.bundleId = "com.example.app"
+      _ = resetTargetAfterExternalRelaunch()
+      stampElapsedWindow(origin: .announcedRelaunch(bundleId: "com.example.app"))
+
+      invalidateCachedTarget(reason: "ax_snapshot_failure")
+      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
+
+      XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 0)
+      XCTAssertGreaterThanOrEqual(
+        measureStabilizationDuration(),
+        firstInteractionAfterActivateDelay * 0.8
+      )
+    }
+  }
+
+  @MainActor
   func testSkippedActivationWithoutAWindowStampsOne() {
     withStubbedTargetActivation {
       mainOwned.needsPostSnapshotInteractionDelay = false
