@@ -1,7 +1,7 @@
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import { shutdownTargetUse } from '@agent-device/contracts/platform-runtime-operations';
-import { isApplePlatform, publicPlatformString } from '@agent-device/kernel/device';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import {
   requireSessionOrExplicitSelector,
@@ -13,6 +13,7 @@ import {
   type RuntimeCommandHandlerParams,
 } from '../session-runtime-admission.ts';
 import type { DaemonResponse } from '../daemon-request.ts';
+import { deviceStatusReportResponse } from './session-device-status-response.ts';
 
 function shutdownUnavailableResponse(fact: RuntimeOperationFact) {
   if (fact.available) return null;
@@ -90,19 +91,5 @@ export async function handleShutdownCommand(
     );
   }
 
-  return {
-    ok: true,
-    data: {
-      platform: publicPlatformString(device),
-      target: device.target ?? 'mobile',
-      device: device.name,
-      id: device.id,
-      kind: device.kind,
-      shutdown,
-      // Additive Apple-OS discriminant; Apple devices only. Gate on the platform
-      // (not just field presence) so a non-Apple record with a stray appleOs never
-      // surfaces it.
-      ...(isApplePlatform(device.platform) && device.appleOs ? { appleOs: device.appleOs } : {}),
-    },
-  };
+  return deviceStatusReportResponse(device, { shutdown });
 }

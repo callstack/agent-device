@@ -63,57 +63,6 @@ const handleSessionCloseCommandGroup: SessionCommandHandler = (params) =>
     platformResourceCleanup: params.platformResourceCleanup,
   } satisfies SessionCloseCommandInput);
 
-const handleBootCommandEntry: SessionCommandHandler = async ({
-  req,
-  sessionName,
-  sessionStore,
-  inspectFacts,
-  bindDevice,
-  platformServices,
-}) =>
-  await handleBootCommand({
-    req,
-    sessionName,
-    sessionStore,
-    inspectFacts,
-    bindDevice,
-    platformServices,
-  });
-
-const handleShutdownCommandEntry: SessionCommandHandler = async ({
-  req,
-  sessionName,
-  sessionStore,
-  inspectFacts,
-  bindDevice,
-  platformServices,
-}) =>
-  await handleShutdownCommand({
-    req,
-    sessionName,
-    sessionStore,
-    inspectFacts,
-    bindDevice,
-    platformServices,
-  });
-
-const handleAppStateCommandEntry: SessionCommandHandler = async ({
-  req,
-  sessionName,
-  sessionStore,
-  inspectFacts,
-  bindDevice,
-  platformServices,
-}) =>
-  await handleAppStateCommand({
-    req,
-    sessionName,
-    sessionStore,
-    inspectFacts,
-    bindDevice,
-    platformServices,
-  });
-
 const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
   req,
   sessionName,
@@ -172,9 +121,9 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
       inspectFacts,
       bindDevice,
     }),
-  boot: handleBootCommandEntry,
-  shutdown: handleShutdownCommandEntry,
-  appstate: handleAppStateCommandEntry,
+  boot: handleBootCommand,
+  shutdown: handleShutdownCommand,
+  appstate: handleAppStateCommand,
   session_save_script: async ({ req, sessionName, sessionStore }) =>
     handleSessionScriptPublication({ req, sessionName, sessionStore }),
   runtime: async ({

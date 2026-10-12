@@ -1,9 +1,5 @@
 import { resolveDeviceReadinessRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
-import {
-  isApplePlatform,
-  publicPlatformString,
-  type DeviceInfo,
-} from '@agent-device/kernel/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import { asAppError } from '@agent-device/kernel/errors';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
@@ -15,6 +11,7 @@ import { admitRuntimeOperations, type UnavailableRuntimeResponse } from '../runt
 import { startupDeadlineAtMs } from '../startup-deadline.ts';
 import type { RuntimeCommandHandlerParams } from '../session-runtime-admission.ts';
 import type { DaemonResponse } from '../daemon-request.ts';
+import { deviceStatusReportResponse } from './session-device-status-response.ts';
 
 /** `boot --headless` reports an unsupported cell as a request error, not a device capability gap. */
 function bootUnavailableResponse(headless: boolean): UnavailableRuntimeResponse {
@@ -84,25 +81,6 @@ async function resolveBootTargetDevice(
   }
 }
 
-/** The device the runtime now reports as booted, in the wire shape `boot` publishes. */
-function bootedDeviceResponse(device: DeviceInfo): DaemonResponse {
-  return {
-    ok: true,
-    data: {
-      platform: publicPlatformString(device),
-      target: device.target ?? 'mobile',
-      device: device.name,
-      id: device.id,
-      kind: device.kind,
-      booted: true,
-      // Additive Apple-OS discriminant; Apple devices only. Gate on the platform
-      // (not just field presence) so a non-Apple record with a stray appleOs never
-      // surfaces it.
-      ...(isApplePlatform(device.platform) && device.appleOs ? { appleOs: device.appleOs } : {}),
-    },
-  };
-}
-
 /** Brings the selected device up, headless for an Android AVD plan, through one admitted runtime. */
 export async function handleBootCommand(
   params: RuntimeCommandHandlerParams,
@@ -147,5 +125,5 @@ export async function handleBootCommand(
       ? await (await admitted.bind(target, plan.use)).operations.bootTargetHeadless(input)
       : await (await admitted.bind(target, plan.use)).operations.bootTarget(input);
 
-  return bootedDeviceResponse(device);
+  return deviceStatusReportResponse(device, { booted: true });
 }
