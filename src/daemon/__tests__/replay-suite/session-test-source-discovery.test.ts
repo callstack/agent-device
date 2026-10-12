@@ -7,7 +7,7 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   maestroScriptSourceBundleFor,
   replayScriptSourceBundleFor,
-} from '../../../__tests__/test-utils/replay-script-source.ts';
+} from '../support/replay-script-source.ts';
 
 // #1478 P3b: the daemon adapter's inspection capability. #1802 moved expansion and file reading
 // to the caller, so what is left here is exactly format routing plus per-engine manifest

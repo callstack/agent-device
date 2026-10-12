@@ -1,4 +1,4 @@
-import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from './support/device-inventory-gateways.ts';
 /**
  * ADR 0012 decision 6, R7 (C5a): when a repair session was reaped before it was
  * finalized, the request router rewrites the resulting `SESSION_NOT_FOUND` into

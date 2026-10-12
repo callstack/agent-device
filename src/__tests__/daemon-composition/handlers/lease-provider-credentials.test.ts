@@ -11,7 +11,7 @@ import {
   providerCredentialFingerprint,
   readDaemonProviderCredentials,
 } from '../../../provider-credential-fingerprint.ts';
-import { pluginHome, selectPluginManifest } from '../../../plugins/plugin.fixtures.ts';
+import { pluginHome, selectPluginManifest } from '@agent-device/test-kit/plugin.fixtures';
 
 /**
  * Lease refusal compares the client's credential fingerprint against the digest the daemon

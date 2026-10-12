@@ -5,7 +5,7 @@ import { makeAndroidSession } from '../support/session-factories.ts';
 import {
   ANDROID_QS_SHADE_CAPTURE_RAW_NODES,
   walkNonRawAndroidFixture,
-} from '../../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
+} from '../support/android-ui-hierarchy-fixtures.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { SessionStore } from '../../session-store.ts';
 import { replayCoordinatorForTest, replaySessionForTest } from './replay-session-fixture.ts';

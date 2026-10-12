@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeAndroidSession, makeIosSession } from '../support/session-factories.ts';
-import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { replayScriptSourceBundleFor } from '../support/replay-script-source.ts';
 import type { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
 

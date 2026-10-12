@@ -1,4 +1,4 @@
-import { noMaestroIncludeSources } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { noMaestroIncludeSources } from '../support/replay-script-source.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 

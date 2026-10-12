@@ -6,7 +6,7 @@ import { makeSessionStore } from './session-test-harness.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
 
-import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { replayScriptSourceBundleFor } from '../../__tests__/support/replay-script-source.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 

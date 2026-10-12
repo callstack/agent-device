@@ -12,7 +12,7 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   maestroScriptSourceBundleFor,
   replayScriptSourceBundleFor,
-} from '../../__tests__/test-utils/replay-script-source.ts';
+} from './support/replay-script-source.ts';
 
 test('replay leaves deep-link opens to normal device resolution', async () => {
   const root = mkdtempForTestSync('agent-device-replay-device-selection-');

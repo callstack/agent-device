@@ -25,7 +25,7 @@ import { makeIosSession } from '../support/session-factories.ts';
 import {
   maestroScriptSourceBundleFor,
   replayScriptSourceBundleFor,
-} from '../../../__tests__/test-utils/replay-script-source.ts';
+} from '../support/replay-script-source.ts';
 import { REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE } from '@agent-device/replay-port/script-source';
 import {
   captureSnapshotThroughLegacyDispatchFixture,

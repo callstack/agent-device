@@ -22,7 +22,7 @@ import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runti
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { applicationLifecycleRuntimeFixture } from './application-lifecycle-runtime-fixture.ts';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
-import { withClientReplayScriptSources } from '../../__tests__/test-utils/replay-script-source.ts';
+import { withClientReplayScriptSources } from './support/replay-script-source.ts';
 import type { DaemonInvokeFn } from '../daemon-request.ts';
 import { clearAndroidObservationFixture } from './android-observation-fixture.ts';
 import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';

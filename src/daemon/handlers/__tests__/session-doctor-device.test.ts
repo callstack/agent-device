@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import {
   withTestDeviceInventory,
   withTestDeviceInventoryProvider as withDeviceInventoryProvider,
-} from '../../../__tests__/test-utils/device-inventory-gateways.ts';
+} from '../../__tests__/support/device-inventory-gateways.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { attachAdbFailureHint } from '@agent-device/platform-android/mechanics';

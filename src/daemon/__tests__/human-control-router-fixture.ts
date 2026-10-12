@@ -1,4 +1,4 @@
-import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from './support/device-inventory-gateways.ts';
 import {
   daemonPlatformServicesFixture,
   daemonClaimRecoveryGatewayFixture,

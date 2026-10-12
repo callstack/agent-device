@@ -14,7 +14,7 @@ import { recoverAndroidBlockingSystemDialog as recoverOwnedAndroidBlockingSystem
 import { androidObservation } from '../../platform-runtime.ts';
 import { makeAndroidSession } from './support/session-factories.ts';
 import { makeTestScreenRecordingResource } from './support/screen-recording-live-handle.ts';
-import { makeAndroidSnapshotCapture } from '../../__tests__/test-utils/android-snapshot-capture.ts';
+import { makeAndroidSnapshotCapture } from './support/android-snapshot-capture.ts';
 
 const recoverAndroidBlockingSystemDialog = (
   params: Omit<Parameters<typeof recoverOwnedAndroidBlockingSystemDialog>[0], 'observation'>,

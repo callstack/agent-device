@@ -7,7 +7,7 @@ import { LeaseRegistry } from '../../lease-registry.ts';
 import { platformResourceCleanupFixture } from '../support/platform-resource-cleanup-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
 import { makeIosSession } from '../support/session-factories.ts';
-import { maestroScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { maestroScriptSourceBundleFor } from '../support/replay-script-source.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { DaemonRequest } from '../../daemon-request.ts';
 import {

@@ -13,7 +13,7 @@ import {
   splitReplayCommandRequest,
 } from '@agent-device/replay-port/replay-dispatch-envelope';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { replayScriptSourceBundleFor } from '../support/replay-script-source.ts';
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,

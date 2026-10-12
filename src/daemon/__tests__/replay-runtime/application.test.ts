@@ -10,7 +10,7 @@ import {
 } from '@agent-device/host-kit/request';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { makeIosSession } from '../support/session-factories.ts';
-import { withClientReplayScriptSources } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { withClientReplayScriptSources } from '../support/replay-script-source.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { SessionStore } from '../../session-store.ts';
 import {

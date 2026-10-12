@@ -23,7 +23,7 @@ import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { beforeEach, vi } from 'vitest';
 import { applicationLifecycleRuntimeFixture } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
-import { withClientReplayScriptSources } from '../../../__tests__/test-utils/replay-script-source.ts';
+import { withClientReplayScriptSources } from '../../__tests__/support/replay-script-source.ts';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 

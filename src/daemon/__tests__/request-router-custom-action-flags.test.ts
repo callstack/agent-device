@@ -1,4 +1,4 @@
-import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from './support/device-inventory-gateways.ts';
 /**
  * `--actions` reads custom actions through the private-AX snapshot path, which
  * a raw capture does not use. Answering the pair with a capture that

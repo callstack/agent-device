@@ -1,4 +1,4 @@
-import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from './support/device-inventory-gateways.ts';
 import {
   daemonPlatformServicesFixture,
   daemonClaimRecoveryGatewayFixture,
@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getResolveTargetDeviceMock } from './request-router-dispatch-mocks.ts';
 
-import { replayScriptSourceBundleFor } from '../../__tests__/test-utils/replay-script-source.ts';
+import { replayScriptSourceBundleFor } from './support/replay-script-source.ts';
 import { fakeCreateCommandSurface } from './support/command-surface-fake.ts';
 
 vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));

@@ -9,7 +9,7 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
-import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from './support/device-inventory-gateways.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { makeSessionStore } from './support/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
