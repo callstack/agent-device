@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from './support/session-factories.ts';
 import {
   recoveredSnapshotQualityWarning,
   renderSnapshotQualityWarnings,

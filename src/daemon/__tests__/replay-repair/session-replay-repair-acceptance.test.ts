@@ -1,4 +1,4 @@
-import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
+import { storeSessionForTest } from '../support/store-factory.ts';
 /**
  * ADR 0012 decision 6 acceptance test: a healed sibling `.ad` produced by the
  * repair loop must replay end-to-end in a FRESH session, with every selector
@@ -24,7 +24,7 @@ import path from 'node:path';
 import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../support/session-factories.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import {

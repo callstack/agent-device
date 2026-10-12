@@ -6,7 +6,7 @@ import {
   authoringPublication,
   makeIosSession,
   makeRepairCompleteSession,
-} from '../../../../__tests__/test-utils/session-factories.ts';
+} from '../../../__tests__/support/session-factories.ts';
 import { SessionStore } from '../../../session-store.ts';
 import type { DaemonRequest } from '../../../daemon-request.ts';
 import {

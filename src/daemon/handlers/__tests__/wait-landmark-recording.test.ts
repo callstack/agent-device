@@ -18,11 +18,11 @@ import type { DaemonRequest } from '../../daemon-request.ts';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { snapshotRuntimeFixture } from '../../__tests__/snapshot-runtime-fixture.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import {
   makeAndroidSession,
   authoringPublication,
-} from '../../../__tests__/test-utils/session-factories.ts';
+} from '../../__tests__/support/session-factories.ts';
 import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {

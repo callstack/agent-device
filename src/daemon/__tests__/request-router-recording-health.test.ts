@@ -13,8 +13,8 @@ import {
 } from './test-device-runtime-gateway.ts';
 import type { SessionState } from '../session-state.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
+import { makeSessionStore } from './support/store-factory.ts';
+import { makeTestScreenRecordingResource } from './support/screen-recording-live-handle.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 // The observation spy hangs off the port the router composes with (ADR 0019 section 11), not off

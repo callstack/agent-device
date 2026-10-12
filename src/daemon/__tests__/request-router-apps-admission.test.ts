@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';

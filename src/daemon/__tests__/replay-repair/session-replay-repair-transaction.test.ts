@@ -1,5 +1,5 @@
 import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
-import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
+import { storeSessionForTest } from '../support/store-factory.ts';
 /**
  * ADR 0012 decision 6 "repair transaction" lifecycle fixes (Q1/Q2a/Q2b/Q2c):
  * proves the WHOLE chain end to end, at the layer these fixes actually live —

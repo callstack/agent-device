@@ -2,8 +2,8 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { SnapshotOptions } from '@agent-device/contracts/interactor-types';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeAndroidSession } from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { contextFromFlags } from '../../../context.ts';
 import { captureSnapshotForSession } from '../../index.ts';
 

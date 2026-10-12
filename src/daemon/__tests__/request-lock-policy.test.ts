@@ -1,4 +1,4 @@
-import { makeStoredSessionRef } from '../../__tests__/test-utils/store-factory.ts';
+import { makeStoredSessionRef } from './support/store-factory.ts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { applyRequestLockPolicy } from '../request-lock-policy.ts';

@@ -1,4 +1,4 @@
-import { storeSessionForTest } from '../../__tests__/test-utils/store-factory.ts';
+import { storeSessionForTest } from './support/store-factory.ts';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import path from 'node:path';
@@ -13,10 +13,7 @@ import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/dae
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { SessionScriptWriter, type SessionScriptWriteResult } from '../session-script-writer.ts';
 import { SessionStore } from '../session-store.ts';
-import {
-  repairPublication,
-  makeRepairCompleteSession,
-} from '../../__tests__/test-utils/session-factories.ts';
+import { repairPublication, makeRepairCompleteSession } from './support/session-factories.ts';
 import {
   registerFilesystemBoundaryMatrix,
   type FilesystemBoundaryOwner,

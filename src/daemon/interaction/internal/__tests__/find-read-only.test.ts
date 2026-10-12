@@ -1,11 +1,11 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../../../session-state.ts';
 import { buildSnapshotSignatures } from '@agent-device/capture-kit/snapshot-freshness';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import {
   makeAuthoringSession,
   makeIosSession as makeSession,
-} from '../../../../__tests__/test-utils/session-factories.ts';
+} from '../../../__tests__/support/session-factories.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;

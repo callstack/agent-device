@@ -1,8 +1,8 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { IosTargetActivation, PostGestureOutcome } from '@agent-device/kernel/snapshot';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import type { DaemonResponse } from '../../../daemon-request.ts';
 import { legacyDispatchCapture } from '../../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';

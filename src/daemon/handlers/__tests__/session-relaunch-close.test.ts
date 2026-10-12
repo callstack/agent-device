@@ -12,8 +12,8 @@ import { testCreateCommandSurface } from '../../__tests__/command-surface-fixtur
 // installs it from root composition, and these tests compose it the same way.
 installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
 import { createTestDeviceInventoryGateways } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { makeSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { makeSession } from '../../__tests__/support/session-factories.ts';
 import { getResolveTargetDeviceMock } from '../../__tests__/request-router-dispatch-mocks.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
 

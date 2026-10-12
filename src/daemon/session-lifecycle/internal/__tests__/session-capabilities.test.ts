@@ -4,11 +4,8 @@ import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { LINUX_DEVICE, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import {
-  makeAndroidSession,
-  makeSession,
-} from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeAndroidSession, makeSession } from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../../../__tests__/test-utils/device-inventory-gateways.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import type { DeviceInfo } from '@agent-device/kernel/device';

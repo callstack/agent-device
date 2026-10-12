@@ -1,9 +1,6 @@
 import { expect, test } from 'vitest';
-import {
-  makeIosSession,
-  authoringPublication,
-} from '../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { makeIosSession, authoringPublication } from '../support/session-factories.ts';
+import { makeSessionStore } from '../support/store-factory.ts';
 import { makeRecordingReplayInvoke } from './session-replay-repair.fixtures.ts';
 
 test('recording replay fixtures use the selected scoped journal without a public-name slot', async () => {

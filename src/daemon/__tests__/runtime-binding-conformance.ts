@@ -13,8 +13,8 @@ import {
   commandRuntimeUseRequirements,
 } from '@agent-device/command-registry/registry';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
-import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSession } from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { resolveBoundBackRuntime } from '../back-runtime.ts';
 import { resolveBoundFocusRuntime } from '../focus-runtime.ts';
 import { resolveBoundFoldRuntime } from '../fold-runtime.ts';

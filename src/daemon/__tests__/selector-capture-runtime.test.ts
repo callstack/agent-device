@@ -10,8 +10,8 @@ import {
 } from '@agent-device/kernel/snapshot';
 import type { DaemonResponse } from '../daemon-request.ts';
 import { type RequestCaptureProof, withCaptureDisclosures } from '../capture-disclosure.ts';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeIosSession } from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
 
 // R35: the capture runtime executes only through its request-bound capture — there is no

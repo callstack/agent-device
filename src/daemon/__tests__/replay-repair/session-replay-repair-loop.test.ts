@@ -1,4 +1,4 @@
-import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
+import { storeSessionForTest } from '../support/store-factory.ts';
 import { isSessionRecording } from '../../session-script-publication-capability.ts';
 /**
  * ADR 0012 decision 6: `replay --save-script` arming (R1), the repair-run
@@ -27,10 +27,7 @@ import path from 'node:path';
 import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
-import {
-  makeIosSession,
-  repairPublication,
-} from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession, repairPublication } from '../support/session-factories.ts';
 import { repairSessionBoundary } from '../../session-replay-transaction.ts';
 import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../../session-script-publication-state.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';

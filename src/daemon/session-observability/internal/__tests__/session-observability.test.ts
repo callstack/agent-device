@@ -1,8 +1,8 @@
 import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeAndroidSession } from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { handleSessionObservabilityCommands } from '../../index.ts';
 import { createNetworkRuntime, emptyAppLogResult } from './network-runtime-harness.ts';
 

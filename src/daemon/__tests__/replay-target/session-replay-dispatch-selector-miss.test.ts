@@ -37,7 +37,7 @@ import { SessionStore } from '../../session-store.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DaemonRequest } from '../../daemon-request.ts';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../support/session-factories.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,

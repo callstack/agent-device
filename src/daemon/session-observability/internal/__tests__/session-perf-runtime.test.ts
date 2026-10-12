@@ -17,8 +17,8 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceIdentity } from '@agent-device/kernel/device';
-import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeAndroidSession } from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import type {

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { runReplayForTest } from './replay-command-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../support/session-factories.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeAndroidSession } from '../support/session-factories.ts';
 import {
   ANDROID_QS_SHADE_CAPTURE_RAW_NODES,
   walkNonRawAndroidFixture,

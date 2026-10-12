@@ -15,8 +15,8 @@ import {
   makeIosSession,
   makeMacOsSession,
   makeSession,
-} from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+} from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import {
   unavailableApplicationLifecycleOperationFacts,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,

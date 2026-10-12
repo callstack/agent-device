@@ -12,7 +12,7 @@ import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';

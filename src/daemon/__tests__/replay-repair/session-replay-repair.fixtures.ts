@@ -1,4 +1,4 @@
-import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
+import { storeSessionForTest } from '../support/store-factory.ts';
 import { isSessionRecording } from '../../session-script-publication-capability.ts';
 import { NO_SCRIPT_PUBLICATION } from '../../session-script-publication-state.ts';
 /**
@@ -12,7 +12,7 @@ import { NO_SCRIPT_PUBLICATION } from '../../session-script-publication-state.ts
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { SessionStore } from '../../session-store.ts';
 import { isInteractiveObservation } from '../../session-action-recorder.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../support/session-factories.ts';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 
 export function freshEvidence(id: string, label: string): TargetAnnotationV1 {

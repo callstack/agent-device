@@ -1,4 +1,4 @@
-import { storeSessionForTest } from '../../__tests__/test-utils/store-factory.ts';
+import { storeSessionForTest } from './support/store-factory.ts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,10 +9,7 @@ import { buildRequestFinishedEvent } from '@agent-device/session-journal/session
 import { HEAL_COMPLETE_SENTINEL } from '../session-script-writer.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import {
-  makeMacOsSession,
-  repairPublication,
-} from '../../__tests__/test-utils/session-factories.ts';
+import { makeMacOsSession, repairPublication } from './support/session-factories.ts';
 
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 

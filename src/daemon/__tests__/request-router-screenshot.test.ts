@@ -29,8 +29,8 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { PNG } from '@agent-device/capture-kit/png';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { makeSession as makeBaseSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
+import { makeSession as makeBaseSession } from './support/session-factories.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 function makeSession(name: string): SessionState {

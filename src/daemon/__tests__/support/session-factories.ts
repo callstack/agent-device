@@ -1,8 +1,8 @@
-import type { SessionState } from '../../daemon/session-state.ts';
+import type { SessionState } from '../../session-state.ts';
 import type {
   SessionScriptPublicationState,
   SessionScriptRepairStatus,
-} from '../../daemon/session-script-publication-state.ts';
+} from '../../session-script-publication-state.ts';
 import {
   IOS_SIMULATOR,
   ANDROID_EMULATOR,

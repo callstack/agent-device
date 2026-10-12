@@ -3,7 +3,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../support/session-factories.ts';
 import { SessionStore } from '../../session-store.ts';
 import { captureDivergenceObservation } from '@agent-device/replay-port/session-replay-divergence';
 import { replayDivergenceForTest } from './replay-session-fixture.ts';

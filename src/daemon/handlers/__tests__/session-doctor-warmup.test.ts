@@ -3,7 +3,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isActiveProviderDevice } from '../../provider-device-admission.ts';
 import { handleDoctorCommand } from '../session-doctor.ts';
 import { createHostDiagnostics } from '../../../platform-runtime-host-diagnostics.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DaemonResponse } from '../../daemon-request.ts';
 

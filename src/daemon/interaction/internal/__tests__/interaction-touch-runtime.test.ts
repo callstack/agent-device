@@ -1,7 +1,7 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import {
   elementReadFixtureState,

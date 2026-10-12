@@ -4,7 +4,7 @@ import { expect, test } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
 import { appLogResourceStore } from '../app-log-resource-store.ts';

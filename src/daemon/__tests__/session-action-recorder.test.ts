@@ -8,10 +8,7 @@ import { isSessionRecording } from '../session-script-publication-capability.ts'
  */
 import { test, expect } from 'vitest';
 import { recordActionEntry } from '../session-action-recorder.ts';
-import {
-  authoringPublication,
-  makeIosSession,
-} from '../../__tests__/test-utils/session-factories.ts';
+import { authoringPublication, makeIosSession } from './support/session-factories.ts';
 
 test('an observation-only action is excluded while repair-armed and no --record is given', () => {
   const session = makeIosSession('default', {

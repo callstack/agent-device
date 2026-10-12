@@ -10,8 +10,8 @@ import { handleInteractionCommands } from '../../index.ts';
 import {
   makeIosSession,
   authoringPublication,
-} from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+} from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { SessionScriptWriter } from '../../../session-script-writer.ts';
 import { runReplayForTest } from '../../../__tests__/replay-runtime/replay-command-fixture.ts';
 import { replayScriptSourceBundleFor } from '../../../../__tests__/test-utils/replay-script-source.ts';

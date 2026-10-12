@@ -8,8 +8,8 @@ import {
   mockTapPoint,
   resetGetRuntimeFixture,
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
-import { makeIosSession as makeSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { makeIosSession as makeSession } from '../../../__tests__/support/session-factories.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import type { SessionState } from '../../../session-state.ts';
 import type { handleFindCommands } from '../find.ts';

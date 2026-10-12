@@ -14,7 +14,7 @@ import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { readScrollEdgeState } from '@agent-device/capture-kit/scroll-edge-state';
 import { IOS_SIMULATOR, MACOS_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeSession } from './support/session-factories.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 import {
   observeScrollMovement,

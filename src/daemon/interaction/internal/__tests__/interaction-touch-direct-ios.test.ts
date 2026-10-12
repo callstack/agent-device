@@ -7,8 +7,8 @@ import {
   dispatchDisclosureRowsOwnedBy,
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import {
   getRuntimeBindings,

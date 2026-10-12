@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { sessionChecks } from '../session-doctor-options.ts';
 
 // The doctor's recovery command must carry each session's ADDRESS — the string `close --session`

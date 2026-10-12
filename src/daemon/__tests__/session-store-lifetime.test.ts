@@ -7,8 +7,8 @@ import {
   makeRepairCompleteSession,
   makeRepairArmedSession,
   authoringPublication,
-} from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore, storeSessionForTest } from '../../__tests__/test-utils/store-factory.ts';
+} from './support/session-factories.ts';
+import { makeSessionStore, storeSessionForTest } from './support/store-factory.ts';
 import { resolveRepairTombstonePath } from '@agent-device/daemon-contracts/session-repair-tombstone';
 
 const ADDRESS = 'cwd:worktree:default';

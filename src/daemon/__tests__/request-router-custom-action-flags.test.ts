@@ -11,7 +11,7 @@ import path from 'node:path';
 
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 

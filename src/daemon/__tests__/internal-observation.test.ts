@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from './support/session-factories.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { bindInternalObservationAuthority } from '../internal-observation.ts';
 import {

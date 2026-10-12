@@ -4,13 +4,13 @@ import {
 } from './platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../session-state.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import {
   createRequestExecutionScope,
   prepareLockedRequestScope,
 } from '../request-execution-scope.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
+import { makeTestScreenRecordingResource } from './support/screen-recording-live-handle.ts';
 
 import { refreshRecordingHealth } from '../request-recording-health.ts';
 

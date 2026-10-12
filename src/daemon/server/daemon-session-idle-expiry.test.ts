@@ -16,7 +16,7 @@ import {
 import {
   makeIosSession,
   makeRepairCompleteSession,
-} from '../../__tests__/test-utils/session-factories.ts';
+} from '../__tests__/support/session-factories.ts';
 import { resolveDeviceClaimPath } from '../device/device-claim-paths.ts';
 
 /**

@@ -5,7 +5,7 @@ import { stringify } from 'yaml';
 import { runTypedMaestroReplay } from '@agent-device/replay-port/session-replay-maestro-runtime';
 import { SessionStore } from '../../session-store.ts';
 import { replayCommandForTest } from '../replay-runtime/replay-command-fixture.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../support/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { DaemonRequest } from '../../daemon-request.ts';

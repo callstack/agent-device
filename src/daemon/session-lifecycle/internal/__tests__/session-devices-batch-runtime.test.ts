@@ -17,8 +17,8 @@ import { handleSessionInventoryCommands } from '../inventory.ts';
 import { runBatchCommands } from '../../../handlers/session-batch.ts';
 import { handleReleaseMaterializedPathsCommand } from '../../../handlers/session-app-source-deployment.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
-import { makeSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { makeSession } from '../../../__tests__/support/session-factories.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 
 import { withTestDeviceInventory } from '../../../../__tests__/test-utils/device-inventory-gateways.ts';

@@ -3,9 +3,9 @@ import {
   daemonPlatformServicesFixture,
   daemonClaimRecoveryGatewayFixture,
 } from './platform-services-fixture.ts';
-import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeSession } from './support/session-factories.ts';
 import { LINUX_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestExecutionScope } from '../request-execution-scope.ts';
 import type { DaemonRequest } from '../daemon-request.ts';

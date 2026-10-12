@@ -1,4 +1,4 @@
-import { makeStoredSessionRef } from '../__tests__/test-utils/store-factory.ts';
+import { makeStoredSessionRef } from './__tests__/support/store-factory.ts';
 import { test, expect } from 'vitest';
 import { buildSessionRecoveryHint } from './session-recovery-hints.ts';
 import type { SessionRef, SessionState } from './session-state.ts';

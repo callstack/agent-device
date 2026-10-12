@@ -3,8 +3,8 @@ import { expect, test } from 'vitest';
 
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeAndroidSession } from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

@@ -20,7 +20,7 @@ import {
 import { createTransport } from './client-transport-fixture.ts';
 import { runCliCapture } from './cli-capture.ts';
 import { makeTempWorkspace } from './cli-config-fixtures.ts';
-import { makeSessionStore } from './test-utils/store-factory.ts';
+import { makeSessionStore } from '../daemon/__tests__/support/store-factory.ts';
 
 const limrunInstances = vi.hoisted(() => ({
   iosCreate: vi.fn(async () => {

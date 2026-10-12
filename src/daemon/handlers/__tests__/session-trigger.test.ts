@@ -3,7 +3,7 @@ import { test, expect } from 'vitest';
 
 import { handleSessionCommands } from './session-command-harness.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 const invoke = async (_req: DaemonRequest): Promise<DaemonResponse> => {

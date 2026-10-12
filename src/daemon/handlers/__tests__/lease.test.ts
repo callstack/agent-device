@@ -5,7 +5,7 @@ import { test } from 'vitest';
 import { handleLeaseCommands } from '../lease.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {

@@ -11,7 +11,7 @@ import { createAppLogStartResult, createDurableResourceEnvelope } from '@agent-d
 import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';

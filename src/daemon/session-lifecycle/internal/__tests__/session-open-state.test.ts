@@ -5,7 +5,7 @@ import { makeSessionStore } from './session-open-runtime.fixtures.ts';
 import {
   authoringPublication,
   makeIosSession,
-} from '../../../../__tests__/test-utils/session-factories.ts';
+} from '../../../__tests__/support/session-factories.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { isSessionRecording } from '../../../session-script-publication-capability.ts';
 

@@ -9,7 +9,7 @@ import {
   withRequestProgressSink,
 } from '@agent-device/host-kit/request';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../support/session-factories.ts';
 import { withClientReplayScriptSources } from '../../../__tests__/test-utils/replay-script-source.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 import { SessionStore } from '../../session-store.ts';

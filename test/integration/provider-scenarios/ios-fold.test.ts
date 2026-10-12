@@ -6,7 +6,7 @@ import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provid
 import type { ExecResult } from '@agent-device/host-kit/command';
 import { recordActionEntry } from '../../../src/daemon/session-action-recorder.ts';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
-import { makeIosAppSession } from '../../../src/__tests__/test-utils/session-factories.ts';
+import { makeIosAppSession } from '../../../src/daemon/__tests__/support/session-factories.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';

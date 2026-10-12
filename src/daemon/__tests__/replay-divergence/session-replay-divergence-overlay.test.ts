@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { makeAndroidSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeAndroidSession } from '../support/session-factories.ts';
 import {
   ANDROID_IME_CAPTURE_RAW_NODES,
   walkNonRawAndroidFixture,

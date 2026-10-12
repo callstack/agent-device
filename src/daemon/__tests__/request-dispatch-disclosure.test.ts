@@ -23,12 +23,8 @@ import {
   dispatchDisclosureRowsOwnedBy,
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
-import {
-  makeAndroidSession,
-  makeIosAppSession,
-  makeSession,
-} from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeAndroidSession, makeIosAppSession, makeSession } from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { discloseRequestDispatch } from '../request-dispatch-disclosure.ts';

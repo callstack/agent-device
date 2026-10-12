@@ -5,12 +5,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { handleInteractionCommands } from '../../index.ts';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import {
   makeIosSession,
   makeAuthoringSession,
   authoringPublication,
-} from '../../../../__tests__/test-utils/session-factories.ts';
+} from '../../../__tests__/support/session-factories.ts';
 import { SessionScriptWriter } from '../../../session-script-writer.ts';
 import type { SessionState } from '../../../session-state.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';

@@ -11,7 +11,7 @@ import {
   makeIosSession,
   makeMacOsSession,
   makeSession,
-} from '../../__tests__/test-utils/session-factories.ts';
+} from './support/session-factories.ts';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { createLocalAppleToolProvider, runXcrun } from '@agent-device/platform-apple/tool-provider';
 import { buildSimctlArgsForDevice } from '@agent-device/platform-apple/simctl';

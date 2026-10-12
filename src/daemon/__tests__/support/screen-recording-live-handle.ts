@@ -5,7 +5,7 @@ import {
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ScreenRecordingLiveSnapshot } from '@agent-device/contracts/screen-recording-runtime';
 import { deviceIdentity } from '@agent-device/kernel/device';
-import type { SessionState } from '../../daemon/session-state.ts';
+import type { SessionState } from '../../session-state.ts';
 
 type ScreenRecordingOverrides = Partial<ScreenRecordingLiveSnapshot>;
 

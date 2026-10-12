@@ -11,8 +11,8 @@ import {
   type SnapshotResult,
 } from '@agent-device/contracts/snapshot-runtime';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { makeSession as makeStoredSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
+import { makeSession as makeStoredSession } from './support/session-factories.ts';
 import { dispatchGetViaRuntime } from '../selector-runtime.ts';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 

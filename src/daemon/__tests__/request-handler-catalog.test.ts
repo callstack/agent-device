@@ -7,7 +7,7 @@ import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } fr
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { commandDescriptors } from '@agent-device/command-registry/registry';
 import { isRequestCanceledError, type AppError } from '@agent-device/kernel/errors';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { getDaemonCommandRoute, type DaemonCommandRoute } from '../daemon-command-registry.ts';
 import { cleanupDownloadableArtifact, trackDownloadableArtifact } from '../artifact-tracking.ts';
 import { contextFromFlags } from '../context.ts';

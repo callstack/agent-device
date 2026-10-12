@@ -4,12 +4,12 @@ import path from 'node:path';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../session-state.ts';
 import type { createSessionIdleExpiry } from '../server/daemon-session-idle-expiry.ts';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from './support/session-factories.ts';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
   type IsolatedDeviceClaimStore,
-} from '../../__tests__/test-utils/device-claim-store.ts';
+} from './support/device-claim-store.ts';
 import { acquireDeviceClaim, type DeviceClaimSessionOwnership } from '../device/device-claims.ts';
 import { resolveDeviceClaimPath } from '../device/device-claim-paths.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';

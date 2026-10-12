@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { makeRecordingSession } from './session-teardown.fixtures.ts';
 import {
   bindSessionScreenRecording,

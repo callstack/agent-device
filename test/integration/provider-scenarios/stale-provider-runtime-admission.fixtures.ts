@@ -13,7 +13,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { handleAppDeploymentCommand } from '../../../src/daemon/handlers/session-app-deployment.ts';
 import { createRequestRuntimeBindings } from '../../../src/daemon/request-runtime-binding.ts';
 import { createRequestDispatchLedger } from '../../../src/daemon/request-dispatch-ledger.ts';
-import { makeSessionStore } from '../../../src/__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../../src/daemon/__tests__/support/store-factory.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createComposedPlatformRuntimeGateway } from '../../../src/platform-runtime-gateway.ts';
 

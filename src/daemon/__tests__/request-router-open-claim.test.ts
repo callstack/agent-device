@@ -68,7 +68,7 @@ import {
 import { ensureDeviceReady } from '../device/device-ready.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceBootObservation } from '@agent-device/contracts/device-boot';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { inspectDeviceClaims } from '../device/device-claim-inspection.ts';
 import { makeIosDevice, openRequest, storedClaimUpdatedAt } from './request-router-open-harness.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';

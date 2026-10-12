@@ -11,8 +11,8 @@ import {
   sessionIdleDeadlineMs,
   sessionIdleExpiredError,
 } from '../session-idle-expiry.ts';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
+import { makeIosSession } from './support/session-factories.ts';
+import { makeTestScreenRecordingResource } from './support/screen-recording-live-handle.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { deviceIdentity } from '@agent-device/kernel/device';

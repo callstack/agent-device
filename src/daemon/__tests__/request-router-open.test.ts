@@ -88,7 +88,7 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceBootObservation } from '@agent-device/contracts/device-boot';
 import { AppError } from '@agent-device/kernel/errors';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { inspectDeviceClaims } from '../device/device-claim-inspection.ts';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';

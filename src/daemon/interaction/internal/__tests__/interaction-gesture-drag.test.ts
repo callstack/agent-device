@@ -4,8 +4,8 @@ import { attachRefs } from '@agent-device/kernel/snapshot';
 import {
   makeIosSession,
   authoringPublication,
-} from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+} from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { activateCompleteRefFrame, refFrameState } from '../../../ref-frame.ts';
 
 import { handleInteractionCommands } from '../../index.ts';

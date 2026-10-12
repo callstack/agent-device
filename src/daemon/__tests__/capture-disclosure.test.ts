@@ -8,11 +8,8 @@ import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import {
-  makeAndroidSession,
-  makeIosSession,
-} from '../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
+import { makeAndroidSession, makeIosSession } from './support/session-factories.ts';
 import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 

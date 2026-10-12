@@ -5,8 +5,8 @@ import {
   makeIosSession,
   makeAuthoringSession,
   authoringPublication,
-} from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+} from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { finalizeTouchInteraction, handleInteractionCommands } from '../../index.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';

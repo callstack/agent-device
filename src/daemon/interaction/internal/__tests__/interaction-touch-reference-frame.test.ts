@@ -3,9 +3,9 @@ import { makeSnapshotState } from '@agent-device/capture-kit/snapshot-state-fixt
 import {
   makeAndroidSession,
   makeIosAppSession,
-} from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeTestScreenRecordingResource } from '../../../../__tests__/test-utils/screen-recording-live-handle.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+} from '../../../__tests__/support/session-factories.ts';
+import { makeTestScreenRecordingResource } from '../../../__tests__/support/screen-recording-live-handle.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { clearAndroidObservationFixture } from '../../../__tests__/android-observation-fixture.ts';
 import { contextFromFlags } from './interaction-touch-fixtures.ts';
 import { resolveDirectTouchReferenceFrameSafely } from '../interaction-touch-reference-frame.ts';

@@ -11,7 +11,7 @@ import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
-} from '../../../__tests__/test-utils/device-claim-store.ts';
+} from '../../__tests__/support/device-claim-store.ts';
 import { createDeviceClaimAdmission } from '../device-claim-admission.ts';
 import { abandonDeviceClaim, acquireDeviceClaim } from '../device-claims.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';

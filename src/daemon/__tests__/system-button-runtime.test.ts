@@ -17,8 +17,8 @@ import {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { SystemButton } from '@agent-device/contracts/system-button-runtime';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
-import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSession } from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { activateCompleteRefFrame, refFrameState } from '../ref-frame.ts';

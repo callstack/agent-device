@@ -18,7 +18,7 @@ import {
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
-import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeSession } from './support/session-factories.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import type { GenericPlatformExecutionParams } from '../generic-leaf-execution.ts';
 import { readRequestedFoldPose, resolveBoundFoldRuntime } from '../fold-runtime.ts';

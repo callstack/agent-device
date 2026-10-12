@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { makeIosSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
 import { contextFromFlags as buildDaemonContext } from '../../../context.ts';
 import { handleInteractionCommands } from '../../index.ts';

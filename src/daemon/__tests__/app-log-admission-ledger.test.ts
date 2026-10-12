@@ -3,7 +3,7 @@ import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
 import { appLogResourceStore } from '../app-log-resource-store.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 
 const DEVICE: DeviceInfo = {
   platform: 'android',

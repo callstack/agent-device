@@ -3,8 +3,8 @@ import {
   daemonPlatformServicesFixture,
   daemonClaimRecoveryGatewayFixture,
 } from './platform-services-fixture.ts';
-import { makeMacOsSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeMacOsSession } from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { LeaseRegistry } from '../lease-registry.ts';

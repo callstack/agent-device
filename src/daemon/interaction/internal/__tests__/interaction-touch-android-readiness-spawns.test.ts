@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeAndroidSession } from '../../../__tests__/support/session-factories.ts';
 import { withFakeAdb } from '../../../../__tests__/test-utils/fake-adb.ts';
 import { expireRefFrame } from '../../../ref-frame.ts';
 import { runWithAndroidDialogReadinessCheck } from '../interaction-touch-android-readiness.ts';

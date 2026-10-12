@@ -10,7 +10,7 @@ import {
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit/loopback';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { limrunTestDependencies } from '../../platform-runtime-gateway.fixtures.ts';
 import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,

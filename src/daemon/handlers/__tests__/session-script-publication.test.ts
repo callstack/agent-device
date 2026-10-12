@@ -8,7 +8,7 @@ import {
   makeAuthoringSession,
   authoringPublication,
   repairPublication,
-} from '../../../__tests__/test-utils/session-factories.ts';
+} from '../../__tests__/support/session-factories.ts';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';

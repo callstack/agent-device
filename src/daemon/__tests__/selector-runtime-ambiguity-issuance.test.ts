@@ -1,7 +1,7 @@
 import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { selectorCaptureFixture } from './selector-capture-fixture.ts';
 import { refFrameScope, refFrameState } from '../ref-frame.ts';
 import type { DaemonRequest } from '../daemon-request.ts';

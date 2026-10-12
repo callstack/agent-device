@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';

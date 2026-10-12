@@ -4,9 +4,9 @@ import {
   augmentScrollVisualizationResult,
   recordTouchVisualizationEvent,
 } from '../recording-gestures.ts';
-import { makeIosSession, makeMacOsSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession, makeMacOsSession } from './support/session-factories.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
+import { makeTestScreenRecordingResource } from './support/screen-recording-live-handle.ts';
 import type { ScreenRecordingLiveSnapshot } from '@agent-device/contracts/screen-recording-runtime';
 import { TVOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 

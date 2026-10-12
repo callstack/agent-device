@@ -1,5 +1,5 @@
 import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
-import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
+import { storeSessionForTest } from '../support/store-factory.ts';
 /**
  * ADR 0012 decision 6 repair-transaction close-ordering guarantees (BLOCKER 2/3 sequencing): the
  * platform close must run and succeed BEFORE the healed `.ad` commits (never claim a successful

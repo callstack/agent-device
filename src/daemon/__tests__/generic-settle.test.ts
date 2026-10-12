@@ -8,8 +8,8 @@ import {
   iosSystemSurfaceTransitionDisclosure,
   type IosSystemSurfaceProvenance,
 } from '@agent-device/contracts/ios-system-surface';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeIosSession } from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { activateCompleteRefFrame, refFrameState } from '../ref-frame.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
 import type { SessionStore } from '../session-store.ts';

@@ -13,8 +13,8 @@ vi.mock('../handlers/session.ts', () => ({
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { runRequestHandlerChain } from '../request-handler-chain.ts';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeIosSession } from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,

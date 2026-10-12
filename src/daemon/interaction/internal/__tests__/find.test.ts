@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import { makeIosSession as makeSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession as makeSession } from '../../../__tests__/support/session-factories.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;

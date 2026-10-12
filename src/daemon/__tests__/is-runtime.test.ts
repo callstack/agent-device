@@ -7,8 +7,8 @@ import {
   makeAndroidSession,
   makeIosAppSession,
   makeIosSession,
-} from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+} from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { withTestDeviceInventory } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';

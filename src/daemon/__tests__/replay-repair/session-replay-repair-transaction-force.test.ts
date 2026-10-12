@@ -1,5 +1,5 @@
 import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
-import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
+import { storeSessionForTest } from '../support/store-factory.ts';
 /**
  * ADR 0012 decision 6 repair-transaction `--force`/`--overwrite` semantics (#1258): a
  * `--save-script` target that already exists is refused at arm time, before any step runs, unless
@@ -46,7 +46,7 @@ import {
   resetLegacySnapshotCapture,
 } from '../legacy-snapshot-capture-fixture.ts';
 import { dispatchApplicationLifecycleEffect } from '../application-lifecycle-runtime-fixture.ts';
-import { repairPublication } from '../../../__tests__/test-utils/session-factories.ts';
+import { repairPublication } from '../support/session-factories.ts';
 import { HEAL_COMPLETE_SENTINEL } from '../../session-script-writer.ts';
 import {
   repairSessionBoundary,

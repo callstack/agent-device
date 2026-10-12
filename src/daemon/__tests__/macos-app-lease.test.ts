@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { makeIosSession, makeMacOsSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession, makeMacOsSession } from './support/session-factories.ts';
 import {
   assertMacOsAppLeaseAdmitsRequest,
   assertMacOsAppLeaseProcess,

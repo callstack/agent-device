@@ -1,5 +1,5 @@
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeSession } from './support/session-factories.ts';
 import { readPngSize } from '@agent-device/capture-kit/png-size';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
 import type { SessionSurface } from '@agent-device/contracts/session';

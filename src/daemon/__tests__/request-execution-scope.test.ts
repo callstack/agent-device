@@ -10,11 +10,8 @@ import {
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import {
-  makeAndroidSession,
-  makeIosSession,
-} from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeAndroidSession, makeIosSession } from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import {
@@ -25,7 +22,7 @@ import { resolveSessionRequestLogPath } from '../session-artifact-paths.ts';
 import { resolveSessionScope } from '../session-routing.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
+import { makeTestScreenRecordingResource } from './support/screen-recording-live-handle.ts';
 import { handleSessionCloseCommands } from '../session-lifecycle/index.ts';
 
 const TEST_ROOT = mkdtempForTestSync('agent-device-request-execution-scope-');

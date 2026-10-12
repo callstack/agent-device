@@ -19,7 +19,7 @@ import { resolveBoundScrollRuntime } from '../scroll-runtime.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { makeIosSession, makeMacOsSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession, makeMacOsSession } from './support/session-factories.ts';
 import { activateCompleteRefFrame, expireRefFrame } from '../ref-frame.ts';
 
 /**

@@ -13,8 +13,8 @@ import {
   snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/snapshot-runtime';
 import { deviceShape } from '@agent-device/kernel/device';
-import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeAndroidSession } from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
 import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
 import { expectRefusesUnavailableExactOwnerFact } from './runtime-binding-conformance.ts';

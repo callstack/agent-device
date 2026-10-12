@@ -1,6 +1,6 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { activateCompleteRefFrame, refFrameState } from '../../../ref-frame.ts';
 import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../../session-snapshot.ts';
 import { handleInteractionCommands } from '../../index.ts';

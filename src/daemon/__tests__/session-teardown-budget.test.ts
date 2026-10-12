@@ -2,7 +2,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { AGENT_BROWSER_TIMEOUT_MS } from '@agent-device/platform-web';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeAndroidSession } from './support/session-factories.ts';
 import { SessionStore } from '../session-store.ts';
 import {
   resolveDaemonSessionTeardownTimeoutMs,

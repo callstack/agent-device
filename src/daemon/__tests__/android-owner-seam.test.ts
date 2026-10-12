@@ -1,7 +1,7 @@
 import { test, expect, vi } from 'vitest';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
-import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
+import { makeAndroidSession } from './support/session-factories.ts';
+import { makeTestScreenRecordingResource } from './support/screen-recording-live-handle.ts';
 import {
   ensureAndroidBlockingSystemDialogReady,
   recoverAndroidBlockingSystemDialog,

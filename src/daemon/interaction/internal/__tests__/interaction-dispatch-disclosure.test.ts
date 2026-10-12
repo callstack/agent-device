@@ -10,8 +10,8 @@ import {
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
-import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { makeAndroidSession } from '../../../__tests__/support/session-factories.ts';
 import {
   getRuntimeBindings,
   mockFillPoint,

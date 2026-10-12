@@ -7,7 +7,7 @@ import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-re
 import type { FlagDefinition } from '@agent-device/command-registry/flag-types';
 import { resolveConfigBackedFlagDefaults } from '../schema/cli-config.ts';
 import { recordActionEntry } from '../../daemon/session-action-recorder.ts';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../../daemon/__tests__/support/session-factories.ts';
 import { makeTempWorkspace } from '../../__tests__/cli-config-fixtures.ts';
 
 /**

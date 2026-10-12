@@ -5,8 +5,8 @@ import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import {
   makeAndroidSession as makeBaseAndroidSession,
   makeIosSession,
-} from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+} from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { expireRefFrame } from '../../../ref-frame.ts';
 import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../../session-snapshot.ts';
 import { handleInteractionCommands } from '../../index.ts';

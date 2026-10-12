@@ -13,7 +13,7 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { adoptStartedSessionAppLog, finishSessionAppLog } from '../app-log-session-resource.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';

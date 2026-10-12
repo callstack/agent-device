@@ -2,7 +2,7 @@ import { daemonPlatformServicesFixture } from '../../../__tests__/platform-servi
 import { test, expect } from 'vitest';
 import path from 'node:path';
 import { handleSessionInventoryCommands } from '../inventory.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import type { SessionState } from '../../../session-state.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';

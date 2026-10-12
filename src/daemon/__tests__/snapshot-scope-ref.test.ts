@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import { STALE_REF_HINT } from '@agent-device/selectors';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { resolveSnapshotScope } from '../snapshot-capture.ts';
-import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeAndroidSession } from './support/session-factories.ts';
 
 const rect = { x: 0, y: 0, width: 100, height: 100 };
 const labeled = () =>

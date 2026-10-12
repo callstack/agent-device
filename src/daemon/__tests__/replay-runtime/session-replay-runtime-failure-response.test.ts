@@ -12,7 +12,7 @@ vi.mock('../../snapshot-interactor-capture.ts', () => ({
 import path from 'node:path';
 import { runReplayForTest } from './replay-command-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../support/session-factories.ts';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,

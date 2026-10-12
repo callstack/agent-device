@@ -1,5 +1,5 @@
 import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
-import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
+import { storeSessionForTest } from '../support/store-factory.ts';
 /**
  * #1271 stage 2 (ADR 0012 amendment): repair-segment default exclusion of
  * observation-only commands (`snapshot`/`get`/`is`/a read-only `find`), the
@@ -54,10 +54,7 @@ import { handleSessionCloseCommands as handleProductionCloseCommand } from '../.
 import { SessionStore } from '../../session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
-import {
-  makeIosSession,
-  authoringPublication,
-} from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession, authoringPublication } from '../support/session-factories.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import {
   baseReplayRequest as baseReq,

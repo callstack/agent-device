@@ -1,7 +1,7 @@
 import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { afterEach, expect, test } from 'vitest';
-import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeAndroidSession } from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import {
   clearRequestAbortRegistration,
   markRequestCanceled,

@@ -1,8 +1,8 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { makeAndroidSession } from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeTestScreenRecordingResource } from '../../../../__tests__/test-utils/screen-recording-live-handle.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeAndroidSession } from '../../../__tests__/support/session-factories.ts';
+import { makeTestScreenRecordingResource } from '../../../__tests__/support/screen-recording-live-handle.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import { contextFromFlags } from './interaction-touch-fixtures.ts';
 import {

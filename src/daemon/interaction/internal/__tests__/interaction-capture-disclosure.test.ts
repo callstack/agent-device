@@ -6,7 +6,7 @@ import {
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { handleInteractionCommands } from '../../index.ts';
 import { getRuntimeBindings } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { contextFromFlags, makeSession } from './interaction-touch-fixtures.ts';

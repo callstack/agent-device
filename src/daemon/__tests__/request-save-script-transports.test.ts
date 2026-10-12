@@ -1,4 +1,4 @@
-import { storeSessionForTest } from '../../__tests__/test-utils/store-factory.ts';
+import { storeSessionForTest } from './support/store-factory.ts';
 import { isSessionRecording } from '../session-script-publication-capability.ts';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 /**
@@ -26,7 +26,7 @@ import { createDaemonHttpServer } from '../server/http-server.ts';
 import { createSocketServer, listenNetServer } from '../server/transport.ts';
 import type { DaemonInvokeFn, DaemonResponse } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from './support/session-factories.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,

@@ -132,13 +132,13 @@ import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
-} from '../../__tests__/test-utils/device-claim-store.ts';
+} from '../__tests__/support/device-claim-store.ts';
 import { sendRequest } from '../../daemon-client/daemon-client-transport.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { teardownDaemonSessionForShutdown } from './daemon-runtime.ts';
 import { startDaemonRuntimeFixture } from '../__tests__/daemon-runtime-fixture.ts';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeIosSession } from '../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../__tests__/support/store-factory.ts';
 
 afterEach(() => {
   lifecycleEvents.length = 0;

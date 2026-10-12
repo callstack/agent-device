@@ -1,7 +1,7 @@
 import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 vi.mock('../index.ts', async (importOriginal) => {

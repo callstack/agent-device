@@ -1,7 +1,7 @@
 import { test, expect, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
+import { makeAndroidSession } from './support/session-factories.ts';
+import { makeTestScreenRecordingResource } from './support/screen-recording-live-handle.ts';
 
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();

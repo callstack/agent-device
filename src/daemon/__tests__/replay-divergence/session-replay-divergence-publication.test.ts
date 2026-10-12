@@ -8,7 +8,7 @@ vi.mock('../../snapshot-interactor-capture.ts', () => ({
 }));
 
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../support/session-factories.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { ReplayDivergence } from '@agent-device/contracts/divergence';
 import { expireRefFrame, refFrameScope, refFrameState, refFrameTree } from '../../ref-frame.ts';

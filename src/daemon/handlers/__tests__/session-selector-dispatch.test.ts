@@ -29,7 +29,7 @@ import type { SessionState } from '../../session-state.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
 import { refFrameState } from '../../ref-frame.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
 import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 

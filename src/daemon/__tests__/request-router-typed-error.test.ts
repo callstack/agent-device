@@ -23,12 +23,12 @@ import {
 import type { DaemonRequest } from '../daemon-request.ts';
 import type { SessionState } from '../session-state.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import {
   makeAuthoringSession,
   makeRepairCompleteSession,
   makeSession,
-} from '../../__tests__/test-utils/session-factories.ts';
+} from './support/session-factories.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   AppError,

@@ -2,8 +2,8 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { handleInteractionCommands } from '../../index.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
-import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
-import { makeIosSession as makeSession } from '../../../../__tests__/test-utils/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { makeIosSession as makeSession } from '../../../__tests__/support/session-factories.ts';
 import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {

@@ -29,7 +29,7 @@ import {
 import { LeaseRegistry } from '../lease-registry.ts';
 import { ensureDeviceReady } from '../device/device-ready.ts';
 import { awaitFixtureReadiness } from './application-lifecycle-runtime-fixture.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';

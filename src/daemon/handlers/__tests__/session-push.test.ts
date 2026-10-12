@@ -8,7 +8,7 @@ import type {
 } from '../../request-runtime-binding.ts';
 
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   handleSessionCommands,

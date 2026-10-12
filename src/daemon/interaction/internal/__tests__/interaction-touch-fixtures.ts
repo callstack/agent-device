@@ -4,8 +4,8 @@ import {
   makeAndroidSession as makeBaseAndroidSession,
   makeIosAppSession,
   makeMacOsSession as makeBaseMacOsSession,
-} from '../../../../__tests__/test-utils/session-factories.ts';
-import { makeTestScreenRecordingResource } from '../../../../__tests__/test-utils/screen-recording-live-handle.ts';
+} from '../../../__tests__/support/session-factories.ts';
+import { makeTestScreenRecordingResource } from '../../../__tests__/support/screen-recording-live-handle.ts';
 import { activateCompleteRefFrame } from '../../../ref-frame.ts';
 import type { SessionStore } from '../../../session-store.ts';
 import type { SessionState } from '../../../session-state.ts';

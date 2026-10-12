@@ -1,11 +1,8 @@
 import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
-import {
-  makeAndroidSession,
-  makeIosSession,
-} from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeAndroidSession, makeIosSession } from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { withTestDeviceInventory } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { resolveBoundSelectorCapture } from '../selector-capture-binding.ts';
 import { createBoundSelectorRuntime } from '../selector-runtime-backend.ts';

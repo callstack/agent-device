@@ -1,7 +1,7 @@
 import { test, expect, vi } from 'vitest';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeIosSession } from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import {
   admitRequestLeaseForLockedScope,

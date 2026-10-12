@@ -22,7 +22,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { resolveEffectiveSessionName } from '../session-routing.ts';
 import { scopeRequestSession } from '../request-admission.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { inspectAdReplay } from '@agent-device/ad-replay';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 

@@ -32,7 +32,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-import { makeAndroidSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeAndroidSession } from './support/session-factories.ts';
 import { withFakeAdb, type FakeAdbScript } from '../../__tests__/test-utils/fake-adb.ts';
 import {
   countDiagnosticEventsByPhase,

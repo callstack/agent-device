@@ -1,4 +1,4 @@
-import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
+import { storeSessionForTest } from '../support/store-factory.ts';
 /**
  * ADR 0012 decision 6, R2/R3, extended per #1262: behaviors introduced
  * alongside the `resume.from` / `repairHint` agreement fix
@@ -44,7 +44,7 @@ import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,
 } from '../legacy-snapshot-capture-fixture.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../support/session-factories.ts';
 import { repairSessionBoundary } from '../../session-replay-transaction.ts';
 import type { SessionState } from '../../session-state.ts';
 import {

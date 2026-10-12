@@ -8,7 +8,7 @@ import {
   NOW,
   WINDOW_MS,
 } from '../__tests__/session-idle-expiry-harness.ts';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../__tests__/support/session-factories.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 
 /**

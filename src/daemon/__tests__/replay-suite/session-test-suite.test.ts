@@ -34,12 +34,9 @@ import {
 
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  makeAndroidSession,
-  makeMacOsSession,
-} from '../../../__tests__/test-utils/session-factories.ts';
+import { makeAndroidSession, makeMacOsSession } from '../support/session-factories.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
+import { storeSessionForTest } from '../support/store-factory.ts';
 
 const ANDROID_ONE: DeviceInfo = {
   platform: 'android',

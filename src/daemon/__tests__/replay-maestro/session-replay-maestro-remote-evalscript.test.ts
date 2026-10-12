@@ -6,7 +6,7 @@ import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { SessionStore } from '../../session-store.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../support/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { DaemonRequest } from '../../daemon-request.ts';

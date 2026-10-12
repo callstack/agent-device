@@ -6,7 +6,7 @@ import { expect, test } from 'vitest';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeSession } from './support/session-factories.ts';
 import type { GenericPlatformExecutionParams } from '../generic-leaf-execution.ts';
 import { resolveScreenshotGenericExecution } from '../screenshot-runtime.ts';
 import { screenshotRuntimeFixture, writeSolidPng } from './screenshot-runtime-fixture.ts';

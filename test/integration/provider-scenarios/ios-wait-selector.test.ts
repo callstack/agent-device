@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { makeIosAppSession } from '../../../src/__tests__/test-utils/session-factories.ts';
+import { makeIosAppSession } from '../../../src/daemon/__tests__/support/session-factories.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { assertRpcOk } from './assertions.ts';

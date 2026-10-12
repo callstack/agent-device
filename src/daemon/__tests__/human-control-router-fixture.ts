@@ -3,8 +3,8 @@ import {
   daemonPlatformServicesFixture,
   daemonClaimRecoveryGatewayFixture,
 } from './platform-services-fixture.ts';
-import { makeIosAppSession } from '../../__tests__/test-utils/session-factories.ts';
-import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeIosAppSession } from './support/session-factories.ts';
+import { makeSessionStore } from './support/store-factory.ts';
 import { buildSessionLeaseFromRequest } from '../lease-context.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from '../request-router.ts';

@@ -21,10 +21,7 @@ import {
   legacyDispatchCapture,
 } from '../legacy-snapshot-capture-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../snapshot-interactor-capture.ts';
-import {
-  makeAndroidSession,
-  makeIosSession,
-} from '../../../__tests__/test-utils/session-factories.ts';
+import { makeAndroidSession, makeIosSession } from '../support/session-factories.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,

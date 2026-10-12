@@ -14,7 +14,7 @@ import path from 'node:path';
 import { runReplayForTest } from './replay-command-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonResponse } from '../../daemon-request.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from '../support/session-factories.ts';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
 import { maestroScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
 import {

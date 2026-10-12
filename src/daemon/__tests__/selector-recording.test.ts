@@ -11,7 +11,7 @@ import { test, expect } from 'vitest';
 import path from 'node:path';
 import { recordIfSession } from '../selector-recording.ts';
 import { SessionStore } from '../session-store.ts';
-import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { makeIosSession } from './support/session-factories.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 

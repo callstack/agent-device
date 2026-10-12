@@ -14,7 +14,7 @@ import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-r
 import type { DaemonRequest } from '../../daemon-request.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../../request-runtime-binding.ts';

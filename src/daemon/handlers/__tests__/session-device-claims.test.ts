@@ -58,7 +58,7 @@ import {
   handleSessionOpenCommands as handleProductionOpenCommand,
 } from '../../session-lifecycle/index.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { makeAuthoringSession } from '../../../__tests__/test-utils/session-factories.ts';
+import { makeAuthoringSession } from '../../__tests__/support/session-factories.ts';
 import { MACOS_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { AppError } from '@agent-device/kernel/errors';
 import {
