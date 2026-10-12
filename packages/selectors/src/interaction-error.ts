@@ -1,3 +1,4 @@
+import { TARGET_STILL_MOVING_REASON } from '@agent-device/contracts/moving-target-gate';
 import type { Rect, SnapshotCoveringNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 /** Machine-readable `error.details.reason` values shared by interaction producers and adapters. */
@@ -22,6 +23,15 @@ export const INTERACTION_ERROR_REASONS = {
   captureSparse: 'capture_sparse',
   /** The target resolved, but another visible element covers it. */
   targetCovered: 'target_covered',
+  /**
+   * A press or click refused because its target's rect was still changing when the transition window
+   * after the session's last mutating action ran out. `details.selector` or `details.ref` names the
+   * target, `details.rect` where it was resolved and `details.movedToRect` where the re-observation
+   * found it. Branch on this reason, not the message: the recovery is to wait for the surface and
+   * retry, never to retry the same point immediately. The owner is `moving-target-gate.ts` in this
+   * package, which raises the reason beside the hint that names that recovery.
+   */
+  targetStillMoving: TARGET_STILL_MOVING_REASON,
 } as const;
 
 /** The part of a covered node a refusal reports. */
