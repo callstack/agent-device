@@ -211,14 +211,15 @@ describe('system command interface', () => {
   });
 
   test('appstate CLI output renders the macOS session app', () => {
+    // macOS appState is never admitted by the Apple runtime facts, so the live
+    // daemon always answers from the session record: no State line.
     const output = systemCliOutputFormatters.appstate({
       input: {},
       result: {
         platform: 'macos',
         appName: 'System Settings',
         appBundleId: 'com.apple.systempreferences',
-        state: 'runningForeground',
-        source: 'runner',
+        source: 'session',
         surface: 'app',
       },
     });
@@ -226,8 +227,7 @@ describe('system command interface', () => {
       [
         'Session app: System Settings',
         'Bundle: com.apple.systempreferences',
-        'State: runningForeground',
-        'Source: runner',
+        'Source: session',
       ].join('\n'),
     );
   });

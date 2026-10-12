@@ -703,7 +703,7 @@ agent-device apps --platform android --all
 ```
 
 - Android and HarmonyOS `appstate` report the live foreground package and activity.
-- iOS and macOS `appstate` need a session and report that session's app: `appName`, `appBundleId`, and, when a runner is already live, its `state` (`runningForeground`, `runningBackground`, `runningBackgroundSuspended`, `notRunning`, or `unknown`) with `source: runner`. They never start a runner; without one they report `source: session` and no `state`. On iOS, after `home` the app reports a background state; which app took the screen is not reported. A command that had to bring the app back reports a [`targetActivation` disclosure](#foreground-repairs-on-ios).
+- iOS and macOS `appstate` need a session and report that session's app: `appName`, `appBundleId`, and a `source`. On iOS, when a runner is already live the answer carries its `state` (`runningForeground`, `runningBackground`, `runningBackgroundSuspended`, `notRunning`, or `unknown`) with `source: runner`. They never start a runner; otherwise they report `source: session` and no `state` — on macOS the answer is always session-scoped. On iOS, after `home` the app reports a background state; which app took the screen is not reported. A command that had to bring the app back reports a [`targetActivation` disclosure](#foreground-repairs-on-ios).
 - `apps` shows user-installed apps. Add `--all` to include system and OEM apps.
 
 ## Foreground repairs on iOS
