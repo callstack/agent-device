@@ -38,9 +38,11 @@ jobs:
         # scripts/mutation/workflow.test.ts, which also pins --expect-shards to
         # the number of entries here.
         include:
-          - { name: kernel-errors-1, module: kernel-errors, shard: 1/3 }
-          - { name: kernel-errors-2, module: kernel-errors, shard: 2/3 }
-          - { name: kernel-errors-3, module: kernel-errors, shard: 3/3 }
+          - { name: kernel-errors-1, module: kernel-errors, shard: 1/5 }
+          - { name: kernel-errors-2, module: kernel-errors, shard: 2/5 }
+          - { name: kernel-errors-3, module: kernel-errors, shard: 3/5 }
+          - { name: kernel-errors-4, module: kernel-errors, shard: 4/5 }
+          - { name: kernel-errors-5, module: kernel-errors, shard: 5/5 }
           - { name: daemon-ref-frame, module: daemon-ref-frame }
           - { name: interaction-settle, module: interaction-settle }
           - { name: scroll-edge-state, module: scroll-edge-state }
@@ -131,7 +133,7 @@ jobs:
             --report-dir
             .tmp/mutation/shards
             --expect-shards
-            16
+            18
 
       # The self-test and the artifact download both run before the scoring step,
       # so a failure there would otherwise leave the aggregate lane with no envelope.
