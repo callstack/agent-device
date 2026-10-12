@@ -6,7 +6,7 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createDaemonRuntimeDeps } from '../daemon-composition.ts';
-import { startDaemonRuntimeFixture } from '../daemon/__tests__/daemon-runtime-fixture.ts';
+import { startDaemonRuntimeFixture } from './daemon-composition/daemon-runtime-fixture.ts';
 import type { DaemonRuntimeDepsInput } from '../daemon/server/daemon-runtime.ts';
 
 // The server builds its own store, so capture that instance the same way the shutdown tests do:

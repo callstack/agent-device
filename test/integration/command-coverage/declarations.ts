@@ -539,7 +539,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'custom-scheme event name and JSON payload render in the fixture',
     ),
     macos: macos.contract(
-      'src/daemon/app-event-delivery.test.ts',
+      'src/__tests__/daemon-composition/app-event-delivery.test.ts',
       'trigger-app-event supports macOS and prefers macOS template',
       'macOS app-event dispatch selects the macOS URL template',
     ),
@@ -1057,7 +1057,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'macOS gesture dispatch preserves the one-contact drag plan',
     ),
     tvos: tvos.contract(
-      'src/daemon/__tests__/gesture-admission-parity.test.ts',
+      'src/__tests__/daemon-composition/gesture-admission-parity.test.ts',
       'TV, spatial, watch, desktop, Linux, and web gesture policy stays explicit',
       'the typed Apple gesture policy refuses tvOS multi-touch while preserving the narrower gesture contract',
     ),

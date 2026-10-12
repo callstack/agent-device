@@ -1,0 +1,373 @@
+import { daemonPlatformServicesFixture } from '../../daemon/__tests__/platform-services-fixture.ts';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { test } from 'vitest';
+import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
+import { LeaseRegistry } from '../../daemon/lease-registry.ts';
+import { runRequestHandlerChain } from '../../daemon/request-handler-chain.ts';
+import { getDaemonRouteOwnerFiles } from '../../daemon/route-owner-files.ts';
+import type { DaemonRequest, DaemonResponse } from '../../daemon/daemon-request.ts';
+import { LINUX_DEVICE } from '@agent-device/test-kit/device-fixtures';
+import { makeIosSession, makeSession } from '../../daemon/__tests__/support/session-factories.ts';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
+import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
+import { handleInteractionCommands } from '../../daemon/interaction/index.ts';
+import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
+import { createRequestRuntimeBindings } from '../../daemon/request-runtime-binding.ts';
+import { createRequestDispatchLedger } from '../../daemon/request-dispatch-ledger.ts';
+import { createLocalLinuxToolProvider, withLinuxToolProvider } from '@agent-device/platform-linux';
+import {
+  unavailableBindDevice,
+  unavailableBindExactDevice,
+  unavailableDeviceRuntimeGateway,
+  unavailableInspectFacts,
+} from '../../daemon/__tests__/test-device-runtime-gateway.ts';
+import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
+import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
+import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
+import { eagerClosureOf } from '../eager-import-closure.fixtures.ts';
+import { testCreateCommandSurface } from '../../daemon/__tests__/command-surface-fixture.ts';
+
+function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
+  return {
+    command,
+    token: 'test-token',
+    session: 'chain-test',
+    positionals,
+    flags: {},
+    meta: { requestId: `req-${command}` },
+  };
+}
+
+function makeChainParams(req: DaemonRequest) {
+  const sessionStore = makeSessionStore('agent-device-request-chain-');
+  sessionStore.publish('chain-test', makeIosSession('chain-test'));
+  return {
+    createCommandSurface: testCreateCommandSurface,
+    req,
+    sessionName: 'chain-test',
+    logPath: '/tmp/agent-device-request-chain.log',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    platformServices: daemonPlatformServicesFixture(),
+    invoke: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+    providerScope: {},
+    bindDevice: unavailableBindDevice,
+    inspectFacts: unavailableInspectFacts,
+    bindExactDevice: unavailableBindExactDevice,
+    reconcileOrphanedDeviceClaim: async () => ({
+      status: 'retained' as const,
+      reason: 'test-no-recovery',
+    }),
+    screenRecordingAdmissionLedger: createScreenRecordingAdmissionLedger(),
+    audioProbeAdmissionLedger: createAudioProbeAdmissionLedger(),
+    perfCaptureAdmissionLedger: createPerfCaptureAdmissionLedger(),
+    requestScope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+    retainDeviceExecutionLock: async () => {},
+    throwIfCanceled: () => {},
+    contextFromFlags: () => ({ logPath: '/tmp/agent-device-request-chain.log' }),
+  };
+}
+
+test('route owner files match the production module loaders', () => {
+  const source = fs.readFileSync(
+    new URL('../../daemon/request-handler-chain.ts', import.meta.url),
+    'utf8',
+  );
+  const definitions = [
+    ...source.matchAll(/(\w+): defineDaemonRoute\(\{\s+load: \(\) => import\('([^']+)'\),/g),
+  ];
+  const ownerFiles = getDaemonRouteOwnerFiles();
+  const genericModulePath = /import \* as genericRequestHandlerModule from '([^']+)'/.exec(
+    source,
+  )?.[1];
+  const genericRouteMatches =
+    /generic: defineDaemonRoute\(\{\s+load: async \(\) => genericRequestHandlerModule,/.test(
+      source,
+    );
+
+  assert.equal(definitions.length + 1, Object.keys(ownerFiles).length);
+  for (const [, route, modulePath] of definitions) {
+    assert.ok(route && modulePath);
+    assert.equal(ownerFiles[route as keyof typeof ownerFiles], `src/daemon/${modulePath.slice(2)}`);
+  }
+  assert.ok(genericModulePath && genericRouteMatches);
+  assert.equal(ownerFiles.generic, `src/daemon/${genericModulePath.slice(2)}`);
+
+  assert.ok(
+    !/ownerFile/.test(source),
+    'owner-file paths are tooling-only: keep them in route-owner-files.ts, not the production chain module',
+  );
+});
+
+test('request handler chain keeps interaction routes out of its eager import closure', () => {
+  const chainFile = path.resolve(import.meta.dirname, '../../daemon/request-handler-chain.ts');
+  const closure = eagerClosureOf(chainFile);
+
+  assert.ok(closure.length > 20, 'eager closure walk must reach the request chain');
+  assert.equal(
+    closure.includes(path.resolve(import.meta.dirname, '../../daemon/interaction/index.ts')),
+    false,
+    'interaction routes must stay behind the request chain lazy import',
+  );
+});
+
+test('interaction facade keeps route implementations out of its eager import closure', () => {
+  const facadeFile = path.resolve(import.meta.dirname, '../../daemon/interaction/index.ts');
+  const closure = eagerClosureOf(facadeFile);
+  const snapshotComposition = path.resolve(
+    import.meta.dirname,
+    '../../daemon/snapshot-runtime-capture-input.ts',
+  );
+
+  assert.ok(
+    closure.includes(snapshotComposition),
+    'interaction facade eager closure must include its snapshot composition dependency',
+  );
+
+  for (const routeModule of ['find.ts', 'interaction.ts']) {
+    const routePath = path.resolve(
+      import.meta.dirname,
+      `../../daemon/interaction/internal/${routeModule}`,
+    );
+    assert.equal(
+      fs.existsSync(routePath),
+      true,
+      `${routeModule} must exist for this closure check`,
+    );
+    assert.equal(
+      closure.includes(routePath),
+      false,
+      `${routeModule} must stay behind the interaction facade's deferred delegate`,
+    );
+  }
+});
+
+test('request handler chain routes trace commands to the record-trace family', async () => {
+  const response = await runRequestHandlerChain(makeChainParams(makeRequest('trace', ['start'])));
+
+  assert.equal(response?.ok, true);
+  assert.equal(response?.data?.trace, 'started');
+});
+
+test('request handler chain forwards the deferred provider app catalog to inventory', async () => {
+  const req = makeRequest('apps');
+  req.flags = { platform: 'android', leaseProvider: 'limrun' };
+  const response = await runRequestHandlerChain({
+    ...makeChainParams(req),
+    providerAppCatalog: {
+      supports: (provider) => provider === 'limrun',
+      list: async () => ['Example.apk'],
+    },
+  });
+
+  assert.deepEqual(response, { ok: true, data: { apps: ['Example.apk'] } });
+});
+
+// R61 put `react-native dismiss-overlay` behind the owner's own `tapPoint` admission, and the
+// chain had never forwarded the request's runtime bindings to that route — so the dismissal leg
+// had been reaching a missing gateway ever since R48 moved it off the retired dispatcher. Only
+// the no-overlay path returned early enough to hide it, which is why no suite caught it.
+test('request handler chain forwards the request runtime bindings to react-native', async () => {
+  const inspected: string[] = [];
+  const params = makeChainParams(makeRequest('react-native', ['dismiss-overlay']));
+
+  const response = await runRequestHandlerChain({
+    ...params,
+    inspectFacts: async (device) => {
+      inspected.push(device.id);
+      return await unavailableDeviceRuntimeGateway.inspectFacts(device);
+    },
+  });
+
+  // The bindings reached the route, and the owner's refusal — not a missing gateway — is what
+  // came back. A chain that dropped them would answer `runtime-gateway-missing` instead.
+  assert.equal(inspected.length, 1);
+  assert.equal(response?.ok, false);
+  if (response?.ok === false) {
+    assert.match(response.error.message, /react-native dismiss-overlay is not supported/);
+  }
+});
+
+test('request handler chain leaves generic commands for fallback dispatch', async () => {
+  for (const command of ['back', 'home', 'screenshot', 'scroll']) {
+    const response = await runRequestHandlerChain(makeChainParams(makeRequest(command)));
+
+    assert.equal(response, null, `${command} should fall through to generic dispatch`);
+  }
+});
+
+test('request handler chain routes gesture through the interaction runtime', async () => {
+  const response = await runRequestHandlerChain(makeChainParams(makeRequest('gesture')));
+
+  assert.equal(response?.ok, false);
+  if (response?.ok !== false) throw new Error('Expected invalid gesture response');
+  assert.equal(response.error.code, 'INVALID_ARGS');
+});
+
+test('request handler chain routes swipe through the interaction runtime', async () => {
+  const response = await runRequestHandlerChain(makeChainParams(makeRequest('swipe')));
+
+  assert.equal(response?.ok, false);
+  if (response?.ok !== false) throw new Error('Expected invalid swipe response');
+  assert.equal(response.error.code, 'INVALID_ARGS');
+});
+
+test('swipe rejects repetition inputs that can monopolize the request', async () => {
+  const cases = [
+    {
+      input: { count: 201 },
+      message: 'Expected count to be at most 200.',
+    },
+    {
+      input: { pauseMs: 10_001 },
+      message: 'Expected pauseMs to be at most 10000.',
+    },
+    {
+      input: { count: 7, pauseMs: 10_000 },
+      message: 'Swipe series must fit within 60000ms.',
+    },
+  ];
+
+  for (const { input, message } of cases) {
+    const req = {
+      ...makeRequest('swipe'),
+      input: {
+        from: { x: 10, y: 20 },
+        to: { x: 110, y: 20 },
+        ...input,
+      },
+    };
+    const response = await runRequestHandlerChain(makeChainParams(req));
+
+    assert.equal(response?.ok, false);
+    if (response?.ok !== false) throw new Error('Expected invalid swipe response');
+    assert.equal(response.error.code, 'INVALID_ARGS');
+    assert.equal(response.error.message, message);
+  }
+});
+
+test('duration-less public coordinate swipe retains Linux drag behavior', async () => {
+  const sessionStore = makeSessionStore('agent-device-linux-swipe-');
+  sessionStore.publish('linux-swipe', makeSession('linux-swipe', { device: LINUX_DEVICE }));
+  const drags: number[][] = [];
+  let captureCount = 0;
+  const provider = await createLocalLinuxToolProvider({
+    accessibility: {
+      captureTree: async () => {
+        captureCount += 1;
+        return {
+          nodes: [
+            {
+              index: 0,
+              depth: 0,
+              type: 'Application',
+              rect: { x: 0, y: 0, width: 200, height: 200 },
+              visibleToUser: true,
+            },
+          ],
+          truncated: false,
+          surface: 'desktop',
+        };
+      },
+    },
+    input: {
+      click: async () => {},
+      doubleClick: async () => {},
+      longPress: async () => {},
+      drag: async (...values) => {
+        drags.push(values);
+      },
+      scroll: async () => {},
+      typeText: async () => {},
+      key: async () => {},
+    },
+  });
+
+  // R44: swipe binds its gesture tier before executing, so this drives the REAL Linux owner
+  // through the composed gateway. Linux advertises no `gestureViewport`, so the coordinate frame
+  // still comes from the capture below — the preferred-operation fallback, unchanged.
+  const gateway = createPlatformRuntimeGateway({
+    resolveSessionArtifacts: () => ({
+      outputPath: '/sessions/linux-swipe/app.log',
+      pidPath: '/sessions/linux-swipe/app-log.pid',
+    }),
+    sessionsDir: '/sessions',
+  });
+  let bindCount = 0;
+  const bindings = createRequestRuntimeBindings({
+    dispatchLedger: createRequestDispatchLedger(),
+    gateway: {
+      ...gateway,
+      bind: async (request) => {
+        bindCount += 1;
+        return await gateway.bind(request);
+      },
+    },
+    scope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+    admitDeviceClaim: async () => {},
+  });
+  const response = await withLinuxToolProvider(
+    provider,
+    async () =>
+      await handleInteractionCommands({
+        createCommandSurface: testCreateCommandSurface,
+        platformServices: daemonPlatformServicesFixture(),
+        inspectFacts: bindings.inspectFacts,
+        bindDevice: bindings.bindDevice,
+        req: {
+          ...makeRequest('swipe'),
+          session: 'linux-swipe',
+          input: { from: { x: 10, y: 20 }, to: { x: 110, y: 20 } },
+        },
+        sessionName: 'linux-swipe',
+        sessionStore,
+        contextFromFlags: () => ({}),
+        captureSnapshotForSession: async (_session, _flags, _store, _context, options) => {
+          assert.ok(options.boundCapture);
+          const captured = await options.boundCapture({ options: { surface: 'desktop' } });
+          return makeSnapshotState(captured.nodes ?? []);
+        },
+      }),
+  );
+
+  assert.ok(response?.ok);
+  assert.ok(response.data);
+  assert.equal(response.data.kind, 'fling');
+  assert.equal(response.data.durationMs, 100);
+  assert.equal(bindCount, 1);
+  assert.equal(captureCount, 1);
+  assert.deepEqual(drags, [[10, 20, 110, 20, 100]]);
+});
+
+test('request handler chain routes lease commands to the lease family', async () => {
+  const response = await runRequestHandlerChain({
+    ...makeChainParams({
+      ...makeRequest(INTERNAL_COMMANDS.leaseAllocate),
+      flags: { tenant: 'tenant-a', runId: 'run-a' },
+    }),
+    sessionName: 'other-session',
+  });
+
+  assert.equal(response?.ok, true);
+  assert.equal(typeof response?.data?.lease, 'object');
+});
+
+test('request handler chain routes session commands to the session family', async () => {
+  const response = await runRequestHandlerChain(
+    makeChainParams(makeRequest(INTERNAL_COMMANDS.runtime, ['show'])),
+  );
+
+  assert.equal(response?.ok, true);
+  assert.equal(response?.data?.session, 'chain-test');
+  assert.equal(response?.data?.configured, false);
+});
