@@ -119,6 +119,26 @@ extension RunnerTests {
   }
 
   @MainActor
+  func testInvalidationForErrorDiscardsTheWindowSoTheNextSkippedActivationStampsFresh() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningForeground
+      mainOwned.app = app
+      mainOwned.bundleId = "com.example.app"
+      firstInteractionReadyUptime = ProcessInfo.processInfo.systemUptime - 1
+
+      invalidateCachedTarget(reason: "target_terminated")
+      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
+
+      XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 0)
+      XCTAssertGreaterThanOrEqual(
+        measureStabilizationDuration(),
+        firstInteractionAfterActivateDelay * 0.8
+      )
+    }
+  }
+
+  @MainActor
   func testSkippedActivationWithoutADeadlineStampsTheWindow() {
     withStubbedTargetActivation {
       mainOwned.needsPostSnapshotInteractionDelay = false

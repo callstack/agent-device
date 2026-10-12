@@ -196,6 +196,7 @@ extension RunnerTests {
     mainOwned.bundleId = nil
     mainOwned.processIdentifier = nil
     resetTargetBoundState()
+    firstInteractionReadyUptime = nil
   }
 
   /// State that belongs to the currently bound target and must not outlive it: the text-entry tap
@@ -217,6 +218,9 @@ extension RunnerTests {
     mainOwned.bundleId = nil
     mainOwned.processIdentifier = nil
     resetTargetBoundState()
+    // Only the announced relaunch below leaves a deadline behind a dropped binding, which is what
+    // lets a skipped activation keep it. Any other invalidation starts the next activation fresh.
+    firstInteractionReadyUptime = nil
   }
 
   @MainActor
