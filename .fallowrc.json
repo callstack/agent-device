@@ -49,9 +49,9 @@
       "name": "mutation-pilot",
       "enablers": ["@stryker-mutator/core"],
       "entryPointRole": "test",
-      "entryPoints": ["scripts/mutation/coverage-reporter.ts", "scripts/mutation/seed-setup.ts"],
+      "entryPoints": ["scripts/mutation/coverage-reporter.mjs", "scripts/mutation/seed-setup.ts"],
       "usedExports": [
-        { "pattern": "scripts/mutation/coverage-reporter.ts", "exports": ["strykerPlugins"] }
+        { "pattern": "scripts/mutation/coverage-reporter.mjs", "exports": ["strykerPlugins"] }
       ]
     }
   ],
