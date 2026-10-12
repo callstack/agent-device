@@ -22,8 +22,8 @@ pnpm gate --help
 ```
 
 `check:affected --run` reports coverage obligations without instrumenting; when related tests are
-selected, it runs one capped `vitest related` command. Run local coverage to investigate a specific
-coverage question or CI failure.
+selected, it runs one capped `vitest related` command. Run local coverage, then
+`check:coverage-crap` gates the touched functions (CONTRIBUTING.md).
 
 Two selection traps recur:
 
