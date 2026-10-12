@@ -35,7 +35,7 @@ Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent tha
     T3 Code</a>.
 </p>
 
-<sub>e2e link is an affiliate link. Integration details: [e2e](https://e2e.tester.army/docs) · [T3 Code](https://github.com/pingdotgg/t3code/blob/main/docs/user/devices.md).</sub>
+<sub>Integration details: [e2e](https://e2e.tester.army/docs) · [T3 Code](https://github.com/pingdotgg/t3code/blob/main/docs/user/devices.md).</sub>
 
 ## Quick start
 
