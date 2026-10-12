@@ -379,6 +379,15 @@ The device-lane test reads each export's transform-applied size back through AVF
 `resolvedRenderSize` the overlay tool uses — so a `rot90` panel is compared upright rather than on its
 sideways coding grid, and no second MP4 geometry parser is added to the shipped packages.
 
+A quarter-turn transform can leave the upright frame outside a zero-origin composition canvas.
+The Duo inner capture has a `2006x2852` natural size and transform `[0, 1, -1, 0, 0, 0]`, which
+places its upright `2852x2006` bounds at `x=-2852`. Applying that transform without translating the
+bounds into the render canvas clips the source content and trips the compositor's all-black check
+(#2774). The overlay now derives its render size and origin translation from the same transformed
+bounds. Native export regressions cover an identity transform and both translated and
+negative-origin quarter turns, asserting upright source content, unchanged geometry, and drawn
+touches.
+
 ## Verified on a booted Duo
 
 Closed pose: `screenshot` moved from `669x951` luma 0.09 to `466x678` luma 65.8; a tap on Safari's
