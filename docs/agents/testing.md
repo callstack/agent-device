@@ -125,9 +125,8 @@ worker process, so a case that never returns or kills its process is reported as
 against the exact input. Promote a discovered case with the command the harness prints — never
 hand-copy an unshrunk input.
 
-Weekly kernels live in `scripts/mutation/modules.ts`; PR canary triggers are `LANE_TOOLING` in
-`scripts/mutation/run.ts`. Scores are advisory; incomplete sweeps fail. Line coverage cannot prove
-test strength.
+Scope: `scripts/mutation/modules.ts` (weekly), `scripts/mutation/run.ts#LANE_TOOLING` (PR canary).
+Scores are advisory; incomplete sweeps fail. Coverage does not prove test strength.
 
 ## Before editing a shared module
 
