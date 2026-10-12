@@ -271,10 +271,51 @@ test('a ref the second observation cannot re-measure is refused, never self-agre
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
       assert.equal(details?.dispatched, 'no');
+      // Nothing was measured, so nothing is reported: a caller reading `movedToRect` would take the
+      // stale frame position for a fresh observation of where the target went.
+      assert.equal(details?.movedToRect, undefined);
+      // The `@ref` branch of the recovery, asserted on a real refusal rather than on the string: the
+      // hint's only test was the contracts unit suite, and the hint now lives beside this refusal.
+      assert.match(String(details?.hint), /snapshot -i/);
+      assert.match(String(details?.hint), /ref frame/);
       return true;
     },
   );
   assert.deepEqual(device.taps(), [], 'an unmeasured position licenses no tap');
+});
+
+test('a surface that arrives between the two looks is not rest', async () => {
+  // Rest is one position on one surface. The screening already refuses to compare positions across
+  // surfaces for exactly the #2438 reason — a system sheet can carry the same control at the same
+  // rect — and the two looks that certify rest are the same comparison. Without the surface check, a
+  // sheet presented during the sample gap would let a press land on it while reporting agreement.
+  const sheet = 'com.apple.springboard';
+  const device = createGuardedDevice({
+    stored: slideTree(MID_FLIGHT_X),
+    trees: [
+      // The resolution's own capture, then the two looks: the first on the app's content at rest,
+      // the second on a sheet presented during the sample gap — same control, same rect, another
+      // surface.
+      slideTree(MID_FLIGHT_X),
+      slideTree(RESTING_X),
+      slideTree(RESTING_X, { surfaceBundleId: sheet }),
+    ],
+    ...DISTURBING_HISTORY,
+  });
+
+  await assert.rejects(
+    () => device.press('selector'),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+      assert.equal(details?.dispatched, 'no');
+      // The sheet's rect is not somewhere the app's target moved to, so the refusal reports no
+      // position rather than one measured on a presentation this press never asked about.
+      assert.equal(details?.movedToRect, undefined);
+      return true;
+    },
+  );
+  assert.deepEqual(device.taps(), [], 'the sheet never received a tap');
 });
 
 test('a target the wait loses is refused by resolution, not by a motion refusal', async () => {
@@ -346,6 +387,9 @@ test('a replacement that took the ref at the frame coordinates is refused, not a
     (error: unknown) => {
       const details = (error as { details?: Record<string, unknown> }).details;
       assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+      // A look that measured no target reports no position: the frame rect is the value the whole
+      // window exists to doubt, and publishing it as `movedToRect` would read as a fresh observation.
+      assert.equal(details?.movedToRect, undefined);
       return true;
     },
   );

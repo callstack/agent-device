@@ -103,6 +103,13 @@ async function readMovingTargetGate(
  * `nodeRectByIdentity` then answers fail-closed — absent, ambiguous and unmeasurable all read as
  * "not shown at rest" — because a guard whose failure mode is a refused tap must never grant rest
  * on a guess.
+ *
+ * The claim is an inference from one tree, not stability evidence: an animation that has not moved
+ * the control yet reads here exactly as a finished transition does, and no observation available at
+ * this instant separates them. The tier that carries evidence is `resolveAtRestTarget`, which spends
+ * two fresh observations and requires them to agree on a position and a surface. This one buys the
+ * case it can decide for free — the previous transition already finished, which is what the large
+ * majority of presses inside the window are — and sends everything else to be measured.
  */
 function baselineShowsTargetAtRest(
   baseline: MovingTargetBaseline,
@@ -150,9 +157,25 @@ async function resolveAtRestTarget(
   const first = await reObserveTarget(runtime, options, params);
   if (!first.measured) throw motionRefusal(resolved, undefined, now(runtime) - waitedFrom);
   await sleep(runtime, MOVING_TARGET_GATE_SAMPLE_GAP_MS);
-  const second = await reObserveTarget(runtime, options, params);
+  const second = onSameSurface(first, await reObserveTarget(runtime, options, params));
   if (second.measured && movingTargetRectsStable(first.rect, second.rect)) return second.resolved;
   throw motionRefusal(resolved, second.rect, now(runtime) - waitedFrom);
+}
+
+/**
+ * Rest is one position on one surface, which is why the screening refuses to compare positions
+ * across surfaces at all (#2438). A look taken on another presentation — a system sheet arriving
+ * during the sample gap can carry the same control at the same rect — therefore measures nothing
+ * about where this target came to rest, and is demoted to the shape that already means that: it
+ * cannot certify agreement, and no position from it is reported as somewhere the target moved to.
+ */
+function onSameSurface(
+  first: MovingTargetObservation & { measured: true },
+  next: MovingTargetObservation,
+): MovingTargetObservation {
+  return next.measured && next.surfaceBundleId === first.surfaceBundleId
+    ? next
+    : { measured: false, rect: undefined, resolved: next.resolved };
 }
 
 /** One look at the target: what it resolved to, and whether that look measured a position. */
@@ -162,14 +185,24 @@ type MovingTargetObservation = MovingTargetMeasurement & {
 
 /** Whether a look produced a position of its own, or nothing to compare against. */
 type MovingTargetMeasurement =
-  /** The position this observation's own capture reported for the target. */
-  | { measured: true; rect: Rect }
+  /** The position this observation's own capture reported for the target, on that capture's surface. */
+  | MovingTargetMeasured
   /**
    * No position of its own. Two of these would "agree" trivially — rest certified by a
    * non-measurement, the one outcome the gate must never produce — so the first of them ends the
    * recheck, and a refusal reports no `movedToRect` rather than a stale one.
    */
   | { measured: false; rect: undefined };
+
+/**
+ * A look that measured the target: where it put it, and on which surface. The surface rides along
+ * because a rect is only comparable to one measured on the same presentation (#2438).
+ */
+type MovingTargetMeasured = {
+  measured: true;
+  rect: Rect;
+  surfaceBundleId: string | undefined;
+};
 
 /**
  * One observation of the same target, asked as the original question rather than a narrower one.
@@ -190,8 +223,11 @@ async function reObserveTarget(
   if (options.target.kind !== 'ref') {
     const resolved = await resolveInteractionTarget(runtime, options, params);
     const rect = resolvedRect(resolved);
+    // A selector resolution measured its target on the surface it resolved against, which it
+    // publishes as `preAction` along with the tree.
+    const surfaceBundleId = resolved.preAction?.surfaceBundleId;
     return rect
-      ? { measured: true, resolved, rect }
+      ? { measured: true, resolved, rect, surfaceBundleId }
       : { measured: false, resolved, rect: undefined };
   }
   const { snapshot } = await captureInteractionSnapshot(runtime, options, true);
@@ -226,7 +262,9 @@ function measureRefObservation(
     captured !== undefined &&
     movingTargetRectsStable(captured.rect, rect) &&
     localIdentitiesEqual(readNodeLocalIdentity(captured), readNodeLocalIdentity(dispatchedNode));
-  return measured ? { measured: true, rect } : { measured: false, rect: undefined };
+  return measured
+    ? { measured: true, rect, surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
+    : { measured: false, rect: undefined };
 }
 
 function resolvedRect(resolved: ResolvedInteractionTarget): Rect | undefined {
