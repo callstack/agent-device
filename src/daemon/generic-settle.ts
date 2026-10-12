@@ -13,7 +13,9 @@ import {
   settleFlagGuardResponse,
 } from './interaction/index.ts';
 import type { BoundContextFromFlags } from './context.ts';
+import type { RuntimeAdmissionBindings } from './request-runtime-binding.ts';
 import type { DaemonPlatformServices } from './platform-services.ts';
+import { resolveSettleObservationCapture } from './settle-observation-capture.ts';
 import { issueSettleRefs } from './session-snapshot.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
@@ -66,7 +68,7 @@ type GenericSettleContext = {
   sessionStore: SessionStore;
   contextFromFlags: BoundContextFromFlags;
   platformServices: DaemonPlatformServices;
-};
+} & RuntimeAdmissionBindings;
 
 /**
  * Rejects an orphaned `--settle-quiet` up front (the shared flag grammar), and
@@ -120,10 +122,25 @@ async function observeSettled(
   return refsGeneration === undefined ? observation : { ...observation, refsGeneration };
 }
 
+/**
+ * Resolves the observation's capture before the runtime is constructed, so the loop reads the screen
+ * through the same producer the caller's next command reads it through (#3510). `back` and
+ * `scroll <direction>` are the cells that need it: their action use is the movement alone.
+ * `scroll top|bottom` and `scroll --until` already require `captureSnapshot` for their between-pass
+ * verification; there this is the request's second admit-and-bind for one operation, served from the
+ * gateway's binding cache rather than a second device acquisition.
+ */
 async function createGenericSettleRuntime(
   context: GenericSettleContext,
 ): Promise<Awaited<ReturnType<typeof createInteractionRuntime>> | undefined> {
   try {
+    const boundCapture = await resolveSettleObservationCapture({
+      command: context.req.command,
+      session: context.session,
+      inspectFacts: context.inspectFacts,
+      platformServices: context.platformServices,
+      bindDevice: context.bindDevice,
+    });
     return await createInteractionRuntime({
       createCommandSurface: context.createCommandSurface,
       req: context.req,
@@ -134,6 +151,7 @@ async function createGenericSettleRuntime(
       contextFromFlags: context.contextFromFlags,
       platformServices: context.platformServices,
       captureSnapshotForSession,
+      settleObservationCapture: boundCapture,
     });
   } catch {
     return undefined;

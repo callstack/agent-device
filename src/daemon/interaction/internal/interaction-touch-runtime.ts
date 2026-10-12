@@ -32,6 +32,7 @@ import {
   type InteractionResponsePayloads,
 } from './interaction-touch-response.ts';
 import type { BoundTouchExecutor } from '../../touch-runtime.ts';
+import type { BoundSnapshotCapture } from '../../snapshot-runtime-binding.ts';
 import { noActiveSessionError } from '@agent-device/kernel/contracts';
 
 /**
@@ -48,6 +49,8 @@ export async function dispatchRuntimeInteraction<
   },
   options: {
     touchExecutor: BoundTouchExecutor;
+    /** The request's own observation capture when its action use carries none (#3510). */
+    settleObservationCapture?: BoundSnapshotCapture;
     androidFreshnessBaseline?: SessionState['snapshot'];
     /**
      * Present when the action targets a `@ref`: if Android dialog recovery
@@ -75,6 +78,7 @@ export async function dispatchRuntimeInteraction<
   const runtime = await createInteractionRuntimeForRoute({
     ...params,
     touchExecutor: options.touchExecutor,
+    settleObservationCapture: options.settleObservationCapture,
     consumedCapture,
   });
   const actionStartedAt = Date.now();
@@ -134,6 +138,7 @@ export async function dispatchRuntimeInteraction<
     const corroboratedResponse = await buildRuntimeIosCorroboratedResponse({
       error: appError,
       handlerParams: params,
+      observationCapture: options.settleObservationCapture,
       session,
       target: options.iosTapCorroboration?.target,
       extra: options.iosTapCorroboration?.extra,
@@ -150,6 +155,8 @@ async function buildRuntimeIosCorroboratedResponse(params: {
   handlerParams: InteractionRouteInput & {
     captureSnapshotForSession: CaptureSnapshotForSession;
   };
+  /** The capture this request's own pre-action baseline was taken with, when it holds one (#3510). */
+  observationCapture: BoundSnapshotCapture | undefined;
   session: SessionState;
   target: InteractionTarget | undefined;
   extra: Record<string, unknown> | undefined;
@@ -168,6 +175,7 @@ async function buildRuntimeIosCorroboratedResponse(params: {
     sessionStore: params.handlerParams.sessionStore,
     contextFromFlags: params.handlerParams.contextFromFlags,
     captureSnapshotForSession: params.handlerParams.captureSnapshotForSession,
+    boundCapture: params.observationCapture,
   });
   if (!corroboration) return undefined;
 

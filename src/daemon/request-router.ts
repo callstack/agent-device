@@ -647,6 +647,10 @@ async function dispatchGenericForLockedScope(params: {
     executePlatformCommand: runtimeExecution.execute,
     androidObservation,
     createCommandSurface,
+    // The settle observation binds its own capture on this route, so it needs the same
+    // request-scoped seams the action's admission above already used (#3510).
+    inspectFacts: lockedScope.inspectFacts,
+    bindDevice: lockedScope.bindDevice,
     ...(runtimeExecution.recorded ? { recordedRequest: runtimeExecution.recorded } : {}),
   });
   return dispatchResponse;

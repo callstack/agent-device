@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { handleInteractionCommands } from '../../index.ts';
 import {
   makeIosSession,
@@ -22,6 +23,7 @@ import {
   snapshotPayload,
 } from './interaction-ios-tap-outcome-fixtures.ts';
 import {
+  appCaptureComparisonIdentity,
   appCaptureComparisonKey,
   systemSurfaceCaptureComparisonKey,
 } from '../../../__tests__/ios-comparison-key-fixture.ts';
@@ -293,6 +295,80 @@ test('a changed capture from a different iOS backend keeps the tap failure', asy
   if (response && !response.ok) expect(response.error.code).toBe('XCTEST_RECORDED_FAILURE');
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(0);
 });
+
+/**
+ * #3510: `--settle` on a coordinate press binds the request's own capture, and the pre-action
+ * baseline the settle plan takes goes through it. The corroboration probe is an observation too, so
+ * it answers through the same capture AND under the same backend pin: an unkeyed baseline next to a
+ * keyed capture, or a keyed baseline next to an unkeyed one, is an identity mismatch that would
+ * report a tap that landed as a recorded failure.
+ *
+ * A private-AX baseline is the unkeyed half of that pair: a pinned capture leaves the planned route,
+ * and an app capture off that route carries no identity (#2438). Dropping the pin whenever a bound
+ * capture exists would answer it from the bridge and refuse the rescue the pin exists to earn.
+ */
+test.each([
+  {
+    name: 'a request-bound bridge capture corroborates its own keyed baseline',
+    baseline: () =>
+      buildSnapshotState(
+        { ...snapshotPayload(profileNodes), comparisonIdentity: identity() },
+        { snapshotInteractiveOnly: false },
+      ),
+    after: () => ({ ...snapshotPayload(imageViewerNodes), comparisonIdentity: identity() }),
+    expectedPreferredBackend: undefined,
+  },
+  {
+    name: 'a private-AX baseline pins the backend of the request-bound capture',
+    baseline: () =>
+      buildSnapshotState(snapshotPayload(profileNodes, 'private-ax'), {
+        snapshotInteractiveOnly: false,
+      }),
+    // A pinned capture leaves the planned route, so the runner answers and stamps no identity.
+    after: () => snapshotPayload(imageViewerNodes, 'private-ax'),
+    expectedPreferredBackend: 'private-ax',
+  },
+] as const)(
+  'the corroboration probe answers $name',
+  async ({ baseline, after, expectedPreferredBackend }) => {
+    const sessionName = 'ios-corroboration-bound-capture';
+    const sessionStore = makeSessionStore();
+    sessionStore.publish(
+      sessionName,
+      makeIosSession(sessionName, { appBundleId: 'com.example.app', snapshot: baseline() }),
+    );
+    const askedWith: Record<string, unknown>[] = [];
+    const boundCapture = vi.fn(async () => after());
+
+    const corroboration = await corroborateIosTapFailure({
+      error: new AppError('XCTEST_RECORDED_FAILURE', 'tap failed'),
+      command: 'click',
+      requestId: undefined,
+      flags: {},
+      ref: sessionStore.lookup(sessionName)!,
+      sessionStore,
+      contextFromFlags,
+      // Mirrors the real seam: one capture ask, answered by the bound capture under the pin.
+      captureSnapshotForSession: async (_ref, _flags, _store, _context, options) => {
+        askedWith.push(options as unknown as Record<string, unknown>);
+        return buildSnapshotState(await options.boundCapture!([] as never), {
+          snapshotInteractiveOnly: options.interactiveOnly,
+        });
+      },
+      boundCapture: boundCapture as unknown as Parameters<
+        typeof corroborateIosTapFailure
+      >[0]['boundCapture'],
+    });
+
+    expect(boundCapture).toHaveBeenCalledTimes(1);
+    expect(askedWith[0]?.preferredBackend).toBe(expectedPreferredBackend);
+    expect(corroboration?.warning).toMatch(/post-action accessibility capture changed/);
+  },
+);
+
+function identity() {
+  return appCaptureComparisonIdentity(IOS_SIMULATOR.id, 'com.example.app');
+}
 
 test('a producer or generation switch cannot corroborate a failed tap', async () => {
   const sessionName = 'ios-comparison-identity-mismatch';

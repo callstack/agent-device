@@ -201,6 +201,29 @@ export async function resolveBoundSnapshotCaptureRuntime(
 }
 
 /**
+ * Binds a plan that the caller already admitted, and keeps only its capture operation. For a caller
+ * that owns its refusal path — an optional capture whose refusal degrades an observation instead of
+ * failing a command — this is the half of `admitAndBindSnapshotCapture` that carries no
+ * command-facing refusal wording, and so spends none of the host probes that wording builds. A
+ * caller with a session, or one that owes a readiness check, uses the full form instead.
+ */
+export async function bindAdmittedSnapshotCapture(
+  params: Readonly<{
+    admission: AdmittedRuntimePlan<SnapshotRuntimePlan | SelectorCaptureRuntimePlan>;
+    bindDevice?: BindDeviceRuntime;
+    platformServices: DaemonPlatformServices;
+  }>,
+): Promise<BoundSnapshotCapture> {
+  const bound = await bindSnapshotCaptureRuntime(
+    params.bindDevice,
+    params.admission,
+    undefined,
+    params.platformServices,
+  );
+  return async (input: CaptureSnapshotInput) => await bound.captureSnapshot(input);
+}
+
+/**
  * Binds only an admitted plan, on the device it was admitted for: the token is minted by
  * `admitRuntimePlan` alone and unwrapped by exact identity, so nothing that was not admitted —
  * a bare plan, a separate device, a look-alike or Proxy — can reach the capture operations.

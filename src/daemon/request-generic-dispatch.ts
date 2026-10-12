@@ -26,6 +26,7 @@ import { buildActionEventResult } from '@agent-device/session-journal/session-ev
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { GenericPlatformExecution, RecordedGenericRequest } from './generic-leaf-execution.ts';
+import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from './request-runtime-binding.ts';
 
 export async function dispatchGenericCommand(params: {
   req: DaemonRequest;
@@ -43,6 +44,9 @@ export async function dispatchGenericCommand(params: {
   recordedRequest?: RecordedGenericRequest;
   androidObservation?: AndroidObservationAdapter;
   platformServices: DaemonPlatformServices;
+  /** The request-scoped runtime seams `--settle` admits its own observation capture through (#3510). */
+  inspectFacts: InspectDeviceRuntimeFacts;
+  bindDevice: BindDeviceRuntime;
 }): Promise<DaemonResponse> {
   const { req, ref: sessionRef, logPath, sessionStore, contextFromFlags } = params;
   const session = sessionStore.requireCurrent(sessionRef);
@@ -68,6 +72,8 @@ export async function dispatchGenericCommand(params: {
     command: platformCommand,
     flags: req.flags,
     createCommandSurface: params.createCommandSurface,
+    inspectFacts: params.inspectFacts,
+    bindDevice: params.bindDevice,
   });
   if ('response' in settlePlan) return settlePlan.response;
   const preflightReadiness = await ensureNoAndroidBlockingDialogReady(
@@ -224,6 +230,8 @@ async function planGenericSettleObservation(params: {
   platformServices: DaemonPlatformServices;
   command: string;
   flags: CommandFlags | undefined;
+  inspectFacts: InspectDeviceRuntimeFacts;
+  bindDevice: BindDeviceRuntime;
 }): Promise<
   { response: DaemonResponse } | { observe?: () => Promise<SettleObservation | undefined> }
 > {

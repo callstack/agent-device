@@ -12,6 +12,7 @@ import { isLocalIosRunnerSession } from '../../direct-ios-selector.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../../session-store.ts';
 import type { SessionRef, SessionState } from '../../session-state.ts';
+import type { BoundSnapshotCapture } from '../../snapshot-runtime-binding.ts';
 import type { BoundContextFromFlags, CaptureSnapshotForSession } from './types.ts';
 
 const XCTEST_RECORDED_FAILURE = 'XCTEST_RECORDED_FAILURE';
@@ -39,6 +40,12 @@ export type IosTapCorroborationParams = {
   sessionStore: SessionStore;
   contextFromFlags: BoundContextFromFlags;
   captureSnapshotForSession: CaptureSnapshotForSession;
+  /**
+   * The capture this request's own pre-action baseline was taken with, when it holds one. The probe
+   * is an observation too and answers through it: a keyed baseline next to an unkeyed legacy capture
+   * is an identity mismatch, which would report a tap that landed as a recorded failure (#3510).
+   */
+  boundCapture?: BoundSnapshotCapture;
 };
 
 export type IosTapCorroboration = {
@@ -131,10 +138,15 @@ async function captureCorroborationSnapshot(
       params.contextFromFlags,
       {
         interactiveOnly: presentation?.interactiveOnly ?? true,
-        // Evidence comparison is only valid same-backend, and the recorded-failure
-        // screens are exactly where the capture plan flips between XCTest and
-        // private-AX (the penalty boundary) — pin the probe to the baseline's
-        // backend instead of failing closed on the mismatch.
+        // Two independent facts about the one capture, both forwarded: which implementation answers
+        // (the request's own binding when it holds one) and which backend that capture must present.
+        ...(params.boundCapture ? { boundCapture: params.boundCapture } : {}),
+        // Evidence comparison is only valid same-backend, and the recorded-failure screens are
+        // exactly where the capture plan flips between XCTest and private-AX (the penalty
+        // boundary) — pin the probe to the baseline's backend instead of failing closed on the
+        // mismatch. The pin is an option OF the capture, so a bound capture takes it too: dropping
+        // it there would answer a private-AX baseline with a bridge capture, whose comparison
+        // identity no unkeyed runner baseline can match.
         ...(preferredBackend ? { preferredBackend } : {}),
         signal: getRequestSignal(params.requestId),
       },

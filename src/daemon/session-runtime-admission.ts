@@ -3,6 +3,7 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import type {
   RuntimeOperationFact,
   RuntimeOperationKey,
+  RuntimeOperationUnavailability,
 } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
@@ -124,7 +125,7 @@ export function unwrapAdmittedRuntimePlan<Plan extends RuntimePlan>(
 export type RefusedRuntimePlan<Plan extends RuntimePlan> = Readonly<{
   admitted: false;
   operation: Plan['use']['required'][number];
-  fact: RuntimeOperationFact;
+  fact: RuntimeOperationUnavailability;
 }>;
 
 /**

@@ -16,6 +16,7 @@ import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import type { SessionRef, SessionState } from '../session-state.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
+import { selectorCaptureFixture } from './selector-capture-fixture.ts';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 // #1638 `--settle` on the GENERIC daemon route (scroll/back): the settled diff,
@@ -90,14 +91,21 @@ async function emulateCaptureSnapshotForSession(
   ref: SessionRef,
   flags: CommandFlags | undefined,
   sessionStore: SessionStore,
-  options: { interactiveOnly: boolean },
+  options: {
+    interactiveOnly: boolean;
+    boundCapture?: Parameters<typeof captureSnapshotForSession>[4]['boundCapture'];
+  },
 ) {
   captureObservations.push({
     postGestureStabilizationPending:
       sessionStore.requireCurrent(ref).postGestureStabilization !== undefined,
   });
   const effectiveFlags = { ...(flags ?? {}), snapshotInteractiveOnly: options.interactiveOnly };
-  const snapshotData = (await mockDispatch('snapshot')) as Parameters<typeof buildSnapshotState>[0];
+  // Same rule the real seam applies: a request-bound capture is the tree this request reads, and
+  // only a request that holds none dispatches for one (#3510).
+  const snapshotData = options.boundCapture
+    ? await options.boundCapture({})
+    : ((await mockDispatch('snapshot')) as Parameters<typeof buildSnapshotState>[0]);
   const snapshot = buildSnapshotState(snapshotData ?? {}, effectiveFlags);
   setSessionSnapshot(sessionStore.requireCurrent(ref), snapshot);
   return snapshot;
@@ -138,8 +146,9 @@ function seedSession(
   sessionName: string,
   sessionStore: SessionStore,
   baseline: GenericSettleTree = { nodes: BEFORE_NODES },
+  overrides?: Partial<SessionState>,
 ): SessionState {
-  const session = makeIosSession(sessionName);
+  const session = makeIosSession(sessionName, overrides);
   setSessionSnapshot(session, buildSnapshotState(snapshotPayload(baseline), {}));
   activateCompleteRefFrame(session);
   sessionStore.publish(sessionName, session);
@@ -172,13 +181,28 @@ function mockSurfaceDispatch(tree: GenericSettleTree, result: Record<string, unk
   );
 }
 
+/**
+ * The default gateway these cases run against: an owner whose settle captures arrive through the
+ * emulated `captureSnapshotForSession` this file drives, i.e. one whose bound capture plan is
+ * refused. The cases that pin the admitted capture name their own fixture (#3510).
+ */
+function legacyCaptureRuntimeBindings() {
+  return selectorCaptureFixture({
+    capture: { available: false, reason: 'unsupported-platform-leaf' },
+    withoutActiveApp: { available: false, reason: 'unsupported-platform-leaf' },
+  });
+}
+
 async function dispatchGeneric(params: {
   sessionName: string;
   sessionStore: SessionStore;
-  session: SessionState;
   command: string;
   positionals?: string[];
   flags?: CommandFlags;
+  /** The request-scoped runtime seams `--settle` admits its own observation capture through. */
+  runtimeBindings?: Readonly<
+    Pick<Parameters<typeof dispatchGenericCommand>[0], 'inspectFacts' | 'bindDevice'>
+  >;
 }): Promise<DaemonResponse> {
   const req: DaemonRequest = {
     token: 't',
@@ -197,6 +221,8 @@ async function dispatchGeneric(params: {
     sessionStore: params.sessionStore,
     contextFromFlags,
     executePlatformCommand: platformExecution,
+    ...legacyCaptureRuntimeBindings(),
+    ...params.runtimeBindings,
   });
 }
 
@@ -222,7 +248,7 @@ beforeEach(() => {
 test('scroll --settle answers with the settled diff against the stored pre-action tree', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-scroll';
-  const session = seedSession(sessionName, sessionStore);
+  seedSession(sessionName, sessionStore);
   // Every settle capture sees the post-scroll tree; the diff baseline is the
   // tree already stored on the session, not a capture taken here.
   mockCommandDispatch([AFTER_NODES]);
@@ -230,7 +256,6 @@ test('scroll --settle answers with the settled diff against the stored pre-actio
   const response = await dispatchGeneric({
     sessionName,
     sessionStore,
-    session,
     command: 'scroll',
     positionals: ['down'],
     flags: { ...SETTLE_FLAGS },
@@ -268,7 +293,7 @@ test('scroll --settle answers with the settled diff against the stored pre-actio
 test('back --settle answers with the settled diff alongside the command result', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-back';
-  const session = seedSession(sessionName, sessionStore);
+  seedSession(sessionName, sessionStore);
   mockDispatch.mockImplementation(async (command) => {
     if (command === 'snapshot')
       return { nodes: AFTER_NODES, backend: 'xctest', producer: 'apple-runner' };
@@ -278,7 +303,6 @@ test('back --settle answers with the settled diff alongside the command result',
   const response = await dispatchGeneric({
     sessionName,
     sessionStore,
-    session,
     command: 'back',
     flags: { ...SETTLE_FLAGS },
   });
@@ -382,7 +406,7 @@ function expectNoPublishedRefFrame(sessionStore: SessionStore, sessionName: stri
 test('scroll --settle attaches no diff across an app-to-sheet surface change and discloses it', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-scroll-to-sheet';
-  const session = seedSession(sessionName, sessionStore);
+  seedSession(sessionName, sessionStore);
   // The stored pre-action tree is app content; every settle capture reads the sheet now presented
   // over that still-foreground app.
   mockSurfaceDispatch({ nodes: WEB_SIGN_IN_SHEET_NODES, systemSurface: WEB_SIGN_IN_SHEET });
@@ -390,7 +414,6 @@ test('scroll --settle attaches no diff across an app-to-sheet surface change and
   const response = await dispatchGeneric({
     sessionName,
     sessionStore,
-    session,
     command: 'scroll',
     positionals: ['down'],
     flags: { ...SETTLE_FLAGS },
@@ -412,7 +435,7 @@ test('scroll --settle attaches no diff across a sheet-to-app surface change and 
   const sessionName = 'generic-settle-scroll-from-sheet';
   // The baseline is the sheet this scroll acts on; the settled tree is the app content that
   // returns once the sheet completes and dismisses itself.
-  const session = seedSession(sessionName, sessionStore, {
+  seedSession(sessionName, sessionStore, {
     nodes: WEB_SIGN_IN_SHEET_NODES,
     systemSurface: WEB_SIGN_IN_SHEET,
   });
@@ -421,7 +444,6 @@ test('scroll --settle attaches no diff across a sheet-to-app surface change and 
   const response = await dispatchGeneric({
     sessionName,
     sessionStore,
-    session,
     command: 'scroll',
     positionals: ['down'],
     flags: { ...SETTLE_FLAGS },
@@ -444,7 +466,7 @@ test('scroll --settle attaches no diff across a sheet-to-app surface change and 
 test('back --settle attaches no diff across an app-to-sheet surface change and discloses it', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-back-to-sheet';
-  const session = seedSession(sessionName, sessionStore);
+  seedSession(sessionName, sessionStore);
   mockSurfaceDispatch(
     { nodes: WEB_SIGN_IN_SHEET_NODES, systemSurface: WEB_SIGN_IN_SHEET },
     {
@@ -457,7 +479,6 @@ test('back --settle attaches no diff across an app-to-sheet surface change and d
   const response = await dispatchGeneric({
     sessionName,
     sessionStore,
-    session,
     command: 'back',
     flags: { ...SETTLE_FLAGS },
   });
@@ -478,7 +499,7 @@ test('back --settle attaches no diff across an app-to-sheet surface change and d
 test('back --settle attaches no diff across a sheet-to-app surface change and discloses it', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-back-from-sheet';
-  const session = seedSession(sessionName, sessionStore, {
+  seedSession(sessionName, sessionStore, {
     nodes: WEB_SIGN_IN_SHEET_NODES,
     systemSurface: WEB_SIGN_IN_SHEET,
   });
@@ -494,7 +515,6 @@ test('back --settle attaches no diff across a sheet-to-app surface change and di
   const response = await dispatchGeneric({
     sessionName,
     sessionStore,
-    session,
     command: 'back',
     flags: { ...SETTLE_FLAGS },
   });
@@ -513,13 +533,12 @@ test('back --settle attaches no diff across a sheet-to-app surface change and di
 test('the settle observation runs after the post-gesture stabilization marker', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-order';
-  const session = seedSession(sessionName, sessionStore);
+  seedSession(sessionName, sessionStore);
   mockCommandDispatch([AFTER_NODES]);
 
   await dispatchGeneric({
     sessionName,
     sessionStore,
-    session,
     command: 'scroll',
     positionals: ['down'],
     flags: { ...SETTLE_FLAGS },
@@ -532,22 +551,93 @@ test('the settle observation runs after the post-gesture stabilization marker', 
   expect(captureObservations[0]?.postGestureStabilizationPending).toBe(true);
 });
 
-test('scroll without --settle takes no observation captures and issues no refs', async () => {
+test('scroll --settle observes through the request-bound capture, once admitted', async () => {
   const sessionStore = makeSessionStore();
-  const sessionName = 'generic-settle-off';
-  const session = seedSession(sessionName, sessionStore);
+  const sessionName = 'generic-settle-bound-capture';
+  // A tracked app: the plan this request must admit is the active-app one. The fixture refuses the
+  // without-active-app plan, so an observation that resolved the wrong cell would degrade to the
+  // legacy dispatch below and fail these assertions rather than pass by accident.
+  seedSession(
+    sessionName,
+    sessionStore,
+    { nodes: BEFORE_NODES },
+    { appBundleId: 'com.example.app' },
+  );
   mockCommandDispatch([AFTER_NODES]);
+  const runtimeBindings = selectorCaptureFixture({
+    withoutActiveApp: { available: false, reason: 'owner-capability-missing' },
+    snapshot: () => ({
+      nodes: AFTER_NODES,
+      backend: 'xctest',
+      producer: 'simulator-ax-bridge',
+    }),
+  });
 
   const response = await dispatchGeneric({
     sessionName,
     sessionStore,
-    session,
     command: 'scroll',
     positionals: ['down'],
+    flags: { ...SETTLE_FLAGS },
+    runtimeBindings,
+  });
+
+  const settle = expectOkData(response).settle as SettlePayload;
+  expect(settle.settled).toBe(true);
+  // One admit-and-bind for the whole observation, and every capture taken through it: the settled
+  // tree and the tree the caller's next `snapshot` reads are the same producer's output (#3510).
+  expect(runtimeBindings.binds.length).toBe(1);
+  expect(runtimeBindings.captures.length).toBe(settle.captures);
+  expect(mockDispatch).not.toHaveBeenCalledWith('snapshot');
+  expect((sessionStore.get(sessionName) as SessionState).snapshot?.producer).toBe(
+    'simulator-ax-bridge',
+  );
+});
+
+test('scroll --settle still observes when the owner cannot capture', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-unbound-capture';
+  seedSession(sessionName, sessionStore);
+  mockCommandDispatch([AFTER_NODES]);
+  const runtimeBindings = selectorCaptureFixture({
+    capture: { available: false, reason: 'unsupported-platform-leaf' },
+  });
+
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    command: 'scroll',
+    positionals: ['down'],
+    flags: { ...SETTLE_FLAGS },
+    runtimeBindings,
+  });
+
+  // The owner's own snapshot path is its only snapshot path: the observation stays complete and
+  // nothing pretends a second capture implementation produced it.
+  expect(expectOkData(response).settle).toMatchObject({ settled: true });
+  expect(runtimeBindings.binds).toEqual([]);
+  expect(mockDispatch).toHaveBeenCalledWith('snapshot');
+});
+
+test('scroll without --settle takes no observation captures and issues no refs', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-off';
+  seedSession(sessionName, sessionStore);
+  mockCommandDispatch([AFTER_NODES]);
+  const runtimeBindings = selectorCaptureFixture();
+
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    command: 'scroll',
+    positionals: ['down'],
+    runtimeBindings,
   });
 
   expect(expectOkData(response).settle).toBeUndefined();
   expect(captureObservations).toEqual([]);
+  // Settling is what asks for an observation capture, so a plain scroll never pays for one.
+  expect(runtimeBindings.binds).toEqual([]);
   // ADR 0014: the leaf side-effect seam expired the frame and nothing
   // re-published it.
   expect(refFrameState(sessionStore.get(sessionName) as SessionState)).toBe('expired');
@@ -577,6 +667,7 @@ test('an ended generic lifetime is refused before dispatch or settle constructio
       logPath: '',
       contextFromFlags,
       executePlatformCommand: platformExecution,
+      ...legacyCaptureRuntimeBindings(),
     }),
   ).rejects.toMatchObject({ details: { reason: 'session_lifetime_ended' } });
   expect(mockDispatch).not.toHaveBeenCalled();
@@ -586,7 +677,7 @@ test('an ended generic lifetime is refused before dispatch or settle constructio
 test('a generic command without the observation trait ignores a stray settle flag', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-traitless';
-  const session = seedSession(sessionName, sessionStore);
+  seedSession(sessionName, sessionStore);
   mockDispatch.mockResolvedValue({ action: 'home', message: 'Home' });
 
   // A hand-built daemon request can put settle flags on any command; only the
@@ -595,7 +686,6 @@ test('a generic command without the observation trait ignores a stray settle fla
   const response = await dispatchGeneric({
     sessionName,
     sessionStore,
-    session,
     command: 'home',
     flags: { settle: true },
   });
@@ -607,13 +697,12 @@ test('a generic command without the observation trait ignores a stray settle fla
 test('an orphaned --settle-quiet is rejected before the command dispatches', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-orphan';
-  const session = seedSession(sessionName, sessionStore);
+  seedSession(sessionName, sessionStore);
   mockDispatch.mockRejectedValue(new Error('dispatch must not run for an orphaned settle flag'));
 
   const response = await dispatchGeneric({
     sessionName,
     sessionStore,
-    session,
     command: 'scroll',
     positionals: ['down'],
     flags: { settleQuietMs: 25 },
@@ -628,7 +717,7 @@ test('an orphaned --settle-quiet is rejected before the command dispatches', asy
 test('scroll stays successful when its lifetime retires during optional settle observation', async () => {
   const store = makeSessionStore();
   const name = 'generic-settle-retired';
-  const session = seedSession(name, store);
+  seedSession(name, store);
   const ref = store.lookup(name)!;
   mockCommandDispatch([AFTER_NODES]);
   mockCaptureSnapshotForSession.mockImplementationOnce(
@@ -649,7 +738,6 @@ test('scroll stays successful when its lifetime retires during optional settle o
   const response = await dispatchGeneric({
     sessionName: name,
     sessionStore: store,
-    session,
     command: 'scroll',
     positionals: ['down'],
     flags: { ...SETTLE_FLAGS },
@@ -663,7 +751,7 @@ for (const change of ['rebuild', 'retire'] as const) {
   test(`held generic settle capture respects its lifetime after ${change}`, async () => {
     const store = makeSessionStore();
     const name = `generic-held-settle-${change}`;
-    const session = seedSession(name, store);
+    seedSession(name, store);
     const ref = store.lookup(name)!;
     let entered!: () => void;
     let release!: () => void;
@@ -682,7 +770,6 @@ for (const change of ['rebuild', 'retire'] as const) {
     const pending = dispatchGeneric({
       sessionName: name,
       sessionStore: store,
-      session,
       command: 'scroll',
       positionals: ['down'],
       flags: { ...SETTLE_FLAGS },

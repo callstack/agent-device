@@ -84,6 +84,7 @@ export async function dispatchTargetedTouchViaRuntime(
   return await dispatchRuntimeInteraction(params, {
     ...buildTargetedRuntimeOptions(params, command, boundAdmitted),
     touchExecutor,
+    settleObservationCapture: prepared.settleObservationCapture,
   });
 }
 

@@ -44,6 +44,20 @@ export type InteractionRouteInput = {
   captureProof?: RequestCaptureProof;
 };
 
+/**
+ * The observation capture a request admitted for itself. Only the two constructors that build an
+ * observation runtime carry it — never the route input every interaction command shares — so a
+ * capture reaches an observation only from the module that admitted it on the owner's facts (#3510).
+ */
+export type SettleObservationCaptureInput = {
+  /**
+   * For a route whose action runtime use carries no capture: a coordinate-targeted touch
+   * (`tapPoint`/`fillPoint` declare none) or a generic-route action. Without it the post-action
+   * observation reads the screen through a different producer than the caller's next command does.
+   */
+  settleObservationCapture?: BoundSnapshotCapture;
+};
+
 export type FindRouteInput = {
   createCommandSurface: CreateDaemonCommandSurface;
   req: DaemonRequest;
@@ -105,6 +119,12 @@ export type InteractionRuntimeInput = {
   pairedGestureViewport?: Rect;
   touchExecutor?: BoundTouchExecutor;
   gestures?: BoundGestureExecutor;
+  /**
+   * The capture every observation on this request reads the screen through: the action binding's
+   * own capture when its runtime use carries one, otherwise the capture the request admitted for
+   * its observations. Resolved once at construction so no route can mix producers (#3510).
+   */
+  boundCapture?: BoundSnapshotCapture;
 };
 
 export type InteractionGestureVisualization = (

@@ -10,6 +10,7 @@ import type {
   CaptureSnapshotForSession,
   FindRouteInput,
   InteractionRouteInput,
+  SettleObservationCaptureInput,
 } from './internal/types.ts';
 
 export type { FindRouteInput, InteractionRouteInput } from './internal/types.ts';
@@ -67,11 +68,12 @@ export const captureSnapshotForSession: CaptureSnapshotForSession = async (
 };
 
 export async function createInteractionRuntime(
-  params: InteractionRouteInput & {
-    pairedGestureViewport?: Rect;
-    touchExecutor?: import('../touch-runtime.ts').BoundTouchExecutor;
-    gestures?: import('../gesture-runtime.ts').BoundGestureExecutor;
-  },
+  params: SettleObservationCaptureInput &
+    InteractionRouteInput & {
+      pairedGestureViewport?: Rect;
+      touchExecutor?: import('../touch-runtime.ts').BoundTouchExecutor;
+      gestures?: import('../gesture-runtime.ts').BoundGestureExecutor;
+    },
 ) {
   return await createInteractionRuntimeForRoute({
     ...bindInteractionSession(params),

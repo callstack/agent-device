@@ -20,6 +20,7 @@ import type {
   CaptureSnapshotForSession,
   InteractionRouteInput,
   InteractionRuntimeInput,
+  SettleObservationCaptureInput,
 } from './types.ts';
 import { finalizeTouchInteraction as finalizeInteraction } from './interaction-common.ts';
 import { markDeferredInteractionOutcome } from '../../deferred-interaction-outcome.ts';
@@ -30,23 +31,25 @@ import type { DaemonResponse } from '../../daemon-request.ts';
 import type { SessionRef } from '../../session-state.ts';
 import type { BoundTouchExecutor } from '../../touch-runtime.ts';
 import type { BoundGestureExecutor } from '../../gesture-runtime.ts';
+import type { BoundSnapshotCapture } from '../../snapshot-runtime-binding.ts';
 import { NO_ACTIVE_SESSION_MESSAGE } from '@agent-device/kernel/contracts';
 
 export async function createInteractionRuntimeForRoute(
-  params: InteractionRouteInput & {
-    captureSnapshotForSession: CaptureSnapshotForSession;
-    pairedGestureViewport?: Rect;
-    touchExecutor?: BoundTouchExecutor;
-    gestures?: BoundGestureExecutor;
-    /**
-     * Filled with the LAST capture this request consumed. ADR 0014 ambiguity
-     * issuance is only valid against a tree the session stored under the
-     * generation it freezes, and a sparse-quality capture deliberately stores
-     * nothing — the refusal seam needs the same consumed-capture slot the
-     * selector routes carry (`consumedSnapshot`), owned per dispatch.
-     */
-    consumedCapture?: { state?: SnapshotState };
-  },
+  params: SettleObservationCaptureInput &
+    InteractionRouteInput & {
+      captureSnapshotForSession: CaptureSnapshotForSession;
+      pairedGestureViewport?: Rect;
+      touchExecutor?: BoundTouchExecutor;
+      gestures?: BoundGestureExecutor;
+      /**
+       * Filled with the LAST capture this request consumed. ADR 0014 ambiguity
+       * issuance is only valid against a tree the session stored under the
+       * generation it freezes, and a sparse-quality capture deliberately stores
+       * nothing — the refusal seam needs the same consumed-capture slot the
+       * selector routes carry (`consumedSnapshot`), owned per dispatch.
+       */
+      consumedCapture?: { state?: SnapshotState };
+    },
 ) {
   const ref = bindInteractionSession(params).sessionRef;
   if (!ref) throw new KernelAppError('SESSION_NOT_FOUND', NO_ACTIVE_SESSION_MESSAGE);
@@ -90,6 +93,7 @@ export async function createInteractionRuntimeForRoute(
     pairedGestureViewport: params.pairedGestureViewport,
     touchExecutor: params.touchExecutor,
     gestures: params.gestures,
+    boundCapture: resolveBoundCapture(params),
   });
 }
 
@@ -145,6 +149,27 @@ export function finalizeTouchInteraction(params: FinalizeTouchInteractionInput):
   });
 }
 
+/**
+ * The capture implementation every observation on this request reads the screen through: the action
+ * binding's own capture when its runtime use carries one, otherwise the capture the request admitted
+ * for its observations (`settle-observation-capture.ts`). Resolved once, at construction, so a route
+ * cannot answer one capture from the request-bound runtime and the next from the legacy path. Which
+ * backend a bound capture presents stays per-capture: the settle loop pins it once it sees a
+ * `private-ax` verdict.
+ */
+function resolveBoundCapture(
+  params: SettleObservationCaptureInput & {
+    touchExecutor?: BoundTouchExecutor;
+    gestures?: BoundGestureExecutor;
+  },
+): BoundSnapshotCapture | undefined {
+  return (
+    params.touchExecutor?.captureSnapshot ??
+    params.gestures?.captureSnapshot ??
+    params.settleObservationCapture
+  );
+}
+
 function createInteractionAgentDevice(params: InteractionRuntimeInput) {
   return params.createCommandSurface({
     backend: createInteractionBackend(params),
@@ -166,7 +191,7 @@ function createInteractionBackend(params: InteractionRuntimeInput): AgentDeviceB
         preferredBackend: options?.preferredBackend,
         includeRects: options?.includeRects === true,
         signal: context.signal,
-        boundCapture: params.touchExecutor?.captureSnapshot ?? params.gestures?.captureSnapshot,
+        boundCapture: params.boundCapture,
       }),
     }),
     ...gestureBackendMembers(params, gestureContext),

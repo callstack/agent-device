@@ -14,6 +14,7 @@ import type {
   CaptureSnapshotForSession,
   InteractionRouteInput,
   RefSnapshotFlagGuardResponse,
+  SettleObservationCaptureInput,
 } from './types.ts';
 import { refreshAndroidRefSnapshotIfFreshnessActive } from './interaction-touch-android-freshness.ts';
 import { unsupportedMacOsDesktopSurfaceInteraction } from './interaction-touch-policy.ts';
@@ -47,18 +48,21 @@ type AdmittedFill = {
   parsedTarget: Extract<ReturnType<typeof parseFillTarget>, { ok: true }>;
   touchExecutor: BoundTouchExecutor;
   staleRefsWarning: string | undefined;
+  settleObservationCapture: SettleObservationCaptureInput['settleObservationCapture'];
 };
 
 export async function dispatchFillViaRuntime(params: FillParams): Promise<DaemonResponse> {
   params = bindInteractionSession(params);
   const admission = await admitFill(params);
   if ('response' in admission) return admission.response;
-  const { parsedTarget, touchExecutor, staleRefsWarning } = admission.admitted;
+  const { parsedTarget, touchExecutor, staleRefsWarning, settleObservationCapture } =
+    admission.admitted;
   const { req, sessionName } = params;
   const replayTargetGuard = req.internal?.replayTargetGuard;
 
   return await dispatchRuntimeInteraction(params, {
     touchExecutor,
+    settleObservationCapture,
     refContext:
       parsedTarget.target.kind === 'ref' && req.internal?.findResolvedTarget === undefined
         ? {
@@ -115,13 +119,8 @@ async function readFillAdmission(
   const target = readFillTarget(params);
   if ('response' in target) return target;
   const { session, parsedTarget } = target;
-  const prepared = await prepareTouchDispatch(
-    params,
-    session,
-    'fill',
-    parsedTarget.target.kind !== 'point',
-  );
-  if (!prepared.ok) return { response: prepared.response };
+  // Pure input refusals first: a rejected fill must not pay a facts inspection or a bind, matching
+  // the order the press route keeps by validating inside its own admission.
   assertRecordedFillParameterization({
     flags: req.flags,
     replayPlanStep: req.internal?.replayPlanStep === true,
@@ -129,6 +128,13 @@ async function readFillAdmission(
   });
   const invalidSettleFlags = settleFlagGuardResponse('fill', req.flags);
   if (invalidSettleFlags) return { response: invalidSettleFlags };
+  const prepared = await prepareTouchDispatch(
+    params,
+    session,
+    'fill',
+    parsedTarget.target.kind !== 'point',
+  );
+  if (!prepared.ok) return { response: prepared.response };
   const refPreamble = await prepareFillRefTarget(
     params,
     session,
@@ -142,6 +148,7 @@ async function readFillAdmission(
       parsedTarget,
       touchExecutor: prepared.touchExecutor,
       staleRefsWarning: refPreamble.staleRefsWarning,
+      settleObservationCapture: prepared.settleObservationCapture,
     },
   };
 }

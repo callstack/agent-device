@@ -783,6 +783,14 @@ set to read facts — is retired for new units: they may not introduce admission
 an already-migrated handler onto facts inspection changes production admission behavior; it is its
 own independently reviewed unit with parity evidence, never a side effect of a structural change.
 
+One second bind per request is permitted, and is not the retired idiom: a post-action observation
+(`--settle`) whose action use carries no capture admits the `capture-only` plan for its own reads
+(#3510). It is not an admission-only bind — it never reads facts through a binding, admits through
+the facts probe, and binds only on admission — and where the action's use already required
+`captureSnapshot` (`scroll top|bottom`, `scroll --until`) it projects the request's cached device
+binding rather than acquiring a second one. It stays capture-only: a second bind that carries a
+mutating operation is the execution use the plan should have selected.
+
 Use declarations share one neutral `defineUse`; per-domain currying wrappers add a module per
 domain for no information and are not added. Required-only declarations are the default. Declaring
 a preferred operation requires a recorded measurement of the fast path's benefit in the unit

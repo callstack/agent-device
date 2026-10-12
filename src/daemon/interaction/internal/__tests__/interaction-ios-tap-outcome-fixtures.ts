@@ -58,7 +58,7 @@ export function snapshotPayload(
   backend: 'tree' | 'queries' | 'private-ax' = 'tree',
 ) {
   return {
-    backend: 'xctest',
+    backend: 'xctest' as const,
     producer: 'apple-runner' as const,
     nodes,
     quality: { state: 'healthy' as const, backend },
