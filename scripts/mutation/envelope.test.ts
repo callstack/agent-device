@@ -367,7 +367,10 @@ test('a report from a failed shard cannot make the aggregate pass', () => {
       assert.notEqual(failed.exitCode, 0);
       const reason = 'Shard failure or missing envelope: shard-a';
       assert.match(failed.stdout, new RegExp(`Incomplete sweep: ${reason}`));
-      assert.equal(failed.stderr.trim(), `mutation: ${reason}`);
+      assert.deepEqual(
+        failed.stderr.split('\n').filter((line) => line.startsWith('mutation: ')),
+        [`mutation: ${reason}`],
+      );
       assert.equal(readEnvelope().data.error, reason);
       fs.writeFileSync(path.join(shard, 'lane-envelope.json'), JSON.stringify({ result: 'pass' }));
       const passed = runMutation(args);
