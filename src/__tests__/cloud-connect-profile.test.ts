@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
+import { beginStdoutCapture } from './test-utils/stream-capture.ts';
 import { runCliCapture } from './cli-capture.ts';
 import {
   hashRemoteConfigFile,
@@ -913,11 +914,11 @@ async function connectWithGeneratedCloudProfile(stateDir: string): Promise<void>
 }
 
 async function captureConnectStdout(task: () => Promise<void>): Promise<void> {
-  const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  const stdoutCapture = beginStdoutCapture();
   try {
     await task();
   } finally {
-    stdoutWrite.mockRestore();
+    stdoutCapture.restore();
   }
 }
 

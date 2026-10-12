@@ -11,6 +11,10 @@ import {
   listenOnLoopback,
   supportsLoopbackBind,
 } from '@agent-device/test-kit/loopback';
+import {
+  beginStderrCapture,
+  withCapturedStderrAsync,
+} from '../../__tests__/test-utils/stream-capture.ts';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { sendToDaemon } from '../daemon-client.ts';
 import { currentDaemonCodeSignature } from '../../__tests__/test-utils/daemon-http-fixture.ts';
@@ -87,31 +91,6 @@ function mockEventHttpRequest(
   return () => {
     (http as unknown as { request: typeof http.request }).request = originalHttpRequest;
   };
-}
-
-async function captureInteractiveStderr(callback: () => Promise<void>): Promise<string> {
-  const stderr = process.stderr as typeof process.stderr & { isTTY?: boolean };
-  const mutableStderr = stderr as unknown as Record<string, unknown>;
-  const originalIsTTY = Object.getOwnPropertyDescriptor(stderr, 'isTTY');
-  const originalWrite = process.stderr.write.bind(process.stderr);
-  const originalCi = process.env.CI;
-  let output = '';
-  Object.defineProperty(stderr, 'isTTY', { configurable: true, value: true });
-  delete process.env.CI;
-  (process.stderr as any).write = ((chunk: unknown) => {
-    output += String(chunk);
-    return true;
-  }) as typeof process.stderr.write;
-  try {
-    await callback();
-    return output;
-  } finally {
-    process.stderr.write = originalWrite;
-    if (originalCi === undefined) delete process.env.CI;
-    else process.env.CI = originalCi;
-    if (originalIsTTY) Object.defineProperty(stderr, 'isTTY', originalIsTTY);
-    else delete mutableStderr.isTTY;
-  }
 }
 
 function respondToHealthcheck(options: Record<string, any>, res: MockHttpResponse): boolean {
@@ -272,9 +251,8 @@ test('sendToDaemon forwards replay test progress before the socket response', as
       .map((entry) => JSON.stringify(entry))
       .join('\n'),
   );
-  let stderr = '';
+  const stderrCapture = beginStderrCapture();
   const progressEvents: RequestProgressEvent[] = [];
-  const originalStderrWrite = process.stderr.write.bind(process.stderr);
   const originalCreateConnection = net.createConnection;
   let createConnectionCalls = 0;
   (net as unknown as { createConnection: typeof net.createConnection }).createConnection = ((
@@ -333,11 +311,6 @@ test('sendToDaemon forwards replay test progress before the socket response', as
   }) as typeof net.createConnection;
 
   try {
-    (process.stderr as any).write = ((chunk: unknown) => {
-      stderr += String(chunk);
-      return true;
-    }) as typeof process.stderr.write;
-
     writeCurrentDaemonInfo(stateDir, { port: 65_530, transport: 'socket' });
 
     const response = await sendToDaemon(
@@ -352,7 +325,7 @@ test('sendToDaemon forwards replay test progress before the socket response', as
     );
 
     assert.deepEqual(response, { ok: true, data: { via: 'socket' } });
-    assert.equal(stderr, '');
+    assert.equal(stderrCapture.read(), '');
     assert.equal(progressEvents.length, 2);
     const progressEvent = progressEvents[0];
     assert.equal(progressEvent?.type, 'replay-test');
@@ -363,16 +336,15 @@ test('sendToDaemon forwards replay test progress before the socket response', as
   } finally {
     (net as unknown as { createConnection: typeof net.createConnection }).createConnection =
       originalCreateConnection;
-    process.stderr.write = originalStderrWrite;
+    stderrCapture.restore();
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
 
 test('sendToDaemon forwards replay test progress before the HTTP NDJSON response', async () => {
-  let stderr = '';
+  const stderrCapture = beginStderrCapture();
   const seenPaths: string[] = [];
   const progressEvents: RequestProgressEvent[] = [];
-  const originalStderrWrite = process.stderr.write.bind(process.stderr);
   const originalHttpRequest = http.request;
   (http as unknown as { request: typeof http.request }).request = ((
     options: any,
@@ -444,11 +416,6 @@ test('sendToDaemon forwards replay test progress before the HTTP NDJSON response
   }) as typeof http.request;
 
   try {
-    (process.stderr as any).write = ((chunk: unknown) => {
-      stderr += String(chunk);
-      return true;
-    }) as typeof process.stderr.write;
-
     await withRemoteDaemonEnv(async () => {
       const response = await sendToDaemon(
         {
@@ -464,7 +431,7 @@ test('sendToDaemon forwards replay test progress before the HTTP NDJSON response
       assert.deepEqual(response, { ok: true, data: { via: 'http-progress' } });
     });
     assert.deepEqual(seenPaths, ['GET /agent-device/health', 'POST /agent-device/rpc']);
-    assert.equal(stderr, '');
+    assert.equal(stderrCapture.read(), '');
     assert.equal(progressEvents.length, 1);
     const progressEvent = progressEvents[0];
     assert.equal(progressEvent?.type, 'replay-test');
@@ -473,7 +440,7 @@ test('sendToDaemon forwards replay test progress before the HTTP NDJSON response
     }
   } finally {
     (http as unknown as { request: typeof http.request }).request = originalHttpRequest;
-    process.stderr.write = originalStderrWrite;
+    stderrCapture.restore();
   }
 });
 
@@ -1044,17 +1011,20 @@ test('sendToDaemon prints installing notice before remote install RPC completes'
   });
 
   try {
-    const stderr = await captureInteractiveStderr(async () => {
-      await withRemoteDaemonEnv(async () => {
-        await sendToDaemon({
-          session: 'default',
-          command: 'install',
-          positionals: ['remote:/srv/builds/Sample.apk'],
-          flags: {},
-          meta: { requestId: 'req-installing-notice' },
+    const stderr = await withCapturedStderrAsync(
+      async () => {
+        await withRemoteDaemonEnv(async () => {
+          await sendToDaemon({
+            session: 'default',
+            command: 'install',
+            positionals: ['remote:/srv/builds/Sample.apk'],
+            flags: {},
+            meta: { requestId: 'req-installing-notice' },
+          });
         });
-      });
-    });
+      },
+      { interactive: true },
+    );
 
     assert.match(stderr, /Installing\.\.\.\n/);
   } finally {

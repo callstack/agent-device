@@ -10,6 +10,10 @@ import {
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit/loopback';
 import { runCli } from '../../src/cli.ts';
+import {
+  beginStderrCapture,
+  beginStdoutCapture,
+} from '../../src/__tests__/test-utils/stream-capture.ts';
 
 // Smoke coverage for the repo-local remote host flow: connect to a remote profile,
 // prepare Metro through the host bridge, and reuse connection runtime hints on open.
@@ -37,8 +41,8 @@ async function runCliJson(args: string[], env?: NodeJS.ProcessEnv): Promise<CliJ
 
   const originalEnv = process.env;
   const originalExit = process.exit;
-  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
-  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+  const stdoutCapture = beginStdoutCapture();
+  const stderrCapture = beginStderrCapture();
 
   process.env = {
     ...process.env,
@@ -47,14 +51,6 @@ async function runCliJson(args: string[], env?: NodeJS.ProcessEnv): Promise<CliJ
   (process as any).exit = ((nextCode?: number) => {
     throw new ExitSignal(nextCode ?? 0);
   }) as typeof process.exit;
-  (process.stdout as any).write = ((chunk: unknown) => {
-    stdout += String(chunk);
-    return true;
-  }) as typeof process.stdout.write;
-  (process.stderr as any).write = ((chunk: unknown) => {
-    stderr += String(chunk);
-    return true;
-  }) as typeof process.stderr.write;
 
   try {
     await runCli(args);
@@ -67,9 +63,11 @@ async function runCliJson(args: string[], env?: NodeJS.ProcessEnv): Promise<CliJ
   } finally {
     process.env = originalEnv;
     process.exit = originalExit;
-    process.stdout.write = originalStdoutWrite;
-    process.stderr.write = originalStderrWrite;
+    stdoutCapture.restore();
+    stderrCapture.restore();
   }
+  stdout = stdoutCapture.read();
+  stderr = stderrCapture.read();
 
   const json = parseCliJson(stdout);
   return {

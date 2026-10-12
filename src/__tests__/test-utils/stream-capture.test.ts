@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   beginStderrCapture,
   withCapturedStderr,
-  withInteractiveStderr,
+  withCapturedStderrAsync,
+  withCapturedOutput,
   withStreamTty,
 } from './stream-capture.ts';
 
@@ -22,6 +23,7 @@ test('withCapturedStderr restores an inherited write without leaving an own prop
 
 test('withCapturedStderr puts back a pre-existing own-property write', () => {
   const stream = process.stderr as unknown as Record<string, unknown>;
+  const originalWrite = Object.getOwnPropertyDescriptor(process.stderr, 'write');
   let sentinelHits = 0;
   stream.write = () => {
     sentinelHits += 1;
@@ -35,9 +37,8 @@ test('withCapturedStderr puts back a pre-existing own-property write', () => {
     process.stderr.write('sentinel\n');
     assert.equal(sentinelHits, 1, 'the pre-capture own write must be the live one again');
   } finally {
-    // Success: drop the restored sentinel so the prototype write is live again.
-    // Failure mid-assert: drop whatever capture stub is still installed.
-    delete stream.write;
+    if (originalWrite) Object.defineProperty(process.stderr, 'write', originalWrite);
+    else delete stream.write;
   }
 });
 
@@ -52,16 +53,47 @@ test('passthroughBufferWrites forwards Buffers to the real stream with the strea
   }
 });
 
-test('withInteractiveStderr hides CI, marks the stream a TTY, and restores all three', () => {
+test('discard keeps the stream quiet even with passthroughBufferWrites enabled', () => {
+  const stream = process.stderr as unknown as Record<string, unknown>;
+  const originalWrite = Object.getOwnPropertyDescriptor(process.stderr, 'write');
+  let realWrites = 0;
+  stream.write = () => {
+    realWrites += 1;
+    return true;
+  };
+  try {
+    const capture = beginStderrCapture({ passthroughBufferWrites: true, discard: true });
+    try {
+      assert.equal(process.stderr.write(Buffer.from('quiet')), true);
+      assert.equal(process.stderr.write('quiet too\n'), true);
+      assert.equal(capture.read(), '');
+    } finally {
+      capture.restore();
+    }
+    // With discard winning, nothing reached the sentinel during the capture window —
+    // a passthrough-before-discard leak would have counted the Buffer there.
+    assert.equal(realWrites, 0);
+    process.stderr.write('now counted\n');
+    assert.equal(realWrites, 1, 'the restored sentinel is the live write again');
+  } finally {
+    if (originalWrite) Object.defineProperty(process.stderr, 'write', originalWrite);
+    else delete stream.write;
+  }
+});
+
+test('interactive capture hides CI, marks the stream a TTY, and restores all three', () => {
   const originalCi = process.env.CI;
   const originalIsTTY = Object.getOwnPropertyDescriptor(process.stderr, 'isTTY');
   process.env.CI = '1';
   try {
-    const captured = withInteractiveStderr(() => {
-      assert.equal(process.env.CI, undefined);
-      assert.equal(process.stderr.isTTY, true);
-      process.stderr.write('interactive line\n');
-    });
+    const captured = withCapturedStderr(
+      () => {
+        assert.equal(process.env.CI, undefined);
+        assert.equal(process.stderr.isTTY, true);
+        process.stderr.write('interactive line\n');
+      },
+      { interactive: true },
+    );
     assert.equal(captured, 'interactive line\n');
     assert.equal(process.env.CI, '1');
     assert.deepEqual(Object.getOwnPropertyDescriptor(process.stderr, 'isTTY'), originalIsTTY);
@@ -78,4 +110,21 @@ test('withStreamTty restores the original isTTY descriptor state', () => {
   const sawToggled = withStreamTty(process.stdout, toggled, () => process.stdout.isTTY === toggled);
   assert.equal(sawToggled, true);
   assert.deepEqual(Object.getOwnPropertyDescriptor(process.stdout, 'isTTY'), isTTYBefore);
+});
+
+test('the async and dual-stream forms restore both process streams to their own descriptors', async () => {
+  const stderrBefore = Object.getOwnPropertyDescriptor(process.stderr, 'write');
+  const stdoutBefore = Object.getOwnPropertyDescriptor(process.stdout, 'write');
+  const stderr = await withCapturedStderrAsync(async () => {
+    await Promise.resolve();
+    process.stderr.write('async line\n');
+  });
+  assert.equal(stderr, 'async line\n');
+  const both = await withCapturedOutput(async () => {
+    process.stdout.write('out\n');
+    process.stderr.write('err\n');
+  });
+  assert.deepEqual(both, { stdout: 'out\n', stderr: 'err\n' });
+  assert.deepEqual(Object.getOwnPropertyDescriptor(process.stderr, 'write'), stderrBefore);
+  assert.deepEqual(Object.getOwnPropertyDescriptor(process.stdout, 'write'), stdoutBefore);
 });

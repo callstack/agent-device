@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
+import { beginStdoutCapture } from './test-utils/stream-capture.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
 import { readActiveConnectionState } from '../remote/remote-connection-state.ts';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
@@ -81,7 +82,7 @@ function mockConnectionProfileFetch(): ReturnType<typeof vi.fn> {
 }
 
 async function connectWithNoLogin(stateDir: string): Promise<void> {
-  const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  const stdoutCapture = beginStdoutCapture();
   try {
     await connectCommand({
       positionals: [],
@@ -95,6 +96,6 @@ async function connectWithNoLogin(stateDir: string): Promise<void> {
       client: {} as AgentDeviceClient,
     });
   } finally {
-    stdoutWrite.mockRestore();
+    stdoutCapture.restore();
   }
 }

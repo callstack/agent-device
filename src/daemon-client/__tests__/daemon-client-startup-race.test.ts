@@ -20,6 +20,7 @@ import {
   currentDaemonCodeSignature,
 } from '../../__tests__/test-utils/daemon-http-fixture.ts';
 import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit/loopback';
+import { beginStderrCapture } from '../../__tests__/test-utils/stream-capture.ts';
 import {
   resolveDaemonPaths,
   type DaemonPaths,
@@ -508,7 +509,7 @@ test.for([
     }
     await actualRetry.sleep(10);
   });
-  const notice = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  const stderrCapture = beginStderrCapture();
   try {
     const pending = sendToDaemon(request(paths));
     if (expected.alive)
@@ -528,12 +529,12 @@ test.for([
     assert.equal(spawn.mock.calls.length, expected.launches);
     assert.equal(http.rpcRequests.length, expected.rpcs);
     assert.equal(
-      notice.mock.calls.flat().join('').includes(`Replacing daemon (pid ${winner.pid}, v0.0.1)`),
+      stderrCapture.read().includes(`Replacing daemon (pid ${winner.pid}, v0.0.1)`),
       !expected.alive,
     );
   } finally {
     clock.mockRestore();
-    notice.mockRestore();
+    stderrCapture.restore();
     await closeLoopbackServer(http.server);
   }
 });

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { withCapturedStderr, withStreamTty } from './test-utils/stream-capture.ts';
 
 vi.mock('@agent-device/host-kit/command', () => ({
   runCmdDetached: vi.fn(),
@@ -30,7 +31,6 @@ function readCache(stateDir: string): Record<string, unknown> {
 }
 
 const cleanupPaths: string[] = [];
-const originalStderrIsTTY = process.stderr.isTTY;
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -38,19 +38,11 @@ beforeEach(() => {
   vi.stubEnv('NODE_ENV', '');
   vi.stubEnv('CI', '');
   vi.stubEnv('AGENT_DEVICE_NO_UPDATE_NOTIFIER', '');
-  Object.defineProperty(process.stderr, 'isTTY', {
-    configurable: true,
-    value: true,
-  });
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
-  Object.defineProperty(process.stderr, 'isTTY', {
-    configurable: true,
-    value: originalStderrIsTTY,
-  });
   while (cleanupPaths.length > 0) {
     const next = cleanupPaths.pop();
     if (next) {
@@ -67,18 +59,17 @@ test('notifier prints cached upgrade notice once for a newly discovered version'
     checkedAt: '2026-03-25T10:00:00.000Z',
   });
 
-  let stderr = '';
-  vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
-    stderr += String(chunk);
-    return true;
-  }) as typeof process.stderr.write);
-
-  maybeRunUpgradeNotifier({
-    command: 'devices',
-    currentVersion: '0.11.3',
-    stateDir,
-    flags: {},
-  });
+  const stderr = withCapturedStderr(
+    () => {
+      maybeRunUpgradeNotifier({
+        command: 'devices',
+        currentVersion: '0.11.3',
+        stateDir,
+        flags: {},
+      });
+    },
+    { interactive: true },
+  );
 
   assert.match(stderr, /Update available: agent-device 0\.11\.3 -> 0\.12\.0/);
   assert.equal(vi.mocked(runCmdDetached).mock.calls.length, 0);
@@ -96,18 +87,17 @@ test('notifier treats the release as newer than the -dev build of the same base'
     checkedAt: '2026-03-25T10:00:00.000Z',
   });
 
-  let stderr = '';
-  vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
-    stderr += String(chunk);
-    return true;
-  }) as typeof process.stderr.write);
-
-  maybeRunUpgradeNotifier({
-    command: 'devices',
-    currentVersion: '0.12.0-dev',
-    stateDir,
-    flags: {},
-  });
+  const stderr = withCapturedStderr(
+    () => {
+      maybeRunUpgradeNotifier({
+        command: 'devices',
+        currentVersion: '0.12.0-dev',
+        stateDir,
+        flags: {},
+      });
+    },
+    { interactive: true },
+  );
 
   assert.match(stderr, /Update available: agent-device 0\.12\.0-dev -> 0\.12\.0/);
 });
@@ -121,18 +111,17 @@ test('notifier skips repeat prompts after the cached version was already shown',
     prompted: true,
   });
 
-  let stderr = '';
-  vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
-    stderr += String(chunk);
-    return true;
-  }) as typeof process.stderr.write);
-
-  maybeRunUpgradeNotifier({
-    command: 'devices',
-    currentVersion: '0.11.3',
-    stateDir,
-    flags: {},
-  });
+  const stderr = withCapturedStderr(
+    () => {
+      maybeRunUpgradeNotifier({
+        command: 'devices',
+        currentVersion: '0.11.3',
+        stateDir,
+        flags: {},
+      });
+    },
+    { interactive: true },
+  );
 
   assert.equal(stderr, '');
 });
@@ -144,11 +133,13 @@ test('notifier starts a background check when the cache is stale', () => {
     checkedAt: '2026-03-01T10:00:00.000Z',
   });
 
-  maybeRunUpgradeNotifier({
-    command: 'devices',
-    currentVersion: '0.11.3',
-    stateDir,
-    flags: {},
+  withStreamTty(process.stderr, true, () => {
+    maybeRunUpgradeNotifier({
+      command: 'devices',
+      currentVersion: '0.11.3',
+      stateDir,
+      flags: {},
+    });
   });
 
   const spawnCall = vi.mocked(runCmdDetached).mock.calls[0];
@@ -202,17 +193,17 @@ test('a nightly build checks and recommends the nightly dist-tag', async () => {
   await runUpdateCheckWorker({ cachePath, currentVersion: '0.12.0-nightly.20261010.7' });
 
   assert.equal(fetchMock.mock.calls[0]?.[0], 'https://registry.npmjs.org/agent-device/nightly');
-  let stderr = '';
-  vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
-    stderr += String(chunk);
-    return true;
-  }) as typeof process.stderr.write);
-  maybeRunUpgradeNotifier({
-    command: 'devices',
-    currentVersion: '0.12.0-nightly.20261010.7',
-    stateDir,
-    flags: {},
-  });
+  const stderr = withCapturedStderr(
+    () => {
+      maybeRunUpgradeNotifier({
+        command: 'devices',
+        currentVersion: '0.12.0-nightly.20261010.7',
+        stateDir,
+        flags: {},
+      });
+    },
+    { interactive: true },
+  );
   assert.match(
     stderr,
     /-> 0\.12\.0-nightly\.20261011\.8\. Run `npm install -g agent-device@nightly`/,
@@ -228,13 +219,17 @@ test('a cached version from the other channel is neither shown nor kept past a c
     distTag: 'nightly',
     checkedAt: '2026-03-30T10:00:00.000Z',
   });
-  let stderr = '';
-  vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
-    stderr += String(chunk);
-    return true;
-  }) as typeof process.stderr.write);
-
-  maybeRunUpgradeNotifier({ command: 'devices', currentVersion: '0.11.3', stateDir, flags: {} });
+  const stderr = withCapturedStderr(
+    () => {
+      maybeRunUpgradeNotifier({
+        command: 'devices',
+        currentVersion: '0.11.3',
+        stateDir,
+        flags: {},
+      });
+    },
+    { interactive: true },
+  );
 
   assert.equal(stderr, '');
   assert.equal(vi.mocked(runCmdDetached).mock.calls.length, 1, 'the switch starts a fresh check');

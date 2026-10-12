@@ -1,5 +1,6 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import { withCapturedStdoutAsync } from './test-utils/stream-capture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -78,7 +79,7 @@ test('connect auto-generates a local session and writes minimal remote state', a
     JSON.stringify({ daemonBaseUrl: 'https://daemon.example.test' }),
   );
 
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       flags: {
@@ -113,7 +114,7 @@ test('connect auto-generates a local session and writes minimal remote state', a
 test('connect proxy writes normal remote state with generated non-secret profile', async () => {
   const { tempRoot, stateDir } = connectionWorkspace('agent-device-connect-proxy-');
 
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: ['proxy'],
       flags: {
@@ -161,7 +162,7 @@ test('connect proxy writes normal remote state with generated non-secret profile
 test('connect daemon-base-url shortcut uses proxy profile for direct proxy URLs', async () => {
   const { tempRoot, stateDir } = connectionWorkspace('agent-device-connect-proxy-shortcut-');
 
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       flags: {
@@ -193,7 +194,7 @@ test('connect proxy scopes generated client identity by explicit session', async
   const { tempRoot, stateDir } = connectionWorkspace('agent-device-connect-proxy-sessions-');
 
   for (const session of ['agent-a', 'agent-b']) {
-    await captureStdout(async () => {
+    await withCapturedStdoutAsync(async () => {
       await connectCommand({
         positionals: ['proxy'],
         flags: {
@@ -222,7 +223,7 @@ test('connect proxy scopes generated client identity by explicit session', async
 test('connect proxy notice distinguishes safe inventory from lease allocation', async () => {
   const { tempRoot, stateDir } = connectionWorkspace('agent-device-connect-proxy-notice-');
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: ['proxy'],
       flags: {
@@ -321,7 +322,7 @@ test('connect reports deferred Metro runtime preparation when remote config has 
     }),
   );
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       flags: {
@@ -389,7 +390,7 @@ test('connection status re-emits the deferred Metro command scoped to the named 
     client: createTestClient(),
   });
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     await connectionCommand({
       positionals: ['status'],
       flags: {
@@ -432,7 +433,7 @@ test('connect without a session creates a fresh connection without replacing the
     runId: 'run-123',
   };
 
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       flags: connectFlags,
@@ -441,7 +442,7 @@ test('connect without a session creates a fresh connection without replacing the
   });
   const firstState = readActiveConnectionState({ stateDir });
 
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       flags: connectFlags,
@@ -1721,7 +1722,7 @@ test('connect --force stops replaced Metro companion after state is updated', as
   });
   const release = recordedLeaseRelease();
 
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       flags: forceConnectFlags({
@@ -1769,7 +1770,7 @@ test('connect --force without a session does not replace the active generated co
   });
   const release = recordedLeaseRelease();
 
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       flags: forceConnectFlags({
@@ -1810,7 +1811,7 @@ test("connect --force releases the previous lease with the previous connection's
   seedPreviousConnection({ stateDir, remoteConfigPath: oldRemoteConfigPath });
   const release = recordedLeaseRelease();
 
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       flags: forceConnectFlags({
@@ -1838,7 +1839,7 @@ test('connect --force skips releasing the previous lease when its token cannot b
   seedPreviousConnection({ stateDir, remoteConfigPath: oldRemoteConfigPath });
   const release = recordedLeaseRelease();
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       flags: forceConnectFlags({
@@ -1872,7 +1873,7 @@ test('connect --force does not misclassify an env-sourced new token as the previ
   seedPreviousConnection({ stateDir, remoteConfigPath: oldRemoteConfigPath });
   const release = recordedLeaseRelease();
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       // No daemonAuthToken flag: the ambient token above flows in purely
@@ -1919,7 +1920,7 @@ test('connect --force does not treat a re-pointed config path’s token as the p
   );
   const release = recordedLeaseRelease();
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       flags: forceConnectFlags({ json: false, stateDir, remoteConfig: remoteConfigPath }),
@@ -1954,7 +1955,7 @@ test('connect --force does not trust an unchanged profile token for a CLI-overri
   seedPreviousConnection({ stateDir, remoteConfigPath });
   const release = recordedLeaseRelease();
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       flags: forceConnectFlags({
@@ -1993,7 +1994,7 @@ test('connect --force still releases with a rotated credential when the config k
   );
   const release = recordedLeaseRelease();
 
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       flags: forceConnectFlags({ stateDir, remoteConfig: newRemoteConfigPath }),
@@ -2021,7 +2022,7 @@ test('connect --force reuses the ambient token to release the previous lease whe
   });
   const release = recordedLeaseRelease();
 
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     await connectCommand({
       positionals: [],
       flags: forceConnectFlags({
@@ -2066,7 +2067,7 @@ test('disconnect tolerates prior close and removes local connection state', asyn
   );
 
   let handled = false;
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     handled = await disconnectCommand({
       positionals: [],
       flags: {
@@ -2114,7 +2115,7 @@ test('disconnect after connect-only cleanup stays local when no session resource
   });
   let closeCalls = 0;
 
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     await disconnectCommand({
       positionals: [],
       flags: {
@@ -2155,7 +2156,7 @@ test('disconnect without a session uses active connection state', async () => {
     },
   });
 
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     await disconnectCommand({
       positionals: [],
       flags: {
@@ -2200,7 +2201,7 @@ test('disconnect human output surfaces provider release warnings and artifact li
     },
   });
 
-  const output = await captureStdout(async () => {
+  const output = await withCapturedStdoutAsync(async () => {
     await disconnectCommand({
       positionals: [],
       flags: {
@@ -2278,7 +2279,7 @@ test('disconnect releases proxy lease with provider client and device metadata',
   });
   const release = recordedLeaseRelease();
 
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     await disconnectCommand({
       positionals: [],
       flags: {
@@ -2310,7 +2311,7 @@ test('disconnect releases proxy lease with provider client and device metadata',
 test('connection status reports missing state without daemon calls', async () => {
   const { tempRoot, stateDir } = connectionWorkspace('agent-device-connection-status-');
   let handled = false;
-  await captureStdout(async () => {
+  await withCapturedStdoutAsync(async () => {
     handled = await connectionCommand({
       positionals: ['status'],
       flags: {
@@ -2344,7 +2345,7 @@ test('connection status reports active connection state', async () => {
     },
   });
 
-  const output = await captureStdout(async () => {
+  const output = await withCapturedStdoutAsync(async () => {
     await connectionCommand({
       positionals: ['status'],
       flags: {
@@ -2393,20 +2394,3 @@ test('connection state filenames distinguish unsafe session names', () => {
   );
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
-
-async function captureStdout(run: () => Promise<void>): Promise<string> {
-  let stdout = '';
-  const originalWrite = process.stdout.write.bind(process.stdout);
-  (process.stdout as any).write = ((chunk: unknown) => {
-    stdout += String(chunk);
-    return true;
-  }) as typeof process.stdout.write;
-
-  try {
-    await run();
-  } finally {
-    process.stdout.write = originalWrite;
-  }
-
-  return stdout;
-}

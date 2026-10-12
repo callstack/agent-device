@@ -5,6 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { run } from './run.ts';
+import {
+  beginStderrCapture,
+  beginStdoutCapture,
+} from '../../src/__tests__/test-utils/stream-capture.ts';
 
 // The verdict is what CI enforces on a PR, so these run the real entrypoint against a real git
 // repo, a real fallow and hand-built coverage reports — a stub of fallow could not prove that
@@ -102,43 +106,15 @@ function commit(message: string): void {
 
 // The entrypoint writes reports and reads the job summary, so each case needs the stream capture as
 // well as the exit code: `code: 0` with a "no trustworthy verdict" body is the failure mode here.
-//
-// Restoring means putting back the descriptor, not a function of the same name. `process.stdout`
-// inherits `write` from its prototype, so a saved-and-reassigned property would leave an own
-// property shadowing the prototype's, and `bind` would have handed back a bound copy no later
-// `delete` could undo.
-type CapturedStream = Readonly<{
-  target: NodeJS.WriteStream;
-  key: 'write';
-  descriptor: PropertyDescriptor | undefined;
-}>;
-
 function capture(fn: () => number): { code: number; out: string } {
-  const chunks: string[] = [];
-  const restore: CapturedStream[] = [];
-  const collect = (chunk: string | Uint8Array): boolean => {
-    chunks.push(String(chunk));
-    return true;
-  };
-  for (const target of [process.stdout, process.stderr]) {
-    restore.push({
-      target,
-      key: 'write',
-      descriptor: Object.getOwnPropertyDescriptor(target, 'write'),
-    });
-    Object.defineProperty(target, 'write', {
-      value: collect,
-      writable: true,
-      configurable: true,
-    });
-  }
+  const stdoutCapture = beginStdoutCapture();
+  const stderrCapture = beginStderrCapture();
   try {
-    return { code: fn(), out: chunks.join('') };
+    const code = fn();
+    return { code, out: stdoutCapture.read() + stderrCapture.read() };
   } finally {
-    for (const { target, key, descriptor } of restore) {
-      if (descriptor) Object.defineProperty(target, key, descriptor);
-      else delete (target as unknown as Record<string, unknown>)[key];
-    }
+    stdoutCapture.restore();
+    stderrCapture.restore();
   }
 }
 

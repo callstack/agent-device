@@ -15,6 +15,7 @@ import { installIsolatedCliTestEnv } from './cli-test-env.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonResponse } from '../daemon-client/daemon-client.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { beginStderrCapture, beginStdoutCapture } from './test-utils/stream-capture.ts';
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -63,40 +64,10 @@ async function runCliExpectingExit(
   throw new Error('expected runCli to exit');
 }
 
-function captureStdout(): { read: () => string; restore: () => void } {
-  const originalWrite = process.stdout.write.bind(process.stdout);
-  let captured = '';
-  (process.stdout as { write: typeof process.stdout.write }).write = ((chunk: unknown) => {
-    captured += String(chunk);
-    return true;
-  }) as typeof process.stdout.write;
-  return {
-    read: () => captured,
-    restore: () => {
-      process.stdout.write = originalWrite;
-    },
-  };
-}
-
-function captureStderr(): { read: () => string; restore: () => void } {
-  const originalWrite = process.stderr.write.bind(process.stderr);
-  let captured = '';
-  (process.stderr as { write: typeof process.stderr.write }).write = ((chunk: unknown) => {
-    captured += String(chunk);
-    return true;
-  }) as typeof process.stderr.write;
-  return {
-    read: () => captured,
-    restore: () => {
-      process.stderr.write = originalWrite;
-    },
-  };
-}
-
 test('--version exits 0 and prints the version, without touching the daemon', async () => {
   const restoreEnv = installIsolatedCliTestEnv();
   const exitSpy = installTerminatingExitSpy();
-  const stdout = captureStdout();
+  const stdout = beginStdoutCapture();
   const sendToDaemon = async (): Promise<DaemonResponse> => {
     throw new Error('sendToDaemon should not be called for --version');
   };
@@ -117,7 +88,7 @@ test('--version exits 0 and prints the version, without touching the daemon', as
 test('bare `help` with no target exits 0 and prints usage', async () => {
   const restoreEnv = installIsolatedCliTestEnv();
   const exitSpy = installTerminatingExitSpy();
-  const stdout = captureStdout();
+  const stdout = beginStdoutCapture();
   const sendToDaemon = async (): Promise<DaemonResponse> => {
     throw new Error('sendToDaemon should not be called for help');
   };
@@ -138,7 +109,7 @@ test('bare `help` with no target exits 0 and prints usage', async () => {
 test('no command exits 1 and prints usage', async () => {
   const restoreEnv = installIsolatedCliTestEnv();
   const exitSpy = installTerminatingExitSpy();
-  const stdout = captureStdout();
+  const stdout = beginStdoutCapture();
   const sendToDaemon = async (): Promise<DaemonResponse> => {
     throw new Error('sendToDaemon should not be called with no command');
   };
@@ -199,7 +170,7 @@ test('a --debug failure caps the daemon-log-tail dump instead of printing it unb
 
   const restoreEnv = installIsolatedCliTestEnv();
   const exitSpy = installExitSpy();
-  const stderr = captureStderr();
+  const stderr = beginStderrCapture();
   const sendToDaemon = async (): Promise<DaemonResponse> => ({
     ok: false,
     error: { code: 'SESSION_NOT_FOUND', message: 'No active session' },
@@ -236,7 +207,7 @@ test('a --debug failure caps the daemon-log-tail dump instead of printing it unb
 test('a failed `is` predicate exits non-zero, whatever answered it', async () => {
   const restoreEnv = installIsolatedCliTestEnv();
   const exitSpy = installExitSpy();
-  const stderr = captureStderr();
+  const stderr = beginStderrCapture();
   const sendToDaemon = async (): Promise<DaemonResponse> => ({
     ok: false,
     error: {

@@ -68,19 +68,3 @@ export function currentDaemonCodeSignature(): string {
   const spec = resolveDaemonLaunchSpec();
   return computeDaemonCodeSignature(spec.useSrc ? spec.srcPath : spec.distPath, spec.root);
 }
-
-/** Swaps `process.stderr.write` for a buffer until `restore`, so a test can read what was printed. */
-export function captureStderr(): { read: () => string; restore: () => void } {
-  const originalWrite = process.stderr.write.bind(process.stderr);
-  let captured = '';
-  (process.stderr as { write: typeof process.stderr.write }).write = ((chunk: unknown) => {
-    captured += String(chunk);
-    return true;
-  }) as typeof process.stderr.write;
-  return {
-    read: () => captured,
-    restore: () => {
-      process.stderr.write = originalWrite;
-    },
-  };
-}

@@ -176,9 +176,6 @@ test('stopSpawnedMetroProcess gives up cleanup (best effort) when SIGKILL throws
   }
 });
 
-// The stop call site is `stopSpawnedMetroProcess(pid).catch(() => {})`, so an unexpected kill
-// error is swallowed and the only observable outcome is the readiness timeout, exactly as for
-// the ESRCH/EPERM give-up cases. These pin the escalation attempt, not a rethrow.
 test('prepareMetroRuntime reports the readiness timeout when the escalated SIGKILL is refused with EACCES', async () => {
   const projectRoot = createMetroProject('kill-eacces');
   vi.mocked(runCmdDetached).mockReturnValue(987);

@@ -1,6 +1,6 @@
 /**
- * Fakes for tests that drive stderr behavior: capturing what a stream's `write` receives and
- * toggling `isTTY` on a real process stream. Every fake restores exactly what it changed — in
+ * Fakes for tests that drive stdout/stderr behavior: capturing what a stream's `write` receives
+ * and toggling `isTTY` on a real process stream. Every fake restores exactly what it changed — in
  * particular, a property the stream inherited from the Writable/Socket prototype is restored by
  * deleting the test's own property, never by assignment, so no shadow survives the test.
  */
@@ -18,9 +18,15 @@ export type StreamCaptureOptions = {
   passthroughBufferWrites?: boolean;
   /**
    * Pretend the stream is attached to an interactive terminal while capturing: `isTTY` reads
-   * true and `CI` is unset until `restore()`.
+   * true and `CI` is unset until `restore()`. Used to exercise TTY-gated stderr rendering.
    */
   interactive?: boolean;
+  /**
+   * Silently drop captured writes instead of recording them, for tool processes that must keep
+   * a stream quiet for their whole life and never read what was swallowed. Takes precedence
+   * over `passthroughBufferWrites`: a discarded stream stays quiet for every write.
+   */
+  discard?: boolean;
 };
 
 function restoreInheritedProperty(
@@ -38,7 +44,15 @@ function restoreInheritedProperty(
 
 /** Captures `process.stderr.write` until `restore()`. The primitive the scoped forms derive from. */
 export function beginStderrCapture(options: StreamCaptureOptions = {}): StreamCapture {
-  const stream = process.stderr;
+  return captureStream(process.stderr, options);
+}
+
+/** Captures `process.stdout.write` until `restore()`. The primitive the stdout scoped forms use. */
+export function beginStdoutCapture(options: StreamCaptureOptions = {}): StreamCapture {
+  return captureStream(process.stdout, options);
+}
+
+function captureStream(stream: NodeJS.WriteStream, options: StreamCaptureOptions): StreamCapture {
   const mutableStream = stream as unknown as Record<string, unknown>;
   const writeDescriptor = Object.getOwnPropertyDescriptor(stream, 'write');
   const originalWrite = stream.write;
@@ -52,6 +66,10 @@ export function beginStderrCapture(options: StreamCaptureOptions = {}): StreamCa
     delete process.env.CI;
   }
   mutableStream.write = (chunk: unknown, ...args: unknown[]) => {
+    // Discard means "keep this stream quiet", so it wins over passthrough when both are set.
+    if (options.discard) {
+      return true;
+    }
     if (options.passthroughBufferWrites && Buffer.isBuffer(chunk)) {
       // Call with the stream as receiver: Writable.prototype.write reads `this._writableState`.
       return (
@@ -76,7 +94,8 @@ export function beginStderrCapture(options: StreamCaptureOptions = {}): StreamCa
 
 /**
  * Runs `run` with `process.stderr.write` captured and returns everything it received. Pass
- * `interactive: true` to also fake an attached terminal (isTTY set, CI unset) for the duration.
+ * `interactive: true` to also fake an attached terminal (isTTY set, CI unset) for the duration,
+ * which is how TTY-gated stderr renderers are exercised.
  */
 export function withCapturedStderr(run: () => void, options: StreamCaptureOptions = {}): string {
   const capture = beginStderrCapture(options);
@@ -88,12 +107,47 @@ export function withCapturedStderr(run: () => void, options: StreamCaptureOption
   return capture.read();
 }
 
-/**
- * Scoped capture through an interactive terminal: `process.stderr` reports `isTTY`, `CI` is
- * unset, and everything `process.stderr.write` receives is captured and returned.
- */
-export function withInteractiveStderr(run: () => void): string {
-  return withCapturedStderr(run, { interactive: true });
+/** Async form of {@link withCapturedStderr}. */
+export async function withCapturedStderrAsync(
+  run: () => Promise<unknown>,
+  options: StreamCaptureOptions = {},
+): Promise<string> {
+  const capture = beginStderrCapture(options);
+  try {
+    await run();
+  } finally {
+    capture.restore();
+  }
+  return capture.read();
+}
+
+/** Async form of {@link beginStdoutCapture} scoped to one run. */
+export async function withCapturedStdoutAsync(
+  run: () => Promise<unknown>,
+  options: StreamCaptureOptions = {},
+): Promise<string> {
+  const capture = beginStdoutCapture(options);
+  try {
+    await run();
+  } finally {
+    capture.restore();
+  }
+  return capture.read();
+}
+
+/** Runs `run` with both process output streams captured. */
+export async function withCapturedOutput(
+  run: () => Promise<unknown>,
+): Promise<{ stdout: string; stderr: string }> {
+  const stdout = beginStdoutCapture();
+  const stderr = beginStderrCapture();
+  try {
+    await run();
+  } finally {
+    stderr.restore();
+    stdout.restore();
+  }
+  return { stdout: stdout.read(), stderr: stderr.read() };
 }
 
 /** Toggles `isTTY` on a real process stream for the duration of `run`, then restores it. */

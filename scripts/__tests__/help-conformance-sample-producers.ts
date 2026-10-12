@@ -1,4 +1,5 @@
 import type { CapturedSample } from '../help-conformance-sample-outputs.mjs';
+import { withCapturedStderrAsync } from '../../src/__tests__/test-utils/stream-capture.ts';
 import {
   AMBIGUOUS_MATCH_SAMPLE,
   APP_NOT_INSTALLED_SAMPLE,
@@ -66,18 +67,10 @@ const formatFill = (result: Record<string, unknown>) =>
 
 /** The `Error (CODE): …` + `Hint: …` text printHumanError writes to stderr. */
 async function renderHumanError(error: AppError): Promise<string> {
-  const lines: string[] = [];
-  const originalWrite = process.stderr.write;
-  process.stderr.write = ((chunk: string | Uint8Array) => {
-    lines.push(String(chunk));
-    return true;
-  }) as typeof process.stderr.write;
-  try {
+  const stderr = await withCapturedStderrAsync(async () => {
     await printHumanError(normalizeError(error));
-  } finally {
-    process.stderr.write = originalWrite;
-  }
-  return lines.join('').trimEnd();
+  });
+  return stderr.trimEnd();
 }
 
 type ErrorResponse = {

@@ -7,6 +7,7 @@ import type {
 } from '../daemon-client/daemon-client.ts';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { beginStderrCapture, beginStdoutCapture } from './test-utils/stream-capture.ts';
 
 class ExitSignal extends Error {
   public readonly code: number;
@@ -55,16 +56,12 @@ export async function runCliCapture(
     typeof responderOrOptions === 'function'
       ? { ...extraOptions, sendToDaemon: responderOrOptions }
       : { ...extraOptions, ...(responderOrOptions ?? {}) };
-  let stdout = '';
-  let stderr = '';
   let code: number | null = null;
   const calls: CapturedDaemonRequest[] = [];
   const transportOptions: DaemonTransportOptions[] = [];
   const stateDir = options.stateDirPrefix ? mkdtempForTestSync(options.stateDirPrefix) : undefined;
 
   const originalExit = process.exit;
-  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
-  const originalStderrWrite = process.stderr.write.bind(process.stderr);
   const originalCwd = process.cwd();
   const restoreEnv = installIsolatedCliTestEnv({
     ...(options.env ?? {}),
@@ -78,20 +75,12 @@ export async function runCliCapture(
   (process as any).exit = ((nextCode?: number) => {
     throw new ExitSignal(nextCode ?? 0);
   }) as typeof process.exit;
-  (process.stdout as any).write = ((chunk: unknown, ...args: unknown[]) => {
-    if (options.passthroughBufferWrites && Buffer.isBuffer(chunk)) {
-      return originalStdoutWrite(chunk, ...(args as [any]));
-    }
-    stdout += String(chunk);
-    return true;
-  }) as typeof process.stdout.write;
-  (process.stderr as any).write = ((chunk: unknown, ...args: unknown[]) => {
-    if (options.passthroughBufferWrites && Buffer.isBuffer(chunk)) {
-      return originalStderrWrite(chunk, ...(args as [any]));
-    }
-    stderr += String(chunk);
-    return true;
-  }) as typeof process.stderr.write;
+  const stdoutCapture = beginStdoutCapture({
+    passthroughBufferWrites: options.passthroughBufferWrites,
+  });
+  const stderrCapture = beginStderrCapture({
+    passthroughBufferWrites: options.passthroughBufferWrites,
+  });
 
   const sendToDaemon = async (
     req: CapturedDaemonRequest,
@@ -114,10 +103,16 @@ export async function runCliCapture(
     restoreEnv();
     if (stateDir) fs.rmSync(stateDir, { recursive: true, force: true });
     process.exit = originalExit;
-    process.stdout.write = originalStdoutWrite;
-    process.stderr.write = originalStderrWrite;
+    stdoutCapture.restore();
+    stderrCapture.restore();
     process.chdir(originalCwd);
   }
 
-  return { code, stdout, stderr, calls, transportOptions };
+  return {
+    code,
+    stdout: stdoutCapture.read(),
+    stderr: stderrCapture.read(),
+    calls,
+    transportOptions,
+  };
 }

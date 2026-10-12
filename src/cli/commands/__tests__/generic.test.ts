@@ -2,27 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { withCapturedStdoutAsync } from '../../../__tests__/test-utils/stream-capture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createAgentDeviceClient } from '../../../agent-device-client.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { ClientBackedCliCommandName } from '../client-backed.ts';
 import { runGenericClientBackedCommand } from '../generic.ts';
-
-async function captureStdout(fn: () => Promise<unknown>): Promise<string> {
-  const chunks: string[] = [];
-  const original = process.stdout.write.bind(process.stdout);
-  process.stdout.write = ((chunk: unknown) => {
-    chunks.push(String(chunk));
-    return true;
-  }) as typeof process.stdout.write;
-  try {
-    await fn();
-  } finally {
-    process.stdout.write = original;
-  }
-  return chunks.join('');
-}
 
 test('snapshot --level digest --json preserves the digest through the generic CLI path', async () => {
   const digest = { nodeCount: 3, refs: [{ ref: 'e1', label: 'Login' }], truncated: false };
@@ -37,7 +23,7 @@ test('snapshot --level digest --json preserves the digest through the generic CL
   );
   const flags = { json: true, responseLevel: 'digest' } as CliFlags;
 
-  const out = await captureStdout(() =>
+  const out = await withCapturedStdoutAsync(() =>
     runGenericClientBackedCommand({
       command: 'snapshot' as ClientBackedCliCommandName,
       positionals: [],
@@ -78,7 +64,7 @@ test('replay human output keeps the composable warnings channel (#2560)', async 
     },
   );
 
-  const out = await captureStdout(() =>
+  const out = await withCapturedStdoutAsync(() =>
     runGenericClientBackedCommand({
       command: 'replay' as ClientBackedCliCommandName,
       positionals: [scriptPath],
@@ -112,7 +98,7 @@ test('the generic CLI path prints the response warnings', async () => {
     },
   );
 
-  const out = await captureStdout(() =>
+  const out = await withCapturedStdoutAsync(() =>
     runGenericClientBackedCommand({
       command: 'type' as ClientBackedCliCommandName,
       positionals: ['hi'],

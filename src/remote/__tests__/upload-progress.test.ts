@@ -1,17 +1,20 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { withInteractiveStderr } from '../../__tests__/test-utils/stream-capture.ts';
+import { withCapturedStderr } from '../../__tests__/test-utils/stream-capture.ts';
 import {
   createStderrUploadProgressReporter,
   type UploadProgressEvent,
 } from '../upload-progress.ts';
 
 function renderEvents(events: UploadProgressEvent[]): string {
-  return withInteractiveStderr(() => {
-    const sink = createStderrUploadProgressReporter();
-    assert.equal(sink !== undefined, true);
-    for (const event of events) sink!(event);
-  });
+  return withCapturedStderr(
+    () => {
+      const sink = createStderrUploadProgressReporter();
+      assert.equal(sink !== undefined, true);
+      for (const event of events) sink!(event);
+    },
+    { interactive: true },
+  );
 }
 
 test('the stderr reporter formats start, resume, progress and fallback events', () => {

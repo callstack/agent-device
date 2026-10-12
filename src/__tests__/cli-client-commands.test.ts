@@ -17,6 +17,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { resolveCliOptions } from '../cli/resolve-cli-options.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createStubClientLeases } from './test-utils/client-lease-fixtures.ts';
+import { withCapturedOutput, withCapturedStdoutAsync } from './test-utils/stream-capture.ts';
 
 // #1802: the replay client reads the script it names, so CLI-level replay cases need a real file.
 const REPLAY_SCRIPT_ROOT = mkdtempForTestSync('agent-device-cli-replay-scripts-');
@@ -265,7 +266,7 @@ test('metro prepare forwards normalized options to client.metro.prepare', async 
     },
   });
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
       command: 'metro',
       positionals: ['prepare'],
@@ -363,7 +364,7 @@ test('metro reload forwards host, port, bundle URL, and timeout to client.metro.
     },
   });
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
       command: 'metro',
       positionals: ['reload'],
@@ -417,7 +418,7 @@ test('events prints a parsed session timeline from the generic CLI route', async
     },
   });
 
-  const output = await captureOutput(async () => {
+  const output = await withCapturedOutput(async () => {
     const handled = await tryRunClientBackedCommand({
       command: 'events',
       positionals: [],
@@ -507,7 +508,7 @@ test('diff screenshot forwards --surface to live client screenshot capture', asy
       },
     });
 
-    await captureStdout(async () => {
+    await withCapturedStdoutAsync(async () => {
       const handled = await tryRunClientBackedCommand({
         command: 'diff',
         positionals: ['screenshot'],
@@ -619,7 +620,7 @@ test('apps command defaults to user-installed and prints discovery hint', async 
     },
   });
 
-  const output = await captureOutput(async () => {
+  const output = await withCapturedOutput(async () => {
     const handled = await tryRunClientBackedCommand({
       command: 'apps',
       positionals: [],
@@ -666,7 +667,7 @@ test('screenshot reports annotated ref count in non-json mode', async () => {
     }),
   });
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
       command: 'screenshot',
       positionals: ['/tmp/screenshot.png'],
@@ -700,7 +701,7 @@ click text="Continue"
     },
   });
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
       command: 'replay',
       positionals: ['export', sourcePath],
@@ -845,7 +846,7 @@ test('keyboard status prints Android input ownership in human output', async () 
     inputOwner: 'ime',
   });
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
       command: 'keyboard',
       positionals: ['status'],
@@ -877,7 +878,7 @@ test('metro prepare wraps output in the standard success envelope for --json', a
     },
   });
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
       command: 'metro',
       positionals: ['prepare'],
@@ -950,7 +951,7 @@ test('metro prepare with --remote-config loads profile defaults', async () => {
     },
   });
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
       command: 'metro',
       positionals: ['prepare'],
@@ -990,7 +991,7 @@ test('install prints command-owned success output in human mode', async () => {
     },
   });
 
-  const stdout = await captureStdout(async () => {
+  const stdout = await withCapturedStdoutAsync(async () => {
     const handled = await tryRunClientBackedCommand({
       command: 'install',
       positionals: ['Demo', '/tmp/Demo.app'],
@@ -1082,49 +1083,6 @@ test('settings location set rejects invalid coordinates before client call', asy
     );
   }
 });
-
-async function captureStdout(run: () => Promise<void>): Promise<string> {
-  let stdout = '';
-  const originalWrite = process.stdout.write.bind(process.stdout);
-  (process.stdout as any).write = ((chunk: unknown) => {
-    stdout += String(chunk);
-    return true;
-  }) as typeof process.stdout.write;
-
-  try {
-    await run();
-  } finally {
-    process.stdout.write = originalWrite;
-  }
-
-  return stdout;
-}
-
-async function captureOutput(
-  run: () => Promise<void>,
-): Promise<{ stdout: string; stderr: string }> {
-  let stdout = '';
-  let stderr = '';
-  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
-  const originalStderrWrite = process.stderr.write.bind(process.stderr);
-  (process.stdout as any).write = ((chunk: unknown) => {
-    stdout += String(chunk);
-    return true;
-  }) as typeof process.stdout.write;
-  (process.stderr as any).write = ((chunk: unknown) => {
-    stderr += String(chunk);
-    return true;
-  }) as typeof process.stderr.write;
-
-  try {
-    await run();
-  } finally {
-    process.stdout.write = originalStdoutWrite;
-    process.stderr.write = originalStderrWrite;
-  }
-
-  return { stdout, stderr };
-}
 
 function createStubClient(params: {
   installFromSource: AgentDeviceClient['apps']['installFromSource'];
