@@ -54,6 +54,7 @@
     { "path": "packages/replay-test" },
     { "path": "packages/selectors" },
     { "path": "packages/session-journal" },
+    { "path": "packages/test-kit" },
     { "path": "packages/xml" }
   ]
 }

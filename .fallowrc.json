@@ -314,14 +314,14 @@
       "exports": ["*"]
     },
     {
-      // Published package surfaces (see each package.json#exports); consumers may be external or reach them through workspace package exports Fallow does not follow.
-      "file": "{src/sdk/*.ts,src/ai-sdk/index.ts,packages/proxy/src/index.ts}",
+      // @agent-device/test-kit is the test-helper package: every module is consumed only from the test trees (root, scripts/, packages/, test/), which --production analysis does not see, exactly like the *.fixtures.ts entry above. The package manifest's exports map owns its surface; the same per-file blanket keeps it inside every other Fallow rule.
+      "file": "packages/test-kit/src/*.ts",
       "exports": ["*"]
     },
     {
-      // #1642: its three consumers (src/__tests__/cli-device-status.test.ts, src/daemon/device/__tests__/device-claims.test.ts, src/daemon/device/__tests__/device-claim-prune.test.ts) all reach it the only way a Vitest module mock can — `vi.mock(path, async (importOriginal) => (await import('...host-process-mock.ts')).pinOwnProcessStartTime(importOriginal))`. Dependency analysis cannot follow that dynamic import to a consumer, the same limitation the daemon route-handler entry above records.
-      "file": "src/__tests__/test-utils/host-process-mock.ts",
-      "exports": ["pinOwnProcessStartTime"]
+      // Published package surfaces (see each package.json#exports); consumers may be external or reach them through workspace package exports Fallow does not follow.
+      "file": "{src/sdk/*.ts,src/ai-sdk/index.ts,packages/proxy/src/index.ts}",
+      "exports": ["*"]
     },
     {
       // Tool config default exports, loaded by the tool rather than imported.
@@ -356,7 +356,7 @@
       "exports": ["getSessionCommandKind"]
     },
     {
-      // Workspace-package symbols whose only consumers are test-tree files, which --production analysis does not see. Each import is the package specifier, so the façade entry is load-bearing: parseTargetAnnotationV1Payload/TARGET_ANNOTATION_MAX_FIELD_BYTES from src/daemon/__tests__/session-target-evidence.test.ts, MAESTRO_COMPAT_* from src/cli/parser/__tests__/maestro-support-matrix.test.ts, SCRIPT_FLAG_COMMANDS/scriptFlagEntries from src/commands/replay/script-flag-admission.test.ts (the #3197 two-way drift guard between the .ad grammar and the CLI schema), createAppLogLiveHandle from src/__tests__/test-utils/app-log-live-handle.ts (its production sibling createAppLogLiveHandleFromFinish wraps it, and scripts/layering/platform-package-policy.test.ts pins the specifier form).
+      // Workspace-package symbols whose only consumers are test-tree files, which --production analysis does not see. Each import is the package specifier, so the façade entry is load-bearing: parseTargetAnnotationV1Payload/TARGET_ANNOTATION_MAX_FIELD_BYTES from src/daemon/__tests__/session-target-evidence.test.ts, MAESTRO_COMPAT_* from src/cli/parser/__tests__/maestro-support-matrix.test.ts, SCRIPT_FLAG_COMMANDS/scriptFlagEntries from src/commands/replay/script-flag-admission.test.ts (the #3197 two-way drift guard between the .ad grammar and the CLI schema), createAppLogLiveHandle from packages/test-kit/src/app-log-live-handle.ts (its production sibling createAppLogLiveHandleFromFinish wraps it, and scripts/layering/platform-package-policy.test.ts pins the specifier form).
       "file": "packages/{ad-script,maestro,capture-kit}/src/index.ts",
       "exports": [
         "parseTargetAnnotationV1Payload",

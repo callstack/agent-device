@@ -132,7 +132,40 @@ export const NEW_ENTRY_CEILINGS: Readonly<Record<EntryCategory, number>> = Objec
  */
 export const APPROVED_OVER_CEILING: Readonly<
   Record<string, { issue: string; reason: string; owner: string }>
-> = Object.freeze({});
+> = Object.freeze({
+  // The three test-kit helpers whose narrow fixture subpath sits behind a heavy package façade
+  // (the capture-kit barrel, the command-registry catalog, and the contracts runtime-facet
+  // family). Every module they evaluate is workspace-package vocabulary — no concrete platform
+  // implementation, which the deny-platform assertion below separately proves. The ceiling
+  // guards production entry weight; a test-only helper's closure is never loaded by a CLI run,
+  // a daemon start, or the published bundle.
+  'packages/test-kit/src/app-log-live-handle.ts': {
+    issue: '#1490',
+    reason:
+      'Test-only live-handle constructor; its one value edge is the capture-kit façade that owns ' +
+      'the real implementation, so its closure is capture-kit + contracts + kernel vocabulary. ' +
+      'The subpath is one function, and splitting the capture-kit façade for it would move ' +
+      'production code for a test import.',
+    owner: 'test-kit',
+  },
+  'packages/test-kit/src/property-arbitraries.ts': {
+    issue: '#1490',
+    reason:
+      "Test-only fast-check arbitraries; the weight is the command-registry catalog's eager " +
+      'registry-metadata surface, which the property files must read to stay drift-free against ' +
+      'the registry (the #1413 shared-hazard design). No platform implementation; never bundled.',
+    owner: 'test-kit',
+  },
+  'packages/test-kit/src/runtime-operation-facts.ts': {
+    issue: '#1490',
+    reason:
+      'Test-only unavailable-runtime fact builders typed against the twelve runtime-facet ' +
+      'contracts subpaths plus kernel device vocabulary; the contracts family is exactly the ' +
+      'vocabulary-facade layer the budgets treat as cheap per edge, and no single facet can be ' +
+      'dropped without breaking a runtime-seam fixture consumer.',
+    owner: 'test-kit',
+  },
+});
 
 /** The category is a function of the path, never a hand-written column. */
 export function entryCategoryOf(entryFile: string): EntryCategory {

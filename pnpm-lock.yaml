@@ -92,6 +92,9 @@ importers:
       '@agent-device/session-journal':
         specifier: workspace:*
         version: link:packages/session-journal
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:packages/test-kit
       '@agent-device/testmu':
         specifier: workspace:*
         version: link:packages/provider-testmu
@@ -630,6 +633,31 @@ importers:
       '@agent-device/kernel':
         specifier: workspace:*
         version: link:../kernel
+
+  packages/test-kit:
+    dependencies:
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
+      '@agent-device/command-registry':
+        specifier: workspace:*
+        version: link:../command-registry
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/daemon-contracts':
+        specifier: workspace:*
+        version: link:../daemon-contracts
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+    devDependencies:
+      fast-check:
+        specifier: ^4.9.0
+        version: 4.9.0
 
   packages/xml: {}
 

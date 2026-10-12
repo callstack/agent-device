@@ -312,6 +312,7 @@
     "@agent-device/replay-test": "workspace:*",
     "@agent-device/selectors": "workspace:*",
     "@agent-device/session-journal": "workspace:*",
+    "@agent-device/test-kit": "workspace:*",
     "@agent-device/xml": "workspace:*",
     "@arethetypeswrong/cli": "^0.18.5",
     "@chenglou/freerange": "^0.0.4",

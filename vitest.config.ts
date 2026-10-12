@@ -278,6 +278,9 @@ export default defineConfig({
         'src/**/*.test.ts',
         'src/**/__tests__/**',
         '**/*.fixtures.ts',
+        // Test helpers are test material, not product surface: they sat under `__tests__/` roots
+        // before @agent-device/test-kit existed and must stay out of the coverage denominator.
+        'packages/test-kit/**',
         'src/**/*-types.ts',
         'src/**/types.ts',
         'src/sdk/**',
