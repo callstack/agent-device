@@ -132,6 +132,9 @@ test('daemon shutdown reports a web close failure on stderr instead of losing it
 // asks the port for every session, and only a web device reaches the agent-browser process.
 test('daemon session teardown never dispatches a web close for a non-web session', async () => {
   const root = mkdtempForTestSync('agent-device-non-web-teardown-');
+  // With the fake installed, a close the adapter should never ask for reaches the
+  // agent-browser process seam (mockRunCmd) and fails below instead of passing silently.
+  await installFakeManagedAgentBrowser(root);
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   sessionStore.publish('android-non-web-teardown-session', {
     name: 'android-non-web-teardown-session',
@@ -145,15 +148,17 @@ test('daemon session teardown never dispatches a web close for a non-web session
     createdAt: Date.now(),
     actions: [],
   });
+  const stderrChunks: string[] = [];
 
   await teardownDaemonSessionForShutdown({
     ref: sessionStore.lookup('android-non-web-teardown-session')!,
     sessionStore,
-    stderr: { write: () => {} },
+    stderr: { write: (chunk) => stderrChunks.push(chunk) },
     platformCleanup: platformResourceCleanup,
   });
 
   // The snapshot-helper leg is a real-mechanics no-op for a device with no registered helper
-  // session; the process seam below is what a mistaken web close would have shown up on.
+  // session; a mistaken web close would surface on the process seam and on stderr below.
   expect(mockRunCmd).not.toHaveBeenCalled();
+  expect(stderrChunks.join('')).toBe('');
 });
