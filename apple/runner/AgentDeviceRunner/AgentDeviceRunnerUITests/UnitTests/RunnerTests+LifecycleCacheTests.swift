@@ -85,47 +85,84 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testSkippedActivationAfterTargetResetKeepsAnElapsedWindow() {
-    withStubbedTargetActivation {
-      mainOwned.needsPostSnapshotInteractionDelay = false
-      RunnerTargetActivationSpy.state = .runningForeground
-      _ = resetTargetAfterExternalRelaunch()
-      firstInteractionReadyUptime = ProcessInfo.processInfo.systemUptime - 1
-
-      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
-
-      XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 0)
-      XCTAssertLessThan(measureStabilizationDuration(), firstInteractionAfterActivateDelay / 2)
-      XCTAssertNil(firstInteractionReadyUptime)
-    }
-  }
-
-  @MainActor
-  func testSkippedActivationAfterTargetResetWaitsOnlyForTheRemainingWindow() {
-    withStubbedTargetActivation {
-      mainOwned.needsPostSnapshotInteractionDelay = false
-      RunnerTargetActivationSpy.state = .runningForeground
-      _ = resetTargetAfterExternalRelaunch()
-      let resetDeadline = firstInteractionReadyUptime
-      sleepFor(firstInteractionAfterActivateDelay / 2)
-
-      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
-
-      XCTAssertEqual(firstInteractionReadyUptime, resetDeadline)
-      let waited = measureStabilizationDuration()
-      XCTAssertLessThan(waited, firstInteractionAfterActivateDelay * 0.75)
-      XCTAssertNil(firstInteractionReadyUptime)
-    }
-  }
-
-  @MainActor
-  func testInvalidationForErrorDiscardsTheWindowSoTheNextSkippedActivationStampsFresh() {
+  func testSkippedActivationAfterAnnouncedRelaunchKeepsAnElapsedWindow() {
     withStubbedTargetActivation {
       mainOwned.needsPostSnapshotInteractionDelay = false
       RunnerTargetActivationSpy.state = .runningForeground
       mainOwned.app = app
       mainOwned.bundleId = "com.example.app"
-      firstInteractionReadyUptime = ProcessInfo.processInfo.systemUptime - 1
+      _ = resetTargetAfterExternalRelaunch()
+      stampElapsedWindow(origin: .announcedRelaunch(bundleId: "com.example.app"))
+
+      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
+
+      XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 0)
+      XCTAssertLessThan(measureStabilizationDuration(), firstInteractionAfterActivateDelay / 2)
+      XCTAssertNil(firstInteractionWindow)
+    }
+  }
+
+  @MainActor
+  func testSkippedActivationAfterAnnouncedRelaunchWaitsOnlyForTheRemainingWindow() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningForeground
+      mainOwned.app = app
+      mainOwned.bundleId = "com.example.app"
+      _ = resetTargetAfterExternalRelaunch()
+      let resetWindow = firstInteractionWindow
+      sleepFor(firstInteractionAfterActivateDelay / 2)
+
+      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
+
+      XCTAssertEqual(firstInteractionWindow?.readyUptime, resetWindow?.readyUptime)
+      XCTAssertEqual(firstInteractionWindow?.origin, .announcedRelaunch(bundleId: "com.example.app"))
+      XCTAssertLessThan(measureStabilizationDuration(), firstInteractionAfterActivateDelay * 0.75)
+      XCTAssertNil(firstInteractionWindow)
+    }
+  }
+
+  @MainActor
+  func testAnnouncedRelaunchWithNoBoundTargetCoversWhicheverBundleActivatesNext() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningForeground
+      invalidateCachedTarget(reason: "unit_test_setup")
+      _ = resetTargetAfterExternalRelaunch()
+      XCTAssertEqual(firstInteractionWindow?.origin, .announcedRelaunch(bundleId: nil))
+      stampElapsedWindow(origin: .announcedRelaunch(bundleId: nil))
+
+      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
+
+      XCTAssertLessThan(measureStabilizationDuration(), firstInteractionAfterActivateDelay / 2)
+    }
+  }
+
+  @MainActor
+  func testSkippedActivationOfAnotherBundleThanTheAnnouncedRelaunchStampsFresh() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningForeground
+      stampElapsedWindow(origin: .announcedRelaunch(bundleId: "com.example.a"))
+
+      _ = activateTarget(bundleId: "com.example.b", reason: "bundle_changed")
+
+      XCTAssertEqual(firstInteractionWindow?.origin, .activation)
+      XCTAssertGreaterThanOrEqual(
+        measureStabilizationDuration(),
+        firstInteractionAfterActivateDelay * 0.8
+      )
+    }
+  }
+
+  @MainActor
+  func testStaleActivationWindowSurvivingTerminateInvalidationStampsFreshOnSkippedActivation() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningForeground
+      mainOwned.app = app
+      mainOwned.bundleId = "com.example.app"
+      stampElapsedWindow(origin: .activation)
 
       invalidateCachedTarget(reason: "target_terminated")
       _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
@@ -139,14 +176,15 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testSkippedActivationWithoutADeadlineStampsTheWindow() {
+  func testSkippedActivationWithoutAWindowStampsOne() {
     withStubbedTargetActivation {
       mainOwned.needsPostSnapshotInteractionDelay = false
       RunnerTargetActivationSpy.state = .runningForeground
-      firstInteractionReadyUptime = nil
+      firstInteractionWindow = nil
 
       _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
 
+      XCTAssertEqual(firstInteractionWindow?.origin, .activation)
       XCTAssertGreaterThanOrEqual(
         measureStabilizationDuration(),
         firstInteractionAfterActivateDelay * 0.8
@@ -155,15 +193,16 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testPerformedActivationReplacesAnElapsedWindow() {
+  func testPerformedActivationReplacesAnElapsedAnnouncedWindow() {
     withStubbedTargetActivation {
       mainOwned.needsPostSnapshotInteractionDelay = false
       RunnerTargetActivationSpy.state = .runningBackground
-      firstInteractionReadyUptime = ProcessInfo.processInfo.systemUptime - 1
+      stampElapsedWindow(origin: .announcedRelaunch(bundleId: "com.example.app"))
 
       _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
 
       XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 1)
+      XCTAssertEqual(firstInteractionWindow?.origin, .activation)
       XCTAssertGreaterThanOrEqual(
         measureStabilizationDuration(),
         firstInteractionAfterActivateDelay * 0.8
@@ -172,55 +211,10 @@ extension RunnerTests {
   }
 
   @MainActor
-  func testSkippedActivationOfAnotherBundleReplacesAnElapsedWindow() {
-    withStubbedTargetActivation {
-      mainOwned.needsPostSnapshotInteractionDelay = false
-      RunnerTargetActivationSpy.state = .runningForeground
-      mainOwned.app = app
-      mainOwned.bundleId = "com.example.previous"
-      firstInteractionReadyUptime = ProcessInfo.processInfo.systemUptime - 1
-
-      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
-
-      XCTAssertGreaterThanOrEqual(
-        measureStabilizationDuration(),
-        firstInteractionAfterActivateDelay * 0.8
-      )
-    }
-  }
-
-  func testForegroundReacquisitionContinuesOnlyTheSameBoundProcess() {
-    XCTAssertTrue(
-      Self.reacquiresBoundTarget(
-        previousBundleId: nil,
-        previousProcessIdentifier: nil,
-        bundleId: "com.example.app",
-        processIdentifier: 42
-      )
-    )
-    XCTAssertTrue(
-      Self.reacquiresBoundTarget(
-        previousBundleId: "com.example.app",
-        previousProcessIdentifier: 42,
-        bundleId: "com.example.app",
-        processIdentifier: 42
-      )
-    )
-    XCTAssertFalse(
-      Self.reacquiresBoundTarget(
-        previousBundleId: "com.example.app",
-        previousProcessIdentifier: 41,
-        bundleId: "com.example.app",
-        processIdentifier: 42
-      )
-    )
-    XCTAssertFalse(
-      Self.reacquiresBoundTarget(
-        previousBundleId: "com.example.other",
-        previousProcessIdentifier: 42,
-        bundleId: "com.example.app",
-        processIdentifier: 42
-      )
+  private func stampElapsedWindow(origin: FirstInteractionWindow.Origin) {
+    firstInteractionWindow = FirstInteractionWindow(
+      readyUptime: ProcessInfo.processInfo.systemUptime - 1,
+      origin: origin
     )
   }
 #endif
@@ -296,7 +290,7 @@ extension RunnerTests {
     mainOwned.bundleId = "com.example.app"
     mainOwned.processIdentifier = 42
     snapshotXCTestPenaltyWarmupExemption.isPending = true
-    firstInteractionReadyUptime = nil
+    firstInteractionWindow = nil
     penalizeSnapshotXCTestChannel(bundleId: "com.example.app", reason: "test")
     XCTAssertTrue(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
 
@@ -308,7 +302,7 @@ extension RunnerTests {
     XCTAssertNil(mainOwned.processIdentifier)
     XCTAssertFalse(snapshotXCTestPenaltyWarmupExemption.isPending)
     XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
-    XCTAssertNotNil(firstInteractionReadyUptime)
+    XCTAssertEqual(firstInteractionWindow?.origin, .announcedRelaunch(bundleId: "com.example.app"))
   }
 
   /// The settling window is a deadline measured from the activation, not a pause charged at the
@@ -319,10 +313,13 @@ extension RunnerTests {
     mainOwned.needsPostSnapshotInteractionDelay = false
 
     // An activation whose window has already elapsed: the caller spent it getting back to us.
-    firstInteractionReadyUptime = ProcessInfo.processInfo.systemUptime - 1
+    firstInteractionWindow = FirstInteractionWindow(
+      readyUptime: ProcessInfo.processInfo.systemUptime - 1,
+      origin: .activation
+    )
     let elapsedAfterSatisfiedWindow = measureStabilizationDuration()
     XCTAssertLessThan(elapsedAfterSatisfiedWindow, firstInteractionAfterActivateDelay / 2)
-    XCTAssertNil(firstInteractionReadyUptime)
+    XCTAssertNil(firstInteractionWindow)
 
     // A fresh activation still gets the whole guard.
     beginFirstInteractionStabilization()
@@ -331,7 +328,7 @@ extension RunnerTests {
       elapsedAfterFreshActivation,
       firstInteractionAfterActivateDelay * 0.8
     )
-    XCTAssertNil(firstInteractionReadyUptime)
+    XCTAssertNil(firstInteractionWindow)
   }
 
   @MainActor

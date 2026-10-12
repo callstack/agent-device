@@ -196,7 +196,6 @@ extension RunnerTests {
     mainOwned.bundleId = nil
     mainOwned.processIdentifier = nil
     resetTargetBoundState()
-    firstInteractionReadyUptime = nil
   }
 
   /// State that belongs to the currently bound target and must not outlive it: the text-entry tap
@@ -218,20 +217,20 @@ extension RunnerTests {
     mainOwned.bundleId = nil
     mainOwned.processIdentifier = nil
     resetTargetBoundState()
-    // Only the announced relaunch below leaves a deadline behind a dropped binding, which is what
-    // lets a skipped activation keep it. Any other invalidation starts the next activation fresh.
-    firstInteractionReadyUptime = nil
   }
 
   @MainActor
   func resetTargetAfterExternalRelaunch() -> Response {
+    // The wire carries no bundle, so the window is attributed to the binding being dropped; with
+    // none bound it matches whichever bundle activates next.
+    let announcedBundleId = mainOwned.bundleId
     invalidateCachedTarget(reason: "external_app_relaunch")
     // The app process is replaced, but the retained runner survives. Clear
     // process-bound capture state explicitly because invalidation drops the
     // old PID before refreshCachedTargetIfProcessChanged can observe it.
     clearSnapshotXCTestChannelPenalty(reason: "external_app_relaunch")
     clearPrivateAXAcceptedDepth(reason: "external_app_relaunch")
-    beginFirstInteractionStabilization()
+    beginFirstInteractionStabilization(origin: .announcedRelaunch(bundleId: announcedBundleId))
     return Response(ok: true, data: DataPayload(message: "target reset"))
   }
 
@@ -370,8 +369,6 @@ extension RunnerTests {
       initialState.rawValue,
       reason
     )
-    let previousBundleId = mainOwned.bundleId
-    let previousProcessIdentifier = mainOwned.processIdentifier
     var performedActivation = false
     // activate avoids terminating and relaunching the target app
     if initialState == .runningForeground {
@@ -400,18 +397,14 @@ extension RunnerTests {
     }
     mainOwned.app = target
     mainOwned.bundleId = bundleId
-    let processIdentifier = Self.processIdentifier(of: target)
-    mainOwned.processIdentifier = processIdentifier
+    mainOwned.processIdentifier = Self.processIdentifier(of: target)
     resetTargetBoundState()
-    let reacquiredBoundTarget =
+    let announcedRelaunchCoversBinding =
       !performedActivation
-      && Self.reacquiresBoundTarget(
-        previousBundleId: previousBundleId,
-        previousProcessIdentifier: previousProcessIdentifier,
-        bundleId: bundleId,
-        processIdentifier: processIdentifier
-      )
-    beginFirstInteractionStabilization(reacquiredBoundTarget ? .keepPendingWindow : .freshWindow)
+      && firstInteractionWindow?.origin.announcesRelaunch(of: bundleId) == true
+    if !announcedRelaunchCoversBinding {
+      beginFirstInteractionStabilization(origin: .activation)
+    }
     return target
   }
 
@@ -506,39 +499,39 @@ extension RunnerTests {
       sleepFor(postSnapshotInteractionDelay)
       mainOwned.needsPostSnapshotInteractionDelay = false
     }
-    if let readyUptime = firstInteractionReadyUptime {
-      sleepFor(readyUptime - ProcessInfo.processInfo.systemUptime)
-      firstInteractionReadyUptime = nil
+    if let window = firstInteractionWindow {
+      sleepFor(window.readyUptime - ProcessInfo.processInfo.systemUptime)
+      firstInteractionWindow = nil
     }
   }
 
-  enum FirstInteractionWindow {
-    /// The target was activated, replaced, or switched: the window restarts, discarding any
-    /// deadline an earlier activation left behind.
-    case freshWindow
-    /// The same already-foreground target was only re-bound: an existing deadline, pending or
-    /// elapsed but not yet consumed, still describes the last activation and is kept.
-    case keepPendingWindow
+  struct FirstInteractionWindow {
+    /// Where the deadline came from, so a later binding can tell whether it still describes the
+    /// activation that binding relies on.
+    enum Origin: Equatable {
+      /// Stamped by an activation or binding this runner performed.
+      case activation
+      /// Stamped when the daemon announced it had already relaunched and activated the app.
+      /// `bundleId` is the binding that was dropped, or nil when none was bound.
+      case announcedRelaunch(bundleId: String?)
+
+      func announcesRelaunch(of bundleId: String) -> Bool {
+        guard case .announcedRelaunch(let announcedBundleId) = self else { return false }
+        return announcedBundleId == nil || announcedBundleId == bundleId
+      }
+    }
+
+    let readyUptime: TimeInterval
+    let origin: Origin
   }
 
   /// Start the post-activation settling window. Measured from now, so the time the caller spends
   /// getting back to us counts towards it instead of being charged twice.
-  func beginFirstInteractionStabilization(_ window: FirstInteractionWindow = .freshWindow) {
-    if window == .keepPendingWindow, firstInteractionReadyUptime != nil { return }
-    firstInteractionReadyUptime =
-      ProcessInfo.processInfo.systemUptime + firstInteractionAfterActivateDelay
-  }
-
-  /// Whether binding an already-foreground target continues the binding that came before it.
-  /// A cache that was dropped (`nil` bundle) carries no identity to contradict.
-  static func reacquiresBoundTarget(
-    previousBundleId: String?,
-    previousProcessIdentifier: Int?,
-    bundleId: String,
-    processIdentifier: Int?
-  ) -> Bool {
-    guard let previousBundleId else { return true }
-    return previousBundleId == bundleId && previousProcessIdentifier == processIdentifier
+  func beginFirstInteractionStabilization(origin: FirstInteractionWindow.Origin = .activation) {
+    firstInteractionWindow = FirstInteractionWindow(
+      readyUptime: ProcessInfo.processInfo.systemUptime + firstInteractionAfterActivateDelay,
+      origin: origin
+    )
   }
 
   func sleepFor(_ delay: TimeInterval) {
