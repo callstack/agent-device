@@ -829,21 +829,37 @@ test('metro companion worker proxies bridge http requests to the local server', 
 test('metro companion worker normalizes close codes the websocket client cannot send', async () => {
   // A WebSocket client may only close with 1000 or 3000-4999. Every other bridge code must reach
   // upstream as 3001 instead of throwing inside the worker and stranding the tunnel.
+  //
+  // The codes are asserted per stream, not as a sorted multiset, so each expected wire code is
+  // pinned to the bridge code that produced it. `stream-fractional` is what makes the first
+  // normalization stage observable: the second stage passes any 3000-4999 value through, so
+  // without the non-integer rejection here the 3500.5 would reach the wire truncated to 3500
+  // instead of being refused as 3001.
   const closeCodes: Record<string, number | undefined> = {
     'stream-1000': 1000,
     'stream-4000': 4000,
     'stream-1005': 1005,
     'stream-1001': 1001,
     'stream-none': undefined,
+    'stream-fractional': 3500.5,
+  };
+  const expectedCloses: Record<string, CloseFrame> = {
+    'stream-1000': { code: 1000, reason: 'bridge done' },
+    'stream-4000': { code: 4000, reason: 'bridge requested close' },
+    'stream-1005': { code: 3001, reason: 'bridge requested close' },
+    'stream-1001': { code: 3001, reason: 'bridge requested close' },
+    'stream-none': { code: 3001, reason: 'bridge requested close' },
+    'stream-fractional': { code: 3001, reason: 'bridge requested close' },
   };
   const streamIds = Object.keys(closeCodes);
-  const upstreamCloses: CloseFrame[] = [];
+  const upstreamCloses = new Map<string, CloseFrame>();
   const upstreamClosed = createDeferred<void>();
   let upstreamSocketRef: Duplex | null = null;
 
   const upstreamServer = http.createServer((_, res) => writeNotFound(res));
   upstreamServer.on('upgrade', (req, socket) => {
-    if (!req.url?.startsWith('/echo/')) {
+    const streamId = req.url?.startsWith('/echo/') ? req.url.slice('/echo/'.length) : undefined;
+    if (!streamId || !(streamId in closeCodes)) {
       socket.destroy();
       return;
     }
@@ -855,8 +871,8 @@ test('metro companion worker normalizes close codes the websocket client cannot 
         // This probe only answers close frames; text frames are not proxied here.
       },
       (frame) => {
-        upstreamCloses.push(frame);
-        if (upstreamCloses.length === streamIds.length) upstreamClosed.resolve();
+        upstreamCloses.set(streamId, frame);
+        if (upstreamCloses.size === streamIds.length) upstreamClosed.resolve();
       },
     );
   });
@@ -922,17 +938,14 @@ test('metro companion worker normalizes close codes the websocket client cannot 
     earlyExit,
   ]);
 
+  const expectedByStream = streamIds.map((streamId) => ({
+    streamId,
+    received: upstreamCloses.get(streamId),
+    expected: expectedCloses[streamId],
+  }));
   assert.deepEqual(
-    upstreamCloses.map((frame) => frame.code).sort((left, right) => left! - right!),
-    [1000, 3001, 3001, 3001, 4000],
-  );
-  assert.ok(
-    upstreamCloses.some((frame) => frame.reason === 'bridge done'),
-    'a bridge-provided reason must survive normalization',
-  );
-  assert.ok(
-    upstreamCloses.some((frame) => frame.reason === 'bridge requested close'),
-    'a missing bridge reason must fall back to the default',
+    expectedByStream.map((entry) => [entry.streamId, entry.received]),
+    expectedByStream.map((entry) => [entry.streamId, entry.expected]),
   );
 
   // The worker keeps serving after the normalized closes.

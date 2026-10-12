@@ -341,121 +341,202 @@ function errnoException(code: string): NodeJS.ErrnoException {
   return Object.assign(new Error(`simulated ${code}`), { code });
 }
 
-test('stopping a companion survives every process-teardown race', async () => {
-  const projectRoot = mkdtempForTestSync('agent-device-metro-companion-teardown-');
-  const companionCommand = `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`;
-  try {
-    // 1. The recorded pid is already gone: nothing to signal, and the artifacts are cleared.
-    vi.mocked(isProcessAlive).mockReturnValueOnce(false);
-    let statePath = writeOwnCompanionState(projectRoot, 4001);
-    let killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
-    assert.equal((await stopMetroCompanion({ projectRoot })).stopped, true);
-    assert.equal(killSpy.mock.calls.length, 0);
-    assert.equal(fs.existsSync(statePath), false);
-    killSpy.mockRestore();
+const COMPANION_TUNNEL_COMMAND = `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`;
 
-    // 2. The process is alive but its command line is unreadable: never signal an unknown pid.
-    vi.mocked(isProcessAlive).mockReturnValueOnce(true);
-    vi.mocked(readProcessCommand).mockReturnValueOnce(null);
-    statePath = writeOwnCompanionState(projectRoot, 4002);
-    killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
-    assert.equal((await stopMetroCompanion({ projectRoot })).stopped, true);
-    assert.equal(killSpy.mock.calls.length, 0);
-    killSpy.mockRestore();
+type CompanionTeardownCase = Readonly<{
+  name: string;
+  pid: number;
+  processAlive: boolean;
+  processCommand: string | null;
+  /** One entry per `process.kill` call: an errno to throw, or true when the signal is accepted. */
+  killOutcomes: Array<true | 'EPERM' | 'ESRCH' | 'EACCES'>;
+  /** One entry per `waitForProcessExit` call: whether the companion exited in that window. */
+  exitOutcomes: boolean[];
+  expect: Readonly<{
+    rejection?: string;
+    stopped?: boolean;
+    killCalls: Array<[number, 'SIGTERM' | 'SIGKILL']>;
+    exitWaitCalls: Array<[number, number]>;
+    keepsState: boolean;
+  }>;
+}>;
 
-    // 3. SIGTERM is refused (EPERM). The shared stopper reads "signal refused" as
-    //    already-exited, so teardown reports stopped, skips the exit wait and SIGKILL,
-    //    and drops the state file without confirming an exit. EPERM can also mean a
-    //    companion still running under another owner, which is why the daemon's own
-    //    stopper keeps its registration instead (`signal-failed` in
-    //    src/daemon/process/daemon-stop.ts); companion teardown keeps the weaker
-    //    local-dev contract that a pid we cannot signal is not ours to keep tracking.
-    vi.mocked(isProcessAlive).mockReturnValueOnce(true);
-    vi.mocked(readProcessCommand).mockReturnValueOnce(companionCommand);
-    killSpy = vi.spyOn(process, 'kill').mockImplementationOnce(() => {
-      throw errnoException('EPERM');
-    });
-    statePath = writeOwnCompanionState(projectRoot, 4003);
-    assert.equal((await stopMetroCompanion({ projectRoot })).stopped, true);
-    assert.deepEqual(killSpy.mock.calls, [[4003, 'SIGTERM']]);
-    assert.equal(vi.mocked(waitForProcessExit).mock.calls.length, 0);
-    assert.equal(fs.existsSync(statePath), false);
-    killSpy.mockRestore();
-
-    // 4. SIGTERM is ignored: escalate to SIGKILL and wait for the exit again.
-    vi.mocked(waitForProcessExit).mockReset();
-    vi.mocked(isProcessAlive).mockReturnValueOnce(true);
-    vi.mocked(readProcessCommand).mockReturnValueOnce(companionCommand);
-    killSpy = vi.spyOn(process, 'kill').mockReturnValue(true);
-    vi.mocked(waitForProcessExit).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-    statePath = writeOwnCompanionState(projectRoot, 4004);
-    assert.equal((await stopMetroCompanion({ projectRoot })).stopped, true);
-    assert.deepEqual(killSpy.mock.calls, [
-      [4004, 'SIGTERM'],
-      [4004, 'SIGKILL'],
-    ]);
-    assert.deepEqual(
-      vi.mocked(waitForProcessExit).mock.calls.map((call) => [call[0], call[1]]),
-      [
+const COMPANION_TEARDOWN_CASES: CompanionTeardownCase[] = [
+  {
+    // The recorded pid is already gone: nothing to signal, and the artifacts are cleared.
+    name: 'clears artifacts when the recorded pid is already gone',
+    pid: 4001,
+    processAlive: false,
+    processCommand: COMPANION_TUNNEL_COMMAND,
+    killOutcomes: [],
+    exitOutcomes: [],
+    expect: { stopped: true, killCalls: [], exitWaitCalls: [], keepsState: false },
+  },
+  {
+    // The process is alive but its command line is unreadable: never signal an unknown pid.
+    name: 'never signals a pid whose command line is unreadable',
+    pid: 4002,
+    processAlive: true,
+    processCommand: null,
+    killOutcomes: [],
+    exitOutcomes: [],
+    expect: { stopped: true, killCalls: [], exitWaitCalls: [], keepsState: false },
+  },
+  {
+    // SIGTERM is refused (EPERM). The shared stopper reads "signal refused" as already-exited, so
+    // teardown reports stopped, skips the exit wait and SIGKILL, and drops the state file without
+    // confirming an exit. EPERM can also mean a companion still running under another owner, which
+    // is why the daemon's own stopper keeps its registration instead (`signal-failed` in
+    // src/daemon/daemon-stop.ts); companion teardown keeps the weaker local-dev contract that a pid
+    // we cannot signal is not ours to keep tracking.
+    name: 'reads a refused SIGTERM as already exited',
+    pid: 4003,
+    processAlive: true,
+    processCommand: COMPANION_TUNNEL_COMMAND,
+    killOutcomes: ['EPERM'],
+    exitOutcomes: [],
+    expect: {
+      stopped: true,
+      killCalls: [[4003, 'SIGTERM']],
+      exitWaitCalls: [],
+      keepsState: false,
+    },
+  },
+  {
+    // SIGTERM is ignored: escalate to SIGKILL and wait for the exit again.
+    name: 'escalates an ignored SIGTERM to SIGKILL',
+    pid: 4004,
+    processAlive: true,
+    processCommand: COMPANION_TUNNEL_COMMAND,
+    killOutcomes: [true, true],
+    exitOutcomes: [false, true],
+    expect: {
+      stopped: true,
+      killCalls: [
+        [4004, 'SIGTERM'],
+        [4004, 'SIGKILL'],
+      ],
+      exitWaitCalls: [
         [4004, 1_000],
         [4004, 1_000],
       ],
-    );
-    killSpy.mockRestore();
+      keepsState: false,
+    },
+  },
+  {
+    // SIGKILL loses the race (ESRCH): stop without waiting on a pid that is already gone.
+    name: 'skips the second exit wait when SIGKILL loses the race',
+    pid: 4005,
+    processAlive: true,
+    processCommand: COMPANION_TUNNEL_COMMAND,
+    killOutcomes: [true, 'ESRCH'],
+    exitOutcomes: [false],
+    expect: {
+      stopped: true,
+      killCalls: [
+        [4005, 'SIGTERM'],
+        [4005, 'SIGKILL'],
+      ],
+      exitWaitCalls: [[4005, 1_000]],
+      keepsState: false,
+    },
+  },
+  {
+    // A signalling failure that is not a race is reported, and the state file survives so the
+    // companion can be retried instead of being orphaned silently.
+    name: 'reports a non-race SIGTERM failure and keeps the state for retry',
+    pid: 4006,
+    processAlive: true,
+    processCommand: COMPANION_TUNNEL_COMMAND,
+    killOutcomes: ['EACCES'],
+    exitOutcomes: [],
+    expect: {
+      rejection: 'simulated EACCES',
+      killCalls: [[4006, 'SIGTERM']],
+      exitWaitCalls: [],
+      keepsState: true,
+    },
+  },
+  {
+    // The same holds when only the escalation fails for a non-race reason: the retry stops the
+    // same still-recorded companion and fails on SIGKILL.
+    name: 'reports a non-race SIGKILL escalation failure and keeps the state for retry',
+    pid: 4007,
+    processAlive: true,
+    processCommand: COMPANION_TUNNEL_COMMAND,
+    killOutcomes: [true, 'EACCES'],
+    exitOutcomes: [false],
+    expect: {
+      rejection: 'simulated EACCES',
+      killCalls: [
+        [4007, 'SIGTERM'],
+        [4007, 'SIGKILL'],
+      ],
+      exitWaitCalls: [[4007, 1_000]],
+      keepsState: true,
+    },
+  },
+];
 
-    // 5. SIGKILL loses the race (ESRCH): stop without waiting on a pid that is already gone.
-    vi.mocked(waitForProcessExit).mockReset().mockResolvedValueOnce(false);
-    vi.mocked(isProcessAlive).mockReturnValueOnce(true);
-    vi.mocked(readProcessCommand).mockReturnValueOnce(companionCommand);
-    killSpy = vi
-      .spyOn(process, 'kill')
-      .mockReturnValueOnce(true)
-      .mockImplementationOnce(() => {
-        throw errnoException('ESRCH');
+// Each case owns its projectRoot, state file, pid, and mock outcomes, so one failure cannot hide
+// the later scenarios the way the original chained test allowed.
+test.each(COMPANION_TEARDOWN_CASES)(
+  'stopping a companion survives the teardown race: $name',
+  async ({
+    pid,
+    processAlive,
+    processCommand,
+    killOutcomes,
+    exitOutcomes,
+    expect: expectation,
+  }) => {
+    const projectRoot = mkdtempForTestSync('agent-device-metro-companion-teardown-');
+    const statePath = writeOwnCompanionState(projectRoot, pid);
+    try {
+      vi.mocked(isProcessAlive).mockReturnValue(processAlive);
+      vi.mocked(readProcessCommand).mockReturnValue(processCommand);
+      let killIndex = 0;
+      const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => {
+        const outcome = killOutcomes[killIndex];
+        if (outcome === undefined) {
+          throw new Error(`unexpected process.kill call #${killIndex + 1}`);
+        }
+        killIndex += 1;
+        if (outcome !== true) throw errnoException(outcome);
+        return true;
       });
-    statePath = writeOwnCompanionState(projectRoot, 4005);
-    assert.equal((await stopMetroCompanion({ projectRoot })).stopped, true);
-    assert.deepEqual(killSpy.mock.calls, [
-      [4005, 'SIGTERM'],
-      [4005, 'SIGKILL'],
-    ]);
-    assert.equal(vi.mocked(waitForProcessExit).mock.calls.length, 1);
-    killSpy.mockRestore();
-
-    // 6. A signalling failure that is not a race is reported, and the state file survives so the
-    //    companion can be retried instead of being orphaned silently.
-    vi.mocked(isProcessAlive).mockReturnValueOnce(true);
-    vi.mocked(readProcessCommand).mockReturnValueOnce(companionCommand);
-    killSpy = vi.spyOn(process, 'kill').mockImplementationOnce(() => {
-      throw errnoException('EACCES');
-    });
-    statePath = writeOwnCompanionState(projectRoot, 4006);
-    await assert.rejects(() => stopMetroCompanion({ projectRoot }), /simulated EACCES/);
-    assert.equal(fs.existsSync(statePath), true);
-    killSpy.mockRestore();
-
-    // 7. The same holds when only the escalation fails for a non-race reason: the retry stops the
-    //    same still-recorded companion and fails on SIGKILL.
-    vi.mocked(isProcessAlive).mockReturnValueOnce(true);
-    vi.mocked(readProcessCommand).mockReturnValueOnce(companionCommand);
-    killSpy = vi
-      .spyOn(process, 'kill')
-      .mockReturnValueOnce(true)
-      .mockImplementationOnce(() => {
-        throw errnoException('EACCES');
+      let exitIndex = 0;
+      vi.mocked(waitForProcessExit).mockImplementation(async () => {
+        const outcome = exitOutcomes[exitIndex];
+        if (outcome === undefined) {
+          throw new Error(`unexpected waitForProcessExit call #${exitIndex + 1}`);
+        }
+        exitIndex += 1;
+        return outcome;
       });
-    vi.mocked(waitForProcessExit).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
-    await assert.rejects(() => stopMetroCompanion({ projectRoot }), /simulated EACCES/);
-    assert.deepEqual(killSpy.mock.calls, [
-      [4006, 'SIGTERM'],
-      [4006, 'SIGKILL'],
-    ]);
-    assert.equal(fs.existsSync(statePath), true);
-    killSpy.mockRestore();
-  } finally {
-    fs.rmSync(projectRoot, { recursive: true, force: true });
-  }
-});
+
+      if (expectation.rejection !== undefined) {
+        await assert.rejects(
+          () => stopMetroCompanion({ projectRoot }),
+          new RegExp(expectation.rejection),
+        );
+      } else {
+        assert.equal(
+          (await stopMetroCompanion({ projectRoot })).stopped,
+          expectation.stopped === true,
+        );
+      }
+      assert.deepEqual(killSpy.mock.calls, expectation.killCalls);
+      assert.deepEqual(
+        vi.mocked(waitForProcessExit).mock.calls.map((call) => [call[0], call[1]]),
+        expectation.exitWaitCalls,
+      );
+      assert.equal(fs.existsSync(statePath), expectation.keepsState);
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  },
+);
 
 test('legacy state without bridge scope is stopped before respawn', async () => {
   const projectRoot = mkdtempForTestSync('agent-device-metro-companion-legacy-');

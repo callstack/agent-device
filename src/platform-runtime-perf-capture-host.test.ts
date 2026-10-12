@@ -261,7 +261,12 @@ test('rejects a non-xctrace native kind for an Apple capture', async () => {
       localRuntimeOwner('apple'),
       captureInput({ kind: 'perfetto', mode: 'trace' }),
     ),
-  ).rejects.toThrow('Apple native perf requires --kind xctrace, not perfetto');
+    // The typed code is what a caller branches on; the message only pins which of the three
+    // wrongNativeKind call sites fired.
+  ).rejects.toMatchObject({
+    code: 'INVALID_ARGS',
+    message: 'Apple native perf requires --kind xctrace, not perfetto',
+  });
   expect(appleXctrace.startAppleXctracePerfCapture).not.toHaveBeenCalled();
 });
 
