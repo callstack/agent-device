@@ -50,20 +50,12 @@ type ImportSite = {
   declarationTypeOnly: boolean;
 };
 
-// `packages/daemon/src` is where the daemon moves when the extraction lands; the walk below
-// tolerates a root that does not exist yet so this guard keeps seeing the daemon before and after.
-const PRODUCTION_ROOTS = ['src', 'packages/replay-port/src', 'packages/daemon/src'] as const;
+const PRODUCTION_ROOTS = ['src', 'packages/replay-port/src'] as const;
 
 function listProductionSourceFiles(): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
-    let entries;
-    try {
-      entries = fs.readdirSync(path.join(REPO_ROOT, dir), { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
+    for (const entry of fs.readdirSync(path.join(REPO_ROOT, dir), { withFileTypes: true })) {
       if (entry.name === 'node_modules' || entry.name === '__tests__') continue;
       const relPath = path.posix.join(dir, entry.name);
       if (entry.isDirectory()) {
