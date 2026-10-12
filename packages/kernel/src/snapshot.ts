@@ -267,16 +267,26 @@ export const SNAPSHOT_COVERING_LABEL_MAX_LENGTH = 80;
 /**
  * One-line human rendering of a {@link SnapshotCoveringNode} for refusal hints, e.g.
  * `the dialog "Cookie banner" at (16, 420 358x180)`. Coordinates are rounded; the detail payload
- * carries the unrounded rect.
+ * carries the unrounded rect. The label is app-controlled text: the rendering collapses whitespace
+ * and drops quote characters so the hint stays one unambiguous line, while the detail keeps it raw.
  */
 function formatSnapshotCoveringNode(cover: SnapshotCoveringNode): string {
-  const named = cover.label ? `${cover.kind} "${cover.label}"` : cover.kind;
+  const sanitized = cover.label ? sanitizeCoveringLabelForHint(cover.label) : '';
+  const named = sanitized ? `${cover.kind} "${sanitized}"` : cover.kind;
   const rect = cover.rect;
   if (!rect) return `the ${named}`;
   return (
     `the ${named} at (${Math.round(rect.x)}, ${Math.round(rect.y)} ` +
     `${Math.round(rect.width)}x${Math.round(rect.height)})`
   );
+}
+
+function sanitizeCoveringLabelForHint(label: string): string {
+  return label
+    .replaceAll(/[\r\n]+/g, ' ')
+    .replaceAll(/\s+/g, ' ')
+    .replaceAll('"', '')
+    .trim();
 }
 
 /**
