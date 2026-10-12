@@ -3,7 +3,10 @@ import { createDaemonHttpServer } from '../server/http-server.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { listenOnLoopback } from '@agent-device/test-kit/loopback';
 
-export type RpcErrorBody = { error?: { code?: number; data?: { details?: { reason?: string } } } };
+export type RpcErrorBody = {
+  id?: unknown;
+  error?: { code?: number; data?: { details?: { reason?: string } } };
+};
 
 /** One `agent_device.command` call over `/rpc`, as the daemon answered it. */
 export async function postRpcCommand(
@@ -20,6 +23,20 @@ export async function postRpcCommand(
       method: 'agent_device.command',
       params: { command: 'session_list', meta: { requestId } },
     }),
+  });
+  return { status: response.status, body: (await response.json()) as RpcErrorBody };
+}
+
+/** One `/rpc` POST of a caller-chosen body, exactly as the daemon answered it. */
+export async function postRpcRaw(
+  port: number,
+  bearerToken: string,
+  rawBody: string,
+): Promise<{ status: number; body: RpcErrorBody }> {
+  const response = await fetch(`http://127.0.0.1:${port}/rpc`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${bearerToken}` },
+    body: rawBody,
   });
   return { status: response.status, body: (await response.json()) as RpcErrorBody };
 }

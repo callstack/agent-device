@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import type { DiagnosticsRecordRef, NormalizedError } from '@agent-device/kernel/errors';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { LEASE_BACKENDS } from '@agent-device/kernel/contracts';
+import { isRecord } from '@agent-device/kernel/record';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
@@ -178,6 +179,10 @@ export async function createDaemonHttpServer(options: {
     }
 
     readRpcRequestBody(req, res, (body) => {
+      // The flow owns this request's lifetime, so this call site must neither hold lifetime state
+      // nor re-run it; the `catch` only answers. That answer is load-bearing: the daemon exits on
+      // an `unhandledRejection`, so a rejection dropped here would let any process that reaches
+      // the port stop the daemon with one request body.
       void handleRpcRequest({
         req,
         res,
@@ -186,6 +191,8 @@ export async function createDaemonHttpServer(options: {
         expectedToken: token,
         instanceId,
         handleRequest,
+      }).catch((error: unknown) => {
+        sendUnownedRpcRequestFailure(res, normalizeError(error));
       });
     });
   });
@@ -242,7 +249,8 @@ async function handleRpcRequest(params: {
   const lifetime = beginRpcRequestLifetime({ req, res, rpcId: validated.rpcRequest.id });
   // The `finally` below is the flow's only cleanup for a call that never reached an
   // invocation: unsound method params or a duplicate tracking id. An invoked request
-  // releases its own lifetime as the last step of answering.
+  // releases its own lifetime as the last step of answering, before anything observing the
+  // socket gets a turn.
   try {
     const admission = await admitRpcRequest({
       req,
@@ -275,7 +283,7 @@ async function handleRpcRequest(params: {
     // or a duplicate tracking id. The failure answer is on its way, so a socket closing
     // after it is not a client walking out on work still in flight.
     lifetime.markHandlerCompleted();
-    sendRpcRequestFailure(res, validated.rpcRequest, error);
+    sendRpcRequestFailure(res, validated.rpcRequest.id, normalizeError(error));
   } finally {
     lifetime.release();
   }
@@ -310,15 +318,25 @@ type RpcEnvelopeVerdict =
 
 /**
  * Parses and validates one `/rpc` body. A body that is not JSON gets the same -32700 answer
- * the socket's `error` listener gives a stream that breaks before it ends.
+ * the socket's `error` listener gives a stream that breaks before it ends. A body that parses as
+ * anything but one object — `null`, a number, a string, an array — is refused as -32600 before
+ * anything reads a property off it: reading through `null` throws, and that throw has no call to
+ * answer for.
  */
 function validateRpcRequestEnvelope(body: string): RpcEnvelopeVerdict {
-  let rpcRequest: JsonRpcRequest;
+  let parsed: unknown;
   try {
-    rpcRequest = JSON.parse(body) as JsonRpcRequest;
+    parsed = JSON.parse(body);
   } catch {
     return { ok: false, refusal: rpcParseErrorRefusal() };
   }
+  if (!isRecord(parsed)) {
+    return {
+      ok: false,
+      refusal: rpcRefusal(null, INVALID_REQUEST, 'Invalid Request', 400),
+    };
+  }
+  const rpcRequest = parsed as JsonRpcRequest;
 
   const refused = (code: number, message: string, statusCode: number): RpcEnvelopeVerdict => ({
     ok: false,
@@ -493,7 +511,7 @@ async function admitRpcRequest(params: {
       outcome: 'rejected',
       refusal: rpcRefusal(
         rpcRequest.id ?? null,
-        -32602,
+        INVALID_PARAMS,
         'Invalid params: command is required',
         400,
       ),
@@ -636,34 +654,43 @@ async function invokeAdmittedRpcRequest(params: {
     writeRpcResponseEnvelope(res, rpcAnswerFor(rpcRequest, daemonResponse));
   } catch (error) {
     lifetime.markHandlerCompleted();
-    sendRpcRequestFailure(res, rpcRequest, error);
+    sendRpcRequestFailure(res, rpcRequest.id, normalizeError(error));
   } finally {
     lifetime.release();
   }
 }
 
 /**
- * Answers a call that failed before an answer could be written — malformed wire input the
- * method vocabulary refused, or a handler that threw. A status code goes only to a call
- * that has not started answering; a stream already opened answers with its envelope.
+ * Last-resort answer for a `/rpc` flow rejection: no call id is known, so the refusal carries none.
+ * The reason goes to the daemon's error stream — the sink `unhandledRejection` used, and the only
+ * one guaranteed here, since the request's diagnostics scope opens later, inside `handleRequest`.
+ */
+function sendUnownedRpcRequestFailure(res: http.ServerResponse, failure: NormalizedError): void {
+  process.stderr.write(`Daemon error: ${failure.message}\n`);
+  if (!res.writableEnded) sendRpcRequestFailure(res, null, failure);
+}
+
+/**
+ * Answers a call that failed before an answer could be written — malformed wire input the method
+ * vocabulary refused, a handler that threw, or a flow that rejected outright. A status code goes
+ * only to a call that has not started answering; a stream already opened answers with its envelope.
  */
 function sendRpcRequestFailure(
   res: http.ServerResponse,
-  rpcRequest: JsonRpcRequest,
-  error: unknown,
+  requestId: JsonRpcRequest['id'],
+  failure: NormalizedError,
 ): void {
-  const normalized = normalizeError(error);
   const response = createRpcError(
-    rpcRequest.id ?? null,
-    jsonRpcCodeForNormalizedError(normalized.code),
-    normalized.message,
-    normalized,
+    requestId ?? null,
+    jsonRpcCodeForNormalizedError(failure.code),
+    failure.message,
+    failure,
   );
   if (res.headersSent) {
     writeRpcResponseEnvelope(res, response);
     return;
   }
-  sendJson(res, response, statusCodeForNormalizedError(normalized.code));
+  sendJson(res, response, statusCodeForNormalizedError(failure.code));
 }
 
 function rpcAnswerFor(rpcRequest: JsonRpcRequest, daemonResponse: DaemonResponse): JsonRpcResponse {
