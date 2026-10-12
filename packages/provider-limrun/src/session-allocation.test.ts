@@ -1,7 +1,6 @@
 import Limrun from '@limrun/api';
 import { expect, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { buildLimrunClientOptions } from './client-options.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
 import { allocateLimrunAndroidSession, allocateLimrunIosSession } from './session-allocation.ts';
 
@@ -17,7 +16,7 @@ test.for([
     const requests: Array<{ method: string; headers: Headers; url: string }> = [];
     let instanceReady = true;
     const limrun = new Limrun({
-      ...buildLimrunClientOptions({ apiKey: 'lim_test_key', clientVersion: '1.2.3' }),
+      apiKey: 'lim_test_key',
       baseURL: 'https://limrun.example',
       maxRetries: 0,
       fetch: async (url, init) => {
@@ -71,12 +70,14 @@ test.for([
     for (const request of [requests[0]!, requests[2]!]) {
       expect(new URL(request.url).pathname).toBe(`/v1/${platform}_instances`);
       expect(request.headers.get('user-agent')).toBe('agent-device-cli/1.2.3');
-      expect(request.headers.get('x-agent-device-client')).toBe('agent-device-cli');
-      expect(request.headers.get('x-agent-device-version')).toBe('1.2.3');
     }
     for (const request of [requests[1]!, requests[3]!]) {
       expect(new URL(request.url).pathname).toBe(`/v1/${platform}_instances/instance-1`);
       expect(request.headers.get('user-agent')).toMatch(/^Limrun\/JS /);
+    }
+    for (const request of requests) {
+      expect(request.headers.has('x-agent-device-client')).toBe(false);
+      expect(request.headers.has('x-agent-device-version')).toBe(false);
     }
   },
 );

@@ -13,7 +13,7 @@ import {
 } from './app-catalog.ts';
 import { createLimrunDeviceSession } from './device-session.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
-import { LIMRUN_CLIENT_HEADER } from './client-options.ts';
+import { LIMRUN_CLIENT_ID } from './client-options.ts';
 
 type LimrunInstance = {
   metadata: { id: string };
@@ -90,7 +90,7 @@ export async function allocateLimrunIosSession(
       },
     },
     {
-      headers: { 'User-Agent': `${LIMRUN_CLIENT_HEADER}/${params.dependencies.clientVersion}` },
+      headers: { 'User-Agent': `${LIMRUN_CLIENT_ID}/${params.dependencies.clientVersion}` },
     },
   )) as LimrunInstance;
   try {
@@ -137,7 +137,7 @@ export async function allocateLimrunAndroidSession(
       },
     },
     {
-      headers: { 'User-Agent': `${LIMRUN_CLIENT_HEADER}/${params.dependencies.clientVersion}` },
+      headers: { 'User-Agent': `${LIMRUN_CLIENT_ID}/${params.dependencies.clientVersion}` },
     },
   )) as LimrunInstance;
   try {

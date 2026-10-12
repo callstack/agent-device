@@ -133,7 +133,7 @@ afterEach(() => {
   vi.mocked(runCmd).mockReset();
 });
 
-test('Limrun runtime identifies direct CLI usage to the Limrun API', async () => {
+test('Limrun runtime identifies direct CLI usage when creating an instance', async () => {
   const runtime = new LimrunRuntime({
     apiKey: 'lim_test_key',
   });
@@ -159,13 +159,11 @@ test('Limrun runtime identifies direct CLI usage to the Limrun API', async () =>
     assert.equal(deviceSession?.platform, 'ios');
     assert.equal(deviceSession ? 'client' in deviceSession : true, false);
 
-    assert.deepEqual(limrunMockState.constructorOptions[0]?.defaultHeaders, {
-      'x-agent-device-client': 'agent-device-cli',
-      'x-agent-device-version': readVersion(),
-    });
+    assert.equal(limrunMockState.constructorOptions[0]?.defaultHeaders, undefined);
     const iosCreateCalls = limrunMockState.iosCreate.mock.calls as unknown as Array<
-      [{ metadata?: { labels?: Record<string, string> } }]
+      [{ metadata?: { labels?: Record<string, string> } }, { headers: Record<string, string> }]
     >;
+    assert.equal(iosCreateCalls[0]?.[1].headers['User-Agent'], `agent-device-cli/${readVersion()}`);
     assert.deepEqual(iosCreateCalls[0]?.[0].metadata?.labels, {
       tenantId: 'team-a',
       runId: 'run-a',

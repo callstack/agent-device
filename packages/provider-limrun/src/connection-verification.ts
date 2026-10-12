@@ -1,6 +1,5 @@
 import Limrun from '@limrun/api';
 import { AppError } from '@agent-device/kernel/errors';
-import { buildLimrunClientOptions } from './client-options.ts';
 import type { ProviderConnectionVerification } from '@agent-device/contracts/remote';
 import type { LimrunInstanceAccess } from './instance-access.ts';
 
@@ -21,7 +20,6 @@ export type LimrunConnectionVerification = ProviderConnectionVerification & {
 export type LimrunConnectionVerificationOptions = {
   apiKey?: string;
   instances?: LimrunInstanceAccess;
-  clientVersion: string;
   platform: 'android' | 'ios';
   region?: string;
 };
@@ -39,7 +37,7 @@ export async function verifyLimrunConnection(
     );
   }
   const client = new Limrun({
-    ...buildLimrunClientOptions({ apiKey: options.apiKey, clientVersion: options.clientVersion }),
+    apiKey: options.apiKey,
     timeout: 15_000,
     maxRetries: 0,
   });
