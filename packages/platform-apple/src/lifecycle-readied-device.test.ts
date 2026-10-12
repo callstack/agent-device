@@ -40,6 +40,27 @@ test('explicit runner preparation prepares the readied device and later opens re
   expect(prewarmRunnerSession).toHaveBeenCalledWith(readiedSimulator, {}, signal, false);
 });
 
+test('a close that readies a Shutdown Simulator hands the readied device to the interactor', async () => {
+  const { host, calls, resolveInteractor } = coldSimulatorLifecycleHost();
+  const lifecycle = bindAppleApplicationLifecycle({
+    host,
+    device: shutdownSimulator,
+    signal: new AbortController().signal,
+  });
+
+  await lifecycle.closeApplication({
+    appBundleId: 'com.example.app',
+    positionals: ['com.example.app'],
+    surface: 'app',
+    ensureReady: true,
+    execution: {},
+  });
+
+  expect(resolveInteractor).toHaveBeenCalledTimes(1);
+  expect(resolveInteractor.mock.calls[0]?.[0]).toMatchObject({ booted: true });
+  expect(calls.filter((call) => call.args.includes('bootstatus'))).toHaveLength(1);
+});
+
 test('a failed preparation leaves the original device bound', async () => {
   const { host, prewarmRunnerSession } = coldSimulatorLifecycleHost({ bootstatusExitCode: 1 });
   const signal = new AbortController().signal;

@@ -95,7 +95,12 @@ export function bindAppleApplicationLifecycle(
       await params.host.appleApplications.applyRuntimeHints(device, input),
     clearRuntimeHints: async (input) =>
       await params.host.appleApplications.clearRuntimeHints(device, input),
-    closeApplication: async (input) => await closeAppleApplication(params.host, binding, input),
+    closeApplication: async (input) => {
+      if (input.ensureReady) {
+        adoptReadiedDevice(await ensureAppleReady(params.host, device, params.signal));
+      }
+      await closeAppleApplication(params.host, binding, input);
+    },
     finalizeApplicationClose: async (input) =>
       await finalizeAppleApplicationClose(params.host, device, params.signal, input),
     prepareAppleRunner: async (input) => {
@@ -411,9 +416,6 @@ async function closeAppleApplication(
   binding: BoundAppleInteractor,
   input: CloseApplicationInput,
 ): Promise<void> {
-  if (input.ensureReady) {
-    await ensureAppleReady(host, binding.device, binding.signal);
-  }
   if (isApplePlatform(binding.device.platform) && !isIosSimulator(binding.device)) {
     await host.appleApplications.stopRunnerSession(binding.device.id);
   }
