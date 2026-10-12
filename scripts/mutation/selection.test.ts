@@ -93,3 +93,13 @@ test('a kernel diff selects nothing — only a harness diff spends mutants', () 
 test('a docs-only diff selects nothing', () => {
   assert.deepEqual(affectedMatrixFor(['docs/agents/testing.md']), []);
 });
+
+test('both workflow and Vitest configuration changes select the harness canary', () => {
+  for (const file of [
+    'vitest.mutation.config.ts',
+    'vitest.config.ts',
+    '.github/workflows/mutation-weekly.yml',
+  ]) {
+    assert.deepEqual(affectedMatrixFor([file]), shardMatrix([LANE_CANARY]), file);
+  }
+});

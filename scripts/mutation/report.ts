@@ -16,7 +16,7 @@ function renderRow(score: ModuleScore): string {
   const module = moduleById(score.module);
   return (
     `| \`${score.module}\` — ${module.label} | ${score.score}% | ${score.killed} | ` +
-    `${score.survived} | ${score.total} | ${score.timeout} |`
+    `${score.survived} | ${score.total} | ${score.timeout} | ${score.noCoverage} | ${score.errors} |`
   );
 }
 
@@ -27,7 +27,7 @@ function renderDetail(score: ModuleScore, maxListed: number): string[] {
     '',
   ];
   for (const mutant of score.surviving.slice(0, maxListed)) {
-    lines.push(`- \`${mutant.file}:${mutant.line}\` ${mutant.mutator}`);
+    lines.push(`- \`${mutant.file}:${mutant.line}\` ${mutant.mutator} (${mutant.status})`);
   }
   if (score.surviving.length > maxListed) {
     lines.push(`- …and ${score.surviving.length - maxListed} more`);
@@ -37,6 +37,7 @@ function renderDetail(score: ModuleScore, maxListed: number): string[] {
 
 export type RenderOptions = {
   readonly title?: string;
+  readonly incomplete?: string;
   readonly maxSurvivingListed?: number;
 };
 
@@ -50,10 +51,11 @@ export function renderReport(
     `## ${options.title ?? 'Mutation score — decision kernels'}`,
     '',
     `Stryker \`${provenance.strykerVersion}\` · config \`${provenance.configHash}\` · ` +
-      'report only — this lane never fails a build.',
+      'scores are advisory; harness failures fail the lane.',
     '',
-    '| Kernel | Score | Killed | Survived | Total | Timeout |',
-    '| --- | --- | --- | --- | --- | --- |',
+    ...(options.incomplete ? [`**Incomplete sweep: ${options.incomplete}**`, ''] : []),
+    '| Kernel | Score | Killed | Survived | Total | Timeout | Uncovered | Errors |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- |',
     ...scores.map(renderRow),
   ];
 

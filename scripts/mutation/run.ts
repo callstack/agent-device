@@ -28,6 +28,7 @@ import {
   type ModuleId,
   type ShardSpec,
 } from './modules.ts';
+import { shardFiles, type Shard } from './sharding.ts';
 import { derivedAffectedModules } from './ownership.ts';
 import { renderReport, type Provenance } from './report.ts';
 import { mergeReports, summarizeReport, type ModuleScore, type StrykerReport } from './score.ts';
@@ -78,9 +79,6 @@ type Args = {
   shard: Shard | undefined;
   expectShards: number | undefined;
 };
-
-/** One-based slice of a module's mutated sources: `--shard 2/4`. */
-type Shard = { index: number; count: number };
 
 function parseShard(value: string | undefined): Shard | undefined {
   if (!value) return undefined;
@@ -160,30 +158,6 @@ function changedFiles(base: string): string[] {
   return result.stdout.split('\n').filter(Boolean);
 }
 
-// The JSON report path comes from the config (Stryker's CLI takes no nested
-// reporter options), so a run always writes DEFAULT_REPORT_PATH.
-/**
- * Balances a module's sources across `count` jobs. Mutant count tracks file size
- * closely enough that greedy longest-first packing keeps the slowest slice near
- * the mean — the alternative is one 1,277-mutant selectors job that outruns both
- * the 30-minute acceptance budget and its own timeout.
- */
-function shardFiles(files: readonly string[], shard: Shard, root: string): string[] {
-  const bins: { size: number; files: string[] }[] = Array.from({ length: shard.count }, () => ({
-    size: 0,
-    files: [],
-  }));
-  const weighed = files
-    .map((file) => ({ file, size: fs.statSync(path.join(root, file)).size }))
-    .sort((a, b) => b.size - a.size || a.file.localeCompare(b.file));
-  for (const { file, size } of weighed) {
-    const bin = bins.reduce((smallest, next) => (next.size < smallest.size ? next : smallest));
-    bin.files.push(file);
-    bin.size += size;
-  }
-  return bins[shard.index - 1]!.files.sort();
-}
-
 async function runStryker(
   modules: readonly ModuleId[],
   reportPath: string,
@@ -196,11 +170,15 @@ async function runStryker(
   // over the mutated files, not hand-listed; see scripts/mutation/test-scope.ts.
   const globs = mutateGlobs(modules);
   const all = expandMutateFiles(globs, repoRoot);
-  // A sharded job mutates concrete files, so the slice is exact rather than a
-  // glob the next contributor has to keep in step with the registry.
+  // Source ranges keep single-file kernels inside the same shard budget.
   const mutate = shard ? shardFiles(all, shard, repoRoot) : globs;
   const scopePath = path.join(repoRoot, TEST_SCOPE_PATH);
-  const testFiles = relatedTestFiles(shard ? mutate : all, repoRoot);
+  const testFiles = await relatedTestFiles(
+    shard ? [...new Set(mutate.map((file) => file.split(':')[0]!))] : all,
+    repoRoot,
+  );
+  if (testFiles.length === 0)
+    throw new Error(`No related mutation tests for ${modules.join(', ')}`);
   writeTestScope(testFiles, scopePath);
   process.stdout.write(
     `mutation: ${modules.join(', ')}${shard ? ` shard ${shard.index}/${shard.count}` : ''} -> ` +
@@ -216,11 +194,11 @@ async function runStryker(
     onStdoutChunk: (chunk) => void process.stdout.write(chunk),
     onStderrChunk: (chunk) => void process.stderr.write(chunk),
   });
-  // Stryker exits non-zero on a low score too; this lane reports scores rather
-  // than judging them, so only a missing report is fatal here.
-  if (!fs.existsSync(absolute)) {
+  // No score threshold is configured. Any non-zero exit is a harness failure,
+  // even if Stryker wrote a partial report before failing.
+  if (result.exitCode !== 0 || !fs.existsSync(absolute)) {
     throw new Error(
-      `Stryker produced no report at ${reportPath} (exit ${result.exitCode}). See output above.`,
+      `Stryker failed (exit ${result.exitCode}) or produced no report at ${reportPath}. See output above.`,
     );
   }
 }
@@ -342,7 +320,11 @@ function readReport(file: string): StrykerReport {
  * expected-count verdict is the caller's, so a short set is still scored and
  * published before it fails.
  */
-function readShardedReports(dir: string): { report: StrykerReport; count: number } {
+function readShardedReports(dir: string): {
+  report: StrykerReport;
+  count: number;
+  failed: string[];
+} {
   const root = path.isAbsolute(dir) ? dir : path.join(repoRoot, dir);
   // Shard artifacts also carry the lane envelope and the derived test scope, so
   // the report is selected by name rather than by "every .json here".
@@ -352,7 +334,12 @@ function readShardedReports(dir: string): { report: StrykerReport; count: number
     .sort();
   if (files.length === 0) throw new Error(`No Stryker JSON reports found under ${dir}`);
   process.stdout.write(`mutation: merging ${files.length} shard report(s) from ${dir}\n`);
-  return { report: mergeReports(files.map(readReport)), count: files.length };
+  const failed = files
+    .filter(
+      (file) => existingResult(path.join(path.dirname(file), 'lane-envelope.json')) !== 'pass',
+    )
+    .map((file) => path.basename(path.dirname(file)));
+  return { report: mergeReports(files.map(readReport)), count: files.length, failed };
 }
 
 async function produceReport(
@@ -393,14 +380,17 @@ function assertCompleteSweep(state: LaneState, dir: string, shards: number, args
  * Reads shard reports, an existing report, or runs Stryker — and scores them.
  * Returns the shard count when the source was a shard directory.
  */
-async function scoreModules(args: Args, state: LaneState): Promise<number | undefined> {
+async function scoreModules(
+  args: Args,
+  state: LaneState,
+): Promise<{ count: number; failed: string[] } | undefined> {
   state.stage = args.reportDir || args.report ? 'report' : 'stryker';
   const shards = args.reportDir ? readShardedReports(args.reportDir) : undefined;
   const report = shards?.report ?? (await produceReport(state.modules, args.report, args.shard));
 
   state.stage = 'score';
   state.scores = summarizeReport(report, state.modules);
-  return shards?.count;
+  return shards;
 }
 
 async function sweep(args: Args, state: LaneState): Promise<number> {
@@ -421,9 +411,29 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
   const title = args.affected
     ? 'Mutation score — affected decision kernels'
     : 'Mutation score — decision kernels';
-  emit(renderReport(state.scores, state.provenance, { title }), args.summary);
-
-  if (args.reportDir) assertCompleteSweep(state, args.reportDir, shards ?? 0, args);
+  let incomplete: Error | undefined;
+  if (args.reportDir) {
+    try {
+      assertCompleteSweep(state, args.reportDir, shards?.count ?? 0, args);
+      if (args.expectShards !== undefined && shards?.failed.length) {
+        throw new Error(`Shard failure or missing envelope: ${shards.failed.join(', ')}`);
+      }
+    } catch (error) {
+      incomplete = error as Error;
+    }
+  }
+  const reason =
+    args.expectShards !== undefined && shards?.count !== args.expectShards
+      ? `${shards?.count} report(s), expected ${args.expectShards}`
+      : incomplete?.message;
+  emit(
+    renderReport(state.scores, state.provenance, {
+      title,
+      incomplete: incomplete ? reason : undefined,
+    }),
+    args.summary,
+  );
+  if (incomplete) throw incomplete;
   state.stage = 'complete';
   return 0;
 }
@@ -435,14 +445,21 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
  * `workflow.test.ts`, since a filter that missed one would let a harness change
  * merge unproven, and any wider filter only buys a no-op job.
  */
-export const LANE_TOOLING = ['scripts/mutation/', 'scripts/lib/', 'stryker.config.json'];
+export const LANE_TOOLING = [
+  'scripts/mutation/',
+  'scripts/lib/',
+  'stryker.config.json',
+  'vitest.mutation.config.ts',
+  'vitest.config.ts',
+  '.github/workflows/mutation-weekly.yml',
+];
 
 /**
  * The PR lane's matrix: empty unless the diff touches the harness, otherwise the
  * canary plus whatever kernels that same diff derives. The kernel report that
  * pays is the weekly sweep, so the PR lane spends mutants on one thing only —
  * proving the harness still runs end to end when the harness changes. Selecting
- * on derived kernel ownership alone would run the full ten-shard sweep on 24 of
+ * on derived kernel ownership alone would run the full sweep on 24 of
  * the last 40 merged PRs, a per-PR full sweep for a report nobody gates on.
  */
 export function affectedMatrixFor(

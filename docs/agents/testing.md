@@ -125,8 +125,9 @@ worker process, so a case that never returns or kills its process is reported as
 against the exact input. Promote a discovered case with the command the harness prints — never
 hand-copy an unshrunk input.
 
-Mutation is report-only and limited to the registry in `scripts/mutation/modules.ts`. It measures
-whether tests distinguish changed decision logic. Do not infer redundancy from line coverage alone.
+Mutation (`scripts/mutation/modules.ts`): weekly sweeps kernels; the PR canary checks harness,
+Vitest config, and workflows. Scores are advisory; incomplete sweeps fail. Line coverage does not
+prove test strength.
 
 ## Before editing a shared module
 

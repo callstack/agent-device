@@ -6,6 +6,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { mkdtempForTestSync } from '../../src/__tests__/test-utils/tmp-dir.ts';
 import { test } from 'node:test';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { laneEnvelope, LANE_ENVELOPE_SCHEMA_VERSION } from '../lib/lane-envelope.ts';
@@ -222,6 +223,8 @@ test('a short shard set publishes the shards that did report, then fails', () =>
   ]);
   assert.notEqual(result.exitCode, 0, 'a short shard set must fail the aggregate');
   assert.match(result.stderr, /1 report\(s\), expected 10/);
+  assert.match(result.stdout, /Incomplete sweep: 1 report\(s\), expected 10/);
+  assert.doesNotMatch(result.stdout, /this lane never fails a build/);
   assert.match(result.stdout, /\| `kernel-errors` — [^|]+\| 100% \|/);
   const envelope = readEnvelope();
   assert.equal(envelope.result, 'fail');
@@ -307,4 +310,106 @@ test('both mutation lanes publish the envelope', () => {
     );
   }
   assert.match(workflow('mutation-weekly.yml'), /Lane envelope/);
+});
+
+test('a report from a failed shard cannot make the aggregate pass', () => {
+  const dir = '.tmp/mutation/failed-shard';
+  const shard = path.join(repoRoot, dir, 'shard-a');
+  fs.mkdirSync(shard, { recursive: true });
+  fs.writeFileSync(
+    path.join(shard, 'mutation.json'),
+    JSON.stringify({
+      files: { 'packages/kernel/src/errors.ts': { mutants: [{ status: 'Killed' }] } },
+    }),
+  );
+  try {
+    fs.writeFileSync(path.join(shard, 'lane-envelope.json'), JSON.stringify({ result: 'fail' }));
+    const failed = runMutation([
+      '--report-dir',
+      dir,
+      '--expect-shards',
+      '1',
+      '--modules',
+      'kernel-errors',
+    ]);
+    assert.notEqual(failed.exitCode, 0);
+    assert.match(failed.stdout, /Incomplete sweep/);
+    assert.match(failed.stderr, /shard-a/);
+    fs.writeFileSync(path.join(shard, 'lane-envelope.json'), JSON.stringify({ result: 'pass' }));
+    const passed = runMutation([
+      '--report-dir',
+      dir,
+      '--expect-shards',
+      '1',
+      '--modules',
+      'kernel-errors',
+    ]);
+    assert.equal(passed.exitCode, 0, passed.stderr);
+    assert.doesNotMatch(passed.stdout, /Incomplete sweep/);
+    fs.rmSync(path.join(shard, 'lane-envelope.json'));
+    const missing = runMutation([
+      '--report-dir',
+      dir,
+      '--expect-shards',
+      '1',
+      '--modules',
+      'kernel-errors',
+    ]);
+    assert.notEqual(missing.exitCode, 0);
+  } finally {
+    fs.rmSync(path.join(repoRoot, dir), { recursive: true, force: true });
+  }
+});
+
+test('a non-zero Stryker exit fails even when it wrote a report', () => {
+  const root = fs.realpathSync(mkdtempForTestSync('mutation-failed-exit-'));
+  try {
+    runCmdSync('git', ['init', '--quiet', root]);
+    fs.mkdirSync(path.join(root, 'src'));
+    fs.mkdirSync(path.join(root, 'packages/kernel/src'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'bin'));
+    fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(root, 'node_modules'));
+    fs.writeFileSync(path.join(root, 'stryker.config.json'), '{}');
+    fs.writeFileSync(
+      path.join(root, 'vitest.config.ts'),
+      `export default { test: { projects: [{ test: { name: 'unit-core', include: ['src/**/*.test.ts'] } }] } };`,
+    );
+    fs.writeFileSync(path.join(root, 'packages/kernel/src/errors.ts'), 'export const value = 1;');
+    fs.writeFileSync(
+      path.join(root, 'src/consumer.test.ts'),
+      "import { value } from '../packages/kernel/src/errors'; console.log(value);",
+    );
+    fs.writeFileSync(
+      path.join(root, 'bin/pnpm'),
+      `#!/bin/sh
+mkdir -p .tmp/mutation
+printf '{"files":{}}' > .tmp/mutation/mutation.json
+exit 1
+`,
+      { mode: 0o755 },
+    );
+    const result = runCmdSync(
+      process.execPath,
+      [
+        '--experimental-strip-types',
+        path.join(repoRoot, 'scripts/mutation/run.ts'),
+        '--modules',
+        'kernel-errors',
+      ],
+      {
+        cwd: root,
+        env: { ...process.env, PATH: `${path.join(root, 'bin')}:${process.env.PATH}` },
+        allowFailure: true,
+      },
+    );
+    assert.notEqual(result.exitCode, 0);
+    assert.match(result.stderr, /Stryker failed \(exit 1\)/);
+    const envelope = JSON.parse(
+      fs.readFileSync(path.join(root, '.tmp/mutation/lane-envelope.json'), 'utf8'),
+    );
+    assert.equal(envelope.result, 'fail');
+    assert.equal(envelope.data.stage, 'stryker');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
