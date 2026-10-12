@@ -1,13 +1,13 @@
 # Issue Label Workflow
 
-Skills name five canonical triage roles; each maps to the GitHub label of the same name.
+This file defines five triage roles, each a GitHub label of the same name.
 
 | Label | Apply when |
 | --- | --- |
 | `needs-triage` | Every new issue; remove once it is understood and valid |
 | `needs-info` | Reporter or external input is required |
 | `ready-for-agent` | Fully specified; an AFK agent can pick it up with no extra human context |
-| `ready-for-human` | Never; reserved for the maintainer's reviewer agent |
+| `ready-for-human` | Only the maintainer's reviewer agent applies it |
 | `wontfix` | Only after an explicit maintainer decision not to act |
 
 No other agent adds or removes `ready-for-human` on an issue or PR, even when a skill's triage step names it.

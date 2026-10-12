@@ -37,12 +37,13 @@ content change.
 ## Fresh-context self-review
 
 Before opening a PR, give a reviewer with no implementation context (a subagent or new session)
-only the prompt below, the worktree, head, and base; not the diff or a summary. Fix the findings
-you accept, rerun the affected checks, and keep a one-line reason for each rejected finding.
-Without a way to spawn one, reread the full diff cold against the prompt and say so.
+only the prompt below, the worktree, head, and base ref (`origin/main`); not the diff or a summary.
+Fix the findings you accept, rerun the affected checks, and keep a one-line reason for each
+rejected finding. Without a way to spawn one, reread the full diff cold against the prompt and say
+so.
 
 > You did not write this change. Assume it has bugs and find them. Read `AGENTS.md`, then
-> `git diff $(git merge-base origin/<base> HEAD)` and untracked files; open the callers and siblings
+> `git diff $(git merge-base <base-ref> HEAD)` and untracked files; open the callers and siblings
 > of every hunk. Apply the Reviewing section of `docs/agents/pull-requests.md` and the
 > Incident-derived principles. Look for leftovers: narrating comments, guards or try/catch the call
 > site does not need, casts, dead code, a second way to do what the code already does one way. Would
