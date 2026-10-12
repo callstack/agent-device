@@ -366,6 +366,9 @@ extension RunnerTests {
       initialState.rawValue,
       reason
     )
+    let previousBundleId = mainOwned.bundleId
+    let previousProcessIdentifier = mainOwned.processIdentifier
+    var performedActivation = false
     // activate avoids terminating and relaunching the target app
     if initialState == .runningForeground {
       NSLog(
@@ -377,6 +380,7 @@ extension RunnerTests {
       // active set, so the fact would describe the repair instead of the state it repaired (#2682).
       let otherActiveApplicationPid = soleOtherActiveApplicationPid(excluding: Self.processIdentifier(of: target))
       target.activate()
+      performedActivation = true
       pendingTargetActivation = TargetActivationFactPayload(
         reason: reason,
         priorState: Int(initialState.rawValue),
@@ -392,9 +396,18 @@ extension RunnerTests {
     }
     mainOwned.app = target
     mainOwned.bundleId = bundleId
-    mainOwned.processIdentifier = Self.processIdentifier(of: target)
+    let processIdentifier = Self.processIdentifier(of: target)
+    mainOwned.processIdentifier = processIdentifier
     resetTargetBoundState()
-    beginFirstInteractionStabilization()
+    let reacquiredBoundTarget =
+      !performedActivation
+      && Self.reacquiresBoundTarget(
+        previousBundleId: previousBundleId,
+        previousProcessIdentifier: previousProcessIdentifier,
+        bundleId: bundleId,
+        processIdentifier: processIdentifier
+      )
+    beginFirstInteractionStabilization(reacquiredBoundTarget ? .keepPendingWindow : .freshWindow)
     return target
   }
 
@@ -495,11 +508,33 @@ extension RunnerTests {
     }
   }
 
+  enum FirstInteractionWindow {
+    /// The target was activated, replaced, or switched: the window restarts, discarding any
+    /// deadline an earlier activation left behind.
+    case freshWindow
+    /// The same already-foreground target was only re-bound: an existing deadline, pending or
+    /// elapsed but not yet consumed, still describes the last activation and is kept.
+    case keepPendingWindow
+  }
+
   /// Start the post-activation settling window. Measured from now, so the time the caller spends
   /// getting back to us counts towards it instead of being charged twice.
-  func beginFirstInteractionStabilization() {
+  func beginFirstInteractionStabilization(_ window: FirstInteractionWindow = .freshWindow) {
+    if window == .keepPendingWindow, firstInteractionReadyUptime != nil { return }
     firstInteractionReadyUptime =
       ProcessInfo.processInfo.systemUptime + firstInteractionAfterActivateDelay
+  }
+
+  /// Whether binding an already-foreground target continues the binding that came before it.
+  /// A cache that was dropped (`nil` bundle) carries no identity to contradict.
+  static func reacquiresBoundTarget(
+    previousBundleId: String?,
+    previousProcessIdentifier: Int?,
+    bundleId: String,
+    processIdentifier: Int?
+  ) -> Bool {
+    guard let previousBundleId else { return true }
+    return previousBundleId == bundleId && previousProcessIdentifier == processIdentifier
   }
 
   func sleepFor(_ delay: TimeInterval) {
