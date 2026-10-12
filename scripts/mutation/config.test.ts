@@ -56,3 +56,14 @@ test('shard planning pins the same instrumenter version as Stryker core', () => 
     core.dependencies['@stryker-mutator/instrumenter'],
   );
 });
+
+test('coverage reporting pins the same public API version as Stryker core', () => {
+  const root = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+  const core = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, 'node_modules/@stryker-mutator/core/package.json'), 'utf8'),
+  );
+  assert.equal(
+    root.devDependencies['@stryker-mutator/api'],
+    core.dependencies['@stryker-mutator/api'],
+  );
+});

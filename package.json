@@ -320,6 +320,7 @@
     "@nkzw/eslint-plugin": "^2.0.0",
     "@nkzw/oxlint-config": "^1.3.0",
     "@statelyai/graph": "2.4.0",
+    "@stryker-mutator/api": "10.0.0",
     "@stryker-mutator/core": "10.0.0",
     "@stryker-mutator/instrumenter": "10.0.0",
     "@stryker-mutator/vitest-runner": "10.0.0",

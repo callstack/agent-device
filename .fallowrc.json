@@ -44,6 +44,17 @@
     "website/docs/404.mdx",
     "website/rspress.config.ts"
   ],
+  "framework": [
+    {
+      "name": "mutation-pilot",
+      "enablers": ["@stryker-mutator/core"],
+      "entryPointRole": "test",
+      "entryPoints": ["scripts/mutation/coverage-reporter.ts", "scripts/mutation/seed-setup.ts"],
+      "usedExports": [
+        { "pattern": "scripts/mutation/coverage-reporter.ts", "exports": ["strykerPlugins"] }
+      ]
+    }
+  ],
   "ignorePatterns": [
     "examples/test-app/**",
     "scripts/perf/**",
