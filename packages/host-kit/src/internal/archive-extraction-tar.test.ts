@@ -4,7 +4,7 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { extractTarArchive } from './archive-extraction-tar.ts';
 import { ArchiveBudget } from './archive-safety.ts';
-import { createArchiveWorkspace, createTruncatedTgz } from './archive-extraction.fixtures.ts';
+import { createArchiveWorkspace, createTruncatedTgz } from '../archive.fixtures.ts';
 
 test('tar inspection rejects declared bytes before draining an over-budget entry', async () => {
   const workspace = await createArchiveWorkspace();

@@ -4,10 +4,7 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { extractZipArchive } from './archive-extraction-zip.ts';
 import { ArchiveBudget } from './archive-safety.ts';
-import {
-  createArchiveWorkspace,
-  createZipWithEncryptedSecondEntry,
-} from './archive-extraction.fixtures.ts';
+import { createArchiveWorkspace, createZipWithEncryptedSecondEntry } from '../archive.fixtures.ts';
 
 test('zip inspection stops at the entry budget before inspecting later entries', async () => {
   const workspace = await createArchiveWorkspace();

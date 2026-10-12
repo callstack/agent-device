@@ -3,8 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { crc32, gzipSync } from 'node:zlib';
 import * as tar from 'tar-stream';
-import { runCmdSync } from './exec.ts';
-import { mkdtempForTest } from './tmp-dir.fixtures.ts';
+import { mkdtempForTest } from './internal/tmp-dir.fixtures.ts';
 
 export async function createArchiveWorkspace(): Promise<{
   archivePath: string;
@@ -27,21 +26,30 @@ export async function createTruncatedTgz(archivePath: string): Promise<void> {
   await fs.writeFile(archivePath, gzipSync(headerOnly));
 }
 
+/** Two stored entries whose second carries the encrypted general-purpose flag bit. */
 export async function createZipWithEncryptedSecondEntry(archivePath: string): Promise<void> {
-  const staging = path.join(path.dirname(archivePath), 'zip-input');
-  await fs.mkdir(staging);
-  await fs.writeFile(path.join(staging, 'first.txt'), 'first');
-  await fs.writeFile(path.join(staging, 'second.txt'), 'second');
-  runCmdSync('zip', ['-q', archivePath, 'first.txt'], { cwd: staging });
-  runCmdSync('zip', ['-q', '-P', 'secret', archivePath, 'second.txt'], { cwd: staging });
+  await writeZipFixture(archivePath, [
+    { name: 'first.txt', mode: ZIP_FILE_MODE, data: 'first' },
+    { name: 'second.txt', mode: ZIP_FILE_MODE, data: 'second', encrypted: true },
+  ]);
 }
 
+const ZIP_FILE_MODE = 0o100644;
+
 /** One stored zip entry; `mode` is the full Unix `st_mode`, file-type bits included. */
-export type ZipFixtureEntry = { name: string; mode: number; data?: string };
+export type ZipFixtureEntry = {
+  name: string;
+  mode: number;
+  data?: string;
+  /** Declares the entry encrypted, which no archive reader may then extract. */
+  encrypted?: boolean;
+};
 
 /**
  * Writes a stored (uncompressed) zip whose names and Unix attributes are exactly as given, which
- * `zip` itself refuses to produce for links, special files, and escaping names.
+ * `zip` itself refuses to produce for links, special files, and escaping names. An entry declared
+ * `encrypted` carries the traditional encryption flag with a padded 12-byte encryption header and
+ * a zero CRC, the shape readers must refuse before extracting anything.
  */
 export async function writeZipFixture(
   archivePath: string,
@@ -52,24 +60,29 @@ export async function writeZipFixture(
   let offset = 0;
   for (const entry of entries) {
     const name = Buffer.from(entry.name, 'utf8');
-    const data = Buffer.from(entry.data ?? '', 'utf8');
-    const checksum = crc32(data);
+    const payload = Buffer.from(entry.data ?? '', 'utf8');
+    // A traditionally encrypted stored entry carries a 12-byte encryption header before the
+    // ciphertext, and readers validate that against the declared sizes, so the record declares
+    // it and the data section pads it; the payload itself never decrypts to anything.
+    const data = entry.encrypted ? Buffer.concat([Buffer.alloc(12), payload]) : payload;
+    const checksum = entry.encrypted ? 0 : crc32(payload);
+    const flags = 0x0800 | (entry.encrypted ? 0x0001 : 0);
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0x0800, 6);
+    local.writeUInt16LE(flags, 6);
     local.writeUInt32LE(checksum, 14);
     local.writeUInt32LE(data.length, 18);
-    local.writeUInt32LE(data.length, 22);
+    local.writeUInt32LE(payload.length, 22);
     local.writeUInt16LE(name.length, 26);
     const central = Buffer.alloc(46);
     central.writeUInt32LE(0x02014b50, 0);
     central.writeUInt16LE((3 << 8) | 20, 4);
     central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(0x0800, 8);
+    central.writeUInt16LE(flags, 8);
     central.writeUInt32LE(checksum, 16);
     central.writeUInt32LE(data.length, 20);
-    central.writeUInt32LE(data.length, 24);
+    central.writeUInt32LE(payload.length, 24);
     central.writeUInt16LE(name.length, 28);
     central.writeUInt32LE((entry.mode << 16) >>> 0, 38);
     central.writeUInt32LE(offset, 42);

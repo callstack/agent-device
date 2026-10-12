@@ -9,7 +9,7 @@ import {
   writeZipFixture,
   type TarFixtureEntry,
   type ZipFixtureEntry,
-} from './archive-extraction.fixtures.ts';
+} from '../archive.fixtures.ts';
 import { mkdtempForTest } from './tmp-dir.fixtures.ts';
 
 const S_IFREG = 0o100000;

@@ -20,6 +20,10 @@
       "types": "./src/archive.ts",
       "default": "./src/archive.ts"
     },
+    "./archive-fixtures": {
+      "types": "./src/archive.fixtures.ts",
+      "default": "./src/archive.fixtures.ts"
+    },
     "./audio-probe-fixtures": {
       "types": "./src/audio-probe.fixtures.ts",
       "default": "./src/audio-probe.fixtures.ts"
