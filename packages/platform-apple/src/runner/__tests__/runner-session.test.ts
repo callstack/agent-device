@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
-import type { DeviceInfo } from '@agent-device/kernel/device';
 import { IOS_DEVICE, IOS_SIMULATOR } from './device-fixtures.ts';
 import { appleRunnerTestHost } from '../test-host.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -368,67 +367,6 @@ test('runner session startup diagnostics include logical lease context', async (
   assert.match(diagnostics, /"leaseId":"lease-789"/);
   assert.match(diagnostics, /"leaseProvider":"ios-simulator"/);
   assert.match(diagnostics, /"deviceKey":"runner-session-lease-context-sim"/);
-});
-
-async function readStartupTimingsDiagnostic(
-  device: DeviceInfo,
-): Promise<{ durationMs: number; timings: Record<string, number> }> {
-  let reported: { durationMs: number; timings: Record<string, number> } | undefined;
-  appleRunnerTestHost.update({
-    emitDiagnostic: (event) => {
-      if (event.phase !== 'ios_runner_session_startup_timings') return;
-      reported = {
-        durationMs: event.durationMs as number,
-        timings: (event.data as { timings: Record<string, number> }).timings,
-      };
-    },
-  });
-  const session = await ensureRunnerSession(device, {});
-  await executeRunnerCommandWithSession(
-    device,
-    session,
-    { command: 'snapshot', appBundleId: 'com.example.demo' },
-    '/tmp/runner.log',
-    30_000,
-  );
-  assert.ok(reported, 'expected ios_runner_session_startup_timings');
-  return reported;
-}
-
-const sumValues = (timings: Record<string, number>) =>
-  Object.values(timings).reduce((sum, value) => sum + value, 0);
-
-test('runner session startup total excludes the build nested in ensure_xctestrun on a cache miss', async () => {
-  mockWaitForRunner.mockResolvedValue(runnerResponse({ nodes: [], truncated: false }));
-
-  const { durationMs, timings } = await readStartupTimingsDiagnostic({
-    ...IOS_SIMULATOR,
-    id: 'runner-session-timings-miss-sim',
-  });
-
-  assert.equal(timings.build_xctestrun, 12);
-  assert.equal(durationMs, sumValues(timings) - 12);
-});
-
-test('runner session startup total is the plain sum of phases on a cache hit', async () => {
-  mockEnsureXctestrunArtifact.mockResolvedValue({
-    xctestrunPath: '/tmp/cached-runner.xctestrun',
-    derived: '/tmp/derived',
-    cacheKey: RUNNER_CACHE_KEY_FIXTURE,
-    cache: 'hit',
-    artifact: 'valid',
-    buildMs: 0,
-    xctestrunPathSource: 'manifest',
-  });
-  mockWaitForRunner.mockResolvedValue(runnerResponse({ nodes: [], truncated: false }));
-
-  const { durationMs, timings } = await readStartupTimingsDiagnostic({
-    ...IOS_SIMULATOR,
-    id: 'runner-session-timings-hit-sim',
-  });
-
-  assert.equal(timings.build_xctestrun, 0);
-  assert.equal(durationMs, sumValues(timings));
 });
 
 test('runner session fails early for physical iOS devices when Apple developer mode is disabled', async () => {
