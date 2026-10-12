@@ -361,6 +361,10 @@ test('open iOS simulator app prewarms runner cache during cold boot', async () =
     );
     expect(mockPrewarmIosRunnerSession).toHaveBeenCalledTimes(1);
   });
+  expect(mockPrewarmIosRunnerSession).toHaveBeenCalledWith(
+    { ...device, booted: true },
+    expect.anything(),
+  );
 });
 
 test('open iOS app session prewarms runner session when app bundle id is known', async () => {

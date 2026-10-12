@@ -144,17 +144,7 @@ async function waitForSimulatorBoot(
       exitCode: status.exitCode,
     });
   }
-  // The confirming listing runs inside the same budget, and a confirmation that lands after the
-  // deadline is still a timeout: the caller's budget is the contract, not the boot's outcome.
-  const state = await getSimulatorState(
-    host.appleTools,
-    device,
-    signal,
-    Math.min(LIST_TIMEOUT_MS, remainingBootBudgetMs(deadlineAtMs, device)),
-  );
-  if (state !== 'Booted') {
-    throw new AppError('COMMAND_FAILED', 'Simulator is still booting', { deviceId: device.id });
-  }
+  signal.throwIfAborted();
   if (Date.now() >= deadlineAtMs) throw bootDeadlineError(device);
 }
 
