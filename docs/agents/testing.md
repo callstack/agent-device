@@ -125,8 +125,8 @@ worker process, so a case that never returns or kills its process is reported as
 against the exact input. Promote a discovered case with the command the harness prints — never
 hand-copy an unshrunk input.
 
-Scope: `scripts/mutation/modules.ts` (weekly), `scripts/mutation/run.ts#LANE_TOOLING` (PR canary).
-Scores are advisory; incomplete sweeps fail. Coverage does not prove test strength.
+Mutation scope: `scripts/mutation/modules.ts` (weekly), `scripts/mutation/run.ts#LANE_TOOLING`
+(PR canary). Scores are advisory; incomplete sweeps fail. Pilot protocol: `pnpm mutation:run --help`.
 
 ## Before editing a shared module
 

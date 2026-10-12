@@ -28,7 +28,7 @@ export default defineConfig({
       ...threadHostileTestFiles(repoRoot),
       '**/node_modules/**',
     ],
-    setupFiles: [...SETUP_FILES],
+    setupFiles: [...SETUP_FILES, path.join(repoRoot, 'scripts/mutation/seed-setup.ts')],
     ...TEST_ISOLATION,
   },
 });

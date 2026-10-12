@@ -13,6 +13,39 @@ import { laneEnvelope, LANE_ENVELOPE_SCHEMA_VERSION } from '../lib/lane-envelope
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 
+test('invalid scope pilots and missing indexes fail before producing a measurement', () => {
+  const envelopePath = path.join(repoRoot, '.tmp/mutation/lane-envelope.json');
+  for (const args of [
+    ['--report', '.tmp/mutation/old-report.json', '--seed', '123'],
+    ['--scope-probe', '--modules', 'snapshot-occlusion', '--seed', '123'],
+    ['--scope-probe', '--list-affected'],
+    [
+      '--scope-index',
+      '.tmp/mutation/missing-index.json',
+      '--modules',
+      'snapshot-occlusion',
+      '--seed',
+      '123',
+      '--scope-epoch',
+      'test',
+    ],
+  ]) {
+    const result = runCmdSync('node', ['scripts/mutation/run.ts', ...args], {
+      cwd: repoRoot,
+      allowFailure: true,
+    });
+    assert.notEqual(result.exitCode, 0);
+    if (args.includes('--list-affected')) continue;
+    const envelope = JSON.parse(fs.readFileSync(envelopePath, 'utf8'));
+    assert.equal(envelope.result, 'fail');
+    assert.equal(
+      envelope.data.modules.every((module: { score: unknown }) => module.score === null),
+      true,
+    );
+    assert.match(envelope.data.error, /Scope pilots|missing-index|fresh execution/);
+  }
+});
+
 function workflow(name: string): string {
   return fs.readFileSync(path.join(repoRoot, '.github/workflows', name), 'utf8');
 }

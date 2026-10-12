@@ -18,6 +18,17 @@ import { pathToFileURL } from 'node:url';
 import { runCmdStreaming, runCmdSync } from '@agent-device/host-kit/command';
 import { parseScriptArgs } from '../lib/cli-args.ts';
 import { laneEnvelope } from '../lib/lane-envelope.ts';
+import { COVERAGE_CAPTURE_ENV } from './coverage-reporter.ts';
+import {
+  assertCoveragePolicy,
+  coverageScope,
+  scopedTestFiles,
+  scopeFingerprint,
+  type CoverageScope,
+  type ScopeIdentity,
+} from './coverage-scope.ts';
+import { mutationSeed, MUTATION_SEED_ENV } from './seed.ts';
+import type { DryRunCompletedEvent } from '@stryker-mutator/api/report';
 import {
   ALL_MODULE_IDS,
   isModuleId,
@@ -46,10 +57,16 @@ const DEFAULT_REPORT_PATH = '.tmp/mutation/mutation.json';
 const TEST_SCOPE_PATH = '.tmp/mutation/test-scope.json';
 const ENVELOPE_PATH = '.tmp/mutation/lane-envelope.json';
 const LANE_ID = 'mutation-decision-kernels';
+const COVERAGE_SCOPE_PATH = '.tmp/mutation/coverage-scope.json';
+const COVERAGE_CAPTURE_PATH = '.tmp/mutation/coverage-capture.json';
 
 const USAGE = `Usage: pnpm mutation:run [options]
 
   --modules <a,b>   Restrict to specific kernel modules (default: all)
+  --seed <integer>  Fix fast-check inputs (0..2147483647)
+  --scope-probe     Produce fresh coverage-scope.json for one entire module
+  --scope-index <f> Narrow runtime tests using a matching coverage probe
+  --scope-epoch <s> Invocation identifier; required with --seed for scope pilots
   --affected        Restrict to the modules touched between --base and HEAD
   --base <ref>      Base ref for --affected (default: origin/main)
   --report <file>   Read an existing Stryker JSON report instead of running Stryker
@@ -65,6 +82,28 @@ const USAGE = `Usage: pnpm mutation:run [options]
   --fail-envelope <reason>
                     Write a failed lane envelope for a step that ran before (or
                     instead of) the sweep, e.g. a self-test failure
+
+Local coverage pilot (opt-in; weekly defaults remain broad):
+  pnpm mutation:run --modules snapshot-occlusion --seed 12345 --scope-epoch run-1 --scope-probe
+  pnpm mutation:run --modules snapshot-occlusion --seed 12345 --scope-epoch run-1 --scope-index .tmp/mutation/coverage-scope.json
+
+Use a new epoch for each experiment and unchanged inputs in the same checkout/environment.
+A whole-module probe can serve multiple sequential --shard consumers; save each report because
+scope/report paths are shared. Consumers collect fresh coverage and execute mutants; results
+are never reused. Missing, corrupt, changed or empty explicit indexes fail.
+
+The index fingerprints tracked/nonignored contents, inventory, permissions, tools, Node/OS
+and environment (values are hashed). pnpm launcher command text is removed before test execution.
+--seed fixes fast-check defaults; explicit property seeds and other randomness remain independent.
+Only fresh perTest/ignoreStatic=true runs support narrowing. Static audits require separate scope.
+Subprocess/thread exclusions retain the existing lane policy. Different CI job environments
+are not supported. Probe success measures coverage only, never mutant outcomes.
+
+Before enabling CI defaults, compare fresh broad/scoped Ubuntu sweeps at one commit and seed:
+identical mutant identities, no lost kills or extra uncovered mutants, explain outcome changes,
+and measure both runner-minutes and critical-path time including the producer and transfers.
+The first consumer can be slower; savings must amortize across consumers. Keep cross-run index
+reuse and incremental results deferred. Repeat parity checks when scoping, static policy or tools change.
 `;
 
 type Args = {
@@ -78,6 +117,10 @@ type Args = {
   failEnvelope: string | undefined;
   shard: Shard | undefined;
   expectShards: number | undefined;
+  seed: number | undefined;
+  scopeProbe: boolean;
+  scopeIndex: string | undefined;
+  scopeEpoch: string | undefined;
 };
 
 function parseShard(value: string | undefined): Shard | undefined {
@@ -119,8 +162,12 @@ function parseMutationArgs(argv: readonly string[]): Args {
     'fail-envelope': { type: 'string' },
     shard: { type: 'string' },
     'expect-shards': { type: 'string' },
+    seed: { type: 'string' },
+    'scope-probe': { type: 'boolean', default: false },
+    'scope-index': { type: 'string' },
+    'scope-epoch': { type: 'string' },
   });
-  return {
+  const args: Args = {
     modules: parseModules(values.modules),
     affected: Boolean(values.affected),
     base: values.base ?? 'origin/main',
@@ -131,7 +178,40 @@ function parseMutationArgs(argv: readonly string[]): Args {
     failEnvelope: values['fail-envelope'],
     shard: parseShard(values.shard),
     expectShards: values['expect-shards'] ? Number(values['expect-shards']) : undefined,
+    seed: mutationSeed(values.seed),
+    scopeProbe: Boolean(values['scope-probe']),
+    scopeIndex: values['scope-index'],
+    scopeEpoch: values['scope-epoch'],
   };
+  validateMutationArgs(args);
+  return args;
+}
+
+function validateMutationArgs(args: Args): void {
+  if (args.scopeProbe || args.scopeIndex !== undefined) {
+    const incompatible = [
+      args.affected,
+      args.report,
+      args.reportDir,
+      args.listAffected,
+      args.failEnvelope,
+      args.expectShards !== undefined,
+    ];
+    if (
+      args.modules.length !== 1 ||
+      args.seed === undefined ||
+      !args.scopeEpoch ||
+      (!args.scopeIndex && !args.scopeProbe) ||
+      incompatible.some(Boolean) ||
+      (args.scopeProbe && (args.scopeIndex !== undefined || args.shard))
+    )
+      throw new Error(
+        'Scope pilots require one module, --seed and --scope-epoch; probe cannot be sharded or consume an index, and pilots cannot read reports or select affected modules',
+      );
+  } else if (args.scopeEpoch !== undefined)
+    throw new Error('--scope-epoch requires --scope-probe or --scope-index');
+  if (args.seed !== undefined && (args.report || args.reportDir))
+    throw new Error('--seed requires fresh execution, not an existing report');
 }
 
 /** Short, stable content hash of the Stryker config — half of a run's provenance. */
@@ -158,45 +238,132 @@ function changedFiles(base: string): string[] {
   return result.stdout.split('\n').filter(Boolean);
 }
 
+async function mutationTestScope(
+  modules: readonly ModuleId[],
+  sources: readonly string[],
+  options: Args,
+) {
+  const pilot = options.scopeProbe || Boolean(options.scopeIndex);
+  if (pilot)
+    assertCoveragePolicy(JSON.parse(fs.readFileSync(path.join(repoRoot, CONFIG_PATH), 'utf8')));
+  const index: CoverageScope | undefined = options.scopeIndex
+    ? JSON.parse(fs.readFileSync(path.resolve(repoRoot, options.scopeIndex), 'utf8'))
+    : undefined;
+  const candidates = await relatedTestFiles(sources, repoRoot);
+  const identity = pilot
+    ? {
+        module: modules[0]!,
+        epoch: options.scopeEpoch!,
+        seed: options.seed!,
+        fingerprint: scopeFingerprint(repoRoot),
+      }
+    : undefined;
+  const testFiles = options.scopeIndex
+    ? scopedTestFiles(index!, identity!, candidates)
+    : candidates;
+  if (!testFiles.length) throw new Error(`No related mutation tests for ${modules.join(', ')}`);
+  return { candidates, identity, index, testFiles };
+}
+
+async function mutationSourceScope(modules: readonly ModuleId[], shard: Shard | undefined) {
+  const globs = mutateGlobs(modules);
+  const all = expandMutateFiles(globs, repoRoot);
+  if (!shard) return { mutate: globs, sources: all, sourceCount: all.length };
+  const config = JSON.parse(fs.readFileSync(path.join(repoRoot, CONFIG_PATH), 'utf8'));
+  const mutate = await shardFiles(all, shard, repoRoot, config.mutator?.excludedMutations ?? []);
+  return {
+    mutate,
+    sources: [...new Set(mutate.map((file) => file.split(':')[0]!))],
+    sourceCount: mutate.length,
+  };
+}
+
+function finishScopeProbe(
+  exitCode: number,
+  capturePath: string,
+  identity: ScopeIdentity,
+  candidates: readonly string[],
+  startedAt: number,
+): ScopeMeasurement {
+  if (exitCode !== 0 || !fs.existsSync(capturePath))
+    throw new Error('Stryker scope probe failed or produced no coverage capture');
+  if (scopeFingerprint(repoRoot) !== identity.fingerprint)
+    throw new Error('Execution inputs changed during the scope probe');
+  const scope = coverageScope(
+    JSON.parse(fs.readFileSync(capturePath, 'utf8')) as DryRunCompletedEvent,
+    identity,
+    candidates,
+    repoRoot,
+    Date.now() - startedAt,
+  );
+  fs.writeFileSync(path.join(repoRoot, COVERAGE_SCOPE_PATH), `${JSON.stringify(scope, null, 2)}\n`);
+  return {
+    mode: 'probe',
+    candidates: candidates.length,
+    selected: scope.covered.length,
+    producerMs: scope.producerMs,
+  };
+}
+
 async function runStryker(
   modules: readonly ModuleId[],
   reportPath: string,
   shard: Shard | undefined,
-): Promise<void> {
+  options: Args,
+): Promise<ScopeMeasurement> {
+  const startedAt = Date.now();
+  // pnpm appends flags to this metadata; tests must see the same environment in
+  // probes, broad references and scoped consumers.
+  delete process.env.npm_lifecycle_script;
   const absolute = path.isAbsolute(reportPath) ? reportPath : path.join(repoRoot, reportPath);
   fs.mkdirSync(path.dirname(absolute), { recursive: true });
   fs.rmSync(absolute, { force: true });
+  const capturePath = path.join(repoRoot, COVERAGE_CAPTURE_PATH);
+  if (options.scopeProbe) {
+    fs.rmSync(capturePath, { force: true });
+    fs.rmSync(path.join(repoRoot, COVERAGE_SCOPE_PATH), { force: true });
+  }
   // The suite Stryker replays per mutant is derived from Vitest's module graph
   // over the mutated files, not hand-listed; see scripts/mutation/test-scope.ts.
-  const globs = mutateGlobs(modules);
-  const all = expandMutateFiles(globs, repoRoot);
-  // Source ranges keep single-file kernels inside the same shard budget.
-  const excludedMutations =
-    JSON.parse(fs.readFileSync(path.join(repoRoot, CONFIG_PATH), 'utf8')).mutator
-      ?.excludedMutations ?? [];
-  const mutate = shard ? await shardFiles(all, shard, repoRoot, excludedMutations) : globs;
+  const { mutate, sources, sourceCount } = await mutationSourceScope(modules, shard);
   const scopePath = path.join(repoRoot, TEST_SCOPE_PATH);
-  const testFiles = await relatedTestFiles(
-    shard ? [...new Set(mutate.map((file) => file.split(':')[0]!))] : all,
-    repoRoot,
+  const { candidates, identity, index, testFiles } = await mutationTestScope(
+    modules,
+    sources,
+    options,
   );
-  if (testFiles.length === 0)
-    throw new Error(`No related mutation tests for ${modules.join(', ')}`);
   writeTestScope(testFiles, scopePath);
   process.stdout.write(
     `mutation: ${modules.join(', ')}${shard ? ` shard ${shard.index}/${shard.count}` : ''} -> ` +
-      `${shard ? mutate.length : all.length} source(s), ${testFiles.length} related test file(s)\n`,
+      `${sourceCount} source(s), ${testFiles.length} related test file(s)\n`,
   );
 
   // Stryker's `--mutate` takes one comma-separated value, not repeated args.
   const args = ['exec', 'stryker', 'run', CONFIG_PATH, '--mutate', mutate.join(',')];
+  if (options.scopeProbe) {
+    args.push(
+      '--dryRunOnly',
+      '--appendPlugins',
+      path.join(repoRoot, 'scripts/mutation/coverage-reporter.ts'),
+      '--reporters',
+      'scope-coverage',
+    );
+  }
   const result = await runCmdStreaming('pnpm', args, {
     cwd: repoRoot,
     allowFailure: true,
-    env: { ...process.env, [TEST_SCOPE_ENV]: scopePath },
+    env: {
+      ...process.env,
+      [TEST_SCOPE_ENV]: scopePath,
+      [MUTATION_SEED_ENV]: options.seed === undefined ? undefined : String(options.seed),
+      [COVERAGE_CAPTURE_ENV]: options.scopeProbe ? capturePath : undefined,
+    },
     onStdoutChunk: (chunk) => void process.stdout.write(chunk),
     onStderrChunk: (chunk) => void process.stderr.write(chunk),
   });
+  if (options.scopeProbe) {
+    return finishScopeProbe(result.exitCode, capturePath, identity!, candidates, startedAt);
+  }
   // No score threshold is configured. Any non-zero exit is a harness failure,
   // even if Stryker wrote a partial report before failing.
   if (result.exitCode !== 0 || !fs.existsSync(absolute)) {
@@ -204,6 +371,14 @@ async function runStryker(
       `Stryker failed (exit ${result.exitCode}) or produced no report at ${reportPath}. See output above.`,
     );
   }
+  if (identity && scopeFingerprint(repoRoot) !== identity.fingerprint)
+    throw new Error('Execution inputs changed during the scoped mutation run');
+  return {
+    mode: index ? 'coverage' : 'related',
+    candidates: candidates.length,
+    selected: testFiles.length,
+    producerMs: index?.producerMs ?? null,
+  };
 }
 
 function emit(markdown: string, summaryPath: string | undefined): void {
@@ -229,6 +404,12 @@ type Stage = 'setup' | 'select' | 'stryker' | 'report' | 'score' | 'complete';
  * reported fact, whereas skipping the envelope would be silence.
  */
 const UNKNOWN_PROVENANCE: Provenance = { strykerVersion: 'unknown', configHash: 'unknown' };
+type ScopeMeasurement = {
+  mode: 'probe' | 'coverage' | 'related';
+  candidates: number;
+  selected: number;
+  producerMs: number | null;
+};
 
 type LaneState = {
   stage: Stage;
@@ -244,6 +425,9 @@ type LaneState = {
    * to prevent.
    */
   recoveryOnly: boolean;
+  seed?: number;
+  scope?: ScopeMeasurement;
+  scopeProbe?: boolean;
 };
 
 /** The result of an envelope already on disk, if there is a readable one. */
@@ -304,11 +488,13 @@ function writeEnvelope(state: LaneState, startedAtMs: number): void {
     tool: { stryker: state.provenance.strykerVersion },
     configHash: state.provenance.configHash,
     startedAtMs,
+    seed: state.seed === undefined ? undefined : String(state.seed),
     // The lane never judges a score, so the result states whether the lane
     // produced a report at all.
     result: state.stage === 'complete' ? 'pass' : 'fail',
     data: {
-      scope: state.affected ? 'affected' : 'full-sweep',
+      scope: state.scopeProbe ? 'coverage-probe' : state.affected ? 'affected' : 'full-sweep',
+      testScope: state.scope ?? null,
       stage: state.stage,
       error: state.error ?? null,
       modules: state.modules.map((id) => envelopeModule(id, state.scores)),
@@ -367,8 +553,10 @@ async function produceReport(
   modules: readonly ModuleId[],
   reportPath: string | undefined,
   shard: Shard | undefined,
+  args: Args,
+  state: LaneState,
 ): Promise<StrykerReport> {
-  if (!reportPath) await runStryker(modules, DEFAULT_REPORT_PATH, shard);
+  if (!reportPath) state.scope = await runStryker(modules, DEFAULT_REPORT_PATH, shard, args);
   return readReport(reportPath ?? DEFAULT_REPORT_PATH);
 }
 
@@ -404,7 +592,8 @@ function incompleteSweepReason(
 async function scoreModules(args: Args, state: LaneState): Promise<ShardSummary | undefined> {
   state.stage = args.reportDir || args.report ? 'report' : 'stryker';
   const shards = args.reportDir ? readShardedReports(args.reportDir) : undefined;
-  const report = shards?.report ?? (await produceReport(state.modules, args.report, args.shard));
+  const report =
+    shards?.report ?? (await produceReport(state.modules, args.report, args.shard, args, state));
 
   state.stage = 'score';
   state.scores = summarizeReport(report, state.modules);
@@ -424,6 +613,16 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
     return 0;
   }
 
+  if (args.scopeProbe) {
+    state.stage = 'stryker';
+    state.scope = await runStryker(state.modules, DEFAULT_REPORT_PATH, undefined, args);
+    emit(
+      `## Mutation coverage probe\n\n${state.scope.selected}/${state.scope.candidates} test files cover runtime mutants. Producer cost: ${state.scope.producerMs}ms. No mutants tested.\n`,
+      args.summary,
+    );
+    state.stage = 'complete';
+    return 0;
+  }
   const shards = await scoreModules(args, state);
 
   const title = args.affected
@@ -431,6 +630,16 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
     : 'Mutation score — decision kernels';
   const reason = shards ? incompleteSweepReason(state.scores, shards, args) : undefined;
   emit(renderReport(state.scores, state.provenance, { title, incomplete: reason }), args.summary);
+  if (state.scope) {
+    const producer =
+      state.scope.producerMs === null
+        ? ''
+        : ` Probe cost: ${state.scope.producerMs}ms (charged separately).`;
+    emit(
+      `\nTest scope: ${state.scope.mode}; ${state.scope.selected}/${state.scope.candidates} files.${producer}\n`,
+      args.summary,
+    );
+  }
   if (reason) throw new Error(reason);
   state.stage = 'complete';
   return 0;
@@ -495,6 +704,8 @@ async function run(argv: readonly string[], state: LaneState): Promise<number> {
   state.affected = args.affected;
   state.provenance = readProvenance();
   state.modules = args.modules;
+  state.seed = args.seed;
+  state.scopeProbe = args.scopeProbe;
   if (args.failEnvelope) {
     // A step that ran before the sweep failed (the weekly self-test, setup): the
     // lane produced no measurement, and that is what the envelope must say.
