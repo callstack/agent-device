@@ -129,7 +129,7 @@ export async function dispatchRuntimeInteraction<
       // The action's own settle observation, so the baseline can be the tree that proved rest
       // instead of the tree the action started from. Without it the follow-up press re-observes a
       // surface the settle already proved quiet — the round trip `--settle` exists to remove.
-      ...(runtimeResult.settle ? { settle: runtimeResult.settle } : {}),
+      settle: runtimeResult.settle,
     });
   } catch (error) {
     const appError = publishAmbiguousMatchCandidateRefs(
@@ -206,7 +206,7 @@ async function buildRuntimeIosCorroboratedResponse(params: {
     // A corroborated failure still acted through a tree, and its own effect may still be animating.
     // Withholding it would retire the evidence a previous mutation recorded and leave the next press
     // unscreened, which is the opposite of what a dispatch that touched the device should do.
-    ...(resolvedTarget ? { preActionTree: resolvedTarget.preAction } : {}),
+    preActionTree: resolvedTarget?.preAction,
   });
 }
 
