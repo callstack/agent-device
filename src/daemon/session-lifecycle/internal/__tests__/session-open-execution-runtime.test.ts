@@ -17,7 +17,10 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
-const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
+const { mockResolveTargetDevice, mockPrewarmRunnerSession } = vi.hoisted(() => ({
+  mockResolveTargetDevice: vi.fn(),
+  mockPrewarmRunnerSession: vi.fn(async () => {}),
+}));
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -40,13 +43,17 @@ vi.mock('../../../../platform-runtime-runtime-hints.ts', async (importOriginal) 
     clearRuntimeHintValues: vi.fn(async () => {}),
   };
 });
-vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
+vi.mock('../../../../platform-runtime-apple-application-tools.ts', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
+    await importOriginal<
+      typeof import('../../../../platform-runtime-apple-application-tools.ts')
+    >();
   return {
     ...actual,
-    prewarmIosRunnerSession: vi.fn(),
-    stopIosRunnerSession: vi.fn(async () => {}),
+    createAppleApplicationTools: () => ({
+      ...actual.createAppleApplicationTools(),
+      prewarmRunnerSession: mockPrewarmRunnerSession,
+    }),
   };
 });
 vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) => {
@@ -500,6 +507,13 @@ async function openReportingObservation(
     invoke: noopInvoke,
   });
   expect(response?.ok).toBe(true);
+  expect(mockPrewarmRunnerSession).toHaveBeenCalledTimes(1);
+  expect(mockPrewarmRunnerSession).toHaveBeenCalledWith(
+    expect.objectContaining({ platform: 'apple', kind: 'simulator' }),
+    expect.any(Object),
+    expect.any(AbortSignal),
+    false,
+  );
   return sessionStore.get(sessionName);
 }
 
