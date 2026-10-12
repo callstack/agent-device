@@ -1,5 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { AppError } from '@agent-device/kernel/errors';
 import { copyCoreDeviceRunnerFile } from '../physical-device-files.ts';
 import { IOS_DEVICE } from '../../__tests__/device-fixtures.ts';
 import { withFakeAppleTool, type FakeAppleToolScript } from '../../__tests__/fake-apple-tool.ts';
@@ -83,7 +84,16 @@ test('copyCoreDeviceRunnerFile refuses to start once the deadline is spent', asy
         async () => await copyCoreDeviceRunnerFile(IOS_DEVICE, '/tmp/shot.png', '/out/shot.png', 0),
         { device: IOS_DEVICE },
       ),
-    /iOS runner file copy timed out after 0ms/,
+    (error: unknown) => {
+      // The message alone says only "timed out"; the typed step is what tells the caller the
+      // spent deadline was the file copy's, not another phase of the physical-device flow.
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.match(error.message, /iOS runner file copy timed out after 0ms/);
+      assert.equal(error.details?.step, 'runner file copy');
+      assert.equal(error.details?.timeoutMs, 0);
+      return true;
+    },
   );
   assert.deepEqual(calls, []);
 });

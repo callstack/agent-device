@@ -101,6 +101,12 @@ test('product-reference values of the wrong shape never resolve, and a configure
     root,
     path.join('Build', 'Products', 'Debug-iphonesimulator', 'Runner-Runner.app'),
   );
+  // The surviving configured target names a product no other entry in this xctestrun names, so
+  // its contribution is observable: dropping that target from the collection changes the result.
+  const helperBundlePath = seedProductBundle(
+    root,
+    path.join('Build', 'Products', 'Debug-iphonesimulator', 'Helper.app'),
+  );
 
   serveParsedPlist({
     // A legacy single-target map beside the malformed configuration list.
@@ -117,26 +123,27 @@ test('product-reference values of the wrong shape never resolve, and a configure
         TestTargets: { TestBundlePath: '__TESTROOT__/Missing.app' },
       },
       {
-        // Non-record members of an array target list are filtered out.
+        // Non-record members of an array target list are filtered out; had this list been
+        // collected unfiltered, the null member would make the reference scan throw instead of
+        // contributing nothing.
         TestTargets: [null, 42, '__TESTROOT__/Also-Missing.app'],
       },
       {
+        // The one record target: it carries no TestBundlePath and no name of its own, so only
+        // being a record with a usable reference key is what makes its product resolve.
         TestTargets: [
           {
-            DependentProductPaths: [
-              '__TESTROOT__/Debug-iphonesimulator/Runner-Runner.app',
-              42,
-              null,
-            ],
+            DependentProductPaths: ['__TESTROOT__/Debug-iphonesimulator/Helper.app', 42, null],
           },
         ],
       },
     ],
   });
 
-  // The legacy target's string TestBundlePath and the one well-formed dependent product both
-  // resolve to the seeded bundle; nothing the malformed shapes name can appear.
-  assert.deepEqual(await resolveExistingXctestrunProductPaths(xctestrunPath), [appBundlePath]);
+  // The legacy target's string TestBundlePath and the one well-formed dependent product each
+  // resolve to their own seeded bundle; nothing the malformed shapes name can appear.
+  const resolved = await resolveExistingXctestrunProductPaths(xctestrunPath);
+  assert.deepEqual([...resolved!].sort(), [appBundlePath, helperBundlePath].sort());
 });
 
 test('an xctestrun whose parsed form names no product resolves to nothing', async () => {

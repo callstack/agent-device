@@ -110,7 +110,7 @@ function bootPropFailure(stdout: string, stderr: string) {
   };
 }
 
-/** A poll that keeps missing like a real booting device does, and actually burns wall-clock time. */
+/** A poll that keeps missing like a real booting device does and burns the given clock time. */
 function slowBootPropFailure(delayMs: number) {
   return async () => {
     await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -118,10 +118,14 @@ function slowBootPropFailure(delayMs: number) {
   };
 }
 
-async function expectBootFailure(
+/**
+ * Starts the wait and resolves to the typed failure it must produce. The caller drives any timers
+ * between starting and awaiting when the test runs on a fake clock.
+ */
+function startedBootFailure(
   timeoutMs: number,
 ): Promise<{ code: string; message: string; details: Record<string, unknown> }> {
-  return await waitForAndroidBoot('emulator-5554', timeoutMs).then(
+  return waitForAndroidBoot('emulator-5554', timeoutMs).then(
     () => {
       throw new Error('expected waitForAndroidBoot to reject');
     },
@@ -131,6 +135,12 @@ async function expectBootFailure(
       details: (error.details ?? {}) as Record<string, unknown>,
     }),
   );
+}
+
+async function expectBootFailure(
+  timeoutMs: number,
+): Promise<{ code: string; message: string; details: Record<string, unknown> }> {
+  return await startedBootFailure(timeoutMs);
 }
 
 test('a boot poll against an offline device fails as an adb transport loss without retrying', async () => {
@@ -149,21 +159,28 @@ test('a boot poll against an offline device fails as an adb transport loss witho
 });
 
 test('a still-booting device past its deadline reports an Android boot timeout', async () => {
-  // 80 ms per poll with a 50 ms retry cadence crosses the 150 ms deadline inside the second
-  // poll, so the failure is a device that ran out of budget, not three fast poll misses.
-  mockRunCmd.mockImplementation(slowBootPropFailure(80));
+  // On a fake clock: each poll burns 80 ms, and the 150 ms deadline is crossed inside the
+  // second poll, so the failure is a device that ran out of budget, not a run of fast poll
+  // misses. Fake timers keep the 80 ms/150 ms geometry exact instead of racing the host.
+  vi.useFakeTimers();
+  try {
+    mockRunCmd.mockImplementation(slowBootPropFailure(80));
 
-  const failure = await expectBootFailure(150);
+    const started = startedBootFailure(150);
+    await vi.runAllTimersAsync();
+    const failure = await started;
 
-  assert.equal(failure.code, 'COMMAND_FAILED');
-  assert.equal(failure.message, 'Android device did not finish booting in time');
-  assert.equal(failure.details.reason, 'ANDROID_BOOT_TIMEOUT');
-  assert.equal(failure.details.timeoutMs, 150);
-  assert.equal(Number(failure.details.elapsedMs) >= 150, true);
-  assert.equal(mockRunCmd.mock.calls.length, 2);
-  // The classifier sees BOOT_COMMAND_FAILED from the still-booting throw; the caller must
-  // normalize it to the timeout, not trust the raw classification.
-  assert.notEqual(failure.details.reason, 'BOOT_COMMAND_FAILED');
+    assert.equal(failure.code, 'COMMAND_FAILED');
+    assert.equal(failure.message, 'Android device did not finish booting in time');
+    // The classifier sees BOOT_COMMAND_FAILED from the still-booting throw; the caller must
+    // normalize it to the timeout rather than trust the raw classification.
+    assert.equal(failure.details.reason, 'ANDROID_BOOT_TIMEOUT');
+    assert.equal(failure.details.timeoutMs, 150);
+    assert.equal(Number(failure.details.elapsedMs) >= 150, true);
+    assert.equal(mockRunCmd.mock.calls.length, 2);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('a TOOL_MISSING adb inside the boot loop keeps its error code and hint', async () => {

@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { runCmdSync } from '@agent-device/host-kit/command';
+import { writeZipFixture } from '@agent-device/host-kit/archive-fixtures';
 import { AppError } from '@agent-device/kernel/errors';
 import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 import { prepareIosInstallArtifact } from '../install-artifact.ts';
@@ -99,9 +99,13 @@ test('prepareIosInstallArtifact keeps a non-dotted hint a name-only match', asyn
 
 type PayloadBundleFixture = { name: string; bundleId?: string };
 
+const ZIP_DIR_MODE = 0o040000 | 0o755;
+const ZIP_FILE_MODE = 0o100644;
+
 /**
  * Builds a real zip-format IPA carrying the given `Payload/*.app` bundles and runs `run` against
- * it. Info.plist reads go through a fake tool provider keyed by the bundle's own directory, so
+ * it, written through host-kit's own zip fixture so the test needs no `zip` binary on the host.
+ * Info.plist reads go through a fake tool provider keyed by the bundle's own directory, so
  * each payload reports an identity of its own without plist tooling on the host.
  */
 async function withMultiPayloadIpa(
@@ -109,17 +113,15 @@ async function withMultiPayloadIpa(
   run: (ipaPath: string) => Promise<void>,
 ): Promise<void> {
   const root = await mkdtempForTest('agent-device-ios-multi-payload-');
-  const staging = path.join(root, 'staging');
-  for (const bundle of bundles) {
-    const appDir = path.join(staging, 'Payload', `${bundle.name}.app`);
-    await fs.mkdir(appDir, { recursive: true });
-    await fs.writeFile(
-      path.join(appDir, 'Info.plist'),
-      '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict/></plist>',
-    );
-  }
   const ipaPath = path.join(root, 'multi.ipa');
-  runCmdSync('zip', ['-qr', ipaPath, '.'], { cwd: staging });
+  await writeZipFixture(ipaPath, [
+    { name: 'Payload/', mode: ZIP_DIR_MODE },
+    ...bundles.map(({ name }) => ({
+      name: `Payload/${name}.app/Info.plist`,
+      mode: ZIP_FILE_MODE,
+      data: '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict/></plist>',
+    })),
+  ]);
 
   const provider = createLocalAppleToolProvider({
     plist: {

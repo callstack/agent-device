@@ -125,7 +125,9 @@ test('readLinuxTextAtPoint returns an empty string when no rect covers the point
 });
 
 test('readLinuxTextAtPoint ties depth 0 through rect area when rects are degenerate', async () => {
-  // Zero-area rects keep the sort stable on rect area (0 * 0 === 0 * 0) and still resolve by tree order.
+  // A zero-width or zero-height rect still has area 0 (0 * 10 === 0 * 0), so the pair ties on
+  // area and resolves by tree order; and neither rect covers a point one pixel out, so the
+  // inclusive-boundary match, not a size fudge, decides whether anything reads at all.
   captureNodes([
     node({ index: 0, depth: 0, label: 'first', rect: { x: 0, y: 0, width: 0, height: 0 } }),
     node({ index: 1, depth: 0, label: 'second', rect: { x: 0, y: 0, width: 0, height: 10 } }),
@@ -133,12 +135,27 @@ test('readLinuxTextAtPoint ties depth 0 through rect area when rects are degener
 
   // Vitest/JS sort is stable, so equal depth and equal area resolve in tree order.
   assert.equal(await readLinuxTextAtPoint(0, 0, 'desktop'), 'first');
+  assert.equal(await readLinuxTextAtPoint(1, 1, 'desktop'), '');
 });
 
-test('readLinuxTextAtPoint defaults a missing depth to 0 when ordering matches', async () => {
+test('readLinuxTextAtPoint ranks a missing depth as depth 0, in both sort directions', async () => {
+  // Two fixtures pin the default to exactly 0. Here `no-depth` ties the depth-0 nodes and loses
+  // only on area, so any fallback above 0 (or 1) ranks it deeper than them and it — not
+  // `smaller` — would come back from the read.
   captureNodes([
     node({ index: 0, label: 'no-depth', rect: { x: 0, y: 0, width: 100, height: 100 } }),
     node({ index: 1, depth: 0, label: 'root', rect: { x: 0, y: 0, width: 100, height: 100 } }),
+    node({ index: 2, depth: 0, label: 'smaller', rect: { x: 0, y: 0, width: 60, height: 60 } }),
+  ]);
+
+  assert.equal(await readLinuxTextAtPoint(50, 50, 'desktop'), 'smaller');
+
+  // The complement catches a negative fallback: the missing-depth node carries the smaller
+  // area, so depth 0 ranks it first among the depth-0 matches, while any fallback below 0
+  // ranks it behind `root` and the read would return `root`.
+  captureNodes([
+    node({ index: 0, depth: 0, label: 'root', rect: { x: 0, y: 0, width: 100, height: 100 } }),
+    node({ index: 1, label: 'no-depth', rect: { x: 0, y: 0, width: 60, height: 60 } }),
   ]);
 
   assert.equal(await readLinuxTextAtPoint(50, 50, 'desktop'), 'no-depth');

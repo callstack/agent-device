@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
+import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
@@ -7,14 +7,15 @@ import type { AppleToolCommandExecutor } from '../../core/tool-provider-types.ts
 import type { ExecResult } from '@agent-device/host-kit/command';
 
 // App discovery stats each candidate root through the host-file seam and asks that seam for the
-// home directory whose `Applications` folder is the third root. Those two are the only effects
-// mocked here: which roots exist is a host fact a Linux coverage runner cannot answer the way
-// macOS does, so the test declares them. Every `find` and every Info.plist read is driven
-// through the executor and plist-reader arguments the provider factory itself takes.
+// home directory whose `Applications` folder is the third root. Only the two system roots are
+// declared here: which they are (a directory, a plain file, or absent) is a macOS host fact a
+// Linux coverage runner cannot answer the way macOS does, and each declaration is answered with
+// the real `fs.Stats` of a backing tmp path. The user root and the home itself exist for real in
+// tmp dirs the test creates; nothing is hand-statted. Every `find` and every Info.plist read is
+// driven through the executor and plist-reader arguments the provider factory itself takes.
 const hostFileState = vi.hoisted(() => ({
   home: '',
-  directories: new Set<string>(),
-  files: new Set<string>(),
+  systemRoots: new Map<string, string>(),
 }));
 
 vi.mock('@agent-device/host-kit/host-file', async (importOriginal) => {
@@ -23,17 +24,8 @@ vi.mock('@agent-device/host-kit/host-file', async (importOriginal) => {
     ...actual,
     hostHomeDirectory: () => hostFileState.home,
     hostFileStat: async (filePath: string) => {
-      if (hostFileState.directories.has(filePath)) {
-        return { isDirectory: () => true } as fs.Stats;
-      }
-      if (hostFileState.files.has(filePath)) {
-        return { isDirectory: () => false } as fs.Stats;
-      }
-      const error = new Error(
-        `ENOENT: no such file or directory, stat '${filePath}'`,
-      ) as NodeJS.ErrnoException;
-      error.code = 'ENOENT';
-      throw error;
+      const backingPath = hostFileState.systemRoots.get(filePath);
+      return await actual.hostFileStat(backingPath ?? filePath);
     },
   };
 });
@@ -56,13 +48,38 @@ function bundleName(plistPath: string): string {
 }
 
 /**
- * A scratch home for one run of `listApps`, so the user root is a path the test controls.
- * Nothing is written under it; the `hostFileStat` mock above answers its existence.
+ * A scratch home for one run of `listApps`, so the user root is a path the test controls. The
+ * home itself really exists in tmp; whether its `Applications` directory exists is each test's
+ * choice, made by actually creating it or not.
  */
 async function scratchHome(): Promise<string> {
   const home = await mkdtempForTest('macos-host-home-');
   hostFileState.home = home;
   return home;
+}
+
+/**
+ * Declares one system root as a host fact, answered through the real `fs.Stats`: a backing tmp
+ * directory (a directory root), a backing tmp file (a root that exists but is not a directory),
+ * or a path inside a tmp dir that is never created (a root that does not exist at all, so the
+ * stat rejects with ENOENT the way the kernel reports a missing path).
+ */
+async function declareSystemRoot(
+  root: string,
+  kind: 'directory' | 'file' | 'absent',
+): Promise<void> {
+  const backing = await mkdtempForTest('macos-host-root-');
+  if (kind === 'directory') {
+    hostFileState.systemRoots.set(root, backing);
+    return;
+  }
+  if (kind === 'file') {
+    const backingFile = path.join(backing, 'not-a-directory');
+    await fs.writeFile(backingFile, '');
+    hostFileState.systemRoots.set(root, backingFile);
+    return;
+  }
+  hostFileState.systemRoots.set(root, path.join(backing, 'never-created'));
 }
 
 function recordingRunCommand(params: {
@@ -105,16 +122,15 @@ async function listApps(params: {
 afterEach(() => {
   findCalls = [];
   hostFileState.home = '';
-  hostFileState.directories.clear();
-  hostFileState.files.clear();
+  hostFileState.systemRoots.clear();
 });
 
 test('listApps walks every present root, normalizes find output, and sorts resolved apps by name', async () => {
   const home = await scratchHome();
   const userApplications = path.join(home, 'Applications');
-  hostFileState.directories.add('/Applications');
-  hostFileState.directories.add('/System/Applications');
-  hostFileState.directories.add(userApplications);
+  await fs.mkdir(userApplications);
+  await declareSystemRoot('/Applications', 'directory');
+  await declareSystemRoot('/System/Applications', 'directory');
 
   const found = await listApps({
     filter: 'all',
@@ -157,9 +173,9 @@ test('listApps walks every present root, normalizes find output, and sorts resol
 test('listApps probes each root independently: a non-directory root is never searched and a failing find contributes nothing', async () => {
   const home = await scratchHome();
   const userApplications = path.join(home, 'Applications');
-  hostFileState.files.add('/Applications');
-  hostFileState.directories.add('/System/Applications');
-  hostFileState.directories.add(userApplications);
+  await fs.mkdir(userApplications);
+  await declareSystemRoot('/Applications', 'file');
+  await declareSystemRoot('/System/Applications', 'directory');
 
   const found = await listApps({
     filter: 'all',
@@ -184,6 +200,10 @@ test('listApps probes each root independently: a non-directory root is never sea
 
 test('listApps finds nothing when no candidate root exists and reads no plist for it', async () => {
   await scratchHome();
+  // Every candidate root is declared absent, including the system roots a real macOS host
+  // carries; the user root is absent because its scratch home never grows an Applications dir.
+  await declareSystemRoot('/Applications', 'absent');
+  await declareSystemRoot('/System/Applications', 'absent');
 
   const found = await listApps({
     filter: 'all',
@@ -199,7 +219,8 @@ test('listApps finds nothing when no candidate root exists and reads no plist fo
 
 test('listApps keeps only bundles whose plist carries an identifier and fails open on a plist read that throws', async () => {
   await scratchHome();
-  hostFileState.directories.add('/Applications');
+  await declareSystemRoot('/Applications', 'directory');
+  await declareSystemRoot('/System/Applications', 'absent');
   const read: string[] = [];
 
   const found = await listApps({
@@ -246,7 +267,8 @@ test('listApps keeps only bundles whose plist carries an identifier and fails op
 
 test('listApps hides Apple bundles for the user-installed filter and shows them for all', async () => {
   await scratchHome();
-  hostFileState.directories.add('/Applications');
+  await declareSystemRoot('/Applications', 'directory');
+  await declareSystemRoot('/System/Applications', 'absent');
   const findLinesByRoot = {
     '/Applications': ['/Applications/MyTool.app', '/Applications/System Preferences.app'],
   };
