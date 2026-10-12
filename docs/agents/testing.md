@@ -147,8 +147,7 @@ action with a literal gate id; `pnpm check:gate-manifest` verifies registration,
 path reachability, and routed device lanes. Raw shell text cannot declare ownership.
 
 New check: update the catalog and its executable model. Changed path ownership: plant a path that
-would previously be misrouted and watch the selector or manifest fail before fixing it. Workflow
-limitations (manual-only, opaque owners) belong in the gate declarations, not here.
+would previously be misrouted and watch the selector or manifest fail before fixing it.
 
 ## Concurrency torture lane
 

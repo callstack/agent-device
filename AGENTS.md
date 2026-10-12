@@ -36,6 +36,8 @@ normal app-driving startup follows the skill's routing card.
   in names, types, boundaries, and tests; reserve comments for public API docs, tool directives,
   and non-obvious constraints that cannot be encoded.
 - Key behavior on typed reasons and details, never error text; do not copy existing message sniffs.
+- A claim about a platform family in code, help, or docs holds for every backend in it (Appium as
+  well as ADB on Android), or names the backends it covers.
 - Keep metadata at response level when it applies to the whole snapshot. Append warnings through
   the shared response builder; never replace prior warnings.
 - Before preserving a compatibility shape, run `git tag --contains <commit>`. Unreleased API has no
