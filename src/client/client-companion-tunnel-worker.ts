@@ -207,7 +207,8 @@ function toUpstreamWebSocketUrl(localBaseUrl: string, requestPath: string): stri
 }
 
 /**
- * The only code shape `WebSocket.close` may be handed: 1000 or the 3000-4999 private range. Any
+ * The only code shape `WebSocket.close` may be handed: 1000, or the 3000-4999 range RFC 6455 keeps
+ * for this program's own use (3000-3999 for libraries and applications, 4000-4999 private). Any
  * other code, including the 1001-1015 range and a missing one, leaves as 3001 so the close lands
  * instead of being refused by the client.
  */
