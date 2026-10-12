@@ -6,12 +6,16 @@ import {
   resolveIosDeviceDeepLinkBundleId,
 } from '@agent-device/contracts/command';
 import { parseSessionSurface, type SessionSurface } from '@agent-device/contracts/session';
-import { isApplePlatform, isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import {
+  isApplePlatform,
+  isIosFamily,
+  isMacOs,
+  type DeviceInfo,
+} from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   classifyAndroidAppTarget,
   formatAndroidInstalledPackageRequiredMessage,
-  resolveAndroidPackageForOpen,
 } from '@agent-device/platform-android/mechanics';
 import type { ClaimRecoveryGatewayFactory } from '../device/claim-recovery-gateway.ts';
 import type { DaemonPlatformServices } from '../platform-services.ts';
@@ -45,7 +49,8 @@ const fixtureDeviceBootObservation = Object.freeze({
       return await observeSimulatorBootTimeMs(device);
     }
     if (device.platform === 'android') {
-      const { observeAndroidBootTimeMs } = await import('@agent-device/platform-android/device-boot');
+      const { observeAndroidBootTimeMs } =
+        await import('@agent-device/platform-android/device-boot');
       return await observeAndroidBootTimeMs(device);
     }
     return { observed: false, reason: 'unsupported-device' } as const;
@@ -114,7 +119,12 @@ async function fixtureValidateOpenRelaunchTarget(params: {
   return undefined;
 }
 
-async function fixtureResolveSessionAppBundleIdForTarget(
+/**
+ * The open-target bundle-id rules as the fixture answers them: contract Safari/deep-link rules and
+ * the platform packages' own resolvers, no root open-target module. Both the services port and the
+ * canned lifecycle `resolveOpenTarget` answer through this single implementation.
+ */
+export async function fixtureResolveSessionAppBundleIdForTarget(
   device: DeviceInfo,
   openTarget: string | undefined,
   currentAppBundleId: string | undefined,
@@ -197,6 +207,10 @@ async function resolveAndroidPackage(
 ): Promise<string | undefined> {
   if (device.platform !== 'android' || !openTarget) return undefined;
   try {
+    // Dynamic like the Apple branch: suites register their mechanics mocks after this fixture's
+    // module evaluates, so a static import would bind the unmocked leaf.
+    const { resolveAndroidPackageForOpen } =
+      await import('@agent-device/platform-android/mechanics');
     return await resolveAndroidPackageForOpen(device, openTarget);
   } catch {
     return undefined;

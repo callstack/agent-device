@@ -23,6 +23,7 @@ import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import { isIosFamily, type DeviceInfo } from '@agent-device/kernel/device';
 import { beforeEach, vi } from 'vitest';
 import { applicationLifecycleRuntimeFixture } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
+import type { ApplicationLifecycleRuntimeOperations } from '@agent-device/contracts/application-lifecycle-runtime';
 import { withClientReplayScriptSources } from '@agent-device/replay-port/replay-script-source-fixtures';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
@@ -66,6 +67,30 @@ export const mockPushNotificationRuntime = vi.fn(
 export const mockBindDeviceRuntime = vi.fn(async (device: DeviceInfo, use) =>
   narrowDeviceBinding(await readinessBinding(device), use),
 );
+
+/**
+ * Test-harness seam (per test-file module graph): points the harness bindings at another
+ * lifecycle-ops fixture. Root-owned composition suites install the real composed fixture via
+ * `src/__tests__/daemon-composition/handlers/install-real-lifecycle-harness.ts`; daemon suites keep
+ * the canned port fixture default.
+ */
+export function setHarnessLifecycleOperationsLoader(
+  loader: (
+    device: DeviceInfo,
+    signal?: AbortSignal,
+    shutdownTarget?: (device: DeviceInfo) => Promise<TargetShutdownResult>,
+  ) => Promise<ApplicationLifecycleRuntimeOperations>,
+): void {
+  loadLifecycleOperations = loader;
+}
+
+type LifecycleOperationsLoader = (
+  device: DeviceInfo,
+  signal?: AbortSignal,
+  shutdownTarget?: (device: DeviceInfo) => Promise<TargetShutdownResult>,
+) => Promise<ApplicationLifecycleRuntimeOperations>;
+
+let loadLifecycleOperations: LifecycleOperationsLoader = applicationLifecycleRuntimeFixture;
 
 beforeEach(() => {
   mockInspectDeviceRuntimeFacts.mockClear();
@@ -173,7 +198,7 @@ async function readinessBinding(
   device: DeviceInfo,
 ): Promise<DeviceBinding<PlatformRuntimeOperations>> {
   const facts = readinessFacts(device);
-  const lifecycle = await applicationLifecycleRuntimeFixture(
+  const lifecycle = await loadLifecycleOperations(
     device,
     new AbortController().signal,
     async () => await mockShutdownTargetRuntime(),

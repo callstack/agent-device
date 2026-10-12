@@ -6,7 +6,6 @@ import fs from 'node:fs';
 import type {
   ApplicationLifecycleRuntimeOperations,
   OpenApplicationInput,
-  PostOpenObservation,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DaemonRequest } from '../../../daemon-request.ts';
 import {
@@ -17,9 +16,8 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
-const { mockResolveTargetDevice, mockPrewarmRunnerSession } = vi.hoisted(() => ({
+const { mockResolveTargetDevice } = vi.hoisted(() => ({
   mockResolveTargetDevice: vi.fn(),
-  mockPrewarmRunnerSession: vi.fn(async () => {}),
 }));
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
@@ -34,28 +32,6 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   };
 });
 vi.mock('../../../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
-vi.mock('../../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../../platform-runtime-runtime-hints.ts')>();
-  return {
-    ...actual,
-    applyRuntimeHintValues: vi.fn(async () => {}),
-    clearRuntimeHintValues: vi.fn(async () => {}),
-  };
-});
-vi.mock('../../../../platform-runtime-apple-application-tools.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('../../../../platform-runtime-apple-application-tools.ts')
-    >();
-  return {
-    ...actual,
-    createAppleApplicationTools: () => ({
-      ...actual.createAppleApplicationTools(),
-      prewarmRunnerSession: mockPrewarmRunnerSession,
-    }),
-  };
-});
 vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/app-resolution')>();
@@ -80,15 +56,13 @@ import {
   mockInspectDeviceRuntimeFacts,
 } from '../../../handlers/__tests__/session-command-harness.ts';
 import {
-  applyRuntimeHintValues,
-  clearRuntimeHintValues,
-} from '../../../../platform-runtime-runtime-hints.ts';
+  applyRuntimeHintsFixture,
+  clearRuntimeHintsFixture,
+  dispatchApplicationLifecycleEffect,
+} from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
 import { resolveAndroidPackageForOpen } from '@agent-device/platform-android/mechanics';
-import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
-import { pendingSurfaceStabilization } from '../../../deferred-interaction-outcome.ts';
 import {
   makeAndroidEmulator,
-  makeAppleSimulator,
   makeSession,
   makeSessionStore,
   noopInvoke,
@@ -96,8 +70,8 @@ import {
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
-const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintValues);
-const mockClearRuntimeHints = vi.mocked(clearRuntimeHintValues);
+const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsFixture);
+const mockClearRuntimeHints = vi.mocked(clearRuntimeHintsFixture);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
 
 beforeEach(() => {
@@ -467,73 +441,6 @@ test('open reports the launch confirmation its platform answered', async () => {
 
   expect(response?.ok).toBe(true);
   if (response?.ok) expect(response.data?.launchConfirmation).toBe('accepted');
-});
-
-async function openReportingObservation(
-  sessionName: string,
-  postOpenObservation: PostOpenObservation,
-) {
-  const sessionStore = makeSessionStore();
-  mockResolveTargetDevice.mockResolvedValue(makeAppleSimulator());
-  const bindDefault = mockBindDeviceRuntime.getMockImplementation();
-  if (!bindDefault) throw new Error('the harness binds a default runtime');
-  mockBindDeviceRuntime.mockImplementationOnce(async (device, use) => {
-    const binding = await bindDefault(device, use);
-    const operations = binding.operations as ApplicationLifecycleRuntimeOperations;
-    return {
-      ...binding,
-      operations: {
-        ...binding.operations,
-        openApplication: async (input: OpenApplicationInput) => {
-          const outcome = await operations.openApplication(input);
-          return { ...outcome, timing: { ...outcome.timing, postOpenObservation } };
-        },
-      },
-    };
-  });
-
-  const response = await handleSessionCommands({
-    createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'open',
-      positionals: ['Demo'],
-      flags: { platform: 'ios' },
-    },
-    sessionName,
-    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-  expect(response?.ok).toBe(true);
-  expect(mockPrewarmRunnerSession).toHaveBeenCalledTimes(1);
-  expect(mockPrewarmRunnerSession).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'apple', kind: 'simulator' }),
-    expect.any(Object),
-    expect.any(AbortSignal),
-    false,
-  );
-  return sessionStore.get(sessionName);
-}
-
-test('a fresh iOS open that could not observe its app leaves the next capture to settle', async () => {
-  const session = await openReportingObservation('unobserved-open', 'unobservable');
-
-  expect(pendingSurfaceStabilization(session)?.action).toBe('open');
-});
-
-test('a fresh iOS open whose observation probe failed leaves the next capture to settle', async () => {
-  const session = await openReportingObservation('probe-failed-open', 'probe-failed');
-
-  expect(pendingSurfaceStabilization(session)?.action).toBe('open');
-});
-
-test('a fresh iOS open that observed its app leaves nothing pending', async () => {
-  const session = await openReportingObservation('observed-open', 'observable');
-
-  expect(pendingSurfaceStabilization(session)).toBeUndefined();
 });
 
 function holdNativeOpen() {

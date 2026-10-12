@@ -19,11 +19,6 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   };
 });
 vi.mock('../../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
-vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platform-runtime-runtime-hints.ts')>();
-  return { ...actual, applyRuntimeHintValues: vi.fn(async () => {}) };
-});
 vi.mock('@agent-device/platform-android/mechanics', () => ({
   activateAndroidTestIme: vi.fn(async () => ({ activated: false })),
   restoreAndroidTestIme: vi.fn(async () => ({ restored: false, reason: 'no-record' })),
@@ -39,12 +34,12 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
 
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { ensureDeviceReady } from '../../device/device-ready.ts';
-import { applyRuntimeHintValues } from '../../../platform-runtime-runtime-hints.ts';
 import {
   activateAndroidTestIme,
   resolveAndroidPackageForOpen,
 } from '@agent-device/platform-android/mechanics';
 import {
+  applyRuntimeHintsFixture,
   discoverReadyAndroidEmulators,
   dispatchApplicationLifecycleEffect,
 } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
@@ -73,7 +68,7 @@ const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockDiscoverReadyAndroidEmulators = vi.mocked(discoverReadyAndroidEmulators);
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
-const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintValues);
+const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsFixture);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
 const reconcileOrphanedDeviceClaim = async () => ({
   status: 'retained' as const,
@@ -251,40 +246,6 @@ test('failed local open response rolls its device claim back', async () => {
 
   assert.equal(response.ok, false);
   assert.deepEqual(inspectDeviceClaims({ serial: android.id }), []);
-});
-
-test('cancellation after local device setup retains the device claim for recovery', async () => {
-  const { store, stateDir } = setup();
-  const requestId = 'claim-canceled-after-dispatch';
-  mockResolveTargetDevice.mockResolvedValue(android);
-  mockDispatch.mockResolvedValue(undefined);
-  markRequestCanceled(requestId);
-
-  try {
-    const response = await handleOpenCommand({
-      createCommandSurface: fakeCreateCommandSurface,
-      platformServices: daemonPlatformServicesFixture(),
-      req: {
-        command: 'open',
-        token: 'test',
-        session: 'claim-canceled-after-dispatch',
-        positionals: ['Demo'],
-        flags: { platform: 'android' },
-        meta: { requestId },
-      },
-      sessionName: 'claim-canceled-after-dispatch',
-      logPath: path.join(stateDir, 'daemon.log'),
-      sessionStore: store,
-    });
-
-    assert.equal(response.ok, false);
-    assert.equal(mockDispatch.mock.calls.length, 1);
-    assert.equal(vi.mocked(activateAndroidTestIme).mock.calls.length, 1);
-    assert.equal(inspectDeviceClaims({ serial: android.id })[0]?.classification, 'live');
-    assert.equal(store.get('claim-canceled-after-dispatch'), undefined);
-  } finally {
-    clearRequestCanceled(requestId);
-  }
 });
 
 test('a canceled attempt lets the next attempt of the same suite open the device', async () => {

@@ -40,10 +40,8 @@ import { ANDROID_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
 import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import { LeaseRegistry } from '../../daemon/lease-registry.ts';
-import {
-  createRequestHandler,
-  lifecycleDeviceRuntimeGateway,
-} from '../../daemon/__tests__/test-device-runtime-gateway.ts';
+import { createRequestHandler } from '../../daemon/__tests__/test-device-runtime-gateway.ts';
+import { realLifecycleDeviceRuntimeGateway } from './lifecycle-runtime-gateway.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockActivateAndroidTestIme = vi.mocked(activateAndroidTestIme);
@@ -70,7 +68,7 @@ async function runAndroidFlowReplay(session: string, flags: Record<string, unkno
     token: 'test-token',
     sessionStore: makeSessionStore('agent-device-replay-test-ime-'),
     leaseRegistry: new LeaseRegistry(),
-    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    deviceRuntimeGateway: realLifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });

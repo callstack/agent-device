@@ -1,12 +1,12 @@
-import { localRuntimeOwner, type DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
+import {
+  localRuntimeOwner,
+  narrowDeviceBinding,
+  type DeviceRuntimeGateway,
+} from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
-import type {
-  BindDeviceRuntime,
-  BindExactDeviceRuntime,
-} from '../../request-runtime-binding.ts';
-import { narrowDeviceBinding } from '@agent-device/contracts/platform-runtime';
+import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../../request-runtime-binding.ts';
 
 /**
  * The `DeviceRuntimeGateway` port answering that no owner on this host can bind the device:

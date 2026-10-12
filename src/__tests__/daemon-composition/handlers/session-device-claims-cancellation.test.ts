@@ -1,0 +1,143 @@
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import { afterEach, test, vi } from 'vitest';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
+
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
+  const { selectionFromResolveTargetDevice } =
+    await import('../../../daemon/__tests__/device-selection-stub.ts');
+  const resolveTargetDevice = vi.fn();
+  return {
+    ...actual,
+    resolveTargetDevice,
+    resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(resolveTargetDevice)),
+  };
+});
+vi.mock('../../../daemon/device/device-ready.ts', () => ({
+  ensureDeviceReady: vi.fn(async () => {}),
+}));
+vi.mock('@agent-device/platform-android/mechanics', () => ({
+  activateAndroidTestIme: vi.fn(async () => ({ activated: false })),
+  restoreAndroidTestIme: vi.fn(async () => ({ restored: false, reason: 'no-record' })),
+  stopAndroidSnapshotHelperSessionForDevice: vi.fn(async () => {}),
+  resolveAndroidPackageForOpen: vi.fn(async () => undefined),
+  inferAndroidPackageAfterOpen: vi.fn(
+    async (_device, _target, currentAppBundleId) => currentAppBundleId,
+  ),
+}));
+vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
+  (await import('@agent-device/test-kit/host-process-mock')).pinOwnProcessStartTime(importOriginal),
+);
+
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import { ensureDeviceReady } from '../../../daemon/device/device-ready.ts';
+import {
+  activateAndroidTestIme,
+  resolveAndroidPackageForOpen,
+} from '@agent-device/platform-android/mechanics';
+import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
+import { inspectDeviceClaims } from '../../../daemon/device/device-claim-inspection.ts';
+import {
+  localRuntimeOwner,
+  narrowDeviceBinding,
+  type DeviceBinding,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type { BindDeviceRuntime } from '../../../daemon/request-runtime-binding.ts';
+import {
+  applicationLifecycleRuntimeFixture,
+  dispatchApplicationLifecycleEffect,
+} from '../application-lifecycle-runtime-fixture.ts';
+import { SessionStore } from '../../../daemon/session-store.ts';
+import { handleSessionOpenCommands as handleProductionOpenCommand } from '../../../daemon/session-lifecycle/index.ts';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { inspectLifecycleRuntimeFacts } from '../../../daemon/__tests__/application-lifecycle-runtime-harness.ts';
+
+const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
+const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
+const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
+const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
+const reconcileOrphanedDeviceClaim = async () => ({
+  status: 'retained' as const,
+  reason: 'test-no-recovery',
+});
+
+// The post-open test-IME activation is the real Android lifecycle's sequencing step after the
+// open dispatch — the daemon-lane canned binding performs no IME leg, so this claim-retention
+// case runs in the composition lane on the real composed lifecycle.
+async function realLifecycleBinding(
+  device: DeviceInfo,
+): Promise<DeviceBinding<PlatformRuntimeOperations>> {
+  return {
+    device,
+    owner: localRuntimeOwner(device.platform),
+    facts: await inspectLifecycleRuntimeFacts(device),
+    operations: await applicationLifecycleRuntimeFixture(device),
+    [Symbol.asyncDispose]: async () => {},
+  };
+}
+
+const bindRealLifecycleRuntime: BindDeviceRuntime = async (device, use) =>
+  narrowDeviceBinding(await realLifecycleBinding(device), use);
+
+afterEach(() => {
+  vi.clearAllMocks();
+  mockEnsureDeviceReady.mockResolvedValue(undefined);
+  mockResolveAndroidPackage.mockResolvedValue(undefined);
+});
+
+function setup(): { store: SessionStore; stateDir: string } {
+  const stateDir = mkdtempForTestSync('agent-device-session-device-claim-');
+  const claimsDir = path.join(stateDir, 'claims');
+  process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
+  return { store: new SessionStore(path.join(stateDir, 'sessions')), stateDir };
+}
+
+const android: DeviceInfo = {
+  platform: 'android',
+  id: 'emulator-5554',
+  name: 'Pixel',
+  kind: 'emulator',
+  booted: true,
+};
+
+test('cancellation after local device setup retains the device claim for recovery', async () => {
+  const { store, stateDir } = setup();
+  const requestId = 'claim-canceled-after-dispatch';
+  mockResolveTargetDevice.mockResolvedValue(android);
+  mockDispatch.mockResolvedValue(undefined);
+  markRequestCanceled(requestId);
+
+  try {
+    const response = await handleProductionOpenCommand({
+      createCommandSurface: fakeCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      req: {
+        command: 'open',
+        token: 'test',
+        session: 'claim-canceled-after-dispatch',
+        positionals: ['Demo'],
+        flags: { platform: 'android' },
+        meta: { requestId },
+      },
+      sessionName: 'claim-canceled-after-dispatch',
+      logPath: path.join(stateDir, 'daemon.log'),
+      sessionStore: store,
+      inspectFacts: inspectLifecycleRuntimeFacts,
+      bindDevice: bindRealLifecycleRuntime,
+      reconcileOrphanedDeviceClaim,
+    });
+
+    assert.equal(response.ok, false);
+    assert.equal(mockDispatch.mock.calls.length, 1);
+    assert.equal(vi.mocked(activateAndroidTestIme).mock.calls.length, 1);
+    assert.equal(inspectDeviceClaims({ serial: android.id })[0]?.classification, 'live');
+    assert.equal(store.get('claim-canceled-after-dispatch'), undefined);
+  } finally {
+    clearRequestCanceled(requestId);
+  }
+});

@@ -2,6 +2,7 @@ import path from 'node:path';
 import { vi } from 'vitest';
 import {
   type ApplicationLifecycleOperationFacts,
+  type ApplicationLifecycleRuntimeOperations,
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
@@ -52,7 +53,15 @@ function lifecycleFactsForTest(device: DeviceInfo): ApplicationLifecycleOperatio
   });
 }
 
-async function lifecycleBindingForTest(device: DeviceInfo) {
+/** Loads the lifecycle operations a lifecycle gateway binds; the daemon default is the canned port fixture. */
+export type LifecycleOperationsLoader = (
+  device: DeviceInfo,
+) => Promise<ApplicationLifecycleRuntimeOperations>;
+
+async function lifecycleBindingForTest(
+  device: DeviceInfo,
+  loadLifecycleOperations: LifecycleOperationsLoader = applicationLifecycleRuntimeFixture,
+) {
   const lifecycleFacts = lifecycleFactsForTest(device);
   const base = createUnavailableRuntimeFactsForTest(device, localRuntimeOwner(device.platform));
   return {
@@ -69,7 +78,7 @@ async function lifecycleBindingForTest(device: DeviceInfo) {
     },
     operations: {
       ...availableApplicationLifecycleOperations(
-        await applicationLifecycleRuntimeFixture(device),
+        await loadLifecycleOperations(device),
         lifecycleFacts,
       ),
       // The gesture family rides along: replay flows drive `scroll`/`swipe` through this gateway,
@@ -83,13 +92,25 @@ async function lifecycleBindingForTest(device: DeviceInfo) {
   };
 }
 
-/** Opt-in lifecycle fixture: commands bind the real root host after fact admission. */
+/** Opt-in lifecycle fixture: commands bind the canned lifecycle port after fact admission. */
 export const lifecycleDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> =
   Object.freeze({
     inspectFacts: async (device) => (await lifecycleBindingForTest(device)).facts,
     bind: async ({ device }) => await lifecycleBindingForTest(device),
     shutdown: async () => {},
   });
+
+/** The same gateway shape bound to a caller-supplied lifecycle-ops loader (root composition lanes pass the real fixture). */
+export function createLifecycleDeviceRuntimeGateway(
+  loadLifecycleOperations: LifecycleOperationsLoader,
+): DeviceRuntimeGateway<PlatformRuntimeOperations> {
+  return Object.freeze({
+    inspectFacts: async (device) =>
+      (await lifecycleBindingForTest(device, loadLifecycleOperations)).facts,
+    bind: async ({ device }) => await lifecycleBindingForTest(device, loadLifecycleOperations),
+    shutdown: async () => {},
+  });
+}
 
 /**
  * A fresh, unfrozen `lifecycleDeviceRuntimeGateway`-equivalent whose `inspectFacts`/`bind` are
@@ -98,12 +119,16 @@ export const lifecycleDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntime
  * would leak call counts between tests in other files) — call this per test that needs to observe
  * fact-inspection/binding call counts through the router seam.
  */
-export function createLifecycleDeviceRuntimeGatewaySpies() {
+export function createLifecycleDeviceRuntimeGatewaySpies(
+  loadLifecycleOperations: LifecycleOperationsLoader = applicationLifecycleRuntimeFixture,
+) {
   const inspectFacts = vi.fn(
-    async (device: DeviceInfo) => (await lifecycleBindingForTest(device)).facts,
+    async (device: DeviceInfo) =>
+      (await lifecycleBindingForTest(device, loadLifecycleOperations)).facts,
   );
   const bind = vi.fn(
-    async (request: DeviceBindingRequest) => await lifecycleBindingForTest(request.device),
+    async (request: DeviceBindingRequest) =>
+      await lifecycleBindingForTest(request.device, loadLifecycleOperations),
   );
   const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
     inspectFacts,
@@ -122,7 +147,6 @@ import {
 } from './support/unavailable-device-runtime-gateway.ts';
 
 export {
-  unavailableBinding,
   unavailableBindDevice,
   unavailableBindExactDevice,
   unavailableDeviceRuntimeGateway,
@@ -191,7 +215,6 @@ async function gestureBinding(device: DeviceInfo) {
     operations: { ...base.operations, ...gestureRuntimeSpies },
   } as unknown as Awaited<ReturnType<DeviceRuntimeGateway<PlatformRuntimeOperations>['bind']>>;
 }
-
 
 export function createRequestHandler(
   deps: Omit<

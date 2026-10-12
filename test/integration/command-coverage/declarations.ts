@@ -632,7 +632,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'session inventory proves the app lease is removed',
     ),
     macos: macos.contract(
-      'src/daemon/handlers/__tests__/session-relaunch-close.test.ts',
+      'src/__tests__/daemon-composition/handlers/session-relaunch-close.test.ts',
       'close on macOS session stops runner and dismisses automation alert before delete',
       'macOS close stops the runner, dismisses automation state, and deletes the session',
     ),

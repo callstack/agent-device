@@ -31,15 +31,6 @@ vi.mock('../../../../platform-runtime-apple-application-tools.ts', async (import
     }),
   };
 });
-vi.mock('../../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../../platform-runtime-runtime-hints.ts')>();
-  return {
-    ...actual,
-    applyRuntimeHintValues: vi.fn(async () => {}),
-    clearRuntimeHintValues: vi.fn(async () => {}),
-  };
-});
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
@@ -73,9 +64,11 @@ import {
   mockBindDeviceRuntime,
   mockInspectDeviceRuntimeFacts,
 } from '../../../handlers/__tests__/session-command-harness.ts';
-import { applyRuntimeHintValues } from '../../../../platform-runtime-runtime-hints.ts';
+import {
+  applyRuntimeHintsFixture,
+  dispatchApplicationLifecycleEffect,
+} from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
 import { resolveAndroidPackageForOpen } from '@agent-device/platform-android/mechanics';
-import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
 import { lifecycleRuntimeFacts } from '../../../__tests__/application-lifecycle-runtime-harness.ts';
 import {
   makeAndroidDevice,
@@ -87,7 +80,7 @@ import {
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
-const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintValues);
+const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsFixture);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
 
 beforeEach(() => {

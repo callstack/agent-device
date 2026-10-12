@@ -54,15 +54,13 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   return { ...actual, resolveAndroidPackageForOpen: vi.fn(async () => undefined) };
 });
 
-import {
-  createRequestHandler,
-  lifecycleDeviceRuntimeGateway,
-} from '../../../daemon/__tests__/test-device-runtime-gateway.ts';
+import { createRequestHandler } from '../../../daemon/__tests__/test-device-runtime-gateway.ts';
+import { realLifecycleDeviceRuntimeGateway } from '../lifecycle-runtime-gateway.ts';
 import {
   dispatchApplicationLifecycleEffect,
   awaitFixtureReadiness,
   discoverReadyAndroidEmulators,
-} from '../../../daemon/__tests__/application-lifecycle-runtime-fixture.ts';
+} from '../application-lifecycle-runtime-fixture.ts';
 import {
   stopIosRunnerSession,
   releaseIosRunnerOnClose,
@@ -102,7 +100,7 @@ function createHandler(sessionStore: ReturnType<typeof makeSessionStore>) {
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
-    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    deviceRuntimeGateway: realLifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     platformResourceCleanup,
     trackDownloadableArtifact: () => 'artifact-id',
@@ -137,11 +135,11 @@ test('close on iOS simulator session retains runner and deletes the session', as
     sessionName,
     makeSession(sessionName, {
       device: {
-    platform: 'apple',
-    id: 'sim-1',
-    name: 'iPhone 17 Pro',
-    kind: 'simulator',
-    booted: true,
+        platform: 'apple',
+        id: 'sim-1',
+        name: 'iPhone 17 Pro',
+        kind: 'simulator',
+        booted: true,
       },
       appName: 'com.example.app',
     }),
@@ -162,12 +160,12 @@ test('close on iOS simulator with scoped simulator set retains runner and delete
     sessionName,
     makeSession(sessionName, {
       device: {
-    platform: 'apple',
-    id: 'sim-1',
-    name: 'iPhone 17 Pro',
-    kind: 'simulator',
-    booted: true,
-    simulatorSetPath: '/tmp/tenant-a/simulator-set',
+        platform: 'apple',
+        id: 'sim-1',
+        name: 'iPhone 17 Pro',
+        kind: 'simulator',
+        booted: true,
+        simulatorSetPath: '/tmp/tenant-a/simulator-set',
       },
       appName: 'com.example.app',
     }),
@@ -187,11 +185,11 @@ test('close <app> on iOS simulator retains runner while terminating app', async 
     sessionName,
     makeSession(sessionName, {
       device: {
-    platform: 'apple',
-    id: 'sim-1',
-    name: 'iPhone 17 Pro',
-    kind: 'simulator',
-    booted: true,
+        platform: 'apple',
+        id: 'sim-1',
+        name: 'iPhone 17 Pro',
+        kind: 'simulator',
+        booted: true,
       },
       appName: 'com.example.app',
     }),

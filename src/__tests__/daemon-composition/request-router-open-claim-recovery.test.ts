@@ -20,7 +20,9 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 
 providerDeviceAdmissionFixture();
 
-vi.mock('../../daemon/device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../../daemon/device/device-ready.ts', () => ({
+  ensureDeviceReady: vi.fn(async () => {}),
+}));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/process')>();
   const startTime = 'test-process-start';

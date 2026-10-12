@@ -1,24 +1,17 @@
-import { daemonPlatformServicesFixture } from '../../../__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import {
   sessionCloseShutdownFixture,
   type SessionState,
 } from './session-close-shutdown.fixtures.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 const {
   AppError,
-  handleSessionCommands,
   makeIosSimulatorRecordingSession,
   makeSession,
   makeSessionStore,
-  mockReleaseRunnerOnClose,
   mockStopIosRunnerSession,
   mockStopIosRunnerSession: stopIosRunnerSession,
-  noopInvoke,
-  path,
   recordingCleanupMock,
   recordingFinishMock,
   resetSessionCloseShutdownMocks,
@@ -28,77 +21,6 @@ const {
 } = sessionCloseShutdownFixture;
 
 beforeEach(resetSessionCloseShutdownMocks);
-
-test('close finalizes an active iOS simulator recording before deleting the session', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-active-recording-close-session';
-  const session = makeIosSimulatorRecordingSession(sessionStore, sessionName);
-  const finish = recordingFinishMock(session);
-  sessionStore.publish(sessionName, session);
-
-  const response = await handleSessionCommands({
-    createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'close',
-      positionals: [],
-      flags: {},
-    },
-    sessionName,
-    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-
-  expect(response?.ok).toBe(true);
-  // The recorder was signaled (SIGINT finalizes the simctl mp4), the recording
-  // was detached, and the session was deleted — no orphaned recordVideo child.
-  expect(finish).toHaveBeenCalledOnce();
-  expect(sessionStore.get(sessionName)).toBeUndefined();
-  // An active recording at close time still defeats iOS runner retention even
-  // though the recording is finalized (and cleared) before the retention step.
-  expect(mockReleaseRunnerOnClose).toHaveBeenCalledWith(session.device.id, { retain: false });
-  expect(finish.mock.invocationCallOrder[0]).toBeLessThan(
-    mockReleaseRunnerOnClose.mock.invocationCallOrder[0]!,
-  );
-});
-
-test('close surfaces a recording finalization failure through the cleanup-failure channel', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'ios-recording-close-failure-session';
-  const session = makeIosSimulatorRecordingSession(sessionStore, sessionName, {
-    recorderExitCode: 1,
-  });
-  const finish = recordingFinishMock(session);
-  const forceCleanup = recordingCleanupMock(session);
-  sessionStore.publish(sessionName, session);
-
-  await expect(
-    handleSessionCommands({
-      createCommandSurface: fakeCreateCommandSurface,
-      platformServices: daemonPlatformServicesFixture(),
-      req: {
-        token: 't',
-        session: sessionName,
-        command: 'close',
-        positionals: [],
-        flags: {},
-      },
-      sessionName,
-      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-      sessionStore,
-      invoke: noopInvoke,
-    }),
-  ).rejects.toThrow(/recording: .*failed to stop recording/);
-
-  // Cleanup failure is reported, later cleanup still ran, session still deleted.
-  expect(finish).toHaveBeenCalledOnce();
-  expect(forceCleanup).toHaveBeenCalledOnce();
-  expect(mockReleaseRunnerOnClose).toHaveBeenCalledWith(session.device.id, { retain: false });
-  expect(sessionStore.get(sessionName)).toBeUndefined();
-});
 
 test('daemon resource teardown finalizes recording before lifecycle runner disposal', async () => {
   const sessionName = 'ios-active-recording-teardown-session';
