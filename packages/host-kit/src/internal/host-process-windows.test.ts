@@ -31,18 +31,22 @@ function windowsPlatform<T>(run: () => T): T;
 function windowsPlatform<T>(run: () => Promise<T>): Promise<T>;
 function windowsPlatform<T>(run: () => T | Promise<T>): T | Promise<T> {
   const previous = Object.getOwnPropertyDescriptor(process, 'platform');
-  Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-  try {
-    const result = run();
-    return result instanceof Promise
-      ? result.finally(() => {
-          if (previous) Object.defineProperty(process, 'platform', previous);
-        })
-      : result;
-  } catch (error) {
+  const restore = () => {
     if (previous) Object.defineProperty(process, 'platform', previous);
+  };
+  Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+  let outcome: T | Promise<T>;
+  try {
+    outcome = run();
+  } catch (error) {
+    restore();
     throw error;
   }
+  if (!(outcome instanceof Promise)) {
+    restore();
+    return outcome;
+  }
+  return outcome.finally(restore);
 }
 
 function cimAnswers(stdout: string, exitCode = 0): void {

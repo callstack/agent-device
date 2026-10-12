@@ -54,9 +54,9 @@ type FakeManagedAgentBrowserInstall = ReturnType<typeof expectedManagedAgentBrow
 
 /**
  * Drives one scenario through the real provider against a managed install whose CLI answers come
- * from the caller's command-executor override, in a state dir of its own. Tests that only need
- * the CLI answers leave `options` empty: without an owned-process record store the provider keeps
- * no fleet record, so no scenario pays for or trips over a real process-table read.
+ * from the caller's command-executor override, in a state dir of its own. Tests that only need the
+ * CLI answers leave `options` empty: without an owned-process record store the provider keeps no
+ * fleet record, so no scenario pays for or trips over a real process-table read.
  */
 export async function withManagedAgentBrowserProvider(
   options: {
@@ -67,13 +67,8 @@ export async function withManagedAgentBrowserProvider(
   testFn: (provider: WebProvider) => void | Promise<void>,
 ): Promise<void> {
   const stateDir = mkdtempForTestSync('agent device web provider ');
-  try {
-    installFakeManagedAgentBrowser(stateDir);
-    const provider = createAgentBrowserWebProvider({ ...options, stateDir });
-    await testFn(provider);
-  } finally {
-    fs.rmSync(stateDir, { recursive: true, force: true });
-  }
+  installFakeManagedAgentBrowser(stateDir);
+  await testFn(createAgentBrowserWebProvider({ ...options, stateDir }));
 }
 
 /** The answer shape the managed backend answers every command with. */
