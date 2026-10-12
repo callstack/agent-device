@@ -5,6 +5,7 @@ import {
   snapshotRefBodies,
   snapshotRefMinting,
   type RawSnapshotNode,
+  type SnapshotProvenance,
 } from './snapshot.ts';
 
 const node = (index: number, extra: Partial<RawSnapshotNode> = {}): RawSnapshotNode => ({
@@ -55,16 +56,54 @@ describe('attachRefs', () => {
 });
 
 describe('snapshotRefMinting', () => {
-  test('a web capture owns its ref namespace', () => {
+  test('the producer that owns its ref namespace gets backend-issued minting', () => {
     expect(snapshotRefMinting({ backend: 'web', producer: 'agent-browser' })).toBe(
       'backend-issued',
     );
   });
 
-  test('every other producer is minted positionally, and a capture with no provenance too', () => {
-    expect(snapshotRefMinting({ backend: 'xctest', producer: 'apple-runner' })).toBe('dense');
-    expect(snapshotRefMinting({ backend: 'android', producer: 'appium-source' })).toBe('dense');
+  // The mode keys on the producer, never on the platform channel: several producers can feed one
+  // channel (`xctest` alone has four) and only some of them mint refs of their own. A web adapter
+  // added later — a webdriver- or CDP-backed one — would arrive on the `web` channel minting
+  // nothing, and would need dense numbering to keep every node addressable as it does today.
+  test.each([
+    { backend: 'xctest', producer: 'apple-runner' },
+    { backend: 'xctest', producer: 'simulator-ax-bridge' },
+    { backend: 'xctest', producer: 'appium-source' },
+    { backend: 'xctest', producer: 'limrun-ios-tree' },
+    { backend: 'android', producer: 'android-uiautomator' },
+    { backend: 'android', producer: 'appium-source' },
+    { backend: 'harmonyos-arkui', producer: 'harmonyos-uitest' },
+    { backend: 'macos-helper', producer: 'macos-helper' },
+    { backend: 'linux-atspi', producer: 'linux-atspi' },
+  ] satisfies readonly SnapshotProvenance[])(
+    '$backend/$producer is minted positionally',
+    (provenance) => {
+      expect(snapshotRefMinting(provenance)).toBe('dense');
+    },
+  );
+
+  test('a capture with no provenance is minted positionally', () => {
     expect(snapshotRefMinting(undefined)).toBe('dense');
+    expect(snapshotRefMinting({})).toBe('dense');
+    // Type-level half of the producer-keyed decision: a channel cannot be handed over on its own,
+    // so this function never has to guess which producer published a tree. `pnpm typecheck` fails
+    // the moment the parameter widens back to a partial pair.
+    // @ts-expect-error the minting mode needs the whole provenance pair, not the channel alone
+    snapshotRefMinting({ backend: 'web' });
+  });
+
+  test('a second producer on the web channel keeps dense numbering', () => {
+    // Forward-looking regression for the axis itself, not for a pair the table admits today: the
+    // provenance table has exactly one web producer, so a webdriver- or CDP-backed adapter is not
+    // expressible yet and has to be widened through here. When it lands, `agent-browser` is the
+    // entry that owns its refs and nothing else on the channel does — the case a channel check
+    // would get wrong by handing it `backend-issued` and stripping every ref in its tree.
+    const secondWebAdapter = {
+      backend: 'web',
+      producer: 'webdriver-source',
+    } as unknown as SnapshotProvenance;
+    expect(snapshotRefMinting(secondWebAdapter)).toBe('dense');
   });
 });
 

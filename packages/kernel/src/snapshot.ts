@@ -821,16 +821,33 @@ export function snapshotRefBodies(nodes: readonly SnapshotNode[]): string[] {
 }
 
 /**
+ * The one producer that resolves actions against refs of its own, and so owns the ref namespace of
+ * every tree it publishes. A producer that mints nothing belongs nowhere in this list: it keeps
+ * dense positional numbering. Adding a second producer that mints its own refs means adding it here.
+ */
+const REF_NAMESPACE_OWNERS: readonly SnapshotProvenance['producer'][] = ['agent-browser'];
+
+/**
  * The ref-minting mode of a capture, from the pair that produced it. This is the one place that
  * knows which producers own their ref namespace, so the projection that publishes a tree and the
  * projection that later re-attaches refs to it cannot disagree.
+ *
+ * It reads the producer and not the platform channel, per the rule the provenance table states:
+ * several producers can feed one channel with different guarantees, and a second web adapter
+ * (webdriver-backed, or anything else that lands on this channel) mints no refs of its own — it
+ * needs dense numbering, which a channel-keyed check would silently take away from it. The
+ * parameter is the whole pair or nothing, so a caller cannot present a channel and leave this to
+ * guess who acquired the tree.
  */
 export function snapshotRefMinting(
-  provenance: Partial<SnapshotProvenance> | undefined,
+  provenance: SnapshotCaptureProvenance | undefined,
 ): SnapshotRefMinting {
   // agent-browser resolves click/fill/hover against refs it minted itself, in tree order and not
   // densely (#2283). A ref minted beside it would either name a different element or nothing.
-  return provenance?.backend === 'web' ? 'backend-issued' : 'dense';
+  const producer = provenance?.producer;
+  return producer !== undefined && REF_NAMESPACE_OWNERS.includes(producer)
+    ? 'backend-issued'
+    : 'dense';
 }
 
 /**
