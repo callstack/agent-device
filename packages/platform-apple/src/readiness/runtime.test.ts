@@ -224,6 +224,22 @@ test('physical readiness forwards the request signal to the focused host port', 
   expect(ensureConnected).toHaveBeenCalledWith(expect.anything(), controller.signal);
 });
 
+test('a cold boot reveals Simulator.app without taking focus from the frontmost app', async () => {
+  const { host } = coldSimulatorHost({});
+  const commandRun = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
+
+  await ensureAppleReady(
+    { ...host, commands: { ...host.commands, run: commandRun } },
+    simulator(),
+    new AbortController().signal,
+  );
+
+  expect(commandRun).toHaveBeenCalledWith(
+    expect.objectContaining({ executable: 'open', args: ['-g', '-a', 'Simulator'] }),
+    expect.anything(),
+  );
+});
+
 /** A Shutdown Simulator whose boot, bootstatus, and post-boot listing run the given hooks first. */
 function coldSimulatorHost(hooks: {
   onBoot?: () => void;

@@ -5,7 +5,7 @@ import {
   openIosSimulatorApp,
   wasSimulatorRecentlyObservedBooted,
 } from '../simulator.ts';
-import { IOS_BOOT_TIMEOUT_MS, IOS_SIMULATOR_FOCUS_TIMEOUT_MS } from '../config.ts';
+import { IOS_BOOT_TIMEOUT_MS, IOS_SIMULATOR_SHOW_TIMEOUT_MS } from '../config.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmd } from '@agent-device/host-kit/command';
 import { IOS_TEST_SIMULATOR } from './apple-core-stub-helpers.ts';
@@ -66,14 +66,14 @@ test('ensureBootedSimulator opens Simulator after cold boot', async () => {
     'xcrun simctl list devices -j': simulatorStateSequence('Shutdown', 'Booted'),
     'xcrun simctl boot sim-1': OK_RESULT,
     'xcrun simctl bootstatus sim-1 -b': OK_RESULT,
-    'open -a Simulator': OK_RESULT,
+    'open -g -a Simulator': OK_RESULT,
   });
 
   await ensureBootedSimulator(IOS_TEST_SIMULATOR);
 
   assert.equal(
     mockRunCmd.mock.calls.some(
-      ([cmd, args]) => cmd === 'open' && args.join(' ') === '-a Simulator',
+      ([cmd, args]) => cmd === 'open' && args.join(' ') === '-g -a Simulator',
     ),
     true,
   );
@@ -81,14 +81,14 @@ test('ensureBootedSimulator opens Simulator after cold boot', async () => {
 
 test('openIosSimulatorApp opens Simulator', async () => {
   mockRunCmdResponses({
-    'open -a Simulator': OK_RESULT,
+    'open -g -a Simulator': OK_RESULT,
   });
 
   await openIosSimulatorApp();
 
   assert.deepEqual(
     mockRunCmd.mock.calls.map(([cmd, args]) => [cmd, args.join(' ')]),
-    [['open', '-a Simulator']],
+    [['open', '-g -a Simulator']],
   );
 });
 
@@ -108,8 +108,8 @@ test('ensureBootedSimulator leaves the Simulator app alone when already booted',
 test('openIosSimulatorApp times out instead of hanging indefinitely', async () => {
   mockRunCmd.mockImplementation(async (cmd, args, options) => {
     assert.equal(cmd, 'open');
-    assert.deepEqual(args, ['-a', 'Simulator']);
-    assert.equal(options?.timeoutMs, IOS_SIMULATOR_FOCUS_TIMEOUT_MS);
+    assert.deepEqual(args, ['-g', '-a', 'Simulator']);
+    assert.equal(options?.timeoutMs, IOS_SIMULATOR_SHOW_TIMEOUT_MS);
     throw new AppError('COMMAND_FAILED', 'open timed out after 10000ms', {
       timeoutMs: options?.timeoutMs,
     });
@@ -174,7 +174,7 @@ test('ensureBootedSimulator retries a transient simctl boot failure and boots on
       return bootCalls === 1 ? failedSimctlBoot('Unable to boot sim-1 right now') : OK_RESULT;
     },
     'xcrun simctl bootstatus sim-1 -b': OK_RESULT,
-    'open -a Simulator': OK_RESULT,
+    'open -g -a Simulator': OK_RESULT,
   });
 
   await settleBoot(ensureBootedSimulator(IOS_TEST_SIMULATOR));
@@ -184,7 +184,7 @@ test('ensureBootedSimulator retries a transient simctl boot failure and boots on
   assert.equal(bootCalls, 2);
   assert.equal(
     mockRunCmd.mock.calls.some(
-      ([cmd, args]) => cmd === 'open' && args.join(' ') === '-a Simulator',
+      ([cmd, args]) => cmd === 'open' && args.join(' ') === '-g -a Simulator',
     ),
     true,
   );
@@ -298,7 +298,7 @@ test('ensureBootedSimulator reports a simulator that never reaches Booted after 
   assert.equal(mockRunCmd.mock.calls.filter(([, args]) => args[1] === 'boot').length, 3);
   assert.equal(
     mockRunCmd.mock.calls.some(
-      ([cmd, args]) => cmd === 'open' && args.join(' ') === '-a Simulator',
+      ([cmd, args]) => cmd === 'open' && args.join(' ') === '-g -a Simulator',
     ),
     false,
   );

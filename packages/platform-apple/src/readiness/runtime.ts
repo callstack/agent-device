@@ -187,7 +187,7 @@ async function simulatorState(
 
 async function showSimulator(host: AppleReadinessHost, signal: AbortSignal): Promise<void> {
   await host.commands.run(
-    { executable: 'open', args: ['-a', 'Simulator'], allowFailure: true, timeoutMs: 10_000 },
+    { executable: 'open', args: ['-g', '-a', 'Simulator'], allowFailure: true, timeoutMs: 10_000 },
     signal,
   );
 }
