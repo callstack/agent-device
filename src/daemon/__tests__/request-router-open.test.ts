@@ -180,6 +180,12 @@ test('open returns and creates the session state directory', async () => {
       path.join(String(response.data?.sessionStateDir), 'events.ndjson'),
     );
     expect(fs.existsSync(String(response.data?.sessionStateDir))).toBe(true);
+    // `open` records the request through `recordEvent`, which queues the event-log
+    // append rather than writing it, so the path it returns can be named before the
+    // file exists. Every reader of that log awaits this flush first (see
+    // session-store.test.ts); asserting existence without it races the append and
+    // only passes when module loading happened to drain the queue in time.
+    await sessionStore.flushEvents('session-a');
     expect(fs.existsSync(String(response.data?.eventLogPath))).toBe(true);
   }
   expect(inspectDeviceClaims({ udid: device.id })[0]?.claim?.stateDir).toBe(
