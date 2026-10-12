@@ -20,7 +20,6 @@ function clientEdge(
     dynamic: kind === 'dynamic',
     typeOnly: kind === 'type',
     symbols: [],
-    bindingResidue: false,
     fromZone: targetDagZone(file),
     toZone: targetDagZone(target),
   };

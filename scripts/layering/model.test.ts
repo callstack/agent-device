@@ -292,7 +292,6 @@ test('parseImports detects multiline dynamic imports', () => {
       typeOnly: false,
       line: 1,
       symbols: [],
-      bindingResidue: false,
     },
   ]);
 });
@@ -307,7 +306,6 @@ test('parseImports resolves constant-template dynamic imports', () => {
       typeOnly: false,
       line: 1,
       symbols: [],
-      bindingResidue: false,
     },
   ]);
 });
@@ -324,13 +322,13 @@ test('parseImports captures destructured named bindings of dynamic imports, keye
   );
 
   assert.deepEqual(
-    edges.map(({ spec, symbols, bindingResidue }) => ({ spec, symbols, bindingResidue })),
+    edges.map(({ spec, symbols }) => ({ spec, symbols })),
     [
-      { spec: './dyn.ts', symbols: ['a', 'b'], bindingResidue: false },
-      { spec: './dyn.ts', symbols: [], bindingResidue: false },
-      { spec: './dyn.ts', symbols: [], bindingResidue: false },
-      { spec: './dyn.ts', symbols: ['a'], bindingResidue: true },
-      { spec: './dyn.ts', symbols: [], bindingResidue: true },
+      { spec: './dyn.ts', symbols: ['a', 'b'] },
+      { spec: './dyn.ts', symbols: [] },
+      { spec: './dyn.ts', symbols: [] },
+      { spec: './dyn.ts', symbols: ['a'] },
+      { spec: './dyn.ts', symbols: [] },
     ],
   );
 });

@@ -20,11 +20,6 @@ export type ImportEdge = {
    * dynamic imports that do not destructure named bindings.
    */
   symbols: readonly string[];
-  /**
-   * True when a dynamic-import destructure holds a binding the scanner cannot name (a rest element
-   * or a computed key); `symbols` then does not enumerate the full imported surface.
-   */
-  bindingResidue: boolean;
 };
 
 export type ResolvedImportEdge = ImportEdge & {
@@ -221,7 +216,6 @@ function staticImportEdge(
     typeOnly,
     line: sourceLine(source, start),
     symbols,
-    bindingResidue: false,
   };
 }
 
@@ -249,7 +243,6 @@ export function parseImports(source: string): ImportEdge[] {
           typeOnly: false,
           line: sourceLine(source, start),
           symbols: capture ? [...capture.symbols] : [],
-          bindingResidue: capture?.residue ?? false,
         },
       });
       return;
