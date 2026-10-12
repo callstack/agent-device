@@ -10,6 +10,8 @@
 // lcov was dropped by an exclude glob — reported (non-gating) so exclusions
 // cannot silently absorb new logic.
 
+import { repoRelativePath } from '../lib/repo-path.ts';
+
 // Single source of truth for the gate. Changed-line coverage below this
 // percentage fails the Coverage CI job (unless waived).
 export const CHANGED_LINE_COVERAGE_THRESHOLD = 70;
@@ -33,16 +35,11 @@ export type ChangedFileDiff = {
   readonly deleted: boolean;
 };
 
-// Normalize an lcov/diff path to a repo-relative posix path. `rootDir` strips an
-// absolute-path prefix some coverage providers emit; `./` and `b/` prefixes are
-// dropped so lcov and diff paths join on the same key.
+// Normalize an lcov/diff path to a repo-relative posix path, then drop the `a/`-style prefixes git
+// writes. Relativization itself is shared with the coverage-map keys (scripts/lib/repo-path.ts): a
+// key from another checkout must relativize identically here and there, or the two never join.
 export function normalizePath(raw: string, rootDir?: string): string {
-  let p = raw.trim().replaceAll('\\', '/');
-  if (rootDir) {
-    const root = rootDir.replaceAll('\\', '/').replace(/\/$/, '');
-    if (p === root) return '';
-    if (p.startsWith(`${root}/`)) p = p.slice(root.length + 1);
-  }
+  let p = repoRelativePath(raw, rootDir);
   if (p.startsWith('b/')) p = p.slice(2);
   if (p.startsWith('./')) p = p.slice(2);
   return p;

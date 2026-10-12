@@ -1,63 +1,178 @@
-// Entry point for the coverage-based CRAP report: `pnpm check:coverage-crap [--base <ref> | --all]`.
+// Entry point for the coverage-based CRAP verdict: `pnpm check:coverage-crap [--base <ref> | --all]`.
 //
 // Reuses the Istanbul map `pnpm test:coverage` already wrote (never runs coverage a second time),
 // drops records with impossible counts, and asks fallow to score the functions the diff against
-// <base> touches, or every function with --all. Report-only: it prints the functions at or above
-// the threshold to stdout and the GitHub job summary (touched functions also as warning
-// annotations), and exits 0 once it has a verdict.
+// <base> touches, or every function with --all.
+//
+// `--base` (a PR) blocks: it exits 1 when a touched function scores at or above the threshold, and
+// also when the reports cannot be trusted to answer — a missing or malformed map, a map with fewer
+// files than the same run enumerated, or a touched file the map dropped or never recorded. `--all`
+// (the `main` report) stays report-only, because `main` carries debt on purpose: it exits 0 once it
+// has a report to show. Attribution is rename-aware — `readChangedLinesDiff` pairs a pure move at
+// 90%, so relocating a file owes nothing for the functions that moved with it.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { parseScriptArgs } from '../lib/cli-args.ts';
+import { parseLcov, parseUnifiedDiff } from '../coverage-changed/model.ts';
 import { readChangedLinesDiff } from '../lib/repo-git.ts';
+import { repoRelativePath } from '../lib/repo-path.ts';
 import {
+  coverageMapPaths,
+  decideCrapVerdict,
   parseFallowJsonReport,
+  parseIstanbulCoverageMap,
+  readCrapExemptions,
   readCrapFindings,
+  readEstimatedFindings,
+  readTouchedFiles,
   renderCrapAnnotations,
   renderCrapReport,
   sanitizeIstanbulCoverage,
+  type CrapExemptions,
+  type CrapFinding,
   type CrapScope,
   type IstanbulCoverageMap,
+  type TouchedFile,
 } from './model.ts';
 
 const USAGE = 'Usage: pnpm check:coverage-crap [--base <ref> | --all]\n';
 const COVERAGE_PATH = 'coverage/coverage-istanbul.json';
+const LCOV_PATH = 'coverage/lcov.info';
 const SANITIZED_PATH = 'coverage/fallow-crap-coverage.json';
 const DIFF_PATH = 'coverage/fallow-crap.diff';
 const FALLOW_CONFIG = 'fallow-crap.json';
 const CRAP_THRESHOLD = 30;
 const FALLOW_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
 
-export function run(argv: readonly string[], cwd?: string): number {
-  const values = parseScriptArgs(argv, USAGE, {
-    base: { type: 'string', default: 'origin/main' },
-    all: { type: 'boolean', default: false },
-  });
-  const base = values.base ?? 'origin/main';
-  const scope: CrapScope = values.all ? 'all' : 'touched';
-  const root = cwd ?? runCmdSync('git', ['rev-parse', '--show-toplevel']).stdout.trim();
+// This repository's own pinned fallow, beside the checkout this script was loaded from. Resolving
+// it from the analyzed root instead would let a second checkout supply a different version.
+const PINNED_FALLOW_BIN = path.resolve(
+  import.meta.dirname,
+  '..',
+  '..',
+  'node_modules',
+  'fallow',
+  'bin',
+  'fallow',
+);
+
+function firstLine(text: string): string {
+  return text.trim().split('\n')[0] ?? 'no output';
+}
+
+/** Drops an `AppError` prefix so the report names the cause rather than the wrapper. */
+function describe(error: unknown): string {
+  return error instanceof Error ? firstLine(error.message) : String(error);
+}
+
+/**
+ * Says out loud that no verdict was reached. These cases exit before a report exists, so they go to
+ * stderr rather than heading a table of nothing, which would read as a clean result in the logs.
+ */
+function refuse(reason: string): number {
+  process.stderr.write(`check:coverage-crap: no trustworthy verdict — ${reason}\n`);
+  return 1;
+}
+
+/**
+ * The diff this verdict is scoped to, written where fallow reads it. Without it there is nothing to
+ * scope to, and a `fallow-crap.diff` left by an earlier run would silently supply one, so a failure
+ * here is fatal rather than a scoring of the wrong lines.
+ */
+function readScopedDiff(root: string, base: string): readonly TouchedFile[] {
+  const diff = readChangedLinesDiff(root, base);
+  fs.writeFileSync(path.resolve(root, DIFF_PATH), diff);
+  return readTouchedFiles(parseUnifiedDiff(diff));
+}
+
+/**
+ * The files the coverage run enumerated, per lcov, or null when it wrote no record of that. A run
+ * that lists no files cannot be that record either, and reaching the verdict as an empty set would
+ * satisfy every completeness check at once.
+ */
+function readEnumeratedPaths(root: string): Set<string> | null {
+  const lcovPath = path.resolve(root, LCOV_PATH);
+  if (!fs.existsSync(lcovPath)) return null;
+  const enumerated = new Set(parseLcov(fs.readFileSync(lcovPath, 'utf8'), root).keys());
+  return enumerated.size > 0 ? enumerated : null;
+}
+
+/** What one coverage run and one diff say, as far as they can be read at all. */
+type CrapInputs = Readonly<{
+  /** Every file the run recorded counters for, including records dropped as corrupt below. */
+  mapPaths: ReadonlySet<string>;
+  /** Every file the run listed in lcov, or null when it wrote nothing usable. */
+  enumeratedPaths: ReadonlySet<string> | null;
+  touched: readonly TouchedFile[];
+  /** Records the sanitizer refused, as repo-relative paths. */
+  dropped: readonly string[];
+}>;
+
+/**
+ * Reads the two reports of one coverage run plus this change's diff, or names the reason there is
+ * nothing to decide from. A verdict computed from an unreadable map would read as "no findings",
+ * which is indistinguishable from a clean branch, so those cases stop here.
+ */
+function gatherCrapInputs(
+  root: string,
+  base: string,
+  scope: CrapScope,
+): CrapInputs | { refusal: string } {
   const coveragePath = path.resolve(root, COVERAGE_PATH);
   if (!fs.existsSync(coveragePath)) {
-    process.stderr.write(
-      `check:coverage-crap: no Istanbul coverage map at ${coveragePath}. Run \`pnpm test:coverage\` first.\n`,
-    );
-    return 1;
+    return {
+      refusal: `no Istanbul coverage map at ${coveragePath}. Run \`pnpm test:coverage\` first.`,
+    };
+  }
+  let map: IstanbulCoverageMap;
+  try {
+    map = parseIstanbulCoverageMap(fs.readFileSync(coveragePath, 'utf8'));
+  } catch (error: unknown) {
+    return { refusal: `${coveragePath}: ${describe(error)}` };
   }
 
-  const { map, dropped } = sanitizeIstanbulCoverage(
-    JSON.parse(fs.readFileSync(coveragePath, 'utf8')) as IstanbulCoverageMap,
-  );
-  fs.writeFileSync(path.resolve(root, SANITIZED_PATH), JSON.stringify(map));
+  let touched: readonly TouchedFile[] = [];
   if (scope === 'touched') {
-    fs.writeFileSync(path.resolve(root, DIFF_PATH), readChangedLinesDiff(root, base));
+    try {
+      touched = readScopedDiff(root, base);
+    } catch (error: unknown) {
+      return { refusal: `the diff against ${base} failed: ${describe(error)}` };
+    }
   }
 
+  const { map: sanitized, dropped } = sanitizeIstanbulCoverage(map);
+  fs.writeFileSync(path.resolve(root, SANITIZED_PATH), JSON.stringify(sanitized));
+
+  // lcov is the same coverage run's own list of the files it enumerated, which is what makes a
+  // touched file absent from the map detectable. Only the per-file verdict needs it: the whole-repo
+  // backlog is scored from the map alone.
+  // lcov is the same coverage run's own list of the files it enumerated, which is what makes a
+  // touched file absent from the map detectable. Whether a missing one is worth reporting is the
+  // verdict's call, not this reader's.
+  return {
+    mapPaths: coverageMapPaths(map, root),
+    enumeratedPaths: readEnumeratedPaths(root),
+    touched,
+    dropped: dropped.map((file) => repoRelativePath(file, root)),
+  };
+}
+
+/**
+ * Scores the sanitized map, scoped to this diff in `touched` scope. `fallowBin` is a parameter rather
+ * than the constant so a test can assert these flags against a stand-in that reports a chosen finding.
+ */
+function runFallowHealth(
+  root: string,
+  scope: CrapScope,
+  fallowBin: string,
+): { stdout: string } | { failure: string } {
   const fallow = runCmdSync(
     process.execPath,
     [
-      path.join(root, 'node_modules', 'fallow', 'bin', 'fallow'),
+      fallowBin,
       'health',
       '--config',
       FALLOW_CONFIG,
@@ -74,24 +189,85 @@ export function run(argv: readonly string[], cwd?: string): number {
     ],
     { cwd: root, allowFailure: true, maxBuffer: FALLOW_MAX_BUFFER_BYTES },
   );
-  if (fallow.exitCode !== 0) {
-    process.stderr.write(`check:coverage-crap: fallow health failed:\n${fallow.stderr}\n`);
+  return fallow.exitCode === 0
+    ? { stdout: fallow.stdout }
+    : { failure: `fallow health failed:\n${fallow.stderr}` };
+}
+
+/**
+ * The exemptions come from the resolved config, not from a copy in this diff: the report then states
+ * the scope fallow actually applied. Reading them is reporting, not gating, so a failure says so.
+ */
+function readExemptions(root: string, fallowBin: string): CrapExemptions {
+  const config = runCmdSync(
+    process.execPath,
+    [fallowBin, 'config', '--config', FALLOW_CONFIG, '--format', 'json'],
+    { cwd: root, allowFailure: true, maxBuffer: FALLOW_MAX_BUFFER_BYTES },
+  );
+  return config.exitCode === 0
+    ? readCrapExemptions(config.stdout)
+    : { available: false, detail: firstLine(config.stderr) };
+}
+
+/** Scores what was gathered, prints the verdict, and returns the process exit code. */
+function reportCrapVerdict(
+  root: string,
+  scope: CrapScope,
+  inputs: CrapInputs,
+  fallowBin: string,
+): number {
+  const health = runFallowHealth(root, scope, fallowBin);
+  if ('failure' in health) {
+    process.stderr.write(`check:coverage-crap: ${health.failure}\n`);
     return 1;
   }
-  const findings = readCrapFindings(parseFallowJsonReport(fallow.stdout), CRAP_THRESHOLD);
-  const report = renderCrapReport({
+  const report = parseFallowJsonReport(health.stdout);
+  const findings = readCrapFindings(report, CRAP_THRESHOLD);
+  const verdict = decideCrapVerdict({
+    scope,
     findings,
-    dropped: dropped.map((file) => path.relative(root, file)),
+    estimated: readEstimatedFindings(report, CRAP_THRESHOLD),
+    touched: inputs.touched,
+    dropped: new Set(inputs.dropped),
+    // Pre-sanitizer on purpose: a record the sanitizer dropped is reported as corrupt, and a file
+    // the run measured is not also missing from the map.
+    mapPaths: inputs.mapPaths,
+    enumeratedPaths: inputs.enumeratedPaths,
+  });
+  const rendered = renderCrapReport({
+    findings,
+    dropped: inputs.dropped,
     threshold: CRAP_THRESHOLD,
     scope,
+    verdict,
+    exemptions: readExemptions(root, fallowBin),
   });
-  process.stdout.write(report);
+  publish(rendered, scope, verdict.offenders);
+  return verdict.blocking ? 1 : 0;
+}
+
+/** The report goes to stdout, to the job summary, and — the debt only — onto the PR's diff. */
+function publish(rendered: string, scope: CrapScope, offenders: readonly CrapFinding[]): void {
+  process.stdout.write(rendered);
   const summaryPath = process.env.GITHUB_STEP_SUMMARY;
-  if (summaryPath) fs.appendFileSync(summaryPath, report);
+  if (summaryPath) fs.appendFileSync(summaryPath, rendered);
   if (scope === 'touched' && process.env.GITHUB_ACTIONS === 'true') {
-    process.stdout.write(renderCrapAnnotations(findings));
+    process.stdout.write(renderCrapAnnotations(offenders));
   }
-  return 0;
+}
+
+export function run(argv: readonly string[], cwd?: string, fallowBin = PINNED_FALLOW_BIN): number {
+  const values = parseScriptArgs(argv, USAGE, {
+    base: { type: 'string', default: 'origin/main' },
+    all: { type: 'boolean', default: false },
+  });
+  const base = values.base ?? 'origin/main';
+  const scope: CrapScope = values.all ? 'all' : 'touched';
+  const root = cwd ?? runCmdSync('git', ['rev-parse', '--show-toplevel']).stdout.trim();
+
+  const inputs = gatherCrapInputs(root, base, scope);
+  if ('refusal' in inputs) return refuse(inputs.refusal);
+  return reportCrapVerdict(root, scope, inputs, fallowBin);
 }
 
 // exitCode, not exit(): a large report written to a pipe must drain before the process ends.
