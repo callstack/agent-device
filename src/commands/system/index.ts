@@ -226,7 +226,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
 >;
 
 const appStateCommandDescription =
-  'Show foreground app/activity (Android; iOS answers per command)';
+  'Show foreground app/activity (Android and HarmonyOS; iOS and macOS answer per session)';
 const backCommandDescription =
   'Navigate back in the app or through system navigation. Use in-app for the app navigation stack and system when the platform back behavior is required.';
 const homeCommandDescription =

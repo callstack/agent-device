@@ -5,7 +5,6 @@ import {
   publicPlatformString,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { errorResponse, type DaemonFailureResponse } from '@agent-device/kernel/contracts';
 import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import { admitRuntimeUse } from '../runtime-admission.ts';
 import type { RuntimeCommandHandlerParams } from '../session-runtime-admission.ts';
@@ -15,20 +14,6 @@ import { appleSessionRequiredRefusal } from './session-appstate-apple-session.ts
 function sortedAndroidSerialAllowlist(value: string | undefined): string[] | undefined {
   const allowlist = resolveAndroidSerialAllowlist(value);
   return allowlist ? [...allowlist].sort() : undefined;
-}
-
-function appstateUnsupportedResponse(
-  device: DeviceInfo,
-  hint: string | undefined,
-): DaemonFailureResponse {
-  return errorResponse(
-    'UNSUPPORTED_OPERATION',
-    device.platform === 'web'
-      ? 'appstate is not supported on web.'
-      : 'appstate is not supported on this device',
-    undefined,
-    hint ? { hint } : undefined,
-  );
 }
 
 /**
@@ -50,7 +35,6 @@ export async function queryDeviceRuntimeAppState(
     inspectFacts: params.inspectFacts,
     platformServices: params.platformServices,
     bindDevice: params.bindDevice,
-    unavailableResponse: (unavailable) => appstateUnsupportedResponse(device, unavailable.hint),
   });
   if (admitted.type === 'response') return admitted.response;
   const runtime = admitted.runtime;

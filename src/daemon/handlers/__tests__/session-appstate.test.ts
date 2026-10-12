@@ -24,6 +24,24 @@ test('appstate returns missing-session error for explicit session flag', async (
   }
 });
 
+test('appstate --platform macos missing-session error never suggests omitting --session', async () => {
+  const response = await handleAppStateCommand({
+    platformServices: daemonPlatformServicesFixture(),
+    req: appStateRequest('named', { platform: 'macos', session: 'named' }),
+    sessionName: 'named',
+    sessionStore: makeSessionStore(),
+  });
+
+  expect(response.ok).toBe(false);
+  if (!response.ok) {
+    expect(response.error.code).toBe('SESSION_NOT_FOUND');
+    // macOS appstate is session-required just like iOS, so pointing at
+    // "omit --session" would only lead to the session-required refusal.
+    expect(response.error.message).toMatch(/Run open with --session named first/i);
+    expect(response.error.message).not.toMatch(/omit --session/i);
+  }
+});
+
 test('appstate refuses --platform ios without a session at the message level', async () => {
   const response = await handleAppStateCommand({
     platformServices: daemonPlatformServicesFixture(),

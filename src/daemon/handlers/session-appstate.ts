@@ -19,7 +19,10 @@ function appStateSessionNotFoundResponse(
   sessionName: string,
   platform: string | undefined,
 ): DaemonResponse {
-  if (platform === 'ios') {
+  // Apple targets answer appstate only from an open session and its runner, so the
+  // "omit --session" route they would otherwise be pointed at just reaches the
+  // session-required refusal. Send them straight to opening the session.
+  if (platform === 'ios' || platform === 'macos') {
     return errorResponse(
       'SESSION_NOT_FOUND',
       `No active session "${sessionName}". Run open with --session ${sessionName} first.`,

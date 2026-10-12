@@ -102,7 +102,8 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
-    expect(response.error.message).toMatch(/appstate is not supported on web/i);
+    expect(response.error.message).toBe('appstate is not supported on this device');
+    expect(response.error.details).toEqual({ reason: 'unsupported-platform-leaf' });
   }
   expect(bound).toBe(false);
 });
