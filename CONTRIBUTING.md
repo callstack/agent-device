@@ -252,12 +252,13 @@ fails when it cannot score them. It prints `no trustworthy verdict` and names th
 or when a touched function postdates the map and would be scored from complexity alone. Every one of
 those is a stale coverage run, not a debt you owe: re-run `pnpm test:coverage` on the commit and
 re-check. What does count as debt is editing a function that already scores 30 or more — the score
-does not have to be new. Moving a file without editing its lines touches none of its functions, and
-neither does deleting lines from one: removing code retires debt instead of adding it, which is also
-why deleting a whole function passes. A deletion that leaves an untested complex function standing is
-not charged, and that function keeps showing in the `--all` backlog. Unlike the changed-line gate,
-this one has no `coverage-waiver` label: the only way past a score is to test or simplify the
-function, or to exempt the file in `fallow-crap.json`.
+does not have to be new. Only lines you add are charged, so removing them is not: deleting a whole
+function takes its score with it, and deleting lines from one is not charged however it moves the
+score — a deletion that drops lines which used to be covered can raise what the function scores, and
+that debt reaches the `--all` backlog rather than your PR. Moving a file without editing its lines
+touches none of its functions. Unlike the changed-line gate, this one has no `coverage-waiver` label:
+the only way past a score is to test or simplify the function, or to exempt the file in
+`fallow-crap.json`.
 
 Two things are listed rather than blocked, so a green run does not mean they were checked. A touched
 function in a file coverage never instrumented — one `coverage.exclude` drops, or one a stale local

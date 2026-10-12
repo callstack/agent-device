@@ -291,10 +291,10 @@ test('a rename that also edits the body owes the edited lines', () => {
 test('deleting lines from a debt function does not charge the function that survives them', () => {
   // Measured, not assumed: fallow's `--diff-file` index holds added lines only, so a hunk that is
   // nothing but removals contributes no line to intersect a function's span with, and this run
-  // agrees rather than overriding it. Removing code retires debt instead of adding it, which is the
-  // rule the whole-file and pure-rename exemptions already follow — the residual is deliberate: a
-  // deletion that leaves an untested complex function standing is not charged here, and `--all`
-  // still lists it on main. Pinned so a change to either layer's scoping has to say so.
+  // agrees rather than overriding it — the same reason the whole-file and pure-rename exemptions
+  // exist. The residual is deliberate and not free: a deletion can even raise a surviving
+  // function's CRAP by removing lines that used to be covered, and that new debt shows up only in
+  // `--all`. Pinned so a change to either layer's scoping has to say so.
   writeCoverage({ 'src/debt.ts': { span: [1, 13] }, 'src/clean.ts': { hits: 4 } });
   write('src/debt.ts', DEBT.replace('    total += 1;\n', ''));
   commit('delete a line inside the debt function');
@@ -309,11 +309,10 @@ test('deleting lines from a debt function does not charge the function that surv
   assert.match(backlog.out, /\| `src\/debt\.ts:1` score \| 42\.0 \| 6 \| 0% \|/);
 });
 
-test('lines added elsewhere in a file do not charge a function whose own lines did not change', () => {
-  // Scoping is per function span, not per file, so a one-line edit in a large module does not
-  // inherit every debt score inside it. Here the file has added lines — `helper` is rewritten and
-  // another export appears below the function — and the function lost one line, yet none of the
-  // added lines fall in its span, so it is not this change's verdict.
+test('lines added below a debt function do not charge it, though the diff also deleted one inside', () => {
+  // The per-span half of the boundary: scoping is per function span, not per file, so a module is
+  // not charged for the debt it merely contains. `score` loses one line here and the file gains two
+  // below it, and because none of the added lines land inside the span, none of them charge it.
   writeCoverage({ 'src/debt.ts': { span: [1, 13] }, 'src/clean.ts': { hits: 4 } });
   write(
     'src/debt.ts',
@@ -329,7 +328,11 @@ test('lines added elsewhere in a file do not charge a function whose own lines d
   assert.match(backlog.out, /\| `src\/debt\.ts:1` score \| 42\.0 \| 6 \| 0% \|/);
 });
 
-test('deleting the debt function altogether is retiring it, not a change to it', () => {
+test('a deleted function takes its score with it, out of both scopes', () => {
+  // The exemption here is structural, not the diff filter: the head file no longer contains the
+  // function, so no report of that run scores it — measured, `--all` finds nothing either. So this
+  // pins that a removal leaves no residue behind in either scope, which is the opposite of what the
+  // two cases above pin, where the debt is in the map and only the scoping keeps it uncharged.
   writeCoverage({ 'src/debt.ts': { noFunctions: true }, 'src/clean.ts': { hits: 4 } });
   write('src/debt.ts', TRIVIAL);
   commit('replace the debt function with a constant');
@@ -338,6 +341,9 @@ test('deleting the debt function altogether is retiring it, not a change to it',
 
   assert.equal(code, 0);
   assert.match(out, /no touched function\(s\) at or above 30/);
+  const backlog = check(['--all']);
+  assert.equal(backlog.code, 0);
+  assert.match(backlog.out, /no function\(s\) at or above 30/);
 });
 
 test('a touched file the sanitizer dropped as corrupt yields no verdict', () => {
