@@ -8,8 +8,10 @@ export function isNodeVisible(node: SnapshotNode): boolean {
   return node.rect.width > 0 && node.rect.height > 0;
 }
 
+/** A published `editable` fact decides; the type inference applies only when the fact is absent. */
 export function isNodeEditable(node: SnapshotNode, platform: Platform | PublicPlatform): boolean {
-  return isFillableType(node.type ?? '', platform) && node.enabled !== false;
+  if (node.enabled === false) return false;
+  return node.editable ?? isFillableType(node.type ?? '', platform);
 }
 
 /**
