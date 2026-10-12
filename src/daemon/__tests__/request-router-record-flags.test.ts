@@ -1,4 +1,4 @@
-import { createTestDeviceInventoryGateways } from './support/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 /**
  * #1271 stage 2 (ADR 0012 amendment): `--record` and `--no-record` express
  * opposite recording intents for the same action, so both together is

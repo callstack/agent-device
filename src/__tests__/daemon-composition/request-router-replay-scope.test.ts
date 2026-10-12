@@ -1,4 +1,4 @@
-import { createTestDeviceInventoryGateways } from '../test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { legacyDispatchCapture } from '../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';

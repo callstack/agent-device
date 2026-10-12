@@ -26,6 +26,10 @@
     "./open-target": {
       "types": "./src/open-target.ts",
       "default": "./src/open-target.ts"
+    },
+    "./inventory-gateways-fixtures": {
+      "types": "./src/inventory-gateways.fixtures.ts",
+      "default": "./src/inventory-gateways.fixtures.ts"
     }
   }
 }

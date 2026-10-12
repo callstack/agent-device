@@ -49,7 +49,7 @@ import {
 } from '../../../__tests__/test-device-runtime-gateway.ts';
 import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
 import { getResolveTargetDeviceMock } from '../../../__tests__/request-router-dispatch-mocks.ts';
-import { createTestDeviceInventoryGateways } from '../../../__tests__/support/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { makeSession } from '../../../__tests__/support/session-factories.ts';
 import { LeaseRegistry } from '../../../lease-registry.ts';

@@ -32,7 +32,7 @@ import type {
 import type { SessionState } from '../../../src/daemon/session-state.ts';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
-import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.ts';
+import { withClientReplayScriptSources } from '@agent-device/replay-port/replay-script-source-fixtures';
 import type {
   DeviceInventoryProvider,
   ProviderDeviceRuntime,
@@ -41,7 +41,7 @@ import type {
 import {
   createTestDeviceInventoryGateways,
   createTestDeviceInventoryGatewaysFromProvider,
-} from '../../../src/__tests__/test-utils/device-inventory-gateways.ts';
+} from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createHostDiagnostics } from '../../../src/platform-runtime-host-diagnostics.ts';
 import type { PlatformRuntimeProviderRegistration } from '../../../src/platform-runtime-gateway.ts';
 import { createProviderPlatformRuntimeRegistrations } from '../../../src/provider-device-runtimes.ts';

@@ -1,4 +1,4 @@
-import { createTestDeviceInventoryGateways } from '../test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { beforeEach, expect, test } from 'vitest';
 import { createRequestHandler } from '../../daemon/__tests__/test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../../daemon/lease-registry.ts';

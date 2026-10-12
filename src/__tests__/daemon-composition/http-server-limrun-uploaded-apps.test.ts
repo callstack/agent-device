@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test, vi } from 'vitest';
 import { createLimrunRuntime } from '@agent-device/provider-limrun';
 import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
-import { createTestDeviceInventoryGateways } from '../test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
   closeLoopbackServer,
   listenOnLoopback,

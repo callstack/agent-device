@@ -24,7 +24,7 @@ import {
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
-import { createTestDeviceInventoryGateways } from '../test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
   makeAndroidSession,
   makeIosAppSession,

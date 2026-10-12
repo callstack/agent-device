@@ -32,7 +32,7 @@ import {
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
 
-import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../support/device-inventory-gateways.ts';
+import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAndroidSession, makeMacOsSession } from '../support/session-factories.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';

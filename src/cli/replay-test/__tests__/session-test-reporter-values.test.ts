@@ -28,7 +28,7 @@ import { handleSessionCommands } from '../../../daemon/handlers/__tests__/sessio
 import { SessionStore } from '../../../daemon/session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon/daemon-request.ts';
 import { withRequestProgressSink } from '@agent-device/host-kit/request';
-import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
+import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import {
   getReplayTestReporterExitCode,

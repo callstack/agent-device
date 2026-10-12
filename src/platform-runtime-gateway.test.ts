@@ -20,7 +20,7 @@ import { handleAppStateCommand } from './daemon/handlers/session-appstate.ts';
 import { createRequestRuntimeBindings } from './daemon/request-runtime-binding.ts';
 import { createRequestDispatchLedger } from './daemon/request-dispatch-ledger.ts';
 import { makeSessionStore } from './daemon/__tests__/support/store-factory.ts';
-import { withTestDeviceInventory } from './__tests__/test-utils/device-inventory-gateways.ts';
+import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
 import {
   gatewayFixture as gateway,

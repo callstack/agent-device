@@ -16,7 +16,7 @@ import { SessionStore } from '../../session-store.ts';
 import type { DaemonResponse } from '../../daemon-request.ts';
 import { makeIosSession } from '../support/session-factories.ts';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
-import { maestroScriptSourceBundleFor } from '../support/replay-script-source.ts';
+import { maestroScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,

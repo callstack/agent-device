@@ -12,7 +12,7 @@ import {
 } from '../../handlers/session-replay-command.ts';
 import { runReplayTestCommand } from '@agent-device/replay-port/test-command';
 import type { ReplayCommand, ReplayTestCommand } from '@agent-device/replay-port/command-types';
-import { replayScriptSourceBundleFor } from '../support/replay-script-source.ts';
+import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { DaemonInvokeFn, DaemonRequest } from '../../daemon-request.ts';
 

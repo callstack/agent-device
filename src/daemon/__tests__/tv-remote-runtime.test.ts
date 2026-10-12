@@ -16,7 +16,7 @@ import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote
 import { deviceShape } from '@agent-device/kernel/device';
 import { makeSession } from './support/session-factories.ts';
 import { makeSessionStore } from './support/store-factory.ts';
-import { createTestDeviceInventoryGateways } from './support/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { activateCompleteRefFrame, refFrameState } from '../ref-frame.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';

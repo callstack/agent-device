@@ -8,7 +8,7 @@ vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () 
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { createTestDeviceInventoryGateways } from './support/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeIosSession } from './support/session-factories.ts';
 import { makeSessionStore } from './support/store-factory.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';

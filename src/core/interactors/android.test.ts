@@ -10,7 +10,7 @@ import {
   scrollAndroid,
   snapshotAndroid,
 } from '@agent-device/platform-android/mechanics';
-import { makeAndroidSnapshotCapture } from '../../daemon/__tests__/support/android-snapshot-capture.ts';
+import { makeAndroidSnapshotCapture } from '@agent-device/platform-android/snapshot-capture-fixtures';
 
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();

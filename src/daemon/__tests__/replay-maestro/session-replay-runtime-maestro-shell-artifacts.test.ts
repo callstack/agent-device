@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { SessionStore } from '../../session-store.ts';
-import { replayScriptSourceBundleFor } from '../support/replay-script-source.ts';
+import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 
 const { runReplayFixture, runReplayForTest } = maestroReplayFixture;
 

@@ -52,6 +52,10 @@
       "types": "./src/daemon-port/script-source.ts",
       "default": "./src/daemon-port/script-source.ts"
     },
+    "./script-source-bundle": {
+      "types": "./src/daemon-port/script-source-bundle.ts",
+      "default": "./src/daemon-port/script-source-bundle.ts"
+    },
     "./session-replay-action-runtime": {
       "types": "./src/daemon-port/session-replay-action-runtime.ts",
       "default": "./src/daemon-port/session-replay-action-runtime.ts"
@@ -151,6 +155,14 @@
     "./test-command": {
       "types": "./src/daemon-port/test-command.ts",
       "default": "./src/daemon-port/test-command.ts"
+    },
+    "./source-discovery": {
+      "types": "./src/daemon-port/source-discovery.ts",
+      "default": "./src/daemon-port/source-discovery.ts"
+    },
+    "./replay-script-source-fixtures": {
+      "types": "./src/daemon-port/replay-script-source.fixtures.ts",
+      "default": "./src/daemon-port/replay-script-source.fixtures.ts"
     }
   }
 }

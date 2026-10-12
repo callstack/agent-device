@@ -9,7 +9,7 @@ import {
   androidUiNodes,
   parseUiHierarchyTree,
 } from '@agent-device/platform-android/mechanics';
-import { parseUiHierarchy } from '../daemon/__tests__/support/android-ui-hierarchy-fixtures.ts';
+import { parseUiHierarchy } from '@agent-device/platform-android/ui-hierarchy-fixtures';
 
 function publishUiHierarchy(xml: string) {
   const captured = parseUiHierarchy(xml, 800, {});

@@ -10,7 +10,7 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createTestDeviceInventoryGateways } from '../test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';

@@ -12,7 +12,7 @@ import {
   makeMacOsSession,
   makeSession,
 } from '../../daemon/__tests__/support/session-factories.ts';
-import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../test-utils/device-inventory-gateways.ts';
+import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createLocalAppleToolProvider, runXcrun } from '@agent-device/platform-apple/tool-provider';
 import { buildSimctlArgsForDevice } from '@agent-device/platform-apple/simctl';
 import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';

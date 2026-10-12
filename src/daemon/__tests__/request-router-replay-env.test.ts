@@ -1,4 +1,4 @@
-import { createTestDeviceInventoryGateways } from './support/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
@@ -6,7 +6,7 @@ import { makeSessionStore } from './support/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { replayScriptSourceBundleFor } from './support/replay-script-source.ts';
+import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import { fakeCreateCommandSurface } from './support/command-surface-fake.ts';
 
 function createHarness() {

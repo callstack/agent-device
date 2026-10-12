@@ -4,7 +4,7 @@ import { expect, test } from 'vitest';
 import {
   loadReplayScriptSourceBundle,
   REPLAY_SCRIPT_SOURCE_BUNDLE_MAX_BYTES,
-} from './script-source-bundle.ts';
+} from '@agent-device/replay-port/script-source-bundle';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 // #1802: the caller reads every script file a replay run needs and sends the text. These pin the

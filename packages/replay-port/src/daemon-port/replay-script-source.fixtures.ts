@@ -1,10 +1,12 @@
+// The single owner of the client-collected replay source bundles test requests carry (#1802):
+// the same collector the real client runs, imported through this package's own subpaths.
 import fs from 'node:fs';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { MaestroSourceReader } from '@agent-device/maestro';
 import { resolveUserPath } from '@agent-device/host-kit/file';
-import type { DaemonRequest } from '../../daemon/daemon-request.ts';
-import { loadReplayScriptSourceBundle } from '../../commands/replay/script-source-bundle.ts';
-import { discoverReplaySourcePaths } from '../../commands/replay/source-discovery.ts';
+import { loadReplayScriptSourceBundle } from './script-source-bundle.ts';
+import { discoverReplaySourcePaths } from './source-discovery.ts';
 
 /** A native `.ad` script's one-entry source bundle for test requests. */
 export function replayScriptSourceBundleFor(filePath: string): ReplayScriptSourceBundle {
@@ -44,7 +46,9 @@ export const noMaestroIncludeSources: MaestroSourceReader = (resolvedPath) => {
  * the CLI boundary (pinned in `cli-client-commands.test.ts`), and a daemon-level harness must
  * still deliver the request so the daemon's own response is what the case observes.
  */
-export async function withClientReplayScriptSources(req: DaemonRequest): Promise<DaemonRequest> {
+export async function withClientReplayScriptSources(
+  req: DaemonWireRequest,
+): Promise<DaemonWireRequest> {
   if (req.command !== 'replay' && req.command !== 'test') return req;
   const inputs = req.positionals ?? [];
   const entryPath = inputs[0];
@@ -76,6 +80,9 @@ export async function withClientReplayScriptSources(req: DaemonRequest): Promise
   }
 }
 
-function withFlags(req: DaemonRequest, flags: Partial<DaemonRequest['flags']>): DaemonRequest {
+function withFlags(
+  req: DaemonWireRequest,
+  flags: Partial<NonNullable<DaemonWireRequest['flags']>>,
+): DaemonWireRequest {
   return { ...req, flags: { ...(req.flags ?? {}), ...flags } };
 }

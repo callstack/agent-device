@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { discoverReplaySourcePaths } from './source-discovery.ts';
+import { discoverReplaySourcePaths } from '@agent-device/replay-port/source-discovery';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 // #1802: path expansion, traversal ordering and file-type routing are CALLER work — `test`

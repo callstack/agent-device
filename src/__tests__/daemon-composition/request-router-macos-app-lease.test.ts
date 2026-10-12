@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
-import { createTestDeviceInventoryGateways } from '../test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { MACOS_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
 import { makeMacOsSession } from '../../daemon/__tests__/support/session-factories.ts';

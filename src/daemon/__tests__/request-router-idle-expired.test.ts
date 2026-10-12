@@ -1,4 +1,4 @@
-import { createTestDeviceInventoryGateways } from './support/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 /**
  * #2833: when a command finds no session because this daemon already expired it for idleness, the
  * answer stays `SESSION_NOT_FOUND` but carries the typed reason, the window it missed, and the device

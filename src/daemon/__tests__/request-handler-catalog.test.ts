@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from './support/device-inventory-gateways.ts';
+import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { commandDescriptors } from '@agent-device/command-registry/registry';
 import { isRequestCanceledError, type AppError } from '@agent-device/kernel/errors';

@@ -18,7 +18,7 @@ vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () 
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceRuntimeGateway, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { createTestDeviceInventoryGateways } from './support/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeIosAppSession } from './support/session-factories.ts';
 import { makeSessionStore } from './support/store-factory.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';

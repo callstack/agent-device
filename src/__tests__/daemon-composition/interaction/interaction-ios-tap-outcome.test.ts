@@ -15,7 +15,7 @@ import {
 import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
 import { SessionScriptWriter } from '../../../daemon/session-script-writer.ts';
 import { runReplayForTest } from '../../../daemon/__tests__/replay-runtime/replay-command-fixture.ts';
-import { replayScriptSourceBundleFor } from '../../test-utils/replay-script-source.ts';
+import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import {
   imageViewerNodes,
   profileNodes,

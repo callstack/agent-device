@@ -1,9 +1,3 @@
-// Daemon-side fake for the composed device-inventory gateway port. The root
-// `src/__tests__/test-utils/device-inventory-gateways.ts` builds through the real
-// `createComposedDeviceInventoryGateways` composition (platform-runtime-device-inventory);
-// daemon policy tests only need the port's behavior, so this fixture composes the same
-// package-owned rules (contracts projection + provider request scoping) without reaching
-// into root composition.
 import {
   filterDeviceInventoryProjection,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
@@ -15,6 +9,7 @@ import {
 import type {
   ComposedDeviceInventoryGateways,
   DeviceInventoryGateway,
+  InstalledAppProbe,
   ProviderAwareDeviceInventoryGateway,
 } from '@agent-device/contracts/platform-module';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
@@ -24,11 +19,12 @@ import {
   type Platform,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
-import { withDeviceInventoryContext } from '@agent-device/device-selection/device-inventory-context';
+import { withDeviceInventoryContext } from './device-inventory-context.ts';
 
 export type TestDeviceInventoryOptions = Readonly<{
   provider?: ProviderDeviceInventorySource;
   local?: (request: Readonly<DeviceInventoryRequest>) => Promise<readonly DeviceInfo[]>;
+  findInstalledApp?: InstalledAppProbe;
 }>;
 
 const testRequestScope: PlatformRequestScope = Object.freeze({
@@ -113,7 +109,21 @@ export function createTestDeviceInventoryGateways(
     discover: async (request, scope) => (await discoverWithSource(request, scope)).devices,
     discoverWithSource,
   });
-  return Object.freeze({ providerFirst, localOnly });
+  return Object.freeze({
+    providerFirst,
+    localOnly,
+    findInstalledApp: options.findInstalledApp,
+  });
+}
+
+export async function withTestDeviceInventory<T>(
+  options: TestDeviceInventoryOptions,
+  task: () => Promise<T>,
+): Promise<T> {
+  return await withDeviceInventoryContext(
+    { ...createTestDeviceInventoryGateways(options), requestScope: testRequestScope },
+    task,
+  );
 }
 
 /** Test-only bridge for fixtures that still implement the public nullable provider port. */
@@ -131,16 +141,6 @@ export function createTestDeviceInventoryGatewaysFromProvider(
       },
     },
   });
-}
-
-export async function withTestDeviceInventory<T>(
-  options: TestDeviceInventoryOptions,
-  task: () => Promise<T>,
-): Promise<T> {
-  return await withDeviceInventoryContext(
-    { ...createTestDeviceInventoryGateways(options), requestScope: testRequestScope },
-    task,
-  );
 }
 
 export async function withTestDeviceInventoryProvider<T>(

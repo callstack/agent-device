@@ -1,4 +1,4 @@
-import { createTestDeviceInventoryGateways } from '../test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { test, expect, vi } from 'vitest';
 
 import path from 'node:path';

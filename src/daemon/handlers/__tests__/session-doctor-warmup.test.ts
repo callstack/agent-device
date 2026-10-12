@@ -4,7 +4,7 @@ import { isActiveProviderDevice } from '../../provider-device-admission.ts';
 import { handleDoctorCommand } from '../session-doctor.ts';
 import { createHostDiagnostics } from '../../../platform-runtime-host-diagnostics.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import { withTestDeviceInventory } from '../../__tests__/support/device-inventory-gateways.ts';
+import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { DaemonResponse } from '../../daemon-request.ts';
 
 const { mockAppleRunnerWarmupCheck } = vi.hoisted(() => ({

@@ -7,7 +7,7 @@ import { fakeCreateCommandSurface } from '../../__tests__/support/command-surfac
 // The daemon reads provider ownership through its own typed admission seam; these suites
 // install the seam over runtime fakes, the way root composition installs the real one.
 const providerAdmission = providerDeviceAdmissionFixture();
-import { createTestDeviceInventoryGateways } from '../../__tests__/support/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeSession } from '../../__tests__/support/session-factories.ts';
 import { getResolveTargetDeviceMock } from '../../__tests__/request-router-dispatch-mocks.ts';

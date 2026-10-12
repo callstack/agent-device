@@ -1,7 +1,7 @@
 import {
   createTestDeviceInventoryGateways,
   createTestDeviceInventoryGatewaysFromProvider,
-} from '../test-utils/device-inventory-gateways.ts';
+} from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from '../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
 import path from 'node:path';

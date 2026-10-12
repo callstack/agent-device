@@ -9,7 +9,7 @@ import {
   makeIosSession,
 } from '../../daemon/__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
-import { withTestDeviceInventory } from '../test-utils/device-inventory-gateways.ts';
+import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
 import type { DaemonRequest } from '../../daemon/daemon-request.ts';

@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { makeAndroidSession, makeIosSession } from './support/session-factories.ts';
 import { makeSessionStore } from './support/store-factory.ts';
-import { withTestDeviceInventory } from './support/device-inventory-gateways.ts';
+import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { resolveBoundSelectorCapture } from '../selector-capture-binding.ts';
 import { createBoundSelectorRuntime } from '../selector-runtime-backend.ts';
 import { selectorCaptureFixture } from './selector-capture-fixture.ts';

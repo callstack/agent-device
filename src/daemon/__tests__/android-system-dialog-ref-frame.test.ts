@@ -12,7 +12,7 @@ import { recoverAndroidBlockingSystemDialog as recoverOwnedAndroidBlockingSystem
 import { androidObservation } from '../../platform-runtime.ts';
 import { makeAndroidSession } from './support/session-factories.ts';
 import { makeTestScreenRecordingResource } from './support/screen-recording-live-handle.ts';
-import { makeAndroidSnapshotCapture } from './support/android-snapshot-capture.ts';
+import { makeAndroidSnapshotCapture } from '@agent-device/platform-android/snapshot-capture-fixtures';
 import { refFrameState } from '../ref-frame.ts';
 
 const recoverAndroidBlockingSystemDialog = (

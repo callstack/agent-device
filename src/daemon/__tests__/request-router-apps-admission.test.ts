@@ -3,7 +3,7 @@ import { expect, test, vi } from 'vitest';
 import path from 'node:path';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { createTestDeviceInventoryGateways } from './support/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeSessionStore } from './support/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import type { DaemonRequest } from '../daemon-request.ts';

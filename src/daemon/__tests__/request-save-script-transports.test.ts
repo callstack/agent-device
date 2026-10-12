@@ -1,6 +1,6 @@
 import { storeSessionForTest } from './support/store-factory.ts';
 import { isSessionRecording } from '../session-script-publication-capability.ts';
-import { createTestDeviceInventoryGateways } from './support/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 /**
  * #1478 (P4-pre): raw-wire counterfactuals for the `flags.saveScript` seam.
  *

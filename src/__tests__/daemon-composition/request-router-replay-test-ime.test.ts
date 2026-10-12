@@ -5,7 +5,7 @@
  * lifecycle binding, where the platform host performs the activation. Physical-device
  * defaults stay off: the activation seam fires only for an explicit opt-in.
  */
-import { createTestDeviceInventoryGateways } from '../test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 
@@ -38,7 +38,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
 
 import { ANDROID_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
-import { replayScriptSourceBundleFor } from '../test-utils/replay-script-source.ts';
+import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import { LeaseRegistry } from '../../daemon/lease-registry.ts';
 import {
   createRequestHandler,

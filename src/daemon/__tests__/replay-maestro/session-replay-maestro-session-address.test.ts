@@ -6,7 +6,7 @@ import { runTypedMaestroReplay } from '@agent-device/replay-port/session-replay-
 import { SessionStore } from '../../session-store.ts';
 import { replayCommandForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { makeIosSession } from '../support/session-factories.ts';
-import { maestroScriptSourceBundleFor } from '../support/replay-script-source.ts';
+import { maestroScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { DaemonRequest } from '../../daemon-request.ts';
 
