@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { attachRefs } from '@agent-device/kernel/snapshot';
 import { test } from 'vitest';
 import {
   scrollFrameFromAndroidWebDriverSource,
@@ -230,4 +231,100 @@ test('Android WebDriver scroll frame prefers visible scrollable containers', asy
     ),
     { x: 0, y: 393, width: 1080, height: 1103 },
   );
+});
+
+// UiAutomator2 names a tag by class and repeats it as `class`; a source may instead emit a generic
+// `<node class=…>`. Both shapes describe the same widget, so they must publish the same facts.
+const ANDROID_WIDGET_ATTRIBUTES =
+  'index="0" package="com.example.app" text="" resource-id="com.example.app:id/w" checkable="false" checked="false" clickable="true" enabled="true" focusable="true" focused="false" scrollable="false" long-clickable="false" password="false" selected="false" displayed="true"';
+
+function androidSourceShapes(
+  className: string,
+  bounds: string,
+): ReadonlyArray<readonly [shape: string, source: string]> {
+  const attributes = `${ANDROID_WIDGET_ATTRIBUTES} class="${className}" bounds="${bounds}"`;
+  return [
+    ['class-named tag', `<hierarchy rotation="0"><${className} ${attributes} /></hierarchy>`],
+    ['generic node tag', `<hierarchy rotation="0"><node ${attributes} /></hierarchy>`],
+  ];
+}
+
+const ANDROID_CLASS_IDENTITY_CASES = [
+  {
+    widget: 'EditText',
+    className: 'android.widget.EditText',
+    kind: 'text-field',
+    editable: true,
+    scrollContainer: false,
+  },
+  {
+    widget: 'ScrollView',
+    className: 'android.widget.ScrollView',
+    kind: 'scroll-area',
+    editable: undefined,
+    scrollContainer: true,
+  },
+  {
+    widget: 'RecyclerView',
+    className: 'androidx.recyclerview.widget.RecyclerView',
+    kind: 'list',
+    editable: undefined,
+    scrollContainer: true,
+  },
+  {
+    widget: 'Button',
+    className: 'android.widget.Button',
+    kind: 'button',
+    editable: undefined,
+    scrollContainer: false,
+  },
+] as const;
+
+for (const expected of ANDROID_CLASS_IDENTITY_CASES) {
+  for (const [shape, source] of androidSourceShapes(expected.className, '[0,200][1080,1600]')) {
+    test(`Android WebDriver facts publish a ${expected.widget} the same from a ${shape}`, async () => {
+      const [node] = attachRefs(parseWebDriverSourceFacts(source, 'android').nodes).slice(-1);
+
+      assert.equal(node!.type, expected.className);
+      assert.equal(node!.role, expected.className);
+      assert.equal(node!.kind, expected.kind);
+      assert.equal(node!.editable, expected.editable);
+      assert.deepEqual(
+        await scrollFrameFromAndroidWebDriverSource(source),
+        expected.scrollContainer ? { x: 0, y: 200, width: 1080, height: 1400 } : undefined,
+      );
+    });
+  }
+}
+
+test('Android WebDriver facts fall back to the tag when a node reports no class', () => {
+  const [empty, missing] = parseWebDriverSourceFacts(
+    '<hierarchy>' +
+      '<android.widget.Button class="" text="Go" bounds="[0,0][100,40]" />' +
+      '<android.widget.TextView text="Hi" bounds="[0,40][100,80]" />' +
+      '</hierarchy>',
+    'android',
+  ).nodes;
+
+  assert.deepEqual(
+    [empty!.type, missing!.type],
+    ['android.widget.Button', 'android.widget.TextView'],
+  );
+});
+
+test('Android WebDriver facts read a generic node tag as checkable by its class when no checkable attribute is reported', () => {
+  const [node] = parseWebDriverSourceFacts(
+    '<node class="android.widget.Switch" checked="true" bounds="[0,0][100,40]" />',
+    'android',
+  ).nodes;
+
+  assert.equal(node!.checked, true);
+});
+
+test('iOS WebDriver facts keep the tag as the type whatever a class attribute says', () => {
+  const [node] = parseWebDriverSourceFacts(
+    '<AppiumAUT><XCUIElementTypeButton class="android.widget.EditText" name="Go" x="0" y="0" width="100" height="40" /></AppiumAUT>',
+  ).nodes;
+
+  assert.equal(node!.type, 'XCUIElementTypeButton');
 });

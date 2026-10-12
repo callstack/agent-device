@@ -122,6 +122,16 @@ function isSourceContainer(xmlNode: XmlNode, platform: WebDriverSourcePlatform):
   return platform === 'ios' && (name === 'hierarchy' || name === 'appiumaut');
 }
 
+/**
+ * The type a source node publishes. UiAutomator2 usually names its tags by class, but a source may
+ * emit a generic tag around a `class` attribute; the class is the Android type either way.
+ * XCUITest names its element type by tag.
+ */
+function publishedType(xmlNode: XmlNode, platform: WebDriverSourcePlatform): string {
+  if (platform !== 'android') return xmlNode.name;
+  return nonEmptyWebDriverAttribute(xmlNode.attributes.class) ?? xmlNode.name;
+}
+
 function appendSourceNode(
   nodes: RawSnapshotNode[],
   xmlNode: XmlNode,
@@ -132,20 +142,13 @@ function appendSourceNode(
 ): number {
   const index = nodes.length;
   const rect = rectFromWebDriverAttributes(xmlNode.attributes);
+  const type = publishedType(xmlNode, platform);
   nodes.push(
-    sourceNodeFromAttributes(
-      index,
-      xmlNode.name,
-      xmlNode.attributes,
-      parentIndex,
-      depth,
-      rect,
-      platform,
-    ),
+    sourceNodeFromAttributes(index, type, xmlNode.attributes, parentIndex, depth, rect, platform),
   );
   if (parentIndex === undefined) {
     sourceRoots.push({
-      type: xmlNode.name,
+      type,
       ...(rect ? { rect } : {}),
       rectStatus: rectStatus(xmlNode.attributes, rect),
     });
@@ -246,7 +249,7 @@ function androidTextFieldFacts(
   attrs: Record<string, string>,
 ): TextFieldFacts | undefined {
   const password = parseWebDriverBoolean(attrs.password);
-  if (!ANDROID_TEXT_FIELD_CLASS.test(classNameSegment(attrs.class ?? type)) && password !== true) {
+  if (!ANDROID_TEXT_FIELD_CLASS.test(classNameSegment(type)) && password !== true) {
     return undefined;
   }
   const placeholder = nonEmptyWebDriverAttribute(attrs.hint);
@@ -284,8 +287,7 @@ function checkedFact(
   platform: WebDriverSourcePlatform,
 ): Pick<RawSnapshotNode, 'checked'> {
   if (platform !== 'android') return {};
-  const checkable =
-    parseWebDriverBoolean(attrs.checkable) ?? ANDROID_CHECKABLE_CLASS.test(attrs.class ?? type);
+  const checkable = parseWebDriverBoolean(attrs.checkable) ?? ANDROID_CHECKABLE_CLASS.test(type);
   const checked = parseWebDriverBoolean(attrs.checked);
   return checkable && checked !== undefined ? { checked } : {};
 }
