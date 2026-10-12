@@ -1,7 +1,7 @@
 import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { test, expect, vi } from 'vitest';
 
-import { handleSessionStateCommands } from '../session-state.ts';
+import { handleAppStateCommand } from '../session-appstate.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
@@ -39,7 +39,7 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
       local: async () => [device],
     },
     async () =>
-      await handleSessionStateCommands({
+      await handleAppStateCommand({
         platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
@@ -160,7 +160,7 @@ test('appstate rejects a missing readiness fact even when appState is available'
   const response = await withTestDeviceInventory(
     { local: async () => [device] },
     async () =>
-      await handleSessionStateCommands({
+      await handleAppStateCommand({
         platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',
@@ -258,7 +258,7 @@ test('sessionless Android appstate inspects once, binds once, and preserves oper
   const response = await withTestDeviceInventory(
     { local: async () => [device] },
     async () =>
-      await handleSessionStateCommands({
+      await handleAppStateCommand({
         platformServices: daemonPlatformServicesFixture(),
         req: {
           token: 't',

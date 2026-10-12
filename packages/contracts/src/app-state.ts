@@ -3,7 +3,7 @@ import type { SessionSurface } from './session-surface.ts';
 
 /**
  * Closed result of the `appstate` command, grounded in the daemon handler's
- * success returns (src/daemon/handlers/session-state.ts `handleAppStateCommand`).
+ * success returns (src/daemon/handlers/session-appstate.ts `handleAppStateCommand`).
  * A discriminated union on `platform`:
  *  - Apple (`ios` / `macos`) session state, with iOS-only device locators that
  *    the previous hand-written mirror omitted; and

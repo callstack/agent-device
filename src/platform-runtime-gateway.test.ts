@@ -16,7 +16,7 @@ import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLimrunRuntime } from '@agent-device/provider-limrun';
 import { describe, expect, test, vi } from 'vitest';
-import { handleSessionStateCommands } from './daemon/handlers/session-state.ts';
+import { handleAppStateCommand } from './daemon/handlers/session-appstate.ts';
 import { createRequestRuntimeBindings } from './daemon/request-runtime-binding.ts';
 import { createRequestDispatchLedger } from './daemon/request-dispatch-ledger.ts';
 import { makeSessionStore } from './__tests__/test-utils/store-factory.ts';
@@ -344,7 +344,7 @@ describe('composed platform runtime gateway', () => {
       const response = await withTestDeviceInventory(
         { local: async () => [staleDevice] },
         async () =>
-          await handleSessionStateCommands({
+          await handleAppStateCommand({
             platformServices: daemonPlatformServicesFixture(),
             req: {
               token: 't',

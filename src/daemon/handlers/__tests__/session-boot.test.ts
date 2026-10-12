@@ -12,7 +12,7 @@ import {
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import { handleSessionStateCommands } from '../session-state.ts';
+import { handleBootCommand } from '../session-boot.ts';
 import type { SessionState } from '../../session-state.ts';
 import {
   handleSessionCommands,
@@ -456,7 +456,7 @@ test('boot rejects --headless outside Android directly', async () => {
     booted: false,
   };
   mockResolveTargetDevice.mockResolvedValue(device);
-  const response = await handleSessionStateCommands({
+  const response = await handleBootCommand({
     platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',

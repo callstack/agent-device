@@ -211,7 +211,6 @@
     "src/daemon/handlers/session-runtime-port-reverse.ts",
     "src/daemon/handlers/session-script-publication.ts",
     "src/daemon/handlers/session-shutdown.ts",
-    "src/daemon/handlers/session-state.ts",
     "src/daemon/handlers/session.ts",
     "src/daemon/handlers/snapshot.ts",
     "src/daemon/handlers/trace-runtime.ts",

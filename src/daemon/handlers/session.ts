@@ -9,7 +9,9 @@ import {
   handleSessionInventoryCommands,
   handleSessionOpenCommands,
 } from '../session-lifecycle/index.ts';
-import { handleSessionStateCommands } from './session-state.ts';
+import { handleBootCommand } from './session-boot.ts';
+import { handleShutdownCommand } from './session-shutdown.ts';
+import { handleAppStateCommand } from './session-appstate.ts';
 import { handleSessionObservabilityCommands } from '../session-observability/index.ts';
 import { handleReplayCommand, handleReplayTestCommand } from './session-replay-command.ts';
 import { handleSessionScriptPublication } from './session-script-publication.ts';
@@ -61,7 +63,7 @@ const handleSessionCloseCommandGroup: SessionCommandHandler = (params) =>
     platformResourceCleanup: params.platformResourceCleanup,
   } satisfies SessionCloseCommandInput);
 
-const handleSessionStateCommandGroup: SessionCommandHandler = async ({
+const handleBootCommandEntry: SessionCommandHandler = async ({
   req,
   sessionName,
   sessionStore,
@@ -69,7 +71,41 @@ const handleSessionStateCommandGroup: SessionCommandHandler = async ({
   bindDevice,
   platformServices,
 }) =>
-  await handleSessionStateCommands({
+  await handleBootCommand({
+    req,
+    sessionName,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+    platformServices,
+  });
+
+const handleShutdownCommandEntry: SessionCommandHandler = async ({
+  req,
+  sessionName,
+  sessionStore,
+  inspectFacts,
+  bindDevice,
+  platformServices,
+}) =>
+  await handleShutdownCommand({
+    req,
+    sessionName,
+    sessionStore,
+    inspectFacts,
+    bindDevice,
+    platformServices,
+  });
+
+const handleAppStateCommandEntry: SessionCommandHandler = async ({
+  req,
+  sessionName,
+  sessionStore,
+  inspectFacts,
+  bindDevice,
+  platformServices,
+}) =>
+  await handleAppStateCommand({
     req,
     sessionName,
     sessionStore,
@@ -136,9 +172,9 @@ const SESSION_COMMAND_HANDLER_IMPLS = {
       inspectFacts,
       bindDevice,
     }),
-  boot: handleSessionStateCommandGroup,
-  shutdown: handleSessionStateCommandGroup,
-  appstate: handleSessionStateCommandGroup,
+  boot: handleBootCommandEntry,
+  shutdown: handleShutdownCommandEntry,
+  appstate: handleAppStateCommandEntry,
   session_save_script: async ({ req, sessionName, sessionStore }) =>
     handleSessionScriptPublication({ req, sessionName, sessionStore }),
   runtime: async ({

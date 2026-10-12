@@ -22,7 +22,8 @@ import { LeaseRegistry } from '../../lease-registry.ts';
 import { acquireDeviceClaim } from '../../device/device-claims.ts';
 import { inspectDeviceClaims } from '../../device/device-claim-inspection.ts';
 import { createRequestExecutionScope } from '../../request-execution-scope.ts';
-import { handleSessionStateCommands } from '../session-state.ts';
+import { handleBootCommand } from '../session-boot.ts';
+import { handleShutdownCommand } from '../session-shutdown.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
 
 // #1799: `boot`/`shutdown` route through a daemon that need not own the target
@@ -57,7 +58,7 @@ async function claimForeignDaemon(root: string): Promise<string> {
 async function runStateCommand(
   command: 'boot' | 'shutdown',
   store: SessionStore,
-): Promise<DaemonResponse | null> {
+): Promise<DaemonResponse> {
   const req: DaemonRequest = {
     token: 't',
     session: 'default',
@@ -80,14 +81,17 @@ async function runStateCommand(
     },
   });
   try {
-    return await handleSessionStateCommands({
+    const handlerParams = {
       platformServices: daemonPlatformServicesFixture(),
       req,
       sessionName: 'default',
       sessionStore: store,
       inspectFacts: scope.inspectFacts,
       bindDevice: scope.bindDevice,
-    });
+    };
+    return command === 'boot'
+      ? await handleBootCommand(handlerParams)
+      : await handleShutdownCommand(handlerParams);
   } catch (error) {
     return { ok: false, error: normalizeError(error) };
   } finally {
