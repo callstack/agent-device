@@ -316,7 +316,12 @@ async function listFindMatches(
   };
 }
 
-/** The address an agent acts on, for a match the capture's producer issued a ref for. */
+/**
+ * The address an agent acts on, when this node has one. Where the capture's producer mints its own
+ * refs (`backend-issued`, web) a node it left unaddressed carries none, and listing one would offer
+ * an agent something the next command refuses; where refs were minted densely by `attachRefs`
+ * (Apple, Android, Linux) every node has one. Read the field, never the mode.
+ */
 function refAddress(node: SnapshotNode): { ref?: string } {
   return node.ref === undefined ? {} : { ref: `@${node.ref}` };
 }

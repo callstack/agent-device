@@ -404,10 +404,10 @@ export type SnapshotNode = RawSnapshotNode & {
    * Normalized role, from the same table the text presenter reads (`formatRole` below). `type`
    * stays the raw platform class; `kind` is the presenter's own answer, published so a `--json`
    * consumer gets the presented role without re-deriving it from `type` (#2656). `attachRefs` is
-   * the one production construction path and always sets it; optional here (rather than required
-   * like `ref`) only so the many hand-built `SnapshotNode` fixtures across the daemon/selector test
-   * suites that predate #2656 and never route through `attachRefs` do not all need updating for a
-   * field their assertions never read.
+   * the one production construction path and always sets it; optional here only so the many
+   * hand-built `SnapshotNode` fixtures across the daemon/selector test suites that predate #2656 and
+   * never route through `attachRefs` do not all need updating for a field their assertions never
+   * read. An absent `ref` is a real answer about the node; an absent `kind` is a fixture shortcut.
    */
   kind?: string;
   /**
