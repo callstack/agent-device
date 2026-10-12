@@ -1,8 +1,8 @@
 diff --git a/dist/index.mjs b/dist/index.mjs
-index ebe37dd027ab90208d32131aa5e114ce9c9124b0..28b2332fd37e5bd6d08cf1e385804f8ff7bd076f 100644
+index 1c85b95f5e48e6e47ee8bc720133ec162b1088bb..3924e7a06a2bf7a317ccdb2b4d742fae802e3c14 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -526,6 +526,22 @@ var y = class CoverageMapper {
+@@ -528,6 +528,22 @@ var b = class CoverageMapper {
  		let i = [], a = [];
  		for (let e of n) {
  			if (!e) {
@@ -25,7 +25,7 @@ index ebe37dd027ab90208d32131aa5e114ce9c9124b0..28b2332fd37e5bd6d08cf1e385804f8f
  				i.push({
  					start: {
  						line: void 0,
-@@ -536,10 +552,6 @@ var y = class CoverageMapper {
+@@ -538,10 +554,6 @@ var b = class CoverageMapper {
  						column: void 0
  					}
  				});

@@ -274,15 +274,20 @@ export default defineConfig({
         lines: 80,
       },
       include: ['src/**/*.ts', 'packages/*/src/**/*.ts'],
+      // Vitest 5 matches these against the path relative to the repo root without picomatch's
+      // `contains`, so a pattern reaches only the tree its anchor names: `src/**` no longer covers
+      // `packages/*/src/**` the way 4.1.11's did. The four that name a kind of file rather than a
+      // location are root-free. Written as `src/**` instead, package-side type modules and
+      // `__tests__` helpers join the coverage denominator and dilute it with test material.
       exclude: [
-        'src/**/*.test.ts',
-        'src/**/__tests__/**',
+        '**/*.test.ts',
+        '**/__tests__/**',
         '**/*.fixtures.ts',
         // Test helpers are test material, not product surface: they sat under `__tests__/` roots
         // before @agent-device/test-kit existed and must stay out of the coverage denominator.
         'packages/test-kit/**',
-        'src/**/*-types.ts',
-        'src/**/types.ts',
+        '**/*-types.ts',
+        '**/types.ts',
         'src/sdk/**',
         'src/bin.ts',
         'src/client/client-types.ts',

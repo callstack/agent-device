@@ -114,42 +114,46 @@ test('isTrustedInstallSourceUrl recognizes supported artifact services', () => {
   );
 });
 
-test.sequential('materializeInstallablePath extracts zip archives without ditto', async () => {
-  const unzipPath = findExecutableInPath('unzip');
-  assert.ok(unzipPath, 'unzip must be available for portable zip extraction');
+test(
+  'materializeInstallablePath extracts zip archives without ditto',
+  { concurrent: false },
+  async () => {
+    const unzipPath = findExecutableInPath('unzip');
+    assert.ok(unzipPath, 'unzip must be available for portable zip extraction');
 
-  const tempRoot = await mkdtempForTest('agent-device-install-source-unzip-');
-  const archivePath = path.join(tempRoot, 'bundle.zip');
-  const binDir = path.join(tempRoot, 'bin');
-  const payloadDir = path.join(tempRoot, 'payload');
-  const apkPath = path.join(payloadDir, 'Sample.apk');
-  const previousPath = process.env.PATH;
-
-  try {
-    await fs.mkdir(binDir);
-    await fs.symlink(unzipPath, path.join(binDir, 'unzip'));
-    await fs.mkdir(payloadDir);
-    await fs.writeFile(apkPath, 'placeholder apk', 'utf8');
-    runCmdSync('zip', ['-qr', archivePath, 'payload'], { cwd: tempRoot });
-
-    process.env.PATH = binDir;
-    const result = await materializeInstallablePath({
-      source: { kind: 'path', path: archivePath },
-      isInstallablePath: (candidatePath, stat) => stat.isFile() && candidatePath.endsWith('.apk'),
-      installableLabel: 'Android installable (.apk or .aab)',
-    });
+    const tempRoot = await mkdtempForTest('agent-device-install-source-unzip-');
+    const archivePath = path.join(tempRoot, 'bundle.zip');
+    const binDir = path.join(tempRoot, 'bin');
+    const payloadDir = path.join(tempRoot, 'payload');
+    const apkPath = path.join(payloadDir, 'Sample.apk');
+    const previousPath = process.env.PATH;
 
     try {
-      assert.equal(path.basename(result.installablePath), 'Sample.apk');
-      assert.equal(await fs.readFile(result.installablePath, 'utf8'), 'placeholder apk');
+      await fs.mkdir(binDir);
+      await fs.symlink(unzipPath, path.join(binDir, 'unzip'));
+      await fs.mkdir(payloadDir);
+      await fs.writeFile(apkPath, 'placeholder apk', 'utf8');
+      runCmdSync('zip', ['-qr', archivePath, 'payload'], { cwd: tempRoot });
+
+      process.env.PATH = binDir;
+      const result = await materializeInstallablePath({
+        source: { kind: 'path', path: archivePath },
+        isInstallablePath: (candidatePath, stat) => stat.isFile() && candidatePath.endsWith('.apk'),
+        installableLabel: 'Android installable (.apk or .aab)',
+      });
+
+      try {
+        assert.equal(path.basename(result.installablePath), 'Sample.apk');
+        assert.equal(await fs.readFile(result.installablePath, 'utf8'), 'placeholder apk');
+      } finally {
+        await result.cleanup();
+      }
     } finally {
-      await result.cleanup();
+      process.env.PATH = previousPath;
+      await fs.rm(tempRoot, { recursive: true, force: true });
     }
-  } finally {
-    process.env.PATH = previousPath;
-    await fs.rm(tempRoot, { recursive: true, force: true });
-  }
-});
+  },
+);
 
 test('materializeInstallablePath extracts tar.gz archives', async () => {
   const tempRoot = await mkdtempForTest('agent-device-install-source-tar-');

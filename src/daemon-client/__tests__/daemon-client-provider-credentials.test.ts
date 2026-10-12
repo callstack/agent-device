@@ -31,8 +31,9 @@ afterEach(() => {
 
 type CapturedDaemon = { bodies: string[]; close: () => Promise<void> };
 
-test.sequential.for(['socket', 'http'] as const)(
+test.for(['socket', 'http'] as const)(
   'a local %s daemon gets a fingerprint, never the key, only on lease_allocate with credentials',
+  { concurrent: false },
   async (transport, t) => {
     if (!(await supportsLoopbackBind())) {
       t.skip('loopback listeners are not permitted in this environment');
@@ -85,33 +86,37 @@ test.sequential.for(['socket', 'http'] as const)(
   },
 );
 
-test.sequential('a remote daemon gets no provider credential fingerprint', async (t) => {
-  if (!(await supportsLoopbackBind())) {
-    t.skip('loopback listeners are not permitted in this environment');
-    return;
-  }
-  clearCredentialEnv();
-  vi.stubEnv('LIMRUN_API_KEY', API_KEY);
-  const remote = await startHttpDaemonFixture({});
-  vi.stubEnv('AGENT_DEVICE_DAEMON_BASE_URL', `http://127.0.0.1:${remote.port}`);
-  vi.stubEnv('AGENT_DEVICE_DAEMON_AUTH_TOKEN', 'remote-secret');
+test(
+  'a remote daemon gets no provider credential fingerprint',
+  { concurrent: false },
+  async (t) => {
+    if (!(await supportsLoopbackBind())) {
+      t.skip('loopback listeners are not permitted in this environment');
+      return;
+    }
+    clearCredentialEnv();
+    vi.stubEnv('LIMRUN_API_KEY', API_KEY);
+    const remote = await startHttpDaemonFixture({});
+    vi.stubEnv('AGENT_DEVICE_DAEMON_BASE_URL', `http://127.0.0.1:${remote.port}`);
+    vi.stubEnv('AGENT_DEVICE_DAEMON_AUTH_TOKEN', 'remote-secret');
 
-  try {
-    await sendToDaemon({
-      session: 'default',
-      command: 'lease_allocate',
-      positionals: [],
-      meta: { requestId: 'req-remote-lease', leaseProvider: 'limrun', tenantId: 'tenant-a' },
-    });
-  } finally {
-    await closeLoopbackServer(remote.server);
-  }
+    try {
+      await sendToDaemon({
+        session: 'default',
+        command: 'lease_allocate',
+        positionals: [],
+        meta: { requestId: 'req-remote-lease', leaseProvider: 'limrun', tenantId: 'tenant-a' },
+      });
+    } finally {
+      await closeLoopbackServer(remote.server);
+    }
 
-  expect(remote.rpcRequests.map((rpc) => rpc.method)).toEqual(['agent_device.lease.allocate']);
-  const body = JSON.stringify(remote.rpcRequests[0]);
-  expect(readFingerprint(body)).toBe(undefined);
-  expect(body).not.toContain(API_KEY);
-});
+    expect(remote.rpcRequests.map((rpc) => rpc.method)).toEqual(['agent_device.lease.allocate']);
+    const body = JSON.stringify(remote.rpcRequests[0]);
+    expect(readFingerprint(body)).toBe(undefined);
+    expect(body).not.toContain(API_KEY);
+  },
+);
 
 function readFingerprint(body: string): unknown {
   const parsed = JSON.parse(body) as {

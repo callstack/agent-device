@@ -83,14 +83,14 @@ function countsAreValid(record: IstanbulCounters): boolean {
  * Drops file records with a negative, null, or non-integer hit count, which fallow refuses the
  * whole map over.
  *
- * Two upstream defects produced those counts on real runs, both fixed by the patches under
- * `patches/`: the v8 provider resolved a module's script wrapper length from whichever coverage
- * file it read last, so an unmeasured one shifted every offset off its source, and
- * `ast-v8-to-istanbul` subtracted located branch paths from a region that did not contain them,
- * which an awaited continuation can make negative. Either can also merge into a record measured
- * correctly and pull its counts down, so a record is dropped whole rather than repaired; zeroed
- * counts from the same shift are indistinguishable from untested code and stay. A dropped file
- * gets no CRAP score rather than a wrong one.
+ * The one defect that produced those counts on real runs is patched under `patches/`:
+ * `ast-v8-to-istanbul` subtracts located branch paths from a region that did not contain them,
+ * which an awaited continuation can make negative. Vitest 5 fixed the other upstream (#10506,
+ * #10643): the v8 provider used to resolve a module's script wrapper length from whichever coverage
+ * file it read last, so an unmeasured one shifted every offset off its source. Any rule can also
+ * merge into a record measured correctly and pull its counts down, so a record is dropped whole
+ * rather than repaired; zeroed counts from the same shift are indistinguishable from untested code
+ * and stay. A dropped file gets no CRAP score rather than a wrong one.
  */
 export function sanitizeIstanbulCoverage(map: IstanbulCoverageMap): SanitizedCoverage {
   const kept: Record<string, IstanbulCounters> = {};
@@ -463,8 +463,9 @@ function renderDroppedSection(dropped: readonly string[]): readonly string[] {
   if (dropped.length === 0) return [];
   return section([
     `Unscored: ${dropped.length} file(s) with counts no execution can produce ` +
-      `(for example, an unresolved script wrapper offset or a negative branch path count, ` +
-      `both fixed under patches/): ${dropped.map((file) => `\`${file}\``).join(', ')}`,
+      `(for example, an implicit-else branch path count driven negative by an awaited ` +
+      `continuation, which \`ast-v8-to-istanbul\` is patched against): ` +
+      `${dropped.map((file) => `\`${file}\``).join(', ')}`,
   ]);
 }
 

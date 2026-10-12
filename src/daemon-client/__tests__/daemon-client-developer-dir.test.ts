@@ -17,8 +17,9 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const DEVELOPER_DIR = '/Applications/Xcode.app/Contents/Developer';
 
-test.sequential.for([DEVELOPER_DIR, '', undefined])(
+test.for([DEVELOPER_DIR, '', undefined])(
   'sendToDaemon forwards local DEVELOPER_DIR (%s) and strips remote developerDir',
+  { concurrent: false },
   async (developerDir, t) => {
     if (!(await supportsLoopbackBind())) {
       t.skip('loopback listeners are not permitted in this environment');

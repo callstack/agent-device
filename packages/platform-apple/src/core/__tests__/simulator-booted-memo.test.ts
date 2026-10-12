@@ -78,16 +78,24 @@ test('booted memo is scoped per simulator set path', async () => {
   expect(countSimctlListCalls()).toBe(2);
 });
 
-test.sequential('process memo test setup clears simulator boot memo: seed', async () => {
-  markSimulatorBooted(simulator);
+test(
+  'process memo test setup clears simulator boot memo: seed',
+  { concurrent: false },
+  async () => {
+    markSimulatorBooted(simulator);
 
-  await ensureBootedSimulator(simulator);
+    await ensureBootedSimulator(simulator);
 
-  expect(countSimctlListCalls()).toBe(0);
-});
+    expect(countSimctlListCalls()).toBe(0);
+  },
+);
 
-test.sequential('process memo test setup clears simulator boot memo: verify', async () => {
-  await ensureBootedSimulator(simulator);
+test(
+  'process memo test setup clears simulator boot memo: verify',
+  { concurrent: false },
+  async () => {
+    await ensureBootedSimulator(simulator);
 
-  expect(countSimctlListCalls()).toBe(1);
-});
+    expect(countSimctlListCalls()).toBe(1);
+  },
+);

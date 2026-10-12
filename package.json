@@ -329,7 +329,7 @@
     "@types/pngjs": "^6.0.5",
     "@types/tar-stream": "^3.1.4",
     "@types/yauzl": "^3.4.0",
-    "@vitest/coverage-v8": "4.1.11",
+    "@vitest/coverage-v8": "5.0.4",
     "ai": "^7.0.68",
     "eslint-plugin-no-only-tests": "^3.4.0",
     "eslint-plugin-perfectionist": "^5.10.1",
@@ -347,7 +347,7 @@
     "typescript": "^7.0.2",
     "undici": "7.29.1",
     "vite": "^8.2.1",
-    "vitest": "^4.1.11",
+    "vitest": "5.0.4",
     "yaml": "^2.9.0",
     "yauzl": "^3.4.0",
     "@agent-device/testmu": "workspace:*"

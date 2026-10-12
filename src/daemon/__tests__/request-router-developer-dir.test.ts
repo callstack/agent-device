@@ -8,43 +8,47 @@ import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
-test.sequential('a request spawns its commands with its own DEVELOPER_DIR, else the daemon one', async () => {
-  const seen: string[] = [];
-  const handler = createRequestHandler({
-    createCommandSurface: testCreateCommandSurface,
-    logPath: path.join(mkdtempForTestSync('agent-device-router-developer-dir-'), 'daemon.log'),
-    token: 'test-token',
-    sessionStore: makeSessionStore('agent-device-router-developer-dir-store-'),
-    leaseRegistry: new LeaseRegistry(),
-    deviceInventoryGateways: createTestDeviceInventoryGateways({
-      local: async () => {
-        const child = await runCmd(process.execPath, [
-          '-e',
-          'process.stdout.write(process.env.DEVELOPER_DIR ?? "")',
-        ]);
-        seen.push(child.stdout);
-        return [];
-      },
-    }),
-    trackDownloadableArtifact: () => 'artifact-id',
-  });
-  const devices = (developerDir?: string) =>
-    handler({
+test(
+  'a request spawns its commands with its own DEVELOPER_DIR, else the daemon one',
+  { concurrent: false },
+  async () => {
+    const seen: string[] = [];
+    const handler = createRequestHandler({
+      createCommandSurface: testCreateCommandSurface,
+      logPath: path.join(mkdtempForTestSync('agent-device-router-developer-dir-'), 'daemon.log'),
       token: 'test-token',
-      session: 'default',
-      command: 'devices',
-      positionals: [],
-      flags: { platform: 'ios' },
-      meta: { requestId: `req-${developerDir ?? 'none'}`, developerDir },
+      sessionStore: makeSessionStore('agent-device-router-developer-dir-store-'),
+      leaseRegistry: new LeaseRegistry(),
+      deviceInventoryGateways: createTestDeviceInventoryGateways({
+        local: async () => {
+          const child = await runCmd(process.execPath, [
+            '-e',
+            'process.stdout.write(process.env.DEVELOPER_DIR ?? "")',
+          ]);
+          seen.push(child.stdout);
+          return [];
+        },
+      }),
+      trackDownloadableArtifact: () => 'artifact-id',
     });
+    const devices = (developerDir?: string) =>
+      handler({
+        token: 'test-token',
+        session: 'default',
+        command: 'devices',
+        positionals: [],
+        flags: { platform: 'ios' },
+        meta: { requestId: `req-${developerDir ?? 'none'}`, developerDir },
+      });
 
-  const saved = process.env.DEVELOPER_DIR;
-  process.env.DEVELOPER_DIR = '/daemon/Developer';
-  try {
-    await Promise.all([devices('/a/Developer'), devices('/b/Developer'), devices(''), devices()]);
-  } finally {
-    if (saved === undefined) delete process.env.DEVELOPER_DIR;
-    else process.env.DEVELOPER_DIR = saved;
-  }
-  expect([...seen].sort()).toEqual(['', '/a/Developer', '/b/Developer', '/daemon/Developer']);
-});
+    const saved = process.env.DEVELOPER_DIR;
+    process.env.DEVELOPER_DIR = '/daemon/Developer';
+    try {
+      await Promise.all([devices('/a/Developer'), devices('/b/Developer'), devices(''), devices()]);
+    } finally {
+      if (saved === undefined) delete process.env.DEVELOPER_DIR;
+      else process.env.DEVELOPER_DIR = saved;
+    }
+    expect([...seen].sort()).toEqual(['', '/a/Developer', '/b/Developer', '/daemon/Developer']);
+  },
+);
