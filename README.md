@@ -23,19 +23,17 @@ Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent tha
 
 <p>
   agent-device powers mobile automation in
-  <a href="https://e2e.tester.army/docs">
+  <a href="https://e2e.tester.army">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/assets/e2e-logo-dark.png">
       <img src="docs/assets/e2e-logo-light.png" width="24" height="24" align="middle" alt="">
     </picture>
-    e2e by testerarmy</a>
+    e2e</a>
   and
   <a href="https://github.com/pingdotgg/t3code">
     <img src="docs/assets/t3-code-logo.svg" width="24" height="24" align="middle" alt="">
     T3 Code</a>.
 </p>
-
-<sub>Integration details: [e2e](https://e2e.tester.army/docs) · [T3 Code](https://github.com/pingdotgg/t3code/blob/main/docs/user/devices.md).</sub>
 
 ## Quick start
 
