@@ -159,7 +159,7 @@ importers:
         specifier: ^5.10.1
         version: 5.10.1(eslint@10.9.1(supports-color@7.2.0))(supports-color@7.2.0)(typescript@7.0.2)
       fallow:
-        specifier: ^3.32.0
+        specifier: 3.32.0
         version: 3.32.0
       fast-check:
         specifier: ^4.9.0

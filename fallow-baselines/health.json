@@ -10,11 +10,6 @@
         "count": 1
       }
     },
-    "src/cli.ts": {
-      "complexity_critical": {
-        "count": 1
-      }
-    },
     "src/cli/auth-session.ts": {
       "complexity_moderate": {
         "count": 1
@@ -22,9 +17,6 @@
     },
     "src/cli/parser/args.ts": {
       "complexity_critical": {
-        "count": 2
-      },
-      "complexity_moderate": {
         "count": 1
       }
     },
@@ -33,52 +25,7 @@
         "count": 1
       }
     },
-    "src/core/dispatch.ts": {
-      "complexity_critical": {
-        "count": 1
-      }
-    },
-    "src/daemon-client/daemon-client-lifecycle.ts": {
-      "complexity_high": {
-        "count": 1
-      }
-    },
-    "src/daemon-client/daemon-client-metadata.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/daemon-client/daemon-client.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/daemon/device/device-ready.ts": {
-      "complexity_high": {
-        "count": 1
-      }
-    },
-    "src/daemon/handlers/__tests__/replay-heal.test.ts": {
-      "complexity_high": {
-        "count": 1
-      }
-    },
     "src/daemon/interaction/internal/find.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/daemon/handlers/record-trace.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/daemon/session-lifecycle/internal/inventory.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/daemon/handlers/session-test-artifacts.ts": {
       "complexity_moderate": {
         "count": 1
       }
@@ -93,23 +40,8 @@
         "count": 1
       }
     },
-    "src/daemon/runtime-hints.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/daemon/session-selector.ts": {
       "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/kernel/device.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "packages/platform-apple/src/core/perf.ts": {
-      "complexity_high": {
         "count": 1
       }
     },
@@ -123,22 +55,7 @@
         "count": 1
       }
     },
-    "packages/provision-kit/src/boot-diagnostics.ts": {
-      "complexity_critical": {
-        "count": 1
-      }
-    },
     "packages/platform-linux/src/input-actions.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/remote/remote-config-core.ts": {
-      "complexity_high": {
-        "count": 1
-      }
-    },
-    "src/screenshot-diff/screenshot-diff.ts": {
       "complexity_moderate": {
         "count": 1
       }
@@ -153,22 +70,7 @@
         "count": 1
       }
     },
-    "test/integration/provider-scenarios/android-lifecycle.test.ts": {
-      "complexity_critical": {
-        "count": 1
-      }
-    },
     "test/integration/provider-scenarios/macos-world.ts": {
-      "complexity_high": {
-        "count": 1
-      }
-    },
-    "packages/maestro/test/conformance/conformance-normalize.ts": {
-      "complexity_critical": {
-        "count": 2
-      }
-    },
-    "src/daemon/server/http-rpc-methods.ts": {
       "complexity_high": {
         "count": 1
       }
@@ -182,13 +84,10 @@
     "packages/replay-port/src/daemon-port/session-replay-heal.ts:high impact",
     "src/daemon/context.ts:high impact",
     "src/daemon/handlers/session.ts:complexity",
-    "src/replay/script-utils.ts:high impact",
     "packages/selectors/src/internal/predicates.ts:high impact",
     "packages/provision-kit/src/boot-diagnostics.ts:complexity",
-    "src/compat/maestro/support.ts:high impact",
     "src/daemon/session-routing.ts:high impact",
     "src/commands/cli-grammar/common.ts:high impact",
-    "src/snapshot/snapshot-presentation/tree.ts:high impact",
     "packages/kernel/src/success-text.ts:high impact",
     "src/cli.ts:complexity",
     "src/commands/interaction/output.ts:high impact",
@@ -197,29 +96,24 @@
     "packages/platform-apple/src/core/app-launch.ts:complexity",
     "packages/kernel/src/record.ts:high impact",
     "src/daemon/daemon-command-registry.ts:high impact",
-    "src/replay/script.ts:complexity",
     "src/daemon/handlers/session-doctor-output.ts:high impact",
     "packages/platform-apple/src/core/perf-xml.ts:high impact",
     "src/client/screenshot-result.ts:high impact",
     "packages/platform-web/src/json-utils.ts:high impact",
     "packages/platform-android/src/settings.ts:complexity",
     "packages/capture-kit/src/snapshot/snapshot-presentation/text-surface.ts:high impact",
-    "src/daemon/handlers/session-test-sharding.ts:high impact",
     "packages/replay-port/src/daemon-port/native-command.ts:complexity",
     "packages/platform-apple/src/core/debug-symbols/utils.ts:high impact",
     "packages/platform-linux/src/snapshot.ts:high impact",
     "packages/selectors/src/interaction-targeting.ts:high impact",
     "packages/maestro/src/internal/runtime-targets.ts:high impact",
     "packages/kernel/src/source-value.ts:high impact",
-    "src/request/cancel.ts:high impact",
     "src/commands/interaction/selectors.ts:untested risk",
     "packages/selectors/src/internal/build.ts:high impact",
-    "src/kernel/redaction.ts:high impact",
     "packages/provider-webdriver/src/webdriver-utils.ts:high impact",
     "packages/kernel/src/keyed-lock.ts:high impact",
     "src/cli/replay-test/reporters/format.ts:high impact",
     "packages/replay-port/src/daemon-port/session-test-infrastructure.ts:high impact",
-    "src/daemon/handlers/session-test-artifacts.ts:high impact",
     "packages/platform-android/src/app-parsers.ts:high impact",
     "packages/platform-android/src/ui-hierarchy.ts:high impact",
     "packages/platform-android/src/sdk.ts:high impact",

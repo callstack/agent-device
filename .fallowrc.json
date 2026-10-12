@@ -99,29 +99,14 @@
       "exports": ["default"]
     },
     {
-      // Android perf mechanics are selected through the lazy platform host so importing agent-device does not eagerly load adb mechanics. Fallow cannot follow the dynamic property read in src/platform-runtime-perf-host.ts.
-      "file": "packages/platform-android/src/perf.ts",
-      "exports": ["sampleAndroidMemoryPerf"]
-    },
-    {
-      // Apple perf sampling metadata is selected through the same lazy platform host; Fallow cannot follow the dynamic property read in src/platform-runtime-perf-host.ts.
-      "file": "packages/platform-apple/src/core/perf.ts",
-      "exports": ["buildAppleFrameSamplingMetadata", "buildAppleMemorySamplingMetadata"]
-    },
-    {
       // packages/platform-apple/src/lifecycle.ts loads this module on demand and reads the member off the memoized import() promise, which Fallow cannot follow.
       "file": "packages/platform-apple/src/expo-dev-client-launch.ts",
       "exports": ["resolveExpoDevClientLaunchUrl"]
     },
     {
-      // These host-process helpers are consumed only by integration leak-oracle support and host-process unit tests; Fallow's production graph intentionally excludes both consumers.
-      "file": "packages/host-kit/src/process.ts",
-      "exports": ["uniquePositivePids", "readOwnedProcessRecordFile"]
-    },
-    {
       // Apple app-resolution helpers are reached through the named lazy façade in packages/platform-apple/src/app-resolution-facade.ts. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to the facade's re-exports.
       "file": "packages/platform-apple/src/core/app-resolution.ts",
-      "exports": ["buildAppNotInstalledError", "resolveIosAppAlias"]
+      "exports": ["buildAppNotInstalledError"]
     },
     {
       // The app-resolution package facade is consumed through workspace package exports. Fallow does not follow that package boundary, so keep only its externally consumed helper that has no visible production edge here.
@@ -145,28 +130,12 @@
     {
       // Apple install mechanics are reached through the named install-artifact façade. Fallow cannot connect workspace package exports to these source exports; keep this list limited to the actual facade re-exports.
       "file": "packages/platform-apple/src/core/install-artifact.ts",
-      "exports": ["prepareIosInstallArtifact", "readIosBundleInfo"]
+      "exports": ["readIosBundleInfo"]
     },
     {
-      // Apple perf mechanics are reached through the named lazy perf façade. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to the facade's re-exports.
+      // Apple perf façade types put values from the lazy perf seam in a public signature without a static in-repo importer; Fallow cannot connect dynamic import member reads through the façade to these source types; keep the list limited to the façade types that actually report.
       "file": "packages/platform-apple/src/perf-facade.ts",
-      "exports": [
-        "buildAppleFrameSamplingMetadata",
-        "buildAppleMemorySamplingMetadata",
-        "buildAppleMemorySnapshotSupport",
-        "isRetryableIosDeviceTraceRecordFailure",
-        "resolveIosDevicePerfHint",
-        "captureAppleMemorySnapshot",
-        "sampleAppleFramePerf",
-        "sampleAppleMemoryPerf",
-        "cleanupAppleXctracePerfCapture",
-        "startAppleXctracePerfCapture",
-        "stopAppleXctracePerfCapture",
-        "writeAppleXctracePerfReport",
-        "AppleXctraceCpuProfileReport",
-        "AppleXctracePerfMode",
-        "AppleXctracePerfResult"
-      ]
+      "exports": ["AppleXctraceCpuProfileReport", "AppleXctracePerfMode", "AppleXctracePerfResult"]
     },
     {
       // Apple tool-provider mechanics are reached through the named lazy tool-provider façade. Fallow cannot connect dynamic import member reads to these source exports; keep this list limited to the facade's re-exports.
@@ -176,50 +145,8 @@
         "resolveAppleToolProvider",
         "createLocalAppleToolProvider",
         "readApplePlistJson",
-        "runAppleToolCommand",
-        "runXcrun"
+        "runAppleToolCommand"
       ]
-    },
-    {
-      // The device-aware simctl argument builder is reached through the named lazy simctl façade. Fallow cannot connect the dynamic member read to this source export; keep the suppression limited to that re-export.
-      "file": "packages/platform-apple/src/core/simctl.ts",
-      "exports": ["buildSimctlArgsForDevice"]
-    },
-    {
-      // The simctl façade symbols are named package entrypoints reached through dynamic platform-runtime imports. Fallow cannot connect those member reads to the re-exports; keep the suppression limited to these facade symbols.
-      "file": "packages/platform-apple/src/simctl-facade.ts",
-      "exports": ["buildSimctlArgsForDevice", "buildAppleSimulatorRecordVideoArgs"]
-    },
-    {
-      // Apple runner mechanics are reached through the named runner operations façade. Fallow cannot connect workspace package exports to these source exports; keep this list limited to the façade and its cleanup composition.
-      "file": "packages/platform-apple/src/core/runner-client.ts",
-      "exports": [
-        "notifyIosRunnerAppRelaunched",
-        "prewarmIosRunnerSession",
-        "prepareIosRunner",
-        "resolveRunnerAppBundleId",
-        "detachIosRunnerSessionsForShutdown",
-        "stopIosRunnerSession",
-        "stopAllIosRunnerSessions",
-        "readStaleRunnerLease",
-        "verifyLeaseRunnerPidIdentity",
-        "applyXctestRunnerAppIconFromDerivedPath"
-      ]
-    },
-    {
-      // The named runner-owner façade owns this mutator; Fallow cannot connect the workspace package export to the moved source export.
-      "file": "packages/platform-apple/src/core/runner-owner-state.ts",
-      "exports": ["setRunnerLeaseOwnerStateDir"]
-    },
-    {
-      // Apple diagnostics are reached through the named doctor façade. Fallow cannot connect workspace package exports to these source exports.
-      "file": "packages/platform-apple/src/doctor.ts",
-      "exports": ["appleToolchainCheck", "appleRunnerWarmupCheck"]
-    },
-    {
-      // macOS helper mechanics are reached through the named macOS façade. Fallow cannot connect workspace package exports to these source exports.
-      "file": "packages/platform-apple/src/os/macos/helper.ts",
-      "exports": ["startMacOsAudioProbeProcess", "resolveFrontmostMacOsApp"]
     },
     {
       // The legacy Maestro fallback wording remains contracts vocabulary for wire/fixture compatibility, but has no in-repo production consumer. The Apple migration changes this file's documentation path, so keep the existing declaration explicit without treating it as a new W4 export leak.
@@ -239,38 +166,9 @@
       ]
     },
     {
-      // The interaction facade exposes #2178's named route inputs and deferred handlers, plus the existing ref mutation response consumed by help conformance. Fallow's production graph cannot follow the request-handler-chain dynamic imports, so this exact list is the facade contract.
+      // The interaction facade exposes #2178's deferred route handlers plus the existing ref mutation response consumed by help conformance. Fallow's production graph cannot follow the request-handler-chain dynamic imports, so this exact list is the facade contract.
       "file": "src/daemon/interaction/index.ts",
-      "exports": [
-        "FindRouteInput",
-        "refMutationAdmissionResponse",
-        "handleFindCommands",
-        "handleInteractionCommands"
-      ]
-    },
-    {
-      // The #2178 route implementations are reached only through the interaction facade's deferred delegates; Fallow's production graph cannot follow those dynamic imports. Keep this exemption limited to the two route entrypoints.
-      "file": "src/daemon/interaction/internal/{find,interaction}.ts",
-      "exports": ["handleFindCommands", "handleInteractionCommands"]
-    },
-    {
-      // Dedicated CLI command handlers are reached only through the dynamic `import()` table `dedicatedCliCommandHandlerLoaders` in src/cli/commands/router.ts, which --production analysis cannot follow to a consumer. Same shape as the daemon route-handler entry above; that table is what enumerates this list, so add/remove here whenever a loader is added/removed.
-      "file": "src/cli/commands/{auth,connection,daemon,device,plugins,proxy,recording,replay,screenshot,takeover}.ts",
-      "exports": [
-        "authCommand",
-        "pluginsCommand",
-        "connectCommand",
-        "disconnectCommand",
-        "connectionCommand",
-        "daemonCommand",
-        "deviceCommand",
-        "proxyCommand",
-        "recordingCommand",
-        "replayCommand",
-        "screenshotCommand",
-        "diffCommand",
-        "takeoverCommand"
-      ]
+      "exports": ["refMutationAdmissionResponse", "handleFindCommands", "handleInteractionCommands"]
     },
     {
       // The macOS façade members are read off the memoized loadMacOs() loader in src/platform-runtime-apple-application-tools.ts. Fallow cannot connect that dynamic member read to the re-exports.
@@ -283,11 +181,6 @@
       "exports": ["answerSimulatorLaunchConfirmation"]
     },
     {
-      // preflightIosRunnerDeviceReadiness is called from packages/platform-apple/src/runner/runner-session.ts through a dynamic import; Fallow cannot connect the dynamic member read.
-      "file": "packages/platform-apple/src/runner/runner-device-readiness.ts",
-      "exports": ["preflightIosRunnerDeviceReadiness"]
-    },
-    {
       // The CLI and MCP process entrypoints are loaded lazily by the module table in src/cli/entry.ts; Fallow cannot connect those dynamic member reads.
       "file": "{src/cli/process-entry.ts,src/mcp/server.ts}",
       "exports": ["runCliProcess", "runAgentDeviceMcpServer"]
@@ -296,11 +189,6 @@
       // Runtime hint application is reached from the Android and Apple application tools through the lazy loadRuntimeHints() import; Fallow cannot connect the dynamic member read.
       "file": "src/platform-runtime-runtime-hints.ts",
       "exports": ["applyRuntimeHintValues", "clearRuntimeHintValues"]
-    },
-    {
-      // createAgentDevice is consumed by the lazy imports in src/cli/commands/{recording,screenshot}.ts; Fallow cannot connect the dynamic member reads.
-      "file": "src/runtime.ts",
-      "exports": ["createAgentDevice"]
     },
     {
       // The contracts snapshot façade must re-export every symbol of ../snapshot-scope.ts (scripts/layering/package-boundaries.test.ts, façade exhaustiveness); callers import it from @agent-device/contracts/snapshot-scope, so the façade copy has no consumer.
@@ -338,14 +226,12 @@
     },
     {
       // Type-level `AssertTrue<...>` registry-totality guards. Exported only so `noUnusedLocals` keeps them alive; a consumer would defeat the point.
-      "file": "{packages/command-registry/src/registry.ts,src/core/interactors/register-builtins.ts,src/core/platform-descriptor/registry.ts,src/daemon/request-platform-providers.ts}",
+      "file": "{packages/command-registry/src/registry.ts,src/core/interactors/register-builtins.ts}",
       "exports": [
         "CommandOwnerFileClaimsAreComplete",
         "CommandUnionStaysLiteral",
         "CliCommandUnionStaysLiteral",
-        "BuiltinPluginsCoverAllPlatforms",
-        "PlatformDescriptorsAreTotal",
-        "GatedKeysAreResolverKeys"
+        "BuiltinPluginsCoverAllPlatforms"
       ]
     },
     {
@@ -354,24 +240,12 @@
       "exports": ["IS_PREDICATE_USAGE_HINT"]
     },
     {
-      // Help-benchmark conformance seam: helpTopicIds feeds the topic-coverage gate, whose consumer is a test-tree file outside --production analysis.
-      "file": "src/cli/parser/cli-help.ts",
-      "exports": ["helpTopicIds"]
-    },
-    {
-      // #1458: getSessionCommandKind's former production consumer (the session.ts if-chain) was replaced by SESSION_COMMAND_HANDLER_IMPLS, which encodes command-kind groupings directly via shared handler references instead of a kind lookup. The accessor and its SessionCommandKind classification remain covered by daemon-command-registry.test.ts, a test-tree file outside --production analysis.
-      "file": "src/daemon/daemon-command-registry.ts",
-      "exports": ["getSessionCommandKind"]
-    },
-    {
-      // Workspace-package symbols whose only consumers are test-tree files, which --production analysis does not see. Each import is the package specifier, so the façade entry is load-bearing: parseTargetAnnotationV1Payload/TARGET_ANNOTATION_MAX_FIELD_BYTES from src/daemon/__tests__/session-target-evidence.test.ts, MAESTRO_COMPAT_* from src/cli/parser/__tests__/maestro-support-matrix.test.ts, SCRIPT_FLAG_COMMANDS/scriptFlagEntries from src/commands/replay/script-flag-admission.test.ts (the #3197 two-way drift guard between the .ad grammar and the CLI schema), createAppLogLiveHandle from packages/test-kit/src/app-log-live-handle.ts (its production sibling createAppLogLiveHandleFromFinish wraps it, and scripts/layering/platform-package-policy.test.ts pins the specifier form).
+      // Workspace-package symbols whose only consumers are test-tree files, which --production analysis does not see. Each import is the package specifier, so the façade entry is load-bearing: parseTargetAnnotationV1Payload from src/daemon/__tests__/session-target-evidence.test.ts, MAESTRO_COMPAT_* from src/cli/parser/__tests__/maestro-support-matrix.test.ts, SCRIPT_FLAG_COMMANDS/scriptFlagEntries from src/commands/replay/script-flag-admission.test.ts (the #3197 two-way drift guard between the .ad grammar and the CLI schema).
       "file": "packages/{ad-script,maestro,capture-kit}/src/index.ts",
       "exports": [
         "parseTargetAnnotationV1Payload",
-        "TARGET_ANNOTATION_MAX_FIELD_BYTES",
         "MAESTRO_COMPAT_LIMITATIONS",
         "MAESTRO_COMPAT_SUPPORTED_CAPABILITIES",
-        "createAppLogLiveHandle",
         "SCRIPT_FLAG_COMMANDS",
         "scriptFlagEntries"
       ]
@@ -392,18 +266,9 @@
       "exports": ["*"]
     },
     {
-      // Apple Simulator snapshot acquisition is a private package facet consumed by downstream runtime work; Fallow cannot see external consumers through the workspace exports map. Keep only the deliberately narrow public factory, source interface, and request/outcome types here; host injection, cache metadata, and preparation internals stay private.
+      // Apple Simulator snapshot acquisition is a private package facet consumed by downstream runtime work; Fallow cannot see external consumers through the workspace exports map. Only the shared failure/limits/request-target types report without an exemption; the factory and its source interface resolve through the package boundary.
       "file": "packages/platform-apple/src/snapshot-source-facade.ts",
-      "exports": [
-        "createSimulatorSnapshotSource",
-        "SimulatorSnapshotSource",
-        "SnapshotSourceFailure",
-        "SnapshotSourceFailureKind",
-        "SnapshotSourceLimits",
-        "SnapshotSourceOutcome",
-        "SnapshotSourceRequest",
-        "SnapshotSourceTarget"
-      ]
+      "exports": ["SnapshotSourceFailureKind", "SnapshotSourceLimits", "SnapshotSourceTarget"]
     },
     {
       // The native wire vocabulary is exported only so the parity test can pin the Objective-C literals; it is not part of the snapshot-source package facet.
@@ -420,154 +285,14 @@
       "exports": ["SUPPORTED_MAESTRO_COMMAND_NAMES"]
     },
     {
-      // Published type surface: re-exported by src/sdk/limrun.ts to agent-device/limrun, where test/integration/limrun-public-types.test.ts pins that consumers can import it. Its only importer compiles in a temp checkout, so no static in-repo edge reaches it — the same reason src/sdk/*.ts is exempt above.
-      "file": "packages/provider-limrun/src/index.ts",
-      "exports": ["LimrunIosCommandExecution"]
-    },
-    {
-      // Converting the contracts façades from `export *` to explicit named re-exports (the pin-table retirement) made these individually visible to --production analysis for the first time; a bare star previously hid them from this exact check. isRecord/IOS_SAFARI_BUNDLE_ID/REPLAY_DIVERGENCE_* have no production consumer. Kept rather than narrowed here so the façade's re-export surface stays byte-identical to the symbol set the retired pin table asserted — narrowing the surface is a follow-up with its own review, not a side effect of this mechanical conversion.
-      "file": "packages/contracts/src/facades/{client,command,divergence,recording}.ts",
-      "exports": [
-        "isRecord",
-        "IOS_SAFARI_BUNDLE_ID",
-        "REPLAY_DIVERGENCE_DEFAULT_REF_LIMIT",
-        "REPLAY_DIVERGENCE_DIGEST_REF_LIMIT",
-        "REPLAY_DIVERGENCE_LEVEL_BYTE_LIMITS",
-        "applyReplayDivergenceLevelCaps",
-        "measureReplayDivergenceBytes",
-        "sanitizeReplayDivergenceField",
-        "truncateUtf8Field",
-        "isRecordingExportQuality"
-      ]
-    },
-    {
-      // HarmonyOS package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected host route explicit here.
-      "file": "packages/platform-harmonyos/src/hdc.ts",
-      "exports": ["ensureHarmonyToolchainPathConfigured"]
-    },
-    {
-      // HarmonyOS package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected lifecycle route explicit here.
-      "file": "packages/platform-harmonyos/src/app-lifecycle.ts",
-      "exports": ["listHarmonyApps", "openHarmonyApp", "closeHarmonyApp"]
-    },
-    {
       // HarmonyOS archive metadata parsing is exercised by package-owned tests but has no production caller; keep the direct test seam explicit while the implementation remains colocated with app lifecycle mechanics.
       "file": "packages/platform-harmonyos/src/app-lifecycle.ts",
       "exports": ["resolveHarmonyArchiveBundleName"]
     },
     {
-      // HarmonyOS package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected diagnostics route explicit here.
-      "file": "packages/platform-harmonyos/src/doctor.ts",
-      "exports": ["harmonyToolchainCheck"]
-    },
-    {
-      // HarmonyOS package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected interaction route explicit here.
-      "file": "packages/platform-harmonyos/src/input-actions.ts",
-      "exports": [
-        "pressHarmony",
-        "doubleClickHarmony",
-        "longPressHarmony",
-        "typeHarmony",
-        "fillHarmony",
-        "scrollHarmony",
-        "performHarmonyGesture",
-        "homeHarmony",
-        "appSwitcherHarmony",
-        "pressHarmonyKeyboardKey",
-        "setHarmonyOrientation"
-      ]
-    },
-    {
-      // HarmonyOS package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.
-      "file": "packages/platform-harmonyos/src/perf.ts",
-      "exports": ["sampleHarmonyMemoryPerf"]
-    },
-    {
-      // HarmonyOS package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.
-      "file": "packages/platform-harmonyos/src/screenshot.ts",
-      "exports": ["screenshotHarmony"]
-    },
-    {
-      // HarmonyOS package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.
-      "file": "packages/platform-harmonyos/src/settings.ts",
-      "exports": ["setHarmonySetting"]
-    },
-    {
-      // HarmonyOS package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected host route explicit here.
-      "file": "packages/platform-harmonyos/src/index.ts",
-      "exports": ["sampleHarmonyMemoryPerf"]
-    },
-    {
-      // Linux package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected interactor/snapshot routes explicit here.
-      "file": "packages/platform-linux/src/app-lifecycle.ts",
-      "exports": ["openLinuxApp", "closeLinuxApp", "backLinux", "homeLinux"]
-    },
-    {
-      // Linux package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its selected interactor route explicit here.
-      "file": "packages/platform-linux/src/input-actions.ts",
-      "exports": [
-        "rightClickLinux",
-        "middleClickLinux",
-        "doubleClickLinux",
-        "longPressLinux",
-        "focusLinux",
-        "swipeLinux"
-      ]
-    },
-    {
-      // Linux package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.
-      "file": "packages/platform-linux/src/screenshot.ts",
-      "exports": ["screenshotLinux"]
-    },
-    {
-      // Linux package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.
-      "file": "packages/platform-linux/src/snapshot.ts",
-      "exports": ["readLinuxTextAtPoint"]
-    },
-    {
-      // Linux package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis.
-      "file": "packages/platform-linux/src/clipboard.ts",
-      "exports": ["readLinuxClipboard", "writeLinuxClipboard"]
-    },
-    {
-      // Linux package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis.
-      "file": "packages/platform-linux/src/input-actions.ts",
-      "exports": ["scrollLinux", "fillLinux"]
-    },
-    {
-      // Linux package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.
-      "file": "packages/platform-linux/src/surface-snapshot.ts",
-      "exports": ["captureLinuxSurfaceSnapshot"]
-    },
-    {
       // Linux package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.
       "file": "packages/platform-linux/src/index.ts",
       "exports": ["createLocalLinuxToolProvider"]
-    },
-    {
-      // Vega package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.
-      "file": "packages/platform-vega/src/doctor.ts",
-      "exports": ["vegaToolchainCheck"]
-    },
-    {
-      // Web package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its managed-backend/provider routes explicit here.
-      "file": "packages/platform-web/src/agent-browser-tool.ts",
-      "exports": ["doctorManagedAgentBrowser"]
-    },
-    {
-      // Web package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.
-      "file": "packages/platform-web/src/agent-browser-tool.ts",
-      "exports": ["setupManagedAgentBrowser"]
-    },
-    {
-      // Web package façade loader is a named external seam. Its dynamic property read is not visible to --production analysis.
-      "file": "packages/platform-web/src/doctor.ts",
-      "exports": ["webBrowserLifecycleCheck"]
-    },
-    {
-      // Web package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, so keep the façade and its request-scoped provider routes explicit here.
-      "file": "packages/platform-web/src/provider.ts",
-      "exports": ["resolveWebProvider", "hasScopedWebProvider"]
     },
     {
       // Web package façade loaders are named external seams. Their dynamic property reads are not visible to --production analysis, and the timeout is pinned by the daemon teardown test.
@@ -630,7 +355,6 @@
   },
   "publicPackages": ["agent-device"],
   "audit": {
-    "deadCodeBaseline": "fallow-baselines/dead-code.json",
     "healthBaseline": "fallow-baselines/health.json"
   },
   // CRAP needs measured coverage: estimated from imports it disagrees with measured scores on most
