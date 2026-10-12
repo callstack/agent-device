@@ -18,16 +18,18 @@ import {
   createRequestHandler as createProductionRequestHandler,
   type RequestRouterDeps,
 } from '../request-router.ts';
-import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
+import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { applicationLifecycleRuntimeFixture } from './application-lifecycle-runtime-fixture.ts';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
 import { withClientReplayScriptSources } from '@agent-device/replay-port/replay-script-source-fixtures';
 import type { DaemonInvokeFn } from '../daemon-request.ts';
 import { clearAndroidObservationFixture } from './android-observation-fixture.ts';
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
-import { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';
-import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
+import {
+  daemonClaimRecoveryGatewayFixture,
+  daemonPlatformServicesFixture,
+} from './platform-services-fixture.ts';
+import { platformResourceCleanupFixture } from './support/platform-resource-cleanup-fixture.ts';
 import { providerCredentialsFixture } from './support/provider-credentials-fixture.ts';
 
 const unavailable = Object.freeze({
@@ -111,21 +113,21 @@ export function createLifecycleDeviceRuntimeGatewaySpies() {
   return { gateway, inspectFacts, bind };
 }
 
-export const unavailableDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> =
-  Object.freeze({
-    inspectFacts: async (device) => (await unavailableBinding(device)).facts,
-    bind: async ({ device }) => {
-      const owner = localRuntimeOwner(device.platform);
-      return {
-        device,
-        owner,
-        facts: createUnavailableRuntimeFactsForTest(device, owner),
-        operations: {},
-        [Symbol.asyncDispose]: async () => {},
-      };
-    },
-    shutdown: async () => {},
-  });
+import {
+  unavailableBinding,
+  unavailableBindDevice,
+  unavailableBindExactDevice,
+  unavailableDeviceRuntimeGateway,
+  unavailableInspectFacts,
+} from './support/unavailable-device-runtime-gateway.ts';
+
+export {
+  unavailableBinding,
+  unavailableBindDevice,
+  unavailableBindExactDevice,
+  unavailableDeviceRuntimeGateway,
+  unavailableInspectFacts,
+};
 
 /**
  * Spies for the gesture surface a router-level test drives. They replace the retired
@@ -190,38 +192,6 @@ async function gestureBinding(device: DeviceInfo) {
   } as unknown as Awaited<ReturnType<DeviceRuntimeGateway<PlatformRuntimeOperations>['bind']>>;
 }
 
-async function unavailableBinding(device: DeviceInfo) {
-  return await unavailableDeviceRuntimeGateway.bind({
-    device,
-    intent: { kind: 'ordinary' },
-    scope: {
-      signal: new AbortController().signal,
-      diagnostics: { emit: () => {} },
-      progress: { report: () => {} },
-    },
-  });
-}
-
-export const unavailableBindDevice: BindDeviceRuntime = async (device, use) =>
-  narrowDeviceBinding(await unavailableBinding(device), use);
-
-export const unavailableInspectFacts = unavailableDeviceRuntimeGateway.inspectFacts;
-
-export const unavailableBindExactDevice: BindExactDeviceRuntime = async (
-  device,
-  owner,
-  fence,
-  use,
-  scope,
-) =>
-  narrowDeviceBinding(
-    await unavailableDeviceRuntimeGateway.bind({
-      device,
-      intent: { kind: 'exact-owner', owner, fence },
-      scope,
-    }),
-    use,
-  );
 
 export function createRequestHandler(
   deps: Omit<
@@ -239,12 +209,12 @@ export function createRequestHandler(
     deviceRuntimeGateway = unavailableDeviceRuntimeGateway,
     providerCredentials = providerCredentialsFixture({}, path.dirname(deps.logPath)),
     platformServices = daemonPlatformServicesFixture(),
-    claimRecoveryGateway = createClaimRecoveryGateway,
+    claimRecoveryGateway = daemonClaimRecoveryGatewayFixture(),
     ...rest
   } = deps;
   const handle = createProductionRequestHandler({
     androidObservation: clearAndroidObservationFixture,
-    platformResourceCleanup,
+    platformResourceCleanup: platformResourceCleanupFixture(),
     ...rest,
     platformServices,
     claimRecoveryGateway,

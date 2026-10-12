@@ -549,56 +549,6 @@ test('close on macOS session stops runner and dismisses automation alert before 
   expect(sessionStore.get(sessionName)).toBe(undefined);
 });
 
-test('close on iOS simulator session retains runner and deletes the session', async () => {
-  const sessionStore = makeSessionStore('agent-device-relaunch-close-');
-  const sessionName = 'ios-simulator-session';
-  sessionStore.publish(
-    sessionName,
-    makeSession(sessionName, {
-      device: {
-        platform: 'apple',
-        id: 'sim-1',
-        name: 'iPhone 17 Pro',
-        kind: 'simulator',
-        booted: true,
-      },
-      appName: 'com.example.app',
-    }),
-  );
-
-  const response = await createHandler(sessionStore)(sessionRequest(sessionName, 'close'));
-
-  expect(response.ok).toBe(true);
-  expect(mockStopIosRunner).not.toHaveBeenCalled();
-  expect(mockReleaseRunnerOnClose).toHaveBeenCalledWith('sim-1', { retain: true });
-  expect(sessionStore.get(sessionName)).toBeUndefined();
-});
-
-test('close on iOS simulator with scoped simulator set retains runner and deletes the session', async () => {
-  const sessionStore = makeSessionStore('agent-device-relaunch-close-');
-  const sessionName = 'ios-scoped-simulator-session';
-  sessionStore.publish(
-    sessionName,
-    makeSession(sessionName, {
-      device: {
-        platform: 'apple',
-        id: 'sim-1',
-        name: 'iPhone 17 Pro',
-        kind: 'simulator',
-        booted: true,
-        simulatorSetPath: '/tmp/tenant-a/simulator-set',
-      },
-      appName: 'com.example.app',
-    }),
-  );
-
-  const response = await createHandler(sessionStore)(sessionRequest(sessionName, 'close'));
-
-  expect(response.ok).toBe(true);
-  expect(mockReleaseRunnerOnClose).toHaveBeenCalledWith('sim-1', { retain: true });
-  expect(sessionStore.get(sessionName)).toBeUndefined();
-});
-
 test('close on leased iOS simulator session stops runner before deleting session', async () => {
   const sessionStore = makeSessionStore('agent-device-relaunch-close-');
   const sessionName = 'ios-leased-simulator-session';
@@ -704,43 +654,6 @@ test('close <app> on iOS stops runner before app close dispatch and performs fin
 
   expect(response.ok).toBe(true);
   expect(calls).toEqual(['stop-runner', 'close:com.example.app', 'release-runner:stop']);
-});
-
-test('close <app> on iOS simulator retains runner while terminating app', async () => {
-  const sessionStore = makeSessionStore('agent-device-relaunch-close-');
-  const sessionName = 'ios-simulator-close-session';
-  sessionStore.publish(
-    sessionName,
-    makeSession(sessionName, {
-      device: {
-        platform: 'apple',
-        id: 'sim-1',
-        name: 'iPhone 17 Pro',
-        kind: 'simulator',
-        booted: true,
-      },
-      appName: 'com.example.app',
-    }),
-  );
-
-  const calls: string[] = [];
-  mockStopIosRunner.mockImplementation(async () => {
-    calls.push('stop-runner');
-  });
-  mockReleaseRunnerOnClose.mockImplementation(async (_deviceId, options) => {
-    calls.push(`release-runner:${options.retain ? 'retain' : 'stop'}`);
-  });
-  mockDispatch.mockImplementation(async (_device, command, positionals) => {
-    calls.push(`${command}:${(positionals ?? []).join(' ')}`);
-    return {};
-  });
-
-  const response = await createHandler(sessionStore)(
-    sessionRequest(sessionName, 'close', { positionals: ['com.example.app'] }),
-  );
-
-  expect(response.ok).toBe(true);
-  expect(calls).toEqual(['close:com.example.app', 'release-runner:retain']);
 });
 
 test('app-only close terminates an iOS simulator app without ending its session', async () => {

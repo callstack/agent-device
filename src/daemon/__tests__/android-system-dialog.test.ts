@@ -10,7 +10,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
 
 import { snapshotAndroid } from '@agent-device/platform-android/mechanics';
 import { recoverAndroidBlockingSystemDialog as recoverOwnedAndroidBlockingSystemDialog } from '../android-system-dialog.ts';
-import { androidObservation } from '../../platform-runtime.ts';
+import { androidObservationPolicyFixture as androidObservation } from './android-observation-fixture.ts';
 
 const recoverAndroidBlockingSystemDialog = (
   params: Omit<Parameters<typeof recoverOwnedAndroidBlockingSystemDialog>[0], 'observation'>,

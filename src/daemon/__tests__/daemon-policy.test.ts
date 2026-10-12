@@ -16,7 +16,7 @@ import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-
 import { assertDaemonPolicyAdmitsRequest } from '../daemon-policy.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { createHostDiagnostics } from '../../platform-runtime-host-diagnostics.ts';
+import { hostDiagnosticsFixture } from './support/host-diagnostics-fixture.ts';
 import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
@@ -67,7 +67,7 @@ function makeHandler(
         : undefined,
     }),
     trackDownloadableArtifact: () => 'artifact-id',
-    hostDiagnostics: createHostDiagnostics(),
+    hostDiagnostics: hostDiagnosticsFixture(),
     daemonPolicy,
   });
   return { handler, bind, inspectFacts };

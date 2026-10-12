@@ -15,7 +15,7 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { handleDoctorCommand } from '../session-doctor.ts';
-import { createHostDiagnostics } from '../../../platform-runtime-host-diagnostics.ts';
+import { hostDiagnosticsFixture } from '../../__tests__/support/host-diagnostics-fixture.ts';
 
 vi.mock('../session-doctor-device.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../session-doctor-device.ts')>();
@@ -45,7 +45,7 @@ test('doctor app checks retain runtime admission failures as a failed target-app
   });
 
   const response = await handleDoctorCommand({
-    hostDiagnostics: createHostDiagnostics(),
+    hostDiagnostics: hostDiagnosticsFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -143,7 +143,7 @@ test('doctor preserves the legacy unsupported HarmonyOS target-app check', async
   });
 
   const response = await handleDoctorCommand({
-    hostDiagnostics: createHostDiagnostics(),
+    hostDiagnostics: hostDiagnosticsFixture(),
     req: {
       token: 't',
       session: sessionName,

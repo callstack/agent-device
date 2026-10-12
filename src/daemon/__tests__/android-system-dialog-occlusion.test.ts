@@ -11,7 +11,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
 
 import { runAndroidAdb, snapshotAndroid } from '@agent-device/platform-android/mechanics';
 import { recoverAndroidBlockingSystemDialog as recoverOwnedAndroidBlockingSystemDialog } from '../android-system-dialog.ts';
-import { androidObservation } from '../../platform-runtime.ts';
+import { androidObservationPolicyFixture as androidObservation } from './android-observation-fixture.ts';
 import { makeAndroidSession } from './support/session-factories.ts';
 import { makeTestScreenRecordingResource } from './support/screen-recording-live-handle.ts';
 import { makeAndroidSnapshotCapture } from '@agent-device/platform-android/snapshot-capture-fixtures';
