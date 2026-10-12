@@ -1,5 +1,9 @@
-import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
-import { centerOfRect } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, Rect, SnapshotCoveringNode } from '@agent-device/kernel/snapshot';
+import {
+  centerOfRect,
+  formatRole,
+  SNAPSHOT_COVERING_LABEL_MAX_LENGTH,
+} from '@agent-device/kernel/snapshot';
 import { areRectsApproximatelyEqual, normalizeRect } from '@agent-device/kernel/rect-center';
 import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import {
@@ -113,12 +117,28 @@ export function annotateCoveredSnapshotNodes(
     ),
     coverCache: new Map(),
   };
-  const coveredPositions: number[] = [];
+  const coveredPositions: Array<{ position: number; coveredBy?: SnapshotCoveringNode }> = [];
   for (const [position, node] of nodes.entries()) {
     if (!isCandidateTouchNode(node)) continue;
-    if (findCoveringNode(scan, position, node, options)) coveredPositions.push(position);
+    const coveringNode = findCoveringNode(scan, position, node, options);
+    if (coveringNode)
+      coveredPositions.push({ position, coveredBy: describeCoveringNode(coveringNode) });
   }
   return annotateCoveredPositions(nodes, coveredPositions);
+}
+
+/**
+ * The bounded, non-actionable description of the cover the scan found. No ref is ever carried — see
+ * {@link SnapshotCoveringNode}.
+ */
+function describeCoveringNode(node: RawSnapshotNode): SnapshotCoveringNode {
+  const label = node.label?.trim();
+  const rect = positiveRect(node.rect);
+  return {
+    kind: formatRole(node.type ?? 'Element'),
+    ...(label ? { label: label.slice(0, SNAPSHOT_COVERING_LABEL_MAX_LENGTH) } : {}),
+    ...(rect ? { rect } : {}),
+  };
 }
 
 /** Applies backend-owned covered decisions through the same publication annotation contract. */
@@ -126,25 +146,26 @@ export function annotateSnapshotNodesCoveredByPolicy(
   nodes: RawSnapshotNode[],
   isCovered: (node: RawSnapshotNode) => boolean,
 ): RawSnapshotNode[] {
-  const coveredPositions: number[] = [];
+  const coveredPositions: Array<{ position: number; coveredBy?: undefined }> = [];
   for (const [position, node] of nodes.entries()) {
-    if (isCandidateTouchNode(node) && isCovered(node)) coveredPositions.push(position);
+    if (isCandidateTouchNode(node) && isCovered(node)) coveredPositions.push({ position });
   }
   return annotateCoveredPositions(nodes, coveredPositions);
 }
 
 function annotateCoveredPositions(
   nodes: RawSnapshotNode[],
-  coveredPositions: readonly number[],
+  coveredPositions: ReadonlyArray<{ position: number; coveredBy?: SnapshotCoveringNode }>,
 ): RawSnapshotNode[] {
   if (coveredPositions.length === 0) return nodes;
   const annotated = [...nodes];
-  for (const position of coveredPositions) {
+  for (const { position, coveredBy } of coveredPositions) {
     const node = nodes[position]!;
     annotated[position] = {
       ...node,
       hittable: false,
       interactionBlocked: 'covered' as const,
+      ...(coveredBy ? { coveredBy } : {}),
       presentationHints: mergeCoveredHint(node.presentationHints),
     };
   }

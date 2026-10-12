@@ -246,6 +246,50 @@ export type SnapshotPresentationFlagInput = SnapshotOptionFlagFields<
   (typeof SNAPSHOT_PRESENTATION_OPTION_KEYS)[number]
 >;
 
+/**
+ * The bounded, non-actionable description of the element that occludes a covered node. It carries
+ * only what the occlusion scan observed — presented role, an optional clipped accessible name, and
+ * the cover's rect — and deliberately no ref: the cover may be a container the snapshot never
+ * issues refs for, and naming it is diagnosis, not an invitation to target it.
+ */
+export type SnapshotCoveringNode = {
+  /** The cover's presented role, from the same table the text presenter reads (`formatRole`). */
+  kind: string;
+  /** The cover's accessible name, trimmed and clipped to {@link SNAPSHOT_COVERING_LABEL_MAX_LENGTH}. */
+  label?: string;
+  /** The cover's positive rect as the scan measured it. */
+  rect?: Rect;
+};
+
+/** Upper bound for a covering-node label carried in diagnostics; longer names are clipped. */
+export const SNAPSHOT_COVERING_LABEL_MAX_LENGTH = 80;
+
+/**
+ * One-line human rendering of a {@link SnapshotCoveringNode} for refusal hints, e.g.
+ * `the dialog "Cookie banner" at (16, 420 358x180)`. Coordinates are rounded; the detail payload
+ * carries the unrounded rect.
+ */
+function formatSnapshotCoveringNode(cover: SnapshotCoveringNode): string {
+  const named = cover.label ? `${cover.kind} "${cover.label}"` : cover.kind;
+  const rect = cover.rect;
+  if (!rect) return `the ${named}`;
+  return (
+    `the ${named} at (${Math.round(rect.x)}, ${Math.round(rect.y)} ` +
+    `${Math.round(rect.width)}x${Math.round(rect.height)})`
+  );
+}
+
+/**
+ * The recovery hint every covered-interaction refusal publishes. When the scan named the cover it
+ * says what to dismiss; a cover-less refusal (a backend-policy annotation that reports only the
+ * boolean) keeps the generic recovery rather than guessing a culprit.
+ */
+export function coveredInteractionHint(coveredBy: SnapshotCoveringNode | undefined): string {
+  return coveredBy
+    ? `Covered by ${formatSnapshotCoveringNode(coveredBy)}. Dismiss or close that element, scroll the target clear of it, or inspect with snapshot/screenshot before retrying.`
+    : 'Use a different visible target, scroll it clear of the overlay, or inspect with snapshot/screenshot before retrying.';
+}
+
 export type RawSnapshotNode = {
   index: number;
   type?: string;
@@ -297,6 +341,14 @@ export type RawSnapshotNode = {
   hiddenContentAbove?: boolean;
   hiddenContentBelow?: boolean;
   interactionBlocked?: 'covered';
+  /**
+   * Bounded description of the element the geometric occlusion scan found drawing on top of this
+   * node, published together with `interactionBlocked: 'covered'` so a refusal can name the culprit
+   * instead of only the fact of coverage. Absent when the covered decision came from a
+   * backend-policy annotation that reports a boolean and names no cover. This is a description, not
+   * an authorization: it carries no ref and is never an actionable target.
+   */
+  coveredBy?: SnapshotCoveringNode;
   presentationHints?: string[];
   /**
    * Backend-minted ref for this node, when the capture backend already assigns a

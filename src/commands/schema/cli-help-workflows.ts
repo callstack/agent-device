@@ -53,6 +53,7 @@ Recovery:
   Network/typeahead result missing: wait text "Expected result" or wait <selector>.
   A target that should be gone/disappear: use wait absent <selector>; wait exists ... is rejected in favor of the plain selector wait.
   Keyboard visible over the next target: an element whose center sits behind the keyboard is refused with tap_keyboard_occludes_target, because the touch would activate a key instead of the target. End editing first -- the app's own Done/Cancel control, or keyboard enter when submission is wanted -- then retry. A target whose center stays above the keys still presses; a raw coordinate behind the keyboard taps anyway and reports the reason in warning.
+  Target covered by other visible UI: refused with target_covered. When the occlusion scan identified the covering element, error.details.coveredBy and the hint name it (role, label, rect) so you know what to dismiss; the cover is diagnosis only -- never target its ref. Dismiss/close it or scroll the target clear, then retry.
   Sparse or recovered accessibility snapshot: use screenshot as visual truth, leave the bad screen if needed, then retry snapshot -i.
   Non-hittable success hint: verify with the settled diff or snapshot; retarget by a better ref/selector if the UI did not change.
 

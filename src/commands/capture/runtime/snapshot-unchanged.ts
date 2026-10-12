@@ -95,7 +95,7 @@ type ComparableSnapshotNode = Omit<
 
 type ScalarPresentationField = Exclude<
   keyof ComparableSnapshotNode,
-  'rect' | 'presentationHints' | 'actions'
+  'rect' | 'coveredBy' | 'presentationHints' | 'actions'
 >;
 
 const PRESENTATION_SCALAR_FIELDS = {
@@ -137,8 +137,22 @@ function areSnapshotNodesEquivalent(previous: SnapshotNode, current: SnapshotNod
   return (
     PRESENTATION_SCALAR_KEYS.every((field) => previous[field] === current[field]) &&
     areRectsEquivalent(previous.rect, current.rect) &&
+    areCoveringNodesEquivalent(previous.coveredBy, current.coveredBy) &&
     areStringArraysEquivalent(previous.presentationHints, current.presentationHints) &&
     areStringArraysEquivalent(previous.actions, current.actions)
+  );
+}
+
+/** The occlusion scan's cover description is presentation evidence: two captures agree when every carried component does. */
+function areCoveringNodesEquivalent(
+  previous: SnapshotNode['coveredBy'],
+  current: SnapshotNode['coveredBy'],
+): boolean {
+  if (!previous || !current) return previous === current;
+  return (
+    previous.kind === current.kind &&
+    previous.label === current.label &&
+    areRectsEquivalent(previous.rect, current.rect)
   );
 }
 

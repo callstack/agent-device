@@ -5,7 +5,7 @@ import type {
   SnapshotNode,
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { normalizeRef } from '@agent-device/kernel/snapshot';
+import { coveredInteractionHint, normalizeRef } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import {
   runNodePipelineStages,
@@ -27,6 +27,12 @@ import type { InteractionAction } from './interaction-resolution-request.ts';
  * The one construction site for "covered by another visible element" refusals, shared by the
  * node-stage runner below (ref, selector, native-ref preflight) and `selector-readiness.ts`'s
  * covered-target diagnosis probe.
+ *
+ * When the occlusion scan could name the cover (`node.coveredBy`), the refusal says so in a typed
+ * `coveredBy` detail and in the hint — Playwright's "intercepts pointer events" shape: the agent
+ * learns what to dismiss without re-guessing from a screenshot. Covers from backend-policy
+ * annotations carry no identity, and those refusals keep the generic hint rather than guessing.
+ * The cover is diagnosis only: no ref is ever surfaced as actionable for it.
  */
 export function buildCoveredInteractionError(params: {
   label: string;
@@ -34,16 +40,18 @@ export function buildCoveredInteractionError(params: {
   action: InteractionAction;
   selector?: string;
 }): AppError {
+  const coveredBy = params.node.coveredBy;
   return discloseDispatch(
     new AppError(
       'COMMAND_FAILED',
       `${params.label} is covered by another visible element and cannot ${interactionVerb(params.action)} safely`,
       {
         reason: INTERACTION_ERROR_REASONS.targetCovered,
-        hint: 'Use a different visible target, scroll it clear of the overlay, or inspect with snapshot/screenshot before retrying.',
+        hint: coveredInteractionHint(coveredBy),
         ...(params.selector ? { selector: params.selector } : {}),
         ref: `@${params.node.ref}`,
         interactionBlocked: params.node.interactionBlocked,
+        ...(coveredBy ? { coveredBy } : {}),
       },
     ),
     'no',

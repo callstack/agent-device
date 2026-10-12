@@ -496,6 +496,11 @@ test('handleFindCommands focus rejects covered matches before dispatching coordi
         label: 'Save draft',
         hittable: false,
         interactionBlocked: 'covered',
+        coveredBy: {
+          kind: 'tab-bar',
+          label: 'Media',
+          rect: { x: 0, y: 760, width: 390, height: 84 },
+        },
         presentationHints: ['covered'],
         rect: { x: 16, y: 790, width: 140, height: 44 },
         parentIndex: 0,
@@ -504,6 +509,7 @@ test('handleFindCommands focus rejects covered matches before dispatching coordi
         index: 2,
         ref: 'e3',
         type: 'TabBar',
+        label: 'Media',
         hittable: true,
         rect: { x: 0, y: 760, width: 390, height: 84 },
         parentIndex: 0,
@@ -515,6 +521,14 @@ test('handleFindCommands focus rejects covered matches before dispatching coordi
   if (!response.ok) {
     expect(response.error.message).toContain('is covered by another visible element');
     expect(response.error.details?.interactionBlocked).toBe('covered');
+    // The refusal names the cover the scan found and never advertises its ref.
+    expect(response.error.details?.coveredBy).toEqual({
+      kind: 'tab-bar',
+      label: 'Media',
+      rect: { x: 0, y: 760, width: 390, height: 84 },
+    });
+    expect(response.error.details?.hint).toContain('Covered by the tab-bar "Media"');
+    expect(response.error.details?.hint).not.toMatch(/@e\d/);
   }
   expect(mockDispatch.mock.calls.filter((call) => call[1] === 'focus')).toEqual([]);
 });

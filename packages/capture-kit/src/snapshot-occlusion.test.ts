@@ -1,7 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { annotateCoveredSnapshotNodes } from './snapshot-occlusion.ts';
+import { SNAPSHOT_COVERING_LABEL_MAX_LENGTH } from '@agent-device/kernel/snapshot';
+import {
+  annotateCoveredSnapshotNodes,
+  annotateSnapshotNodesCoveredByPolicy,
+} from './snapshot-occlusion.ts';
 
 // #1478 P5 codec-extraction regression: `annotateCoveredSnapshotNodes` marks
 // a touch candidate `interactionBlocked: 'covered'` when a later, floating
@@ -91,6 +95,72 @@ test('annotateCoveredSnapshotNodes still marks a touch target covered by a later
   const result = annotateCoveredSnapshotNodes([target, overlay]);
   assert.equal(result[0]?.interactionBlocked, 'covered');
   assert.equal(result[0]?.hittable, false);
+});
+
+test('annotateCoveredSnapshotNodes carries a bounded description of the covering node', () => {
+  const target: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Save',
+    rect: { x: 10, y: 10, width: 100, height: 40 },
+  };
+  const overlay: RawSnapshotNode = {
+    index: 1,
+    type: 'XCUIElementTypeDialog',
+    label: '  Cookie banner  ',
+    rect: { x: 0, y: 0, width: 200, height: 200 },
+  };
+
+  const result = annotateCoveredSnapshotNodes([target, overlay]);
+
+  // The description is the presented role + a trimmed label + the cover's rect, and it carries no
+  // ref: naming the culprit is diagnosis, never an actionable re-target.
+  assert.deepEqual(result[0]?.coveredBy, {
+    kind: 'dialog',
+    label: 'Cookie banner',
+    rect: { x: 0, y: 0, width: 200, height: 200 },
+  });
+});
+
+test('annotateCoveredSnapshotNodes clips a covering label to the bounded length', () => {
+  const target: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Save',
+    rect: { x: 10, y: 10, width: 100, height: 40 },
+  };
+  const overlay: RawSnapshotNode = {
+    index: 1,
+    type: 'dialog',
+    label: 'x'.repeat(SNAPSHOT_COVERING_LABEL_MAX_LENGTH + 40),
+    rect: { x: 0, y: 0, width: 200, height: 200 },
+  };
+
+  const result = annotateCoveredSnapshotNodes([target, overlay]);
+
+  assert.equal(result[0]?.coveredBy?.label?.length, SNAPSHOT_COVERING_LABEL_MAX_LENGTH);
+});
+
+test('annotateSnapshotNodesCoveredByPolicy refuses without guessing a cover', () => {
+  // The Android replacement-surface lane reports only the covered boolean; the refusal must not
+  // invent a culprit it never observed.
+  const target: RawSnapshotNode = {
+    index: 0,
+    type: 'button',
+    role: 'button',
+    hittable: true,
+    label: 'Save',
+    rect: { x: 10, y: 10, width: 100, height: 40 },
+  };
+
+  const result = annotateSnapshotNodesCoveredByPolicy([target], (node) => node.index === 0);
+
+  assert.equal(result[0]?.interactionBlocked, 'covered');
+  assert.equal(result[0]?.coveredBy, undefined);
 });
 
 test('annotateCoveredSnapshotNodes leaves an uncovered touch target unchanged', () => {

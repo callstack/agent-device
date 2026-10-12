@@ -203,6 +203,38 @@ test('unchanged metadata compares action and presentation hint arrays by value',
   expect(buildUnchangedSnapshotMetadata({ previous, current, options: {} })).toBeUndefined();
 });
 
+test('unchanged metadata compares covering-node descriptions by value', () => {
+  const cover = { kind: 'tab-bar', label: 'Media', rect: { x: 0, y: 760, width: 390, height: 84 } };
+  const previous = snapshot('Create');
+  previous.nodes[0]!.interactionBlocked = 'covered';
+  previous.nodes[0]!.coveredBy = { ...cover, rect: { ...cover.rect } };
+  const current = snapshot('Create', {
+    nodes: [
+      {
+        ...previous.nodes[0]!,
+        coveredBy: { ...cover, rect: { ...cover.rect } },
+      },
+    ],
+  });
+
+  // A fresh object identity per capture is the norm; equivalence must read components.
+  expect(buildUnchangedSnapshotMetadata({ previous, current, options: {} })).toMatchObject({
+    nodeCount: 1,
+  });
+
+  current.nodes[0]!.coveredBy = { ...cover, kind: 'toolbar' };
+  expect(buildUnchangedSnapshotMetadata({ previous, current, options: {} })).toBeUndefined();
+
+  current.nodes[0]!.coveredBy = { ...cover, label: undefined };
+  expect(buildUnchangedSnapshotMetadata({ previous, current, options: {} })).toBeUndefined();
+
+  current.nodes[0]!.coveredBy = { ...cover, rect: { ...cover.rect, y: 700 } };
+  expect(buildUnchangedSnapshotMetadata({ previous, current, options: {} })).toBeUndefined();
+
+  current.nodes[0]!.coveredBy = undefined;
+  expect(buildUnchangedSnapshotMetadata({ previous, current, options: {} })).toBeUndefined();
+});
+
 test('unchanged metadata requires comparison-safe snapshots', () => {
   expect(
     buildUnchangedSnapshotMetadata({
