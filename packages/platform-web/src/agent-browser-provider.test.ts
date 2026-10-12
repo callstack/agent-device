@@ -162,7 +162,6 @@ test('agent-browser provider normalizes snapshot refs, labels, values, and paren
     assert.deepEqual(calls[0]?.args, [
       'snapshot',
       '--interactive',
-      '--compact',
       '--depth',
       '4',
       '--selector',
@@ -208,7 +207,7 @@ test('agent-browser provider fetches snapshot rects only when requested', async 
     assert.deepEqual(
       calls.map((call) => call.args.slice(0, 3)),
       [
-        ['snapshot', '--compact', '--json'],
+        ['snapshot', '--json', '--session'],
         ['get', 'box', '@e1'],
         ['get', 'box', '@e2'],
         ['get', 'box', '@e3'],
