@@ -3,18 +3,22 @@ import { normalizeRect } from '@agent-device/kernel/rect-center';
 import type { SurfaceScopedNodes } from './interaction.ts';
 
 /**
- * The moving-target gate (#3471): a press must not dispatch at a point an in-flight transition has
- * already vacated. A capture is one instant's photograph of a surface that may still be rearranging
- * itself, and the ADB-backed Android helper is measured reporting frames in flight — so a press
- * issued right after an action that moved the UI can resolve a point the target has already left and
- * report success on the vacancy. The exposure is the runtime path's own capture-to-dispatch
- * distance, so the gate is backend-neutral.
+ * The pure half of the moving-target gate (#3471): a press must not dispatch at a point an
+ * in-flight transition has already vacated. A capture is one instant's photograph of a surface that
+ * may still be rearranging itself, and the ADB-backed Android helper is measured reporting frames in
+ * flight — so a press issued right after an action that moved the UI can resolve a point the target
+ * has already left and report success on the vacancy. The exposure is the runtime path's own
+ * capture-to-dispatch distance, so the gate is backend-neutral.
  *
  * Two judgements decide when it is real, both pure over values the caller already holds so neither
  * is re-derived per platform: {@link movingTargetGateDecision} asks whether this position is still
  * owed a second observation, {@link movingTargetRectsStable} asks whether the target has stopped.
  * The window is anchored on the mutation's END, so the gate waits out only what is LEFT of it —
  * which is also why the refusal's hint names `--settle` as the caller-opted superset.
+ *
+ * What cannot be decided over values — spending the window, taking the re-observations, and the
+ * refusal with its reason (`INTERACTION_ERROR_REASONS.targetStillMoving`) and hint — lives in
+ * `src/commands/interaction/runtime/moving-target-gate.ts`, which produces all three together.
  */
 
 /** How long after a mutation its target positions stay owed a second observation. */
@@ -109,28 +113,5 @@ export function movingTargetRectsStable(
     Math.abs(a.y - b.y) <= MOVING_TARGET_GATE_RECT_TOLERANCE_PX &&
     Math.abs(a.width - b.width) <= MOVING_TARGET_GATE_RECT_TOLERANCE_PX &&
     Math.abs(a.height - b.height) <= MOVING_TARGET_GATE_RECT_TOLERANCE_PX
-  );
-}
-
-/**
- * The hint published beside a `target_still_moving` refusal — the recovery that works, with its
- * wording owned here so every producer publishes one text. Pairing the two is a convention rather
- * than something this module enforces: the reason is a literal in the vocabulary every interaction
- * adapter reads (`INTERACTION_ERROR_REASONS.targetStillMoving` in
- * `packages/selectors/src/interaction-error.ts`), so a producer could raise it without this hint.
- * The runtime moving-target gate is the only producer today and publishes both together.
- *
- * A selector re-resolves against a fresh capture and can be retried as-is. An `@ref` cannot survive
- * the wait: the capture a `wait` takes retires the ref frame (ADR 0014), which is the same reason
- * the off-screen guard sends its `@ref` refusals to a selector.
- */
-export function targetStillMovingHint(params: { selector: string | undefined }): string {
-  const reobserve = params.selector
-    ? `Run wait '${params.selector}' and retry with the same selector`
-    : 'Run snapshot -i and retry with a selector (text=/id=) rather than this @ref — re-observing retires the ref frame';
-  return (
-    'The target was still moving when the transition window after the previous action ran out, so no resting ' +
-    `position could be confirmed and nothing was tapped. ${reobserve}; or pass --settle to have the action itself ` +
-    'wait for the UI to go quiet.'
   );
 }

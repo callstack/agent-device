@@ -6,7 +6,6 @@ import {
   MOVING_TARGET_GATE_WINDOW_MS,
   movingTargetGateDecision,
   movingTargetRectsStable,
-  targetStillMovingHint,
 } from './moving-target-gate.ts';
 
 // #3471: the two judgements the moving-target gate makes, isolated from both callers so the window
@@ -160,24 +159,5 @@ test('the stability comparison is symmetric', () => {
   );
 });
 
-// --- the refusal's published recovery ---
-
-test('a refused selector press names the wait that recovers it', () => {
-  const hint = targetStillMovingHint({ selector: 'label="Slide target"' });
-
-  assert.match(hint, /wait 'label="Slide target"'/);
-  assert.match(hint, /same selector/);
-  assert.match(hint, /--settle/);
-  assert.match(hint, /nothing was tapped/);
-});
-
-test('a refused @ref press is sent to a selector, because the wait would retire its frame', () => {
-  // ADR 0014: the capture a `wait` takes expires the ref frame, so telling the caller to retry the
-  // same ref would trade a motion refusal for a stale-ref refusal.
-  const hint = targetStillMovingHint({ selector: undefined });
-
-  assert.match(hint, /snapshot -i/);
-  assert.match(hint, /selector/);
-  assert.match(hint, /ref frame/);
-  assert.doesNotMatch(hint, /wait '/);
-});
+// The refusal's published recovery is asserted in the runtime gate's suite, where the hint lives
+// beside the refusal that publishes it (`movingTargetHint`); this module decides, it does not speak.

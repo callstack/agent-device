@@ -25,25 +25,28 @@ const RESTING_X = 10;
 const BUTTON_Y = 240;
 
 /** One button, reported at `x`: the same control at two positions is the whole fixture. */
-function slideTree(x: number): SnapshotState {
-  return makeSnapshotState([
-    {
-      index: 0,
-      depth: 0,
-      type: 'Application',
-      label: 'App',
-      rect: { x: 0, y: 0, width: 400, height: 800 },
-    },
-    {
-      index: 1,
-      depth: 1,
-      parentIndex: 0,
-      type: 'Button',
-      label: 'Slide target',
-      rect: { x, y: BUTTON_Y, width: 120, height: 50 },
-      hittable: true,
-    },
-  ]);
+function slideTree(x: number, over?: { label?: string; surfaceBundleId?: string }): SnapshotState {
+  return makeSnapshotState(
+    [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Application',
+        label: 'App',
+        rect: { x: 0, y: 0, width: 400, height: 800 },
+      },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'Button',
+        label: over?.label ?? 'Slide target',
+        rect: { x, y: BUTTON_Y, width: 120, height: 50 },
+        hittable: true,
+      },
+    ],
+    over?.surfaceBundleId ? { iosSystemSurfaceBundleId: over.surfaceBundleId } : undefined,
+  );
 }
 
 function centerOf(x: number): Point {
@@ -66,6 +69,7 @@ function createGuardedDevice(params: {
   refFrame?: SnapshotState;
 }): {
   press: (target: 'selector' | 'ref') => Promise<Point[]>;
+  pressSelector: (expression: string) => Promise<Point[]>;
   pressPoint: () => Promise<Point[]>;
   captures: () => number;
   taps: () => Point[];
@@ -79,7 +83,14 @@ function createGuardedDevice(params: {
       ? undefined
       : {
           finishedAt: clock.now() - params.baselineAgeMs,
-          tree: { nodes: baselineTree.nodes },
+          // The baseline carries its surface the way a real one does: `surfaceScopedNodes` reads it
+          // off the capture, so a fixture that wants a system-surface baseline asks for one.
+          tree: {
+            nodes: baselineTree.nodes,
+            ...(baselineTree.iosSystemSurfaceBundleId
+              ? { surfaceBundleId: baselineTree.iosSystemSurfaceBundleId }
+              : {}),
+          },
         };
   const device = createAgentDevice({
     backend: {
@@ -131,6 +142,10 @@ function createGuardedDevice(params: {
 
   return {
     press,
+    pressSelector: async (expression: string) => {
+      await device.interactions.press(selector(expression), { session: 'default' });
+      return taps;
+    },
     pressPoint: async () => {
       await device.interactions.press(
         { kind: 'point', x: centerOf(RESTING_X).x, y: centerOf(RESTING_X).y },
@@ -277,9 +292,112 @@ test('a target the wait loses is refused by resolution, not by a motion refusal'
     () => device.press('ref'),
     (error: unknown) => {
       const details = (error as { details?: Record<string, unknown> }).details;
-      assert.notEqual(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+      // Named, not merely "not the motion refusal": any unrelated rejection would pass otherwise.
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.refNotFound);
+      assert.equal(details?.dispatched, 'no');
       return true;
     },
   );
   assert.deepEqual(device.taps(), []);
+});
+
+test('a target newly arrived on a different surface is re-observed, not certified stationary', async () => {
+  // The screening compares positions, so it is only meaningful inside one surface: an iOS system
+  // sheet arriving over the app can carry the same-identity node at the same rect, and that is the
+  // positional coincidence ADR 0014 refuses rather than evidence of rest. The press pays the
+  // re-observations instead of tapping on the strength of the other surface's tree.
+  const sheet = 'com.apple.springboard';
+  const device = createGuardedDevice({
+    stored: slideTree(MID_FLIGHT_X, { surfaceBundleId: sheet }),
+    trees: [
+      slideTree(MID_FLIGHT_X, { surfaceBundleId: sheet }),
+      slideTree(RESTING_X, { surfaceBundleId: sheet }),
+      slideTree(RESTING_X, { surfaceBundleId: sheet }),
+    ],
+    baselineAgeMs: 100,
+    // The baseline shows the target exactly where the press resolved it — the `stationary` shape —
+    // but it is the app's tree, not the sheet's.
+    baselineTree: slideTree(MID_FLIGHT_X),
+  });
+
+  assert.deepEqual(await device.press('selector'), [centerOf(RESTING_X)]);
+  assert.equal(
+    device.captures(),
+    3,
+    'resolution plus both re-observations, not the screening alone',
+  );
+});
+
+test('a replacement that took the ref at the frame coordinates is refused, not agreed', async () => {
+  // ADR 0014 keeps the authorized frame node when the captured node's identity differs, so both
+  // looks land on the frame rect — and a gate that read rect agreement alone would certify rest and
+  // dispatch onto a control it never measured. Same ref, same position, different element: the
+  // look measured something, but not the target.
+  const frame = slideTree(RESTING_X);
+  const device = createGuardedDevice({
+    stored: frame,
+    refFrame: frame,
+    trees: [replacementAtRestingRect(), replacementAtRestingRect()],
+    ...DISTURBING_HISTORY,
+  });
+
+  await assert.rejects(
+    () => device.press('ref'),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+      return true;
+    },
+  );
+  assert.deepEqual(device.taps(), [], 'one look that measured no target ends the recheck');
+});
+
+/** The `@e2` position, held by a control with a different local identity. */
+function replacementAtRestingRect(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      label: 'App',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      ref: 'e2',
+      type: 'Button',
+      label: 'Something else',
+      rect: { x: RESTING_X, y: BUTTON_Y, width: 120, height: 50 },
+      hittable: true,
+    },
+  ]);
+}
+
+test('the refused selector press publishes a wait that survives the shell', async () => {
+  // The hint is copied into a shell, and a naive single-quote wrap over a selector carrying an
+  // apostrophe would end the word early — teaching a recovery that cannot run.
+  const label = "It's moving";
+  const device = createGuardedDevice({
+    stored: slideTree(MID_FLIGHT_X, { label }),
+    // Still moving at the end of the window: the two re-observations disagree.
+    trees: [
+      slideTree(MID_FLIGHT_X, { label }),
+      slideTree(MID_FLIGHT_X + 40, { label }),
+      slideTree(MID_FLIGHT_X + 80, { label }),
+    ],
+    baselineAgeMs: 100,
+    baselineTree: slideTree(-400, { label }),
+  });
+
+  await assert.rejects(
+    () => device.pressSelector('label="It\'s moving"'),
+    (error: unknown) => {
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+      assert.match(String(details?.hint), /wait 'label="It'\\''s moving"'/);
+      return true;
+    },
+  );
 });

@@ -30,11 +30,13 @@ export const INTERACTION_ERROR_REASONS = {
   /** The target resolved, but another visible element covers it. */
   targetCovered: 'target_covered',
   /**
-   * A press or click refused because its target's rect was still changing when the transition window
-   * after the session's last mutating action ran out. `details.selector` or `details.ref` names the
-   * target, `details.rect` where the command resolved it and `details.movedToRect` where the last
-   * re-observation found it. Branch on this reason, not the message: the recovery is to wait for the
-   * surface and retry, never to retry the same point immediately. The owner is
+   * A press or click refused because it could not confirm a resting position for its target: the
+   * target's rect was still changing when the transition window after the session's last mutating
+   * action ran out, or a re-observation could not measure the position at all. `details.selector` or
+   * `details.ref` names the target, `details.rect` is where the command resolved it, and
+   * `details.movedToRect` where the last re-observation found it — present only when that look
+   * measured one. Branch on this reason, not the message: the recovery is to wait for the surface
+   * and retry, never to retry the same point immediately. The owner is
    * `src/commands/interaction/runtime/moving-target-gate.ts`, which raises the reason beside the
    * hint that names that recovery.
    */
