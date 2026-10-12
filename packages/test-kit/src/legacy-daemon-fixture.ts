@@ -73,7 +73,14 @@ const acquired = acquireDaemonLock(paths.baseDir, paths.lockPath, {
 });
 fs.writeFileSync(paths.baseDir + '/legacy-disposition.json', JSON.stringify({ acquired }));
 if (!acquired) process.exit(0);
-fs.writeFileSync(paths.infoPath, JSON.stringify({ ...identity, port: 4210, token: 'legacy-token', version: '0.21.20' }));
+const registration = JSON.stringify({ ...identity, port: 4210, token: 'legacy-token', version: '0.21.20' });
+// Published through a temp file like the real owner does: callers wait on
+// fs.existsSync(paths.infoPath) as the signal that registration completed, and a direct
+// writeFileSync creates the file before its bytes exist, so that wait can return an
+// empty registration. Renaming last also means the lock file is fully written by then.
+const registrationTemp = paths.infoPath + '.' + process.pid + '.tmp';
+fs.writeFileSync(registrationTemp, registration);
+fs.renameSync(registrationTemp, paths.infoPath);
 process.on('SIGTERM', () => { releaseDaemonLock(paths.lockPath); process.exit(0); });
 setInterval(() => {}, 1000);
 `,
