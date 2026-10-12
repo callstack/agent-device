@@ -1,8 +1,8 @@
 // Real archived device trees, regenerated from a device and never hand-edited (a
 // hand-written id is how a fixture stops proving anything). Static import, not an
 // `fs` read: it typechecks each tree against `RawSnapshotNode[]`.
-import imeCapture from './android-ime-capture.raw.json' with { type: 'json' };
-import qsShadeCapture from './android-qs-shade-capture.raw.json' with { type: 'json' };
+import imeCapture from './fixtures/android-ime-capture.raw.json' with { type: 'json' };
+import qsShadeCapture from './fixtures/android-qs-shade-capture.raw.json' with { type: 'json' };
 import {
   buildUiHierarchySnapshot,
   parseUiHierarchyTree,
@@ -10,7 +10,7 @@ import {
   buildAndroidSnapshotClickabilityEvidence,
   type AndroidUiHierarchy,
   type AndroidUiHierarchySnapshotOptions,
-} from '@agent-device/platform-android/mechanics';
+} from './mechanics.ts';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
 /**

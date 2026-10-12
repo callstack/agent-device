@@ -137,7 +137,7 @@ test('unit tests under src/ and packages/*/src own no lane', () => {
     assert.deepEqual(lanes(file), [], file);
   }
   // Non-TypeScript under __tests__ is a fixture the selector cannot place, not a unit test.
-  assert.ok(!isUnitTest('src/daemon/__tests__/support/android-ime-capture.raw.json'));
+  assert.ok(!isUnitTest('packages/platform-android/src/android-ime-capture.raw.json'));
   // Package tests outside src/ have no owner and keep failing open.
   assert.ok(!isUnitTest('packages/maestro/test/conformance/verify.test.ts'));
   assert.equal(

@@ -95,7 +95,15 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/simulator-boot',
     '@agent-device/platform-apple/tool-provider',
   ],
-  android: [ANDROID_HOST_FACET, ANDROID_MECHANICS_FACADE, ANDROID_DEVICE_BOOT_FACADE],
+  android: [
+    ANDROID_HOST_FACET,
+    ANDROID_MECHANICS_FACADE,
+    ANDROID_DEVICE_BOOT_FACADE,
+    // Test-only entries: the shared Android capture/walk fixtures (#3517), the same
+    // shape as the Apple runner's requests-fixtures seam above.
+    '@agent-device/platform-android/snapshot-capture-fixtures',
+    '@agent-device/platform-android/ui-hierarchy-fixtures',
+  ],
 };
 
 function isAndroidFacetSubpathImport(file: string, specifier: string): boolean {

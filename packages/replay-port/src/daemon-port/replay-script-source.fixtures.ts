@@ -1,5 +1,4 @@
-// The single owner of the client-collected replay source bundles test requests carry (#1802):
-// the same collector the real client runs, imported through this package's own subpaths.
+// The single owner of the client-collected replay source bundles test requests carry (#1802).
 import fs from 'node:fs';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';

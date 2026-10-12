@@ -3,10 +3,7 @@ import type {
   SnapshotOcclusionContextEvidence,
 } from '@agent-device/contracts/capture';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import {
-  createAndroidSnapshotCapture,
-  type AndroidSnapshotCapture,
-} from '@agent-device/platform-android/mechanics';
+import { createAndroidSnapshotCapture, type AndroidSnapshotCapture } from './mechanics.ts';
 
 export function makeAndroidSnapshotCapture(
   nodes: RawSnapshotNode[],

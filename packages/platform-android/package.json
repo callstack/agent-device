@@ -38,7 +38,7 @@
     },
     "./ui-hierarchy-fixtures": {
       "types": "./src/ui-hierarchy.fixtures.ts",
-      "default": "./src/ui-hierarchy-fixtures.ts"
+      "default": "./src/ui-hierarchy.fixtures.ts"
     }
   }
 }
