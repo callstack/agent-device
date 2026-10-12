@@ -34,9 +34,6 @@
     // subprocess (test/integration/daemon-replace-exit-flush.test.ts), so
     // dependency analysis cannot follow the runCmdSync string path to it.
     "test/integration/support/exit-after-flush.ts",
-    // Same reason: scripts/coverage-crap/run.test.ts passes this to run() as the fallow binary,
-    // and it is invoked as a `node <path>` subprocess rather than imported.
-    "scripts/coverage-crap/fallow-stand-in.fixture.mjs",
     "src/cli/update-check-entry.ts",
     "examples/sdk/client-session.ts",
     "examples/sdk/metro-runtime.ts",

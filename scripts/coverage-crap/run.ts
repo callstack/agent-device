@@ -49,7 +49,7 @@ const FALLOW_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
 
 // This repository's own pinned fallow, beside the checkout this script was loaded from. Resolving
 // it from the analyzed root instead would let a second checkout supply a different version.
-const PINNED_FALLOW_BIN = path.resolve(
+const FALLOW_BIN = path.resolve(
   import.meta.dirname,
   '..',
   '..',
@@ -147,9 +147,6 @@ function gatherCrapInputs(
   fs.writeFileSync(path.resolve(root, SANITIZED_PATH), JSON.stringify(sanitized));
 
   // lcov is the same coverage run's own list of the files it enumerated, which is what makes a
-  // touched file absent from the map detectable. Only the per-file verdict needs it: the whole-repo
-  // backlog is scored from the map alone.
-  // lcov is the same coverage run's own list of the files it enumerated, which is what makes a
   // touched file absent from the map detectable. Whether a missing one is worth reporting is the
   // verdict's call, not this reader's.
   return {
@@ -160,19 +157,12 @@ function gatherCrapInputs(
   };
 }
 
-/**
- * Scores the sanitized map, scoped to this diff in `touched` scope. `fallowBin` is a parameter rather
- * than the constant so a test can assert these flags against a stand-in that reports a chosen finding.
- */
-function runFallowHealth(
-  root: string,
-  scope: CrapScope,
-  fallowBin: string,
-): { stdout: string } | { failure: string } {
+/** Scores the sanitized map, scoped to this diff in `touched` scope. */
+function runFallowHealth(root: string, scope: CrapScope): { stdout: string } | { failure: string } {
   const fallow = runCmdSync(
     process.execPath,
     [
-      fallowBin,
+      FALLOW_BIN,
       'health',
       '--config',
       FALLOW_CONFIG,
@@ -198,10 +188,10 @@ function runFallowHealth(
  * The exemptions come from the resolved config, not from a copy in this diff: the report then states
  * the scope fallow actually applied. Reading them is reporting, not gating, so a failure says so.
  */
-function readExemptions(root: string, fallowBin: string): CrapExemptions {
+function readExemptions(root: string): CrapExemptions {
   const config = runCmdSync(
     process.execPath,
-    [fallowBin, 'config', '--config', FALLOW_CONFIG, '--format', 'json'],
+    [FALLOW_BIN, 'config', '--config', FALLOW_CONFIG, '--format', 'json'],
     { cwd: root, allowFailure: true, maxBuffer: FALLOW_MAX_BUFFER_BYTES },
   );
   return config.exitCode === 0
@@ -210,13 +200,8 @@ function readExemptions(root: string, fallowBin: string): CrapExemptions {
 }
 
 /** Scores what was gathered, prints the verdict, and returns the process exit code. */
-function reportCrapVerdict(
-  root: string,
-  scope: CrapScope,
-  inputs: CrapInputs,
-  fallowBin: string,
-): number {
-  const health = runFallowHealth(root, scope, fallowBin);
+function reportCrapVerdict(root: string, scope: CrapScope, inputs: CrapInputs): number {
+  const health = runFallowHealth(root, scope);
   if ('failure' in health) {
     process.stderr.write(`check:coverage-crap: ${health.failure}\n`);
     return 1;
@@ -240,7 +225,7 @@ function reportCrapVerdict(
     threshold: CRAP_THRESHOLD,
     scope,
     verdict,
-    exemptions: readExemptions(root, fallowBin),
+    exemptions: readExemptions(root),
   });
   publish(rendered, scope, verdict.offenders);
   return verdict.blocking ? 1 : 0;
@@ -256,7 +241,7 @@ function publish(rendered: string, scope: CrapScope, offenders: readonly CrapFin
   }
 }
 
-export function run(argv: readonly string[], cwd?: string, fallowBin = PINNED_FALLOW_BIN): number {
+export function run(argv: readonly string[], cwd?: string): number {
   const values = parseScriptArgs(argv, USAGE, {
     base: { type: 'string', default: 'origin/main' },
     all: { type: 'boolean', default: false },
@@ -267,7 +252,7 @@ export function run(argv: readonly string[], cwd?: string, fallowBin = PINNED_FA
 
   const inputs = gatherCrapInputs(root, base, scope);
   if ('refusal' in inputs) return refuse(inputs.refusal);
-  return reportCrapVerdict(root, scope, inputs, fallowBin);
+  return reportCrapVerdict(root, scope, inputs);
 }
 
 // exitCode, not exit(): a large report written to a pipe must drain before the process ends.

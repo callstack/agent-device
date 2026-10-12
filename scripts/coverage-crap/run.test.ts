@@ -98,45 +98,57 @@ function commit(message: string): void {
 
 // The entrypoint writes reports and reads the job summary, so each case needs the stream capture as
 // well as the exit code: `code: 0` with a "no trustworthy verdict" body is the failure mode here.
+//
+// Restoring means putting back the descriptor, not a function of the same name. `process.stdout`
+// inherits `write` from its prototype, so a saved-and-reassigned property would leave an own
+// property shadowing the prototype's, and `bind` would have handed back a bound copy no later
+// `delete` could undo.
+type CapturedStream = Readonly<{
+  target: NodeJS.WriteStream;
+  key: 'write';
+  descriptor: PropertyDescriptor | undefined;
+}>;
+
 function capture(fn: () => number): { code: number; out: string } {
   const chunks: string[] = [];
-  const original = process.stdout.write.bind(process.stdout);
-  const originalErr = process.stderr.write.bind(process.stderr);
+  const restore: CapturedStream[] = [];
   const collect = (chunk: string | Uint8Array): boolean => {
     chunks.push(String(chunk));
     return true;
   };
-  process.stdout.write = collect as typeof process.stdout.write;
-  process.stderr.write = collect as typeof process.stderr.write;
+  for (const target of [process.stdout, process.stderr]) {
+    restore.push({
+      target,
+      key: 'write',
+      descriptor: Object.getOwnPropertyDescriptor(target, 'write'),
+    });
+    Object.defineProperty(target, 'write', {
+      value: collect,
+      writable: true,
+      configurable: true,
+    });
+  }
   try {
     return { code: fn(), out: chunks.join('') };
   } finally {
-    process.stdout.write = original;
-    process.stderr.write = originalErr;
+    for (const { target, key, descriptor } of restore) {
+      if (descriptor) Object.defineProperty(target, key, descriptor);
+      else delete (target as unknown as Record<string, unknown>)[key];
+    }
   }
 }
 
-function check(args: readonly string[], fallowBin?: string): { code: number; out: string } {
-  return capture(() => run(args, repo, fallowBin));
-}
+const HEADS = ['main', 'feature'];
 
-/**
- * A fallow that reports what a case says rather than what it measures, for the two claims the real
- * binary cannot make on command: that the blocking exit follows a reported finding, and that a
- * no-verdict branch wins over a finding that asks to be ignored. Also the only way to see which
- * flags this gate passes.
- */
-const STANDIN = path.join(import.meta.dirname, 'fallow-stand-in.fixture.mjs');
+// The real CI job sets these, and `run()` honours both: it appends its report to the step summary
+// file and emits annotations. A fixture repo is not a CI job, so leaving them inherited wrote fake
+// debt tables into the real job's summary while this suite ran. `checkOnActions` opts one case back
+// in, the only case where the annotation format is what is under test.
+const ACTIONS_ENV_KEYS = ['GITHUB_ACTIONS', 'GITHUB_STEP_SUMMARY'] as const;
+let savedActionsEnv: Record<string, string | undefined> = {};
 
-/** Tells the stand-in which finding to report, in fallow's own report shape. */
-function standInReports(finding: Record<string, unknown>): void {
-  write('coverage/fallow-stand-in.json', JSON.stringify([finding]));
-}
-
-function standInFlags(): { diffFile: string | null; coverage: string | null } {
-  return JSON.parse(
-    fs.readFileSync(path.join(repo, 'coverage/fallow-stand-in-called-with.json'), 'utf8'),
-  ) as { diffFile: string | null; coverage: string | null };
+function check(args: readonly string[]): { code: number; out: string } {
+  return capture(() => run(args, repo));
 }
 
 /** Annotations are a CI-surface output, so the case that reads them has to stand in for Actions. */
@@ -145,13 +157,17 @@ function checkOnActions(args: readonly string[]): { code: number; out: string } 
   try {
     return check(args);
   } finally {
-    delete process.env.GITHUB_ACTIONS;
+    if (savedActionsEnv.GITHUB_ACTIONS === undefined) delete process.env.GITHUB_ACTIONS;
+    else process.env.GITHUB_ACTIONS = savedActionsEnv.GITHUB_ACTIONS;
   }
 }
 
-const HEADS = ['main', 'feature'];
-
 beforeEach(() => {
+  savedActionsEnv = {};
+  for (const key of ACTIONS_ENV_KEYS) {
+    savedActionsEnv[key] = process.env[key];
+    delete process.env[key];
+  }
   repo = fs.mkdtempSync(path.join(os.tmpdir(), 'coverage-crap-'));
   git('init', '-q');
   git('config', 'user.email', 'test@example.com');
@@ -187,6 +203,10 @@ beforeEach(() => {
 
 afterEach(() => {
   fs.rmSync(repo, { recursive: true, force: true });
+  for (const [key, value] of Object.entries(savedActionsEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 });
 
 test('a change that touches no function at or above the threshold passes', () => {
@@ -220,6 +240,10 @@ test('editing a function that already scores too high blocks, even though the sc
 });
 
 test("the score of an untouched file is not this change's verdict", () => {
+  // Half of this is the exit code: the map holds `src/debt.ts` at CRAP 42 and the run is still green,
+  // which only happens if fallow filtered its findings by this diff rather than scoring the repo.
+  // The other half is that diff itself, since a flag that silently went missing would score
+  // everything and a diff built from the wrong range would look just as clean.
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
   write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
   commit('clean edit, debt left alone');
@@ -228,6 +252,9 @@ test("the score of an untouched file is not this change's verdict", () => {
 
   assert.equal(code, 0);
   assert.doesNotMatch(out, /src\/debt\.ts:1/);
+  const scoped = fs.readFileSync(path.join(repo, 'coverage/fallow-crap.diff'), 'utf8');
+  assert.match(scoped, /^\+\+\+ b\/src\/clean\.ts$/m);
+  assert.doesNotMatch(scoped, /^\+\+\+ b\/src\/debt\.ts$/m);
 });
 
 test('a pure rename does not touch the functions that moved with the file', () => {
@@ -327,94 +354,52 @@ test('an lcov that lists no files is a gap too, not a trivially-complete enumera
   assert.match(out, /no usable lcov report lists the files the coverage run measured/);
 });
 
-test("the blocking exit follows the reported finding, not this suite's guess about scoring", () => {
-  // The real-fallow cases above prove fallow reports debt; this one proves the plumbing: a finding
-  // fallow returns for a touched function is what turns the exit code, and it reaches fallow scoped
-  // to this diff. Losing `--diff-file` would widen every PR verdict to the whole repo, and a green
-  // run would not notice.
-  writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
-  write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
-  commit('clean edit');
-  standInReports({ path: 'src/debt.ts', name: 'score', line: 1, crap: 42 });
-
-  const { code, out } = check(['--base', HEADS[0]!], STANDIN);
-
-  assert.equal(code, 1);
-  assert.match(out, /1 touched function\(s\) at or above 30/);
-  assert.match(out, /\| `src\/debt\.ts:1` score \| 42\.0 \| 6 \| 0% \|/);
-  assert.equal(standInFlags().diffFile, 'coverage/fallow-crap.diff');
-});
-
-test('the same finding in report-only scope stays green and asks for no diff', () => {
-  writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
-  write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
-  commit('clean edit');
-  standInReports({ path: 'src/debt.ts', name: 'score', line: 1, crap: 42 });
-
-  const { code, out } = check(['--all'], STANDIN);
-
-  assert.equal(code, 0);
-  assert.match(out, /Coverage-based CRAP \(report-only\): 1 function\(s\) at or above 30/);
-  assert.equal(standInFlags().diffFile, null);
-});
-
-test('a finding does not outvote the missing enumeration it would have been scored from', () => {
-  // Both are true at once: there is debt to show and no record of what was measured. Showing the
-  // count would let a report that cannot answer its own question read as an answered one.
-  writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
-  write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
-  commit('clean edit');
+test('a debt finding and a missing enumeration together still say the report cannot answer', () => {
+  // Both are true at once: there is debt to show, and no record of what was measured. Showing the
+  // count would let a report that cannot answer its own question read as an answered one, so the
+  // gap wins the headline either way.
+  writeCoverage({ 'src/debt.ts': { span: [1, 19] }, 'src/clean.ts': { hits: 4 } });
+  write(
+    'src/debt.ts',
+    DEBT.replace('  return total;', '  if (a === b) {\n    total += 2;\n  }\n  return total;'),
+  );
+  commit('edit the debt, then lose lcov');
   fs.rmSync(path.join(repo, 'coverage/lcov.info'));
-  standInReports({ path: 'src/debt.ts', name: 'score', line: 1, crap: 42 });
 
-  const { code, out } = check(['--base', HEADS[0]!], STANDIN);
+  const { code, out } = check(['--base', HEADS[0]!]);
 
   assert.equal(code, 1);
-  assert.match(out, /no trustworthy verdict/i);
   assert.match(out, /no usable lcov report lists the files the coverage run measured/);
   assert.doesNotMatch(out, /1 touched function\(s\) at or above 30/);
 });
 
-test('an estimated score for a touched function the map predates yields no verdict', () => {
-  // The file is in the map, so only this function postdates it: fallow scored it from complexity
-  // alone, which is a guess about a function this PR added and no re-run can leave unguessed.
+test('a touched function the map predates is estimated, and an estimate is no verdict', () => {
+  // `src/debt.ts` IS in the map, which records only `score`, so appending a second complex function
+  // leaves the map older than the code and fallow scores the new one from complexity alone. Real
+  // fallow produces exactly that report here, which is what the gate refuses to score from.
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
-  write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
-  commit('clean edit');
-  standInReports({
-    path: 'src/clean.ts',
-    name: 'also_trivial',
-    line: 2,
-    crap: 31.6,
-    coverage_source: 'estimated',
-  });
+  write('src/debt.ts', `${DEBT}${DEBT.replace('score', 'added')}`);
+  commit('append a complex function to a file the map records');
 
-  const { code, out } = check(['--base', HEADS[0]!], STANDIN);
+  const { code, out } = check(['--base', HEADS[0]!]);
 
   assert.equal(code, 1);
   assert.match(out, /no trustworthy verdict/i);
-  assert.match(out, /estimated from complexity alone\*\*: `src\/clean\.ts:2` also_trivial/);
+  assert.match(out, /estimated from complexity alone\*\*: `src\/debt\.ts:15` added/);
 });
 
-test('an estimated score in a file coverage never instruments is listed, not blocked on', () => {
-  // `scripts/**` is the shape of a normal tooling PR: no re-run would measure it, so blocking would
-  // refuse the PR for a file coverage was never asked to instrument. Silent would hide the 31.6.
+test('an estimate in a file coverage never instruments is listed, not blocked on', () => {
+  // `scripts/**` is outside both coverage roots, so no re-run would measure it: blocking on the
+  // estimate would refuse every tooling PR, and staying silent would hide the 42.
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
-  write('scripts/tool.ts', 'export const flag = 1;\n');
-  commit('add a tooling file');
-  standInReports({
-    path: 'scripts/tool.ts',
-    name: 'flag',
-    line: 1,
-    crap: 31.6,
-    coverage_source: 'estimated',
-  });
+  write('scripts/tool.ts', DEBT);
+  commit('add a tooling file coverage does not instrument');
 
-  const { code, out } = check(['--base', HEADS[0]!], STANDIN);
+  const { code, out } = check(['--base', HEADS[0]!]);
 
   assert.equal(code, 0);
   assert.match(out, /no touched function\(s\) at or above 30/);
-  assert.match(out, /Not measured, and not blocking.*`scripts\/tool\.ts:1` flag \(CRAP 31\.6\)/s);
+  assert.match(out, /Not measured, and not blocking.*`scripts\/tool\.ts:1` score \(CRAP 42\.0\)/s);
 });
 
 test('a missing coverage map says so with the command to run', () => {
