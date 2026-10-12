@@ -12,9 +12,11 @@ const shutdownResult: TargetShutdownResult = {
 
 describe('deviceStatusReportResponse', () => {
   test('emits the public identity fields with the boot status', () => {
-    expect(
-      deviceStatusReportResponse({ ...IOS_SIMULATOR, target: 'mobile' }, { booted: true }),
-    ).toEqual({
+    const response = deviceStatusReportResponse(
+      { ...IOS_SIMULATOR, target: 'mobile' },
+      { booted: true },
+    );
+    expect(response).toEqual({
       ok: true,
       data: {
         platform: 'ios',
@@ -26,6 +28,17 @@ describe('deviceStatusReportResponse', () => {
         appleOs: 'ios',
       },
     });
+    // The wire order the pre-refactor literals emitted: identity, status, appleOs.
+    if (!response.ok || !response.data) return;
+    expect(Object.keys(response.data)).toEqual([
+      'platform',
+      'target',
+      'device',
+      'id',
+      'kind',
+      'booted',
+      'appleOs',
+    ]);
   });
 
   test('emits the shutdown status and defaults the target to mobile', () => {
