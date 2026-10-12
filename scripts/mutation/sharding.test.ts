@@ -6,6 +6,34 @@ import { test } from 'node:test';
 import { parseSync } from 'oxc-parser';
 import { shardFiles } from './sharding.ts';
 
+test('compact decisions are spread across shards instead of outweighed by comments', () => {
+  const root = fs.realpathSync(mkdtempForTestSync('mutation-density-'));
+  try {
+    fs.writeFileSync(
+      path.join(root, 'verbose.ts'),
+      `${'// long explanation\n'.repeat(500)}export const fallback = false;\n`,
+    );
+    fs.writeFileSync(
+      path.join(root, 'dense.ts'),
+      Array.from(
+        { length: 8 },
+        (_, index) =>
+          `export function f${index}(x: number) { return x > 0 && x < 10 ? x + 1 : x - 1; }\n`,
+      ).join(''),
+    );
+    for (const index of [1, 2]) {
+      assert.ok(
+        shardFiles(['verbose.ts', 'dense.ts'], { index, count: 2 }, root).some((range) =>
+          range.startsWith('dense.ts:'),
+        ),
+        `shard ${index} has no compact decisions`,
+      );
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('a single-file kernel is split without losing or duplicating statement-spanning mutants', () => {
   const root = fs.realpathSync(mkdtempForTestSync('mutation-sharding-'));
   const source = `export const label = "🧪";\nexport function first() {\n${Array.from({ length: 15 }, (_, index) => `  const a${index} = 1;\n`).join('')}  return true;\n}\nexport const second = false;\nexport function third() {\n${Array.from({ length: 15 }, (_, index) => `  const b${index} = 2;\n`).join('')}  return false;\n}\n`;
