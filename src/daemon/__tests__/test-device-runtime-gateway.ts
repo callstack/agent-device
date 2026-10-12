@@ -21,7 +21,7 @@ import {
 import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../request-runtime-binding.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { applicationLifecycleRuntimeFixture } from './application-lifecycle-runtime-fixture.ts';
-import { createUnavailableRuntimeFactsForTest } from '../../__tests__/test-utils/runtime-operation-facts.ts';
+import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
 import { withClientReplayScriptSources } from '../../__tests__/test-utils/replay-script-source.ts';
 import type { DaemonInvokeFn } from '../daemon-request.ts';
 import { clearAndroidObservationFixture } from './android-observation-fixture.ts';

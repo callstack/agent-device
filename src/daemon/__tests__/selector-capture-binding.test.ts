@@ -1,6 +1,6 @@
 import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test } from 'vitest';
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   makeAndroidSession,
   makeIosSession,

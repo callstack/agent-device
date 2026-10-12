@@ -34,7 +34,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-import { ANDROID_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
+import { ANDROID_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { replayScriptSourceBundleFor } from '../../__tests__/test-utils/replay-script-source.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -42,7 +42,7 @@ import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
 } from './test-device-runtime-gateway.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockActivateAndroidTestIme = vi.mocked(activateAndroidTestIme);
 const mockRestoreAndroidTestIme = vi.mocked(restoreAndroidTestIme);

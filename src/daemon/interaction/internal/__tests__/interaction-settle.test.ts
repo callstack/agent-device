@@ -20,7 +20,7 @@ import {
   clearRequestAbortRegistration,
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
-import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   getRuntimeBindings,
   mockFillPoint,

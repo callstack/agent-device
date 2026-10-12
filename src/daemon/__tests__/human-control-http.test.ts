@@ -5,7 +5,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 import { HUMAN_CONTROL_HTTP_PREFIX } from '../human-control-contract.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import {

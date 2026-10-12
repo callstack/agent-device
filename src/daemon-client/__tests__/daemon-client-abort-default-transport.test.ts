@@ -33,8 +33,8 @@ import {
   skipWhenLoopbackUnavailable,
   trackLoopbackSockets,
   type SkippableTestContext,
-} from '../../__tests__/test-utils/loopback.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+} from '@agent-device/test-kit/loopback';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const TOKEN = 'default-transport-abort-token';
 

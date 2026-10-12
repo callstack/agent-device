@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { makeIosAppSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { ObservationClock } from '@agent-device/capture-kit/observe-until';

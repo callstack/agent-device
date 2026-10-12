@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { makeRecordRuntimeHarness } from './record-runtime.fixtures.ts';
 
 test('record start adopts the runtime pair and projects unchanged response metadata', async () => {

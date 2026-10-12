@@ -1,6 +1,6 @@
 import { daemonPlatformServicesFixture } from './__tests__/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { IOS_DEVICE, IOS_SIMULATOR } from '../__tests__/test-utils/device-fixtures.ts';
+import { IOS_DEVICE, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { buildIosOpenCommandHint } from './ios-app-session-hint.ts';
 
 // The foreground-app probe is stubbed through the port (ADR 0019 section 11), never by mocking

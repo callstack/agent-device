@@ -3,17 +3,14 @@ import { test, expect, vi } from 'vitest';
 import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import {
-  LINUX_DEVICE,
-  WEB_DESKTOP_DEVICE,
-} from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { LINUX_DEVICE, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import {
   makeAndroidSession,
   makeSession,
 } from '../../../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../../../../__tests__/test-utils/device-inventory-gateways.ts';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
@@ -32,7 +29,7 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../request-runtime-binding.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 /** The system leaves this owner refuses: the retired fallback listed them unconditionally. */

@@ -8,7 +8,7 @@ import { makeIosSession, makeMacOsSession } from '../../__tests__/test-utils/ses
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 import type { ScreenRecordingLiveSnapshot } from '@agent-device/contracts/screen-recording-runtime';
-import { TVOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { TVOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 
 function makeSession(recording: Partial<ScreenRecordingLiveSnapshot> = {}) {
   const session = makeIosSession('default', {

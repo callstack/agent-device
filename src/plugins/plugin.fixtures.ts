@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ProviderProfileField } from '@agent-device/contracts/provider-profile-fields';
-import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 export function pluginHome() {
   const home = mkdtempForTestSync('provider-plugins-');

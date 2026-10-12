@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildOpenResult } from '../session-open-surface.ts';
 import { resolveRequestedOpenSurface } from '../../../../platform-runtime-open-target.ts';
-import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 
 test('resolveRequestedOpenSurface rejects surface flag on iOS', () => {
   assert.throws(

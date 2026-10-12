@@ -29,7 +29,7 @@ import {
   type PlatformRuntimeOperations,
   snapshotRuntimePlanUses,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 function snapshotDeviceRuntimeGateway(): DeviceRuntimeGateway<PlatformRuntimeOperations> {
   const runtime = snapshotRuntimeFixture();

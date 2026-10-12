@@ -11,7 +11,7 @@ import type { SessionCommandParams } from '../session-command-input.ts';
 import { handleReplayTestCommand } from '../session-replay-command.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { makeSessionStore } from './session-test-harness.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 test('replay test handler threads the complete video owner into the application command', async () => {

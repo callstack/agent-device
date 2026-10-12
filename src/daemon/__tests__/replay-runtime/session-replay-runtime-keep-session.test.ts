@@ -1,5 +1,5 @@
 import { test, expect, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 /**
  * #1555 structural-quality review ("topology fix... its subject now lives

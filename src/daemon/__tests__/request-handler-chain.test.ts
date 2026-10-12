@@ -8,7 +8,7 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { runRequestHandlerChain } from '../request-handler-chain.ts';
 import { getDaemonRouteOwnerFiles } from '../route-owner-files.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
-import { LINUX_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
+import { LINUX_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { makeIosSession, makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';

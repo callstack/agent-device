@@ -8,7 +8,7 @@ import {
   registerRequestAbort,
   withRequestProgressSink,
 } from '@agent-device/host-kit/request';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { withClientReplayScriptSources } from '../../../__tests__/test-utils/replay-script-source.ts';
 import type { DaemonRequest, DaemonResponse } from '../../daemon-request.ts';

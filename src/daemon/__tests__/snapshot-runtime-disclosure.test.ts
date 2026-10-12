@@ -6,7 +6,7 @@ import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { markDeferredInteractionOutcome } from '../deferred-interaction-outcome.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { SessionStore } from '../session-store.ts';
 import { handleSnapshotCommands } from '../handlers/snapshot.ts';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';

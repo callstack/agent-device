@@ -19,7 +19,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { snapshotCliOutput } from '../../../commands/capture/output.ts';
 import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
-import { buildNodes } from '../../../__tests__/test-utils/snapshot-builders.ts';
+import { buildNodes } from '@agent-device/test-kit/snapshot-builders';
 import {
   fixtureScreenshotCaptures,
   resetSnapshotRuntimeFixture,

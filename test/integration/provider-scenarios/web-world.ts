@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { likelyPlayableWebmContainer } from '../../../src/__tests__/test-utils/video-fixtures.ts';
+import { likelyPlayableWebmContainer } from '@agent-device/test-kit/video-fixtures';
 import type { WebProvider } from '@agent-device/platform-web';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { validPng } from './assertions.ts';

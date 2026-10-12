@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { LINUX_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { LINUX_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type {
   BindDeviceRuntime,
@@ -13,7 +13,7 @@ import {
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { handleDoctorCommand } from '../session-doctor.ts';
 import { createHostDiagnostics } from '../../../platform-runtime-host-diagnostics.ts';
 

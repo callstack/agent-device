@@ -26,8 +26,8 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../../src/__tests__/test-utils/loopback.ts';
-import { mkdtempForTestSync } from '../../../src/__tests__/test-utils/tmp-dir.ts';
+} from '@agent-device/test-kit/loopback';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const UPSTREAM_TOKEN = 'upstream-token';
 const PROXY_TOKEN = 'proxy-token';

@@ -2,7 +2,7 @@ import { test, expect, vi, afterEach } from 'vitest';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
-import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import type { DaemonRequest } from '../daemon-request.ts';

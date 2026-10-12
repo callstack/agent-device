@@ -16,7 +16,7 @@ import { selectPlugin, pluginHome } from '../plugins/plugin.fixtures.ts';
 import { installedPlugins } from '../plugins/store.ts';
 import manifest from '@agent-device/testmu/package.json' with { type: 'json' };
 import type { PluginConnection } from '../plugins/connection.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
 vi.mock('@agent-device/testmu/connection-verification', () => ({

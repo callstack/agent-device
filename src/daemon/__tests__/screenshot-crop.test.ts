@@ -1,4 +1,4 @@
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { readPngSize } from '@agent-device/capture-kit/png-size';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
@@ -17,7 +17,7 @@ import { expect, test, vi } from 'vitest';
 import type { SessionState } from '../session-state.ts';
 import { buildScreenshotCropWarnings, cropScreenshotToSelector } from '../screenshot-crop.ts';
 import { writeSolidPng } from './screenshot-runtime-fixture.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 test('the warning composition is the single owner: partial intersection and only', () => {
   expect(buildScreenshotCropWarnings(undefined)).toEqual([]);

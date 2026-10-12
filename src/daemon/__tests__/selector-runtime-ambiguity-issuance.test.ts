@@ -6,7 +6,7 @@ import { selectorCaptureFixture } from './selector-capture-fixture.ts';
 import { refFrameScope, refFrameState } from '../ref-frame.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { dispatchIsViaRuntime } from '../selector-runtime.ts';
-import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   getRuntimeBindings,
   mockTapPoint,

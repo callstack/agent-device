@@ -1,7 +1,7 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
-import { WEB_DESKTOP_DEVICE } from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { handleInteractionCommands } from '../../index.ts';
 import {
   getRuntimeBindings,

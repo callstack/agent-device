@@ -1,6 +1,6 @@
 import path from 'node:path';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
-import { buildNodes } from '../../../__tests__/test-utils/snapshot-builders.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { buildNodes } from '@agent-device/test-kit/snapshot-builders';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { buildSnapshotSignatures } from '@agent-device/capture-kit/snapshot-freshness';

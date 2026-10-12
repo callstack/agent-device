@@ -11,7 +11,7 @@ import {
   type CapturedCliRun,
   type CapturedDaemonRequest,
 } from './cli-capture.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 type RunCliCaptureOptions = {
   preserveHome?: boolean;

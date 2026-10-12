@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
-import { MACOS_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
+import { MACOS_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeMacOsSession } from '../../__tests__/test-utils/session-factories.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from './test-device-runtime-gateway.ts';

@@ -8,7 +8,7 @@ import type {
 import { createSelectorRuntimeForDevice } from './selector-runtime-backend.ts';
 import { SessionStore } from './session-store.ts';
 import type { SessionState } from './session-state.ts';
-import { mkdtempForTestSync } from '../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { testCreateCommandSurface } from './__tests__/command-surface-fixture.ts';
 

@@ -19,7 +19,7 @@ import { test } from 'vitest';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import type { DaemonRequest } from '../../daemon-request.ts';
 import { attachRemoteReplayTestArtifacts } from '@agent-device/replay-port/test-command';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const SUITE_INVOCATION_ID = 'cd5f9c01feec8d70';
 

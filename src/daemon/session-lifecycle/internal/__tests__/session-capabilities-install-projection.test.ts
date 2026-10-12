@@ -11,7 +11,7 @@ import type {
 } from '../../../request-runtime-binding.ts';
 import { createCapabilitiesAdmissionRuntime } from './session-capabilities.fixtures.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 test('capabilities projects the install family from exactly one facts inspection', async () => {

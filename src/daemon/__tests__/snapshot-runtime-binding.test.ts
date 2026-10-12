@@ -2,7 +2,7 @@ import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
 import { resolveSnapshotRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
-import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import type { BindDeviceRuntime } from '../request-runtime-binding.ts';

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveSessionDir } from '../session-artifact-paths.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 test('resolveSessionDir keeps every session dir beneath the sessions dir', () => {
   const sessionsDir = path.join(

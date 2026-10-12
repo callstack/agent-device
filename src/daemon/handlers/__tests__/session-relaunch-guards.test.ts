@@ -11,7 +11,7 @@ import {
 } from './session-test-harness.ts';
 import { handleSessionCommands } from './session-command-harness.ts';
 import { makeTestScreenRecordingResource } from '../../../__tests__/test-utils/screen-recording-live-handle.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 test('open --relaunch rejects URL targets', async () => {

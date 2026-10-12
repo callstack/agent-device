@@ -15,7 +15,7 @@ import type {
 import type { SettingsUpdateOptions } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import { resolveCliOptions } from '../cli/resolve-cli-options.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createStubClientLeases } from './test-utils/client-lease-fixtures.ts';
 
 // #1802: the replay client reads the script it names, so CLI-level replay cases need a real file.

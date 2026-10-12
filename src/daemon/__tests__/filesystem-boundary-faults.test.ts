@@ -21,12 +21,10 @@ import {
   registerFilesystemBoundaryMatrix,
   type FilesystemBoundaryOwner,
   type FilesystemBoundaryFixture,
-} from '../../__tests__/test-utils/filesystem-boundary-faults.ts';
+} from '@agent-device/test-kit/filesystem-boundary-faults';
 
 vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
-  (await import('../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
-    importOriginal,
-  ),
+  (await import('@agent-device/test-kit/host-process-mock')).pinOwnProcessStartTime(importOriginal),
 );
 
 type DaemonFilesystemBoundaryOwner =

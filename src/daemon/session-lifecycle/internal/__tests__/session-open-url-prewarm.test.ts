@@ -64,7 +64,7 @@ import {
   resolveIosApp,
   resolveIosSimulatorDeepLinkBundleId,
 } from '@agent-device/platform-apple/app-resolution';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { SessionStore } from '../../daemon/session-store.ts';
-import { mkdtempForTestSync } from './tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { SessionRef, SessionState } from '../../daemon/session-state.ts';
 
 export function makeSessionStore(prefix = 'agent-device-test-'): SessionStore {

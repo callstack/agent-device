@@ -1,6 +1,6 @@
 import { expect } from 'vitest';
 import path from 'node:path';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonResponse, DaemonResponseData } from '../../daemon-request.ts';
 

@@ -8,7 +8,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../../src/__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 
 const CANCELLATION_ROWS = {
   mutation: { command: 'press', positionals: ['enter'] },

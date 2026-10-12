@@ -7,8 +7,8 @@ import { createRequestHandler } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { makeIosSession, makeSession } from '../../__tests__/test-utils/session-factories.ts';
-import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 test('events reads the daemon-owned session timeline without appending poll noise', async () => {

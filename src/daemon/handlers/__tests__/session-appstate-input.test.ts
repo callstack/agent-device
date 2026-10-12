@@ -12,7 +12,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SessionState } from '../../session-state.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
 import { handleSessionCommands, mockInspectDeviceRuntimeFacts } from './session-command-harness.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   AppStateRuntimeInput,

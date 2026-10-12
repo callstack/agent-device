@@ -19,8 +19,8 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from './test-utils/loopback.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+} from '@agent-device/test-kit/loopback';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const DAEMON_TOKEN = 'daemon-secret';
 const DAEMON_SESSION = 'cwd:abcdef0123456789:default';

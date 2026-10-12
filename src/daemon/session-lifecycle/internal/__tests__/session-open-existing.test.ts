@@ -16,7 +16,7 @@ import {
 } from '../../../handlers/__tests__/session-test-harness.ts';
 import type { SessionState } from '../../../session-state.ts';
 import { handleSessionCommands } from '../../../handlers/__tests__/session-command-harness.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 test('open web URL on iOS device session without active app falls back to Safari', async () => {

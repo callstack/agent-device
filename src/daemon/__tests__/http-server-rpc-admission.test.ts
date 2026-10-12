@@ -3,12 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
-import {
-  closeLoopbackServer,
-  skipWhenLoopbackUnavailable,
-} from '../../__tests__/test-utils/loopback.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { restoreEnv } from '../../__tests__/test-utils/env.ts';
+import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { restoreEnv } from '@agent-device/test-kit/env';
 import { postRpcCommand, startRpcServer } from './http-server-rpc.fixtures.ts';
 
 const DAEMON_TOKEN = 'admission-daemon-secret';

@@ -14,8 +14,8 @@ import { readMetroSessionHints } from '../metro/metro-session-hints.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { AppError } from '@agent-device/kernel/errors';
 import { isProcessAlive, waitForProcessExit } from '@agent-device/host-kit/process';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
-import { closeLoopbackServer, listenOnLoopback } from './test-utils/loopback.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit/loopback';
 
 const TEST_TOKEN = 'agent-device-proxy-test-token';
 

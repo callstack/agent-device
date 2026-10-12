@@ -20,7 +20,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../../src/__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 
 const SUITE_INVOCATION_ID = 'cd5f9c01feec8d70';
 

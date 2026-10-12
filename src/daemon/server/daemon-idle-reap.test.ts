@@ -12,7 +12,7 @@ import {
   isDaemonIdle,
   resolveDaemonIdleReapMs,
 } from './daemon-idle-reap.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { makeTestScreenRecordingResource } from '../../__tests__/test-utils/screen-recording-live-handle.ts';
 
 let stateDir: string;

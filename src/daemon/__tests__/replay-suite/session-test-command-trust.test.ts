@@ -13,7 +13,7 @@ import {
 import { runReplayTestCommand } from '@agent-device/replay-port/test-command';
 import type { ReplayCommand, ReplayTestCommand } from '@agent-device/replay-port/command-types';
 import { replayScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { DaemonInvokeFn, DaemonRequest } from '../../daemon-request.ts';
 
 const capturedCommands: ReplayCommand[] = [];

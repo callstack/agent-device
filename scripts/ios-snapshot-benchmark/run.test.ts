@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
 import { resolveRepoRoot } from './host.ts';
 
 test('CLI refuses an unmarked existing root before any descendant can be cleared', async () => {

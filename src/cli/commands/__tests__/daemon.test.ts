@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { DaemonStopResult } from '../../../daemon/daemon-stop.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mocks = vi.hoisted(() => ({
   cleanupDaemonOwner: vi.fn(async () => undefined),

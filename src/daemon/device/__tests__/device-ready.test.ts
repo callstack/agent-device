@@ -27,7 +27,7 @@ import {
   ANDROID_EMULATOR,
   IOS_DEVICE,
   IOS_SIMULATOR,
-} from '../../../__tests__/test-utils/device-fixtures.ts';
+} from '@agent-device/test-kit/device-fixtures';
 import { DEVICE_READY_CACHE_TTL_MS, ensureDeviceReady } from '../device-ready.ts';
 
 const mockRunCmd = vi.mocked(runCmd);

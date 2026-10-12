@@ -31,8 +31,8 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../__tests__/test-utils/loopback.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+} from '@agent-device/test-kit/loopback';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { flushSessionEventLogWrites } from '@agent-device/session-journal/session-event-log';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 

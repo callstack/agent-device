@@ -5,7 +5,7 @@ import { handleSessionInventoryCommands } from '../inventory.ts';
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import type { SessionState } from '../../../session-state.ts';
-import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { resolveImplicitSessionScope } from '../../../session-routing.ts';
 import { tenantScopedSessionName } from '../../../session-tenant-scope.ts';
 

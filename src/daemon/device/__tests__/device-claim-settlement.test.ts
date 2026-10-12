@@ -8,12 +8,10 @@ import { canonicalLocalDeviceKey } from '../device-claim-paths.ts';
 import { inspectDeviceClaims } from '../device-claim-inspection.ts';
 import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
 vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
-  (await import('../../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
-    importOriginal,
-  ),
+  (await import('@agent-device/test-kit/host-process-mock')).pinOwnProcessStartTime(importOriginal),
 );
 
 const device: DeviceInfo = {

@@ -13,7 +13,7 @@ import { withSessionlessRunnerCleanup } from '../../snapshot-session.ts';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { closeIosApp } from '@agent-device/platform-apple/app-lifecycle';
 import { stopIosRunnerSession } from '@agent-device/platform-apple/runner/operations';
-import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   isActiveProviderDevice,
   setActiveProviderDeviceRuntimes,

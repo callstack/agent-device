@@ -9,10 +9,7 @@ import {
   listenNetServer,
 } from '../../../src/daemon/server/transport.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import {
-  closeLoopbackServer,
-  skipWhenLoopbackUnavailable,
-} from '../../../src/__tests__/test-utils/loopback.ts';
+import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
 
 test('Provider-backed integration daemon socket transport frames requests and normalizes malformed input', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) {

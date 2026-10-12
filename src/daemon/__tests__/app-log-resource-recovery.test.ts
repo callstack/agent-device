@@ -10,9 +10,9 @@ import {
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { createTestAppLogLiveHandle } from '../../__tests__/test-utils/app-log-live-handle.ts';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { recoverAppLogResourcesAfterDaemonLock } from '../app-log-resource-recovery.ts';
 import { appLogResourceStore } from '../app-log-resource-store.ts';
 

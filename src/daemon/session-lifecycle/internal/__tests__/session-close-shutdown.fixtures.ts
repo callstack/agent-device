@@ -68,7 +68,7 @@ import {
   stopIosRunnerSession,
 } from '@agent-device/platform-apple/runner/operations';
 import { cleanupAppleXctracePerfCapture } from '@agent-device/platform-apple/perf';
-import { WEB_DESKTOP_DEVICE } from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { acquireDeviceClaim } from '../../../device/device-claims.ts';
 import { inspectDeviceClaims } from '../../../device/device-claim-inspection.ts';
 
@@ -84,7 +84,7 @@ import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import { lifecycleRuntimeFacts } from '../../../__tests__/application-lifecycle-runtime-harness.ts';
 import { dispatchApplicationLifecycleEffect } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 export type { DeviceBinding, PlatformRuntimeOperations, SessionState };
 

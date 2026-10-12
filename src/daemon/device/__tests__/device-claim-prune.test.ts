@@ -9,12 +9,10 @@ import { acquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
 
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
-  (await import('../../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
-    importOriginal,
-  ),
+  (await import('@agent-device/test-kit/host-process-mock')).pinOwnProcessStartTime(importOriginal),
 );
 
 const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;

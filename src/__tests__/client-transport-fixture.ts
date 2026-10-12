@@ -1,6 +1,6 @@
 import type { AgentDeviceClientConfig } from '../agent-device-client.ts';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contracts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const TEST_STATE_DIR = mkdtempForTestSync('agent-device-client-test-');
 

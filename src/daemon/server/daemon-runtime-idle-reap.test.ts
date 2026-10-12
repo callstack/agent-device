@@ -18,7 +18,7 @@ vi.mock('../lease-registry.ts', async (importOriginal) => {
 
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { startDaemonRuntimeFixture } from '../__tests__/daemon-runtime-fixture.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 afterEach(() => {
   vi.useRealTimers();

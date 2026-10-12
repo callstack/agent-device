@@ -5,7 +5,7 @@ import { test } from 'vitest';
 import { parseIntegerEnv } from '../../../src/daemon/server/server-lifecycle.ts';
 import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { mkdtempForTestSync } from '../../../src/__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 test('Provider-backed integration daemon lifecycle writes metadata and protects acquisitions', async () => {
   const root = mkdtempForTestSync('agent-device-daemon-lifecycle-');

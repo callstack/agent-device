@@ -2,7 +2,7 @@ import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { SnapshotResult } from '@agent-device/contracts/snapshot-runtime';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   makeAndroidSession,
   makeIosAppSession,

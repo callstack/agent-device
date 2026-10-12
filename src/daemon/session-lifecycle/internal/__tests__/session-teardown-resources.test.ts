@@ -4,8 +4,8 @@ import {
   sessionCloseShutdownFixture,
   type SessionState,
 } from './session-close-shutdown.fixtures.ts';
-import { installFakeManagedAgentBrowser } from '../../../../__tests__/test-utils/web-managed-agent-browser.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { installFakeManagedAgentBrowser } from '@agent-device/test-kit/web-managed-agent-browser';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 const {

@@ -13,7 +13,7 @@ import {
   MACOS_DEVICE,
   TVOS_SIMULATOR,
   VISIONOS_SIMULATOR,
-} from '../test-utils/device-fixtures.ts';
+} from '@agent-device/test-kit/device-fixtures';
 
 test('resolveDeviceAppleOs prefers the stored discriminant, else infers from target', () => {
   assert.equal(resolveDeviceAppleOs(IPADOS_SIMULATOR), 'ipados');

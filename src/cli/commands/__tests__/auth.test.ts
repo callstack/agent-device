@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { runCliCapture } from '../../../__tests__/cli-capture.ts';
 import { writeCliSession } from '../../auth-session.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 afterEach(() => {
   vi.unstubAllGlobals();

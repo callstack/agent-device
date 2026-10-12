@@ -9,10 +9,7 @@ import type { AudioProbeResult } from '@agent-device/contracts/audio-probe-resul
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { deviceIdentity, type DeviceInfo } from '@agent-device/kernel/device';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import {
-  IOS_DEVICE,
-  WEB_DESKTOP_DEVICE,
-} from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_DEVICE, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import {
   makeAndroidSession,
   makeIosSession,
@@ -23,7 +20,7 @@ import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory
 import {
   unavailableApplicationLifecycleOperationFacts,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
-} from '../../../../__tests__/test-utils/runtime-operation-facts.ts';
+} from '@agent-device/test-kit/runtime-operation-facts';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { audioProbeDurableResource } from '@agent-device/capture-kit/audio-probe-session-resource';
 import type { SessionStore } from '../../../session-store.ts';

@@ -9,9 +9,9 @@ import {
   type RuntimeFacts,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { IOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { createUnavailableRuntimeFactsForTest } from '../../../__tests__/test-utils/runtime-operation-facts.ts';
+import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

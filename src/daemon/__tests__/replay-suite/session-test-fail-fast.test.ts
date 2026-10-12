@@ -6,7 +6,7 @@ import { expect, test } from 'vitest';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { handleSessionCommands } from '../../handlers/__tests__/session-command-harness.ts';
 
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 test('test --fail-fast continues after passing scripts', async () => {

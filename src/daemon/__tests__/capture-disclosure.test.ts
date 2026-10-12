@@ -35,7 +35,7 @@ vi.mock('../device/device-ready.ts', () => ({
 }));
 
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
-import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { withSystemSurfaceDisclosure } from '../capture-disclosure.ts';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { TARGET_ACTIVATION_FACT } from './capture-disclosure-target-activation-fact.ts';

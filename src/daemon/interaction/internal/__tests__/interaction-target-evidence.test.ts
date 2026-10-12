@@ -13,7 +13,7 @@ import {
 } from '../../../../__tests__/test-utils/session-factories.ts';
 import { SessionScriptWriter } from '../../../session-script-writer.ts';
 import type { SessionState } from '../../../session-state.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 // ADR 0012 decision 3, daemon-routed recording: target-v1 evidence is

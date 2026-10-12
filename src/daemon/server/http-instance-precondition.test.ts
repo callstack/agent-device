@@ -10,7 +10,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 
 type RpcErrorResponse = { error?: { code?: number; data?: { code?: string } } };
 

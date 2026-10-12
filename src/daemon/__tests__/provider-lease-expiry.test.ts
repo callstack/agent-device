@@ -3,7 +3,7 @@ import { expect, test, vi } from 'vitest';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 test('retries an expired live-only provider lease release after a transient failure', async () => {
   vi.useFakeTimers();

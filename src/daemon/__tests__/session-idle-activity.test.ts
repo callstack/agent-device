@@ -30,7 +30,7 @@ import {
 } from '../request-execution-scope.ts';
 import { withKeyedLock } from '@agent-device/kernel/keyed-lock';
 import type { DaemonRequest } from '../daemon-request.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const TEST_ROOT = mkdtempForTestSync('agent-device-session-idle-activity-');
 const LOG_PATH = path.join(TEST_ROOT, 'diagnostics.log');

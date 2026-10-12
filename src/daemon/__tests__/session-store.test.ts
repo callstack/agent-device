@@ -14,7 +14,7 @@ import {
   repairPublication,
 } from '../../__tests__/test-utils/session-factories.ts';
 
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];
 

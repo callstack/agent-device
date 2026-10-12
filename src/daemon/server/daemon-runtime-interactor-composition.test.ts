@@ -3,8 +3,8 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import { setActiveProviderDeviceRuntimes } from '../../provider-device-runtime.ts';
-import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createDaemonProviderRuntimeComposition } from '../../provider-device-runtimes.ts';
 import { providerCredentialFingerprint } from '../../provider-credential-fingerprint.ts';
 import {

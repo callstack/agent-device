@@ -21,7 +21,7 @@ import {
   captureSnapshotUse,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 function snapshotDeviceRuntimeGateway(): DeviceRuntimeGateway<PlatformRuntimeOperations> {

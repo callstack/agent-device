@@ -6,7 +6,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
 import { resolveLimrunConnectProfile } from '../cli/connection/limrun-profile.ts';
 import { runCliCapture } from './cli-capture.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 test('connect limrun refuses profile fields Limrun does not read', async () => {
   const result = await runCliCapture(

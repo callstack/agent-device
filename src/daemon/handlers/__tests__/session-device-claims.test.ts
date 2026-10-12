@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
@@ -34,9 +34,7 @@ vi.mock('@agent-device/platform-android/mechanics', () => ({
   ),
 }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
-  (await import('../../../__tests__/test-utils/host-process-mock.ts')).pinOwnProcessStartTime(
-    importOriginal,
-  ),
+  (await import('@agent-device/test-kit/host-process-mock')).pinOwnProcessStartTime(importOriginal),
 );
 
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
@@ -61,7 +59,7 @@ import {
 } from '../../session-lifecycle/index.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeAuthoringSession } from '../../../__tests__/test-utils/session-factories.ts';
-import { MACOS_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { MACOS_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   bindProviderLifecycleRuntime,

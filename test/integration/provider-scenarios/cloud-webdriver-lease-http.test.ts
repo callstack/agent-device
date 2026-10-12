@@ -9,7 +9,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../../src/__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
   CloudWebDriverTestServer,

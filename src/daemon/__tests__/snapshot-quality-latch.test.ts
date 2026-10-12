@@ -16,7 +16,7 @@ import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../session-state.ts';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { snapshotRuntimeFixture } from './snapshot-runtime-fixture.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 vi.mock('../snapshot-interactor-capture.ts', async () => {

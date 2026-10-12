@@ -17,7 +17,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../../src/__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 
 const TENANT = 'local-proxy-tenant';
 const OTHER_TENANT = 'other-tenant';

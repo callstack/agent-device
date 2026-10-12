@@ -5,8 +5,8 @@ import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,
   MACOS_DEVICE,
-} from '../../__tests__/test-utils/device-fixtures.ts';
-import { buildNodes } from '../../__tests__/test-utils/snapshot-builders.ts';
+} from '@agent-device/test-kit/device-fixtures';
+import { buildNodes } from '@agent-device/test-kit/snapshot-builders';
 import {
   legacyDispatchCapture,
   resetLegacySnapshotCapture,

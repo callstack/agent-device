@@ -10,7 +10,7 @@ import {
   readProcessStartTime,
 } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   spawnRegisteredDaemonFixture,
   finishRegisteredDaemonFixtures,
@@ -19,7 +19,7 @@ import {
   startHttpDaemonFixture,
   currentDaemonCodeSignature,
 } from '../../__tests__/test-utils/daemon-http-fixture.ts';
-import { closeLoopbackServer, supportsLoopbackBind } from '../../__tests__/test-utils/loopback.ts';
+import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit/loopback';
 import {
   resolveDaemonPaths,
   type DaemonPaths,

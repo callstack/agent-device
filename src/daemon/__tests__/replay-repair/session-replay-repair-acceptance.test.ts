@@ -8,7 +8,7 @@ import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 import { markRepairTransactionComplete } from '../../session-replay-transaction.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =

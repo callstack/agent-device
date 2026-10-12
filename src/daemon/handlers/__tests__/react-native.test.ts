@@ -4,7 +4,7 @@ import { handleReactNativeCommands } from '../react-native.ts';
 import { captureSnapshot } from '../../snapshot-capture.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../session-state.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   getRuntimeBindings,
   mockTapPoint,

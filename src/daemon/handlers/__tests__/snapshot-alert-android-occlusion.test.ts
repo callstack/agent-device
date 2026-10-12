@@ -11,7 +11,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
 });
 
 import { pressAndroid, snapshotAndroid } from '@agent-device/platform-android/mechanics';
-import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { createAndroidInteractor } from '../../../core/interactors/android.ts';
 import { makeAndroidSnapshotCapture } from '../../../__tests__/test-utils/android-snapshot-capture.ts';
 

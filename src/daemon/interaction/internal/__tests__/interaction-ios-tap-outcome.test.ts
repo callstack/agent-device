@@ -25,7 +25,7 @@ import {
   appCaptureComparisonKey,
   systemSurfaceCaptureComparisonKey,
 } from '../../../__tests__/ios-comparison-key-fixture.ts';
-import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   getRuntimeBindings,
   mockTapPoint,
@@ -33,7 +33,7 @@ import {
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 import { corroborateIosTapFailure } from '../interaction-ios-tap-outcome.ts';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
 vi.mock('../../../snapshot-interactor-capture.ts', async () => {

@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import * as path from 'node:path';
 import { handleSessionCommands } from './session-command-harness.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
 

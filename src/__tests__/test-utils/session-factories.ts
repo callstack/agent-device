@@ -3,7 +3,11 @@ import type {
   SessionScriptPublicationState,
   SessionScriptRepairStatus,
 } from '../../daemon/session-script-publication-state.ts';
-import { IOS_SIMULATOR, ANDROID_EMULATOR, MACOS_DEVICE } from './device-fixtures.ts';
+import {
+  IOS_SIMULATOR,
+  ANDROID_EMULATOR,
+  MACOS_DEVICE,
+} from '@agent-device/test-kit/device-fixtures';
 
 /** A repair-variant `scriptPublication` literal for test setups. */
 export function repairPublication(

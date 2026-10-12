@@ -5,7 +5,7 @@ import type {
   SnapshotResult,
   SnapshotRuntimeAcquiredResult,
 } from '@agent-device/contracts/interactor-types';
-import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { installInteractorResolution } from '../interactor-resolution.ts';
 import { captureSnapshotWithInteractor } from '../snapshot-interactor-capture.ts';
 

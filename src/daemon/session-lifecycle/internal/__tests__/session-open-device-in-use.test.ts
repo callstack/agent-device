@@ -5,7 +5,7 @@ import {
   buildForeignWorkspaceSessionConflict,
 } from '../../../session-recovery-hints.ts';
 import type { SessionRef } from '../../../session-state.ts';
-import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 
 // DEVICE_IN_USE named `SessionState.name`, and for an implicitly cwd-scoped session that is
 // `default` while the session is stored — and addressable — as `cwd:<hash>:default`. Both the

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 
 const lifecycleEvents = vi.hoisted(() => [] as string[]);
@@ -128,7 +128,7 @@ vi.mock('../provider-lease-expiry.ts', async (importOriginal) => {
 
 import { acquireDeviceClaim } from '../device/device-claims.ts';
 import { resolveDeviceClaimPath } from '../device/device-claim-paths.ts';
-import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,

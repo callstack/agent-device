@@ -29,7 +29,7 @@ import {
   makeSession,
 } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { DaemonRequest } from '../daemon-request.ts';
 import { discloseRequestDispatch } from '../request-dispatch-disclosure.ts';
 import { createRequestDispatchLedger } from '../request-dispatch-ledger.ts';

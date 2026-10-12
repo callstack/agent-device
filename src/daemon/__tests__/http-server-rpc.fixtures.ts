@@ -1,7 +1,7 @@
 import type { Server } from 'node:http';
 import { createDaemonHttpServer } from '../server/http-server.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
-import { listenOnLoopback } from '../../__tests__/test-utils/loopback.ts';
+import { listenOnLoopback } from '@agent-device/test-kit/loopback';
 
 export type RpcErrorBody = { error?: { code?: number; data?: { details?: { reason?: string } } } };
 

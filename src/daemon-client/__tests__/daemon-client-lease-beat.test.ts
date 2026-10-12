@@ -2,7 +2,7 @@ import { afterEach, describe, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
-import { closeLoopbackServer, listenOnLoopback } from '../../__tests__/test-utils/loopback.ts';
+import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit/loopback';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   buildLeaseHeartbeatRequest,

@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { withMockedPlatform } from '../../__tests__/test-utils/host-execution.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { withMockedPlatform } from '@agent-device/test-kit/host-execution';
 
 const legacyRedirect = vi.hoisted(() => ({
   xctestDeviceSetPath: '',

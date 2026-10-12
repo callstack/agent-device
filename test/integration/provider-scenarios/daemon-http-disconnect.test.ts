@@ -8,7 +8,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../../src/__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 
 // A non-streaming request that loses its client before response headers must be
 // marked canceled through its request-scoped AbortSignal. The old behavior only

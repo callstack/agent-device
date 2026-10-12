@@ -19,7 +19,7 @@ import {
   scriptTargetPath,
   scriptTargetForce,
 } from '../../session-script-publication-state.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const TARGET_EVIDENCE: TargetAnnotationV1 = {
   id: 'continue',

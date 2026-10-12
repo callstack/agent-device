@@ -6,8 +6,8 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   return { ...actual, runCmd: vi.fn() };
 });
 
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { installFakeManagedAgentBrowser } from '../../__tests__/test-utils/web-managed-agent-browser.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { installFakeManagedAgentBrowser } from '@agent-device/test-kit/web-managed-agent-browser';
 import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 import { runCmd } from '@agent-device/host-kit/command';
 import { SessionStore } from '../session-store.ts';

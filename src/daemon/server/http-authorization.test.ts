@@ -8,9 +8,9 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../__tests__/test-utils/loopback.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
-import { restoreEnv } from '../../__tests__/test-utils/env.ts';
+} from '@agent-device/test-kit/loopback';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { restoreEnv } from '@agent-device/test-kit/env';
 
 const DAEMON_TOKEN = 'daemon-secret';
 

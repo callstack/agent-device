@@ -9,7 +9,7 @@ import {
 import { makeSessionStore } from '../../../../__tests__/test-utils/store-factory.ts';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { finalizeTouchInteraction, handleInteractionCommands } from '../../index.ts';
-import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/device-fixtures.ts';
+import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   getRuntimeBindings,
   mockFillPoint,

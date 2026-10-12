@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import nodeFs, { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { runCliCapture, type CliCaptureOptions } from './cli-capture.ts';
-import { mkdtempForTest, mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTest, mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 /**
  * #1802: `test <path-or-glob>` expands on the CALLER, so these reporter cases need a real suite

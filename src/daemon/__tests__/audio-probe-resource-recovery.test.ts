@@ -13,8 +13,8 @@ import {
   createDurableResourceEnvelope,
   createHostAudioProbeCaptureOperations,
 } from '@agent-device/capture-kit';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { recoverAudioProbeResourceAfterDaemonLock } from '@agent-device/capture-kit/audio-probe-recovery';
 import { audioProbeResourceStore } from '@agent-device/capture-kit/audio-probe-resource-store';
 import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';

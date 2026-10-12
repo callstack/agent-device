@@ -383,7 +383,7 @@ function replayScriptLineArbs(): fc.Arbitrary<string>[] {
         `replay command "${command}" from @agent-device/command-registry/catalog is ` +
           'unclassified: ' +
           'add a line template or a waiver to REPLAY_SCRIPT_LINE_PLANS in ' +
-          'src/__tests__/test-utils/property-arbitraries.ts',
+          '@agent-device/test-kit/property-arbitraries',
       );
     }
     if (!('waived' in plan)) arbitraries.push(plan);

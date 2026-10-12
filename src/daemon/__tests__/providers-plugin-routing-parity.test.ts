@@ -24,7 +24,7 @@ import {
   TVOS_SIMULATOR,
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
-} from '../../__tests__/test-utils/device-fixtures.ts';
+} from '@agent-device/test-kit/device-fixtures';
 import { makeSession } from '../../__tests__/test-utils/session-factories.ts';
 import { getPlugin, tryGetPlugin } from '../../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';

@@ -13,7 +13,7 @@ import { recordIfSession } from '../selector-recording.ts';
 import { SessionStore } from '../session-store.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import type { DaemonRequest } from '../daemon-request.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 function makeStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-selector-recording-');

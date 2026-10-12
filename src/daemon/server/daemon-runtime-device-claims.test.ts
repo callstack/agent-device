@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 
 vi.mock('../session-teardown.ts', async (importOriginal) => {

@@ -7,11 +7,11 @@ import { testCreateCommandSurface } from './command-surface-fixture.ts';
 vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
+import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { createTestDeviceInventoryGateways } from '../../__tests__/test-utils/device-inventory-gateways.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { assertDaemonPolicyAdmitsRequest } from '../daemon-policy.ts';
 import type { DaemonRequest } from '../daemon-request.ts';

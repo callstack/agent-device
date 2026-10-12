@@ -26,7 +26,7 @@ import {
 import { prepareIosInstallArtifact } from '@agent-device/platform-apple/install-artifact';
 import { AppError } from '@agent-device/kernel/errors';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from './install-source.coverage.ts';
-import { mkdtempForTest } from './test-utils/tmp-dir.ts';
+import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
 import * as networkTransport from '@agent-device/provision-kit/install-source-network-transport';
 
 test('validateDownloadSourceUrl rejects localhost and private literal addresses by default', async () => {

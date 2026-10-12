@@ -36,7 +36,7 @@ import {
   PRE_DISPATCH_REFUSAL_REASONS,
   retriableForErrorCode,
 } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockLifecycleEffect = vi.mocked(dispatchApplicationLifecycleEffect);
 

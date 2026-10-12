@@ -2,7 +2,7 @@ import { daemonPlatformServicesFixture } from '../../__tests__/platform-services
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { trackUploadedArtifact } from '../../artifact-tracking.ts';
 import type {
   BindDeviceRuntime,

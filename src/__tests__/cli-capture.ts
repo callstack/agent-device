@@ -6,7 +6,7 @@ import type {
   sendToDaemon,
 } from '../daemon-client/daemon-client.ts';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 class ExitSignal extends Error {
   public readonly code: number;

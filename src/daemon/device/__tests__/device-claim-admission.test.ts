@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { localRuntimeOwner, providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { asAppError } from '@agent-device/kernel/errors';
-import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,

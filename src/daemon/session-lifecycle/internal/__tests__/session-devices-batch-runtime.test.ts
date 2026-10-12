@@ -24,7 +24,7 @@ import type { DaemonRequest, DaemonResponse } from '../../../daemon-request.ts';
 import { withTestDeviceInventory } from '../../../../__tests__/test-utils/device-inventory-gateways.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
-import { mkdtempForTestSync } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({
   ok: true,

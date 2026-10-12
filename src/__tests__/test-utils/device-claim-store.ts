@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach } from 'vitest';
-import { mkdtempForTestSync } from './tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { DeviceClaimReconciler } from '../../daemon/device/device-claims.ts';
 
 export type IsolatedDeviceClaimStore = {

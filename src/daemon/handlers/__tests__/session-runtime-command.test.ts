@@ -21,7 +21,7 @@ import {
   gestureRuntimeSpies,
 } from '../../__tests__/test-device-runtime-gateway.ts';
 import { refFrameState } from '../../ref-frame.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../../__tests__/command-surface-fixture.ts';
 
 test('runtime set/show/clear manages session-scoped runtime hints before open', async () => {

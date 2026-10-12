@@ -38,7 +38,7 @@ import {
   makeAndroidSession,
   makeMacOsSession,
 } from '../../../__tests__/test-utils/session-factories.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { storeSessionForTest } from '../../../__tests__/test-utils/store-factory.ts';
 
 const ANDROID_ONE: DeviceInfo = {

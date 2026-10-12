@@ -7,12 +7,8 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
 import { getInteractor } from '../core/interactors.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import {
-  ANDROID_EMULATOR,
-  IOS_DEVICE,
-  MACOS_DEVICE,
-} from '../__tests__/test-utils/device-fixtures.ts';
-import { mkdtempForTest } from '../__tests__/test-utils/tmp-dir.ts';
+import { ANDROID_EMULATOR, IOS_DEVICE, MACOS_DEVICE } from '@agent-device/test-kit/device-fixtures';
+import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
 
 /**
  * The composed `trigger-app-event` path as R57 left it: the daemon's own policy resolves the

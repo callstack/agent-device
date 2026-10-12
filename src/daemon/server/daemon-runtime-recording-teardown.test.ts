@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 import { SessionStore } from '../session-store.ts';
 import { makeRecordingSession } from '../__tests__/session-teardown.fixtures.ts';

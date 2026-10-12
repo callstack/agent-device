@@ -1,11 +1,11 @@
 import { isMacOs } from '@agent-device/kernel/device';
 import { legacyDispatchCapture } from '../../__tests__/legacy-snapshot-capture-fixture.ts';
 import { expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { AppLogLiveState } from '@agent-device/contracts/app-log-runtime';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { createTestAppLogLiveHandle } from '../../../__tests__/test-utils/app-log-live-handle.ts';
+import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
 import type { LogBackend } from '@agent-device/contracts/observability';
 
 vi.mock('node:timers/promises', async (importOriginal) => {

@@ -16,7 +16,7 @@ function chainTerms(expression: string): SelectorTerm[][] {
 // Property, not another example: a selector value carries user text, so the
 // grammar has to survive both quote characters, backslash runs, `||` and `=`
 // inside a value, and whitespace-only values. Extend the hazard vocabulary in
-// src/__tests__/test-utils/property-arbitraries.ts rather than pinning one more
+// @agent-device/test-kit/property-arbitraries rather than pinning one more
 // case here.
 test('parsing a printed selector chain yields the terms it was printed from', () => {
   fc.assert(

@@ -7,7 +7,7 @@ import {
   MACOS_DEVICE,
   TVOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
-} from '../../__tests__/test-utils/device-fixtures.ts';
+} from '@agent-device/test-kit/device-fixtures';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
 import {
   SESSION_SURFACES,

@@ -11,7 +11,7 @@ import {
   finalizeResumableUpload,
   receiveResumableUploadChunk,
 } from '../resumable-upload.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { runCmdSync } from '@agent-device/host-kit/command';
 
 test('finalizing an unknown upload reports expiry with a recovery hint', async () => {

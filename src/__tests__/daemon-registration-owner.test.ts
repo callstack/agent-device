@@ -20,13 +20,13 @@ import {
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readRegisteredDaemonOwnership } from '@agent-device/daemon-contracts/daemon-registration';
 import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   registeredDaemonFixtureArgs,
   spawnRegisteredDaemonFixture,
   finishRegisteredDaemonFixture,
 } from './test-utils/registered-daemon-fixture.ts';
-import { spawnLegacyDaemonFixture } from './test-utils/legacy-daemon-fixture.ts';
+import { spawnLegacyDaemonFixture } from '@agent-device/test-kit/legacy-daemon-fixture';
 import { ensureDaemon, resolveClientSettings } from '../daemon-client/daemon-client-lifecycle.ts';
 import { inspectProcessLock } from '@agent-device/host-kit/file';
 import { AppError } from '@agent-device/kernel/errors';

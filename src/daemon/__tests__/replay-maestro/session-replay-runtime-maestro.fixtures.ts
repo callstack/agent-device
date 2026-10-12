@@ -44,7 +44,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon-request.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { SessionStore } from '../../session-store.ts';
 import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';

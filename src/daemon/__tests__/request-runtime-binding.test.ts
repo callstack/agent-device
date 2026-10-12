@@ -16,7 +16,7 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { screenRecordingRecoveryUse } from '@agent-device/contracts/screen-recording-runtime-plan';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '../../__tests__/test-utils/runtime-operation-facts.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { acquireDurableCaptureRecoveryAuthorityBeforeDeadline } from '@agent-device/capture-kit/durable-capture';
 import {

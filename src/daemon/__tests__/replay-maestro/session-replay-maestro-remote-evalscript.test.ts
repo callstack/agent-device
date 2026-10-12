@@ -8,7 +8,7 @@ import { platformResourceCleanup } from '../../../platform-runtime-resource-clea
 import { SessionStore } from '../../session-store.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { DaemonRequest } from '../../daemon-request.ts';
 import {
   unavailableBindDevice,

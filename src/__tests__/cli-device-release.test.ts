@@ -9,10 +9,10 @@ import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { appLogResourceStore } from '../daemon/app-log-resource-store.ts';
 import { runStaleDeviceClaimRelease } from '../cli/commands/device-release.ts';
 import { runCliCapture } from './cli-capture.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
-  (await import('./test-utils/host-process-mock.ts')).pinOwnProcessStartTime(importOriginal),
+  (await import('@agent-device/test-kit/host-process-mock')).pinOwnProcessStartTime(importOriginal),
 );
 
 function hashedClaimPath(claimsDir: string, deviceKey: string): string {

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { createCustomReplayTestReporter } from '../custom.ts';
-import { mkdtempForTest } from '../../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
 
 test.each([
   {
