@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
+import type { SettleObservation, SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   markDeferredInteractionOutcome,
@@ -206,6 +206,80 @@ test('a gesture takes the surface over from a press, rather than joining it', ()
 
   assert.equal(session.deferredSurface?.kind, 'stabilize');
   assert.equal(movingTargetBaseline(session), undefined);
+});
+
+/** A `--settle` observation. `diff` is the field that means "converged AND stored". */
+function settleMark(params: { settled: boolean; diff: boolean }): SettleObservation {
+  return {
+    settled: params.settled,
+    waitedMs: 120,
+    captures: 3,
+    quietMs: 50,
+    timeoutMs: 1_000,
+    ...(params.diff
+      ? { diff: { summary: { additions: 1, removals: 0, unchanged: 4 }, lines: [] } }
+      : {}),
+  };
+}
+
+test('a settle that stored its settled tree records that tree, not the tree the press started from', () => {
+  // The loop stopped because two reads agreed, and the tree it published became the session
+  // snapshot. That tree IS the resting surface, and the follow-up press is contractually supposed to
+  // spend a tap and nothing else (test/integration/provider-scenarios/settle-observation.test.ts);
+  // screening it against the pre-action tree re-observes a surface the settle already proved quiet.
+  const session = makeSession('android');
+  const settled = appTree('Settled');
+  session.snapshot = settled;
+
+  markDeferredInteractionOutcome({
+    session,
+    command: 'press',
+    positionals: ['label="Slide target"'],
+    flags: undefined,
+    preActionTree: { nodes: appTree('Pre-action').nodes },
+    settle: settleMark({ settled: true, diff: true }),
+  });
+
+  assert.equal(movingTargetBaseline(session)?.tree.nodes, settled.nodes);
+});
+
+test('a settle that timed out keeps the acted-through tree', () => {
+  // The loop ran out its budget without two reads agreeing, so the newest capture says nothing about
+  // rest — recording it would turn an unsettled surface into evidence of quiet.
+  const session = makeSession('android');
+  session.snapshot = appTree('Still changing');
+  const actedThrough = appTree('Pre-action');
+
+  markDeferredInteractionOutcome({
+    session,
+    command: 'press',
+    positionals: ['label="Slide target"'],
+    flags: undefined,
+    preActionTree: { nodes: actedThrough.nodes },
+    settle: settleMark({ settled: false, diff: false }),
+  });
+
+  assert.equal(movingTargetBaseline(session)?.tree.nodes, actedThrough.nodes);
+});
+
+test('a converged settle that stored nothing keeps the acted-through tree', () => {
+  // `settled: true` is not the whole claim: a sparse capture is refused by the store and a
+  // cross-surface transition (#2438) withholds the diff, leaving whatever an earlier capture
+  // published. Only the stored settled tree may carry a rest claim.
+  const session = makeSession('android');
+  session.snapshot = appTree('Published by some earlier capture');
+  const actedThrough = appTree('Pre-action');
+
+  markDeferredInteractionOutcome({
+    session,
+    command: 'press',
+    positionals: ['label="Slide target"'],
+    flags: undefined,
+    preActionTree: { nodes: actedThrough.nodes },
+    settle: settleMark({ settled: true, diff: false }),
+  });
+
+  assert.equal(movingTargetBaseline(session)?.tree.nodes, actedThrough.nodes);
 });
 
 test('the trigger is wider than the guard on purpose: any command that acted through a tree records it', () => {

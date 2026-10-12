@@ -1,5 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
+import type { SettleObservation, SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { DaemonResponse } from '../../daemon-request.ts';
 import { stripInternalInteractionFlags } from '../../deferred-interaction-outcome.ts';
@@ -34,6 +34,11 @@ export function finalizeTouchInteraction(params: {
    * baseline. Absent for the dispatches that acted without a daemon tree.
    */
   preActionTree?: SurfaceScopedNodes | undefined;
+  /**
+   * The action's own `--settle` observation, forwarded to the deferred-outcome marker, which reads
+   * the settled-tree signal from it (#3471).
+   */
+  settle?: SettleObservation | undefined;
 }): DaemonResponse {
   const {
     operations,
@@ -49,6 +54,7 @@ export function finalizeTouchInteraction(params: {
     actionFinishedAt,
     androidFreshnessBaseline,
     preActionTree,
+    settle,
   } = params;
   const actionFlags = stripInternalInteractionFlags(flags);
   const [parameterizedResult, parameterizedResponseData] = parameterizeFillPayloads({
@@ -81,6 +87,7 @@ export function finalizeTouchInteraction(params: {
     flags,
     androidFreshnessBaseline,
     preActionTree,
+    settle,
   });
   operations.recordGestureVisualization(
     actionCommand,

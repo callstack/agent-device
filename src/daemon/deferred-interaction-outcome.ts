@@ -1,5 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
+import type { SettleObservation, SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import type { PostOpenObservation } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { SnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { isApplePlatform, isMobilePlatform } from '@agent-device/kernel/device';
@@ -64,6 +64,12 @@ export type DeferredInteractionOutcomeMark = {
    * moving-target baseline; absent for the routes that dispatch without a daemon tree.
    */
   preActionTree?: SurfaceScopedNodes | undefined;
+  /**
+   * The action's own `--settle` observation, when it ran one (#3471). Its `diff` is the load-bearing
+   * field: the runtime attaches it only when the loop converged AND stored its settled tree within
+   * one surface, which is exactly when that published tree may stand as the baseline.
+   */
+  settle?: SettleObservation | undefined;
 };
 
 export function markDeferredInteractionOutcome(
@@ -77,6 +83,7 @@ export function markDeferredInteractionOutcome(
     flags,
     androidFreshnessBaseline,
     preActionTree,
+    settle,
   } = params;
   if (isNavigationSensitiveAction(action)) {
     markAndroidSnapshotFreshness(session, action, androidFreshnessBaseline ?? session.snapshot);
@@ -91,7 +98,18 @@ export function markDeferredInteractionOutcome(
   // #1542/#1600 unsettled-tree check the scroll bought.
   if (markSurfaceStabilization(session, action, positionals, flags)) return;
   if (pendingSurfaceStabilization(session)) return;
-  markMovingTargetBaseline(session, preActionTree);
+  markMovingTargetBaseline(session, preActionTree, settle?.diff !== undefined);
+}
+
+/** Narrows a published capture to the shape a baseline keeps, so a stored tree never smuggles in more. */
+function movingTargetRestTree(snapshot: SnapshotState | undefined): SurfaceScopedNodes | undefined {
+  if (!snapshot) return undefined;
+  return {
+    nodes: snapshot.nodes,
+    ...(snapshot.iosSystemSurfaceBundleId
+      ? { surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
+      : {}),
+  };
 }
 
 /** Whether this mutation left an unsettled surface for the capture side to steady. */
@@ -143,27 +161,26 @@ function markSurfaceStabilization(
  * tap, `back`, an app open) leave the session idle: the ordinary navigate-then-tap step pays the
  * gate nothing.
  *
- * The baseline is that tree and never the session's current snapshot. A `--settle` or `--verify`
- * press does publish a post-action observation, and it would be the better account of where the
- * surface came to rest — but nothing here can tell a post-action capture from a freshness capture or
- * a `@ref` press's authorized frame, since all three reach `session.snapshot` as a different node
- * array from the one the action resolved against. Inferring "newer" from array identity would
- * attribute to this action a surface it may never have looked at, which is the exact thing this
- * marker forbids. A settled press therefore leaves the next press owed a re-observation rather than
- * answered from a tree of unknown provenance: the cost lands on one extra pair of captures inside the
- * window, never on a rest judgement made against the wrong surface.
+ * `restProved` switches the tree to the session's published one, and is set only when the action's
+ * own settle loop converged AND stored its settled tree. Everything else keeps the pre-action tree:
+ * the session's snapshot may hold a freshness capture, a `@ref` press's authorized frame, or a lone
+ * `--verify` capture, and none of those proves rest. Inferring it from a snapshot that merely
+ * differs from the tree the action resolved against would attribute to this action a surface it may
+ * never have looked at — the substitution this marker exists to prevent.
  */
 function markMovingTargetBaseline(
   session: SessionState,
   preActionTree: SurfaceScopedNodes | undefined,
+  restProved: boolean,
 ): void {
-  if (!preActionTree || preActionTree.nodes.length === 0) {
+  const tree = restProved ? movingTargetRestTree(session.snapshot) : preActionTree;
+  if (!tree || tree.nodes.length === 0) {
     retireMovingTargetBaseline(session);
     return;
   }
   session.deferredSurface = {
     kind: 'recheck',
-    baseline: { finishedAt: Date.now(), tree: preActionTree },
+    baseline: { finishedAt: Date.now(), tree },
   };
 }
 
