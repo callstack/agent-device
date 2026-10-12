@@ -88,6 +88,17 @@ export async function ensureBootedSimulator(
       }
     | undefined;
 
+  // The retry policy, the deadline classifier, and the final rethrow classify the same failure
+  // against the same captured output. Either capture may still be absent when a classifier runs
+  // — an early boot failure has no bootstatus — so the fallback order reads them live here.
+  const classifyAttempt = (error: unknown) =>
+    classifyBootFailure({
+      error,
+      stdout: bootStatusResult?.stdout ?? bootResult?.stdout,
+      stderr: bootStatusResult?.stderr ?? bootResult?.stderr,
+      context: { platform: 'ios', phase: 'boot' },
+    });
+
   try {
     await retryWithPolicy(
       async ({ deadline: attemptDeadline }) => {
@@ -140,12 +151,7 @@ export async function ensureBootedSimulator(
         maxDelayMs: 2000,
         jitter: 0.2,
         shouldRetry: (error) => {
-          const reason = classifyBootFailure({
-            error,
-            stdout: bootStatusResult?.stdout ?? bootResult?.stdout,
-            stderr: bootStatusResult?.stderr ?? bootResult?.stderr,
-            context: { platform: 'ios', phase: 'boot' },
-          });
+          const reason = classifyAttempt(error);
           return reason !== 'IOS_BOOT_TIMEOUT' && reason !== 'CI_RESOURCE_STARVATION_SUSPECTED';
         },
       },
@@ -153,22 +159,11 @@ export async function ensureBootedSimulator(
         deadline,
         phase: 'boot',
         signal: options.signal,
-        classifyReason: (error) =>
-          classifyBootFailure({
-            error,
-            stdout: bootStatusResult?.stdout ?? bootResult?.stdout,
-            stderr: bootStatusResult?.stderr ?? bootResult?.stderr,
-            context: { platform: 'ios', phase: 'boot' },
-          }),
+        classifyReason: classifyAttempt,
       },
     );
   } catch (error) {
-    const reason = classifyBootFailure({
-      error,
-      stdout: bootStatusResult?.stdout ?? bootResult?.stdout,
-      stderr: bootStatusResult?.stderr ?? bootResult?.stderr,
-      context: { platform: 'ios', phase: 'boot' },
-    });
+    const reason = classifyAttempt(error);
 
     throw new AppError('COMMAND_FAILED', 'iOS simulator failed to boot', {
       platform: 'ios',
