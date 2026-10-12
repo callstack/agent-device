@@ -11,6 +11,7 @@ import type { DaemonResponse } from '../daemon-request.ts';
 import {
   appleSessionAppStateResponse,
   appleSessionRequiredRefusal,
+  type AppStateSessionRecord,
 } from './session-appstate-apple-session.ts';
 import { queryDeviceRuntimeAppState } from './session-appstate-device-runtime.ts';
 
@@ -30,14 +31,22 @@ function appStateSessionNotFoundResponse(
   );
 }
 
+type AppStateSessionStoreEntry = ReturnType<RuntimeCommandHandlerParams['sessionStore']['get']>;
+
+/** The answer of target admission: a refusal, or the authority that answers with its session. */
+type AppStateTargetDecision =
+  | { refusal: DaemonResponse }
+  | { answeredBy: 'apple-session'; session: AppStateSessionRecord }
+  | { answeredBy: 'device-runtime'; session: AppStateSessionStoreEntry };
+
 /**
  * Has this appstate request an answerable target, and which authority answers it: the Apple
- * session it points at, or the device runtime the selector resolves to. Every way the request can
- * be refused without a device answers here.
+ * session it points at, or the device runtime the selector resolves to. The apple-session branch
+ * carries the session itself, so answering it can never re-read the store for a session that has
+ * gone missing between admission and response. Every way the request can be refused without a
+ * device answers here.
  */
-function admitAppStateTarget(
-  params: RuntimeCommandHandlerParams,
-): { refusal: DaemonResponse } | { answeredBy: 'apple-session' | 'device-runtime' } {
+function admitAppStateTarget(params: RuntimeCommandHandlerParams): AppStateTargetDecision {
   const { req, sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
   const flags = req.flags ?? {};
@@ -59,7 +68,10 @@ function admitAppStateTarget(
   if (normalizedPlatform === 'macos' && !useSessionStateForApple) {
     return { refusal: appleSessionRequiredRefusal('macos') };
   }
-  return { answeredBy: useSessionStateForApple && session ? 'apple-session' : 'device-runtime' };
+  if (useSessionStateForApple && session) {
+    return { answeredBy: 'apple-session' as const, session };
+  }
+  return { answeredBy: 'device-runtime' as const, session };
 }
 
 /**
@@ -72,12 +84,11 @@ export async function handleAppStateCommand(
   const target = admitAppStateTarget(params);
   if ('refusal' in target) return target.refusal;
 
-  const session = params.sessionStore.get(params.sessionName);
-  if (target.answeredBy === 'apple-session' && session) {
-    return await appleSessionAppStateResponse(params, session);
+  if (target.answeredBy === 'apple-session') {
+    return await appleSessionAppStateResponse(params, target.session);
   }
   const device = await resolveCommandDevice({
-    session,
+    session: target.session,
     flags: params.req.flags ?? {},
     platformServices: params.platformServices,
   });

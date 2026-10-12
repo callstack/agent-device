@@ -18,7 +18,7 @@ import type { DaemonResponse } from '../daemon-request.ts';
  * The session facts this answer is built from, as a structural view: the handler reads exactly
  * the fields it uses and passes no more of the session shape than this.
  */
-type AppStateSessionRecord = Readonly<{
+export type AppStateSessionRecord = Readonly<{
   device: DeviceInfo;
   surface?: SessionSurface;
   appBundleId?: string;

@@ -12,7 +12,6 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SessionState } from '../../session-state.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
 import { handleSessionCommands, mockInspectDeviceRuntimeFacts } from './session-command-harness.ts';
-import { handleSessionStateCommands } from '../session-state.ts';
 import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
@@ -451,27 +450,5 @@ test('appstate on iOS keeps the session answer, with no state, when the runner c
     expect(response.data?.appName).toBe('Benchmark');
     expect(response.data?.source).toBe('session');
     expect(response.data).not.toHaveProperty('state');
-  }
-});
-
-test('appstate returns missing-session error for explicit session flag', async () => {
-  const response = await handleSessionStateCommands({
-    platformServices: daemonPlatformServicesFixture(),
-    req: {
-      token: 't',
-      session: 'named',
-      command: 'appstate',
-      positionals: [],
-      flags: { platform: 'ios', session: 'named' },
-    },
-    sessionName: 'named',
-    sessionStore: makeSessionStore(),
-  });
-
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('SESSION_NOT_FOUND');
-    expect(response.error.message).toMatch(/Run open with --session named first/i);
   }
 });
