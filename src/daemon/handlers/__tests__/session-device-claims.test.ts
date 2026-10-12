@@ -67,7 +67,7 @@ import {
   inspectProviderLifecycleRuntimeFacts,
   inspectLifecycleRuntimeFacts,
 } from '../../__tests__/application-lifecycle-runtime-harness.ts';
-import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
+import { noopPlatformResourceCleanup as platformResourceCleanup } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockDiscoverReadyAndroidEmulators = vi.mocked(discoverReadyAndroidEmulators);

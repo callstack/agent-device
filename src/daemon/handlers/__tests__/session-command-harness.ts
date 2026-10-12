@@ -25,7 +25,7 @@ import { beforeEach, vi } from 'vitest';
 import { applicationLifecycleRuntimeFixture } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
 import { withClientReplayScriptSources } from '../../../__tests__/test-utils/replay-script-source.ts';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
-import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
+import { noopPlatformResourceCleanup as platformResourceCleanup } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 const unavailable = Object.freeze({
   available: false,

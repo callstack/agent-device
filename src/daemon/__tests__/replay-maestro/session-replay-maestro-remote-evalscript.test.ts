@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { LeaseRegistry } from '../../lease-registry.ts';
-import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
+import { noopPlatformResourceCleanup as platformResourceCleanup } from '../support/platform-resource-cleanup-fixture.ts';
 import { SessionStore } from '../../session-store.ts';
 import { makeIosSession } from '../support/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '../../../__tests__/test-utils/replay-script-source.ts';

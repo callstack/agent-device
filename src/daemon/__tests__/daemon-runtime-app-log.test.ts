@@ -1,4 +1,4 @@
-import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
+import { noopPlatformResourceCleanup as platformResourceCleanup } from './support/platform-resource-cleanup-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';

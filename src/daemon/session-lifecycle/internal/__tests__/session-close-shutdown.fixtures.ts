@@ -52,7 +52,7 @@ import {
   mockShutdownTargetRuntime,
 } from '../../../handlers/__tests__/session-command-harness.ts';
 import { teardownSessionResources as teardownProductionSessionResources } from '../../../session-teardown.ts';
-import { platformResourceCleanup } from '../../../../platform-runtime-resource-cleanup.ts';
+import { noopPlatformResourceCleanup as platformResourceCleanup } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { LeaseRegistry } from '../../../lease-registry.ts';
 import { runCmd } from '@agent-device/host-kit/command';
 import {

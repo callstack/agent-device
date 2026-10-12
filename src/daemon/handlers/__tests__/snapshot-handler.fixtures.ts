@@ -13,7 +13,7 @@ import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest } from '../../daemon-request.ts';
 import type { SessionState } from '../../session-state.ts';
 import { handleSnapshotCommands as handleProductionSnapshotCommands } from '../snapshot.ts';
-import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
+import { noopPlatformResourceCleanup as platformResourceCleanup } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 export function makeSessionStore(): SessionStore {
   const root = mkdtempForTestSync('agent-device-snapshot-handler-');

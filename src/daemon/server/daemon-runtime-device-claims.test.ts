@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
+import { noopPlatformResourceCleanup as platformResourceCleanup } from '../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 vi.mock('../session-teardown.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../session-teardown.ts')>();

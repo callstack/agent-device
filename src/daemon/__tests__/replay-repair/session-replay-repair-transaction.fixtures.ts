@@ -12,7 +12,7 @@ import {
   bindLifecycleRuntime,
   inspectLifecycleRuntimeFacts,
 } from '../application-lifecycle-runtime-harness.ts';
-import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
+import { noopPlatformResourceCleanup as platformResourceCleanup } from '../support/platform-resource-cleanup-fixture.ts';
 import { freshEvidence } from './session-replay-repair.fixtures.ts';
 
 /**

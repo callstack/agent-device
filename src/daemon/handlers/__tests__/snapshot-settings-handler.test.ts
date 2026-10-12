@@ -12,7 +12,7 @@ import { fakeCreateCommandSurface } from '../../__tests__/support/command-surfac
 // The daemon reads provider ownership through its own typed admission seam; production
 // installs it from root composition, and these tests compose it the same way.
 installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
-import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
+import { noopPlatformResourceCleanup as platformResourceCleanup } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import {
   fixtureSettingsMutations,
   fixtureSettingsReads,

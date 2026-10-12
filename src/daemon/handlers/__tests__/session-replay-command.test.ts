@@ -6,7 +6,7 @@ import {
   unavailableBindExactDevice,
 } from '../../__tests__/test-device-runtime-gateway.ts';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
-import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
+import { noopPlatformResourceCleanup as platformResourceCleanup } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import type { SessionCommandParams } from '../session-command-input.ts';
 import { handleReplayTestCommand } from '../session-replay-command.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
