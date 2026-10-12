@@ -290,17 +290,18 @@ function buildSnapshotArgs(options: WebSnapshotOptions | undefined): string[] {
 }
 
 /**
- * Refs per backend `batch` call. The backend reads a batch from stdin as one JSON array, so the
- * group is bounded by that payload rather than by a round-trip budget: measured on a 408-ref page,
- * 200 refs measured in 0.28 s inside one process, so a group finishes far inside the command timeout
- * the per-ref path also had — and the whole capture now costs 3 spawns instead of 381.
+ * Refs per backend `batch` call. The bound is the group that finishes inside the command timeout it
+ * runs under (`AGENT_BROWSER_TIMEOUT_MS`, 30 s) with room to spare: measured on a 408-ref page, 200
+ * refs measured in 0.28 s and all 408 in 0.33 s inside one process, because a command inside a batch
+ * is a DOM read of an already-loaded page rather than an interpreter boot. Raising the number is safe
+ * only while that ratio holds — the stdin payload itself (~23 bytes per ref) is not the constraint.
  */
 const MAX_REFS_PER_RECT_BATCH = 200;
 
 /**
  * The bounds of every ref of the capture, in `batch` round trips: the backend measures them inside
- * one process, where the per-ref alternative pays one spawn per ref (measured on a 408-ref page: 90 s
- * of spawns against 0.3 s of batching).
+ * one process, where the per-ref alternative pays one spawn per ref (measured on a 408-ref page: one
+ * capture cost 385 spawns and 90 s, and 4 spawns and 0.3 s batched).
  *
  * A ref the backend could not measure comes back as a failed entry and simply gets no rect — an
  * element that is absent or has no box is an ordinary answer, and the entry's own `success` field is
@@ -312,12 +313,16 @@ async function fetchRefRects(
   refs: readonly string[],
 ): Promise<Map<string, Rect>> {
   const rects = new Map<string, Rect>();
+  // A capture with no addressable node is an empty group list, so the loop below never runs and the
+  // backend is never called. That is the one place this seam declines to ask, and it is also what
+  // keeps such a capture from tripping the refusal: nothing failed, there was nothing to measure.
   for (let start = 0; start < refs.length; start += MAX_REFS_PER_RECT_BATCH) {
     const group = refs.slice(start, start + MAX_REFS_PER_RECT_BATCH);
     const commands = group.map((ref) => ['get', 'box', browserRefSelector(ref)]);
     const entries = parseBatchEntries(
       await runJson(['batch'], { stdin: JSON.stringify(commands) }),
       commands,
+      refs.length,
     );
     for (const [index, entry] of entries.entries()) {
       const ref = group[index];
@@ -356,13 +361,20 @@ type AgentBrowserBatchEntry = {
 /**
  * The backend answers a batch with one entry per command, echoing each command back, and reports a
  * whole-batch fault as a single object instead of an array. The echo is what pairs an entry to the
- * ref it measured: a count that disagrees, an entry that is not an object, or an entry describing
- * some other command means the answer cannot be matched back, so the geometry is refused rather than
- * guessed at. Position is trusted only as the order of the echo, never as the pairing itself.
+ * ref it measured, so position is trusted only as the order of the echo, never as the pairing
+ * itself. Anything that breaks that pairing — an answer that is not a list of entries, a list that
+ * does not cover the commands sent, an entry with no verdict, an entry describing some other command
+ * — means the geometry cannot be matched back and is refused, naming which invariant broke.
+ *
+ * Each refusal is keyed by a stable `reason` identifier rather than by its own sentence, so a caller
+ * branches on the failure without reading prose. `captureRefs` is the capture's whole ref count
+ * instead of this group's, because the answer reads as a statement about the capture and one capture
+ * can be measured in several groups.
  */
 function parseBatchEntries(
   data: unknown,
   commands: readonly (readonly string[])[],
+  captureRefs: number,
 ): AgentBrowserBatchEntry[] {
   const unusable = (reason: string): AppError =>
     new AppError(
@@ -371,15 +383,18 @@ function parseBatchEntries(
       {
         cmd: AGENT_BROWSER,
         args: ['batch'],
-        requestedRefs: commands.length,
+        reason,
+        requestedRefs: captureRefs,
+        groupRefs: commands.length,
         hint: AGENT_BROWSER_DOCTOR_HINT,
       },
     );
-  if (!Array.isArray(data) || data.length !== commands.length) throw unusable('entry count');
-  if (!data.every(isBatchEntry)) throw unusable('entry shape');
+  if (!Array.isArray(data)) throw unusable('batch-result-not-a-list');
+  if (data.length !== commands.length) throw unusable('entry-count');
+  if (!data.every(isBatchEntry)) throw unusable('entry-shape');
   const entries = data;
   for (const [index, entry] of entries.entries()) {
-    if (!sameBatchCommand(entry.command, commands[index])) throw unusable('entry command');
+    if (!sameBatchCommand(entry.command, commands[index])) throw unusable('entry-command');
   }
   return entries;
 }

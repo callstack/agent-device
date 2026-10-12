@@ -79,11 +79,11 @@ async function attachDraftRects(
   drafts: SnapshotDraftNode[],
   fetchRects: SnapshotRectFetch,
 ): Promise<void> {
-  // Only a node the backend issued a ref for has a box to ask for: a ref-less line is text the
-  // backend never measured, and `get box` has no handle for it.
-  const addressable = drafts.flatMap((draft) => (draft.ref === undefined ? [] : [draft.ref]));
-  if (addressable.length === 0) return;
-  const rects = await fetchRects(addressable);
+  // One fetch for the whole capture. A capture of nothing addressable still comes through, and the
+  // fetcher decides not to call the backend for it: that decision belongs with the refusal below.
+  const rects = await fetchRects(
+    drafts.flatMap((draft) => (draft.ref === undefined ? [] : [draft.ref])),
+  );
   for (const draft of drafts) {
     const ref = draft.ref;
     const rect = ref === undefined ? undefined : rects.get(ref);

@@ -207,8 +207,9 @@ test('agent-browser provider refuses snapshot geometry when the batch resolves n
 });
 
 test('agent-browser provider refuses geometry when the batch answers with too few entries', async () => {
-  // Entries pair back to refs by position, so a short answer cannot be trusted: pairing four refs
-  // against the entries that exist would hand each node some other node's box.
+  // Each entry has to name the command it answers, so an answer with fewer entries than commands
+  // cannot be paired at all: filling four refs from the entries that exist would hand each node some
+  // other node's box.
   await withWebProvider(async (provider) => {
     await assert.rejects(
       () =>
@@ -223,10 +224,7 @@ test('agent-browser provider refuses geometry when the batch answers with too fe
           },
           async () => await provider.snapshot({ includeRects: true }),
         ),
-      (error: unknown) =>
-        error instanceof AppError &&
-        error.code === 'COMMAND_FAILED' &&
-        /unusable batch result/.test(error.message),
+      refusedFor('entry-count'),
     );
   });
 });
@@ -244,17 +242,15 @@ test('agent-browser provider refuses geometry when the batch answers with an obj
               : snapshotPayload(),
           async () => await provider.snapshot({ includeRects: true }),
         ),
-      (error: unknown) =>
-        error instanceof AppError &&
-        error.code === 'COMMAND_FAILED' &&
-        /unusable batch result/.test(error.message),
+      refusedFor('batch-result-not-a-list'),
     );
   });
 });
 
 test('agent-browser provider refuses geometry when a batch entry is not an entry', async () => {
-  // Right number of answers, one of them not a result object — an empty object carrying neither the
-  // command it answers nor a verdict: the positions no longer describe the refs they measured.
+  // Right number of answers, one of them not an object at all. The point of this test is the shape
+  // guard, so the member has to be one the guard alone rejects: an object would be refused further
+  // down by the echo check and the branch under test would go unpinned.
   await withWebProvider(async (provider) => {
     await assert.rejects(
       () =>
@@ -265,7 +261,7 @@ test('agent-browser provider refuses geometry when a batch entry is not an entry
             return jsonResult(
               commands.map((command, index) =>
                 index === 0
-                  ? {}
+                  ? null
                   : { command, success: true, error: null, result: boxRect(command[2]) },
               ),
               1,
@@ -273,10 +269,7 @@ test('agent-browser provider refuses geometry when a batch entry is not an entry
           },
           async () => await provider.snapshot({ includeRects: true }),
         ),
-      (error: unknown) =>
-        error instanceof AppError &&
-        error.code === 'COMMAND_FAILED' &&
-        /unusable batch result/.test(error.message),
+      refusedFor('entry-shape'),
     );
   });
 });
@@ -305,10 +298,7 @@ test('agent-browser provider refuses geometry when an entry echoes a different c
           },
           async () => await provider.snapshot({ includeRects: true }),
         ),
-      (error: unknown) =>
-        error instanceof AppError &&
-        error.code === 'COMMAND_FAILED' &&
-        /unusable batch result/.test(error.message),
+      refusedFor('entry-command'),
     );
   });
 });
@@ -353,6 +343,64 @@ test('agent-browser provider surfaces a stale ref as a refusal of the geometry i
         error.code === 'COMMAND_FAILED' &&
         error.message === 'Stale ref @e1',
     );
+  });
+});
+
+test('agent-browser provider passes snapshot cancellation to the geometry batch', async () => {
+  // The batch is the call that now carries up to 200 commands, so it is the one where a dropped
+  // signal costs a whole 30 s after the caller gave up. The capture call has its own test; this is
+  // the geometry half.
+  const controller = new AbortController();
+  await withWebProvider(async (provider) => {
+    const signals: Array<AbortSignal | undefined> = [];
+    await withCommandExecutorOverride(
+      async (_cmd, args, options) => {
+        signals.push(options.signal);
+        if (agentBrowserCliArgs(args)[0] !== 'batch') return snapshotPayload();
+        const commands = readBatchCommands(options.stdin);
+        return jsonResult(
+          commands.map((command) => ({
+            command,
+            success: true,
+            error: null,
+            result: boxRect(command[2]),
+          })),
+        );
+      },
+      async () => await provider.snapshot({ includeRects: true, signal: controller.signal }),
+    );
+    assert.equal(signals.length, 2, 'one capture call and one geometry batch');
+    assert.equal(
+      signals[1],
+      controller.signal,
+      'the geometry batch is cancellable by the request that asked for it',
+    );
+  });
+});
+
+test('agent-browser provider asks the backend nothing for a capture of only ref-less text', async () => {
+  // A capture of only ref-less text has no box to ask for. Declining is the fetcher's decision, and
+  // pinning it here is what keeps the all-unmeasurable refusal from firing on an empty tree.
+  await withWebProvider(async (provider) => {
+    const calls: AgentBrowserCall[] = [];
+    const snapshot = await withCommandExecutorOverride(
+      async (cmd, args) => {
+        recordCall(calls, cmd, args);
+        return jsonResult({
+          success: true,
+          data: { refs: {}, snapshot: '- status "Hello Zed"', truncated: false },
+        });
+      },
+      async () => await provider.snapshot({ includeRects: true }),
+    );
+
+    assert.deepEqual(
+      calls.map((call) => call.args[0]),
+      ['snapshot'],
+      'no batch is sent when nothing in the capture has a ref',
+    );
+    assert.equal(snapshot.nodes.length, 1);
+    assert.equal(snapshot.nodes[0]?.ref, undefined);
   });
 });
 
@@ -408,6 +456,17 @@ function assertGeometryRects(snapshot: WebSnapshotResult): void {
       { x: 31, y: 32, width: 100, height: 20 },
     ],
   );
+}
+
+/**
+ * The refusal this file is about, pinned to the invariant that broke. Every branch below shares the
+ * message prefix, so matching the prefix alone would let any of them satisfy any of these tests.
+ */
+function refusedFor(reason: string) {
+  return (error: unknown) =>
+    error instanceof AppError &&
+    error.code === 'COMMAND_FAILED' &&
+    error.details?.reason === reason;
 }
 
 /** The commands the provider wrote for one `batch`, which is the shape this file is about. */
