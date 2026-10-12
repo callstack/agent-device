@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import type { DryRunCompletedEvent } from '@stryker-mutator/api/report';
 import { DryRunStatus, TestStatus } from '@stryker-mutator/api/test-runner';
-import { mkdtempForTestSync } from '../../src/__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   assertCoveragePolicy,
   coverageScope,
