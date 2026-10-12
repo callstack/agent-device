@@ -9,6 +9,7 @@ export const DISPATCH_DISCLOSURE_PRODUCERS = [
   'android-adb',
   'android-helper',
   'webdriver',
+  'web-agent-browser',
   'post-action-guard',
 ] as const;
 
@@ -52,6 +53,8 @@ export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>>
     'packages/platform-android/src/__tests__/touch-helper-session.test.ts',
   'webdriver.': 'packages/provider-webdriver/src/webdriver-transport.test.ts',
   'webdriver.orientation.': 'packages/provider-webdriver/src/webdriver-orientation.test.ts',
+  'web-agent-browser.':
+    'packages/platform-web/src/__tests__/agent-browser-dispatch-disclosure.test.ts',
   'maestro-direct.':
     'src/daemon/interaction/internal/__tests__/interaction-touch-direct-ios.test.ts',
 };

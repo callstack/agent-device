@@ -2,7 +2,11 @@ import { execFailureDetails } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { hostPlatform, type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
-import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  type DispatchDisclosure,
+  discloseDispatchAfterSteps,
+} from '@agent-device/kernel/errors';
 
 import type { Rect } from '@agent-device/kernel/snapshot';
 import {
@@ -75,7 +79,12 @@ export function createAgentBrowserWebProvider(
       await runJson(['set', 'viewport', String(width), String(height)]);
     },
     async click(x, y) {
-      await clickCoordinates(runJson, x, y);
+      const sends = createAgentBrowserSendLedger(runJson);
+      try {
+        await clickCoordinates(sends.send, x, y);
+      } catch (error) {
+        throw sends.discloseDispatch(error);
+      }
     },
     async hover(x, y) {
       await movePointer(runJson, x, y);
@@ -89,15 +98,20 @@ export function createAgentBrowserWebProvider(
     async fill(x, y, text) {
       // The shared web interactor is coordinate-first; bridge that to low-level
       // browser input until a future ref-targeted web path can call native fill.
-      await clickCoordinates(runJson, x, y);
-      await runJson(['press', selectAllShortcut()]);
-      if (text.length === 0) {
-        // The clear-field request (#2063): typing zero characters over the selection would
-        // leave the old value selected but intact, so the selection must be deleted instead.
-        await runJson(['press', 'Backspace']);
-        return;
+      const sends = createAgentBrowserSendLedger(runJson);
+      try {
+        await clickCoordinates(sends.send, x, y);
+        await sends.send(['press', selectAllShortcut()]);
+        if (text.length === 0) {
+          // The clear-field request (#2063): typing zero characters over the selection would
+          // leave the old value selected but intact, so the selection must be deleted instead.
+          await sends.send(['press', 'Backspace']);
+          return;
+        }
+        await sends.send(['keyboard', 'type', text]);
+      } catch (error) {
+        throw sends.discloseDispatch(error);
       }
-      await runJson(['keyboard', 'type', text]);
     },
     async fillRef(ref, text) {
       await runJson(['fill', browserRefSelector(ref), text]);
@@ -128,16 +142,39 @@ async function runPacedScroll(
   scrollOptions: { amount?: number; pixels?: number; durationMs?: number } | undefined,
 ): Promise<void> {
   const steps = buildPacedScrollSteps(resolveWebScrollDistance(scrollOptions));
-  let dispatchedSteps = 0;
+  const sends = createAgentBrowserSendLedger(runJson);
   try {
     for (const step of steps) {
-      await runJson(buildScrollArgs(direction, step.distance));
-      dispatchedSteps += 1;
+      await sends.send(buildScrollArgs(direction, step.distance));
       if (step.delayAfterMs > 0) await sleep(step.delayAfterMs);
     }
   } catch (error) {
-    throw discloseDispatchAfterSteps(error, dispatchedSteps);
+    throw sends.discloseDispatch(error);
   }
+}
+
+/** One backend send for a compound operation, counted by {@link createAgentBrowserSendLedger}. */
+type AgentBrowserSend = (args: string[]) => Promise<unknown>;
+
+/**
+ * Counts the backend sends of one compound web operation that returned, and discloses them on
+ * its failure through the shared rule: `no` survives only while nothing was sent, so a counted
+ * send makes the failure `unknown` with `details.dispatchedSteps`.
+ */
+function createAgentBrowserSendLedger(runJson: (args: string[]) => Promise<unknown>): {
+  send: AgentBrowserSend;
+  discloseDispatch(error: unknown): unknown;
+} {
+  let dispatchedSteps = 0;
+  return {
+    send: async (args) => {
+      await runJson(args);
+      dispatchedSteps += 1;
+    },
+    discloseDispatch(error: unknown): unknown {
+      return discloseDispatchAfterSteps(error, dispatchedSteps);
+    },
+  };
 }
 
 type ScrollStep = {
@@ -210,22 +247,14 @@ function buildScrollArgs(direction: string, distance: number | undefined): strin
   return ['scroll', direction, ...(distance === undefined ? [] : [String(distance)])];
 }
 
-async function clickCoordinates(
-  runJson: (args: string[]) => Promise<unknown>,
-  x: number,
-  y: number,
-): Promise<void> {
-  await movePointer(runJson, x, y);
-  await runJson(['mouse', 'down']);
-  await runJson(['mouse', 'up']);
+async function clickCoordinates(send: AgentBrowserSend, x: number, y: number): Promise<void> {
+  await movePointer(send, x, y);
+  await send(['mouse', 'down']);
+  await send(['mouse', 'up']);
 }
 
-async function movePointer(
-  runJson: (args: string[]) => Promise<unknown>,
-  x: number,
-  y: number,
-): Promise<void> {
-  await runJson(['mouse', 'move', String(Math.round(x)), String(Math.round(y))]);
+async function movePointer(send: AgentBrowserSend, x: number, y: number): Promise<void> {
+  await send(['mouse', 'move', String(Math.round(x)), String(Math.round(y))]);
 }
 
 async function captureAgentBrowserSnapshot(
@@ -464,6 +493,7 @@ function unwrapAgentBrowserJson(
       args: cliArgs,
       hint: readStringProperty(parsed, 'hint') ?? AGENT_BROWSER_DOCTOR_HINT,
       agentBrowserError: parsed.error,
+      ...agentBrowserCliRefusalDispatch(parsed),
     });
   }
   if (result.exitCode !== 0) {
@@ -522,6 +552,8 @@ function mapAgentBrowserRunError(error: unknown, args: string[]): AppError {
         cmd: AGENT_BROWSER,
         args,
         hint: webBackendHint(appError),
+        // The managed entry was never spawned, so nothing of this command reached the browser.
+        dispatched: 'no',
       },
       appError,
     );
@@ -558,6 +590,28 @@ function readEnvelopeErrorMessage(envelope: JsonObject): string {
 
 function toErrorCode(value: unknown): 'COMMAND_FAILED' | (string & {}) {
   return typeof value === 'string' && value.length > 0 ? value : 'COMMAND_FAILED';
+}
+
+/**
+ * The typed envelope `type`s that prove the agent-browser CLI refused an argv before the command
+ * could reach the browser daemon: the CLI answers them itself, with the daemon dead, and a
+ * semantic failure carries no `type` at all. The requested operation never ran, so `no` is safe.
+ * For a command that did reach the backend, whatever the browser did with it is not knowable from
+ * the reply, so the provider stays silent and the request router's fallback answers `unknown`.
+ * Mirrored by the `web-agent-browser.` rows in contracts/fixtures/dispatch-disclosure.json.
+ */
+const AGENT_BROWSER_PRE_DISPATCH_REFUSAL_TYPES: ReadonlySet<string> = new Set([
+  'unknown_command',
+  'missing_arguments',
+]);
+
+function agentBrowserCliRefusalDispatch(parsed: JsonObject): {
+  dispatched?: DispatchDisclosure;
+} {
+  const type = readStringProperty(parsed, 'type');
+  return type !== undefined && AGENT_BROWSER_PRE_DISPATCH_REFUSAL_TYPES.has(type)
+    ? { dispatched: 'no' }
+    : {};
 }
 
 function browserRefSelector(ref: string): string {
