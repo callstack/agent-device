@@ -329,13 +329,14 @@ test('lines added below a debt function do not charge it, though the diff also d
 });
 
 test('a deleted function takes its score with it, out of both scopes', () => {
-  // The exemption here is structural, not the diff filter: the head file no longer contains the
-  // function, so no report of that run scores it — measured, `--all` finds nothing either. So this
-  // pins that a removal leaves no residue behind in either scope, which is the opposite of what the
-  // two cases above pin, where the debt is in the map and only the scoping keeps it uncharged.
-  writeCoverage({ 'src/debt.ts': { noFunctions: true }, 'src/clean.ts': { hits: 4 } });
+  // The stronger fixture, and the reason the exemption is structural rather than the diff filter
+  // again: the map still records `score` at 42 from a coverage run that predates the deletion, yet
+  // neither scope reports it, because scoring walks the source and the source no longer holds the
+  // function. The two cases above pin debt that IS scored and is held back by scoping; this one
+  // pins debt that no longer exists in either scope even while the map claims it.
+  writeCoverage({ 'src/debt.ts': { span: [1, 14] }, 'src/clean.ts': { hits: 4 } });
   write('src/debt.ts', TRIVIAL);
-  commit('replace the debt function with a constant');
+  commit('delete the debt function, leave the map recording it');
 
   const { code, out } = check(['--base', HEADS[0]!]);
 
