@@ -149,7 +149,6 @@ export type InteractionPathContract = {
 };
 
 const GAPS_UMBRELLA_ISSUE = 'https://github.com/callstack/agent-device/issues/1081';
-const PARENT_OWNED_TOUCH_POINT_GAP_ISSUE = 'https://github.com/callstack/agent-device/issues/1718';
 const TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE = 'https://github.com/callstack/agent-device/issues/3335';
 
 // Every path shares the SAME cell by construction: response payloads have one
@@ -564,8 +563,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       parentOwnedTouchPoint: {
         kind: 'waived',
         reason:
-          'gap: the runner has the matched element but no daemon snapshot tree from which to exclude independently interactive descendants.',
-        trackingIssue: PARENT_OWNED_TOUCH_POINT_GAP_ISSUE,
+          'Intentional: pinned Maestro 2.5.1 taps the matched element center, even when an independently interactive descendant covers it; excluding descendants would change authored Maestro behavior.',
       },
       offscreen: {
         kind: 'waived',
@@ -627,8 +625,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       parentOwnedTouchPoint: {
         kind: 'waived',
         reason:
-          'gap: Maestro compatibility executes the matched element center runner-side without a daemon snapshot tree of independently interactive descendants.',
-        trackingIssue: PARENT_OWNED_TOUCH_POINT_GAP_ISSUE,
+          'Intentional: pinned Maestro 2.5.1 taps the matched element center, even when an independently interactive descendant covers it; the non-hittable coordinate fallback preserves that compatibility behavior.',
       },
       offscreen: {
         // hasTappableFrame keeps two path-specific choices (empty element
