@@ -48,6 +48,8 @@ type CoverageOptions = Readonly<{
   hits?: number;
   /** Emit a count no execution can produce, which the sanitizer drops with the whole record. */
   corrupt?: boolean;
+  /** Record the file with no functions in it, as a run over a deleted function's file reports. */
+  noFunctions?: boolean;
 }>;
 
 function istanbulRecord(file: string, options: CoverageOptions): Record<string, unknown> {
@@ -56,17 +58,19 @@ function istanbulRecord(file: string, options: CoverageOptions): Record<string, 
   return {
     path: path.join(repo, file),
     statementMap: { 0: { start: line(from), end: line(to) } },
-    fnMap: {
-      0: {
-        name: 'score',
-        decl: { start: line(from), end: line(from) },
-        loc: { start: line(from), end: line(to) },
-        line: from,
-      },
-    },
+    fnMap: options.noFunctions
+      ? {}
+      : {
+          0: {
+            name: 'score',
+            decl: { start: line(from), end: line(from) },
+            loc: { start: line(from), end: line(to) },
+            line: from,
+          },
+        },
     branchMap: {},
     s: { 0: options.corrupt ? -1 : (options.hits ?? 0) },
-    f: { 0: options.hits ?? 0 },
+    f: options.noFunctions ? {} : { 0: options.hits ?? 0 },
     b: {},
   };
 }
@@ -255,6 +259,58 @@ test('a rename that also edits the body owes the edited lines', () => {
 
   assert.equal(code, 1);
   assert.match(out, /\| `src\/moved\.ts:1` score \| 56\.0 \| 7 \| 0% \|/);
+});
+
+test('deleting lines from a debt function does not charge the function that survives them', () => {
+  // Measured, not assumed: fallow's `--diff-file` index holds added lines only, so a hunk that is
+  // nothing but removals contributes no line to intersect a function's span with, and this run
+  // agrees rather than overriding it. Removing code retires debt instead of adding it, which is the
+  // rule the whole-file and pure-rename exemptions already follow — the residual is deliberate: a
+  // deletion that leaves an untested complex function standing is not charged here, and `--all`
+  // still lists it on main. Pinned so a change to either layer's scoping has to say so.
+  writeCoverage({ 'src/debt.ts': { span: [1, 13] }, 'src/clean.ts': { hits: 4 } });
+  write('src/debt.ts', DEBT.replace('    total += 1;\n', ''));
+  commit('delete a line inside the debt function');
+
+  const { code, out } = check(['--base', HEADS[0]!]);
+
+  assert.equal(code, 0);
+  assert.match(out, /no touched function\(s\) at or above 30/);
+  // Not a vacuous pass: the same map, scored without the diff, does hold this function at 42.
+  const backlog = check(['--all']);
+  assert.equal(backlog.code, 0);
+  assert.match(backlog.out, /\| `src\/debt\.ts:1` score \| 42\.0 \| 6 \| 0% \|/);
+});
+
+test('lines added elsewhere in a file do not charge a function whose own lines did not change', () => {
+  // Scoping is per function span, not per file, so a one-line edit in a large module does not
+  // inherit every debt score inside it. Here the file has added lines — `helper` is rewritten and
+  // another export appears below the function — and the function lost one line, yet none of the
+  // added lines fall in its span, so it is not this change's verdict.
+  writeCoverage({ 'src/debt.ts': { span: [1, 13] }, 'src/clean.ts': { hits: 4 } });
+  write(
+    'src/debt.ts',
+    `${DEBT.replace('    total += 1;\n', '')}\nexport const helper = 2;\nexport const extra = 3;\n`,
+  );
+  commit('drop a line inside the function, add two below it');
+
+  const { code, out } = check(['--base', HEADS[0]!]);
+
+  assert.equal(code, 0);
+  assert.doesNotMatch(out, /`src\/debt\.ts:1` score/);
+  const backlog = check(['--all']);
+  assert.match(backlog.out, /\| `src\/debt\.ts:1` score \| 42\.0 \| 6 \| 0% \|/);
+});
+
+test('deleting the debt function altogether is retiring it, not a change to it', () => {
+  writeCoverage({ 'src/debt.ts': { noFunctions: true }, 'src/clean.ts': { hits: 4 } });
+  write('src/debt.ts', TRIVIAL);
+  commit('replace the debt function with a constant');
+
+  const { code, out } = check(['--base', HEADS[0]!]);
+
+  assert.equal(code, 0);
+  assert.match(out, /no touched function\(s\) at or above 30/);
 });
 
 test('a touched file the sanitizer dropped as corrupt yields no verdict', () => {
