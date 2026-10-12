@@ -35,6 +35,7 @@ import {
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../../snapshot-interactor-capture.ts';
 import { corroborateIosTapFailure } from '../interaction-ios-tap-outcome.ts';
+import { movingTargetBaseline } from '../../../deferred-interaction-outcome.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../../../__tests__/command-surface-fixture.ts';
 
@@ -134,6 +135,34 @@ test('a changed post-action capture corroborates an iOS tap reported as failed',
   }
   expect(legacyDispatchCapture.mock.calls.filter((call) => call[1] === 'press')).toHaveLength(1);
   expect(sessionStore.get(sessionName)?.actions).toHaveLength(1);
+});
+
+test('a corroborated tap failure still records the tree it acted through (#3471)', async () => {
+  // The corroboration is a dispatch that touched the device through a resolved tree, so it owes the
+  // moving-target baseline like any other mutation: withholding it there would RETIRE the record a
+  // previous action made and leave the next press unscreened by the gate.
+  const sessionName = 'ios-tap-corroboration-baseline';
+  const sessionStore = makeSessionStore();
+  const session = makeIosSession(sessionName, {
+    appBundleId: 'com.example.app',
+    snapshot: snapshot(profileNodes),
+  });
+  sessionStore.publish(sessionName, session);
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
+    if (command === 'press') {
+      throw new AppError(
+        'XCTEST_RECORDED_FAILURE',
+        'XCTest recorded a failure while executing tap; the action may not have been performed.',
+      );
+    }
+    if (command === 'snapshot') return snapshotPayload(imageViewerNodes);
+    return {};
+  });
+
+  const response = await runClick(sessionStore, sessionName);
+
+  expect(response?.ok).toBe(true);
+  expect(movingTargetBaseline(sessionStore.get(sessionName)!)).toBeDefined();
 });
 
 test('an unchanged post-action capture keeps a failed iOS tap failed', async () => {

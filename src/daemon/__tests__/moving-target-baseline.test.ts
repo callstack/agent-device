@@ -92,28 +92,20 @@ test('a baseline from an earlier action is replaced rather than kept beside the 
   assert.notEqual(second.tree.nodes, first.tree.nodes);
 });
 
-test('a newer published observation beats the tree the action resolved against', () => {
-  // The `--settle` and `--verify` case: the action published a tree AFTER its own resolution, and
-  // that later capture is the better account of where the surface came to rest.
+test('the baseline is the tree the action acted through, whatever the session now holds', () => {
+  // The session snapshot may have been replaced by a post-action capture (a `--settle` observation,
+  // a `--verify` capture) — the better account of where the surface came to rest — but nothing here
+  // can tell one from a freshness capture or a `@ref` press's authorized frame, because all three
+  // arrive as a different node array. Adopting it on array identity would screen the next press
+  // against positions this action never looked at, which is what this marker exists to prevent. So
+  // the acted-through tree wins and the settled press simply owes its successor a re-observation.
   const session = makeSession('android');
-  const settled = appTree('Settled');
-  session.snapshot = settled;
+  const actedThrough = appTree('Pre-action');
+  session.snapshot = appTree('Newer, provenance unknown');
 
-  markPress(session, { nodes: appTree('Pre-action').nodes });
+  markPress(session, { nodes: actedThrough.nodes });
 
-  assert.equal(movingTargetBaseline(session)?.tree.nodes, settled.nodes);
-});
-
-test('the observation an action resolved against is kept when it is also the newest one', () => {
-  // Identity, not content, decides: `surfaceScopedNodes` keeps the capture's own array, so a session
-  // holding that same array has published nothing newer than the action's own resolution.
-  const session = makeSession('android');
-  const resolved = appTree();
-  session.snapshot = resolved;
-
-  markPress(session, { nodes: resolved.nodes });
-
-  assert.equal(movingTargetBaseline(session)?.tree.nodes, resolved.nodes);
+  assert.equal(movingTargetBaseline(session)?.tree.nodes, actedThrough.nodes);
 });
 
 test('a baseline keeps the surface its tree came from', () => {
@@ -211,6 +203,27 @@ test('a gesture takes the surface over from a press, rather than joining it', ()
 
   assert.equal(session.deferredSurface?.kind, 'stabilize');
   assert.equal(movingTargetBaseline(session), undefined);
+});
+
+test('the trigger is wider than the guard on purpose: any command that acted through a tree records it', () => {
+  // The ADR 0011 `targetStability` cells scope which commands the GATE refuses to dispatch blind
+  // (press, click). This marker answers a different question — did a mutation just leave a surface
+  // that may still be animating — and a `longpress`, `hover`, or `fill` that resolved its target
+  // through a captured tree can animate the surface exactly as a press does. Narrowing the writer to
+  // press/click would un-guard the press that follows a `fill` which opened a keyboard, which is the
+  // failure the issue describes with a different verb in front of it.
+  const session = makeSession('android');
+  const actedThrough = appTree();
+
+  markDeferredInteractionOutcome({
+    session,
+    command: 'fill',
+    positionals: ['label="Field"', 'hello'],
+    flags: undefined,
+    preActionTree: { nodes: actedThrough.nodes },
+  });
+
+  assert.equal(movingTargetBaseline(session)?.tree.nodes, actedThrough.nodes);
 });
 
 test('an ineligible action marks nothing at all, leaving the record untouched', () => {

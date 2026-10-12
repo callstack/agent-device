@@ -143,37 +143,28 @@ function markSurfaceStabilization(
  * tap, `back`, an app open) leave the session idle: the ordinary navigate-then-tap step pays the
  * gate nothing.
  *
- * When the action published a newer observation than the one it resolved against — a `--settle`
- * observation stores the settled tree, `--verify` captures after the action — that newer tree is the
- * better account of where the surface came to rest, so it becomes the baseline instead. The
- * comparison is by node-array identity: `surfaceScopedNodes` keeps the capture's own array, so a
- * session observation holding the same array is the same observation, and one holding a different
- * array is a later one.
+ * The baseline is that tree and never the session's current snapshot. A `--settle` or `--verify`
+ * press does publish a post-action observation, and it would be the better account of where the
+ * surface came to rest — but nothing here can tell a post-action capture from a freshness capture or
+ * a `@ref` press's authorized frame, since all three reach `session.snapshot` as a different node
+ * array from the one the action resolved against. Inferring "newer" from array identity would
+ * attribute to this action a surface it may never have looked at, which is the exact thing this
+ * marker forbids. A settled press therefore leaves the next press owed a re-observation rather than
+ * answered from a tree of unknown provenance: the cost lands on one extra pair of captures inside the
+ * window, never on a rest judgement made against the wrong surface.
  */
 function markMovingTargetBaseline(
   session: SessionState,
   preActionTree: SurfaceScopedNodes | undefined,
 ): void {
-  const tree = chooseMovingTargetTree(session.snapshot, preActionTree);
-  if (!tree || tree.nodes.length === 0) {
+  if (!preActionTree || preActionTree.nodes.length === 0) {
     retireMovingTargetBaseline(session);
     return;
   }
   session.deferredSurface = {
     kind: 'recheck',
-    baseline: { finishedAt: Date.now(), tree },
+    baseline: { finishedAt: Date.now(), tree: preActionTree },
   };
-}
-
-function chooseMovingTargetTree(
-  published: SnapshotState | undefined,
-  preActionTree: SurfaceScopedNodes | undefined,
-): SurfaceScopedNodes | undefined {
-  if (!preActionTree) return undefined;
-  if (published && published.nodes !== preActionTree.nodes) {
-    return movingTargetBaselineTree(published);
-  }
-  return preActionTree;
 }
 
 /**
@@ -187,19 +178,6 @@ function chooseMovingTargetTree(
 export function retireMovingTargetBaseline(session: SessionState): void {
   if (session.deferredSurface?.kind !== 'recheck') return;
   session.deferredSurface = undefined;
-}
-
-/** Narrows a capture to the shape a baseline keeps, so a stored tree never smuggles in a surface. */
-function movingTargetBaselineTree(
-  snapshot: SnapshotState | undefined,
-): SurfaceScopedNodes | undefined {
-  if (!snapshot) return undefined;
-  return {
-    nodes: snapshot.nodes,
-    ...(snapshot.iosSystemSurfaceBundleId
-      ? { surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
-      : {}),
-  };
 }
 
 /**
