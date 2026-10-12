@@ -112,12 +112,13 @@ export function movingTargetRectsStable(
   );
 }
 
-/** The one reason a press refuses because it cannot name a position its target is at rest in. */
-export const TARGET_STILL_MOVING_REASON = 'target_still_moving';
-
 /**
- * The hint published beside every {@link TARGET_STILL_MOVING_REASON} refusal — the recovery that
- * works, owned here so no producer can publish the reason without it.
+ * The hint published beside a `target_still_moving` refusal — the recovery that works, with its
+ * wording owned here so every producer publishes one text. Pairing the two is a convention rather
+ * than something this module enforces: the reason is a literal in the vocabulary every interaction
+ * adapter reads (`INTERACTION_ERROR_REASONS.targetStillMoving` in
+ * `packages/selectors/src/interaction-error.ts`), so a producer could raise it without this hint.
+ * The runtime moving-target gate is the only producer today and publishes both together.
  *
  * A selector re-resolves against a fresh capture and can be retried as-is. An `@ref` cannot survive
  * the wait: the capture a `wait` takes retires the ref frame (ADR 0014), which is the same reason

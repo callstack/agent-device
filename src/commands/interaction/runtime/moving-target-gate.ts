@@ -1,11 +1,11 @@
 import {
   MOVING_TARGET_GATE_SAMPLE_GAP_MS,
-  TARGET_STILL_MOVING_REASON,
   movingTargetGateDecision,
   movingTargetRectsStable,
   targetStillMovingHint,
   type MovingTargetGateDecision,
 } from '@agent-device/contracts/moving-target-gate';
+import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type { ResolvedInteractionTarget } from '@agent-device/contracts/interaction';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
@@ -208,7 +208,7 @@ function motionRefusal(
         ? `Selector ${selector} is still moving, so no resting position could be confirmed to press`
         : `Ref ${ref} is still moving, so no resting position could be confirmed to press`,
       {
-        reason: TARGET_STILL_MOVING_REASON,
+        reason: INTERACTION_ERROR_REASONS.targetStillMoving,
         ...(selector !== undefined ? { selector } : { ref }),
         ...(resolved.node?.rect ? { rect: resolved.node.rect } : {}),
         ...(disagreement?.secondRect ? { movedToRect: disagreement.secondRect } : {}),

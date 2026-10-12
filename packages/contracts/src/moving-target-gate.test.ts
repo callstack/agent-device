@@ -4,7 +4,6 @@ import {
   MOVING_TARGET_GATE_RECT_TOLERANCE_PX,
   MOVING_TARGET_GATE_SAMPLE_GAP_MS,
   MOVING_TARGET_GATE_WINDOW_MS,
-  TARGET_STILL_MOVING_REASON,
   movingTargetGateDecision,
   movingTargetRectsStable,
   targetStillMovingHint,
@@ -162,10 +161,6 @@ test('the stability comparison is symmetric', () => {
 });
 
 // --- the refusal's published recovery ---
-
-test('the reason is the one shared constant, not a per-producer literal', () => {
-  assert.equal(TARGET_STILL_MOVING_REASON, 'target_still_moving');
-});
 
 test('a refused selector press names the wait that recovers it', () => {
   const hint = targetStillMovingHint({ selector: 'label="Slide target"' });
