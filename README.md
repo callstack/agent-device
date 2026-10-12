@@ -23,7 +23,7 @@ Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent tha
 
 <p>
   agent-device powers mobile automation in
-  <a href="https://tstr.army/thymikee">
+  <a href="https://e2e.tester.army/docs">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/assets/e2e-logo-dark.png">
       <img src="docs/assets/e2e-logo-light.png" width="24" height="24" align="middle" alt="">
