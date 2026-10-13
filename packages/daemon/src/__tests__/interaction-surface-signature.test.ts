@@ -226,7 +226,7 @@ test('classifyBaselineSurfaceEvidence excludes keyboard DESCENDANTS and window S
 /**
  * A keyboard-window subtree: a `[Keyboard]` container plus a SIBLING "Next
  * keyboard" assistant button under the same window — matches the shape in
- * `src/daemon/__tests__/post-gesture-stabilization-fixtures.ts`'s
+ * `packages/daemon/src/__tests__/post-gesture-stabilization-fixtures.ts`'s
  * `keyboardWindowNodes` (kept local here rather than imported: this file's
  * fixtures are raw node literals consumed directly by
  * `buildInteractionSurfaceSignature`, not `SnapshotState`-wrapped like that

@@ -1,5 +1,5 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { legacyDispatchCapture } from '../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import { test, expect, vi, beforeEach } from 'vitest';
 
 import path from 'node:path';
@@ -10,11 +10,11 @@ import {
   createRequestHandler,
   gestureDeviceRuntimeGateway,
   gestureRuntimeSpies,
-} from '../../daemon/__tests__/test-device-runtime-gateway.ts';
-import type { SessionState } from '../../daemon/session-state.ts';
-import { LeaseRegistry } from '../../daemon/lease-registry.ts';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
-import { makeTestScreenRecordingResource } from '../../daemon/__tests__/support/screen-recording-live-handle.ts';
+} from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { makeTestScreenRecordingResource } from '@agent-device/daemon/testing/__tests__/support/screen-recording-live-handle';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 // The observation spy hangs off the port the router composes with (ADR 0019 section 11), not off

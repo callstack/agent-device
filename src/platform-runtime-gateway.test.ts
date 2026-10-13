@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from './daemon/__tests__/platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '@agent-device/daemon/testing/__tests__/platform-services-fixture';
 import {
   type DeviceBinding,
   localRuntimeOwner,
@@ -16,10 +16,10 @@ import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLimrunRuntime } from '@agent-device/provider-limrun';
 import { describe, expect, test, vi } from 'vitest';
-import { handleAppStateCommand } from './daemon/handlers/session-appstate.ts';
-import { createRequestRuntimeBindings } from './daemon/request-runtime-binding.ts';
-import { createRequestDispatchLedger } from './daemon/request-dispatch-ledger.ts';
-import { makeSessionStore } from './daemon/__tests__/support/store-factory.ts';
+import { handleAppStateCommand } from '@agent-device/daemon/testing/handlers/session-appstate';
+import { createRequestRuntimeBindings } from '@agent-device/daemon/testing/request-runtime-binding';
+import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
 import {

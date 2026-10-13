@@ -5,20 +5,20 @@ import {
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
 import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { makeAndroidSession } from '../../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
-import { legacyDispatchCapture } from '../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
-import { snapshotRuntimeFixture } from '../../../daemon/__tests__/snapshot-runtime-fixture.ts';
+import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
-import { DAEMON_SESSION_TEARDOWN_TIMEOUT_MS } from '../../../daemon/session-teardown-budget.ts';
-import { dispatchSnapshotViaRuntime } from '../../../daemon/snapshot-runtime.ts';
-import { teardownDaemonSessionForShutdown } from '../../../daemon/server/daemon-runtime.ts';
+import { DAEMON_SESSION_TEARDOWN_TIMEOUT_MS } from '@agent-device/daemon/testing/session-teardown-budget';
+import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
+import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/testing/server/daemon-runtime';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({
   resolveTargetDevice: vi.fn(async () => ANDROID_EMULATOR),
 }));
-vi.mock('../../../daemon/device/device-ready.ts', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 vi.mock('../../../platform-runtime-resource-cleanup.ts', () => ({

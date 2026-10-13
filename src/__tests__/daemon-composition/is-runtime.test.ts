@@ -7,14 +7,14 @@ import {
   makeAndroidSession,
   makeIosAppSession,
   makeIosSession,
-} from '../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
+} from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
-import type { DaemonRequest } from '../../daemon/daemon-request.ts';
-import { selectorCaptureFixture } from '../../daemon/__tests__/selector-capture-fixture.ts';
-import { markDeferredInteractionOutcome } from '../../daemon/deferred-interaction-outcome.ts';
+import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
+import { selectorCaptureFixture } from '@agent-device/daemon/testing/__tests__/selector-capture-fixture';
+import { markDeferredInteractionOutcome } from '@agent-device/daemon/testing/deferred-interaction-outcome';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
@@ -26,7 +26,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { dispatchIsViaRuntime } from '../../daemon/selector-runtime.ts';
+import { dispatchIsViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
 
 beforeEach(() => {
   mockRunAppleRunnerCommand.mockReset();

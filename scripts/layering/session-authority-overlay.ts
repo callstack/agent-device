@@ -4,25 +4,25 @@ import { sessionStateDeclarationFile } from './session-state.ts';
 
 // The SessionState/SessionStore authority overlay (#2278, ADR 0022): which production files
 // import the SessionState shape from the module that declares it and the SessionStore authority
-// from src/daemon/session-store.ts, at symbol level so that a file importing only helper
+// from packages/daemon/src/session-store.ts, at symbol level so that a file importing only helper
 // functions from session-store.ts is not an authority edge. R7 already owns the write side
 // (field ownership); this overlay owns the read side. The shape target is found by the
 // declaration, not a recorded path: a path constant would silently measure zero shape importers
 // the moment the declaration moves (#2346 moved it from types.ts to session-state.ts). The
-// ratchet applies to the handler-owned subset — the flat src/daemon/handlers/ surface the
+// ratchet applies to the handler-owned subset — the flat packages/daemon/src/handlers/ surface the
 // #2132 migration targeted — and is a membership ratchet against the merge-base: the set may
 // only shrink, so a handler file gaining state-shape or store authority fails instead of
 // silently regrowing the hotspot.
 
 export const SESSION_AUTHORITY_OVERLAY_RULE = 'R75 session-authority-overlay';
 
-const SESSION_STORE_AUTHORITY_TARGET = 'src/daemon/session-store.ts';
-const HANDLER_ROOT = 'src/daemon/handlers/';
+const SESSION_STORE_AUTHORITY_TARGET = 'packages/daemon/src/session-store.ts';
+const HANDLER_ROOT = 'packages/daemon/src/handlers/';
 
 export type SessionAuthorityOverlay = Readonly<{
   /** Production files importing the SessionState symbol from its declaring module, sorted. */
   shapeFiles: readonly string[];
-  /** Production files importing the SessionStore symbol from src/daemon/session-store.ts, sorted. */
+  /** Production files importing the SessionStore symbol from packages/daemon/src/session-store.ts, sorted. */
   authorityFiles: readonly string[];
 }>;
 
@@ -60,7 +60,7 @@ export function handlerOwnedOverlay(overlay: SessionAuthorityOverlay): SessionAu
 
 /**
  * Catches: the handler-owned SessionState-shape / SessionStore-authority surface regrowing —
- *   a file under src/daemon/handlers/ importing either symbol that the merge-base does not
+ *   a file under packages/daemon/src/handlers/ importing either symbol that the merge-base does not
  *   already import it, which is exactly the deep-import the #2132 migration paid to delete.
  *   Both overlays are full-scope; the handler-owned subset is filtered here, at the single
  *   place the ratchet applies it, so the message can never name a file outside its scope.

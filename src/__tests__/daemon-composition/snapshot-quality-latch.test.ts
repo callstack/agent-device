@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { makeIosSession } from '../../daemon/__tests__/support/session-factories.ts';
+import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import {
   recoveredSnapshotQualityWarning,
   renderSnapshotQualityWarnings,
@@ -9,18 +9,18 @@ import {
 import {
   applyRecoveredWarningLatch,
   resolveRecoveredWarningLatch,
-} from '../../daemon/snapshot-quality-latch.ts';
-import { dispatchSnapshotDiffViaRuntime } from '../../daemon/snapshot-diff-runtime.ts';
-import { dispatchSnapshotViaRuntime } from '../../daemon/snapshot-runtime.ts';
-import { SessionStore } from '../../daemon/session-store.ts';
-import type { SessionState } from '../../daemon/session-state.ts';
-import { legacyDispatchCapture } from '../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
-import { snapshotRuntimeFixture } from '../../daemon/__tests__/snapshot-runtime-fixture.ts';
+} from '@agent-device/daemon/testing/snapshot-quality-latch';
+import { dispatchSnapshotDiffViaRuntime } from '@agent-device/daemon/testing/snapshot-diff-runtime';
+import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
-vi.mock('../../daemon/snapshot-interactor-capture.ts', async () => {
-  const fixture = await import('../../daemon/__tests__/legacy-snapshot-capture-fixture.ts');
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
+  const fixture = await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 

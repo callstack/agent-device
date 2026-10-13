@@ -176,7 +176,7 @@ export const BOUNDARY_FAULT_MATRIX = {
     'artifact-producing': {
       kind: 'covered',
       evidence: [
-        'src/daemon/__tests__/filesystem-boundary-faults.test.ts',
+        'packages/daemon/src/__tests__/filesystem-boundary-faults.test.ts',
         'packages/platform-apple/src/runner/__tests__/runner-lease-filesystem-boundary-faults.test.ts',
       ],
       invariants: ['atomic-publication', 'publication-residue-free'],
@@ -184,7 +184,7 @@ export const BOUNDARY_FAULT_MATRIX = {
     'session-lifecycle': {
       kind: 'covered',
       evidence: [
-        'src/daemon/__tests__/filesystem-boundary-faults.test.ts',
+        'packages/daemon/src/__tests__/filesystem-boundary-faults.test.ts',
         'packages/platform-apple/src/runner/__tests__/runner-lease-filesystem-boundary-faults.test.ts',
       ],
       invariants: ['atomic-publication', 'publication-residue-free', 'claim-or-lease-state'],

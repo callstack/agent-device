@@ -1,9 +1,9 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
-import { SessionStore } from '../../../daemon/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../daemon/daemon-request.ts';
-import type { SessionState } from '../../../daemon/session-state.ts';
-import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/testing/daemon-request';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { fakeCreateCommandSurface } from '@agent-device/daemon/testing/__tests__/support/command-surface-fake';
 
 // These close cases pin when the REAL composed lifecycle reaches the root runtime-hints module
 // (lazy evaluation: only an admitted hint mutation loads it), so they run in the composition lane
@@ -23,8 +23,8 @@ import {
   handleSessionCommands as handleHarnessSessionCommands,
   mockBindDeviceRuntime,
   mockInspectDeviceRuntimeFacts,
-} from '../../../daemon/handlers/__tests__/session-command-harness.ts';
-import { lifecycleRuntimeFacts } from '../../../daemon/__tests__/application-lifecycle-runtime-harness.ts';
+} from '@agent-device/daemon/testing/handlers/__tests__/session-command-harness';
+import { lifecycleRuntimeFacts } from '@agent-device/daemon/testing/__tests__/application-lifecycle-runtime-harness';
 import {
   composedLifecycleRuntimeFixture,
   dispatchApplicationLifecycleEffect,

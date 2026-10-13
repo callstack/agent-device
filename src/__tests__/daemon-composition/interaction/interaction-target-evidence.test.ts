@@ -1,18 +1,18 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { legacyDispatchCapture } from '../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { handleInteractionCommands } from '../../../daemon/interaction/index.ts';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import {
   makeIosSession,
   makeAuthoringSession,
   authoringPublication,
-} from '../../../daemon/__tests__/support/session-factories.ts';
-import { SessionScriptWriter } from '../../../daemon/session-script-writer.ts';
-import type { SessionState } from '../../../daemon/session-state.ts';
+} from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { SessionScriptWriter } from '@agent-device/daemon/testing/session-script-writer';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
@@ -27,8 +27,8 @@ const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
 
-vi.mock('../../../daemon/snapshot-interactor-capture.ts', async () => {
-  const fixture = await import('../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts');
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
+  const fixture = await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
@@ -44,7 +44,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
 import {
   getRuntimeBindings,
   resetGetRuntimeFixture,
-} from '../../../daemon/__tests__/interaction-get-runtime-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
 const contextFromFlags = (_flags: CommandFlags | undefined) => ({});
 
 beforeEach(() => {

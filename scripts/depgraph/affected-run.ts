@@ -1,7 +1,7 @@
 // `pnpm depgraph affected <path>` — the blast radius of one file in one query.
 //
 //   pnpm depgraph affected packages/host-kit/src/command.ts
-//   pnpm depgraph affected src/daemon/ref-frame.ts --json --limit 20
+//   pnpm depgraph affected packages/daemon/src/ref-frame.ts --json --limit 20
 //
 // Answers, from the sources of truth rather than a second copy of them:
 //   - dependents (direct / transitive, with a zone breakdown) — reverse reachability over the
@@ -23,7 +23,7 @@ import {
   INTERACTION_DISPATCH_PATHS,
   type InteractionPathId,
 } from '@agent-device/contracts/interaction-guarantees';
-import { DAEMON_COMMAND_DESCRIPTORS } from '../../src/daemon/daemon-command-registry.ts';
+import { DAEMON_COMMAND_DESCRIPTORS } from '@agent-device/daemon/daemon-command-registry';
 import { parseArgs } from 'node:util';
 import { selectChecks, type CheckPlan } from '../check-affected/model.ts';
 import {
@@ -48,7 +48,7 @@ const USAGE =
   '  --json    unbounded machine-readable output\n' +
   '  --limit   entries per list in text output (default 10)\n';
 
-const HANDLER_CHAIN_FILE = 'src/daemon/request-handler-chain.ts';
+const HANDLER_CHAIN_FILE = 'packages/daemon/src/request-handler-chain.ts';
 
 /**
  * The live iOS coverage manifest (#1408) is consumed through the narrowest shape this query

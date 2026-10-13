@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest';
 import { runExplainCommandCli } from '../../../scripts/explain-command.ts';
 import { commandDescriptors } from '@agent-device/command-registry/registry';
 import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
-import { getDaemonRouteOwnerFiles } from '../../daemon/route-owner-files.ts';
+import { getDaemonRouteOwnerFiles } from '@agent-device/daemon/testing/route-owner-files';
 import {
   explainCommand as explainCommandFromMetadata,
   formatCommandExplanation,
@@ -80,7 +80,7 @@ describe('explainCommand', () => {
     if (!result.found) return;
     expect(result.explanation.cli?.commandFlags.map((flag) => flag.key)).toContain('settle');
     expect(result.explanation.files).toContain('src/commands/interaction/index.ts');
-    expect(result.explanation.files).toContain('src/daemon/interaction/index.ts');
+    expect(result.explanation.files).toContain('packages/daemon/src/interaction/index.ts');
     expect(result.explanation.files.every(fileExists)).toBe(true);
   });
 
@@ -146,15 +146,15 @@ describe('explainCommand table-driven coverage', () => {
   });
 
   test.each([
-    ['press', ['src/commands/interaction/index.ts', 'src/daemon/interaction/index.ts']],
+    ['press', ['src/commands/interaction/index.ts', 'packages/daemon/src/interaction/index.ts']],
     ['apps', ['src/commands/management/app.ts']],
     // R39: screenshot has no dispatch projection left, so its platform work is named directly.
-    ['screenshot', ['src/commands/capture/screenshot.ts', 'src/daemon/screenshot-runtime.ts']],
-    ['react-native', ['src/daemon/handlers/react-native.ts']],
-    ['record', ['src/daemon/handlers/record-trace.ts']],
-    ['trace', ['src/daemon/handlers/record-trace.ts']],
-    ['back', ['src/daemon/request-generic-dispatch.ts']],
-    ['home', ['src/daemon/request-generic-dispatch.ts']],
+    ['screenshot', ['src/commands/capture/screenshot.ts', 'packages/daemon/src/screenshot-runtime.ts']],
+    ['react-native', ['packages/daemon/src/handlers/react-native.ts']],
+    ['record', ['packages/daemon/src/handlers/record-trace.ts']],
+    ['trace', ['packages/daemon/src/handlers/record-trace.ts']],
+    ['back', ['packages/daemon/src/request-generic-dispatch.ts']],
+    ['home', ['packages/daemon/src/request-generic-dispatch.ts']],
   ])('derives owner files for %s (split family / route variant / dispatch)', (command, owners) => {
     const result = explainCommand(command as string, { fileExists });
     expect(result.found).toBe(true);

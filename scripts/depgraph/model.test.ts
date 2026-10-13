@@ -48,19 +48,19 @@ function authorityFixture(): Map<string, string> {
     ].join('\n'),
     'src/daemon/type-consumer.ts': "import type { SessionStore } from './session-store.ts';\n",
     'packages/capture-kit/src/snapshot/policy-consumer.ts': [
-      "import type { SessionState } from '../../../../src/daemon/session-state.ts';",
-      "import type { SessionRef } from '../../../../src/daemon/session-state.ts';",
+      "import type { SessionState } from '../../../../packages/daemon/src/session-state.ts';",
+      "import type { SessionRef } from '../../../../packages/daemon/src/session-state.ts';",
       "import './ordinary-target.ts';",
     ].join('\n'),
     'src/daemon/ordinary-consumer.ts': [
       "import { SessionState } from './session-state-store.ts';",
       "import { createRequestRuntimeBindingsExtra } from './request-runtime-binding.ts';",
     ].join('\n'),
-    'src/daemon/session-state.ts':
+    'packages/daemon/src/session-state.ts':
       'export type SessionState = { name: string };\nexport type SessionRef = unknown;\n',
-    'src/daemon/session-store.ts': 'export class SessionStore {}\n',
-    'src/daemon/request-runtime-binding.ts': 'export function createRequestRuntimeBindings() {}\n',
-    'src/daemon/session-script-publication-capability.ts':
+    'packages/daemon/src/session-store.ts': 'export class SessionStore {}\n',
+    'packages/daemon/src/request-runtime-binding.ts': 'export function createRequestRuntimeBindings() {}\n',
+    'packages/daemon/src/session-script-publication-capability.ts':
       'export function isSessionRecording() {}\n',
     'src/daemon/session-state-store.ts': 'export const SessionState = 1;\n',
     'packages/capture-kit/src/snapshot/ordinary-target.ts': 'export const ordinary = 1;\n',
@@ -90,21 +90,21 @@ test('authority overlay uses declared roots and symbols, keeps kind separate, an
     { kind: 'type', labels: ['vocabulary'] },
   );
   assert.deepEqual(
-    graphEdge(graph, 'src/daemon/capability-consumer.ts', 'src/daemon/request-runtime-binding.ts'),
+    graphEdge(graph, 'src/daemon/capability-consumer.ts', 'packages/daemon/src/request-runtime-binding.ts'),
     { kind: 'value', labels: ['capability'] },
   );
   assert.deepEqual(
-    graphEdge(graph, 'src/daemon/state-consumer.ts', 'src/daemon/session-state.ts'),
+    graphEdge(graph, 'src/daemon/state-consumer.ts', 'packages/daemon/src/session-state.ts'),
     {
       kind: 'type',
       labels: ['live-state-shape'],
     },
   );
   assert.deepEqual(
-    graphEdge(graph, 'src/daemon/state-consumer.ts', 'src/daemon/session-store.ts'),
+    graphEdge(graph, 'src/daemon/state-consumer.ts', 'packages/daemon/src/session-store.ts'),
     { kind: 'value', labels: ['live-state-authority'] },
   );
-  assert.deepEqual(graphEdge(graph, 'src/daemon/type-consumer.ts', 'src/daemon/session-store.ts'), {
+  assert.deepEqual(graphEdge(graph, 'src/daemon/type-consumer.ts', 'packages/daemon/src/session-store.ts'), {
     kind: 'type',
     labels: ['live-state-authority'],
   });
@@ -121,21 +121,21 @@ test('authority overlay uses declared roots and symbols, keeps kind separate, an
     { kind: 'value', labels: ['ordinary'] },
   );
   assert.deepEqual(
-    graphEdge(graph, 'src/daemon/ordinary-consumer.ts', 'src/daemon/request-runtime-binding.ts'),
+    graphEdge(graph, 'src/daemon/ordinary-consumer.ts', 'packages/daemon/src/request-runtime-binding.ts'),
     { kind: 'value', labels: ['ordinary'] },
   );
 
   const stateEdges = resolveImportEdges(files, authorityWorkspaceTargets()).filter(
     (edge) =>
       edge.file === 'packages/capture-kit/src/snapshot/policy-consumer.ts' &&
-      edge.target === 'src/daemon/session-state.ts',
+      edge.target === 'packages/daemon/src/session-state.ts',
   );
   assert.equal(stateEdges.length, 2, 'the fixture must exercise raw same-pair imports');
   assert.deepEqual(
     graphEdge(
       graph,
       'packages/capture-kit/src/snapshot/policy-consumer.ts',
-      'src/daemon/session-state.ts',
+      'packages/daemon/src/session-state.ts',
     ),
     {
       kind: 'type',

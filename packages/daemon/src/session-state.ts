@@ -200,7 +200,7 @@ export type SessionState = {
    * resolution, settle observation, system-modal probes) can arm the runner-side penalty
    * without any user-facing render — when the latch is not held, the first public
    * deferred verdict re-renders the warning once. Managed only through
-   * `src/daemon/snapshot-quality-latch.ts`: a genuine recovered render sets it, a healthy
+   * `packages/daemon/src/snapshot-quality-latch.ts`: a genuine recovered render sets it, a healthy
    * public verdict clears it, and an app switch supersedes it.
    */
   recoveredSnapshotWarningLatch?: { appBundleId?: string };
@@ -290,7 +290,7 @@ export type SessionState = {
    * app-rendered echo of an already-authored literal. In-memory only for
    * this session's lifetime: never read by the script writer, the event
    * log, or diagnostics, and dropped with the session. Owned by
-   * `src/daemon/session-action-recorder.ts`.
+   * `packages/daemon/src/session-action-recorder.ts`.
    */
   recordedFillLiterals?: Map<string, string>;
   /**

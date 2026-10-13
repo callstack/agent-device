@@ -14,7 +14,7 @@ import {
  * The command registry's `platformExecution` declarations are the production enumeration of
  * daemon runtime bindings: every device-runtime descriptor names the uses its route admits, and
  * `admitRuntimeOperations` is one seam with no table of its own. The generic and interaction routes
- * admit through per-command `src/daemon/<command>-runtime.ts` resolvers, so every single-use
+ * admit through per-command `packages/daemon/src/<command>-runtime.ts` resolvers, so every single-use
  * descriptor on those routes owes the family its conformance entry; the other direction holds any
  * entry to a cell its descriptor actually declares.
  */

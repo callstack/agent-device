@@ -91,7 +91,7 @@ const handleSessionObservabilityCommandGroup: SessionCommandHandler = async ({
 /**
  * Descriptor-driven exhaustive dispatch table for the daemon's `session`
  * route (mirrors `DISPATCH_HANDLERS` in -device/device-selection/dispatch-resolve and
- * `SNAPSHOT_COMMAND_HANDLER_IMPLS` in src/daemon/handlers/snapshot.ts). The
+ * `SNAPSHOT_COMMAND_HANDLER_IMPLS` in packages/daemon/src/handlers/snapshot.ts). The
  * `satisfies Record<DescriptorSessionRouteCommandName, …>` check means a
  * session-routed descriptor added to the registry without a matching entry
  * here is a COMPILE error, not a runtime routing gap. Command-kind groupings

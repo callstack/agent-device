@@ -20,7 +20,7 @@ test('a kernel is owned by the mirrored test that imports it directly', () => {
     'kernel-errors',
   ]);
   assert.ok(
-    deriver.ownersOf('src/daemon/__tests__/ref-frame.test.ts').includes('daemon-ref-frame'),
+    deriver.ownersOf('packages/daemon/src/__tests__/ref-frame.test.ts').includes('daemon-ref-frame'),
   );
   assert.ok(
     deriver
@@ -38,7 +38,7 @@ test('a kernel is owned by tests that reach it indirectly', () => {
     'daemon-error.test.ts exercises normalizeError but does not own kernel-errors',
   );
   assert.ok(
-    deriver.ownersOf('src/daemon/__tests__/back-runtime.test.ts').includes('scroll-edge-state'),
+    deriver.ownersOf('packages/daemon/src/__tests__/back-runtime.test.ts').includes('scroll-edge-state'),
     'back-runtime.test.ts exercises edge detection but does not own scroll-edge-state',
   );
 });
@@ -90,7 +90,7 @@ test('derived selection unions source ownership with test reachability', () => {
     derivedAffectedModules(
       [
         'packages/selectors/src/internal/parse.ts',
-        'src/daemon/__tests__/ref-frame.test.ts',
+        'packages/daemon/src/__tests__/ref-frame.test.ts',
         'docs/agents/testing.md',
       ],
       repoRoot,

@@ -8,15 +8,15 @@ import {
   iosSystemSurfaceTransitionDisclosure,
   type IosSystemSurfaceProvenance,
 } from '@agent-device/contracts/ios-system-surface';
-import { makeIosSession } from '../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
-import { activateCompleteRefFrame, refFrameState } from '../../daemon/ref-frame.ts';
-import { setSessionSnapshot } from '../../daemon/session-snapshot.ts';
-import type { SessionStore } from '../../daemon/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../daemon/daemon-request.ts';
-import type { SessionRef, SessionState } from '../../daemon/session-state.ts';
+import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { activateCompleteRefFrame, refFrameState } from '@agent-device/daemon/testing/ref-frame';
+import { setSessionSnapshot } from '@agent-device/daemon/testing/session-snapshot';
+import type { SessionStore } from '@agent-device/daemon/testing/session-store';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/testing/daemon-request';
+import type { SessionRef, SessionState } from '@agent-device/daemon/testing/session-state';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import { selectorCaptureFixture } from '../../daemon/__tests__/selector-capture-fixture.ts';
+import { selectorCaptureFixture } from '@agent-device/daemon/testing/__tests__/selector-capture-fixture';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 // #1638 `--settle` on the GENERIC daemon route (scroll/back): the settled diff,
@@ -25,8 +25,8 @@ import { testCreateCommandSurface } from './command-surface-fixture.ts';
 // a resolution, and the observation must run after the deferred-outcome
 // markers. Quiet windows are tuned down so no test waits real time.
 
-vi.mock('../../daemon/interaction/index.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../daemon/interaction/index.ts')>();
+vi.mock('@agent-device/daemon/testing/interaction/index', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/daemon/testing/interaction/index')>();
   return {
     ...actual,
     captureSnapshotForSession: vi.fn(async () => ({
@@ -38,9 +38,9 @@ vi.mock('../../daemon/interaction/index.ts', async (importOriginal) => {
   };
 });
 
-import { captureSnapshotForSession } from '../../daemon/interaction/index.ts';
-import { dispatchGenericCommand } from '../../daemon/request-generic-dispatch.ts';
-import { pendingSurfaceStabilization } from '../../daemon/deferred-interaction-outcome.ts';
+import { captureSnapshotForSession } from '@agent-device/daemon/testing/interaction/index';
+import { dispatchGenericCommand } from '@agent-device/daemon/testing/request-generic-dispatch';
+import { pendingSurfaceStabilization } from '@agent-device/daemon/testing/deferred-interaction-outcome';
 
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
 

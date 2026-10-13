@@ -453,7 +453,7 @@ test('replay rejects legacy JSON payload files', async () => {
 // `req.flags` — so the `parseReplayInput` check that used to reject an
 // unrecognized `--replay-backend` value (`parseReplayInput`) no
 // longer ran on this path. `buildReplayTargetDeviceResolution`
-// (`src/daemon/replay-device-selection.ts`) still calls `parseReplayInput`
+// (`packages/daemon/src/replay-device-selection.ts`) still calls `parseReplayInput`
 // for advisory device-lock binding, but its `catch` deliberately swallows
 // any thrown error ("Parsing and validation stay in the replay handler."),
 // so a raw `.ad` replay with `replayBackend: 'unknown'` executed instead of

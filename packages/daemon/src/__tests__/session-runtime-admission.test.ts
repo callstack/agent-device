@@ -47,7 +47,7 @@ test('the admission cannot be written down or copied: only admitRuntimePlan mint
   // Planted reds for the seam itself: each directive below becomes unused — and tsc fails — if
   // the token loses its #private member (degrades to a plain shape). A route holds a token only
   // by having called admitRuntimePlan (or by a type assertion, which the cutover gate rejects in
-  // src/daemon/). The class value is not exported, so `new` is not even nameable from here.
+  // packages/daemon/src/). The class value is not exported, so `new` is not even nameable from here.
   // @ts-expect-error a literal is not an admission: it lacks the #private member
   const literal: AdmittedRuntimePlan<typeof plan> = { admitted: true };
   // @ts-expect-error a spread of a real admission is a plain object without the #private member

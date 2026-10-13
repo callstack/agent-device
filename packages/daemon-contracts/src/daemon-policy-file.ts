@@ -9,7 +9,7 @@ import { AppError, errorMessage } from '@agent-device/kernel/errors';
  * ADR 0029: the operator-owned rules one daemon enforces for every request it admits. This module
  * owns the policy file: loading, validation, and the digest. It lives at the process root because
  * the daemon client reads the same digest to refuse reusing a daemon with another policy;
- * enforcement is daemon-owned in `src/daemon/daemon-policy.ts`.
+ * enforcement is daemon-owned in `packages/daemon/src/daemon-policy.ts`.
  */
 export const DAEMON_POLICY_ENV = 'AGENT_DEVICE_DAEMON_POLICY';
 

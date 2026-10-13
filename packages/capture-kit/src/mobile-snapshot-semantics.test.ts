@@ -644,7 +644,7 @@ test('mobile presentation does not let contradictory scroll indicator add hidden
 });
 
 // #1542: isConfirmedOnScreenProbe is the pure geometry boundary the off-screen
-// refusal double-check's direct probe (src/daemon/offscreen-target-probe.ts)
+// refusal double-check's direct probe (packages/daemon/src/offscreen-target-probe.ts)
 // reduces its confirm/don't-confirm decision to, once it has a fresh,
 // tree-independent read of the target. Each branch below is proved with a
 // counterfactual per docs/agents/testing.md — see the comment on each test

@@ -136,7 +136,7 @@ export type DescriptorCatalogRecord<Group extends CommandCatalogGroup> = {
 
 /**
  * The literal union of every command whose `daemon.route` is `'session'`.
- * Drives `SESSION_COMMAND_HANDLER_IMPLS` in `src/daemon/handlers/session.ts`: adding a
+ * Drives `SESSION_COMMAND_HANDLER_IMPLS` in `packages/daemon/src/handlers/session.ts`: adding a
  * session-routed descriptor without a matching handler table entry is a compile error rather
  * than a runtime routing gap caught only by `expectHandlerResponse`.
  */
@@ -165,7 +165,7 @@ export type DescriptorDaemonRouteCommandName =
 
 // ---------------------------------------------------------------------------
 // Daemon request-policy trait bundles — copied VERBATIM from
-// src/daemon/daemon-command-registry.ts (DAEMON_COMMAND_DESCRIPTORS).
+// packages/daemon/src/daemon-command-registry.ts (DAEMON_COMMAND_DESCRIPTORS).
 // ---------------------------------------------------------------------------
 
 const ADMISSION_AND_LOCK_EXEMPT = {
@@ -508,7 +508,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'human_control',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/human-control.ts'] as const } : {}),
+    ...(ownerFilesEnabled ? { ownerFiles: ['packages/daemon/src/handlers/human-control.ts'] as const } : {}),
     catalog: { group: 'internal', key: 'humanControl' },
     recordsSessionAction: false,
     daemon: {
@@ -526,7 +526,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'lease_allocate',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/lease.ts'] as const } : {}),
+    ...(ownerFilesEnabled ? { ownerFiles: ['packages/daemon/src/handlers/lease.ts'] as const } : {}),
     catalog: { group: 'internal', key: 'leaseAllocate' },
     recordsSessionAction: false,
     daemon: {
@@ -541,7 +541,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'lease_heartbeat',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/lease.ts'] as const } : {}),
+    ...(ownerFilesEnabled ? { ownerFiles: ['packages/daemon/src/handlers/lease.ts'] as const } : {}),
     catalog: { group: 'internal', key: 'leaseHeartbeat' },
     recordsSessionAction: false,
     daemon: {
@@ -557,7 +557,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'lease_release',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/lease.ts'] as const } : {}),
+    ...(ownerFilesEnabled ? { ownerFiles: ['packages/daemon/src/handlers/lease.ts'] as const } : {}),
     catalog: { group: 'internal', key: 'leaseRelease' },
     recordsSessionAction: false,
     daemon: {
@@ -592,7 +592,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'session_list',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled
-      ? { ownerFiles: ['src/daemon/session-lifecycle/internal/inventory.ts'] as const }
+      ? { ownerFiles: ['packages/daemon/src/session-lifecycle/internal/inventory.ts'] as const }
       : {}),
     catalog: { group: 'internal', key: 'sessionList' },
     recordsSessionAction: false,
@@ -610,7 +610,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'session_save_script',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled
-      ? { ownerFiles: ['src/daemon/handlers/session-script-publication.ts'] as const }
+      ? { ownerFiles: ['packages/daemon/src/handlers/session-script-publication.ts'] as const }
       : {}),
     catalog: { group: 'internal', key: 'sessionSaveScript' },
     recordsSessionAction: false,
@@ -887,8 +887,8 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...(ownerFilesEnabled
       ? {
           ownerFiles: [
-            'src/daemon/handlers/session-runtime-command.ts',
-            'src/daemon/handlers/session-runtime-port-reverse.ts',
+            'packages/daemon/src/handlers/session-runtime-command.ts',
+            'packages/daemon/src/handlers/session-runtime-port-reverse.ts',
           ] as const,
         }
       : {}),
@@ -953,7 +953,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'install_source',
     deviceClaimPolicy: 'transient-exclusive',
     ...(ownerFilesEnabled
-      ? { ownerFiles: ['src/daemon/handlers/session-app-source-deployment.ts'] as const }
+      ? { ownerFiles: ['packages/daemon/src/handlers/session-app-source-deployment.ts'] as const }
       : {}),
     catalog: {
       group: 'internal',
@@ -971,7 +971,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'release_materialized_paths',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled
-      ? { ownerFiles: ['src/daemon/handlers/session-app-source-deployment.ts'] as const }
+      ? { ownerFiles: ['packages/daemon/src/handlers/session-app-source-deployment.ts'] as const }
       : {}),
     catalog: { group: 'internal', key: 'releaseMaterializedPaths' },
     recordsSessionAction: false,
@@ -1502,7 +1502,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'scroll',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/scroll-runtime.ts'] as const } : {}),
+    ...(ownerFilesEnabled ? { ownerFiles: ['packages/daemon/src/scroll-runtime.ts'] as const } : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
     // R53 retires this command's capability bucket and its `dispatch` leaf together: admission is
@@ -1551,7 +1551,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
       ? {
           ownerFiles: [
             'src/commands/capture/screenshot.ts',
-            'src/daemon/screenshot-runtime.ts',
+            'packages/daemon/src/screenshot-runtime.ts',
           ] as const,
         }
       : {}),

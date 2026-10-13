@@ -6,20 +6,20 @@ import {
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
-import { handleInteractionCommands } from '../../../daemon/interaction/index.ts';
-import { getRuntimeBindings } from '../../../daemon/__tests__/interaction-get-runtime-fixture.ts';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { getRuntimeBindings } from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
 import {
   contextFromFlags,
   makeSession,
-} from '../../../daemon/interaction/internal/__tests__/interaction-touch-fixtures.ts';
-import { legacyDispatchCapture } from '../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
-import { markDeferredInteractionOutcome } from '../../../daemon/deferred-interaction-outcome.ts';
+} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import { markDeferredInteractionOutcome } from '@agent-device/daemon/testing/deferred-interaction-outcome';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
-vi.mock('../../../daemon/snapshot-interactor-capture.ts', async () => {
-  const fixture = await import('../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts');
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
+  const fixture = await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 

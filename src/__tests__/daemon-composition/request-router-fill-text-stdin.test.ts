@@ -9,15 +9,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { WebProvider } from '@agent-device/platform-web';
-import type { DaemonRequest } from '../../daemon/daemon-request.ts';
-import type { SessionState } from '../../daemon/session-state.ts';
-import { createRequestHandler } from '../../daemon/__tests__/test-device-runtime-gateway.ts';
-import { LeaseRegistry } from '../../daemon/lease-registry.ts';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
+import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import {
   makeAuthoringSession,
   makeSession,
-} from '../../daemon/__tests__/support/session-factories.ts';
+} from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';

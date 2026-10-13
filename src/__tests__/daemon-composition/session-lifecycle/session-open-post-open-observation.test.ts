@@ -15,14 +15,14 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   const actual =
     await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
   const { selectionFromResolveTargetDevice } =
-    await import('../../../daemon/__tests__/device-selection-stub.ts');
+    await import('@agent-device/daemon/testing/__tests__/device-selection-stub');
   return {
     ...actual,
     resolveTargetDevice: mockResolveTargetDevice,
     resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(mockResolveTargetDevice)),
   };
 });
-vi.mock('../../../daemon/device/device-ready.ts', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 vi.mock('../../../platform-runtime-apple-application-tools.ts', async (importOriginal) => {
@@ -55,16 +55,16 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
 });
 
 import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
-import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
+import { fakeCreateCommandSurface } from '@agent-device/daemon/testing/__tests__/support/command-surface-fake';
 import {
   handleSessionCommands as handleHarnessSessionCommands,
   mockBindDeviceRuntime,
-} from '../../../daemon/handlers/__tests__/session-command-harness.ts';
+} from '@agent-device/daemon/testing/handlers/__tests__/session-command-harness';
 import {
   composedLifecycleRuntimeFixture,
   dispatchApplicationLifecycleEffect,
 } from '../application-lifecycle-runtime-fixture.ts';
-import { pendingSurfaceStabilization } from '../../../daemon/deferred-interaction-outcome.ts';
+import { pendingSurfaceStabilization } from '@agent-device/daemon/testing/deferred-interaction-outcome';
 
 // The harness takes the lifecycle-operations loader per call, exactly like the gateway factories:
 // these composition cases pass the REAL composed fixture instead of the daemon's canned default.
@@ -77,7 +77,7 @@ import {
   makeAppleSimulator,
   makeSessionStore,
   noopInvoke,
-} from '../../../daemon/session-lifecycle/internal/__tests__/session-open-runtime.fixtures.ts';
+} from '@agent-device/daemon/testing/session-lifecycle/internal/__tests__/session-open-runtime.fixtures';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);

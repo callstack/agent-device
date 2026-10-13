@@ -31,8 +31,8 @@ export const DAEMON_MODULARITY_BASELINE = {
 // `@agent-device/contracts/command` as `DaemonWireRequest`). Both are ratcheted
 // together, so moving a symbol between them cannot reopen the boundary to a new outside zone.
 const DAEMON_TYPE_MODULES: readonly string[] = [
-  'src/daemon/daemon-request.ts',
-  'src/daemon/session-state.ts',
+  'packages/daemon/src/daemon-request.ts',
+  'packages/daemon/src/session-state.ts',
 ];
 
 const ENGINE_FILE_PREFIXES = [
@@ -126,7 +126,7 @@ export function checkRetiredInteractionPaths(sourceFiles: readonly string[]): La
     INTERACTION_RETIRED_HANDLER_PATHS,
     /^src\/daemon\/handlers\/(?:find|interaction)(?:-[^/]+)?\.ts$/,
     'interaction handler',
-    'Keep route implementations behind src/daemon/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
+    'Keep route implementations behind packages/daemon/src/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
   );
 }
 
@@ -218,7 +218,7 @@ function checkDaemonTypesImporters(edges: readonly ResolvedImportEdge[]): Layeri
   const allowed = new Set<string>(DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters);
   const importers = new Map<string, ResolvedImportEdge>();
   for (const edge of edges) {
-    if (!DAEMON_TYPE_MODULES.includes(edge.target) || edge.file.startsWith('src/daemon/')) continue;
+    if (!DAEMON_TYPE_MODULES.includes(edge.target) || edge.file.startsWith('packages/daemon/src/')) continue;
     // #2559: the client's daemon-request/session-state reads are owned by the stricter
     // R78 `daemon-client-entry` gate, which also bans runtime imports and names each edge.
     if (edge.file.startsWith('src/daemon-client/')) continue;

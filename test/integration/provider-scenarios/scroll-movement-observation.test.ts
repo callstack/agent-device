@@ -36,7 +36,7 @@ const DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
 // Directional-scroll observation on `observeUntil` (packages/capture-kit/src/observe-until.ts):
 // `scroll down` gates its own `movement` claim on the tree it held before the gesture against one
 // (or more, while the surface still looks untouched) post-gesture capture. The unit-level coverage
-// in src/daemon/__tests__/scroll-movement.test.ts pins the verdict against a scripted capture
+// in packages/daemon/src/__tests__/scroll-movement.test.ts pins the verdict against a scripted capture
 // function directly; these two scenarios drive the SAME loop end to end through the daemon's real
 // command routing and a scripted Apple runner, the way `settle-observation.test.ts` drives `--settle`.
 
@@ -97,7 +97,7 @@ function repeatSnapshotEntry(nodes: readonly unknown[]): ProviderScenarioProvide
 }
 
 // Midpoint (201, 437) sits inside CONTAINER, matching the swipe fixture
-// `src/daemon/__tests__/scroll-movement.test.ts` uses for the same geometry.
+// `packages/daemon/src/__tests__/scroll-movement.test.ts` uses for the same geometry.
 function scrollEntry(): ProviderScenarioProviderEntry {
   return {
     command: 'ios.runner.scroll',

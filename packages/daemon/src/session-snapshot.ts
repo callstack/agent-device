@@ -22,7 +22,7 @@ export const STALE_SNAPSHOT_REFS_WARNING =
  * does NOT touch the ref frame: replacing the latest observation is an
  * operational read, so it never expires, reactivates, or reindexes the
  * authorized frame (ADR 0014). Frame lifetime is owned solely by
- * `src/daemon/ref-frame.ts`; the partial-issuance writer below decides WHETHER to issue
+ * `packages/daemon/src/ref-frame.ts`; the partial-issuance writer below decides WHETHER to issue
  * and hands the transition there.
  */
 export function setSessionSnapshot(session: SessionState, snapshot: SnapshotState): void {

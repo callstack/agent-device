@@ -28,7 +28,7 @@ import {
  * The two things that are not daemon assembly moved out: whether a failure is the
  * accessibility-timeout shape is a policy
  * (`packages/capture-kit/src/snapshot/snapshot-timeout-policy.ts`), and the published evidence shape is
- * vocabulary (`src/daemon/snapshot-timeout-evidence.ts`, whose only consumer is this
+ * vocabulary (`packages/daemon/src/snapshot-timeout-evidence.ts`, whose only consumer is this
  * module). What remains here is the ordering that
  * genuinely needs the daemon: resolving a bound screenshot runtime, writing the artifact,
  * annotating it from the stored observation, and emitting the diagnostics.

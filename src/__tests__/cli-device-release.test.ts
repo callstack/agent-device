@@ -6,7 +6,7 @@ import { test, vi } from 'vitest';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import { appLogResourceStore } from '../daemon/app-log-resource-store.ts';
+import { appLogResourceStore } from '@agent-device/daemon/testing/app-log-resource-store';
 import { runStaleDeviceClaimRelease } from '../cli/commands/device-release.ts';
 import { runCliCapture } from './cli-capture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';

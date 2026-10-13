@@ -14,7 +14,7 @@ import {
  * (or falls back to) that accumulation. Two independent daemon/package call
  * sites needed exactly this scan and, before this move, each carried its own
  * copy: `packages/ad-replay/src/internal/inspect.ts`'s plan-digest platform
- * precedence, and `src/daemon/replay-device-selection.ts`'s
+ * precedence, and `packages/daemon/src/replay-device-selection.ts`'s
  * `readScriptReplaySelection` (fused into its own single pass alongside an
  * app-target scan). A `src/` root file cannot become a façade dependency
  * (R11), and a workspace package may not reach back into root `src/` either

@@ -73,7 +73,7 @@ let mintAdmission: <Plan extends RuntimePlan>(
  * WeakMap keyed by the token's identity. A binder gets at the device and plan only through
  * `unwrapAdmittedRuntimePlan`, which refuses any object that was not minted here — including a
  * Proxy around a real token, which types as the token but is a different identity. What remains
- * is a type assertion, which the cutover gate's manufactured-proof column rejects in src/daemon/.
+ * is a type assertion, which the cutover gate's manufactured-proof column rejects in packages/daemon/src/.
  * A facts-first binder that requires the token therefore enforces "admit before bind" — for this
  * device, for this plan — at the seam.
  */

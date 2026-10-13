@@ -11,7 +11,7 @@ export const VALUE_EDGES: ReadonlySet<EdgeKind> = new Set(['value']);
 
 /**
  * What a module can actually run: value imports plus dynamic ones. The daemon loads every
- * command handler through `import()` (`src/daemon/request-handler-chain.ts`), so dropping
+ * command handler through `import()` (`packages/daemon/src/request-handler-chain.ts`), so dropping
  * dynamic edges would cut every handler chain at its root.
  */
 export const EXECUTABLE_EDGES: ReadonlySet<EdgeKind> = new Set(['value', 'dynamic']);

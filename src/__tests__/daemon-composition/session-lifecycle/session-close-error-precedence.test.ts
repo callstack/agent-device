@@ -3,8 +3,8 @@ import { composedPlatformServicesFixture } from '../platform-services-fixture.ts
 import {
   sessionCloseShutdownFixture,
   type SessionState,
-} from '../../../daemon/session-lifecycle/internal/__tests__/session-close-shutdown.fixtures.ts';
-import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
+} from '@agent-device/daemon/testing/session-lifecycle/internal/__tests__/session-close-shutdown.fixtures';
+import { fakeCreateCommandSurface } from '@agent-device/daemon/testing/__tests__/support/command-surface-fake';
 import { composedLifecycleRuntimeFixture } from '../application-lifecycle-runtime-fixture.ts';
 
 const {

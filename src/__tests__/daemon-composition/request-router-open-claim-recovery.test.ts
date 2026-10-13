@@ -3,21 +3,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { fakeCreateCommandSurface } from '../../daemon/__tests__/support/command-surface-fake.ts';
+import { fakeCreateCommandSurface } from '@agent-device/daemon/testing/__tests__/support/command-surface-fake';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
   composedClaimRecoveryGatewayFixture,
   composedPlatformServicesFixture,
 } from './platform-services-fixture.ts';
-import { getResolveTargetDeviceMock } from '../../daemon/__tests__/request-router-dispatch-mocks.ts';
-import { LeaseRegistry } from '../../daemon/lease-registry.ts';
+import { getResolveTargetDeviceMock } from '@agent-device/daemon/testing/__tests__/request-router-dispatch-mocks';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 // Open-time claim reconciliation runs on the root-composed claim-recovery gateway: the router
 // must hand the acquire path the OWNER-scoped reconciler, so a foreign dead owner's recording
 // recovery executes against that owner's state dir, never the daemon's own store (#2168).
 
-vi.mock('../../daemon/device/device-ready.ts', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
@@ -71,14 +71,14 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
 import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
-} from '../../daemon/__tests__/test-device-runtime-gateway.ts';
+} from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
 import {
   awaitFixtureReadiness,
   dispatchApplicationLifecycleEffect,
-} from '../../daemon/__tests__/application-lifecycle-runtime-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/application-lifecycle-runtime-fixture';
 import { discoverReadyAndroidEmulators } from './application-lifecycle-runtime-fixture.ts';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
-import { inspectDeviceClaims } from '../../daemon/device/device-claim-inspection.ts';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { inspectDeviceClaims } from '@agent-device/daemon/testing/device/device-claim-inspection';
 import {
   createOwnedProcessRecordStore,
   isProcessAlive,
@@ -88,7 +88,7 @@ import {
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
-import { makeIosDevice, openRequest } from '../../daemon/__tests__/request-router-open-harness.ts';
+import { makeIosDevice, openRequest } from '@agent-device/daemon/testing/__tests__/request-router-open-harness';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());

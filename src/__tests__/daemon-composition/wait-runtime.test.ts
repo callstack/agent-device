@@ -21,17 +21,17 @@ import {
   snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/snapshot-runtime';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
-import { makeSession } from '../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
+import { makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
-} from '../../daemon/request-runtime-binding.ts';
-import { handleSnapshotCommands } from '../../daemon/handlers/snapshot.ts';
-import { resolveBoundSelectorCapture } from '../../daemon/selector-capture-binding.ts';
-import { dispatchGetViaRuntime } from '../../daemon/selector-runtime.ts';
-import type { DaemonRequest } from '../../daemon/daemon-request.ts';
+} from '@agent-device/daemon/testing/request-runtime-binding';
+import { handleSnapshotCommands } from '@agent-device/daemon/testing/handlers/snapshot';
+import { resolveBoundSelectorCapture } from '@agent-device/daemon/testing/selector-capture-binding';
+import { dispatchGetViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
+import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const webDevice = {

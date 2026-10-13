@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '../../../src/daemon/session-observability/__tests__/session-audio.coverage.ts';
+import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '@agent-device/daemon/testing/session-observability/__tests__/session-audio.coverage';
 import { ANDROID_INSTALL_SOURCE_CONTRACT_EVIDENCE } from '../../../src/__tests__/install-source.coverage.ts';
 import { ANDROID_LIFECYCLE_CONTRACT_EVIDENCE } from '../provider-scenarios/android-lifecycle.coverage.ts';
 import {
@@ -53,18 +53,18 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'inventory exposes generated recording and trace artifacts and one download consumes its entry',
     ),
     iosSimulator: iosSimulator.contract(
-      'src/daemon/__tests__/http-server-artifacts.test.ts',
+      'packages/daemon/src/__tests__/http-server-artifacts.test.ts',
       'daemon artifact inventory lists artifacts and downloads consume them',
       'daemon inventory exposes a typed non-empty artifact and its downloadable bytes',
     ),
     macos: macos.contract(
-      'src/daemon/__tests__/http-server-artifacts.test.ts',
+      'packages/daemon/src/__tests__/http-server-artifacts.test.ts',
       'daemon artifact inventory lists artifacts and downloads consume them',
       'daemon artifact inventory exposes downloadable files for the macOS session tooling',
     ),
     tvos: tvos.gap('No tvOS-specific artifact inventory command evidence exists yet'),
     web: web.contract(
-      'src/daemon/__tests__/request-router-artifacts-web.test.ts',
+      'packages/daemon/src/__tests__/request-router-artifacts-web.test.ts',
       'artifacts lists a daemon-tracked artifact produced during a web session',
       'daemon artifact listing round-trips a tracked artifact for a web-backed session',
     ),
@@ -112,13 +112,13 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'typed capability response includes fixture-driving commands',
     ),
     macos: macos.contract(
-      'src/daemon/session-lifecycle/internal/__tests__/session-capabilities.test.ts',
+      'packages/daemon/src/session-lifecycle/internal/__tests__/session-capabilities.test.ts',
       'capabilities preserves session-owned appstate for an active %s session',
       'the capabilities response projects exact runtime facts plus active macOS session state',
     ),
     tvos: tvos.gap('No tvOS-specific capabilities command evidence exists yet'),
     web: web.contract(
-      'src/daemon/session-lifecycle/internal/__tests__/session-capabilities.test.ts',
+      'packages/daemon/src/session-lifecycle/internal/__tests__/session-capabilities.test.ts',
       'capabilities omits apps when $label runtime facts deny the operation',
       'web capability projection reflects runtime-owned unsupported operations',
     ),
@@ -159,7 +159,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     ),
     tvos: tvos.gap('No tvOS-specific app inventory command evidence exists yet'),
     web: web.contract(
-      'src/daemon/session-lifecycle/internal/__tests__/session-capabilities.test.ts',
+      'packages/daemon/src/session-lifecycle/internal/__tests__/session-capabilities.test.ts',
       'capabilities omits apps when $label runtime facts deny the operation',
       'web runtime facts keep native app inventory unavailable',
     ),
@@ -179,7 +179,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'shutdown simulator boots again and inventory confirms it',
     ),
     macos: macos.contract(
-      'src/daemon/handlers/__tests__/session-boot.test.ts',
+      'packages/daemon/src/handlers/__tests__/session-boot.test.ts',
       'boot rejects the macOS host boot cell after one facts inspection and before binding',
       'macOS boot is refused by the runtime fact before dispatch',
     ),
@@ -294,7 +294,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     macos: macos.gap('No command-specific macOS event timeline evidence exists yet'),
     tvos: tvos.gap('No tvOS-specific session-event command evidence exists yet'),
     web: web.contract(
-      'src/daemon/__tests__/request-router-events.test.ts',
+      'packages/daemon/src/__tests__/request-router-events.test.ts',
       'events reads the daemon-owned session timeline for a web-backed session',
       'the session-owned event timeline works the same for a web-backed session as any other platform',
     ),
@@ -331,12 +331,12 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'host audio probing has an Android-emulator session contract',
     ),
     iosSimulator: iosSimulator.contract(
-      'src/daemon/session-observability/internal/__tests__/session-audio.test.ts',
+      'packages/daemon/src/session-observability/internal/__tests__/session-audio.test.ts',
       'audio probe starts host helper for iOS simulator audio',
       'host audio permission and probe lifecycle; ScreenCaptureKit is not available on hosted CI',
     ),
     macos: macos.contract(
-      'src/daemon/session-observability/internal/__tests__/session-audio.test.ts',
+      'packages/daemon/src/session-observability/internal/__tests__/session-audio.test.ts',
       'audio probe start binds once, adopts the durable handle, and answers from it',
       'macOS audio probe starts the ScreenCaptureKit helper and reports its backend',
     ),
@@ -347,7 +347,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'host-dependent',
     ),
     web: web.contract(
-      'src/daemon/session-observability/internal/__tests__/session-audio.test.ts',
+      'packages/daemon/src/session-observability/internal/__tests__/session-audio.test.ts',
       'audio probe forwards daemon millisecond timing to the web query operation',
       'web audio probe forwards typed duration and bucket values',
     ),
@@ -369,7 +369,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     macos: macos.gap('No command-specific macOS replay evidence exists beyond the suite runner'),
     tvos: tvos.gap('No tvOS-specific replay command evidence exists yet'),
     web: web.contract(
-      'src/daemon/handlers/__tests__/session-command-replay.test.ts',
+      'packages/daemon/src/handlers/__tests__/session-command-replay.test.ts',
       'replay inherits the parent web platform selector for each invoked step',
       'replay re-invokes each recorded step with no platform branch, so a web selector threads through unchanged',
     ),
@@ -614,7 +614,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     macos: macos.gap('No command-specific macOS batch evidence exists yet'),
     tvos: tvos.gap('No tvOS-specific batch command evidence exists yet'),
     web: web.contract(
-      'src/daemon/session-lifecycle/internal/__tests__/session-devices-batch-runtime.test.ts',
+      'packages/daemon/src/session-lifecycle/internal/__tests__/session-devices-batch-runtime.test.ts',
       'batch step forwards the parent web platform selector to each invoked step',
       'batch re-invokes each step through the normal dispatcher with no platform branch, so a web selector threads through unchanged',
     ),
@@ -814,7 +814,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
     macos: macos.gap('No command-specific macOS trace evidence exists yet'),
     tvos: tvos.gap('No tvOS-specific trace command evidence exists yet'),
     web: web.contract(
-      'src/daemon/handlers/__tests__/trace-runtime.test.ts',
+      'packages/daemon/src/handlers/__tests__/trace-runtime.test.ts',
       'starts and stops one trace through the session-owned trace slot on a web session',
       'session-scoped trace start/stop bookkeeping works the same for a web session as any other platform',
     ),
@@ -1256,7 +1256,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'Android viewport fails closed through its unavailable exact-owner runtime fact',
     ),
     iosSimulator: iosSimulator.contract(
-      'src/daemon/__tests__/viewport-runtime.test.ts',
+      'packages/daemon/src/__tests__/viewport-runtime.test.ts',
       'rejects an unavailable exact-owner fact before binding',
       'iOS viewport fails closed through its unavailable exact-owner runtime fact',
     ),

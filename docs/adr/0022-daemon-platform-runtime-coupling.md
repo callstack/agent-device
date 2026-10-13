@@ -8,17 +8,17 @@ and points at the gates rather than restating the inventory.
 
 Amended 2026-10-11 by #3431: the daemon-runtime composition edges this
 ADR classified (the gateway/diagnostics/resource-cleanup/lifecycle edges, the provider-runtime
-hubs, and the platform-services and claim-recovery dynamic edges) moved out of `src/daemon/` into
+hubs, and the platform-services and claim-recovery dynamic edges) moved out of `packages/daemon/src/` into
 the process-root composition module `src/daemon-composition.ts`, which R76 does not see because it
 is no longer a daemon-zone importer. #3430 then routed the leaked selector-query edge
-(`src/daemon/direct-ios-selector.ts`) through the request-bound runtime binding, so the R76
+(`packages/daemon/src/direct-ios-selector.ts`) through the request-bound runtime binding, so the R76
 inventory is empty; with nothing left to classify, the same change collapsed R76 to a plain ban on
 the coupling and deleted the classification machinery, per the rule's own kill criterion. The
 section-2 outcomes below remain the record of how each was classified.
 
 ## 1. Context
 
-The platform-package migration removed direct production dependencies from `src/daemon/**` to
+The platform-package migration removed direct production dependencies from `packages/daemon/src/**` to
 concrete platform code (R65: zero such imports in every form). What it did not prove is that
 every remaining platform-aware responsibility belongs in the daemon. At the audit baseline
 (`658f822c`) nine daemon files held 13 production imports of root `src/platform-runtime-*.ts`
@@ -36,7 +36,7 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
    `DAEMON_PLATFORM_RUNTIME_EDGES` in
    [`scripts/layering/daemon-platform-runtime-inventory.ts`](../../scripts/layering/daemon-platform-runtime-inventory.ts)
    is now empty, so the classification table and its symbol-drift and staleness passes are deleted
-   and R76 bans the coupling outright — any production `src/daemon/**` import of the family or of a
+   and R76 bans the coupling outright — any production `packages/daemon/src/**` import of the family or of a
    root hub that reaches it is a violation. The categories and outcomes below remain the record of
    how each edge was judged and retired):
    - **Composition-essential** — assembling neutral runtime implementations at the process root.
@@ -64,7 +64,7 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
      are daemon-policy-essential. Selector production and lifecycle participation stay separate.
    - **#2333 (done)** — lifecycle participation of platform resource owners. The
      `apple-runner-owner` and `operation-host` edges are retired; `daemon-runtime.ts` now holds
-     only the typed `PlatformOwnerLifecycle` contract (`src/daemon/platform-owner-lifecycle.ts`),
+     only the typed `PlatformOwnerLifecycle` contract (`packages/daemon/src/platform-owner-lifecycle.ts`),
      composed at the root by `platform-runtime-daemon-lifecycle.ts`, which is the sole importer of
      the Apple runner owner, the Android snapshot-helper and Web orphan cleanups, and legacy
      app-log marker recovery. The `resource-cleanup` edge stays, reclassified
@@ -86,11 +86,11 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
 3. **Session state and store authority are measured as a symbol-level overlay and ratcheted
    on the handler-owned slice.** At `27a97ee619` the overlay is 112 `SessionState` shape edges
    and 68 `SessionStore` authority edges repo-wide, of which 14 shape / 22 authority files are
-   handler-owned (`src/daemon/handlers/**`). Gate rule **R75 `session-authority-overlay`**
+   handler-owned (`packages/daemon/src/handlers/**`). Gate rule **R75 `session-authority-overlay`**
    (reference measured via `measureRatchets` in `scripts/layering/ratchet-reference.ts`) holds
    the handler-owned file sets at or under the merge-base: handler code may lose files from
    either set, never gain them. The ratchet is added now that the edges are classified;
-   cross-module reads outside `src/daemon/handlers/**` are owned by the logical-module
+   cross-module reads outside `packages/daemon/src/handlers/**` are owned by the logical-module
    declarations (R7/R10) and are not ratcheted here.
 
 4. **The entry-to-platform hop trace was re-run with hop roles**

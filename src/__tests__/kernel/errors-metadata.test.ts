@@ -129,7 +129,7 @@ test('normalizeError omits details entirely once stripping diagnostic-meta keys 
 });
 
 // --- Cross-cutting contract: normalizeError composes retriableForErrorCode and
-// defaultHintForCode exactly the way src/daemon/request-router.ts's
+// defaultHintForCode exactly the way packages/daemon/src/request-router.ts's
 // enrichDaemonError (`error.retriable ?? retriableForErrorCode(error.code)`)
 // and the CLI's printHumanError expect, for every registered code. Per-code
 // hint/retriability policy itself is pinned in errors-code-policy.test.ts. ---

@@ -38,7 +38,7 @@
       "coverage_source": "istanbul"
     },
     {
-      "path": "src/daemon/server/http-server.ts",
+      "path": "packages/daemon/src/server/http-server.ts",
       "name": "<arrow>",
       "line": 188,
       "col": 18,

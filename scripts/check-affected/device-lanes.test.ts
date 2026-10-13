@@ -71,9 +71,9 @@ test('the macOS coverage manifest selects its executable gate and macOS replay l
 
 test('shared runtime surface owns every device lane', () => {
   for (const file of [
-    'src/daemon/handlers/session.ts',
+    'packages/daemon/src/handlers/session.ts',
     'packages/kernel/src/errors.ts',
-    'src/daemon/android-system-dialog.ts', // naming convention in a shared dir, not a boundary
+    'packages/daemon/src/android-system-dialog.ts', // naming convention in a shared dir, not a boundary
     'test/integration/smoke-daemon-clean.test.ts',
     'packages/provision-kit/src/install-source.ts',
   ]) {

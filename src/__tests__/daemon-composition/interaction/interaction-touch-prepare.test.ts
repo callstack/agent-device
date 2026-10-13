@@ -16,16 +16,16 @@ import {
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
-import { makeIosAppSession } from '../../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
+import { makeIosAppSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
-} from '../../../daemon/request-runtime-binding.ts';
+} from '@agent-device/daemon/testing/request-runtime-binding';
 import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
-import { handleInteractionCommands } from '../../../daemon/interaction/index.ts';
-import type { SessionStore } from '../../../daemon/session-store.ts';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import type { SessionStore } from '@agent-device/daemon/testing/session-store';
 
 // #3510: the capture an interaction's post-action observation polls. A coordinate-targeted press or
 // fill acts through a use that declares no capture, so before this its settle loop read the screen
@@ -56,7 +56,7 @@ const BRIDGE_PRODUCED = Object.freeze({
 });
 
 const mockInteractorCapture = vi.hoisted(() => vi.fn());
-vi.mock('../../../daemon/snapshot-interactor-capture.ts', () => ({
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
   captureSnapshotWithInteractor: mockInteractorCapture,
 }));
 

@@ -10,9 +10,9 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { installFakeManagedAgentBrowser } from '@agent-device/test-kit/web-managed-agent-browser';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { runCmd } from '@agent-device/host-kit/command';
-import { SessionStore } from '../../../daemon/session-store.ts';
-import { makeWebSession } from '../../../daemon/__tests__/session-teardown.fixtures.ts';
-import { teardownDaemonSessionForShutdown } from '../../../daemon/server/daemon-runtime.ts';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import { makeWebSession } from '@agent-device/daemon/testing/__tests__/session-teardown.fixtures';
+import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/testing/server/daemon-runtime';
 
 const mockRunCmd = vi.mocked(runCmd);
 

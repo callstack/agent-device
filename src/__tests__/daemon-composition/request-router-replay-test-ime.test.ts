@@ -10,10 +10,10 @@ import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 
 import path from 'node:path';
-import { getResolveTargetDeviceMock } from '../../daemon/__tests__/request-router-dispatch-mocks.ts';
+import { getResolveTargetDeviceMock } from '@agent-device/daemon/testing/__tests__/request-router-dispatch-mocks';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
-vi.mock('../../daemon/device/device-ready.ts', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
@@ -37,10 +37,10 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
 });
 
 import { ANDROID_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
-import { LeaseRegistry } from '../../daemon/lease-registry.ts';
-import { createRequestHandler } from '../../daemon/__tests__/test-device-runtime-gateway.ts';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
 import { realLifecycleDeviceRuntimeGateway } from './lifecycle-runtime-gateway.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 

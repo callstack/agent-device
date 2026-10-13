@@ -1,5 +1,5 @@
-// Daemon residue scan (11a-4): every module specifier in a file under src/daemon/ that resolves
-// to a non-package module outside src/daemon/. The rule: daemon files may import workspace
+// Daemon residue scan (11a-4): every module specifier in a file under packages/daemon/src/ that resolves
+// to a non-package module outside packages/daemon/src/. The rule: daemon files may import workspace
 // packages, externals, and each other — nothing else. Once the daemon is its own package, R11 in
 // the layering guard (#3546) enforces this permanently; until then this scan is the measurement.
 //

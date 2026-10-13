@@ -64,7 +64,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
   return { ...actual, runAppleRunnerCommand: vi.fn(async () => ({})) };
 });
 
-vi.mock('../../../src/daemon/ios-app-session-hint.ts', () => ({
+vi.mock('@agent-device/daemon/testing/ios-app-session-hint', () => ({
   buildIosOpenCommandHint: vi.fn(async () => undefined),
 }));
 

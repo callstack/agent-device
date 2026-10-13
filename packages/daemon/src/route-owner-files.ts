@@ -17,15 +17,15 @@ import type { DaemonCommandRoute } from './request-handler-chain.ts';
  * each path still points at the module that route's loader imports.
  */
 const DAEMON_ROUTE_OWNER_FILES = {
-  humanControl: 'src/daemon/handlers/human-control.ts',
-  lease: 'src/daemon/handlers/lease.ts',
-  session: 'src/daemon/handlers/session.ts',
-  snapshot: 'src/daemon/handlers/snapshot.ts',
-  reactNative: 'src/daemon/handlers/react-native.ts',
-  recordTrace: 'src/daemon/handlers/record-trace.ts',
-  find: 'src/daemon/interaction/index.ts',
-  interaction: 'src/daemon/interaction/index.ts',
-  generic: 'src/daemon/request-generic-dispatch.ts',
+  humanControl: 'packages/daemon/src/handlers/human-control.ts',
+  lease: 'packages/daemon/src/handlers/lease.ts',
+  session: 'packages/daemon/src/handlers/session.ts',
+  snapshot: 'packages/daemon/src/handlers/snapshot.ts',
+  reactNative: 'packages/daemon/src/handlers/react-native.ts',
+  recordTrace: 'packages/daemon/src/handlers/record-trace.ts',
+  find: 'packages/daemon/src/interaction/index.ts',
+  interaction: 'packages/daemon/src/interaction/index.ts',
+  generic: 'packages/daemon/src/request-generic-dispatch.ts',
 } as const satisfies Record<DaemonCommandRoute, string>;
 
 export function getDaemonRouteOwnerFiles(): Record<DaemonCommandRoute, string> {

@@ -1,5 +1,5 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { legacyDispatchCapture } from '../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 
@@ -7,40 +7,40 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import { handleInteractionCommands } from '../../../daemon/interaction/index.ts';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
 import {
   makeIosSession,
   authoringPublication,
-} from '../../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
-import { SessionScriptWriter } from '../../../daemon/session-script-writer.ts';
-import { runReplayForTest } from '../../../daemon/__tests__/replay-runtime/replay-command-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { SessionScriptWriter } from '@agent-device/daemon/testing/session-script-writer';
+import { runReplayForTest } from '@agent-device/daemon/testing/__tests__/replay-runtime/replay-command-fixture';
 import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import {
   imageViewerNodes,
   profileNodes,
   snapshot,
   snapshotPayload,
-} from '../../../daemon/interaction/internal/__tests__/interaction-ios-tap-outcome-fixtures.ts';
+} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-ios-tap-outcome-fixtures';
 import {
   appCaptureComparisonIdentity,
   appCaptureComparisonKey,
   systemSurfaceCaptureComparisonKey,
-} from '../../../daemon/__tests__/ios-comparison-key-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/ios-comparison-key-fixture';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   getRuntimeBindings,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '../../../daemon/__tests__/interaction-get-runtime-fixture.ts';
-import { captureSnapshotWithInteractor } from '../../../daemon/snapshot-interactor-capture.ts';
-import { corroborateIosTapFailure } from '../../../daemon/interaction/internal/interaction-ios-tap-outcome.ts';
-import { movingTargetBaseline } from '../../../daemon/deferred-interaction-outcome.ts';
+} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
+import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
+import { corroborateIosTapFailure } from '@agent-device/daemon/testing/interaction/internal/interaction-ios-tap-outcome';
+import { movingTargetBaseline } from '@agent-device/daemon/testing/deferred-interaction-outcome';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
-vi.mock('../../../daemon/snapshot-interactor-capture.ts', async () => {
-  const fixture = await import('../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts');
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
+  const fixture = await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return {
     captureSnapshotWithInteractor: vi.fn(fixture.captureSnapshotThroughLegacyDispatchFixture),
   };

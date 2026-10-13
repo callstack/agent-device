@@ -179,7 +179,7 @@ const RUNTIME_TREE_TARGET_STABILITY: GuaranteeEnforcement = {
 // (interaction-response-construction-guard.test.ts) keeps new branches on it.
 const SHARED_RESPONSE_CONSTRUCTION: GuaranteeEnforcement = {
   kind: 'runtime',
-  via: 'src/daemon/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
+  via: 'packages/daemon/src/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
 };
 
 // runtime-selector, runtime-ref, and coordinate share this waiver: all three finalize through
@@ -192,7 +192,7 @@ const TAP_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
   trackingIssue: TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE,
 };
 
-// Both Maestro-compatible fast paths (src/daemon/interaction/internal/interaction-touch-direct-ios.ts)
+// Both Maestro-compatible fast paths (packages/daemon/src/interaction/internal/interaction-touch-direct-ios.ts)
 // dispatch ONE fused XCTest runner request (`command: 'tap'` with a selectorKey/selectorValue) built
 // in packages/platform-apple/src/interactions.ts#tapElementSelector — not the separate
 // packages/maestro/ flow-script engine, which drives standalone `.yaml` Maestro flows and never
@@ -205,7 +205,7 @@ const DIRECT_IOS_SINGLE_QUERY_READINESS: GuaranteeEnforcement = {
 
 // Shares the SAME reasoning as TAP_OUTCOME_NOT_OBSERVED_GAP: the tap outcome is not observed on the
 // success path here either. The shared ambiguous-XCTest-failure corroboration
-// (src/daemon/interaction/internal/interaction-ios-tap-outcome.ts#corroborateIosTapFailure) is
+// (packages/daemon/src/interaction/internal/interaction-ios-tap-outcome.ts#corroborateIosTapFailure) is
 // invoked identically from this fast path and from the tree-based runtime dispatch, but only ever
 // reconsiders a THROWN error — it never validates a call that returned success, so it is not a
 // baseline outcome claim for either path.
@@ -282,7 +282,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
   responseIdentity: {
     kind: 'runtime',
-    via: 'src/daemon/interaction/internal/interaction-touch-targets.ts#interactionResultExtra',
+    via: 'packages/daemon/src/interaction/internal/interaction-touch-targets.ts#interactionResultExtra',
   },
   verifyEvidence: {
     kind: 'runtime',
@@ -390,7 +390,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       responseConstruction: {
         kind: 'runtime',
-        via: 'src/daemon/interaction/internal/interaction-gesture-response.ts#gestureResponseData',
+        via: 'packages/daemon/src/interaction/internal/interaction-gesture-response.ts#gestureResponseData',
       },
       responseIdentity: {
         kind: 'runtime',
@@ -482,7 +482,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
       responseIdentity: {
         kind: 'runtime',
-        via: 'src/daemon/interaction/internal/interaction-touch-targets.ts#interactionResultExtra',
+        via: 'packages/daemon/src/interaction/internal/interaction-touch-targets.ts#interactionResultExtra',
       },
       verifyEvidence: {
         kind: 'delegated',
@@ -646,7 +646,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/daemon/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
+        via: 'packages/daemon/src/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
       },
       targetReadiness: DIRECT_IOS_SINGLE_QUERY_READINESS,
       outcomeObservation: DIRECT_IOS_OUTCOME_NOT_OBSERVED_GAP,

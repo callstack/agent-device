@@ -34,6 +34,9 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:packages/contracts
+      '@agent-device/daemon':
+        specifier: workspace:*
+        version: link:packages/daemon
       '@agent-device/daemon-contracts':
         specifier: workspace:*
         version: link:packages/daemon-contracts
@@ -279,6 +282,76 @@ importers:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
+
+  packages/daemon:
+    dependencies:
+      '@agent-device/ad-replay':
+        specifier: workspace:*
+        version: link:../ad-replay
+      '@agent-device/ad-script':
+        specifier: workspace:*
+        version: link:../ad-script
+      '@agent-device/capture-kit':
+        specifier: workspace:*
+        version: link:../capture-kit
+      '@agent-device/command-registry':
+        specifier: workspace:*
+        version: link:../command-registry
+      '@agent-device/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@agent-device/daemon-contracts':
+        specifier: workspace:*
+        version: link:../daemon-contracts
+      '@agent-device/device-selection':
+        specifier: workspace:*
+        version: link:../device-selection
+      '@agent-device/host-kit':
+        specifier: workspace:*
+        version: link:../host-kit
+      '@agent-device/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@agent-device/maestro':
+        specifier: workspace:*
+        version: link:../maestro
+      '@agent-device/platform-android':
+        specifier: workspace:*
+        version: link:../platform-android
+      '@agent-device/platform-apple':
+        specifier: workspace:*
+        version: link:../platform-apple
+      '@agent-device/platform-web':
+        specifier: workspace:*
+        version: link:../platform-web
+      '@agent-device/replay-port':
+        specifier: workspace:*
+        version: link:../replay-port
+      '@agent-device/replay-test':
+        specifier: workspace:*
+        version: link:../replay-test
+      '@agent-device/selectors':
+        specifier: workspace:*
+        version: link:../selectors
+      '@agent-device/session-journal':
+        specifier: workspace:*
+        version: link:../session-journal
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
+    devDependencies:
+      fast-check:
+        specifier: ^4.9.0
+        version: 4.9.0
+      oxc-parser:
+        specifier: ^0.146.0
+        version: 0.146.0
+      vitest:
+        specifier: 5.0.4
+        version: 5.0.4(@types/node@22.20.1)(@vitest/coverage-v8@5.0.4)(vite@8.2.1(@types/node@22.20.1)(yaml@2.9.0))
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
 
   packages/daemon-contracts:
     dependencies:

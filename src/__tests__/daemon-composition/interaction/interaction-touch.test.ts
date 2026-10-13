@@ -1,8 +1,8 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { handleInteractionCommands } from '../../../daemon/interaction/index.ts';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
 import {
   getRuntimeBindings,
   mockHoverPoint,
@@ -11,13 +11,13 @@ import {
   mockTapPoint,
   resetGetRuntimeFixture,
   runtimeBindingSpies,
-} from '../../../daemon/__tests__/interaction-get-runtime-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
 import {
   contextFromFlags,
   makeMacOsDesktopSession,
   makeMacOsMenubarSession,
   makeSession,
-} from '../../../daemon/interaction/internal/__tests__/interaction-touch-fixtures.ts';
+} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 // Router ownership: one representative per touch command proves
@@ -37,7 +37,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../daemon/snapshot-interactor-capture.ts', () => ({
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
@@ -52,7 +52,7 @@ import {
   getAndroidBlockingDialogObservation,
   getAndroidScreenSize,
 } from '@agent-device/platform-android/mechanics';
-import { captureSnapshotWithInteractor } from '../../../daemon/snapshot-interactor-capture.ts';
+import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);

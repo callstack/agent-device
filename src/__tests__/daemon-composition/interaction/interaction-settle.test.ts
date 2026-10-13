@@ -1,24 +1,24 @@
 import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { legacyDispatchCapture } from '../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import { test, expect, vi, beforeEach } from 'vitest';
 import {
   createInteractionRuntime,
   handleInteractionCommands,
-} from '../../../daemon/interaction/index.ts';
-import type { SessionStore } from '../../../daemon/session-store.ts';
-import type { SessionRef, SessionState } from '../../../daemon/session-state.ts';
+} from '@agent-device/daemon/testing/interaction/index';
+import type { SessionStore } from '@agent-device/daemon/testing/session-store';
+import type { SessionRef, SessionState } from '@agent-device/daemon/testing/session-state';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import { setSessionSnapshot } from '../../../daemon/session-snapshot.ts';
+import { setSessionSnapshot } from '@agent-device/daemon/testing/session-snapshot';
 import {
   activateCompleteRefFrame,
   expireRefFrame,
   refFrameState,
   refFrameTree,
-} from '../../../daemon/ref-frame.ts';
-import { captureSnapshotWithInteractor } from '../../../daemon/snapshot-interactor-capture.ts';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
-import { makeIosSession } from '../../../daemon/__tests__/support/session-factories.ts';
+} from '@agent-device/daemon/testing/ref-frame';
+import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import {
   clearRequestAbortRegistration,
   registerRequestAbort,
@@ -29,7 +29,7 @@ import {
   mockFillPoint,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '../../../daemon/__tests__/interaction-get-runtime-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 // #1101 --settle daemon response shape: the settle payload (diff + settled +
@@ -39,7 +39,7 @@ import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 // beyond a few poll ticks.
 
 const mockCaptureSnapshotForSession = vi.hoisted(() => vi.fn());
-vi.mock('../../../daemon/snapshot-interactor-capture.ts', () => ({
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 const nativeCapture = vi.mocked(captureSnapshotWithInteractor);

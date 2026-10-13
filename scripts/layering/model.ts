@@ -306,8 +306,8 @@ export function topFolder(file: string): string {
 
 export function targetDagZone(file: string): string {
   // #2342 relocated the daemon client to its own `src/daemon-client/` folder, so the
-  // client zone now falls out of the folder itself; `src/daemon/` is server-only.
-  if (file.startsWith('src/daemon/')) return 'daemon-server';
+  // client zone now falls out of the folder itself; `packages/daemon/src/` is server-only.
+  if (file.startsWith('packages/daemon/src/')) return 'daemon-server';
   return declaredRootModuleZone(file) ?? topFolder(file);
 }
 

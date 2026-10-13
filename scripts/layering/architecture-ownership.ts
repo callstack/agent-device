@@ -12,7 +12,7 @@ export type LogicalModulePolicy = Readonly<{
 }>;
 
 const DAEMON_SESSION_LIFECYCLE_FACADE = {
-  root: 'src/daemon/session-lifecycle/index.ts',
+  root: 'packages/daemon/src/session-lifecycle/index.ts',
   exports: [
     'SessionCloseCommandInput',
     'SessionInventoryCommandInput',
@@ -24,7 +24,7 @@ const DAEMON_SESSION_LIFECYCLE_FACADE = {
 } as const;
 
 const DAEMON_SESSION_OBSERVABILITY_FACADE = {
-  root: 'src/daemon/session-observability/index.ts',
+  root: 'packages/daemon/src/session-observability/index.ts',
   exports: ['SessionObservabilityCommandInput', 'handleSessionObservabilityCommands'],
 } as const;
 
@@ -69,7 +69,7 @@ export const INTERACTION_RETIRED_HANDLER_PATHS = [
 ] as const;
 
 const DAEMON_INTERACTION_FACADE = {
-  root: 'src/daemon/interaction/index.ts',
+  root: 'packages/daemon/src/interaction/index.ts',
   exports: [
     'FindRouteInput',
     'InteractionRouteInput',
@@ -103,7 +103,7 @@ export const LOGICAL_MODULE_POLICIES = [
     name: 'ad-replay',
     roots: ['packages/ad-replay/src/'],
     forbiddenTargetRoots: [
-      'src/daemon/',
+      'packages/daemon/src/',
       'src/providers/',
       'src/compat/',
       'packages/maestro/',
@@ -114,7 +114,7 @@ export const LOGICAL_MODULE_POLICIES = [
     name: 'maestro',
     roots: ['packages/maestro/src/'],
     forbiddenTargetRoots: [
-      'src/daemon/',
+      'packages/daemon/src/',
       'src/providers/',
       'packages/ad-replay/',
       'packages/replay-port/',
@@ -124,7 +124,7 @@ export const LOGICAL_MODULE_POLICIES = [
     name: 'replay-test',
     roots: ['packages/replay-test/src/'],
     forbiddenTargetRoots: [
-      'src/daemon/',
+      'packages/daemon/src/',
       'src/providers/',
       'src/request/',
       'src/compat/',
@@ -136,25 +136,25 @@ export const LOGICAL_MODULE_POLICIES = [
   {
     name: 'replay-port',
     roots: ['packages/replay-port/src/'],
-    forbiddenTargetRoots: ['src/daemon/', 'src/providers/', 'src/compat/'],
+    forbiddenTargetRoots: ['packages/daemon/src/', 'src/providers/', 'src/compat/'],
   },
   {
     name: 'daemon-session-lifecycle',
-    roots: ['src/daemon/session-lifecycle/'],
-    forbiddenTargetRoots: ['src/daemon/handlers/'],
+    roots: ['packages/daemon/src/session-lifecycle/'],
+    forbiddenTargetRoots: ['packages/daemon/src/handlers/'],
     facade: DAEMON_SESSION_LIFECYCLE_FACADE,
   },
   {
     name: 'daemon-interaction',
-    roots: ['src/daemon/interaction/'],
+    roots: ['packages/daemon/src/interaction/'],
     forbiddenTargetRoots: [],
-    internalForbiddenTargetRoots: ['src/daemon/handlers/'],
+    internalForbiddenTargetRoots: ['packages/daemon/src/handlers/'],
     facade: DAEMON_INTERACTION_FACADE,
   },
   {
     name: 'daemon-session-observability',
-    roots: ['src/daemon/session-observability/'],
-    forbiddenTargetRoots: ['src/daemon/handlers/'],
+    roots: ['packages/daemon/src/session-observability/'],
+    forbiddenTargetRoots: ['packages/daemon/src/handlers/'],
     facade: DAEMON_SESSION_OBSERVABILITY_FACADE,
   },
 ] as const satisfies readonly LogicalModulePolicy[];
@@ -190,7 +190,7 @@ export const ARCHITECTURE_OWNERSHIP = {
     {
       name: 'request-runtime-binding',
       kind: 'capability',
-      root: 'src/daemon/request-runtime-binding.ts',
+      root: 'packages/daemon/src/request-runtime-binding.ts',
       exports: [
         'BindDeviceRuntime',
         'BindExactDeviceRuntime',
@@ -205,7 +205,7 @@ export const ARCHITECTURE_OWNERSHIP = {
     {
       name: 'session-script-publication',
       kind: 'capability',
-      root: 'src/daemon/session-script-publication-capability.ts',
+      root: 'packages/daemon/src/session-script-publication-capability.ts',
       exports: [
         'abortAuthoringOnSecondOpen',
         'applyRecordedSaveScriptFlags',
@@ -224,13 +224,13 @@ export const ARCHITECTURE_OWNERSHIP = {
     {
       name: 'session-state-shape',
       kind: 'live-state-shape',
-      root: 'src/daemon/session-state.ts',
+      root: 'packages/daemon/src/session-state.ts',
       exports: ['SessionState'],
     },
     {
       name: 'session-store-authority',
       kind: 'live-state-authority',
-      root: 'src/daemon/session-store.ts',
+      root: 'packages/daemon/src/session-store.ts',
       exports: ['SessionStore'],
     },
   ],
@@ -239,7 +239,7 @@ export const ARCHITECTURE_OWNERSHIP = {
       name: 'snapshot-policy',
       kind: 'executable-policy',
       roots: ['packages/capture-kit/src/snapshot/'],
-      forbiddenTargetRoots: ['src/daemon/'],
+      forbiddenTargetRoots: ['packages/daemon/src/'],
     },
   ],
 } as const;

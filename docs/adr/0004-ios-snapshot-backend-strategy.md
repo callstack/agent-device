@@ -115,7 +115,7 @@ facet in `@agent-device/capture-kit` owns snapshot policy generally rather than 
   stated as a duration budget; the loop derives the deadline from the window's `markedAt` itself, so
   the budget is always spent from the action and a caller has no absolute instant it could get
   wrong.
-  `src/daemon/session-snapshot-freshness.ts` keeps only what needs a session: reading and retiring
+  `packages/daemon/src/session-snapshot-freshness.ts` keeps only what needs a session: reading and retiring
   the window on store-owned `SessionState`, and choosing the comparison baseline from snapshot
   lineage. It remains the declared R7 owner of `androidSnapshotFreshness`.
 - **Timeout evidence.** Whether a capture failed because the hierarchy never arrived is decided
@@ -145,12 +145,12 @@ facet in `@agent-device/capture-kit` owns snapshot policy generally rather than 
 
 `scripts/layering/snapshot-presentation-boundary.test.ts` enforces the direction, but only across
 the roots `snapshot-policy` declares in `scripts/layering/architecture-ownership.ts`: nothing in
-that snapshot tree may import `src/daemon/`, while the overlay modules beside the tree sit outside
+that snapshot tree may import `packages/daemon/src/`, while the overlay modules beside the tree sit outside
 those roots and are outside that gate. It carries a positive control, because a filter that stopped
 matching would look identical to a boundary being obeyed.
 
 The residual call sites #1983 also named are audited and deliberately left in place.
-`src/daemon/direct-ios-selector.ts` carries no presentation policy: `isLocalIosRunnerSession` and
+`packages/daemon/src/direct-ios-selector.ts` carries no presentation policy: `isLocalIosRunnerSession` and
 `readSimpleIosSelectorTarget` are session routing (device family, provider ownership, the
 stabilization window), while `deriveDirectIosNodeSelector` and `isDirectIosSelectorFallbackError`
 are selector derivation and ADR 0011 delegation-on-error. The latter two are pure and

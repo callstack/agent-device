@@ -1,8 +1,8 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { beforeEach, expect, test } from 'vitest';
-import { createRequestHandler } from '../../daemon/__tests__/test-device-runtime-gateway.ts';
-import { LeaseRegistry } from '../../daemon/lease-registry.ts';
-import { SessionStore } from '../../daemon/session-store.ts';
+import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import { AppError } from '@agent-device/kernel/errors';
 import { resetAndroidSnapshotHelperInstallCache } from '@agent-device/platform-android/mechanics';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../test-utils/android-snapshot-helper.ts';

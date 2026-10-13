@@ -54,7 +54,7 @@
 //     brand casts inside those two modules, so a udid never runs outside the set that holds it.
 //   - Over REQUEST-BOUND RUNTIME EXECUTION: facts remain the only admission authority and daemon
 //     code cannot manufacture or repair a narrowed runtime proof (R66).
-//   - Over THE DAEMON'S INTERIOR: every production file under src/daemon/ is owned by exactly one
+//   - Over THE DAEMON'S INTERIOR: every production file under packages/daemon/src/ is owned by exactly one
 //     layer of the manifest in scripts/layering/daemon-layers.ts, and no static edge reads up the
 //     daemon-local order core < resources < execution < sessions < server (R81). The global spine
 //     ranks all five layers at daemon-server's rank, so R5/R6/R80 are blind inside the zone.
@@ -281,7 +281,7 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Layer
     return [
       {
         rule: 'R7 session-state-ownership',
-        file: 'src/daemon/session-state.ts',
+        file: 'packages/daemon/src/session-state.ts',
         line: 1,
         message: 'no daemon module declares SessionState, so its ownership cannot be checked.',
       },
@@ -584,7 +584,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     ),
   'daemon-layers': (context) =>
     checkDaemonLayers(
-      context.sourceFiles.filter((file) => file.startsWith('src/daemon/')),
+      context.sourceFiles.filter((file) => file.startsWith('packages/daemon/src/')),
       context.edges,
       readDaemonLayerManifest(repoRoot),
     ),

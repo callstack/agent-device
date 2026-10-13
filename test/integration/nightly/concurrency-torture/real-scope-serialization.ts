@@ -19,12 +19,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { createRequestExecutionScope } from '../../../../src/daemon/request-execution-scope.ts';
-import { LeaseRegistry } from '../../../../src/daemon/lease-registry.ts';
-import { SessionStore } from '../../../../src/daemon/session-store.ts';
+import { createRequestExecutionScope } from '@agent-device/daemon/testing/request-execution-scope';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonRequest } from '../../../../src/daemon/daemon-request.ts';
+import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
 
 import { DEVICE_POOL } from './bindings.ts';
 

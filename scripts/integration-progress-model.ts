@@ -10,7 +10,7 @@ const EMPTY_STATEMENT_COVERAGE = { covered: 0, pct: 0, total: 0 };
 
 export function buildIntegrationProgressModel({ root = process.cwd() } = {}) {
   const coverageSummary = path.join(root, 'coverage/coverage-summary.json');
-  const handlerTestDir = path.join(root, 'src/daemon/handlers/__tests__');
+  const handlerTestDir = path.join(root, 'packages/daemon/src/handlers/__tests__');
   const providerScenarioDir = path.join(root, 'test/integration/provider-scenarios');
   const commandContractFiles = walkFiles(path.join(root, 'src/commands'), (file) =>
     isCommandContractSource(file),

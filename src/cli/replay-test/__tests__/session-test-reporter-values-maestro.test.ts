@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../../../daemon/__tests__/platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '@agent-device/daemon/testing/__tests__/platform-services-fixture';
 // Characterization of the shipped reporter contract for the MAESTRO adapter (#1478 P3).
 //
 // The sibling session-test-reporter-values.test.ts covers the same contract for native `.ad`.
@@ -41,9 +41,9 @@ import fs from 'node:fs';
 
 import path from 'node:path';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
-import { handleSessionCommands } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
-import { SessionStore } from '../../../daemon/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../daemon/daemon-request.ts';
+import { handleSessionCommands } from '@agent-device/daemon/testing/handlers/__tests__/session-command-harness';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/testing/daemon-request';
 import { withRequestProgressSink } from '@agent-device/host-kit/request';
 import {
   getReplayTestReporterExitCode,

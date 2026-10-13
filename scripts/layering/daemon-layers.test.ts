@@ -40,7 +40,7 @@ function driftFor(
 }
 
 test('the manifest owns every tracked daemon file exactly once, and no static edge reads upward', () => {
-  const daemonFiles = listSourceFiles().filter((file) => file.startsWith('src/daemon/'));
+  const daemonFiles = listSourceFiles().filter((file) => file.startsWith('packages/daemon/src/'));
   assert.ok(daemonFiles.length > 0, 'expected daemon production files to scan');
   const manifest = readDaemonLayerManifest(repoRoot);
   assert.deepEqual(Object.keys(manifest).sort(), [...DAEMON_LAYER_ORDER].sort());

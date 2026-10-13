@@ -1,4 +1,4 @@
-// Catches: the daemon's internal layering drifting silently — a production file under `src/daemon/`
+// Catches: the daemon's internal layering drifting silently — a production file under `packages/daemon/src/`
 //   that no layer owns, an owned file that moved or disappeared, a file claimed by two layers, or a
 //   static import that reads UP the daemon-local order (core < resources < execution < sessions <
 //   server). The global spine ranks all five at daemon-server's rank 4, so R5/R6 cannot see any
@@ -46,7 +46,7 @@ export function daemonLayerRank(layer: DaemonLayer): number {
 }
 
 /**
- * The exhaustive `{layer: sourcePaths}` claim over every production file under `src/daemon/`,
+ * The exhaustive `{layer: sourcePaths}` claim over every production file under `packages/daemon/src/`,
  * committed next to this verifier so moving a file into its layer's folder carries its ownership
  * with it.
  */
@@ -56,9 +56,9 @@ export function readDaemonLayerManifest(repoRoot: string): DaemonLayerManifest {
   ) as DaemonLayerManifest;
 }
 
-/** `src/daemon/<…>.ts` and not a test or fixture path — the only entries the manifest may name. */
+/** `packages/daemon/src/<…>.ts` and not a test or fixture path — the only entries the manifest may name. */
 function isDaemonProductionPath(file: string): boolean {
-  return file.startsWith('src/daemon/') && isProductionSourceFile(file);
+  return file.startsWith('packages/daemon/src/') && isProductionSourceFile(file);
 }
 
 /** The partition flattened to one lookup; a path in two layers keeps its first claim. */
@@ -122,7 +122,7 @@ export function daemonLayerManifestDrift(
       if (!isDaemonProductionPath(file)) {
         violations.push(
           manifestFileViolation(
-            `entry "${file}" is not a production path under src/daemon/. Test files, fixtures, and paths outside the daemon carry no layer.`,
+            `entry "${file}" is not a production path under packages/daemon/src/. Test files, fixtures, and paths outside the daemon carry no layer.`,
           ),
         );
         continue;

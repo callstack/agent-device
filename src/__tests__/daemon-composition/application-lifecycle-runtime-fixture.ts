@@ -15,11 +15,11 @@ import { vi } from 'vitest';
 export {
   awaitFixtureReadiness,
   dispatchApplicationLifecycleEffect,
-} from '../../daemon/__tests__/application-lifecycle-runtime-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/application-lifecycle-runtime-fixture';
 import {
   applicationLifecycleFixtureInteractor,
   awaitFixtureReadiness,
-} from '../../daemon/__tests__/application-lifecycle-runtime-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/application-lifecycle-runtime-fixture';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { createAndroidApplicationTools } from '../../platform-runtime-android-application-tools.ts';
 import { createAppleApplicationTools } from '../../platform-runtime-apple-application-tools.ts';

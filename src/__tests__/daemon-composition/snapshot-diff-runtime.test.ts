@@ -13,15 +13,15 @@ import {
   snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/snapshot-runtime';
 import { deviceShape } from '@agent-device/kernel/device';
-import { makeAndroidSession } from '../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
+import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
-} from '../../daemon/request-runtime-binding.ts';
-import { dispatchSnapshotDiffViaRuntime } from '../../daemon/snapshot-diff-runtime.ts';
-import { expectRefusesUnavailableExactOwnerFact } from '../../daemon/__tests__/runtime-binding-conformance.ts';
-import { unavailableDeviceRuntimeGateway } from '../../daemon/__tests__/support/unavailable-device-runtime-gateway.ts';
+} from '@agent-device/daemon/testing/request-runtime-binding';
+import { dispatchSnapshotDiffViaRuntime } from '@agent-device/daemon/testing/snapshot-diff-runtime';
+import { expectRefusesUnavailableExactOwnerFact } from '@agent-device/daemon/testing/__tests__/runtime-binding-conformance';
+import { unavailableDeviceRuntimeGateway } from '@agent-device/daemon/testing/__tests__/support/unavailable-device-runtime-gateway';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const available = Object.freeze({ available: true } as const);

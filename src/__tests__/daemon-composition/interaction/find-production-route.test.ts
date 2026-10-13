@@ -1,9 +1,9 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import { handleInteractionCommands } from '../../../daemon/interaction/index.ts';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonRequest, DaemonResponse } from '../../../daemon/daemon-request.ts';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
-import { makeIosSession as makeSession } from '../../../daemon/__tests__/support/session-factories.ts';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/testing/daemon-request';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { makeIosSession as makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
@@ -13,8 +13,8 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
     resolveTargetDevice: actual.resolveTargetDevice,
   };
 });
-vi.mock('../../../daemon/snapshot-interactor-capture.ts', async () => {
-  const fixture = await import('../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts');
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
+  const fixture = await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
@@ -22,8 +22,8 @@ import {
   findTouchRuntimeBindings,
   mockDispatch,
   resetFindTouchRuntimeFixture,
-} from '../../../daemon/interaction/internal/__tests__/find-touch-runtime-fixture.ts';
-import { invokeFindHandler } from '../../../daemon/interaction/internal/__tests__/find-handler-fixture.ts';
+} from '@agent-device/daemon/testing/interaction/internal/__tests__/find-touch-runtime-fixture';
+import { invokeFindHandler } from '@agent-device/daemon/testing/interaction/internal/__tests__/find-handler-fixture';
 
 beforeEach(() => {
   resetFindTouchRuntimeFixture();

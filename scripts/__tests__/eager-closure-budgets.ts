@@ -109,7 +109,7 @@ export const HUB_ENTRY_FILES: readonly string[] = [
   'src/daemon.ts',
   'src/platform-runtime.ts',
   'src/core/interactors/register-builtins.ts',
-  'src/daemon/session-teardown.ts',
+  'packages/daemon/src/session-teardown.ts',
 ];
 
 /** A platform façade evaluates exactly this many modules: itself. */

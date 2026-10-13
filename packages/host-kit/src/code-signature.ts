@@ -69,7 +69,7 @@ export function resolveDaemonCodeSignature(): string {
  * first: two installed trees of one version hold the same artifact and have nothing to
  * compare (#2458), while a checkout's code moves under a version that does not move
  * with it. A running daemon publishes its own answer beside its signature
- * (`src/daemon/server/server-lifecycle.ts`) because the question is about the code that
+ * (`packages/daemon/src/server/server-lifecycle.ts`) because the question is about the code that
  * is RUNNING, not only about the client asking it.
  */
 export type DaemonCodeOrigin = 'installed' | 'checkout';

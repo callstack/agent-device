@@ -3,7 +3,7 @@ import {
   createTestDeviceInventoryGatewaysFromProvider,
 } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { test, expect, vi, beforeEach } from 'vitest';
-import { legacyDispatchCapture } from '../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import path from 'node:path';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
@@ -13,7 +13,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 
-vi.mock('../../daemon/device/device-ready.ts', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
@@ -21,11 +21,11 @@ import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
   systemRuntimeSpies,
-} from '../../daemon/__tests__/test-device-runtime-gateway.ts';
-import { snapshotRuntimeFixture } from '../../daemon/__tests__/snapshot-runtime-fixture.ts';
-import type { SessionState } from '../../daemon/session-state.ts';
-import { LeaseRegistry } from '../../daemon/lease-registry.ts';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
+} from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
+import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import {
   type PlatformRuntimeOperations,

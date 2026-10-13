@@ -10,7 +10,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 
-vi.mock('../../daemon/device/device-ready.ts', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
@@ -29,20 +29,20 @@ import {
   makeAndroidSession,
   makeIosAppSession,
   makeSession,
-} from '../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
+} from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import type { DaemonRequest } from '../../daemon/daemon-request.ts';
-import { discloseRequestDispatch } from '../../daemon/request-dispatch-disclosure.ts';
-import { createRequestDispatchLedger } from '../../daemon/request-dispatch-ledger.ts';
-import { LeaseRegistry } from '../../daemon/lease-registry.ts';
-import type { SessionState } from '../../daemon/session-state.ts';
-import { clearAndroidObservationFixture } from '../../daemon/__tests__/android-observation-fixture.ts';
+import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
+import { discloseRequestDispatch } from '@agent-device/daemon/testing/request-dispatch-disclosure';
+import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { clearAndroidObservationFixture } from '@agent-device/daemon/testing/__tests__/android-observation-fixture';
 import {
   createRequestHandler,
   gestureRuntimeSpies,
   lifecycleDeviceRuntimeGateway,
-} from '../../daemon/__tests__/test-device-runtime-gateway.ts';
+} from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
 
 // contracts/fixtures/dispatch-disclosure.json, daemon.route rows: each drives one request through
 // the real request router, with only the bound device operations faked.

@@ -83,7 +83,7 @@ Detected an overly complex or slow accessibility tree. Fell back to the private-
 };
 
 // DEVICE_IN_USE from buildDeviceInUseBySessionError
-// (src/daemon/session-recovery-hints.ts) — the parity test drives that exact producer.
+// (packages/daemon/src/session-recovery-hints.ts) — the parity test drives that exact producer.
 export const DEVICE_IN_USE_SAMPLE = {
   command: `agent-device press 'label="Place order"' --settle`,
   output: `Error (DEVICE_IN_USE): Device is already in use by session "checkout".
@@ -91,7 +91,7 @@ Hint: Run agent-device session list to inspect active sessions. To reuse this de
 };
 
 // Enforced cross-daemon device claim conflict from
-// src/daemon/device/device-claim-conflict.ts. This path is deliberately non-retriable:
+// packages/daemon/src/device/device-claim-conflict.ts. This path is deliberately non-retriable:
 // the exact status command is the only safe next step while ownership is live.
 export const DEVICE_CLAIM_IN_USE_SAMPLE = {
   command: 'agent-device open Demo --platform android --serial emulator-5554',
@@ -100,7 +100,7 @@ Hint: Inspect the owner with: agent-device device status --platform android --se
 };
 
 // ADR 0014 mutation rejection from
-// src/daemon/interaction/index.ts: a pinned ref minted from a
+// packages/daemon/src/interaction/index.ts: a pinned ref minted from a
 // superseded generation is rejected before dispatch. The daemon strips the
 // `~s5` pin at the boundary (interaction-touch-targets.ts), so the message
 // names the plain ref; the hint is the precise resolveRefStalenessWarning.
@@ -110,7 +110,7 @@ export const STALE_REF_SAMPLE = {
 Hint: Ref @e12 was minted from snapshot s5 but the session's ref frame is now s7 — re-run snapshot -i.`,
 };
 
-// AMBIGUOUS_MATCH from buildAmbiguousMatchError (src/daemon/selector-match-errors.ts)
+// AMBIGUOUS_MATCH from buildAmbiguousMatchError (packages/daemon/src/selector-match-errors.ts)
 // — the parity test drives that exact producer. The by-design rejection
 // instead of silent disambiguation: #1597 made the candidate refs (ref, role,
 // label/identifier — the same compact rendering as snapshot -i) print

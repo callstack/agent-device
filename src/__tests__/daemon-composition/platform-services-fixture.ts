@@ -1,7 +1,7 @@
 import { createDaemonPlatformServices } from '../../platform-runtime-daemon-services.ts';
 import { createClaimRecoveryGateway } from '../../platform-runtime-claim-recovery.ts';
-import type { DaemonPlatformServices } from '../../daemon/platform-services.ts';
-import type { ClaimRecoveryGatewayFactory } from '../../daemon/device/claim-recovery-gateway.ts';
+import type { DaemonPlatformServices } from '@agent-device/daemon/testing/platform-services';
+import type { ClaimRecoveryGatewayFactory } from '@agent-device/daemon/testing/device/claim-recovery-gateway';
 
 /**
  * The port the production composition root builds, handed to a test the same way the shared router

@@ -1,4 +1,4 @@
-// The daemon runtime's dependency construction, extracted from `src/daemon/server/daemon-runtime.ts`
+// The daemon runtime's dependency construction, extracted from `packages/daemon/src/server/daemon-runtime.ts`
 // so the operational server owns sequencing and this module owns naming runtimes (ADR 0019).
 // Everything here that names a platform runtime, a provider runtime, an interactor, host
 // diagnostics, credential fingerprinting, resource cleanup, the platform lifecycle owners, the
@@ -10,7 +10,7 @@
 // entry reaches this module through a function-scoped `await import`, so the daemon entry's eager
 // closure does not grow; the platform-services and claim-recovery
 // compositions stay behind function-scoped `await import`, and the command surface loads on first
-// request use. Nothing here value-imports `src/daemon/`: the daemon's session data enters through
+// request use. Nothing here value-imports `packages/daemon/src/`: the daemon's session data enters through
 // plain callbacks, so the platform-runtime zone keeps its value-free direction toward the daemon.
 
 import {
@@ -42,7 +42,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
   ComposeDaemonRuntimeDeps,
   DaemonRuntimeDeps,
-} from './daemon/server/daemon-runtime.ts';
+} from '@agent-device/daemon/server/daemon-runtime';
 
 /**
  * Best-effort startup cleanup of managed-agent-browser orphans left by a previous daemon. It runs

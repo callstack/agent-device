@@ -1,0 +1,103 @@
+{
+  "name": "@agent-device/daemon",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The agent-device daemon server: request routing, sessions, leases, device claims, snapshot and interaction handling. Internal workspace package bundled into the published agent-device artifact (#3352 daemon extraction).",
+  "dependencies": {
+    "@agent-device/ad-replay": "workspace:*",
+    "@agent-device/ad-script": "workspace:*",
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/command-registry": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/daemon-contracts": "workspace:*",
+    "@agent-device/device-selection": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/maestro": "workspace:*",
+    "@agent-device/platform-android": "workspace:*",
+    "@agent-device/platform-apple": "workspace:*",
+    "@agent-device/platform-web": "workspace:*",
+    "@agent-device/replay-port": "workspace:*",
+    "@agent-device/replay-test": "workspace:*",
+    "@agent-device/selectors": "workspace:*",
+    "@agent-device/session-journal": "workspace:*",
+    "@agent-device/test-kit": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-check": "^4.9.0",
+    "oxc-parser": "^0.146.0",
+    "vitest": "5.0.4",
+    "yaml": "^2.9.0"
+  },
+  "exports": {
+    "./app-log-files": {
+      "types": "./src/app-log-files.ts",
+      "default": "./src/app-log-files.ts"
+    },
+    "./daemon-command-registry": {
+      "types": "./src/daemon-command-registry.ts",
+      "default": "./src/daemon-command-registry.ts"
+    },
+    "./daemon-request": {
+      "types": "./src/daemon-request.ts",
+      "default": "./src/daemon-request.ts"
+    },
+    "./daemon-stop": {
+      "types": "./src/daemon-stop.ts",
+      "default": "./src/daemon-stop.ts"
+    },
+    "./device/claim-recovery-gateway": {
+      "types": "./src/device/claim-recovery-gateway.ts",
+      "default": "./src/device/claim-recovery-gateway.ts"
+    },
+    "./device/device-claim-inspection": {
+      "types": "./src/device/device-claim-inspection.ts",
+      "default": "./src/device/device-claim-inspection.ts"
+    },
+    "./device/device-claim-owner-recovery": {
+      "types": "./src/device/device-claim-owner-recovery.ts",
+      "default": "./src/device/device-claim-owner-recovery.ts"
+    },
+    "./device/device-claims": {
+      "types": "./src/device/device-claims.ts",
+      "default": "./src/device/device-claims.ts"
+    },
+    "./managed-session-artifact-path": {
+      "types": "./src/managed-session-artifact-path.ts",
+      "default": "./src/managed-session-artifact-path.ts"
+    },
+    "./platform-owner-lifecycle": {
+      "types": "./src/platform-owner-lifecycle.ts",
+      "default": "./src/platform-owner-lifecycle.ts"
+    },
+    "./platform-request-scope": {
+      "types": "./src/platform-request-scope.ts",
+      "default": "./src/platform-request-scope.ts"
+    },
+    "./platform-resource-cleanup": {
+      "types": "./src/platform-resource-cleanup.ts",
+      "default": "./src/platform-resource-cleanup.ts"
+    },
+    "./platform-services": {
+      "types": "./src/platform-services.ts",
+      "default": "./src/platform-services.ts"
+    },
+    "./route-owner-files": {
+      "types": "./src/route-owner-files.ts",
+      "default": "./src/route-owner-files.ts"
+    },
+    "./server/daemon-runtime": {
+      "types": "./src/server/daemon-runtime.ts",
+      "default": "./src/server/daemon-runtime.ts"
+    },
+    "./session-artifact-paths": {
+      "types": "./src/session-artifact-paths.ts",
+      "default": "./src/session-artifact-paths.ts"
+    },
+    "./testing/*": {
+      "types": "./src/*.ts",
+      "default": "./src/*.ts"
+    }
+  }
+}

@@ -6,10 +6,10 @@ import {
   makeSession,
   noopInvoke,
   assertInvalidArgsMessage,
-} from '../../../daemon/handlers/__tests__/session-test-harness.ts';
-import { handleSessionCommands } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
+} from '@agent-device/daemon/testing/handlers/__tests__/session-test-harness';
+import { handleSessionCommands } from '@agent-device/daemon/testing/handlers/__tests__/session-command-harness';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
+import { fakeCreateCommandSurface } from '@agent-device/daemon/testing/__tests__/support/command-surface-fake';
 import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 
 // These relaunch cases pin the REAL open-target validation rules (the URL-target refusal and the

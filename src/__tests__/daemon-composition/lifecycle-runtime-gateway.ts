@@ -1,7 +1,7 @@
 import {
   createLifecycleDeviceRuntimeGateway,
   createLifecycleDeviceRuntimeGatewaySpies,
-} from '../../daemon/__tests__/test-device-runtime-gateway.ts';
+} from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
 import { composedLifecycleRuntimeFixture } from './application-lifecycle-runtime-fixture.ts';
 
 /**

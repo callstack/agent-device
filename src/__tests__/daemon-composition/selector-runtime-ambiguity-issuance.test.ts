@@ -1,23 +1,23 @@
 import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
-import { selectorCaptureFixture } from '../../daemon/__tests__/selector-capture-fixture.ts';
-import { refFrameScope, refFrameState } from '../../daemon/ref-frame.ts';
-import type { DaemonRequest } from '../../daemon/daemon-request.ts';
-import { dispatchIsViaRuntime } from '../../daemon/selector-runtime.ts';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { selectorCaptureFixture } from '@agent-device/daemon/testing/__tests__/selector-capture-fixture';
+import { refFrameScope, refFrameState } from '@agent-device/daemon/testing/ref-frame';
+import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
+import { dispatchIsViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   getRuntimeBindings,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '../../daemon/__tests__/interaction-get-runtime-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
 import {
   contextFromFlags,
   makeStaleRefSession,
   readPressPoint,
-} from '../../daemon/interaction/internal/__tests__/interaction-touch-fixtures.ts';
-import { handleInteractionCommands } from '../../daemon/interaction/index.ts';
+} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 // #2870 review, the reviewer's pinned invariant: a response that prints
@@ -43,9 +43,9 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('../../daemon/snapshot-interactor-capture.ts', async (importOriginal) => {
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('../../daemon/snapshot-interactor-capture.ts')>();
+    await importOriginal<typeof import('@agent-device/daemon/testing/snapshot-interactor-capture')>();
   return { ...actual, captureSnapshotWithInteractor: mockCaptureSnapshotWithInteractor };
 });
 

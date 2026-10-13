@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { buildOpenResult } from '../../../daemon/session-lifecycle/internal/session-open-surface.ts';
+import { buildOpenResult } from '@agent-device/daemon/testing/session-lifecycle/internal/session-open-surface';
 import { resolveRequestedOpenSurface } from '../../../platform-runtime-open-target.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 

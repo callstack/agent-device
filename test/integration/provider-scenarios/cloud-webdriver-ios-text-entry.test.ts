@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
-import type { DaemonRequest } from '../../../src/daemon/daemon-request.ts';
+import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
 import { assertRpcOk } from './assertions.ts';
 import {
   createProviderScenarioHarness,

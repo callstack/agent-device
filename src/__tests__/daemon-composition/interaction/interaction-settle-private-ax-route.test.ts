@@ -1,13 +1,13 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { makeIosSession } from '../../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
+import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
-import { contextFromFlags as buildDaemonContext } from '../../../daemon/context.ts';
-import { handleInteractionCommands } from '../../../daemon/interaction/index.ts';
-import { getRuntimeBindings } from '../../../daemon/__tests__/interaction-get-runtime-fixture.ts';
+import { contextFromFlags as buildDaemonContext } from '@agent-device/daemon/testing/context';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { getRuntimeBindings } from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
 import { getInteractor } from '../../../core/interactors.ts';
-import { installInteractorResolution } from '../../../daemon/interactor-resolution.ts';
+import { installInteractorResolution } from '@agent-device/daemon/testing/interactor-resolution';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 // Root composition hands the daemon its interactor resolution; this test drives the real

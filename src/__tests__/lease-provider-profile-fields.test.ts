@@ -10,8 +10,8 @@ import {
 } from '@agent-device/kernel/contracts';
 import { LimrunRuntime } from '../sdk/limrun.ts';
 import { createAgentDeviceClient } from '../agent-device-client.ts';
-import { handleLeaseCommands } from '../daemon/handlers/lease.ts';
-import { LeaseRegistry } from '../daemon/lease-registry.ts';
+import { handleLeaseCommands } from '@agent-device/daemon/testing/handlers/lease';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { createProviderDeviceRuntimeRequestProviders } from '../provider-device-runtime.ts';
 import {
   hashRemoteConfigFile,
@@ -20,7 +20,7 @@ import {
 import { createTransport } from './client-transport-fixture.ts';
 import { runCliCapture } from './cli-capture.ts';
 import { makeTempWorkspace } from './cli-config-fixtures.ts';
-import { makeSessionStore } from '../daemon/__tests__/support/store-factory.ts';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 
 const limrunInstances = vi.hoisted(() => ({
   iosCreate: vi.fn(async () => {

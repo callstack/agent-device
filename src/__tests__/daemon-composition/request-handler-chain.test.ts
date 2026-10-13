@@ -4,25 +4,25 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
-import { LeaseRegistry } from '../../daemon/lease-registry.ts';
-import { runRequestHandlerChain } from '../../daemon/request-handler-chain.ts';
-import { getDaemonRouteOwnerFiles } from '../../daemon/route-owner-files.ts';
-import type { DaemonRequest, DaemonResponse } from '../../daemon/daemon-request.ts';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { runRequestHandlerChain } from '@agent-device/daemon/testing/request-handler-chain';
+import { getDaemonRouteOwnerFiles } from '@agent-device/daemon/testing/route-owner-files';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/testing/daemon-request';
 import { LINUX_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { makeIosSession, makeSession } from '../../daemon/__tests__/support/session-factories.ts';
+import { makeIosSession, makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
-import { handleInteractionCommands } from '../../daemon/interaction/index.ts';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
-import { createRequestRuntimeBindings } from '../../daemon/request-runtime-binding.ts';
-import { createRequestDispatchLedger } from '../../daemon/request-dispatch-ledger.ts';
+import { createRequestRuntimeBindings } from '@agent-device/daemon/testing/request-runtime-binding';
+import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
 import { createLocalLinuxToolProvider, withLinuxToolProvider } from '@agent-device/platform-linux';
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,
   unavailableDeviceRuntimeGateway,
   unavailableInspectFacts,
-} from '../../daemon/__tests__/support/unavailable-device-runtime-gateway.ts';
+} from '@agent-device/daemon/testing/__tests__/support/unavailable-device-runtime-gateway';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
@@ -94,10 +94,10 @@ test('route owner files match the production module loaders', () => {
   assert.equal(definitions.length + 1, Object.keys(ownerFiles).length);
   for (const [, route, modulePath] of definitions) {
     assert.ok(route && modulePath);
-    assert.equal(ownerFiles[route as keyof typeof ownerFiles], `src/daemon/${modulePath.slice(2)}`);
+    assert.equal(ownerFiles[route as keyof typeof ownerFiles], `packages/daemon/src/${modulePath.slice(2)}`);
   }
   assert.ok(genericModulePath && genericRouteMatches);
-  assert.equal(ownerFiles.generic, `src/daemon/${genericModulePath.slice(2)}`);
+  assert.equal(ownerFiles.generic, `packages/daemon/src/${genericModulePath.slice(2)}`);
 
   assert.ok(
     !/ownerFile/.test(source),

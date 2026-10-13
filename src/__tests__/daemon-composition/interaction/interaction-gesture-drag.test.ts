@@ -4,18 +4,18 @@ import { attachRefs } from '@agent-device/kernel/snapshot';
 import {
   makeIosSession,
   authoringPublication,
-} from '../../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
-import { activateCompleteRefFrame, refFrameState } from '../../../daemon/ref-frame.ts';
+} from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { activateCompleteRefFrame, refFrameState } from '@agent-device/daemon/testing/ref-frame';
 
-import { handleInteractionCommands } from '../../../daemon/interaction/index.ts';
-import { gestureRuntimeBindingsFixture } from '../../../daemon/interaction/internal/__tests__/gesture-runtime-bindings.fixtures.ts';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { gestureRuntimeBindingsFixture } from '@agent-device/daemon/testing/interaction/internal/__tests__/gesture-runtime-bindings.fixtures';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 const contextFromFlags = () => ({});
 const captureSnapshotForSession = async ({
   session,
-}: import('../../../daemon/session-state.ts').SessionRef) => session.snapshot!;
+}: import('@agent-device/daemon/testing/session-state').SessionRef) => session.snapshot!;
 let gestures = gestureRuntimeBindingsFixture();
 
 beforeEach(() => {

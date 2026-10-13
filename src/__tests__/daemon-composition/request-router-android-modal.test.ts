@@ -13,21 +13,21 @@ import {
   createRequestHandler,
   gestureDeviceRuntimeGateway,
   gestureRuntimeSpies,
-} from '../../daemon/__tests__/test-device-runtime-gateway.ts';
-import type { SessionState } from '../../daemon/session-state.ts';
-import { LeaseRegistry } from '../../daemon/lease-registry.ts';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
+} from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import {
   createProviderDeviceRuntimeRequestProviders,
   isActiveProviderDevice,
 } from '../../provider-device-runtime.ts';
-import { installProviderDeviceAdmission } from '../../daemon/provider-device-admission.ts';
+import { installProviderDeviceAdmission } from '@agent-device/daemon/testing/provider-device-admission';
 
 // Root composition installs the daemon's provider-device admission; this test composes the
 // request providers the same way, so it installs the fact the same way.
 installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
-import { makeTestScreenRecordingResource } from '../../daemon/__tests__/support/screen-recording-live-handle.ts';
+import { makeTestScreenRecordingResource } from '@agent-device/daemon/testing/__tests__/support/screen-recording-live-handle';
 import { androidObservation } from '../../platform-runtime.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';

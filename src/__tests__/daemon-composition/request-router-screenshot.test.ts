@@ -1,5 +1,5 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { legacyDispatchCapture } from '../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 
@@ -16,21 +16,21 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-import { createRequestHandler } from '../../daemon/__tests__/test-device-runtime-gateway.ts';
+import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
 import {
   screenshotRuntimeFixture,
   writeSolidPng,
   type ScreenshotRuntimeFixture,
   type ScreenshotRuntimeFixtureOptions,
-} from '../../daemon/__tests__/screenshot-runtime-fixture.ts';
-import type { DaemonRequest } from '../../daemon/daemon-request.ts';
-import type { SessionState } from '../../daemon/session-state.ts';
-import { LeaseRegistry } from '../../daemon/lease-registry.ts';
+} from '@agent-device/daemon/testing/__tests__/screenshot-runtime-fixture';
+import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { PNG } from '@agent-device/capture-kit/png';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
-import { makeSession as makeBaseSession } from '../../daemon/__tests__/support/session-factories.ts';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { makeSession as makeBaseSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 function makeSession(name: string): SessionState {

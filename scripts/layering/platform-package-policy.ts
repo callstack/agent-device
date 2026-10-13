@@ -113,7 +113,7 @@ function isAndroidFacetSubpathImport(file: string, specifier: string): boolean {
   // The named facets are the implementation seam for root/core/SDK consumers. Daemon production
   // code still reaches platform behavior through the request-bound runtime gateway; tests may
   // import a facet to exercise the package-owned mechanics directly.
-  return !file.startsWith('src/daemon/') || !isProductionSource(file);
+  return !file.startsWith('packages/daemon/src/') || !isProductionSource(file);
 }
 
 function isAppleFacadeSubpathImport(specifier: string): boolean {

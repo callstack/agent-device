@@ -1,13 +1,13 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { legacyDispatchCapture } from '../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 
 import path from 'node:path';
-import { getResolveTargetDeviceMock } from '../../daemon/__tests__/request-router-dispatch-mocks.ts';
+import { getResolveTargetDeviceMock } from '@agent-device/daemon/testing/__tests__/request-router-dispatch-mocks';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
-vi.mock('../../daemon/device/device-ready.ts', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
@@ -33,18 +33,18 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
 });
 
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { makeIosSession } from '../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
-import { LeaseRegistry } from '../../daemon/lease-registry.ts';
+import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import {
   createRequestHandler,
   gestureRuntimeSpies,
   lifecycleDeviceRuntimeGateway,
   systemRuntimeSpies,
-} from '../../daemon/__tests__/test-device-runtime-gateway.ts';
-import { ensureDeviceReady } from '../../daemon/device/device-ready.ts';
+} from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
+import { ensureDeviceReady } from '@agent-device/daemon/testing/device/device-ready';
 // Readiness is package-owned; hold the open at the fixture's platform-neutral readiness gate.
-import { awaitFixtureReadiness } from '../../daemon/__tests__/application-lifecycle-runtime-fixture.ts';
+import { awaitFixtureReadiness } from '@agent-device/daemon/testing/__tests__/application-lifecycle-runtime-fixture';
 import { createRequestPlatformProviders } from '../../platform-runtime.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 

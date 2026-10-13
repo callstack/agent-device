@@ -1,25 +1,25 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import { legacyDispatchCapture } from '../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import {
   makeAndroidSession as makeBaseAndroidSession,
   makeIosSession,
-} from '../../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
-import { expireRefFrame } from '../../../daemon/ref-frame.ts';
+} from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { expireRefFrame } from '@agent-device/daemon/testing/ref-frame';
 import {
   setSessionSnapshot,
   STALE_SNAPSHOT_REFS_WARNING,
-} from '../../../daemon/session-snapshot.ts';
-import { handleInteractionCommands } from '../../../daemon/interaction/index.ts';
+} from '@agent-device/daemon/testing/session-snapshot';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import {
   contextFromFlags,
   makeSession,
   makeStaleRefSession,
   makeVisibleButtonSnapshot,
-} from '../../../daemon/interaction/internal/__tests__/interaction-touch-fixtures.ts';
+} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
 import { runInteraction } from './interaction-touch-runner.ts';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
@@ -30,8 +30,8 @@ const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
 
-vi.mock('../../../daemon/snapshot-interactor-capture.ts', async () => {
-  const fixture = await import('../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts');
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
+  const fixture = await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
@@ -59,7 +59,7 @@ import {
   getRuntimeBindings,
   mockReadTextAtPoint,
   resetGetRuntimeFixture,
-} from '../../../daemon/__tests__/interaction-get-runtime-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
 import {
   getAndroidAppState,
   getAndroidBlockingDialogObservation,

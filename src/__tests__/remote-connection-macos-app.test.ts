@@ -7,7 +7,7 @@ import { connectCommand, disconnectCommand } from '../cli/commands/connection.ts
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { beginStdoutCapture } from './test-utils/stream-capture.ts';
 import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
-import { LeaseRegistry } from '../daemon/lease-registry.ts';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 
 const LEASE_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 

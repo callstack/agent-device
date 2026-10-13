@@ -1,9 +1,9 @@
-import { bindSessionPerfCapture } from '../../daemon/session-capture-binding.ts';
+import { bindSessionPerfCapture } from '@agent-device/daemon/testing/session-capture-binding';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { perfCaptureResourceStore } from '@agent-device/capture-kit/perf-capture-resource-store';
 import {
@@ -11,7 +11,7 @@ import {
   finishLivePerfCapture,
 } from '@agent-device/capture-kit/perf-capture-session-resource';
 import { startAndroidPerfCapture } from '../../platform-runtime-perf-capture-host.ts';
-import type { SessionState } from '../../daemon/session-state.ts';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
 
 const androidNative = vi.hoisted(() => ({
   startAndroidSimpleperfProfile: vi.fn(),

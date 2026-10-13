@@ -31,7 +31,7 @@ import {
 import {
   DEVICE_READY_CACHE_TTL_MS,
   ensureDeviceReady,
-} from '../../../daemon/device/device-ready.ts';
+} from '@agent-device/daemon/testing/device/device-ready';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockEnsureBootedSimulator = vi.mocked(ensureBootedSimulator);

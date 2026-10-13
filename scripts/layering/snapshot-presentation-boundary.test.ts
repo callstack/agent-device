@@ -11,7 +11,7 @@ const repoRoot = path.resolve(import.meta.dirname, '../..');
 
 /**
  * The `snapshot-policy` declaration owns presentation, freshness, timeout and overlay policy;
- * `src/daemon/` owns the assembly that orders them (#1983, ADR 0004). The dependency runs one way
+ * `packages/daemon/src/` owns the assembly that orders them (#1983, ADR 0004). The dependency runs one way
  * only, so a policy stays testable without standing up a session.
  *
  * The real tree is clean, which is exactly why the positive control below exists: a filter that

@@ -11,7 +11,7 @@ import {
 // inventory carried, retired by #3430. Under the ban it is a violation like any other.
 const RETIRED_TARGET = 'src/platform-runtime-apple-resources.ts';
 const RETIRED_STUB = 'export const queryAppleRuntimeSelector = () => ({});\n';
-const RETIRED_IMPORTER = 'src/daemon/direct-ios-selector.ts';
+const RETIRED_IMPORTER = 'packages/daemon/src/direct-ios-selector.ts';
 
 function violations(sources: Record<string, string>): LayeringViolation[] {
   return checkDaemonPlatformRuntimeInventory(resolveImportEdges(new Map(Object.entries(sources))));
@@ -44,7 +44,7 @@ for (const [file, target, symbol] of [
   ['ios-app-session-hint', 'open-target', 'resolveSoleForegroundIosApp'],
 ]) {
   test(`R76 rejects retired observation mechanics in ${file}`, () => {
-    const importer = `src/daemon/${file}.ts`;
+    const importer = `packages/daemon/src/${file}.ts`;
     const sources = {
       [`src/platform-runtime-${target}.ts`]: `export function ${symbol}() {}\n`,
       [importer]: `import { ${symbol} } from '../platform-runtime-${target}.ts';\nvoid ${symbol};\n`,

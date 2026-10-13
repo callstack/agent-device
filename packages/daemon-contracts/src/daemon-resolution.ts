@@ -11,8 +11,8 @@ export type { DaemonServerMode, DaemonTransportPreference };
 /**
  * Where a daemon lives and how to reach it, resolved from raw env/arg values. The client and the
  * daemon both read this subset — the client to find or launch a daemon, the daemon to bind one —
- * so it sits at the process root rather than under `src/daemon/`, where a client would have to
- * reach daemon internals to resolve an address. `src/daemon/config.ts` adds the request-scoping
+ * so it sits at the process root rather than under `packages/daemon/src/`, where a client would have to
+ * reach daemon internals to resolve an address. `packages/daemon/src/config.ts` adds the request-scoping
  * rules that only the daemon applies on top of this.
  */
 

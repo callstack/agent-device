@@ -5,7 +5,7 @@ import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 // internals: the process root composition is. Every on-disk or protocol contract the client shares
 // with the daemon (state-dir/transport resolution, pidfile liveness, the repair tombstone, the
 // progress framing) therefore lives below both sides — since the daemon-contracts extraction, in
-// `packages/daemon-contracts` — not under `src/daemon/`, and the client
+// `packages/daemon-contracts` — not under `packages/daemon/src/`, and the client
 // reaches it there. What remains is the client reading the daemon's request/response vocabulary —
 // the `DaemonRequest`/`DaemonResponse` types that anchor the ADR 0006 wire surface — recorded here,
 // per measured `file -> target` edge, and only as a type-only import. A runtime (value or dynamic)
@@ -36,37 +36,37 @@ export type DaemonClientEntryEdge = Readonly<{
 export const DAEMON_CLIENT_ENTRY_EDGES: readonly DaemonClientEntryEdge[] = [
   {
     file: 'src/daemon-client/daemon-client.ts',
-    target: 'src/daemon/daemon-request.ts',
+    target: 'packages/daemon/src/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
   {
     file: 'src/daemon-client/daemon-client-lifecycle.ts',
-    target: 'src/daemon/daemon-request.ts',
+    target: 'packages/daemon/src/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
   {
     file: 'src/daemon-client/daemon-client-lease-beat.ts',
-    target: 'src/daemon/daemon-request.ts',
+    target: 'packages/daemon/src/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
   {
     file: 'src/daemon-client/daemon-client-liveness-probe.ts',
-    target: 'src/daemon/daemon-request.ts',
+    target: 'packages/daemon/src/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
   {
     file: 'src/daemon-client/daemon-client-progress.ts',
-    target: 'src/daemon/daemon-request.ts',
+    target: 'packages/daemon/src/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
   {
     file: 'src/daemon-client/daemon-client-rpc.ts',
-    target: 'src/daemon/daemon-request.ts',
+    target: 'packages/daemon/src/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
   {
     file: 'src/daemon-client/daemon-client-transport.ts',
-    target: 'src/daemon/daemon-request.ts',
+    target: 'packages/daemon/src/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
 ] as const;
@@ -94,7 +94,7 @@ export function checkDaemonClientEntry(edges: readonly ResolvedImportEdge[]): La
   const measured = new Map<string, MeasuredEdge>();
   for (const edge of edges) {
     if (!edge.file.startsWith('src/daemon-client/')) continue;
-    if (!edge.target.startsWith('src/daemon/')) continue;
+    if (!edge.target.startsWith('packages/daemon/src/')) continue;
     const key = keyOf(edge.file, edge.target);
     const entry = measured.get(key) ?? {
       file: edge.file,
@@ -122,7 +122,7 @@ export function checkDaemonClientEntry(edges: readonly ResolvedImportEdge[]): La
           `the daemon client ${entry.runtimeKind} daemon internals: ${key}. The client composes the ` +
           `daemon over the network, not its module graph. Move the shared contract to ` +
           `packages/daemon-contracts (or read the DaemonRequest/DaemonResponse types in ` +
-          `src/daemon/daemon-request.ts as a type).`,
+          `packages/daemon/src/daemon-request.ts as a type).`,
       });
       seen.add(key);
       continue;

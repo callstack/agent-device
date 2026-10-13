@@ -1,13 +1,13 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import * as path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
-import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
+import { fakeCreateCommandSurface } from '@agent-device/daemon/testing/__tests__/support/command-surface-fake';
 
 vi.mock('node:timers/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:timers/promises')>();
   return { ...actual, setTimeout: vi.fn(async () => undefined) };
 });
-vi.mock('../../../daemon/device/device-ready.ts', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
@@ -44,19 +44,19 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   return { ...actual, resolveAndroidPackageForOpen: vi.fn(async () => undefined) };
 });
 
-import { createRequestHandler } from '../../../daemon/__tests__/test-device-runtime-gateway.ts';
+import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
 import {
   createRealLifecycleDeviceRuntimeGatewaySpies,
   realLifecycleDeviceRuntimeGateway,
 } from '../lifecycle-runtime-gateway.ts';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { dispatchApplicationLifecycleEffect } from '../application-lifecycle-runtime-fixture.ts';
-import { getResolveTargetDeviceMock } from '../../../daemon/__tests__/request-router-dispatch-mocks.ts';
+import { getResolveTargetDeviceMock } from '@agent-device/daemon/testing/__tests__/request-router-dispatch-mocks';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
-import { makeSession } from '../../../daemon/__tests__/support/session-factories.ts';
-import { LeaseRegistry } from '../../../daemon/lease-registry.ts';
-import type { DaemonRequest } from '../../../daemon/daemon-request.ts';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
 import {
   prepareIosRunner,
   prewarmAppleRunnerCache,

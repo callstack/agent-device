@@ -1,5 +1,5 @@
 import { createPlatformRuntimeGateway } from './platform-runtime.ts';
-import type { ClaimRecoveryGatewayFactory } from './daemon/device/claim-recovery-gateway.ts';
+import type { ClaimRecoveryGatewayFactory } from '@agent-device/daemon/device/claim-recovery-gateway';
 
 /**
  * Root composition for owner-scoped claim recovery (ADR 0019 section 1): the daemon owns the

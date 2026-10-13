@@ -7,23 +7,23 @@ import {
   dispatchDisclosureRowsOwnedBy,
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { makeIosSession } from '../../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
-import { handleInteractionCommands } from '../../../daemon/interaction/index.ts';
+import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
 import {
   getRuntimeBindings,
   mockTapElementSelector,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '../../../daemon/__tests__/interaction-get-runtime-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
 import {
   contextFromFlags,
   makeStaleRefSession,
   makeTwoButtonNodes,
-} from '../../../daemon/interaction/internal/__tests__/interaction-touch-fixtures.ts';
+} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
 import { runInteraction } from './interaction-touch-runner.ts';
-import { refFrameState } from '../../../daemon/ref-frame.ts';
-import { captureSnapshotWithInteractor } from '../../../daemon/snapshot-interactor-capture.ts';
+import { refFrameState } from '@agent-device/daemon/testing/ref-frame';
+import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
@@ -36,7 +36,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../daemon/snapshot-interactor-capture.ts', () => ({
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 

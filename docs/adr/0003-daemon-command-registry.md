@@ -21,7 +21,7 @@ to public command identity, and it required duplicate command sets to stay align
 Keep public command identity in `src/command-catalog.ts` and public input/output contracts in
 `src/commands/**`.
 
-Add `src/daemon/daemon-command-registry.ts` as the daemon-side source of truth for command route
+Add `packages/daemon/src/daemon-command-registry.ts` as the daemon-side source of truth for command route
 ownership and daemon request-policy traits. Request modules consume predicate functions from the
 registry instead of recreating command string sets. Handler modules own execution logic only; they do
 not export duplicate coverage tables to prove route membership.
@@ -67,7 +67,7 @@ exposed through named predicates — a property that survives a projected/derive
 derived daemon registry is therefore permitted **only if** it preserves all of the following invariants:
 
 1. **Daemon-owned declaration.** Route and request-policy traits are declared in a daemon-owned facet
-   (under `src/daemon/`) and *composed* into the registration — never inlined as fields on the public
+   (under `packages/daemon/src/`) and *composed* into the registration — never inlined as fields on the public
    command contract in `src/commands/**` or `src/command-catalog.ts`. Co-locating a registration *call*
    is fine; co-locating *ownership* of daemon policy in the public surface is the contamination this ADR
    rejected (see Alternatives, "Keep daemon groups in `src/command-catalog.ts`").
@@ -85,5 +85,5 @@ derived daemon registry is therefore permitted **only if** it preserves all of t
 A single flat public descriptor whose daemon fields leak into public views is **not** permitted — that is
 the "collapse daemon policy into a public command registry" failure this ADR exists to prevent. Compose
 facets owned by their domains; derive the registry from them. Until that derivation lands and is pinned
-by the registry tests, the hand-authored `src/daemon/daemon-command-registry.ts` remains the source of
+by the registry tests, the hand-authored `packages/daemon/src/daemon-command-registry.ts` remains the source of
 truth and the operating rule in `AGENTS.md` is unchanged.

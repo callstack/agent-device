@@ -1,23 +1,23 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { legacyDispatchCapture } from '../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import { beforeEach, expect, test } from 'vitest';
 import {
   makeIosSession,
   makeAuthoringSession,
   authoringPublication,
-} from '../../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
+} from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   finalizeTouchInteraction,
   handleInteractionCommands,
-} from '../../../daemon/interaction/index.ts';
+} from '@agent-device/daemon/testing/interaction/index';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   getRuntimeBindings,
   mockFillPoint,
   resetGetRuntimeFixture,
-} from '../../../daemon/__tests__/interaction-get-runtime-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 const contextFromFlags = (_flags: CommandFlags | undefined) => ({});

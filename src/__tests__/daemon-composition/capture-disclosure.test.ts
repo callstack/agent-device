@@ -1,18 +1,18 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import { legacyDispatchCapture } from '../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
-import { handleFindCommands } from '../../daemon/interaction/index.ts';
-import { getRuntimeBindings } from '../../daemon/__tests__/interaction-get-runtime-fixture.ts';
-import { dispatchFindReadOnlyViaRuntime } from '../../daemon/selector-runtime.ts';
-import { dispatchWaitViaRuntime } from '../../daemon/wait-runtime.ts';
-import type { DaemonRequest, DaemonResponse } from '../../daemon/daemon-request.ts';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import { handleFindCommands } from '@agent-device/daemon/testing/interaction/index';
+import { getRuntimeBindings } from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
+import { dispatchFindReadOnlyViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
+import { dispatchWaitViaRuntime } from '@agent-device/daemon/testing/wait-runtime';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/testing/daemon-request';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
-import { snapshotRuntimeFixture } from '../../daemon/__tests__/snapshot-runtime-fixture.ts';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
+import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import {
   makeAndroidSession,
   makeIosSession,
-} from '../../daemon/__tests__/support/session-factories.ts';
+} from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { platformResourceCleanup } from '../../platform-runtime-resource-cleanup.ts';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
@@ -25,20 +25,20 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   };
 });
 
-vi.mock('../../daemon/snapshot-interactor-capture.ts', async () => {
-  const fixture = await import('../../daemon/__tests__/legacy-snapshot-capture-fixture.ts');
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
+  const fixture = await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
-vi.mock('../../daemon/device/device-ready.ts', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { withSystemSurfaceDisclosure } from '../../daemon/capture-disclosure.ts';
+import { withSystemSurfaceDisclosure } from '@agent-device/daemon/testing/capture-disclosure';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
-import { TARGET_ACTIVATION_FACT } from '../../daemon/__tests__/capture-disclosure-target-activation-fact.ts';
+import { TARGET_ACTIVATION_FACT } from '@agent-device/daemon/testing/__tests__/capture-disclosure-target-activation-fact';
 
 // The occluding-shade capture every scenario below consumes: no application window content, one
 // active quick-settings surface. The Android capture route stamps systemSurfaceOnly on both the

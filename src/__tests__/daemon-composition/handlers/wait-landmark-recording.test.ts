@@ -12,17 +12,17 @@
  * `WAIT_LANDMARK_MISMATCH_REASON` refusal.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
-import { legacyDispatchCapture } from '../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
-import { dispatchWaitViaRuntime } from '../../../daemon/wait-runtime.ts';
-import type { DaemonRequest } from '../../../daemon/daemon-request.ts';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import { dispatchWaitViaRuntime } from '@agent-device/daemon/testing/wait-runtime';
+import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import { snapshotRuntimeFixture } from '../../../daemon/__tests__/snapshot-runtime-fixture.ts';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
+import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import {
   makeAndroidSession,
   authoringPublication,
-} from '../../../daemon/__tests__/support/session-factories.ts';
+} from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
@@ -34,12 +34,12 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   };
 });
 
-vi.mock('../../../daemon/snapshot-interactor-capture.ts', async () => {
-  const fixture = await import('../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts');
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
+  const fixture = await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
-vi.mock('../../../daemon/device/device-ready.ts', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 

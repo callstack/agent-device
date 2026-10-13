@@ -1,16 +1,16 @@
 import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
 import { afterEach, expect, test } from 'vitest';
-import { makeAndroidSession } from '../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
+import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import {
   clearRequestAbortRegistration,
   markRequestCanceled,
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
-import { dispatchSnapshotDiffViaRuntime } from '../../daemon/snapshot-diff-runtime.ts';
-import { dispatchSnapshotViaRuntime } from '../../daemon/snapshot-runtime.ts';
-import { legacyDispatchCapture } from '../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
-import { snapshotRuntimeFixture } from '../../daemon/__tests__/snapshot-runtime-fixture.ts';
+import { dispatchSnapshotDiffViaRuntime } from '@agent-device/daemon/testing/snapshot-diff-runtime';
+import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 /**

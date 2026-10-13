@@ -2,18 +2,18 @@ import { composedPlatformServicesFixture } from './platform-services-fixture.ts'
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { makeIosSession } from '../../daemon/__tests__/support/session-factories.ts';
+import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
-import { SessionStore } from '../../daemon/session-store.ts';
-import { dispatchSnapshotViaRuntime } from '../../daemon/snapshot-runtime.ts';
-import type { DownloadableArtifactRegistration } from '../../daemon/artifact-tracking.ts';
-import { finalizeDaemonResponse } from '../../daemon/request-finalization.ts';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
+import type { DownloadableArtifactRegistration } from '@agent-device/daemon/testing/artifact-tracking';
+import { finalizeDaemonResponse } from '@agent-device/daemon/testing/request-finalization';
 import {
   screenshotRuntimeFixture,
   writeSolidPng,
   type ScreenshotRuntimeFixture,
   type ScreenshotRuntimeFixtureOptions,
-} from '../../daemon/__tests__/screenshot-runtime-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/screenshot-runtime-fixture';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const SPARSE: SnapshotQualityVerdict = {

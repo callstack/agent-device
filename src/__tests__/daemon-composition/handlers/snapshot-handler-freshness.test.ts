@@ -1,15 +1,15 @@
 import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { test, expect, vi, afterEach, beforeEach } from 'vitest';
-import { legacyDispatchCapture } from '../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
-import { resetGetRuntimeFixture } from '../../../daemon/__tests__/interaction-get-runtime-fixture.ts';
+import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import { resetGetRuntimeFixture } from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
 import fs from 'node:fs';
-import { captureSnapshot } from '../../../daemon/snapshot-capture.ts';
-import { SessionStore } from '../../../daemon/session-store.ts';
+import { captureSnapshot } from '@agent-device/daemon/testing/snapshot-capture';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import {
   isActiveProviderDevice,
   setActiveProviderDeviceRuntimes,
 } from '../../../provider-device-runtime.ts';
-import { installProviderDeviceAdmission } from '../../../daemon/provider-device-admission.ts';
+import { installProviderDeviceAdmission } from '@agent-device/daemon/testing/provider-device-admission';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 // The daemon reads provider ownership through its own typed admission seam; production
@@ -23,7 +23,7 @@ import { buildNodes } from '@agent-device/test-kit/snapshot-builders';
 import {
   fixtureScreenshotCaptures,
   resetSnapshotRuntimeFixture,
-} from '../../../daemon/__tests__/snapshot-runtime-fixture.ts';
+} from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
 import {
   androidCapture,
   androidDevice,
@@ -36,10 +36,10 @@ import {
   makeSession,
   makeSessionStore,
   snapshotRequest,
-} from '../../../daemon/handlers/__tests__/snapshot-handler.fixtures.ts';
+} from '@agent-device/daemon/testing/handlers/__tests__/snapshot-handler.fixtures';
 
-vi.mock('../../../daemon/snapshot-interactor-capture.ts', async () => {
-  const fixture = await import('../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts');
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
+  const fixture = await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
@@ -52,12 +52,12 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
 // unambiguous environment; that live-probe logic is covered by
 // ios-app-session-hint.test.ts. Stubbed here so this suite stays hermetic and
 // fast — defaults to "no enrichment", matching the current-behavior fallback.
-vi.mock('../../../daemon/ios-app-session-hint.ts', () => ({
+vi.mock('@agent-device/daemon/testing/ios-app-session-hint', () => ({
   buildIosOpenCommandHint: vi.fn(async () => undefined),
 }));
 
 import { runAppleRunnerCommand } from '@agent-device/platform-apple/runner/operations';
-import { buildIosOpenCommandHint } from '../../../daemon/ios-app-session-hint.ts';
+import { buildIosOpenCommandHint } from '@agent-device/daemon/testing/ios-app-session-hint';
 
 const mockRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const mockBuildIosOpenCommandHint = vi.mocked(buildIosOpenCommandHint);

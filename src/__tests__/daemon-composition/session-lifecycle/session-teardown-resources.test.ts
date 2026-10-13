@@ -2,9 +2,9 @@ import { beforeEach, expect, test } from 'vitest';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
+import { fakeCreateCommandSurface } from '@agent-device/daemon/testing/__tests__/support/command-surface-fake';
 import { composedLifecycleRuntimeFixture } from '../application-lifecycle-runtime-fixture.ts';
-import { sessionCloseShutdownFixture } from '../../../daemon/session-lifecycle/internal/__tests__/session-close-shutdown.fixtures.ts';
+import { sessionCloseShutdownFixture } from '@agent-device/daemon/testing/session-lifecycle/internal/__tests__/session-close-shutdown.fixtures';
 
 const {
   handleSessionCommands: handleHarnessSessionCommands,

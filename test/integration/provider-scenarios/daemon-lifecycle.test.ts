@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { parseIntegerEnv } from '../../../src/daemon/server/server-lifecycle.ts';
+import { parseIntegerEnv } from '@agent-device/daemon/testing/server/server-lifecycle';
 import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';

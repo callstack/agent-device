@@ -10,9 +10,9 @@ import {
 } from '@agent-device/contracts/gesture-normalization';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
-import { createRequestRuntimeBindings } from '../../daemon/request-runtime-binding.ts';
-import { createRequestDispatchLedger } from '../../daemon/request-dispatch-ledger.ts';
-import { resolveBoundGestureRuntime } from '../../daemon/gesture-runtime.ts';
+import { createRequestRuntimeBindings } from '@agent-device/daemon/testing/request-runtime-binding';
+import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
+import { resolveBoundGestureRuntime } from '@agent-device/daemon/testing/gesture-runtime';
 
 /**
  * The parity artifact for R42/R44 (ADR 0019 §6).

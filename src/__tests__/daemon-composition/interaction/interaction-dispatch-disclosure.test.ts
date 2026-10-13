@@ -10,39 +10,39 @@ import {
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
-import { makeAndroidSession } from '../../../daemon/__tests__/support/session-factories.ts';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import {
   getRuntimeBindings,
   mockFillPoint,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '../../../daemon/__tests__/interaction-get-runtime-fixture.ts';
-import { captureSnapshotWithInteractor } from '../../../daemon/snapshot-interactor-capture.ts';
-import { discloseRequestDispatch } from '../../../daemon/request-dispatch-disclosure.ts';
+} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
+import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
+import { discloseRequestDispatch } from '@agent-device/daemon/testing/request-dispatch-disclosure';
 import {
   createRequestDispatchLedger,
   recordBoundMutations,
-} from '../../../daemon/request-dispatch-ledger.ts';
-import type { BindDeviceRuntime } from '../../../daemon/request-runtime-binding.ts';
-import { clearAndroidObservationFixture } from '../../../daemon/__tests__/android-observation-fixture.ts';
-import { activateCompleteRefFrame, expireRefFrame } from '../../../daemon/ref-frame.ts';
-import { handleInteractionCommands } from '../../../daemon/interaction/index.ts';
-import type { InteractionRouteInput } from '../../../daemon/interaction/internal/types.ts';
-import { assertAndroidPressStayedInApp } from '../../../daemon/interaction/internal/interaction-android-escape.ts';
-import { gestureRuntimeBindingsFixture } from '../../../daemon/interaction/internal/__tests__/gesture-runtime-bindings.fixtures.ts';
+} from '@agent-device/daemon/testing/request-dispatch-ledger';
+import type { BindDeviceRuntime } from '@agent-device/daemon/testing/request-runtime-binding';
+import { clearAndroidObservationFixture } from '@agent-device/daemon/testing/__tests__/android-observation-fixture';
+import { activateCompleteRefFrame, expireRefFrame } from '@agent-device/daemon/testing/ref-frame';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import type { InteractionRouteInput } from '@agent-device/daemon/testing/interaction/internal/types';
+import { assertAndroidPressStayedInApp } from '@agent-device/daemon/testing/interaction/internal/interaction-android-escape';
+import { gestureRuntimeBindingsFixture } from '@agent-device/daemon/testing/interaction/internal/__tests__/gesture-runtime-bindings.fixtures';
 import {
   contextFromFlags,
   makeSession,
   makeStaleRefSession,
-} from '../../../daemon/interaction/internal/__tests__/interaction-touch-fixtures.ts';
+} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 // contracts/fixtures/dispatch-disclosure.json, daemon and post-action guard rows: the daemon rows
 // drive a real `press` through the daemon interaction handler, inside the router's dispatch seam,
 // with only the device touch mocked; the guard row drives the guard itself.
 
-vi.mock('../../../daemon/snapshot-interactor-capture.ts', () => ({
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 

@@ -6,15 +6,15 @@ import { expect, test } from 'vitest';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { makeSession } from '../../daemon/__tests__/support/session-factories.ts';
-import type { GenericPlatformExecutionParams } from '../../daemon/generic-leaf-execution.ts';
-import { resolveScreenshotGenericExecution } from '../../daemon/screenshot-runtime.ts';
+import { makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import type { GenericPlatformExecutionParams } from '@agent-device/daemon/testing/generic-leaf-execution';
+import { resolveScreenshotGenericExecution } from '@agent-device/daemon/testing/screenshot-runtime';
 import {
   screenshotRuntimeFixture,
   writeSolidPng,
-} from '../../daemon/__tests__/screenshot-runtime-fixture.ts';
-import type { DaemonRequest } from '../../daemon/daemon-request.ts';
-import type { SessionState } from '../../daemon/session-state.ts';
+} from '@agent-device/daemon/testing/__tests__/screenshot-runtime-fixture';
+import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 

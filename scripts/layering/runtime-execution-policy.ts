@@ -19,7 +19,7 @@ type AstNode = Record<string, unknown>;
 export const RUNTIME_EXECUTION_INTEGRITY_RULE = 'R66 runtime-execution-integrity';
 
 const COMMAND_DESCRIPTOR_MODULE = 'packages/command-registry/src/registry.ts';
-const RUNTIME_ADMISSION_MODULE = 'src/daemon/runtime-admission.ts';
+const RUNTIME_ADMISSION_MODULE = 'packages/daemon/src/runtime-admission.ts';
 const RUNTIME_PROOF_TYPES = new Set(['AdmittedRuntimePlan', 'BoundDeviceRuntime']);
 
 /** Facts are the only admission authority, and daemon code must consume narrowed runtime proofs. */
@@ -40,7 +40,7 @@ export function runtimeExecutionIntegrityViolations(
           at(file, source, node, 'runtime facts are the only device-command admission authority'),
         );
       }
-      if (!file.startsWith('src/daemon/')) return;
+      if (!file.startsWith('packages/daemon/src/')) return;
       if (isManufacturedRuntimeProof(node)) {
         violations.push(
           at(file, source, node, 'daemon code may not manufacture a narrowed runtime proof'),

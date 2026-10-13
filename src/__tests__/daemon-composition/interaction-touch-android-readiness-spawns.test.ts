@@ -1,9 +1,9 @@
 import { expect, test } from 'vitest';
-import { makeAndroidSession } from '../../daemon/__tests__/support/session-factories.ts';
+import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { withFakeAdb } from '../test-utils/fake-adb.ts';
-import { expireRefFrame } from '../../daemon/ref-frame.ts';
-import { runWithAndroidDialogReadinessCheck } from '../../daemon/interaction/internal/interaction-touch-android-readiness.ts';
-import { androidObservationPolicyFixture as androidObservation } from '../../daemon/__tests__/android-observation-fixture.ts';
+import { expireRefFrame } from '@agent-device/daemon/testing/ref-frame';
+import { runWithAndroidDialogReadinessCheck } from '@agent-device/daemon/testing/interaction/internal/interaction-touch-android-readiness';
+import { androidObservationPolicyFixture as androidObservation } from '@agent-device/daemon/testing/__tests__/android-observation-fixture';
 
 // What blocking-dialog readiness costs a run of taps, end to end. Every one of these `dumpsys`
 // spawns is a device round trip on the critical path of an interaction, so the budget is pinned

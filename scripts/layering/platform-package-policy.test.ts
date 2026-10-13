@@ -267,7 +267,7 @@ test('only the canonical composition root may import the private provider compos
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 
   sources.set(
-    'src/daemon/request-router.ts',
+    'packages/daemon/src/request-router.ts',
     "import { providerScope } from '../platform-runtime/request-providers.ts';",
   );
   assert.match(
@@ -280,7 +280,7 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
   // The façade subpath is the facet's consumer seam: root code may import it.
   const sources = validSources();
   sources.set(
-    'src/daemon/selector-runtime.ts',
+    'packages/daemon/src/selector-runtime.ts',
     "import type { RunnerCommand } from '@agent-device/platform-apple/runner';",
   );
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
@@ -400,14 +400,14 @@ test('the Android mechanics facet is the named consumer seam and adb host wiring
   );
 
   const denied = validSources();
-  denied.set('src/daemon/handlers/session.ts', mechanicsImport);
+  denied.set('packages/daemon/src/handlers/session.ts', mechanicsImport);
   assert.match(
     messages(denied).join('\n'),
     /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import '@agent-device\/platform-android\/mechanics'/,
   );
 
   const deniedHost = validSources();
-  deniedHost.set('src/daemon/handlers/session.ts', hostImport);
+  deniedHost.set('packages/daemon/src/handlers/session.ts', hostImport);
   assert.match(
     messages(deniedHost).join('\n'),
     /only src\/platform-runtime\.ts or its governed request-provider composition submodule may import '@agent-device\/platform-android\/adb-host'/,
@@ -435,7 +435,7 @@ test('the Android test-only fixture subpaths accept test consumers and deny prod
     "import { createAndroidSnapshotCapture } from '@agent-device/platform-android/snapshot-capture-fixtures';";
   const allowed = validSources();
   allowed.set('src/__tests__/android-ui-hierarchy.test.ts', fixtureImport);
-  allowed.set('src/daemon/__tests__/android-system-dialog-occlusion.test.ts', fixtureImport);
+  allowed.set('packages/daemon/src/__tests__/android-system-dialog-occlusion.test.ts', fixtureImport);
   allowed.set('test/integration/provider-scenarios/android.test.ts', fixtureImport);
   assert.deepEqual(
     messages(allowed).filter((message) => message.includes('may import')),
