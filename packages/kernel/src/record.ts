@@ -114,22 +114,29 @@ export function readSnapshotKeyboardBandFact(value: unknown): SnapshotKeyboardBa
     return { kind: 'unmeasurable', reason: 'unrecognized-derivation' };
   }
   if (value.kind === 'visible' || value.kind === 'derived') {
-    const frame = parseRect(value.frame);
-    // Same rule as `isPositiveFiniteRect` in kernel/rect, inlined: this module is a leaf that
-    // many facades evaluate, and a rect import here would land in every one of their closures.
-    // The viewport re-read (#3182) is the other side of that seam and lives in kernel/rect as
-    // `readSnapshotViewportSize`, because a viewport IS a rect; readers take the rect module there.
-    const plottable =
-      frame !== undefined &&
-      [frame.x, frame.y, frame.width, frame.height].every(Number.isFinite) &&
-      frame.width > 0 &&
-      frame.height > 0;
-    if (!plottable) return { kind: 'unmeasurable', reason: `invalid-${value.kind}-frame` };
-    return value.kind === 'derived'
-      ? { kind: 'derived', derivation: 'docked-tree', frame }
-      : { kind: 'visible', frame };
+    return readKeyboardFrameFact(value.frame, value.kind);
   }
   return { kind: 'unmeasurable', reason: 'unrecognized-kind' };
+}
+
+function readKeyboardFrameFact(
+  value: unknown,
+  kind: 'visible' | 'derived',
+): SnapshotKeyboardBandFact {
+  const frame = parseRect(value);
+  // Same rule as `isPositiveFiniteRect` in kernel/rect, inlined: this module is a leaf that
+  // many facades evaluate, and a rect import here would land in every one of their closures.
+  // The viewport re-read (#3182) is the other side of that seam and lives in kernel/rect as
+  // `readSnapshotViewportSize`, because a viewport IS a rect; readers take the rect module there.
+  const plottable =
+    frame !== undefined &&
+    [frame.x, frame.y, frame.width, frame.height].every(Number.isFinite) &&
+    frame.width > 0 &&
+    frame.height > 0;
+  if (!plottable) return { kind: 'unmeasurable', reason: `invalid-${kind}-frame` };
+  return kind === 'derived'
+    ? { kind: 'derived', derivation: 'docked-tree', frame }
+    : { kind: 'visible', frame };
 }
 
 export function parsePoint(value: unknown): Point | undefined {
