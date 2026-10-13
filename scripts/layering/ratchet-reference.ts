@@ -57,12 +57,15 @@ export function measureRatchets(
  * The reference measurement: the merge-base tree, enumerated and classified by the same reader
  * the eager-closure ratchet uses, then measured exactly like the working tree. A file whose text
  * is byte-identical at both ends costs no second parse, because `parse` memoizes by source text.
+ * `baseRef` overrides the merge-base with origin/main; it exists for the fixture-repo tests that
+ * measure a synthetic base tree without a fetched origin/main, not for production callers.
  */
 export function mergeBaseRatchets(
   repoRoot: string,
   parse: ImportParser = memoizedImportParser(),
+  baseRef?: string,
 ): MergeBaseRatchets {
-  const ref = mergeBaseWithMain(repoRoot);
+  const ref = baseRef ?? mergeBaseWithMain(repoRoot);
   const { sources, manifests } = readCommittedSources(repoRoot, ref);
   // Measure the base tree in the working tree's coordinates: a `git mv` since the merge-base
   // (the daemon's move to packages/daemon, 11b) would otherwise make rules keyed on current

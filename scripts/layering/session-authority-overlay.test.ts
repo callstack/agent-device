@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 import { resolveImportEdges } from './model.ts';
 import { mergeBaseRatchets } from './ratchet-reference.ts';
@@ -191,19 +194,95 @@ test('the overlay classifies handler writes in both live handler roots, measured
   assert.ok(overlayOf(sources).shapeFiles.includes('packages/daemon/src/handlers/legacy.ts'));
 });
 
+function commitAll(repo: string, message: string): void {
+  execFileSync('git', ['add', '-A'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', message], { cwd: repo });
+}
+
+/**
+ * A fixture repo whose base commit holds the pre-layer-folder daemon layout — a flat
+ * `packages/daemon/src/handlers/` root, the SessionState declaration and the SessionStore
+ * authority at the daemon root — and whose head commit is `git mv` into the layer folders.
+ * Proves the RULE, not the real history: mergeBaseRatchets canonicalizes every base path
+ * through renamedSince, so the handler-owned overlay arrives in head coordinates and no
+ * base handler member is dropped from the scoped set. Reading the real merge-base could
+ * only ever assert one repo state (this stack's, until main absorbs it), then rot.
+ */
 test('the merge-base overlay arrives in head coordinates through the rename mapping', () => {
-  // The merge-base tree declares SessionState under src/daemon/... and holds no layer folders.
-  // mergeBaseRatchets canonicalizes every base path through renamedSince (the base's
-  // src/daemon/handlers/*.ts pair with the head's layer-folder handlers/*.ts, and
-  // session-store.ts pairs under core/), so the reference handler-owned set must already name
-  // the live roots. This is what lets checkSessionAuthorityOverlay compare paths directly and
-  // what makes the old flat handlers/ spellings in this rule dead weight.
-  const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'session-authority-rename-'));
+  const write = (file: string, text: string) => {
+    const target = path.join(repo, file);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, text);
+  };
+  execFileSync('git', ['init', '-q'], { cwd: repo });
+  execFileSync('git', ['config', 'user.name', 'Gate'], { cwd: repo });
+  execFileSync('git', ['config', 'user.email', 'gate@example.test'], { cwd: repo });
+  execFileSync('git', ['config', 'commit.gpgsign', 'false'], { cwd: repo });
+  write('packages/daemon/package.json', JSON.stringify({ name: '@agent-device/daemon' }));
+  write('packages/daemon/src/session-state.ts', STATE_STUB);
+  write('packages/daemon/src/session-store.ts', STORE_STUB);
+  write(
+    'packages/daemon/src/handlers/state-reader.ts',
+    "import type { SessionState } from '../session-state.ts';\nexport const read = (s: SessionState) => s.name;\n",
+  );
+  write(
+    'packages/daemon/src/handlers/store-user.ts',
+    "import { SessionStore } from '../session-store.ts';\nexport const store = new SessionStore();\n",
+  );
+  write(
+    'packages/daemon/src/session-snapshot.ts',
+    "import type { SessionState } from './session-state.ts';\nexport const snap = (s: SessionState) => s.name;\n",
+  );
+  // Pad the files whose import specifiers the move rewrites: a one-line rewrite of a two-line
+  // file is below git's rename-similarity threshold, and the fixture must pair the same
+  // git-mv-plus-small-edit shape the daemon move actually has (cf. eager-closure-budgets).
+  for (const file of ['session-state.ts', 'session-store.ts', 'session-snapshot.ts'])
+    fs.appendFileSync(
+      path.join(repo, 'packages/daemon/src', file),
+      Array.from({ length: 40 }, (_, i) => `export const pad${i} = ${i};`).join('\n') + '\n',
+    );
+  for (const handler of ['handlers/state-reader.ts', 'handlers/store-user.ts'])
+    fs.appendFileSync(
+      path.join(repo, 'packages/daemon/src', handler),
+      Array.from({ length: 40 }, (_, i) => `export const pad${i} = ${i};`).join('\n') + '\n',
+    );
+  commitAll(repo, 'base: flat daemon layout');
+  for (const dir of [
+    'packages/daemon/src/core',
+    'packages/daemon/src/sessions/handlers',
+    'packages/daemon/src/execution/handlers',
+    'packages/daemon/src/execution',
+  ])
+    fs.mkdirSync(path.join(repo, dir), { recursive: true });
+  const baseRef = execFileSync('git', ['rev-parse', 'HEAD'], {
+    cwd: repo,
     encoding: 'utf8',
   }).trim();
-  const reference = mergeBaseRatchets(repoRoot);
+  execFileSync('git', ['mv', 'packages/daemon/src/session-state.ts', 'packages/daemon/src/core/session-state.ts'], { cwd: repo });
+  execFileSync('git', ['mv', 'packages/daemon/src/session-store.ts', 'packages/daemon/src/core/session-store.ts'], { cwd: repo });
+  execFileSync('git', ['mv', 'packages/daemon/src/handlers/state-reader.ts', 'packages/daemon/src/sessions/handlers/state-reader.ts'], { cwd: repo });
+  execFileSync('git', ['mv', 'packages/daemon/src/handlers/store-user.ts', 'packages/daemon/src/execution/handlers/store-user.ts'], { cwd: repo });
+  execFileSync('git', ['mv', 'packages/daemon/src/session-snapshot.ts', 'packages/daemon/src/execution/session-snapshot.ts'], { cwd: repo });
+  for (const handler of ['sessions/handlers/state-reader.ts', 'execution/handlers/store-user.ts'])
+    fs.appendFileSync(path.join(repo, 'packages/daemon/src', handler), '\nexport const touched = 1;\n');
+  commitAll(repo, 'head: layer folders');
+
+  const reference = mergeBaseRatchets(repo, undefined, baseRef);
+  assert.ok(
+    [...readCommittedSources(repo, baseRef).sources.keys()].some((file) =>
+      file.startsWith('packages/daemon/src/handlers/'),
+    ),
+    'the fixture base tree is expected to hold the pre-rename flat handlers/ root',
+  );
+  // Every base handler member survives the canonicalization: one shape edge under
+  // sessions/handlers/, one authority edge under execution/handlers/. A reference that
+  // silently lost them (an unpaired rename) would accept any future handler growth.
   const scoped = handlerOwnedOverlay(reference.sessionAuthority);
-  assert.ok(scoped.shapeFiles.length > 0 && scoped.authorityFiles.length > 0);
+  assert.deepEqual(scoped.shapeFiles, ['packages/daemon/src/sessions/handlers/state-reader.ts']);
+  assert.deepEqual(scoped.authorityFiles, [
+    'packages/daemon/src/execution/handlers/store-user.ts',
+  ]);
   for (const file of [...scoped.shapeFiles, ...scoped.authorityFiles]) {
     assert.match(
       file,
@@ -211,11 +290,12 @@ test('the merge-base overlay arrives in head coordinates through the rename mapp
       `merge-base handler member left the live roots: ${file}`,
     );
   }
-  const baseSources = readCommittedSources(repoRoot, reference.ref).sources;
+  // The non-handler base importer keeps its full-scope membership and stays out of the
+  // handler-owned subset — canonicalization moved it, the scope filter kept it out.
   assert.ok(
-    [...baseSources.keys()].some((file) => file.startsWith('src/daemon/handlers/')),
-    'the merge-base tree is expected to hold the pre-layer-folder src/daemon/handlers/ root',
+    reference.sessionAuthority.shapeFiles.includes('packages/daemon/src/execution/session-snapshot.ts'),
   );
+  assert.ok(!scoped.shapeFiles.includes('packages/daemon/src/execution/session-snapshot.ts'));
 });
 
 test('R75 catches a new handler shape edge expressed as an import type', () => {
