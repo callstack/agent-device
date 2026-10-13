@@ -211,6 +211,70 @@ test.each(['foreground', 'process'] as const)(
   },
 );
 
+test.each([
+  ['foreground', 1, 1_999, true, 2],
+  ['foreground', 1, 2_000, false, 0],
+  ['foreground', 1, 2_001, false, 0],
+  ['process', 1, 1_849, true, 2],
+  ['process', 1, 1_850, false, 1],
+  ['process', 1, 2_000, false, 1],
+  ['process', 1, 2_001, false, 1],
+  ['process', 2, 1_999, true, 2],
+  ['process', 2, 2_000, false, 2],
+  ['process', 2, 2_001, false, 2],
+] as const)(
+  'closeAndroidApp admits %s probe %i completing at %ims only within its fence (success=%s)',
+  async (phase, probe, completionMs, succeeds, expectedProcessPolls) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    let processPolls = 0;
+    try {
+      await withAndroidAdbProvider(
+        {
+          exec: async (args) => {
+            if (args[1] === 'pidof') processPolls += 1;
+            if (
+              (phase === 'foreground' && args[1] === 'dumpsys') ||
+              (phase === 'process' && args[1] === 'pidof' && processPolls === probe)
+            ) {
+              await new Promise((resolve) => setTimeout(resolve, completionMs - Date.now()));
+            }
+            return {
+              stdout:
+                args[1] === 'dumpsys'
+                  ? 'mCurrentFocus=Window{43 u0 com.android.launcher/.Launcher}\n'
+                  : '',
+              stderr: '',
+              exitCode: args[1] === 'pidof' ? 1 : 0,
+            };
+          },
+        },
+        { serial: ANDROID_EMULATOR.id },
+        async () => {
+          const close = closeAndroidApp(ANDROID_EMULATOR, 'com.example.app');
+          const result = succeeds
+            ? close
+            : assert.rejects(close, (error: unknown) => {
+                assert.ok(error instanceof AppError);
+                assert.equal(error.code, 'COMMAND_FAILED');
+                assert.deepEqual(error.details, {
+                  reason: 'android-app-close-timeout',
+                  phase,
+                  packageName: 'com.example.app',
+                  timeoutMs: 2_000,
+                });
+                return true;
+              });
+          await Promise.all([result, vi.runAllTimersAsync()]);
+        },
+      );
+      assert.equal(processPolls, expectedProcessPolls);
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
 test('openAndroidApp ensures Android reverse before localhost deep link launch', async () => {
   const device: DeviceInfo = {
     platform: 'android',

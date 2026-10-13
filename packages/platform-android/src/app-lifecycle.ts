@@ -621,6 +621,7 @@ async function waitForAndroidPackageNotForeground(
   const deadline = Date.now() + ANDROID_CLOSE_FOCUS_TIMEOUT_MS;
   while (Date.now() < deadline) {
     const foreground = await readAndroidForegroundApp(device);
+    if (Date.now() >= deadline) break;
     if (foreground?.package !== packageName) return;
     await sleep(ANDROID_CLOSE_FOCUS_POLL_MS);
   }
@@ -647,9 +648,16 @@ async function waitForAndroidPackageProcessGone(
 ): Promise<void> {
   const deadline = Date.now() + ANDROID_CLOSE_PROCESS_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    if ((await readAndroidPackageProcessState(device, packageName)) !== 'running') {
+    const processRunning =
+      (await readAndroidPackageProcessState(device, packageName)) === 'running';
+    if (Date.now() >= deadline) break;
+    if (!processRunning) {
       await sleep(ANDROID_CLOSE_PROCESS_GONE_STABLE_MS);
-      if ((await readAndroidPackageProcessState(device, packageName)) !== 'running') return;
+      if (Date.now() >= deadline) break;
+      const processStillRunning =
+        (await readAndroidPackageProcessState(device, packageName)) === 'running';
+      if (Date.now() >= deadline) break;
+      if (!processStillRunning) return;
     }
     await sleep(ANDROID_CLOSE_PROCESS_POLL_MS);
   }
