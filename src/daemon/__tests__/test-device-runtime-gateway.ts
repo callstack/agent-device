@@ -62,6 +62,7 @@ function lifecycleFactsForTest(device: DeviceInfo): ApplicationLifecycleOperatio
 async function lifecycleBindingForTest(
   device: DeviceInfo,
   loadLifecycleOperations: LifecycleOperationsLoader = applicationLifecycleRuntimeFixture,
+  signal?: AbortSignal,
 ) {
   const lifecycleFacts = lifecycleFactsForTest(device);
   const base = createUnavailableRuntimeFactsForTest(device, localRuntimeOwner(device.platform));
@@ -79,7 +80,9 @@ async function lifecycleBindingForTest(
     },
     operations: {
       ...availableApplicationLifecycleOperations(
-        await loadLifecycleOperations(device),
+        // The request's signal reaches the loader so a canceled request aborts the bound
+        // lifecycle operations instead of handing them a fresh, uncontended signal.
+        await loadLifecycleOperations(device, signal),
         lifecycleFacts,
       ),
       // The gesture family rides along: replay flows drive `scroll`/`swipe` through this gateway,
@@ -97,7 +100,8 @@ async function lifecycleBindingForTest(
 export const lifecycleDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> =
   Object.freeze({
     inspectFacts: async (device) => (await lifecycleBindingForTest(device)).facts,
-    bind: async ({ device }) => await lifecycleBindingForTest(device),
+    bind: async ({ device, scope }) =>
+      await lifecycleBindingForTest(device, applicationLifecycleRuntimeFixture, scope.signal),
     shutdown: async () => {},
   });
 
@@ -108,7 +112,8 @@ export function createLifecycleDeviceRuntimeGateway(
   return Object.freeze({
     inspectFacts: async (device) =>
       (await lifecycleBindingForTest(device, loadLifecycleOperations)).facts,
-    bind: async ({ device }) => await lifecycleBindingForTest(device, loadLifecycleOperations),
+    bind: async ({ device, scope }) =>
+      await lifecycleBindingForTest(device, loadLifecycleOperations, scope.signal),
     shutdown: async () => {},
   });
 }
@@ -129,7 +134,7 @@ export function createLifecycleDeviceRuntimeGatewaySpies(
   );
   const bind = vi.fn(
     async (request: DeviceBindingRequest) =>
-      await lifecycleBindingForTest(request.device, loadLifecycleOperations),
+      await lifecycleBindingForTest(request.device, loadLifecycleOperations, request.scope.signal),
   );
   const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
     inspectFacts,
