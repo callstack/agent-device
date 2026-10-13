@@ -1,5 +1,4 @@
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { coveredInteractionHint } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotCoveringNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 /** Machine-readable `error.details.reason` values shared by interaction producers and adapters. */
 export const INTERACTION_ERROR_REASONS = {
@@ -32,8 +31,8 @@ type CoveredNodeFacts = Pick<SnapshotNode, 'ref' | 'interactionBlocked' | 'cover
  * The whole `error.details` shape of a covered refusal, shared by every producer (the interaction
  * runtime's `click`/`press`/`fill`/`focus` guard and `find ... focus`) so both paths report the same
  * reason, hint, ref and cover description. The hint names the cover when the occlusion scan found
- * one and stays generic when a backend policy reported only the boolean; `coveredBy` is absent in
- * that case rather than guessed. The cover is diagnosis only — the detail never carries its ref.
+ * one and stays generic when the cover has no name; `coveredBy` is absent in that case rather than
+ * guessed. The cover is diagnosis only — the detail never carries its ref.
  */
 export function coveredInteractionDetails(
   node: CoveredNodeFacts,
@@ -48,4 +47,51 @@ export function coveredInteractionDetails(
     interactionBlocked: node.interactionBlocked,
     ...(coveredBy ? { coveredBy } : {}),
   };
+}
+
+/**
+ * The recovery hint a covered refusal publishes: what to dismiss when the occlusion scan named the
+ * cover, the generic recovery when nothing nameable covered. Owned here rather than by the snapshot
+ * presentation because a covered refusal is its only consumer, and this subpath's import closure is
+ * its own module alone — reaching a snapshot module for one string would make every importer of the
+ * reason vocabulary evaluate the snapshot presentation eagerly.
+ */
+function coveredInteractionHint(coveredBy: SnapshotCoveringNode | undefined): string {
+  if (!coveredBy) {
+    return 'Use a different visible target, scroll it clear of the overlay, or inspect with snapshot/screenshot before retrying.';
+  }
+  return (
+    `Covered by ${describeCoverForHint(coveredBy)}. Dismiss or close that element, ` +
+    'scroll the target clear of it, or inspect with snapshot/screenshot before retrying.'
+  );
+}
+
+/**
+ * One-line rendering of the cover, e.g. `the dialog "Cookie banner" at (16, 420 358x180)`;
+ * coordinates are rounded while the detail payload keeps the unrounded rect. The label is
+ * app-controlled text, so the rendering collapses whitespace and drops quote characters to keep the
+ * hint one unambiguous line.
+ */
+function describeCoverForHint(cover: SnapshotCoveringNode): string {
+  const named = describeCoverNameForHint(cover);
+  const rect = cover.rect;
+  return rect ? `the ${named} at ${describeRectForHint(rect)}` : `the ${named}`;
+}
+
+function describeCoverNameForHint(cover: SnapshotCoveringNode): string {
+  const label = cover.label
+    ? cover.label
+        .replaceAll(/[\r\n]+/g, ' ')
+        .replaceAll(/\s+/g, ' ')
+        .replaceAll('"', '')
+        .trim()
+    : '';
+  return label ? `${cover.kind} "${label}"` : cover.kind;
+}
+
+function describeRectForHint(rect: Rect): string {
+  return (
+    `(${Math.round(rect.x)}, ${Math.round(rect.y)} ` +
+    `${Math.round(rect.width)}x${Math.round(rect.height)})`
+  );
 }

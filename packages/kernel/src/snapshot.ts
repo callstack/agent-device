@@ -264,42 +264,6 @@ export type SnapshotCoveringNode = {
 /** Upper bound for a covering-node label carried in diagnostics; longer names are clipped. */
 export const SNAPSHOT_COVERING_LABEL_MAX_LENGTH = 80;
 
-/**
- * One-line human rendering of a {@link SnapshotCoveringNode} for refusal hints, e.g.
- * `the dialog "Cookie banner" at (16, 420 358x180)`. Coordinates are rounded; the detail payload
- * carries the unrounded rect. The label is app-controlled text: the rendering collapses whitespace
- * and drops quote characters so the hint stays one unambiguous line, while the detail keeps it raw.
- */
-function formatSnapshotCoveringNode(cover: SnapshotCoveringNode): string {
-  const sanitized = cover.label ? sanitizeCoveringLabelForHint(cover.label) : '';
-  const named = sanitized ? `${cover.kind} "${sanitized}"` : cover.kind;
-  const rect = cover.rect;
-  if (!rect) return `the ${named}`;
-  return (
-    `the ${named} at (${Math.round(rect.x)}, ${Math.round(rect.y)} ` +
-    `${Math.round(rect.width)}x${Math.round(rect.height)})`
-  );
-}
-
-function sanitizeCoveringLabelForHint(label: string): string {
-  return label
-    .replaceAll(/[\r\n]+/g, ' ')
-    .replaceAll(/\s+/g, ' ')
-    .replaceAll('"', '')
-    .trim();
-}
-
-/**
- * The recovery hint every covered-interaction refusal publishes. When the scan named the cover it
- * says what to dismiss; a cover-less refusal (a backend-policy annotation that reports only the
- * boolean) keeps the generic recovery rather than guessing a culprit.
- */
-export function coveredInteractionHint(coveredBy: SnapshotCoveringNode | undefined): string {
-  return coveredBy
-    ? `Covered by ${formatSnapshotCoveringNode(coveredBy)}. Dismiss or close that element, scroll the target clear of it, or inspect with snapshot/screenshot before retrying.`
-    : 'Use a different visible target, scroll it clear of the overlay, or inspect with snapshot/screenshot before retrying.';
-}
-
 export type RawSnapshotNode = {
   index: number;
   type?: string;
