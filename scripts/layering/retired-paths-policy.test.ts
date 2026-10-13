@@ -97,7 +97,7 @@ test('R71 accepts the current replay owners and ignores the src/utils zone', () 
     retiredPathRuleViolations('R71', [
       'packages/replay-port/src/script-source-bundle.ts',
       'src/cli/replay-test/reporting.ts',
-      'src/daemon/replay-script-source.ts',
+      'packages/daemon/src/replay-script-source.ts',
       'src/replay-next.ts',
       'src/utils/regrown.ts',
     ]),

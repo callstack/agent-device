@@ -1,5 +1,5 @@
 import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
-import { expect, vi } from 'vitest';
+import { expect, vi, type Mock } from 'vitest';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
 import type { CleanupOutcome } from '@agent-device/contracts/durable-resource';
@@ -225,7 +225,7 @@ function makeRuntime(session: SessionState, options: RuntimeOptions = {}) {
     [Symbol.asyncDispose]: async () => {},
   };
   const bindDevice: BindDeviceRuntime = async (_device, use) => narrowDeviceBinding(binding, use);
-  const bindExactDeviceCalls = vi.fn();
+  const bindExactDeviceCalls = vi.fn() as Mock;
   const bindExactDevice: BindExactDeviceRuntime = async (device, ownerRef, fence, use, scope) => {
     bindExactDeviceCalls(device, ownerRef, fence, use, scope);
     return narrowDeviceBinding(binding, use);

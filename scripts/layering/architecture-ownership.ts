@@ -29,43 +29,43 @@ const DAEMON_SESSION_OBSERVABILITY_FACADE = {
 } as const;
 
 export const SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS = [
-  'src/daemon/handlers/session-device-utils.ts',
-  'src/daemon/handlers/session-runtime-admission.ts',
-  'src/daemon/handlers/session-open.ts',
-  'src/daemon/handlers/session-open-prepare.ts',
-  'src/daemon/handlers/session-open-execution.ts',
-  'src/daemon/handlers/session-open-foreground.ts',
-  'src/daemon/handlers/session-open-surface.ts',
-  'src/daemon/handlers/session-startup-metrics.ts',
+  'packages/daemon/src/handlers/session-device-utils.ts',
+  'packages/daemon/src/handlers/session-runtime-admission.ts',
+  'packages/daemon/src/handlers/session-open.ts',
+  'packages/daemon/src/handlers/session-open-prepare.ts',
+  'packages/daemon/src/handlers/session-open-execution.ts',
+  'packages/daemon/src/handlers/session-open-foreground.ts',
+  'packages/daemon/src/handlers/session-open-surface.ts',
+  'packages/daemon/src/handlers/session-startup-metrics.ts',
 ] as const;
 
 export const INTERACTION_RETIRED_HANDLER_PATHS = [
-  'src/daemon/handlers/find.ts',
-  'src/daemon/handlers/find-match-ranking.ts',
-  'src/daemon/handlers/find-match-resolution.ts',
-  'src/daemon/handlers/find-target-capture.ts',
-  'src/daemon/handlers/interaction.ts',
-  'src/daemon/handlers/interaction-android-escape.ts',
-  'src/daemon/handlers/interaction-gesture.ts',
-  'src/daemon/handlers/interaction-gesture-response.ts',
-  'src/daemon/handlers/interaction-ios-tap-outcome.ts',
-  'src/daemon/handlers/interaction-targeting.ts',
-  'src/daemon/handlers/interaction-touch.ts',
-  'src/daemon/handlers/interaction-touch-android-freshness.ts',
-  'src/daemon/handlers/interaction-touch-android-readiness.ts',
-  'src/daemon/handlers/interaction-touch-direct-ios-eligibility.ts',
-  'src/daemon/handlers/interaction-touch-direct-ios.ts',
-  'src/daemon/handlers/interaction-touch-fill.ts',
-  'src/daemon/handlers/interaction-touch-payload.ts',
-  'src/daemon/handlers/interaction-touch-policy.ts',
-  'src/daemon/handlers/interaction-touch-prepare.ts',
-  'src/daemon/handlers/interaction-touch-press-admission.ts',
-  'src/daemon/handlers/interaction-touch-press.ts',
-  'src/daemon/handlers/interaction-touch-reference-frame.ts',
-  'src/daemon/handlers/interaction-touch-response.ts',
-  'src/daemon/handlers/interaction-touch-runtime.ts',
-  'src/daemon/handlers/interaction-touch-targets.ts',
-  'src/daemon/handlers/system-surface-disclosure.ts',
+  'packages/daemon/src/handlers/find.ts',
+  'packages/daemon/src/handlers/find-match-ranking.ts',
+  'packages/daemon/src/handlers/find-match-resolution.ts',
+  'packages/daemon/src/handlers/find-target-capture.ts',
+  'packages/daemon/src/handlers/interaction.ts',
+  'packages/daemon/src/handlers/interaction-android-escape.ts',
+  'packages/daemon/src/handlers/interaction-gesture.ts',
+  'packages/daemon/src/handlers/interaction-gesture-response.ts',
+  'packages/daemon/src/handlers/interaction-ios-tap-outcome.ts',
+  'packages/daemon/src/handlers/interaction-targeting.ts',
+  'packages/daemon/src/handlers/interaction-touch.ts',
+  'packages/daemon/src/handlers/interaction-touch-android-freshness.ts',
+  'packages/daemon/src/handlers/interaction-touch-android-readiness.ts',
+  'packages/daemon/src/handlers/interaction-touch-direct-ios-eligibility.ts',
+  'packages/daemon/src/handlers/interaction-touch-direct-ios.ts',
+  'packages/daemon/src/handlers/interaction-touch-fill.ts',
+  'packages/daemon/src/handlers/interaction-touch-payload.ts',
+  'packages/daemon/src/handlers/interaction-touch-policy.ts',
+  'packages/daemon/src/handlers/interaction-touch-prepare.ts',
+  'packages/daemon/src/handlers/interaction-touch-press-admission.ts',
+  'packages/daemon/src/handlers/interaction-touch-press.ts',
+  'packages/daemon/src/handlers/interaction-touch-reference-frame.ts',
+  'packages/daemon/src/handlers/interaction-touch-response.ts',
+  'packages/daemon/src/handlers/interaction-touch-runtime.ts',
+  'packages/daemon/src/handlers/interaction-touch-targets.ts',
+  'packages/daemon/src/handlers/system-surface-disclosure.ts',
 ] as const;
 
 const DAEMON_INTERACTION_FACADE = {
@@ -86,16 +86,16 @@ const DAEMON_INTERACTION_FACADE = {
 } as const;
 
 export const SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS = [
-  'src/daemon/handlers/session-observability.ts',
-  'src/daemon/handlers/session-perf-runtime.ts',
-  'src/daemon/handlers/session-network.ts',
-  'src/daemon/handlers/session-audio.ts',
+  'packages/daemon/src/handlers/session-observability.ts',
+  'packages/daemon/src/handlers/session-perf-runtime.ts',
+  'packages/daemon/src/handlers/session-network.ts',
+  'packages/daemon/src/handlers/session-audio.ts',
 ] as const;
 
 export const SNAPSHOT_EXECUTION_RETIRED_HANDLER_PATHS = [
-  'src/daemon/handlers/snapshot-capture.ts',
-  'src/daemon/handlers/snapshot-interactor-capture.ts',
-  'src/daemon/handlers/snapshot-session.ts',
+  'packages/daemon/src/handlers/snapshot-capture.ts',
+  'packages/daemon/src/handlers/snapshot-interactor-capture.ts',
+  'packages/daemon/src/handlers/snapshot-session.ts',
 ] as const;
 
 export const LOGICAL_MODULE_POLICIES = [

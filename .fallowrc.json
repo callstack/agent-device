@@ -29,9 +29,6 @@
     "scripts/patch-xcuitest-runner-icon.ts",
     "scripts/write-xcuitest-cache-metadata.ts",
     "scripts/xcuitest-build-settings.ts",
-    // The 11a-4 residue scan runs by hand (and from CI prose until R11 in #3546 owns
-    // the rule); nothing in the dependency graph imports it.
-    "scripts/daemon-edge-residue-scan.mjs",
     "packages/capture-kit/src/ios-snapshot-engine/replay.ts",
     // #1596 regression fixture: runs as a real `node --experimental-strip-types`
     // subprocess (test/integration/daemon-replace-exit-flush.test.ts), so
@@ -68,7 +65,7 @@
     "scripts/help-conformance-sample-outputs.d.mts",
     "scripts/help-conformance-runner-output.d.mts"
   ],
-  "dynamicallyLoaded": ["src/daemon/interaction/index.ts"],
+  "dynamicallyLoaded": ["packages/daemon/src/interaction/index.ts"],
   "ignoreDependencies": [
     "@theme",
     // @agent-device/maestro owns the source import, while the published root
@@ -158,7 +155,7 @@
     },
     {
       // Daemon route handlers are reached only through the dynamic `import()` table in request-handler-chain.ts, which --production analysis cannot follow to a consumer.
-      "file": "src/daemon/handlers/{human-control,lease,session,snapshot,react-native,record-trace}.ts",
+      "file": "packages/daemon/src/handlers/{human-control,lease,session,snapshot,react-native,record-trace}.ts",
       "exports": [
         "handleHumanControlCommand",
         "handleLeaseCommands",
@@ -170,7 +167,7 @@
     },
     {
       // The interaction facade exposes #2178's deferred route handlers plus the existing ref mutation response consumed by help conformance. Fallow's production graph cannot follow the request-handler-chain dynamic imports, so this exact list is the facade contract.
-      "file": "src/daemon/interaction/index.ts",
+      "file": "packages/daemon/src/interaction/index.ts",
       "exports": ["refMutationAdmissionResponse", "handleFindCommands", "handleInteractionCommands"]
     },
     {
@@ -254,7 +251,7 @@
       ]
     },
     {
-      // src/daemon/__tests__/request-runtime-binding.test.ts drives the daemon's exact bind through the recovery authority, whose cancellation race is what rejects; production reaches it only through finishRecoveredDurableCapture and recoverDurableCaptureResource in the same package.
+      // packages/daemon/src/__tests__/request-runtime-binding.test.ts drives the daemon's exact bind through the recovery authority, whose cancellation race is what rejects; production reaches it only through finishRecoveredDurableCapture and recoverDurableCaptureResource in the same package.
       "file": "packages/capture-kit/src/durable-capture/index.ts",
       "exports": ["acquireDurableCaptureRecoveryAuthorityBeforeDeadline"]
     },

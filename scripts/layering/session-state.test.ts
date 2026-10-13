@@ -28,7 +28,7 @@ test('explicit owner patches name their writes and retain direct assignment chec
   assert.ok(SESSION_STATE_FIELD_OWNERS.appLogFailure!.includes(OWNER));
   const foreign = scan(
     'sessionStore.update(ref, { appLogFailure: error });',
-    'src/daemon/handlers/probe.ts',
+    'packages/daemon/src/handlers/probe.ts',
   )[0]!;
   assert.equal(foreign.field, 'appLogFailure');
   assert.ok(!SESSION_STATE_FIELD_OWNERS[foreign.field]!.includes(foreign.file));
@@ -414,7 +414,7 @@ test('pressure counts capture-kit record replacement and daemon patches with the
     'export type SessionState = {\n  appLogFailure?: Error;\n  lease?: object;\n};';
   const baseline = new Map([
     ['packages/daemon/src/session-state.ts', declaration],
-    ['src/daemon/owner.ts', 'session.appLogFailure = error;'],
+    ['packages/daemon/src/owner.ts', 'session.appLogFailure = error;'],
     [
       'packages/capture-kit/src/capture-admission/owner.ts',
       'const next = { ...session, appLogFailure: error };',
@@ -423,7 +423,7 @@ test('pressure counts capture-kit record replacement and daemon patches with the
   const current = new Map([
     ['packages/daemon/src/session-state.ts', declaration],
     [OWNER, 'store.update(ref, { appLogFailure: error });'],
-    ['src/daemon/invalid.ts', 'store.update(ref, changes);'],
+    ['packages/daemon/src/invalid.ts', 'store.update(ref, changes);'],
   ]);
   assert.deepEqual(sessionStateWritePressure(baseline), {
     writerOwnedFields: 1,

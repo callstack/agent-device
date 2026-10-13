@@ -581,20 +581,32 @@ test('session-state writes are found by field, and non-daemon or undeclared name
       // a runner session outside the daemon is a different type that happens to share a name
       ['src/platforms/apple/runner-session.ts', 'session.refFrame = 1;'],
       // a local that is not a declared SessionState field
-      ['packages/daemon/src/session-observability/internal/session-audio.ts', 'session.somethingElse = 1;'],
+      [
+        'packages/daemon/src/session-observability/internal/session-audio.ts',
+        'session.somethingElse = 1;',
+      ],
       // reads and comparisons are not writes
-      ['packages/daemon/src/interaction/internal/find.ts', "if (session.refFrame === 'active') return;"],
+      [
+        'packages/daemon/src/interaction/internal/find.ts',
+        "if (session.refFrame === 'active') return;",
+      ],
       // a write into a sub-object is not a write to the field itself
-      ['src/daemon/handlers/session-probe.ts', 'session.refFrame.inner = 1;'],
+      ['packages/daemon/src/handlers/session-probe.ts', 'session.refFrame.inner = 1;'],
       // a different binding that happens to have a matching property
-      ['packages/daemon/src/session-lifecycle/internal/session-close.ts', "other.refFrame = 'expired';"],
+      [
+        'packages/daemon/src/session-lifecycle/internal/session-close.ts',
+        "other.refFrame = 'expired';",
+      ],
     ]),
     ['refFrame', 'snapshotGeneration'],
   );
 
   assert.deepEqual(
     writes.map(({ file, field }) => `${file}:${field}`),
-    ['packages/daemon/src/ref-frame.ts:refFrame', 'packages/daemon/src/session-snapshot.ts:snapshotGeneration'],
+    [
+      'packages/daemon/src/ref-frame.ts:refFrame',
+      'packages/daemon/src/session-snapshot.ts:snapshotGeneration',
+    ],
   );
 });
 
@@ -613,7 +625,9 @@ test('every assignment form is a write, including the ones a regex forgets', () 
     'session\n  .refFrame = 1;',
   ];
   for (const form of forms) {
-    const writes = findSessionStateWrites(new Map([['src/daemon/probe.ts', form]]), ['refFrame']);
+    const writes = findSessionStateWrites(new Map([['packages/daemon/src/probe.ts', form]]), [
+      'refFrame',
+    ]);
     assert.deepEqual(
       writes.map(({ field }) => field),
       ['refFrame'],
@@ -624,7 +638,7 @@ test('every assignment form is a write, including the ones a regex forgets', () 
 
 test('a computed session write is reported rather than silently unattributed', () => {
   const writes = findSessionStateWrites(
-    new Map([['src/daemon/probe.ts', 'session[key] = 1;\nsession[`refFrame`] = 2;']]),
+    new Map([['packages/daemon/src/probe.ts', 'session[key] = 1;\nsession[`refFrame`] = 2;']]),
     ['refFrame'],
   );
   // `[computed]` has no entry in SESSION_STATE_FIELD_OWNERS, so R7 fails on it by
@@ -636,13 +650,13 @@ test('a computed session write is reported rather than silently unattributed', (
   assert.equal(SESSION_STATE_FIELD_OWNERS['[computed]'], undefined);
 });
 
-test('every declared session-state owner is a real file path under src/daemon', () => {
+test('every declared session-state owner is a real file path under packages/daemon', () => {
   for (const [field, owners] of Object.entries(SESSION_STATE_FIELD_OWNERS)) {
     assert.ok(owners.length > 0, `${field} must name at least one owner`);
     for (const owner of owners) {
       assert.match(
         owner,
-        /^src\/daemon\/.+\.ts$/,
+        /^packages\/daemon\/src\/.+\.ts$/,
         `${field} owner ${owner} must be a daemon module`,
       );
     }
@@ -658,7 +672,7 @@ test('a session write counts through an aliased binding, not only one named `ses
   const writes = findSessionStateWrites(
     new Map([
       [
-        'src/daemon/probe.ts',
+        'packages/daemon/src/probe.ts',
         [
           'nextSession.snapshotGeneration = 3;',
           'preEntrySession.refFrame = "active";',
@@ -682,7 +696,10 @@ test('every SessionState field is classified exactly once', () => {
   // R7 by being invisible to the scan, and the rule would silently stop covering part of the
   // type it claims to cover.
   const fields = sessionStateFields(
-    readFileSync(path.resolve(import.meta.dirname, '../../packages/daemon/src/session-state.ts'), 'utf8'),
+    readFileSync(
+      path.resolve(import.meta.dirname, '../../packages/daemon/src/session-state.ts'),
+      'utf8',
+    ),
   );
   assert.deepEqual(fieldClassificationDrift(fields), []);
   assert.equal(
@@ -693,7 +710,10 @@ test('every SessionState field is classified exactly once', () => {
 
 test('classification drift is reported in all three directions', () => {
   const declared = sessionStateFields(
-    readFileSync(path.resolve(import.meta.dirname, '../../packages/daemon/src/session-state.ts'), 'utf8'),
+    readFileSync(
+      path.resolve(import.meta.dirname, '../../packages/daemon/src/session-state.ts'),
+      'utf8',
+    ),
   );
 
   // Unclassified: a field added to SessionState and to neither table. This is the case the

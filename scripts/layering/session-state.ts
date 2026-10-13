@@ -24,7 +24,10 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   refFrame: ['packages/daemon/src/ref-frame.ts'],
   // Scoped-snapshot lineage is cleared at two distinct events: crossing a device side-effect
   // seam (ref-frame.ts) and replacing the stored observation (session-snapshot.ts).
-  snapshotScopeSource: ['packages/daemon/src/ref-frame.ts', 'packages/daemon/src/session-snapshot.ts'],
+  snapshotScopeSource: [
+    'packages/daemon/src/ref-frame.ts',
+    'packages/daemon/src/session-snapshot.ts',
+  ],
   snapshot: ['packages/daemon/src/session-snapshot.ts'],
   snapshotGeneration: ['packages/daemon/src/session-snapshot.ts'],
   lastComparisonSafeSnapshot: ['packages/daemon/src/session-snapshot.ts'],
@@ -156,7 +159,8 @@ export function sessionStateDeclarationFile(
   sources: ReadonlyMap<string, string>,
 ): string | undefined {
   for (const [file, source] of sources) {
-    if (file.startsWith('packages/daemon/src/') && SESSION_STATE_DECLARATION.test(source)) return file;
+    if (file.startsWith('packages/daemon/src/') && SESSION_STATE_DECLARATION.test(source))
+      return file;
   }
   return undefined;
 }
@@ -407,7 +411,10 @@ function patchObjects(value: unknown): AstNode[] | undefined {
   return result?.type === 'ObjectExpression' ? [result] : undefined;
 }
 
-const SESSION_STATE_SCAN_ROOTS = ['packages/daemon/src/', 'packages/capture-kit/src/capture-admission/'];
+const SESSION_STATE_SCAN_ROOTS = [
+  'packages/daemon/src/',
+  'packages/capture-kit/src/capture-admission/',
+];
 const SESSION_DRAFT_CONSTRUCTORS: Readonly<Record<string, string>> = {
   'packages/daemon/src/session-lifecycle/internal/session-open-state.ts': 'publishOpenSession',
   'packages/daemon/src/snapshot-session.ts': 'createSnapshotSession',

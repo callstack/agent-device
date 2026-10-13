@@ -117,7 +117,7 @@ test('a removed wire declaration passes with a bump', () => {
 // unchanged is a file move, not a removal: a released peer still parses it,
 // so it must not force a protocol bump.
 test('a declaration moved to a new file unchanged is a move, not a removal', () => {
-  const movedFrom = 'src/daemon/http-contract.ts#buildDaemonHttpUrl';
+  const movedFrom = 'packages/daemon/src/http-contract.ts#buildDaemonHttpUrl';
   const movedTo = 'packages/contracts/src/daemon-http.ts#buildDaemonHttpUrl';
   const released = ledger({
     declarations: { [movedFrom]: 'sha256:ddd', [META]: 'sha256:bbb' },
@@ -140,7 +140,7 @@ test('a declaration moved to a new file unchanged is a move, not a removal', () 
 // CHANGE at the destination (ackable at the new digest) rather than the
 // bump-only removal the key-pair alone would suggest.
 test('a move that changes the shape is a change, acked at the path it moved to', () => {
-  const movedFrom = 'src/daemon/http-health.ts#buildDaemonHealthPayload';
+  const movedFrom = 'packages/daemon/src/http-health.ts#buildDaemonHealthPayload';
   const movedTo = 'packages/contracts/src/daemon-http.ts#buildDaemonHealthPayload';
   const released = ledger({ declarations: { [movedFrom]: 'sha256:old' } });
   const current = ledger({

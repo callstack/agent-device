@@ -345,7 +345,9 @@ export function findDaemonPlatformDependencies(
   sources: readonly ProductionSource[],
 ): DaemonPlatformDependency[] {
   return sources
-    .filter(({ path: file }) => file.startsWith('packages/daemon/src/') && isProductionSourceFile(file))
+    .filter(
+      ({ path: file }) => file.startsWith('packages/daemon/src/') && isProductionSourceFile(file),
+    )
     .flatMap(({ path: file, source }) => [
       ...staticDependencies(file, source),
       ...dynamicDependencies(file, source),

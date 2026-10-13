@@ -71,9 +71,50 @@ if (!baseline) {
   process.exit(0);
 }
 
+/**
+ * Rename pairs from the baseline tag to HEAD, as `<file> -> <file>`. The ledger's
+ * move detection identifies a moved declaration by a sole same-name re-declaration;
+ * a bulk `git mv` of two files that share a declaration name (the daemon's two
+ * `sendJson` helpers) outruns that heuristic, because both destinations are claimed
+ * by candidates. Git's rename detection knows the truth for the whole tree at once,
+ * so the baseline's keys are canonicalized into HEAD coordinates before comparison.
+ * Digests travel unchanged: a pure move is not a wire change.
+ */
+function tagToHeadRenames(tag: string): Map<string, string> {
+  const fields = git(['diff', '--name-status', '-M', '--diff-filter=R', '-z', tag, 'HEAD'])
+    .split('\0')
+    .filter(Boolean);
+  const renames = new Map<string, string>();
+  for (let index = 0; index + 2 < fields.length; index += 3) {
+    const [, from, to] = fields.slice(index, index + 3) as [string, string, string];
+    renames.set(from, to);
+  }
+  return renames;
+}
+
+function canonicalizeLedgerRef(ref: string, renames: ReadonlyMap<string, string>): string {
+  const hash = ref.lastIndexOf('#');
+  const renamed = renames.get(ref.slice(0, hash));
+  return renamed === undefined ? ref : `${renamed}#${ref.slice(hash + 1)}`;
+}
+
+const releasedRenames = tagToHeadRenames(baseline.tag);
+const released = parseWireLedger(baseline.raw, `${baseline.tag}:${WIRE_LEDGER_PATH}`);
 const result = compareWireLedgers({
   baselineTag: baseline.tag,
-  released: parseWireLedger(baseline.raw, `${baseline.tag}:${WIRE_LEDGER_PATH}`),
+  released: {
+    ...released,
+    declarations: Object.fromEntries(
+      Object.entries(released.declarations).map(([ref, digest]) => [
+        canonicalizeLedgerRef(ref, releasedRenames),
+        digest,
+      ]),
+    ),
+    compatibleChanges: released.compatibleChanges.map((change) => ({
+      ...change,
+      declaration: canonicalizeLedgerRef(change.declaration, releasedRenames),
+    })),
+  },
   current: readWireLedger(repoRoot),
   digests: digestWireSurface(repoRoot, WIRE_DECLARATIONS, digestDeclaration),
 });

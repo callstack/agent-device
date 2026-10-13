@@ -34,7 +34,7 @@
   },
   "mutate": [
     "packages/kernel/src/errors.ts",
-    "src/daemon/ref-frame.ts",
+    "packages/daemon/src/ref-frame.ts",
     "src/commands/interaction/runtime/settle.ts",
     "packages/capture-kit/src/snapshot/scroll-edge-state.ts",
     "packages/capture-kit/src/snapshot/scroll-edge-state/**/*.ts",

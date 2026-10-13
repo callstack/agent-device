@@ -19,11 +19,11 @@ const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
 // Fixtures sit at the real daemon paths so the layer lookup treats them like production files;
 // `listSourceFiles()` keeps the manifest half honest against the tracked tree.
 const FIXTURE_MANIFEST = {
-  'daemon-core': ['src/daemon/core.ts'],
-  'daemon-resources': ['src/daemon/resources.ts'],
-  'daemon-execution': ['src/daemon/execution.ts'],
-  'daemon-sessions': ['src/daemon/sessions.ts'],
-  'daemon-server': ['src/daemon/server.ts'],
+  'daemon-core': ['packages/daemon/src/core.ts'],
+  'daemon-resources': ['packages/daemon/src/resources.ts'],
+  'daemon-execution': ['packages/daemon/src/execution.ts'],
+  'daemon-sessions': ['packages/daemon/src/sessions.ts'],
+  'daemon-server': ['packages/daemon/src/server.ts'],
 };
 const FIXTURE_FILES = Object.values(FIXTURE_MANIFEST).flat();
 
@@ -63,13 +63,15 @@ test('the manifest owns every tracked daemon file exactly once, and no static ed
 test('an upward value import fails the layer order', () => {
   const violations = checkDaemonLayers(
     FIXTURE_FILES,
-    fixtureEdges(new Map([['src/daemon/core.ts', "import { thing } from './resources.ts';"]])),
+    fixtureEdges(
+      new Map([['packages/daemon/src/core.ts', "import { thing } from './resources.ts';"]]),
+    ),
     FIXTURE_MANIFEST,
     () => {},
   );
   assert.equal(violations.length, 1);
   assert.equal(violations[0]!.rule, 'R81 daemon-layers');
-  assert.equal(violations[0]!.file, 'src/daemon/core.ts');
+  assert.equal(violations[0]!.file, 'packages/daemon/src/core.ts');
   assert.match(violations[0]!.message, /value import reads up the daemon layer order/);
 });
 
@@ -77,7 +79,9 @@ test('an upward type-only import fails the layer order too', () => {
   const violations = checkDaemonLayers(
     FIXTURE_FILES,
     fixtureEdges(
-      new Map([['src/daemon/resources.ts', "import type { Thing } from './sessions.ts';"]]),
+      new Map([
+        ['packages/daemon/src/resources.ts', "import type { Thing } from './sessions.ts';"],
+      ]),
     ),
     FIXTURE_MANIFEST,
     () => {},
@@ -91,8 +95,8 @@ test('downward and same-layer static edges stay silent', () => {
     FIXTURE_FILES,
     fixtureEdges(
       new Map([
-        ['src/daemon/server.ts', "import { thing } from './core.ts';"],
-        ['src/daemon/sessions.ts', "import type { CoreThing } from './core.ts';"],
+        ['packages/daemon/src/server.ts', "import { thing } from './core.ts';"],
+        ['packages/daemon/src/sessions.ts', "import type { CoreThing } from './core.ts';"],
       ]),
     ),
     FIXTURE_MANIFEST,
@@ -105,7 +109,7 @@ test('a dynamic cross-layer edge is reported, not rejected', () => {
   const reported: string[] = [];
   const violations = checkDaemonLayers(
     FIXTURE_FILES,
-    fixtureEdges(new Map([['src/daemon/sessions.ts', "void import('./server.ts');"]])),
+    fixtureEdges(new Map([['packages/daemon/src/sessions.ts', "void import('./server.ts');"]])),
     FIXTURE_MANIFEST,
     (line) => reported.push(line),
   );
@@ -114,37 +118,43 @@ test('a dynamic cross-layer edge is reported, not rejected', () => {
   assert.match(reported.join(''), /1 dynamic cross-layer daemon edge/);
   assert.match(
     reported.join(''),
-    /src\/daemon\/sessions\.ts \(daemon-sessions\) -> src\/daemon\/server\.ts \(daemon-server\) \[upward, reported only\]/,
+    /packages\/daemon\/src\/sessions\.ts \(daemon-sessions\) -> packages\/daemon\/src\/server\.ts \(daemon-server\) \[upward, reported only\]/,
   );
 });
 
 test('a production daemon file missing from the manifest fails', () => {
-  const violations = driftFor(FIXTURE_MANIFEST, [...FIXTURE_FILES, 'src/daemon/server2.ts']);
+  const violations = driftFor(FIXTURE_MANIFEST, [
+    ...FIXTURE_FILES,
+    'packages/daemon/src/server2.ts',
+  ]);
   assert.equal(violations.length, 1);
-  assert.equal(violations[0]!.file, 'src/daemon/server2.ts');
+  assert.equal(violations[0]!.file, 'packages/daemon/src/server2.ts');
   assert.match(violations[0]!.message, /production daemon file is in no layer/);
 });
 
 test('a file claimed by two layers fails', () => {
   const manifest = {
     ...FIXTURE_MANIFEST,
-    'daemon-resources': ['src/daemon/resources.ts', 'src/daemon/core.ts'],
-  };
-  const violations = driftFor(manifest);
-  assert.equal(violations.length, 1);
-  assert.match(violations[0]!.message, /"src\/daemon\/core\.ts" is claimed by more than one layer/);
-});
-
-test('a manifest entry that is not a tracked production file fails', () => {
-  const manifest = {
-    ...FIXTURE_MANIFEST,
-    'daemon-core': ['src/daemon/core.ts', 'src/daemon/gone.ts'],
+    'daemon-resources': ['packages/daemon/src/resources.ts', 'packages/daemon/src/core.ts'],
   };
   const violations = driftFor(manifest);
   assert.equal(violations.length, 1);
   assert.match(
     violations[0]!.message,
-    /"src\/daemon\/gone\.ts" is owned by "daemon-core" but is not a tracked production file/,
+    /"packages\/daemon\/src\/core\.ts" is claimed by more than one layer/,
+  );
+});
+
+test('a manifest entry that is not a tracked production file fails', () => {
+  const manifest = {
+    ...FIXTURE_MANIFEST,
+    'daemon-core': ['packages/daemon/src/core.ts', 'packages/daemon/src/gone.ts'],
+  };
+  const violations = driftFor(manifest);
+  assert.equal(violations.length, 1);
+  assert.match(
+    violations[0]!.message,
+    /"packages\/daemon\/src\/gone\.ts" is owned by "daemon-core" but is not a tracked production file/,
   );
 });
 
@@ -152,15 +162,15 @@ test('a test, fixture, or foreign path in the manifest fails as a non-production
   const manifest = {
     ...FIXTURE_MANIFEST,
     'daemon-core': [
-      'src/daemon/core.ts',
-      'src/daemon/__tests__/core.test.ts',
+      'packages/daemon/src/core.ts',
+      'packages/daemon/src/__tests__/core.test.ts',
       'src/core/helper.ts',
     ],
   };
   const violations = driftFor(manifest);
   assert.equal(violations.length, 2);
   for (const violation of violations) {
-    assert.match(violation.message, /is not a production path under src\/daemon\/\./);
+    assert.match(violation.message, /is not a production path under packages\/daemon\/src\/\./);
   }
 });
 
@@ -178,7 +188,7 @@ test('a layer key missing from the manifest fails even when no file is orphaned'
   delete manifest['daemon-resources'];
   const violations = driftFor(
     manifest,
-    FIXTURE_FILES.filter((file) => file !== 'src/daemon/resources.ts'),
+    FIXTURE_FILES.filter((file) => file !== 'packages/daemon/src/resources.ts'),
   );
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /layer "daemon-resources" is missing from the manifest/);
@@ -187,7 +197,7 @@ test('a layer key missing from the manifest fails even when no file is orphaned'
 test('a declared layer whose array is empty fails, so it cannot linger after its last file moves', () => {
   const violations = driftFor(
     { ...FIXTURE_MANIFEST, 'daemon-resources': [] },
-    FIXTURE_FILES.filter((file) => file !== 'src/daemon/resources.ts'),
+    FIXTURE_FILES.filter((file) => file !== 'packages/daemon/src/resources.ts'),
   );
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /layer "daemon-resources" owns no files/);

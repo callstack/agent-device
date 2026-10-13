@@ -16,18 +16,6 @@ const simctl = vi.hoisted(() => ({
   calls: [] as string[],
 }));
 
-vi.mock('../packages/platform-apple/src/core/tool-provider.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/platform-apple/tool-provider')>()),
-  runXcrun: async (args: string[]) => {
-    const idx = args.indexOf('listapps');
-    const deviceId = idx >= 0 ? args[idx + 1] : undefined;
-    if (deviceId) simctl.calls.push(deviceId);
-    const entry = simctl.listapps.find((l) => l.deviceId === deviceId);
-    return { stdout: entry ? JSON.stringify(entry.apps) : '{}', stderr: '', exitCode: 0 };
-  },
-  runAppleToolCommand: async () => ({ stdout: '', stderr: '', exitCode: 1 }),
-}));
-
 const scope: PlatformRequestScope = Object.freeze({
   signal: new AbortController().signal,
   diagnostics: Object.freeze({ emit: () => {} }),
@@ -71,13 +59,33 @@ describe('production device inventory composition', () => {
       loadHost: async () => testInventoryHost,
     });
 
-    const selection = await withDeviceInventoryContext({ ...gateways, requestScope: scope }, () =>
-      resolveTargetDeviceSelection(
-        { platform: 'ios' },
-        {
-          appleSimulatorAppTarget: 'com.example.demo',
+    // The fake answers through the production tool-provider scope — the same seam the
+    // package's own tests install with — so no module mock has to guess which loader
+    // identity the probe's dynamic import will land on.
+    const { withAppleToolProvider } = await import('@agent-device/platform-apple/tool-provider');
+    const selection = await withAppleToolProvider(
+      {
+        runCommand: async () => ({ stdout: '', stderr: '', exitCode: 1 }),
+        simctl: {
+          run: async (args) => {
+            const [command, deviceId] = args as string[];
+            if (command !== 'listapps') return { stdout: '{}', stderr: '', exitCode: 0 };
+            simctl.calls.push(deviceId!);
+            const entry = simctl.listapps.find((l) => l.deviceId === deviceId);
+            return { stdout: entry ? JSON.stringify(entry.apps) : '{}', stderr: '', exitCode: 0 };
+          },
         },
-      ),
+        devicectl: { run: async () => ({ stdout: '', stderr: '', exitCode: 1 }) },
+      },
+      () =>
+        withDeviceInventoryContext({ ...gateways, requestScope: scope }, () =>
+          resolveTargetDeviceSelection(
+            { platform: 'ios' },
+            {
+              appleSimulatorAppTarget: 'com.example.demo',
+            },
+          ),
+        ),
     );
 
     expect(selection.device.id).toBe('sim-b');

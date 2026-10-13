@@ -124,7 +124,7 @@ export default defineConfig({
     {
       files: [
         'src/daemon-client/daemon-client-rpc.ts',
-        'src/daemon/downloadable-artifact-http.ts',
+        'packages/daemon/src/downloadable-artifact-http.ts',
         'src/remote/remote-request-diagnostics.ts',
         'src/remote/upload-stream.ts',
       ],
@@ -135,7 +135,7 @@ export default defineConfig({
     },
     {
       files: [
-        'src/daemon/replay/internal/__tests__/session-replay-target-verification-runtime.test.ts',
+        'packages/daemon/src/__tests__/replay-target/session-replay-target-verification-runtime.test.ts',
       ],
       rules: {
         'unicorn/prefer-string-raw': 'off',

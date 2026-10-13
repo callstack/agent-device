@@ -149,7 +149,10 @@ describe('explainCommand table-driven coverage', () => {
     ['press', ['src/commands/interaction/index.ts', 'packages/daemon/src/interaction/index.ts']],
     ['apps', ['src/commands/management/app.ts']],
     // R39: screenshot has no dispatch projection left, so its platform work is named directly.
-    ['screenshot', ['src/commands/capture/screenshot.ts', 'packages/daemon/src/screenshot-runtime.ts']],
+    [
+      'screenshot',
+      ['src/commands/capture/screenshot.ts', 'packages/daemon/src/screenshot-runtime.ts'],
+    ],
     ['react-native', ['packages/daemon/src/handlers/react-native.ts']],
     ['record', ['packages/daemon/src/handlers/record-trace.ts']],
     ['trace', ['packages/daemon/src/handlers/record-trace.ts']],

@@ -417,6 +417,8 @@ test('a captured fallow 3.32 report yields its measured findings past leading ou
   assert.deepEqual(
     findings.map((entry) => [entry.path, entry.name, entry.line, entry.crap]),
     [
+      // The captured fixture keeps the historical capture path: it never existed
+      // at head (the module lives at the package root), so the sweep left it.
       ['src/daemon/handlers/session-state.ts', 'handleSessionStateCommands', 232, 34.1],
       ['src/daemon/handlers/session-state.ts', 'handleAppStateCommand', 112, 30.4],
     ],

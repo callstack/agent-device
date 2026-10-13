@@ -50,14 +50,14 @@ test('the snapshot facet cannot import daemon assembly', () => {
 
 test('the boundary reports a facet module that reaches back into the daemon', () => {
   const sources = new Map([
-    ['src/daemon/types.ts', 'export type SessionState = { id: string };\n'],
+    ['packages/daemon/src/types.ts', 'export type SessionState = { id: string };\n'],
     [
       'packages/capture-kit/src/snapshot/snapshot-freshness/android.ts',
-      "import type { SessionState } from '../../../../../src/daemon/types.ts';\nexport type X = SessionState;\n",
+      "import type { SessionState } from '../../../../../packages/daemon/src/types.ts';\nexport type X = SessionState;\n",
     ],
   ]);
 
   assert.deepEqual(daemonImportsFromSnapshotFacet(sources), [
-    'packages/capture-kit/src/snapshot/snapshot-freshness/android.ts:1 -> src/daemon/types.ts',
+    'packages/capture-kit/src/snapshot/snapshot-freshness/android.ts:1 -> packages/daemon/src/types.ts',
   ]);
 });

@@ -110,7 +110,7 @@ test('external daemon request/session-state importer membership changes require 
     new Map([
       [
         'src/client/new-importer.ts',
-        "import type { SessionState } from '../daemon/session-state.ts';",
+        "import type { SessionState } from '../../packages/daemon/src/session-state.ts';",
       ],
       ['packages/daemon/src/session-state.ts', 'export type SessionState = { name: string };'],
     ]),
@@ -215,7 +215,10 @@ test('replay-test may still import its own files inside the package', () => {
 test('internal trees reject deep imports globally, including from daemon', () => {
   const edges = resolveImportEdges(
     new Map([
-      ['src/daemon/adapter.ts', "import type { Plan } from '@agent-device/maestro/internal/plan';"],
+      [
+        'packages/daemon/src/adapter.ts',
+        "import type { Plan } from '@agent-device/maestro/internal/plan';",
+      ],
       ['packages/maestro/src/internal/plan.ts', 'export type Plan = { steps: number };'],
     ]),
   );
@@ -244,7 +247,10 @@ test('replay-port rejects daemon source imports and engine back edges', () => {
         'packages/ad-replay/src/internal/step-loop.ts',
         "import { runReplayCommand } from '../../../replay-port/src/daemon-port/native-command.ts';",
       ],
-      ['packages/daemon/src/session-lifecycle/index.ts', 'export function handleSessionCloseCommands() {}'],
+      [
+        'packages/daemon/src/session-lifecycle/index.ts',
+        'export function handleSessionCloseCommands() {}',
+      ],
       ['packages/daemon/src/session-store.ts', 'export class SessionStore {}'],
     ]),
   );
@@ -428,7 +434,8 @@ test('session observability rejects handler deep imports in both directions', ()
       {
         file: 'packages/daemon/src/session-observability/internal/session-observability.ts',
         line: 1,
-        message: 'daemon-session-observability must not import packages/daemon/src/handlers/session.ts',
+        message:
+          'daemon-session-observability must not import packages/daemon/src/handlers/session.ts',
       },
     ],
   );
@@ -436,9 +443,9 @@ test('session observability rejects handler deep imports in both directions', ()
 
 test('snapshot execution cannot return to handler-owned support paths', () => {
   const restored = [
-    'src/daemon/handlers/snapshot-capture.ts',
-    'src/daemon/handlers/snapshot-interactor-capture.ts',
-    'src/daemon/handlers/snapshot-session.ts',
+    'packages/daemon/src/handlers/snapshot-capture.ts',
+    'packages/daemon/src/handlers/snapshot-interactor-capture.ts',
+    'packages/daemon/src/handlers/snapshot-session.ts',
   ];
 
   assert.deepEqual(
@@ -450,25 +457,28 @@ test('snapshot execution cannot return to handler-owned support paths', () => {
         'Reuse the daemon-owned snapshot execution module instead of restoring shared mechanics beneath a route adapter.',
     })),
   );
-  assert.deepEqual(checkRetiredSnapshotExecutionPaths(['packages/daemon/src/handlers/snapshot.ts']), []);
+  assert.deepEqual(
+    checkRetiredSnapshotExecutionPaths(['packages/daemon/src/handlers/snapshot.ts']),
+    [],
+  );
 });
 
 test('session lifecycle rejects restored neutral helper paths', () => {
   const violations = checkRetiredSessionLifecyclePaths([
     'packages/daemon/src/session-device-resolution.ts',
-    'src/daemon/handlers/session-device-utils.ts',
-    'src/daemon/handlers/session-runtime-admission.ts',
-    'src/daemon/handlers/session-close-script.ts',
-    'src/daemon/handlers/session-close.ts',
+    'packages/daemon/src/handlers/session-device-utils.ts',
+    'packages/daemon/src/handlers/session-runtime-admission.ts',
+    'packages/daemon/src/handlers/session-close-script.ts',
+    'packages/daemon/src/handlers/session-close.ts',
   ]);
 
   assert.deepEqual(
     violations.map(({ message }) => message),
     [
-      'retired session lifecycle path was restored: src/daemon/handlers/session-device-utils.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
-      'retired session lifecycle path was restored: src/daemon/handlers/session-runtime-admission.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
-      'retired session lifecycle path was restored: src/daemon/handlers/session-close-script.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
-      'retired session lifecycle path was restored: src/daemon/handlers/session-close.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      'retired session lifecycle path was restored: packages/daemon/src/handlers/session-device-utils.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      'retired session lifecycle path was restored: packages/daemon/src/handlers/session-runtime-admission.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      'retired session lifecycle path was restored: packages/daemon/src/handlers/session-close-script.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      'retired session lifecycle path was restored: packages/daemon/src/handlers/session-close.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
     ],
   );
 });
@@ -476,38 +486,38 @@ test('session lifecycle rejects restored neutral helper paths', () => {
 test('interaction rejects restored handler implementation paths', () => {
   const violations = checkRetiredInteractionPaths([
     'packages/daemon/src/interaction/internal/interaction.ts',
-    'src/daemon/handlers/interaction-touch.ts',
+    'packages/daemon/src/handlers/interaction-touch.ts',
   ]);
 
   assert.deepEqual(violations, [
     {
       rule: 'R10 daemon-modularity',
-      file: 'src/daemon/handlers/interaction-touch.ts',
+      file: 'packages/daemon/src/handlers/interaction-touch.ts',
       line: 1,
       message:
-        'retired interaction handler path was restored: src/daemon/handlers/interaction-touch.ts. Keep route implementations behind packages/daemon/src/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
+        'retired interaction handler path was restored: packages/daemon/src/handlers/interaction-touch.ts. Keep route implementations behind packages/daemon/src/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
     },
   ]);
 });
 
 test('interaction rejects renamed handler implementation paths', () => {
   const violations = checkRetiredInteractionPaths([
-    'src/daemon/handlers/interaction-touch-v2.ts',
-    'src/daemon/handlers/find-next.ts',
+    'packages/daemon/src/handlers/interaction-touch-v2.ts',
+    'packages/daemon/src/handlers/find-next.ts',
   ]);
 
   assert.deepEqual(
     violations.map(({ file, message }) => ({ file, message })),
     [
       {
-        file: 'src/daemon/handlers/interaction-touch-v2.ts',
+        file: 'packages/daemon/src/handlers/interaction-touch-v2.ts',
         message:
-          'retired interaction handler path was restored: src/daemon/handlers/interaction-touch-v2.ts. Keep route implementations behind packages/daemon/src/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
+          'retired interaction handler path was restored: packages/daemon/src/handlers/interaction-touch-v2.ts. Keep route implementations behind packages/daemon/src/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
       },
       {
-        file: 'src/daemon/handlers/find-next.ts',
+        file: 'packages/daemon/src/handlers/find-next.ts',
         message:
-          'retired interaction handler path was restored: src/daemon/handlers/find-next.ts. Keep route implementations behind packages/daemon/src/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
+          'retired interaction handler path was restored: packages/daemon/src/handlers/find-next.ts. Keep route implementations behind packages/daemon/src/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
       },
     ],
   );
@@ -515,8 +525,8 @@ test('interaction rejects renamed handler implementation paths', () => {
 
 test('session lifecycle rejects any restored open or close handler path', () => {
   const violations = checkRetiredSessionLifecyclePaths([
-    'src/daemon/handlers/session-open-regressed.ts',
-    'src/daemon/handlers/session-close-regressed.ts',
+    'packages/daemon/src/handlers/session-open-regressed.ts',
+    'packages/daemon/src/handlers/session-close-regressed.ts',
   ]);
 
   assert.deepEqual(
@@ -529,17 +539,17 @@ test('session lifecycle rejects any restored open or close handler path', () => 
     [
       {
         rule: 'R10 daemon-modularity',
-        file: 'src/daemon/handlers/session-open-regressed.ts',
+        file: 'packages/daemon/src/handlers/session-open-regressed.ts',
         line: 1,
         message:
-          'retired session lifecycle path was restored: src/daemon/handlers/session-open-regressed.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+          'retired session lifecycle path was restored: packages/daemon/src/handlers/session-open-regressed.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
       },
       {
         rule: 'R10 daemon-modularity',
-        file: 'src/daemon/handlers/session-close-regressed.ts',
+        file: 'packages/daemon/src/handlers/session-close-regressed.ts',
         line: 1,
         message:
-          'retired session lifecycle path was restored: src/daemon/handlers/session-close-regressed.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+          'retired session lifecycle path was restored: packages/daemon/src/handlers/session-close-regressed.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
       },
     ],
   );
@@ -547,14 +557,14 @@ test('session lifecycle rejects any restored open or close handler path', () => 
 
 test('session observability rejects restored handler paths', () => {
   const restoredPaths = [
-    'src/daemon/handlers/session-observability.ts',
-    'src/daemon/handlers/session-perf-runtime.ts',
-    'src/daemon/handlers/session-network.ts',
-    'src/daemon/handlers/session-audio.ts',
-    'src/daemon/handlers/session-network-regressed.ts',
-    'src/daemon/handlers/session-perf.ts',
-    'src/daemon/handlers/session-logs.ts',
-    'src/daemon/handlers/session-events.ts',
+    'packages/daemon/src/handlers/session-observability.ts',
+    'packages/daemon/src/handlers/session-perf-runtime.ts',
+    'packages/daemon/src/handlers/session-network.ts',
+    'packages/daemon/src/handlers/session-audio.ts',
+    'packages/daemon/src/handlers/session-network-regressed.ts',
+    'packages/daemon/src/handlers/session-perf.ts',
+    'packages/daemon/src/handlers/session-logs.ts',
+    'packages/daemon/src/handlers/session-events.ts',
   ] as const;
   const violations = checkRetiredSessionObservabilityPaths(restoredPaths);
 

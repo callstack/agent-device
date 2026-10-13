@@ -268,7 +268,7 @@ test('only the canonical composition root may import the private provider compos
 
   sources.set(
     'packages/daemon/src/request-router.ts',
-    "import { providerScope } from '../platform-runtime/request-providers.ts';",
+    "import { providerScope } from '../../../src/platform-runtime/request-providers.ts';",
   );
   assert.match(
     messages(sources).join('\n'),
@@ -473,7 +473,10 @@ test('platform packages cannot escape to root, daemon, siblings, or raw process 
   // spawning at runtime, so test files (which fake process primitives) and
   // type-only imports (the runner host port names ChildProcess) are exempt.
   const planted = [
-    ["import type { DaemonRequest } from '../../../src/daemon/types.ts';", 'probe.test.ts'],
+    [
+      "import type { DaemonRequest } from '../../../packages/daemon/src/types.ts';",
+      'probe.test.ts',
+    ],
     ["export { x } from '../../../src/core/x.ts';", 'probe.test.ts'],
     ["void import('@agent-device/platform-android');", 'probe.test.ts'],
     ["import { spawn } from 'node:child_process';", 'probe.ts'],

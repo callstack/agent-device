@@ -75,7 +75,7 @@ export function checkRetiredSessionLifecyclePaths(
   return checkRetiredHandlerPaths(
     sourceFiles,
     SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
-    /^src\/daemon\/handlers\/session-(?:open|close)(?:-[^/]+)?\.ts$/,
+    /^packages\/daemon\/src\/handlers\/session-(?:open|close)(?:-[^/]+)?\.ts$/,
     'session lifecycle',
   );
 }
@@ -86,7 +86,7 @@ export function checkRetiredSessionObservabilityPaths(
   return checkRetiredHandlerPaths(
     sourceFiles,
     SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS,
-    /^src\/daemon\/handlers\/session-(?:observability|perf|logs|events|network|audio)(?:-[^/]+)?\.ts$/,
+    /^packages\/daemon\/src\/handlers\/session-(?:observability|perf|logs|events|network|audio)(?:-[^/]+)?\.ts$/,
     'session observability',
   );
 }
@@ -124,7 +124,7 @@ export function checkRetiredInteractionPaths(sourceFiles: readonly string[]): La
   return checkRetiredHandlerPaths(
     sourceFiles,
     INTERACTION_RETIRED_HANDLER_PATHS,
-    /^src\/daemon\/handlers\/(?:find|interaction)(?:-[^/]+)?\.ts$/,
+    /^packages\/daemon\/src\/handlers\/(?:find|interaction)(?:-[^/]+)?\.ts$/,
     'interaction handler',
     'Keep route implementations behind packages/daemon/src/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
   );
@@ -218,7 +218,8 @@ function checkDaemonTypesImporters(edges: readonly ResolvedImportEdge[]): Layeri
   const allowed = new Set<string>(DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters);
   const importers = new Map<string, ResolvedImportEdge>();
   for (const edge of edges) {
-    if (!DAEMON_TYPE_MODULES.includes(edge.target) || edge.file.startsWith('packages/daemon/src/')) continue;
+    if (!DAEMON_TYPE_MODULES.includes(edge.target) || edge.file.startsWith('packages/daemon/src/'))
+      continue;
     // #2559: the client's daemon-request/session-state reads are owned by the stricter
     // R78 `daemon-client-entry` gate, which also bans runtime imports and names each edge.
     if (edge.file.startsWith('src/daemon-client/')) continue;

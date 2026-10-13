@@ -76,7 +76,7 @@ function makeChainParams(req: DaemonRequest) {
 
 test('route owner files match the production module loaders', () => {
   const source = fs.readFileSync(
-    new URL('../../daemon/request-handler-chain.ts', import.meta.url),
+    new URL('../../../packages/daemon/src/request-handler-chain.ts', import.meta.url),
     'utf8',
   );
   const definitions = [
@@ -94,7 +94,10 @@ test('route owner files match the production module loaders', () => {
   assert.equal(definitions.length + 1, Object.keys(ownerFiles).length);
   for (const [, route, modulePath] of definitions) {
     assert.ok(route && modulePath);
-    assert.equal(ownerFiles[route as keyof typeof ownerFiles], `packages/daemon/src/${modulePath.slice(2)}`);
+    assert.equal(
+      ownerFiles[route as keyof typeof ownerFiles],
+      `packages/daemon/src/${modulePath.slice(2)}`,
+    );
   }
   assert.ok(genericModulePath && genericRouteMatches);
   assert.equal(ownerFiles.generic, `packages/daemon/src/${genericModulePath.slice(2)}`);
@@ -106,23 +109,23 @@ test('route owner files match the production module loaders', () => {
 });
 
 test('request handler chain keeps interaction routes out of its eager import closure', () => {
-  const chainFile = path.resolve(import.meta.dirname, '../../daemon/request-handler-chain.ts');
+  const chainFile = path.resolve(import.meta.dirname, '../../../packages/daemon/src/request-handler-chain.ts');
   const closure = eagerClosureOf(chainFile);
 
   assert.ok(closure.length > 20, 'eager closure walk must reach the request chain');
   assert.equal(
-    closure.includes(path.resolve(import.meta.dirname, '../../daemon/interaction/index.ts')),
+    closure.includes(path.resolve(import.meta.dirname, '../../../packages/daemon/src/interaction/index.ts')),
     false,
     'interaction routes must stay behind the request chain lazy import',
   );
 });
 
 test('interaction facade keeps route implementations out of its eager import closure', () => {
-  const facadeFile = path.resolve(import.meta.dirname, '../../daemon/interaction/index.ts');
+  const facadeFile = path.resolve(import.meta.dirname, '../../../packages/daemon/src/interaction/index.ts');
   const closure = eagerClosureOf(facadeFile);
   const snapshotComposition = path.resolve(
     import.meta.dirname,
-    '../../daemon/snapshot-runtime-capture-input.ts',
+    '../../../packages/daemon/src/snapshot-runtime-capture-input.ts',
   );
 
   assert.ok(
@@ -133,7 +136,7 @@ test('interaction facade keeps route implementations out of its eager import clo
   for (const routeModule of ['find.ts', 'interaction.ts']) {
     const routePath = path.resolve(
       import.meta.dirname,
-      `../../daemon/interaction/internal/${routeModule}`,
+      `../../../packages/daemon/src/interaction/internal/${routeModule}`,
     );
     assert.equal(
       fs.existsSync(routePath),

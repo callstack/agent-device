@@ -25,19 +25,20 @@ test('the overlay counts symbol-level production importers, not file-level impor
   const sources = {
     'packages/daemon/src/session-state.ts': STATE_STUB,
     'packages/daemon/src/session-store.ts': STORE_STUB,
-    'src/daemon/handlers/fixture.ts':
+    'packages/daemon/src/handlers/fixture.ts':
       "import type { SessionState } from '../session-state.ts';\n" +
       "import { SessionStore } from '../session-store.ts';\n",
-    'src/daemon/handlers/request-only.ts':
+    'packages/daemon/src/handlers/request-only.ts':
       "import type { DaemonRequest } from '../session-state.ts';\n" +
       "import { resolveDaemonStateDir } from '../session-store.ts';\n",
-    'src/daemon/non-handler.ts': "import type { SessionState } from './session-state.ts';\n",
-    'src/daemon/handlers/fixture.test.ts':
+    'packages/daemon/src/non-handler.ts':
+      "import type { SessionState } from './session-state.ts';\n",
+    'packages/daemon/src/handlers/fixture.test.ts':
       "import type { SessionState } from '../session-state.ts';\n",
   };
   assert.deepEqual(overlayOf(sources), {
-    shapeFiles: ['src/daemon/handlers/fixture.ts', 'src/daemon/non-handler.ts'],
-    authorityFiles: ['src/daemon/handlers/fixture.ts'],
+    shapeFiles: ['packages/daemon/src/handlers/fixture.ts', 'packages/daemon/src/non-handler.ts'],
+    authorityFiles: ['packages/daemon/src/handlers/fixture.ts'],
   });
 });
 
@@ -45,14 +46,16 @@ test('the overlay follows the SessionState declaration to a moved path, not a re
   // Planted-red against a hardcoded src/daemon/types.ts target: #2346 moved the declaration to
   // session-state.ts, so importers point there, and the overlay must still count them.
   const sources = {
-    'src/daemon/types.ts': 'export type DaemonRequest = { x: number; };\n',
+    'packages/daemon/src/types.ts': 'export type DaemonRequest = { x: number; };\n',
     'packages/daemon/src/session-state.ts': STATE_STUB,
     'packages/daemon/src/session-store.ts': STORE_STUB,
-    'src/daemon/handlers/fixture.ts': "import type { SessionState } from '../session-state.ts';\n",
-    'src/daemon/non-handler.ts': "import type { SessionState } from './session-state.ts';\n",
+    'packages/daemon/src/handlers/fixture.ts':
+      "import type { SessionState } from '../session-state.ts';\n",
+    'packages/daemon/src/non-handler.ts':
+      "import type { SessionState } from './session-state.ts';\n",
   };
   assert.deepEqual(overlayOf(sources), {
-    shapeFiles: ['src/daemon/handlers/fixture.ts', 'src/daemon/non-handler.ts'],
+    shapeFiles: ['packages/daemon/src/handlers/fixture.ts', 'packages/daemon/src/non-handler.ts'],
     authorityFiles: [],
   });
 });
@@ -60,34 +63,40 @@ test('the overlay follows the SessionState declaration to a moved path, not a re
 test('the handler-owned subset is the flat handlers surface only', () => {
   const overlay: SessionAuthorityOverlay = {
     shapeFiles: [
-      'src/daemon/handlers/fixture.ts',
-      'src/daemon/non-handler.ts',
+      'packages/daemon/src/handlers/fixture.ts',
+      'packages/daemon/src/non-handler.ts',
       'packages/daemon/src/interaction/internal/interaction.ts',
     ],
-    authorityFiles: ['src/daemon/handlers/fixture.ts', 'packages/daemon/src/request-router.ts'],
+    authorityFiles: [
+      'packages/daemon/src/handlers/fixture.ts',
+      'packages/daemon/src/request-router.ts',
+    ],
   };
   assert.deepEqual(handlerOwnedOverlay(overlay), {
-    shapeFiles: ['src/daemon/handlers/fixture.ts'],
-    authorityFiles: ['src/daemon/handlers/fixture.ts'],
+    shapeFiles: ['packages/daemon/src/handlers/fixture.ts'],
+    authorityFiles: ['packages/daemon/src/handlers/fixture.ts'],
   });
 });
 
 test('R75 fails a handler file that gains a shape or authority edge beyond the merge-base', () => {
   const reference: SessionAuthorityOverlay = {
-    shapeFiles: ['src/daemon/handlers/kept.ts'],
-    authorityFiles: ['src/daemon/handlers/kept.ts'],
+    shapeFiles: ['packages/daemon/src/handlers/kept.ts'],
+    authorityFiles: ['packages/daemon/src/handlers/kept.ts'],
   };
   const measured: SessionAuthorityOverlay = {
-    shapeFiles: ['src/daemon/handlers/kept.ts', 'src/daemon/handlers/new-shape.ts'],
-    authorityFiles: ['src/daemon/handlers/new-authority.ts'],
+    shapeFiles: [
+      'packages/daemon/src/handlers/kept.ts',
+      'packages/daemon/src/handlers/new-shape.ts',
+    ],
+    authorityFiles: ['packages/daemon/src/handlers/new-authority.ts'],
   };
   const violations = checkSessionAuthorityOverlay(measured, reference);
   assert.equal(violations.length, 2);
   const shape = violations.find(
-    (violation) => violation.file === 'src/daemon/handlers/new-shape.ts',
+    (violation) => violation.file === 'packages/daemon/src/handlers/new-shape.ts',
   )!;
   const authority = violations.find(
-    (violation) => violation.file === 'src/daemon/handlers/new-authority.ts',
+    (violation) => violation.file === 'packages/daemon/src/handlers/new-authority.ts',
   )!;
   assert.equal(shape.rule, SESSION_AUTHORITY_OVERLAY_RULE);
   assert.equal(authority.rule, SESSION_AUTHORITY_OVERLAY_RULE);
@@ -97,11 +106,11 @@ test('R75 fails a handler file that gains a shape or authority edge beyond the m
 
 test('R75 passes when the handler-owned sets hold or shrink', () => {
   const reference: SessionAuthorityOverlay = {
-    shapeFiles: ['src/daemon/handlers/a.ts', 'src/daemon/handlers/b.ts'],
-    authorityFiles: ['src/daemon/handlers/a.ts'],
+    shapeFiles: ['packages/daemon/src/handlers/a.ts', 'packages/daemon/src/handlers/b.ts'],
+    authorityFiles: ['packages/daemon/src/handlers/a.ts'],
   };
   const measured: SessionAuthorityOverlay = {
-    shapeFiles: ['src/daemon/handlers/a.ts'],
+    shapeFiles: ['packages/daemon/src/handlers/a.ts'],
     authorityFiles: [],
   };
   assert.deepEqual(checkSessionAuthorityOverlay(measured, reference), []);
@@ -109,8 +118,8 @@ test('R75 passes when the handler-owned sets hold or shrink', () => {
 
 test('R75 leaves new non-handler importers to the module declarations, not this ratchet', () => {
   const measured: SessionAuthorityOverlay = {
-    shapeFiles: ['src/daemon/new-module.ts'],
-    authorityFiles: ['src/daemon/server/new-module.ts'],
+    shapeFiles: ['packages/daemon/src/new-module.ts'],
+    authorityFiles: ['packages/daemon/src/server/new-module.ts'],
   };
   assert.deepEqual(
     checkSessionAuthorityOverlay(measured, { shapeFiles: [], authorityFiles: [] }),
@@ -122,18 +131,20 @@ test('the end-to-end measurement feeds the ratchet: a new handler importer is re
   const base = {
     'packages/daemon/src/session-state.ts': STATE_STUB,
     'packages/daemon/src/session-store.ts': STORE_STUB,
-    'src/daemon/handlers/kept.ts': "import type { SessionState } from '../session-state.ts';\n",
+    'packages/daemon/src/handlers/kept.ts':
+      "import type { SessionState } from '../session-state.ts';\n",
   };
   const reference = handlerOwnedOverlay(overlayOf(base));
   const grown = {
     ...base,
-    'src/daemon/handlers/new.ts': "import type { SessionState } from '../session-state.ts';\n",
+    'packages/daemon/src/handlers/new.ts':
+      "import type { SessionState } from '../session-state.ts';\n",
   };
   const measured = handlerOwnedOverlay(overlayOf(grown));
   assert.deepEqual(checkSessionAuthorityOverlay(reference, reference), []);
   const violations = checkSessionAuthorityOverlay(measured, reference);
   assert.equal(violations.length, 1);
-  assert.equal(violations[0]!.file, 'src/daemon/handlers/new.ts');
+  assert.equal(violations[0]!.file, 'packages/daemon/src/handlers/new.ts');
 });
 
 test('R75 catches a new handler shape edge expressed as an import type', () => {
@@ -145,13 +156,14 @@ test('R75 catches a new handler shape edge expressed as an import type', () => {
   const measured = handlerOwnedOverlay(
     overlayOf({
       ...base,
-      'src/daemon/handlers/new.ts': "type State = import('../session-state.ts').SessionState;\n",
+      'packages/daemon/src/handlers/new.ts':
+        "type State = import('../session-state.ts').SessionState;\n",
     }),
   );
 
   const violations = checkSessionAuthorityOverlay(measured, reference);
   assert.equal(violations.length, 1);
   assert.equal(violations[0]!.rule, SESSION_AUTHORITY_OVERLAY_RULE);
-  assert.equal(violations[0]!.file, 'src/daemon/handlers/new.ts');
+  assert.equal(violations[0]!.file, 'packages/daemon/src/handlers/new.ts');
   assert.match(violations[0]!.message, /new handler-owned SessionState shape edge/);
 });

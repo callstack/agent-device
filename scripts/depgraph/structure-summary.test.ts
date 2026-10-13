@@ -67,8 +67,8 @@ test('computeZoneSccSummary finds a zone-level cycle built from value edges acro
   // file than the first edge's source.
   const files = sources({
     'src/commands/x1.ts': "import { y } from '../core/y.ts';",
-    'src/core/y.ts': "import { z } from '../daemon/z.ts';",
-    'src/daemon/z.ts': "import { x2 } from '../commands/x2.ts';",
+    'src/core/y.ts': "import { z } from '../../packages/daemon/src/z.ts';",
+    'packages/daemon/src/z.ts': "import { x2 } from '../../../src/commands/x2.ts';",
     'src/commands/x2.ts': 'export const x2 = 1;',
   });
   const graph = buildGraph(files, resolveImportEdges(files));
