@@ -48,9 +48,12 @@ test('public selector nodes retain bar membership while dropping private settle 
     { kind: 'text' as const, text: 'Clock', node },
     { kind: 'list' as const, matches: [{ node }] },
   ]) {
-    const wire = JSON.parse(JSON.stringify(toDaemonFindData(result)));
-    const published = result.kind === 'list' ? wire.matches[0].node : wire.node;
-    expect(published.systemBar).toBe('status');
+    const data = toDaemonFindData(result) as {
+      node?: Record<string, unknown>;
+      matches?: Array<{ node: Record<string, unknown> }>;
+    };
+    const published = result.kind === 'list' ? data.matches?.[0]?.node : data.node;
+    expect(published?.systemBar).toBe('status');
     expect(published).not.toHaveProperty('systemChrome');
   }
 });
