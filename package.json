@@ -150,7 +150,7 @@
     "check:gate-manifest": "node --experimental-strip-types scripts/gate/check.ts",
     "check:gate-manifest:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/gate/*.test.ts",
     "check:coverage-changed": "node --experimental-strip-types scripts/coverage-changed/run.ts",
-    "check:coverage-changed:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/coverage-changed/model.test.ts scripts/coverage-changed/run.test.ts",
+    "check:coverage-changed:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/lib/repo-git.test.ts scripts/lib/repo-path.test.ts scripts/coverage-changed/model.test.ts scripts/coverage-changed/run.test.ts",
     "check:coverage-crap": "node --experimental-strip-types scripts/coverage-crap/run.ts",
     "check:coverage-crap:test": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/coverage-crap/model.test.ts scripts/coverage-crap/patches.test.ts scripts/coverage-crap/run.test.ts",
     "check:layering": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/layering/*.test.ts && node --experimental-strip-types scripts/layering/check.ts",
