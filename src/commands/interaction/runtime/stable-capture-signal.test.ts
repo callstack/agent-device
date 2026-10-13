@@ -164,6 +164,26 @@ test('stable semantic projection stays linear on flat XCTest trees', () => {
   );
 });
 
+test('sub-pixel geometry is quantized before the band, so the band stays in whole pixels', () => {
+  // The band this loop runs is measured in whole pixels: the two captures sit 1.89 px apart raw and
+  // one apart once quantized, and the straddle is what keeps the comparison honest — dropping the
+  // quantization would restart the quiet window on a pair this loop has always called at rest.
+  assert.equal(
+    stableCaptureSignalsEqual(
+      stableCaptureSignal(snapshot(0.51, 900)),
+      stableCaptureSignal(snapshot(2.4, 900)),
+    ),
+    true,
+  );
+  assert.equal(
+    stableCaptureSignalsEqual(
+      stableCaptureSignal(snapshot(0.51, 900)),
+      stableCaptureSignal(snapshot(3.4, 900)),
+    ),
+    false,
+  );
+});
+
 test('regular snapshot stability preserves rounded geometry tolerance', () => {
   const left = snapshot(0, 900);
   const right = snapshot(0.6, 900);
