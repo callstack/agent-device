@@ -19,7 +19,7 @@ import {
   unavailableBindDevice,
   unavailableBindExactDevice,
   unavailableInspectFacts,
-} from './test-device-runtime-gateway.ts';
+} from './support/unavailable-device-runtime-gateway.ts';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';

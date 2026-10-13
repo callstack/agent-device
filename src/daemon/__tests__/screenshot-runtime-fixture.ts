@@ -21,7 +21,7 @@ import fs from 'node:fs';
 import { vi, type Mock } from 'vitest';
 import { PNG } from '@agent-device/capture-kit/png';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
+import { unavailableDeviceRuntimeGateway } from './support/unavailable-device-runtime-gateway.ts';
 import {
   type TapPointInput,
   touchRuntimeOperationFacts,

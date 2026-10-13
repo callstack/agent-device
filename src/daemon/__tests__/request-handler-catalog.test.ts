@@ -23,7 +23,7 @@ import {
   unavailableBindDevice,
   unavailableBindExactDevice,
   unavailableInspectFacts,
-} from './test-device-runtime-gateway.ts';
+} from './support/unavailable-device-runtime-gateway.ts';
 import type { DaemonRequest, DaemonResponse } from '../daemon-request.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';

@@ -2,7 +2,6 @@ import path from 'node:path';
 import { vi } from 'vitest';
 import {
   type ApplicationLifecycleOperationFacts,
-  type ApplicationLifecycleRuntimeOperations,
   applicationLifecycleOperationFacts,
   availableApplicationLifecycleOperations,
 } from '@agent-device/contracts/application-lifecycle-runtime';
@@ -21,7 +20,10 @@ import {
 } from '../request-router.ts';
 import type { BindDeviceRuntime } from '../request-runtime-binding.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { applicationLifecycleRuntimeFixture } from './application-lifecycle-runtime-fixture.ts';
+import {
+  applicationLifecycleRuntimeFixture,
+  type LifecycleOperationsLoader,
+} from './application-lifecycle-runtime-fixture.ts';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
 import { withClientReplayScriptSources } from '@agent-device/replay-port/replay-script-source-fixtures';
 import type { DaemonInvokeFn } from '../daemon-request.ts';
@@ -35,12 +37,6 @@ import { providerCredentialsFixture } from './support/provider-credentials-fixtu
 import {
   unavailableBinding,
   unavailableDeviceRuntimeGateway,
-} from './support/unavailable-device-runtime-gateway.ts';
-export {
-  unavailableBindDevice,
-  unavailableBindExactDevice,
-  unavailableDeviceRuntimeGateway,
-  unavailableInspectFacts,
 } from './support/unavailable-device-runtime-gateway.ts';
 
 const unavailable = Object.freeze({
@@ -62,11 +58,6 @@ function lifecycleFactsForTest(device: DeviceInfo): ApplicationLifecycleOperatio
     configureProviderPortReverse: unavailable,
   });
 }
-
-/** Loads the lifecycle operations a lifecycle gateway binds; the daemon default is the canned port fixture. */
-export type LifecycleOperationsLoader = (
-  device: DeviceInfo,
-) => Promise<ApplicationLifecycleRuntimeOperations>;
 
 async function lifecycleBindingForTest(
   device: DeviceInfo,

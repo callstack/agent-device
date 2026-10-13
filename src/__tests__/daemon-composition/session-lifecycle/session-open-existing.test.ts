@@ -10,10 +10,7 @@ import {
   noopInvoke,
   assertInvalidArgsMessage,
 } from '../../../daemon/handlers/__tests__/session-test-harness.ts';
-import {
-  handleSessionCommands,
-  setHarnessLifecycleOperationsLoader,
-} from '../../../daemon/handlers/__tests__/session-command-harness.ts';
+import { handleSessionCommands as handleHarnessSessionCommands } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
 import { applicationLifecycleRuntimeFixture } from '../application-lifecycle-runtime-fixture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
@@ -24,9 +21,13 @@ import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 // macOS frontmost surface, and the non-desktop `--surface` refusal. The daemon-lane port fixture
 // answers those asks with canned spies (its own siblings pin the daemon's open bookkeeping), so
 // the rule-pinning cases run here against the real composed services AND the real composed
-// lifecycle. The harness's leaf mocks must register first, so the loader is installed here
-// (the loader is read when bindings are built) instead of importing the install module on top.
-setHarnessLifecycleOperationsLoader(applicationLifecycleRuntimeFixture);
+// lifecycle. The harness takes the lifecycle-operations loader per call, exactly like the gateway
+// factories, so no module-global install or import-order dependency is involved.
+const handleSessionCommands = (params: Parameters<typeof handleHarnessSessionCommands>[0]) =>
+  handleHarnessSessionCommands({
+    ...params,
+    lifecycleOperationsLoader: applicationLifecycleRuntimeFixture,
+  });
 
 test('open web URL on iOS device session without active app falls back to Safari', async () => {
   const sessionStore = makeSessionStore();

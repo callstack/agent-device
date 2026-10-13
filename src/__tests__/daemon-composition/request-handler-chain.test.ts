@@ -22,7 +22,7 @@ import {
   unavailableBindExactDevice,
   unavailableDeviceRuntimeGateway,
   unavailableInspectFacts,
-} from '../../daemon/__tests__/test-device-runtime-gateway.ts';
+} from '../../daemon/__tests__/support/unavailable-device-runtime-gateway.ts';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';

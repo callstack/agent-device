@@ -41,7 +41,7 @@ import { type DispatchContext } from '../dispatch-context.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { isActiveProviderDevice } from '../provider-device-admission.ts';
 import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../request-runtime-binding.ts';
-import { unavailableDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
+import { unavailableDeviceRuntimeGateway } from './support/unavailable-device-runtime-gateway.ts';
 import { writeSolidPng } from './screenshot-runtime-fixture.ts';
 
 /**

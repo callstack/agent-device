@@ -54,6 +54,17 @@ export const dispatchApplicationLifecycleEffect = vi.fn(
   ): Promise<void> => undefined,
 );
 
+/**
+ * Loads the lifecycle operations a test binding builds: the daemon default is the canned port
+ * fixture, and root composition lanes pass their real composed fixture. The gateway factories and
+ * the session-command harness both take it as a parameter; nothing installs it into a module global.
+ */
+export type LifecycleOperationsLoader = (
+  device: DeviceInfo,
+  signal?: AbortSignal,
+  shutdownTarget?: (device: DeviceInfo) => Promise<TargetShutdownResult>,
+) => Promise<ApplicationLifecycleRuntimeOperations>;
+
 /** The runtime-hint asks as the fixture answers them, at the port, with the bound device. */
 export const applyRuntimeHintsFixture = vi.fn(
   async (_input: RuntimeHintsApplicationInput & Readonly<{ device: DeviceInfo }>) => undefined,

@@ -1,4 +1,3 @@
-import '../handlers/install-real-lifecycle-harness.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import path from 'node:path';
 import type {
@@ -58,11 +57,22 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
 import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
 import {
-  handleSessionCommands,
+  handleSessionCommands as handleHarnessSessionCommands,
   mockBindDeviceRuntime,
 } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
-import { dispatchApplicationLifecycleEffect } from '../application-lifecycle-runtime-fixture.ts';
+import {
+  applicationLifecycleRuntimeFixture,
+  dispatchApplicationLifecycleEffect,
+} from '../application-lifecycle-runtime-fixture.ts';
 import { pendingSurfaceStabilization } from '../../../daemon/deferred-interaction-outcome.ts';
+
+// The harness takes the lifecycle-operations loader per call, exactly like the gateway factories:
+// these composition cases pass the REAL composed fixture instead of the daemon's canned default.
+const handleSessionCommands = (params: Parameters<typeof handleHarnessSessionCommands>[0]) =>
+  handleHarnessSessionCommands({
+    ...params,
+    lifecycleOperationsLoader: applicationLifecycleRuntimeFixture,
+  });
 import {
   makeAppleSimulator,
   makeSessionStore,
@@ -89,8 +99,8 @@ async function openReportingObservation(
   mockResolveTargetDevice.mockResolvedValue(makeAppleSimulator());
   const bindDefault = mockBindDeviceRuntime.getMockImplementation();
   if (!bindDefault) throw new Error('the harness binds a default runtime');
-  mockBindDeviceRuntime.mockImplementationOnce(async (device, use) => {
-    const binding = await bindDefault(device, use);
+  mockBindDeviceRuntime.mockImplementationOnce(async (device, use, loader) => {
+    const binding = await bindDefault(device, use, loader);
     const operations = binding.operations as ApplicationLifecycleRuntimeOperations;
     return {
       ...binding,

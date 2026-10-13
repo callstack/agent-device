@@ -21,7 +21,7 @@ import type {
 } from '../../daemon/request-runtime-binding.ts';
 import { dispatchSnapshotDiffViaRuntime } from '../../daemon/snapshot-diff-runtime.ts';
 import { expectRefusesUnavailableExactOwnerFact } from '../../daemon/__tests__/runtime-binding-conformance.ts';
-import { unavailableDeviceRuntimeGateway } from '../../daemon/__tests__/test-device-runtime-gateway.ts';
+import { unavailableDeviceRuntimeGateway } from '../../daemon/__tests__/support/unavailable-device-runtime-gateway.ts';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const available = Object.freeze({ available: true } as const);

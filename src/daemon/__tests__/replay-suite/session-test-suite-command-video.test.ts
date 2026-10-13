@@ -17,7 +17,7 @@ import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-sc
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,
-} from '../test-device-runtime-gateway.ts';
+} from '../support/unavailable-device-runtime-gateway.ts';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import type { RecordRuntimeHandlerParams } from '../../handlers/record-runtime.ts';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';

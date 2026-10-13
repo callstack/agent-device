@@ -13,7 +13,7 @@ import type { DaemonRequest } from '../../daemon-request.ts';
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,
-} from '../test-device-runtime-gateway.ts';
+} from '../support/unavailable-device-runtime-gateway.ts';
 import {
   handleReplayCommand,
   handleReplayTestCommand,

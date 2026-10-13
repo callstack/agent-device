@@ -19,7 +19,7 @@ import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from '../device-claim
 import { createRequestExecutionScope } from '../../request-execution-scope.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../session-store.ts';
-import { unavailableDeviceRuntimeGateway } from '../../__tests__/test-device-runtime-gateway.ts';
+import { unavailableDeviceRuntimeGateway } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import type { DeviceClaimPolicy } from '@agent-device/command-registry/types';
 
 const setup = isolatedDeviceClaimStores('agent-device-claim-admission-');

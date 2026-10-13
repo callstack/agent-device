@@ -1,12 +1,12 @@
-import '../handlers/install-real-lifecycle-harness.ts';
 import { beforeEach, expect, test } from 'vitest';
 import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
+import { applicationLifecycleRuntimeFixture } from '../application-lifecycle-runtime-fixture.ts';
 import { sessionCloseShutdownFixture } from '../../../daemon/session-lifecycle/internal/__tests__/session-close-shutdown.fixtures.ts';
 
 const {
-  handleSessionCommands,
+  handleSessionCommands: handleHarnessSessionCommands,
   makeIosSimulatorRecordingSession,
   makeSessionStore,
   mockReleaseRunnerOnClose,
@@ -16,6 +16,14 @@ const {
   recordingFinishMock,
   resetSessionCloseShutdownMocks,
 } = sessionCloseShutdownFixture;
+
+// The harness takes the lifecycle-operations loader per call, exactly like the gateway factories:
+// these composition cases pass the REAL composed fixture instead of the daemon's canned default.
+const handleSessionCommands = (params: Parameters<typeof handleHarnessSessionCommands>[0]) =>
+  handleHarnessSessionCommands({
+    ...params,
+    lifecycleOperationsLoader: applicationLifecycleRuntimeFixture,
+  });
 
 // These cases pin the REAL Apple close finalization around an active recording: the recorder is
 // signaled and cleaned before the runner release, and a finalization failure surfaces through the

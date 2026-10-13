@@ -4,7 +4,7 @@ import { LeaseRegistry } from '../../lease-registry.ts';
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,
-} from '../../__tests__/test-device-runtime-gateway.ts';
+} from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import type { SessionCommandParams } from '../session-command-input.ts';

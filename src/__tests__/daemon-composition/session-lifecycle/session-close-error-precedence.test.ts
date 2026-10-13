@@ -1,4 +1,3 @@
-import '../handlers/install-real-lifecycle-harness.ts';
 import { beforeEach, expect, test } from 'vitest';
 import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import {
@@ -6,10 +5,11 @@ import {
   type SessionState,
 } from '../../../daemon/session-lifecycle/internal/__tests__/session-close-shutdown.fixtures.ts';
 import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
+import { applicationLifecycleRuntimeFixture } from '../application-lifecycle-runtime-fixture.ts';
 
 const {
   AppError,
-  handleSessionCommands,
+  handleSessionCommands: handleHarnessSessionCommands,
   makeIosSimulatorRecordingSession,
   makeSession,
   makeSessionStore,
@@ -21,6 +21,14 @@ const {
   path,
   resetSessionCloseShutdownMocks,
 } = sessionCloseShutdownFixture;
+
+// The harness takes the lifecycle-operations loader per call, exactly like the gateway factories:
+// these composition cases pass the REAL composed fixture instead of the daemon's canned default.
+const handleSessionCommands = (params: Parameters<typeof handleHarnessSessionCommands>[0]) =>
+  handleHarnessSessionCommands({
+    ...params,
+    lifecycleOperationsLoader: applicationLifecycleRuntimeFixture,
+  });
 
 // These two cases pin the REAL Apple close sequencing around a platform close: the runner stop
 // that precedes dispatch on a physical device, and error precedence when the close effect itself

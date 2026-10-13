@@ -49,7 +49,7 @@ import { isActiveProviderDevice } from '../../../src/provider-device-runtime.ts'
 import { installProviderDeviceAdmission } from '../../../src/daemon/provider-device-admission.ts';
 import { installInteractorResolution } from '../../../src/daemon/interactor-resolution.ts';
 import { getInteractor } from '../../../src/core/interactors.ts';
-import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/test-device-runtime-gateway.ts';
+import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/support/unavailable-device-runtime-gateway.ts';
 
 import { openWebSessionNames } from '../../../src/daemon/web-session-names.ts';
 import { testCreateCommandSurface } from '../../../src/__tests__/daemon-composition/command-surface-fixture.ts';

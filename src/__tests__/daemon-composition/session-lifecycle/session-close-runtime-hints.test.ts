@@ -19,14 +19,24 @@ vi.mock('../../../platform-runtime-runtime-hints.ts', () => {
 });
 
 import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
-import '../handlers/install-real-lifecycle-harness.ts';
 import {
-  handleSessionCommands,
+  handleSessionCommands as handleHarnessSessionCommands,
   mockBindDeviceRuntime,
   mockInspectDeviceRuntimeFacts,
 } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
 import { lifecycleRuntimeFacts } from '../../../daemon/__tests__/application-lifecycle-runtime-harness.ts';
-import { dispatchApplicationLifecycleEffect } from '../application-lifecycle-runtime-fixture.ts';
+import {
+  applicationLifecycleRuntimeFixture,
+  dispatchApplicationLifecycleEffect,
+} from '../application-lifecycle-runtime-fixture.ts';
+
+// The harness takes the lifecycle-operations loader per call, exactly like the gateway factories:
+// these composition cases pass the REAL composed fixture instead of the daemon's canned default.
+const handleSessionCommands = (params: Parameters<typeof handleHarnessSessionCommands>[0]) =>
+  handleHarnessSessionCommands({
+    ...params,
+    lifecycleOperationsLoader: applicationLifecycleRuntimeFixture,
+  });
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
