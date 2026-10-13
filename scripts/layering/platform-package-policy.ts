@@ -95,19 +95,20 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/simulator-boot',
     '@agent-device/platform-apple/tool-provider',
   ],
-  android: [
-    ANDROID_HOST_FACET,
-    ANDROID_MECHANICS_FACADE,
-    ANDROID_DEVICE_BOOT_FACADE,
-    // Test-only entries: the shared Android capture/walk fixtures (#3517), the same
-    // shape as the Apple runner's requests-fixtures seam above.
-    '@agent-device/platform-android/snapshot-capture-fixtures',
-    '@agent-device/platform-android/ui-hierarchy-fixtures',
-  ],
+  android: [ANDROID_HOST_FACET, ANDROID_MECHANICS_FACADE, ANDROID_DEVICE_BOOT_FACADE],
 };
+
+// Test-only entries: the shared Android capture/walk fixtures (#3517). They ride export
+// validation with the facets above but not its consumer set: only non-production files
+// may import them, so `src/commands/` style production code importing a fixture trips R13.
+const ANDROID_TEST_ONLY_SUBPATHS: readonly string[] = [
+  '@agent-device/platform-android/snapshot-capture-fixtures',
+  '@agent-device/platform-android/ui-hierarchy-fixtures',
+];
 
 function isAndroidFacetSubpathImport(file: string, specifier: string): boolean {
   if (specifier === ANDROID_HOST_FACET) return file === ANDROID_HOST_BINDING;
+  if (ANDROID_TEST_ONLY_SUBPATHS.includes(specifier)) return isNonProductionConsumer(file);
   if (!(MECHANICS_FACET_SUBPATHS.android ?? []).includes(specifier)) return false;
   // The named facets are the implementation seam for root/core/SDK consumers. Daemon production
   // code still reaches platform behavior through the request-bound runtime gateway; tests may
@@ -207,7 +208,11 @@ function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): Lay
         violation(`${expectedDir}/package.json`, 1, `${expectedDir} must be private`),
       );
     }
-    const expectedSubpaths = [expectedName, ...(MECHANICS_FACET_SUBPATHS[family] ?? [])];
+    const expectedSubpaths = [
+      expectedName,
+      ...(MECHANICS_FACET_SUBPATHS[family] ?? []),
+      ...(family === 'android' ? ANDROID_TEST_ONLY_SUBPATHS : []),
+    ];
     if (
       declaration.exportedSubpaths.length !== expectedSubpaths.length ||
       expectedSubpaths.some((subpath) => !declaration.exportedSubpaths.includes(subpath))

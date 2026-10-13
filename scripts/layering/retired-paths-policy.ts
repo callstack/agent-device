@@ -30,7 +30,7 @@ export const RETIRED_PATH_RULES: Readonly<Record<RetiredPathRuleId, RetiredPathR
     rule: 'R71 replay-ownership',
     prefix: 'src/replay/',
     guidance:
-      'caller source acquisition belongs under src/commands/replay/ and replay-test ' +
+      'caller source acquisition belongs under packages/replay-port/src/ and replay-test ' +
       'presentation belongs under src/cli/replay-test/.',
   },
 };

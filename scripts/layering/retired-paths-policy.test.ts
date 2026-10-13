@@ -80,7 +80,7 @@ test('R71 rejects a planted production file under retired src/replay by name', (
       file: 'src/replay/planted-production-file.ts',
       line: 1,
       message:
-        'src/replay/ is retired; caller source acquisition belongs under src/commands/replay/ ' +
+        'src/replay/ is retired; caller source acquisition belongs under packages/replay-port/src/ ' +
         'and replay-test presentation belongs under src/cli/replay-test/.',
     },
   ]);
@@ -95,7 +95,7 @@ test('R71 rejects a planted production file under retired src/replay by name', (
 test('R71 accepts the current replay owners and ignores the src/utils zone', () => {
   assert.deepEqual(
     retiredPathRuleViolations('R71', [
-      'src/commands/replay/script-source-bundle.ts',
+      'packages/replay-port/src/script-source-bundle.ts',
       'src/cli/replay-test/reporting.ts',
       'src/daemon/replay-script-source.ts',
       'src/replay-next.ts',
