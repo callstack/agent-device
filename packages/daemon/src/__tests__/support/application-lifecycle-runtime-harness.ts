@@ -15,7 +15,10 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import { vi } from 'vitest';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import {
   applicationLifecycleFixtureInteractor,
   applicationLifecycleRuntimeFixture,

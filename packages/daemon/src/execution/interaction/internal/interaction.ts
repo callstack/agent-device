@@ -1,7 +1,13 @@
 import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
-import { type RequestCaptureProof, withCaptureDisclosures } from '../../../core/capture-disclosure.ts';
-import type { CaptureSnapshotForSession, InteractionRouteInput } from '../../../core/interaction/internal/types.ts';
+import {
+  type RequestCaptureProof,
+  withCaptureDisclosures,
+} from '../../../core/capture-disclosure.ts';
+import type {
+  CaptureSnapshotForSession,
+  InteractionRouteInput,
+} from '../../../core/interaction/internal/types.ts';
 import { dispatchFillViaRuntime } from './interaction-touch-fill.ts';
 import { dispatchTargetedTouchViaRuntime } from './interaction-touch-press.ts';
 import { finalizeTouchInteraction } from './interaction-runtime.ts';

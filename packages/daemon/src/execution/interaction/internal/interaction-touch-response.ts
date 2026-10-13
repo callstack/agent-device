@@ -17,7 +17,10 @@ import {
 } from './interaction-response-data-transform.ts';
 import { issueSettleRefs } from '../../session-snapshot.ts';
 import type { RecordedTargetCapture } from '@agent-device/selectors/target-evidence';
-import type { CaptureSnapshotForSession, InteractionRouteInput } from '../../../core/interaction/internal/types.ts';
+import type {
+  CaptureSnapshotForSession,
+  InteractionRouteInput,
+} from '../../../core/interaction/internal/types.ts';
 import { resolveDirectTouchReferenceFrameSafely } from './interaction-touch-reference-frame.ts';
 import { readSnapshotNodesReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
 import { buildTouchPayload } from './interaction-touch-payload.ts';

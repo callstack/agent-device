@@ -38,7 +38,10 @@ import { readLocationCoordinate } from '@agent-device/kernel/location-coordinate
 import { sessionAppRequiredDetails } from '@agent-device/kernel/errors';
 import { successText, withSuccessText } from '@agent-device/kernel/success-text';
 
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { admitRuntimeUse } from '../../core/runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../../core/snapshot-runtime-capture-input.ts';
 import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';

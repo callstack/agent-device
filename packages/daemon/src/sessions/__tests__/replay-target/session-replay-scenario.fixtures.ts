@@ -3,7 +3,11 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { makeIosAppSession } from '../../../__tests__/support/session-factories.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import type { ObservationClock } from '@agent-device/capture-kit/observe-until';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type {
+  DaemonInvokeFn,
+  DaemonRequest,
+  DaemonResponse,
+} from '../../../core/daemon-request.ts';
 import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import {
   baseReplayRequest,

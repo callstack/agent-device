@@ -10,7 +10,10 @@ import {
   retainOrphanedDeviceClaims,
   type IsolatedDeviceClaimStore,
 } from '../../__tests__/support/device-claim-store.ts';
-import { acquireDeviceClaim, type DeviceClaimSessionOwnership } from '../../resources/device/device-claims.ts';
+import {
+  acquireDeviceClaim,
+  type DeviceClaimSessionOwnership,
+} from '../../resources/device/device-claims.ts';
 import { resolveDeviceClaimPath } from '../../resources/device/device-claim-paths.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';

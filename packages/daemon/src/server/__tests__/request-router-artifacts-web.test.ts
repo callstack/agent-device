@@ -10,7 +10,10 @@ import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeSession } from '../../__tests__/support/session-factories.ts';
 import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 
-import { cleanupDownloadableArtifact, trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
+import {
+  cleanupDownloadableArtifact,
+  trackDownloadableArtifact,
+} from '../../resources/artifact-tracking.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 

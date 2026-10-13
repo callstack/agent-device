@@ -2,7 +2,10 @@ import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import { handleRecordCommand } from './record-runtime.ts';
-import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  BindExactDeviceRuntime,
+} from '../../core/request-runtime-binding.ts';
 import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import { handleTraceCommand } from './trace-runtime.ts';

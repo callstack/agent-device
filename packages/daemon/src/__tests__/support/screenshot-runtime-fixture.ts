@@ -20,7 +20,10 @@ import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import fs from 'node:fs';
 import { vi, type Mock } from 'vitest';
 import { PNG } from '@agent-device/capture-kit/png';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { unavailableDeviceRuntimeGateway } from './unavailable-device-runtime-gateway.ts';
 import {
   type TapPointInput,

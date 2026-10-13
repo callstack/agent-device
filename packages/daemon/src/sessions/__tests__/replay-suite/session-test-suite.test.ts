@@ -34,7 +34,10 @@ import {
 
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { makeAndroidSession, makeMacOsSession } from '../../../__tests__/support/session-factories.ts';
+import {
+  makeAndroidSession,
+  makeMacOsSession,
+} from '../../../__tests__/support/session-factories.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts';
 

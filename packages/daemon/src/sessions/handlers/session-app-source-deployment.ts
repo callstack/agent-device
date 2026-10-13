@@ -18,7 +18,10 @@ import {
 } from '../materialized-path-registry.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';
 import { resolveInstallSource } from '../install-source-resolution.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';

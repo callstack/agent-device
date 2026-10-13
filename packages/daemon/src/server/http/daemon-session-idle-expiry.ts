@@ -1,5 +1,8 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { clearDeviceClaim, type DeviceClaimClearOutcome } from '../../resources/device/device-claims.ts';
+import {
+  clearDeviceClaim,
+  type DeviceClaimClearOutcome,
+} from '../../resources/device/device-claims.ts';
 import { existingSessionExecutionLockKeys } from '../request-binding.ts';
 import { withRequestExecutionLockKeys } from '../request-execution-locks.ts';
 import type { RequestExecutionLockKey } from '../request-binding.ts';

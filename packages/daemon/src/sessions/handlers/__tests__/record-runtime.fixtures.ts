@@ -17,7 +17,10 @@ import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
-import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  BindExactDeviceRuntime,
+} from '../../../core/request-runtime-binding.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { handleRecordCommand } from '../record-runtime.ts';
 

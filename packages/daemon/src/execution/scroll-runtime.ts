@@ -35,7 +35,10 @@ import { withSuccessText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from '../core/context.ts';
 import type { SessionState } from '../core/session-state.ts';
 import type { ResolvedGenericExecution } from '../core/generic-leaf-execution.ts';
-import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from '../core/runtime-admission.ts';
+import {
+  resolveBoundGenericRuntime,
+  type RuntimeAdmissionBindings,
+} from '../core/runtime-admission.ts';
 import {
   observeScrollMovement,
   planScrollMovement,

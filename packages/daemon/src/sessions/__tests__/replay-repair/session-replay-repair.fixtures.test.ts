@@ -1,5 +1,8 @@
 import { expect, test } from 'vitest';
-import { makeIosSession, authoringPublication } from '../../../__tests__/support/session-factories.ts';
+import {
+  makeIosSession,
+  authoringPublication,
+} from '../../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { makeRecordingReplayInvoke } from './session-replay-repair.fixtures.ts';
 

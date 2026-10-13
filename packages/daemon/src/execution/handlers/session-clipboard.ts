@@ -14,7 +14,10 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { contextFromFlags, type DaemonCommandContext } from '../../core/context.ts';
 import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
 import type { SessionStore } from '../../core/session-store.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from '../../core/runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../../core/snapshot-runtime-capture-input.ts';
 import { successText } from '@agent-device/kernel/success-text';

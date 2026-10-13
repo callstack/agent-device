@@ -6,7 +6,10 @@ import type {
   CaptureSnapshotInput,
   SnapshotResult,
 } from '@agent-device/contracts/snapshot-runtime';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../core/request-runtime-binding.ts';
 import { admitAndBindSnapshotCapture } from '../core/snapshot-runtime-binding.ts';
 import type { DaemonResponse } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';

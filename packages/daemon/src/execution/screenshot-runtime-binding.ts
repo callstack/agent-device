@@ -22,7 +22,10 @@ import {
   unwrapAdmittedRuntimePlan,
   type AdmittedRuntimePlan,
 } from '../core/session-runtime-admission.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../core/request-runtime-binding.ts';
 import type { DaemonResponse } from '../core/daemon-request.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 

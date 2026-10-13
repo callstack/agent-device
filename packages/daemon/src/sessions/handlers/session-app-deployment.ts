@@ -8,9 +8,15 @@ import {
 } from '@agent-device/contracts/app-deployment-runtime-plan';
 import { isIosFamily, publicPlatformString } from '@agent-device/kernel/device';
 import { readNotificationPayload } from '../dispatch-payload.ts';
-import { cleanupUploadedArtifact, prepareUploadedArtifact } from '../../resources/artifact-tracking.ts';
+import {
+  cleanupUploadedArtifact,
+  prepareUploadedArtifact,
+} from '../../resources/artifact-tracking.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';

@@ -24,7 +24,10 @@ import {
   splitRefGenerationSuffix,
   type Point,
 } from '@agent-device/kernel/snapshot';
-import { resolveBoundGestureRuntime, type BoundGestureExecutor } from '../../../core/gesture-runtime.ts';
+import {
+  resolveBoundGestureRuntime,
+  type BoundGestureExecutor,
+} from '../../../core/gesture-runtime.ts';
 import { isActiveProviderDevice } from '../../../core/provider-device-admission.ts';
 import { sleep } from '@agent-device/host-kit/retry';
 import {
@@ -40,7 +43,10 @@ import {
   createInteractionRuntimeForRoute,
   finalizeTouchInteraction,
 } from './interaction-runtime.ts';
-import type { CaptureSnapshotForSession, InteractionRouteInput } from '../../../core/interaction/internal/types.ts';
+import type {
+  CaptureSnapshotForSession,
+  InteractionRouteInput,
+} from '../../../core/interaction/internal/types.ts';
 import type { RecordedTargetCapture } from '@agent-device/selectors/target-evidence';
 import { gestureResponseData } from './interaction-gesture-response.ts';
 import { noActiveSessionError } from '@agent-device/kernel/contracts';

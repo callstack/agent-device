@@ -29,7 +29,10 @@ import { SessionStore } from '../../../core/session-store.ts';
 import { captureSnapshotWithInteractor } from '../../../core/snapshot-interactor-capture.ts';
 import { makeIosSession, repairPublication } from '../../../__tests__/support/session-factories.ts';
 import { repairSessionBoundary } from '../../../core/session-replay-transaction.ts';
-import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../../../core/session-script-publication-state.ts';
+import {
+  NO_SCRIPT_PUBLICATION,
+  scriptTargetPath,
+} from '../../../core/session-script-publication-state.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import {

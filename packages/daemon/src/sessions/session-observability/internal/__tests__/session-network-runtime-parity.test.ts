@@ -11,7 +11,10 @@ import {
   noopInvoke,
 } from '../../../../__tests__/support/handlers/session-test-harness.ts';
 import { NETWORK_RUNTIME_PROJECTION_PARITY } from './session-network-runtime-parity-fixtures.ts';
-import { createNetworkRuntime, emptyAppLogResult } from '../../../../__tests__/support/session-observability/internal/network-runtime-harness.ts';
+import {
+  createNetworkRuntime,
+  emptyAppLogResult,
+} from '../../../../__tests__/support/session-observability/internal/network-runtime-harness.ts';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 
 test.each(NETWORK_RUNTIME_PROJECTION_PARITY)(

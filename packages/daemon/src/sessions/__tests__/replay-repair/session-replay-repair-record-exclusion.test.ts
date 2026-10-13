@@ -49,7 +49,10 @@ import { handleSessionCloseCommands as handleProductionCloseCommand } from '../.
 import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { captureSnapshotWithInteractor } from '../../../core/snapshot-interactor-capture.ts';
-import { makeIosSession, authoringPublication } from '../../../__tests__/support/session-factories.ts';
+import {
+  makeIosSession,
+  authoringPublication,
+} from '../../../__tests__/support/session-factories.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
 import {
   baseReplayRequest as baseReq,

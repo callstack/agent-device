@@ -17,7 +17,10 @@ import type { PlatformRequestScope } from '@agent-device/contracts/platform-runt
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import type { SessionState } from '../core/session-state.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../core/request-runtime-binding.ts';
 
 type SessionFinalization = Readonly<{
   inspectFacts: InspectDeviceRuntimeFacts;

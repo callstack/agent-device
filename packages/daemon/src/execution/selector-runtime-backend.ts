@@ -24,7 +24,10 @@ import {
   type BoundSelectorOperations,
   type SelectorCaptureCommand,
 } from './selector-capture-binding.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../core/request-runtime-binding.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';

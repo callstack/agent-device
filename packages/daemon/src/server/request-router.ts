@@ -87,7 +87,10 @@ import {
 } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 import { resolveGenericRuntimeExecution } from '../execution/generic-runtime-execution.ts';
-import { discloseRequestDispatch, refusedBeforeDispatch } from '../execution/request-dispatch-disclosure.ts';
+import {
+  discloseRequestDispatch,
+  refusedBeforeDispatch,
+} from '../execution/request-dispatch-disclosure.ts';
 import { recordNestedRequests } from '../core/request-dispatch-ledger.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';

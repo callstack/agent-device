@@ -18,7 +18,10 @@ import {
   createInteractionRuntimeForRoute,
   finalizeTouchInteraction,
 } from './interaction-runtime.ts';
-import type { CaptureSnapshotForSession, InteractionRouteInput } from '../../../core/interaction/internal/types.ts';
+import type {
+  CaptureSnapshotForSession,
+  InteractionRouteInput,
+} from '../../../core/interaction/internal/types.ts';
 import { isAndroidEscapeError } from './interaction-android-escape.ts';
 import { corroborateIosTapFailure, interactionTargetExtra } from './interaction-ios-tap-outcome.ts';
 import {

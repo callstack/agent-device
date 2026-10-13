@@ -6,7 +6,10 @@ import {
   normalizeAllocateLeaseRequest,
   normalizeLeaseBackend,
 } from '../lease-registry-scope.ts';
-import { HUMAN_CONTROL_LEASE_REQUEST, HUMAN_CONTROL_SCOPE } from '../../__tests__/support/human-control-fixtures.ts';
+import {
+  HUMAN_CONTROL_LEASE_REQUEST,
+  HUMAN_CONTROL_SCOPE,
+} from '../../__tests__/support/human-control-fixtures.ts';
 
 test('normalizeLeaseBackend accepts HarmonyOS instance backend', () => {
   assert.equal(normalizeLeaseBackend('harmonyos-instance'), 'harmonyos-instance');

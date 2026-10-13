@@ -16,8 +16,7 @@ vi.mock('node:timers/promises', async (importOriginal) => {
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
-  const { selectionFromResolveTargetDevice } =
-    await import('../device-selection-stub.ts');
+  const { selectionFromResolveTargetDevice } = await import('../device-selection-stub.ts');
   const resolveTargetDevice = vi.fn();
   return {
     ...actual,
@@ -25,7 +24,9 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
     resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(resolveTargetDevice)),
   };
 });
-vi.mock('../../../core/device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../../../core/device/device-ready.ts', () => ({
+  ensureDeviceReady: vi.fn(async () => {}),
+}));
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
@@ -73,7 +74,8 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   return { ...actual, runCmd: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })) };
 });
 vi.mock('../../../sessions/materialized-path-registry.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../sessions/materialized-path-registry.ts')>();
+  const actual =
+    await importOriginal<typeof import('../../../sessions/materialized-path-registry.ts')>();
   return { ...actual, cleanupRetainedMaterializedPathsForSession: vi.fn(async () => {}) };
 });
 

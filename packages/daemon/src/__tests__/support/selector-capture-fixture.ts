@@ -13,7 +13,10 @@ import {
 } from '@agent-device/contracts/snapshot-runtime';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import { isActiveProviderDevice } from '../../core/provider-device-admission.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { unavailableDeviceRuntimeGateway } from './unavailable-device-runtime-gateway.ts';
 
 const available: RuntimeOperationFact = Object.freeze({ available: true });

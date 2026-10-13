@@ -31,7 +31,10 @@ import type {
 } from '@agent-device/contracts/selector-observation-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { captureSnapshotWithInteractor } from '../../core/snapshot-interactor-capture.ts';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { androidObservationFixture } from '../../__tests__/support/android-observation-fixture.ts';

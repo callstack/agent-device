@@ -4,7 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createDaemonHttpServer } from '../http/http-server.ts';
 import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
-import { cleanupUploadedArtifact, trackUploadedArtifact } from '../../resources/artifact-tracking.ts';
+import {
+  cleanupUploadedArtifact,
+  trackUploadedArtifact,
+} from '../../resources/artifact-tracking.ts';
 import { resolveInstallSource } from '../../sessions/install-source-resolution.ts';
 import {
   closeLoopbackServer,

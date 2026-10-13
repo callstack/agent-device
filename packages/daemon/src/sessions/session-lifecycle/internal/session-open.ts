@@ -35,7 +35,10 @@ import type {
 } from '../../../core/request-runtime-binding.ts';
 import { admitRuntimeOperations } from '../../../core/runtime-admission.ts';
 import { resolveExistingSessionDeviceSelection } from '@agent-device/device-selection/device-selection-resolver';
-import { requireRuntimeBinding, requireRuntimeFacts } from '../../../core/session-runtime-admission.ts';
+import {
+  requireRuntimeBinding,
+  requireRuntimeFacts,
+} from '../../../core/session-runtime-admission.ts';
 import {
   completeOpenCommand,
   openNewSessionWithDeviceClaim,

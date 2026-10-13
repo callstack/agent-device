@@ -33,7 +33,10 @@ import {
 } from '@agent-device/capture-kit/screen-recording-stop-recovery';
 import { resolveSessionScope } from '../session-routing.ts';
 import type { SessionStore } from '../../core/session-store.ts';
-import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  BindExactDeviceRuntime,
+} from '../../core/request-runtime-binding.ts';
 import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import { recordSessionAction } from '../../core/session-action-recorder.ts';

@@ -4,7 +4,10 @@
  * request seam before any admission, session, or device work.
  */
 import { expect, test } from 'vitest';
-import { listSaveScriptFlagOwnerCommands, ownsSaveScriptFlag } from '../../core/daemon-command-registry.ts';
+import {
+  listSaveScriptFlagOwnerCommands,
+  ownsSaveScriptFlag,
+} from '../../core/daemon-command-registry.ts';
 import {
   SAVE_SCRIPT_FLAG_OWNER_COMMANDS,
   unsupportedSaveScriptFlagResponse,

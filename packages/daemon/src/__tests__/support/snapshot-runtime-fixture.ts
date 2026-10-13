@@ -40,7 +40,10 @@ import { textSizeSettingPayload } from '@agent-device/contracts/settings';
 import { type DispatchContext } from '../../core/dispatch-context.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { isActiveProviderDevice } from '../../core/provider-device-admission.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { unavailableDeviceRuntimeGateway } from './unavailable-device-runtime-gateway.ts';
 import { writeSolidPng } from './screenshot-runtime-fixture.ts';
 

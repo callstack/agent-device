@@ -8,8 +8,14 @@ import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '@agent-device/command-regist
 import { commandDescriptors } from '@agent-device/command-registry/registry';
 import { isRequestCanceledError, type AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import { getDaemonCommandRoute, type DaemonCommandRoute } from '../../core/daemon-command-registry.ts';
-import { cleanupDownloadableArtifact, trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
+import {
+  getDaemonCommandRoute,
+  type DaemonCommandRoute,
+} from '../../core/daemon-command-registry.ts';
+import {
+  cleanupDownloadableArtifact,
+  trackDownloadableArtifact,
+} from '../../resources/artifact-tracking.ts';
 import { contextFromFlags } from '../../core/context.ts';
 import { handleLeaseCommands } from '../handlers/lease.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';

@@ -4,7 +4,10 @@ import path from 'node:path';
 
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { LINUX_DEVICE, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { makeAndroidSession, makeSession } from '../../../../__tests__/support/session-factories.ts';
+import {
+  makeAndroidSession,
+  makeSession,
+} from '../../../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
 import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';

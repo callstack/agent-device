@@ -31,7 +31,9 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
     resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(mockResolveTargetDevice)),
   };
 });
-vi.mock('../../../../core/device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../../../../core/device/device-ready.ts', () => ({
+  ensureDeviceReady: vi.fn(async () => {}),
+}));
 vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('@agent-device/platform-apple/app-resolution')>();

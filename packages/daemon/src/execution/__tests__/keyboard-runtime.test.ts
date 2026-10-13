@@ -20,7 +20,10 @@ import {
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';
 
 // File-scoped ids, not the widely shared 'emulator-5554'/'ios-simulator' literals: these owner

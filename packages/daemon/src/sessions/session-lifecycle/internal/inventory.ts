@@ -6,7 +6,10 @@ import {
 import { listDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
 import { assertResolvedAppsFilter } from '@agent-device/contracts/device';
 import { asAppError } from '@agent-device/kernel/errors';
-import { requireRuntimeBinding, requireRuntimeFacts } from '../../../core/session-runtime-admission.ts';
+import {
+  requireRuntimeBinding,
+  requireRuntimeFacts,
+} from '../../../core/session-runtime-admission.ts';
 import {
   isApplePlatform,
   isIosFamily,

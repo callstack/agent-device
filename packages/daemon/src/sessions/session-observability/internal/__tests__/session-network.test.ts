@@ -2,7 +2,10 @@ import { daemonPlatformServicesFixture } from '../../../../__tests__/support/pla
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { handleSessionCommands } from '../../../../__tests__/support/handlers/session-command-harness.ts';
-import { createNetworkRuntime, emptyAppLogResult } from '../../../../__tests__/support/session-observability/internal/network-runtime-harness.ts';
+import {
+  createNetworkRuntime,
+  emptyAppLogResult,
+} from '../../../../__tests__/support/session-observability/internal/network-runtime-harness.ts';
 import {
   makeSession,
   makeSessionStore,

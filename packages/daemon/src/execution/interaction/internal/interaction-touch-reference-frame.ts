@@ -5,7 +5,10 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../../../core/session-store.ts';
 import { getSnapshotReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
 import type { SessionRef } from '../../../core/session-state.ts';
-import type { BoundContextFromFlags, CaptureSnapshotForSession } from '../../../core/interaction/internal/types.ts';
+import type {
+  BoundContextFromFlags,
+  CaptureSnapshotForSession,
+} from '../../../core/interaction/internal/types.ts';
 import { isActiveProviderDevice } from '../../../core/provider-device-admission.ts';
 
 async function resolveDirectTouchReferenceFrame(params: {

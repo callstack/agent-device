@@ -16,7 +16,10 @@ import {
   typeTextRuntimeOperationFacts,
 } from '@agent-device/contracts/type-text-runtime';
 import { deviceShape } from '@agent-device/kernel/device';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { resolveBoundTypeTextRuntime } from '../type-text-runtime.ts';
 import { expectRefusesUnavailableExactOwnerFact } from '../../__tests__/support/runtime-binding-conformance.ts';
 

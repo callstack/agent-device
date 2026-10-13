@@ -12,7 +12,10 @@ import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { SessionScope } from '@agent-device/contracts/session';
 import { SessionStore } from '../core/session-store.ts';
-import { listSessionSelectorConflicts, type SessionSelectorConflict } from '../core/session-selector.ts';
+import {
+  listSessionSelectorConflicts,
+  type SessionSelectorConflict,
+} from '../core/session-selector.ts';
 
 const DEFAULT_SESSION_NAME = 'default';
 const IMPLICIT_SESSION_KEY_PREFIX = 'cwd';

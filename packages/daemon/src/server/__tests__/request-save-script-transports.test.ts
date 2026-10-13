@@ -14,7 +14,10 @@ import { createTestDeviceInventoryGateways } from '@agent-device/device-selectio
  * `.ad` artifact behind.
  */
 import fs from 'node:fs';
-import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../../core/session-script-publication-state.ts';
+import {
+  NO_SCRIPT_PUBLICATION,
+  scriptTargetPath,
+} from '../../core/session-script-publication-state.ts';
 import net from 'node:net';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';

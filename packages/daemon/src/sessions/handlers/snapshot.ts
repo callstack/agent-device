@@ -2,12 +2,18 @@ import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import { handleAlertCommand } from '../../execution/handlers/snapshot-alert.ts';
-import { handleSettingsCommand, parseSettingsArgs } from '../../execution/handlers/snapshot-settings.ts';
+import {
+  handleSettingsCommand,
+  parseSettingsArgs,
+} from '../../execution/handlers/snapshot-settings.ts';
 import { dispatchSnapshotDiffViaRuntime } from '../snapshot-diff-runtime.ts';
 import { dispatchSnapshotViaRuntime } from '../snapshot-runtime.ts';
 import { dispatchWaitViaRuntime } from '../../execution/wait-runtime.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from '../../core/snapshot-session.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import type { PlatformResourceCleanup } from '../../core/platform-resource-cleanup.ts';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { errorResponse } from '@agent-device/kernel/contracts';

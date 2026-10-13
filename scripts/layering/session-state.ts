@@ -76,7 +76,9 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   audioProbe: ['packages/daemon/src/core/session-capture-binding.ts'],
   perfCapture: ['packages/daemon/src/core/session-capture-binding.ts'],
   screenRecording: ['packages/daemon/src/core/session-capture-binding.ts'],
-  lastPerfProfile: ['packages/daemon/src/sessions/session-observability/internal/session-perf-runtime.ts'],
+  lastPerfProfile: [
+    'packages/daemon/src/sessions/session-observability/internal/session-perf-runtime.ts',
+  ],
   device: ['packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts'],
   surface: ['packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts'],
   // Open execution owns the paired lease/claim transition after the handler has admitted one
@@ -416,7 +418,8 @@ const SESSION_STATE_SCAN_ROOTS = [
   'packages/capture-kit/src/capture-admission/',
 ];
 const SESSION_DRAFT_CONSTRUCTORS: Readonly<Record<string, string>> = {
-  'packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts': 'publishOpenSession',
+  'packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts':
+    'publishOpenSession',
   'packages/daemon/src/core/snapshot-session.ts': 'createSnapshotSession',
   'packages/daemon/src/sessions/handlers/record-runtime.ts': 'createRecordOnlySession',
 };

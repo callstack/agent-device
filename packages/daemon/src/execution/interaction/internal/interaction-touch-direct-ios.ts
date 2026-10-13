@@ -9,7 +9,10 @@ import { expireRefFrame } from '../../../core/ref-frame.ts';
 import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { finalizeTouchInteraction } from './interaction-runtime.ts';
-import type { CaptureSnapshotForSession, InteractionRouteInput } from '../../../core/interaction/internal/types.ts';
+import type {
+  CaptureSnapshotForSession,
+  InteractionRouteInput,
+} from '../../../core/interaction/internal/types.ts';
 import { corroborateIosTapFailure } from './interaction-ios-tap-outcome.ts';
 import type { BoundTouchExecutor } from '../../../core/touch-runtime.ts';
 import {

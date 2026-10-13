@@ -8,7 +8,10 @@ import { successText } from '@agent-device/kernel/success-text';
 import { requireIntInRange } from '@agent-device/kernel/validation';
 import type { DaemonCommandContext } from '../core/context.ts';
 import type { ResolvedGenericExecution } from '../core/generic-leaf-execution.ts';
-import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from '../core/runtime-admission.ts';
+import {
+  resolveBoundGenericRuntime,
+  type RuntimeAdmissionBindings,
+} from '../core/runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../core/snapshot-runtime-capture-input.ts';
 
 /** `tv-remote <button>`, on the same parse the retired leaf used. */

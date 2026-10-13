@@ -18,7 +18,9 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
     resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(resolveTargetDevice)),
   };
 });
-vi.mock('../../../core/device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
+vi.mock('../../../core/device/device-ready.ts', () => ({
+  ensureDeviceReady: vi.fn(async () => {}),
+}));
 vi.mock('@agent-device/platform-android/mechanics', () => ({
   activateAndroidTestIme: vi.fn(async () => ({ activated: false })),
   restoreAndroidTestIme: vi.fn(async () => ({ restored: false, reason: 'no-record' })),

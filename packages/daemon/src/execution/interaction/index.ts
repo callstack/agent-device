@@ -13,7 +13,10 @@ import type {
   SettleObservationCaptureInput,
 } from '../../core/interaction/internal/types.ts';
 
-export type { FindRouteInput, InteractionRouteInput } from '../../core/interaction/internal/types.ts';
+export type {
+  FindRouteInput,
+  InteractionRouteInput,
+} from '../../core/interaction/internal/types.ts';
 
 export { refMutationAdmissionResponse } from './internal/interaction-ref-policy.ts';
 export { finalizeTouchInteraction } from './internal/interaction-runtime.ts';

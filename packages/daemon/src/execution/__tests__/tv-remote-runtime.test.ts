@@ -19,7 +19,10 @@ import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { activateCompleteRefFrame, refFrameState } from '../../core/ref-frame.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import type { GenericPlatformExecutionParams } from '../../core/generic-leaf-execution.ts';
 import { resolveBoundTvRemoteRuntime } from '../tv-remote-runtime.ts';
 import { expectRefusesUnavailableExactOwnerFact } from '../../__tests__/support/runtime-binding-conformance.ts';

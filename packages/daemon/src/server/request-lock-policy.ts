@@ -15,7 +15,10 @@ import {
 } from '@agent-device/kernel/device';
 import { buildSessionRecoveryHint, describeSessionDevice } from '../core/session-recovery-hints.ts';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
-import { hasLockableDeviceSelector, hasSelectorValue } from '../core/device/device-selector-intent.ts';
+import {
+  hasLockableDeviceSelector,
+  hasSelectorValue,
+} from '../core/device/device-selector-intent.ts';
 import { canOverrideLockPolicySelector } from '../core/daemon-command-registry.ts';
 
 type LockPlatform = NonNullable<DaemonRequest['meta']>['lockPlatform'];

@@ -6,7 +6,10 @@ import { successText } from '@agent-device/kernel/success-text';
 import { readPointPositionals } from '@agent-device/kernel/validation';
 import type { DaemonCommandContext } from '../core/context.ts';
 import type { ResolvedGenericExecution } from '../core/generic-leaf-execution.ts';
-import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from '../core/runtime-admission.ts';
+import {
+  resolveBoundGenericRuntime,
+  type RuntimeAdmissionBindings,
+} from '../core/runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../core/snapshot-runtime-capture-input.ts';
 
 /** `focus x y`, on the same positional parse its still-legacy touch siblings take. */

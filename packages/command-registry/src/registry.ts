@@ -600,7 +600,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'session_list',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled
-      ? { ownerFiles: ['packages/daemon/src/sessions/session-lifecycle/internal/inventory.ts'] as const }
+      ? {
+          ownerFiles: [
+            'packages/daemon/src/sessions/session-lifecycle/internal/inventory.ts',
+          ] as const,
+        }
       : {}),
     catalog: { group: 'internal', key: 'sessionList' },
     recordsSessionAction: false,
@@ -618,7 +622,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'session_save_script',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled
-      ? { ownerFiles: ['packages/daemon/src/sessions/handlers/session-script-publication.ts'] as const }
+      ? {
+          ownerFiles: [
+            'packages/daemon/src/sessions/handlers/session-script-publication.ts',
+          ] as const,
+        }
       : {}),
     catalog: { group: 'internal', key: 'sessionSaveScript' },
     recordsSessionAction: false,
@@ -961,7 +969,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'install_source',
     deviceClaimPolicy: 'transient-exclusive',
     ...(ownerFilesEnabled
-      ? { ownerFiles: ['packages/daemon/src/sessions/handlers/session-app-source-deployment.ts'] as const }
+      ? {
+          ownerFiles: [
+            'packages/daemon/src/sessions/handlers/session-app-source-deployment.ts',
+          ] as const,
+        }
       : {}),
     catalog: {
       group: 'internal',
@@ -979,7 +991,11 @@ export const RAW_COMMAND_DESCRIPTORS = [
     name: 'release_materialized_paths',
     deviceClaimPolicy: 'none',
     ...(ownerFilesEnabled
-      ? { ownerFiles: ['packages/daemon/src/sessions/handlers/session-app-source-deployment.ts'] as const }
+      ? {
+          ownerFiles: [
+            'packages/daemon/src/sessions/handlers/session-app-source-deployment.ts',
+          ] as const,
+        }
       : {}),
     catalog: { group: 'internal', key: 'releaseMaterializedPaths' },
     recordsSessionAction: false,

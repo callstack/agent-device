@@ -93,7 +93,10 @@ test('a runtime import is red even when the same pair is a recorded type edge', 
 test('an unrecorded type import of daemon internals is red', () => {
   const violations = checkDaemonClientEntry([
     ...recordedWireEdges(),
-    clientEdge('src/daemon-client/daemon-launch-spec.ts', 'packages/daemon/src/core/daemon-request.ts'),
+    clientEdge(
+      'src/daemon-client/daemon-launch-spec.ts',
+      'packages/daemon/src/core/daemon-request.ts',
+    ),
   ]);
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /unclassified daemon-client import of daemon internals/);

@@ -25,8 +25,14 @@ import { isActiveProviderDevice } from '../core/provider-device-admission.ts';
 import { buildActionEventResult } from '@agent-device/session-journal/session-event-action-presentation';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
-import type { GenericPlatformExecution, RecordedGenericRequest } from '../core/generic-leaf-execution.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../core/request-runtime-binding.ts';
+import type {
+  GenericPlatformExecution,
+  RecordedGenericRequest,
+} from '../core/generic-leaf-execution.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../core/request-runtime-binding.ts';
 
 export async function dispatchGenericCommand(params: {
   req: DaemonRequest;

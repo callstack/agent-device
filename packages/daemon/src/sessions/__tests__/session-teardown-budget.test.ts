@@ -9,7 +9,10 @@ import {
   SCREEN_RECORDING_SESSION_TEARDOWN_BUDGET_MS,
   WEB_BROWSER_SESSION_TEARDOWN_BUDGET_MS,
 } from '../session-teardown-budget.ts';
-import { makeRecordingSession, makeWebSession } from '../../__tests__/support/session-teardown.fixtures.ts';
+import {
+  makeRecordingSession,
+  makeWebSession,
+} from '../../__tests__/support/session-teardown.fixtures.ts';
 
 test('daemon session teardown budget extends for an active durable recording', () => {
   const root = mkdtempForTestSync('agent-device-shutdown-recording-budget-');

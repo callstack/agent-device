@@ -1,7 +1,10 @@
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
-import { makeSession, makeSessionStore } from '../../../../__tests__/support/handlers/session-test-harness.ts';
+import {
+  makeSession,
+  makeSessionStore,
+} from '../../../../__tests__/support/handlers/session-test-harness.ts';
 import { handleSessionInventoryCommands } from '../inventory.ts';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {

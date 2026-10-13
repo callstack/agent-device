@@ -14,7 +14,10 @@ import { resolveBoundAppEventRuntime } from '../app-event-runtime.ts';
 import { resolveBoundKeyboardRuntime } from '../keyboard-runtime.ts';
 import { resolveRefFrameEffect } from '../../core/daemon-command-registry.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import type { DaemonCommandContext } from '../../core/context.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 

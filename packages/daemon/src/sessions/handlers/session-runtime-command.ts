@@ -14,7 +14,10 @@ import {
   runtimeHintValues,
   toRuntimePlatform,
 } from '../session-runtime.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { handlePortReverseCommand } from './session-runtime-port-reverse.ts';
 import { contextFromFlags } from '../../core/context.ts';
 import { resolveBoundGestureViewportRuntime } from '../../core/gesture-runtime.ts';

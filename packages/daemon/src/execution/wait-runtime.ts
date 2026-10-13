@@ -9,7 +9,11 @@ import { absenceCaptureOptionRefusal } from '@agent-device/selectors/absence-obs
 import { parseVersionedRefPositional } from './ref-positionals.ts';
 import { resolveRefStalenessWarning } from './session-snapshot.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from '../core/snapshot-session.ts';
-import { recordIfSession, stripResolutionPayload, toDaemonWaitData } from '../core/selector-recording.ts';
+import {
+  recordIfSession,
+  stripResolutionPayload,
+  toDaemonWaitData,
+} from '../core/selector-recording.ts';
 import {
   resolveBoundSelectorCapture,
   type BoundSelectorOperations,
@@ -20,7 +24,10 @@ import {
   readRecordedResolutionTarget,
   toDaemonResponse,
 } from './selector-runtime.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../core/request-runtime-binding.ts';
 import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';

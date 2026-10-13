@@ -124,7 +124,10 @@ test('request handler chain keeps interaction routes out of its eager import clo
   assert.ok(closure.length > 20, 'eager closure walk must reach the request chain');
   assert.equal(
     closure.includes(
-      path.resolve(import.meta.dirname, '../../../packages/daemon/src/execution/interaction/index.ts'),
+      path.resolve(
+        import.meta.dirname,
+        '../../../packages/daemon/src/execution/interaction/index.ts',
+      ),
     ),
     false,
     'interaction routes must stay behind the request chain lazy import',

@@ -2,7 +2,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { requireTenantOwnedEntry, type TenantOwnedResourceKind } from '../core/tenant-owned-entry.ts';
+import {
+  requireTenantOwnedEntry,
+  type TenantOwnedResourceKind,
+} from '../core/tenant-owned-entry.ts';
 
 const DEFAULT_MATERIALIZED_PATH_TTL_MS = 15 * 60 * 1000;
 

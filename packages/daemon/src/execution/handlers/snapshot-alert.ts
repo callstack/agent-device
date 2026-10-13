@@ -20,7 +20,10 @@ import { recordSessionAction } from '../../core/session-action-recorder.ts';
 import { parseTimeout } from '@agent-device/command-registry/parse-timeout';
 import { resolveRefFrameEffect } from '../../core/daemon-command-registry.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { admitRuntimeUse, type RuntimeAdmissionBindings } from '../../core/runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../../core/snapshot-runtime-capture-input.ts';
 import type { DaemonFailureResponse } from '@agent-device/kernel/contracts';

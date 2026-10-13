@@ -4,7 +4,10 @@ import path from 'node:path';
 import type { IncomingMessage } from 'node:http';
 import { AppError } from '@agent-device/kernel/errors';
 import { extractTarInstallableArtifact } from './artifact-archive.ts';
-import { requireTenantOwnedEntry, type TenantOwnedResourceKind } from '../core/tenant-owned-entry.ts';
+import {
+  requireTenantOwnedEntry,
+  type TenantOwnedResourceKind,
+} from '../core/tenant-owned-entry.ts';
 import {
   createArtifactTempDir,
   sanitizeArtifactFilename,

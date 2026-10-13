@@ -41,7 +41,10 @@ import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isola
 import type { InstalledAppInfo } from '@agent-device/contracts/app-inventory-runtime';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import { appsRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { ensureAppsRuntimeReady, listAppsFromRuntime } from '../../execution/apps-runtime.ts';
 
 export async function handleDoctorCommand(params: {

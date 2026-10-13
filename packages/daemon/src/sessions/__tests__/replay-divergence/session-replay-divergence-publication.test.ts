@@ -11,8 +11,16 @@ import { captureSnapshotWithInteractor } from '../../../core/snapshot-interactor
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { ReplayDivergence } from '@agent-device/contracts/divergence';
-import { expireRefFrame, refFrameScope, refFrameState, refFrameTree } from '../../../core/ref-frame.ts';
-import { markSessionPartialRefsIssued, setSessionSnapshot } from '../../../execution/session-snapshot.ts';
+import {
+  expireRefFrame,
+  refFrameScope,
+  refFrameState,
+  refFrameTree,
+} from '../../../core/ref-frame.ts';
+import {
+  markSessionPartialRefsIssued,
+  setSessionSnapshot,
+} from '../../../execution/session-snapshot.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { captureDivergenceObservation } from '@agent-device/replay-port/session-replay-divergence';
 import { boundReplayDivergenceForSession } from '@agent-device/replay-port/session-replay-divergence-publication';

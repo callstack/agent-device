@@ -25,7 +25,10 @@ import { runtimeExecutionFromContext } from '../core/snapshot-runtime-capture-in
 import type { DaemonCommandContext } from '../core/context.ts';
 import { captureSnapshotData } from '../core/snapshot-capture.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import type { RecordedGenericRequest, ResolvedGenericExecution } from '../core/generic-leaf-execution.ts';
+import type {
+  RecordedGenericRequest,
+  ResolvedGenericExecution,
+} from '../core/generic-leaf-execution.ts';
 import { createReadonlyRuntimeSessionStore } from '../core/runtime-session.ts';
 import { assertScreenshotCropPolicy } from './screenshot-crop-target.ts';
 import { buildScreenshotCropWarnings, cropScreenshotToSelector } from './screenshot-crop.ts';

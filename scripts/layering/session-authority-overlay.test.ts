@@ -259,13 +259,48 @@ test('the merge-base overlay arrives in head coordinates through the rename mapp
     cwd: repo,
     encoding: 'utf8',
   }).trim();
-  execFileSync('git', ['mv', 'packages/daemon/src/session-state.ts', 'packages/daemon/src/core/session-state.ts'], { cwd: repo });
-  execFileSync('git', ['mv', 'packages/daemon/src/session-store.ts', 'packages/daemon/src/core/session-store.ts'], { cwd: repo });
-  execFileSync('git', ['mv', 'packages/daemon/src/handlers/state-reader.ts', 'packages/daemon/src/sessions/handlers/state-reader.ts'], { cwd: repo });
-  execFileSync('git', ['mv', 'packages/daemon/src/handlers/store-user.ts', 'packages/daemon/src/execution/handlers/store-user.ts'], { cwd: repo });
-  execFileSync('git', ['mv', 'packages/daemon/src/session-snapshot.ts', 'packages/daemon/src/execution/session-snapshot.ts'], { cwd: repo });
+  execFileSync(
+    'git',
+    ['mv', 'packages/daemon/src/session-state.ts', 'packages/daemon/src/core/session-state.ts'],
+    { cwd: repo },
+  );
+  execFileSync(
+    'git',
+    ['mv', 'packages/daemon/src/session-store.ts', 'packages/daemon/src/core/session-store.ts'],
+    { cwd: repo },
+  );
+  execFileSync(
+    'git',
+    [
+      'mv',
+      'packages/daemon/src/handlers/state-reader.ts',
+      'packages/daemon/src/sessions/handlers/state-reader.ts',
+    ],
+    { cwd: repo },
+  );
+  execFileSync(
+    'git',
+    [
+      'mv',
+      'packages/daemon/src/handlers/store-user.ts',
+      'packages/daemon/src/execution/handlers/store-user.ts',
+    ],
+    { cwd: repo },
+  );
+  execFileSync(
+    'git',
+    [
+      'mv',
+      'packages/daemon/src/session-snapshot.ts',
+      'packages/daemon/src/execution/session-snapshot.ts',
+    ],
+    { cwd: repo },
+  );
   for (const handler of ['sessions/handlers/state-reader.ts', 'execution/handlers/store-user.ts'])
-    fs.appendFileSync(path.join(repo, 'packages/daemon/src', handler), '\nexport const touched = 1;\n');
+    fs.appendFileSync(
+      path.join(repo, 'packages/daemon/src', handler),
+      '\nexport const touched = 1;\n',
+    );
   commitAll(repo, 'head: layer folders');
 
   const reference = mergeBaseRatchets(repo, undefined, baseRef);
@@ -280,9 +315,7 @@ test('the merge-base overlay arrives in head coordinates through the rename mapp
   // silently lost them (an unpaired rename) would accept any future handler growth.
   const scoped = handlerOwnedOverlay(reference.sessionAuthority);
   assert.deepEqual(scoped.shapeFiles, ['packages/daemon/src/sessions/handlers/state-reader.ts']);
-  assert.deepEqual(scoped.authorityFiles, [
-    'packages/daemon/src/execution/handlers/store-user.ts',
-  ]);
+  assert.deepEqual(scoped.authorityFiles, ['packages/daemon/src/execution/handlers/store-user.ts']);
   for (const file of [...scoped.shapeFiles, ...scoped.authorityFiles]) {
     assert.match(
       file,
@@ -293,7 +326,9 @@ test('the merge-base overlay arrives in head coordinates through the rename mapp
   // The non-handler base importer keeps its full-scope membership and stays out of the
   // handler-owned subset — canonicalization moved it, the scope filter kept it out.
   assert.ok(
-    reference.sessionAuthority.shapeFiles.includes('packages/daemon/src/execution/session-snapshot.ts'),
+    reference.sessionAuthority.shapeFiles.includes(
+      'packages/daemon/src/execution/session-snapshot.ts',
+    ),
   );
   assert.ok(!scoped.shapeFiles.includes('packages/daemon/src/execution/session-snapshot.ts'));
 });

@@ -1,5 +1,8 @@
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
 import {

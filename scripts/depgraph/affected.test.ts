@@ -98,7 +98,11 @@ test('commandsReaching follows the dynamic import a route uses to load its handl
     ].join('\n'),
   });
   const chains = [
-    { command: 'open', route: 'session', entry: 'packages/daemon/src/sessions/handlers/session.ts' },
+    {
+      command: 'open',
+      route: 'session',
+      entry: 'packages/daemon/src/sessions/handlers/session.ts',
+    },
     { command: 'find', route: 'find', entry: 'packages/daemon/src/execution/interaction/index.ts' },
   ];
 

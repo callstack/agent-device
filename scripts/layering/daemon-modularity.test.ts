@@ -265,7 +265,8 @@ test('replay-port rejects daemon source imports and engine back edges', () => {
     [
       {
         file: 'packages/replay-port/src/daemon-port/test-command.ts',
-        message: 'replay-port must not import packages/daemon/src/sessions/session-lifecycle/index.ts',
+        message:
+          'replay-port must not import packages/daemon/src/sessions/session-lifecycle/index.ts',
       },
       {
         file: 'packages/replay-port/src/daemon-port/native-command.ts',
@@ -322,12 +323,14 @@ test('session lifecycle rejects handler deep imports in both directions', () => 
       {
         file: 'packages/daemon/src/sessions/session-lifecycle/internal/inventory.ts',
         line: 1,
-        message: 'daemon-session-lifecycle must not import packages/daemon/src/sessions/handlers/session.ts',
+        message:
+          'daemon-session-lifecycle must not import packages/daemon/src/sessions/handlers/session.ts',
       },
       {
         file: 'packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
         line: 1,
-        message: 'daemon-session-lifecycle must not import packages/daemon/src/sessions/handlers/session.ts',
+        message:
+          'daemon-session-lifecycle must not import packages/daemon/src/sessions/handlers/session.ts',
       },
     ],
   );

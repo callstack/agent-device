@@ -11,9 +11,15 @@ import { canonicalLocalDeviceKey } from '../device/device-claim-paths.ts';
 import { createDurableCaptureResourceStore } from '@agent-device/capture-kit/durable-capture';
 import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { SessionScriptWriter, type SessionScriptWriteResult } from '../../core/session-script-writer.ts';
+import {
+  SessionScriptWriter,
+  type SessionScriptWriteResult,
+} from '../../core/session-script-writer.ts';
 import { SessionStore } from '../../core/session-store.ts';
-import { repairPublication, makeRepairCompleteSession } from '../../__tests__/support/session-factories.ts';
+import {
+  repairPublication,
+  makeRepairCompleteSession,
+} from '../../__tests__/support/session-factories.ts';
 import {
   registerFilesystemBoundaryMatrix,
   type FilesystemBoundaryOwner,

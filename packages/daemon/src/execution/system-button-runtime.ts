@@ -13,7 +13,10 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { successText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from '../core/context.ts';
 import type { ResolvedGenericExecution } from '../core/generic-leaf-execution.ts';
-import { resolveBoundGenericRuntime, type RuntimeAdmissionBindings } from '../core/runtime-admission.ts';
+import {
+  resolveBoundGenericRuntime,
+  type RuntimeAdmissionBindings,
+} from '../core/runtime-admission.ts';
 import { runtimeExecutionFromContext } from '../core/snapshot-runtime-capture-input.ts';
 
 type SystemButtonUse = RuntimeUse<

@@ -8,7 +8,10 @@ const sessionShutdownSource = readFileSync(
   'utf8',
 );
 const sessionCloseSource = readFileSync(
-  new URL('../../packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts', import.meta.url),
+  new URL(
+    '../../packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
+    import.meta.url,
+  ),
   'utf8',
 );
 const appleLifecycleSource = readFileSync(

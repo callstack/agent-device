@@ -7,7 +7,10 @@ import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/devi
 import { resolveRunnerLogicalLeaseContext } from '../../core/lease-context.ts';
 import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
 import { SessionStore } from '../../core/session-store.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { admitRuntimeUse } from '../../core/runtime-admission.ts';
 import {
   requireSessionOrExplicitSelector,

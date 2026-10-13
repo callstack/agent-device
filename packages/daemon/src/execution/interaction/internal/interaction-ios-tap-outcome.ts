@@ -13,7 +13,10 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type { SessionStore } from '../../../core/session-store.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import type { BoundSnapshotCapture } from '../../../core/snapshot-runtime-binding.ts';
-import type { BoundContextFromFlags, CaptureSnapshotForSession } from '../../../core/interaction/internal/types.ts';
+import type {
+  BoundContextFromFlags,
+  CaptureSnapshotForSession,
+} from '../../../core/interaction/internal/types.ts';
 
 const XCTEST_RECORDED_FAILURE = 'XCTEST_RECORDED_FAILURE';
 // A model commonly needs 5-10s to choose a target after receiving a snapshot.

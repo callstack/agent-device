@@ -5,7 +5,10 @@ import type { SessionState } from '../../core/session-state.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import { bindInternalObservationAuthority } from '../../execution/internal-observation.ts';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import type { PlatformResourceCleanup } from '../../core/platform-resource-cleanup.ts';
 import { runReplayCommand } from '@agent-device/replay-port/native-command';
 import { runReplayTestCommand } from '@agent-device/replay-port/test-command';

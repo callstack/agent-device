@@ -3,7 +3,10 @@ import type { ProviderPortReverseOptions } from '@agent-device/contracts/device'
 import { configureProviderPortReverseRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
 import type { SessionStore } from '../../core/session-store.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { admitRuntimeUse } from '../../core/runtime-admission.ts';
 import {
   requireSessionOrExplicitSelector,

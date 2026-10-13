@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { makeAndroidSession, makeIosSession } from '../../../__tests__/support/session-factories.ts';
+import {
+  makeAndroidSession,
+  makeIosSession,
+} from '../../../__tests__/support/session-factories.ts';
 import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import type { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';

@@ -4,7 +4,10 @@ import { test } from 'vitest';
 import { makeAndroidSession } from '../../../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
 import { handleSessionObservabilityCommands } from '../../index.ts';
-import { createNetworkRuntime, emptyAppLogResult } from '../../../../__tests__/support/session-observability/internal/network-runtime-harness.ts';
+import {
+  createNetworkRuntime,
+  emptyAppLogResult,
+} from '../../../../__tests__/support/session-observability/internal/network-runtime-harness.ts';
 
 test('network dump validates include mode directly', async () => {
   const sessionStore = makeAndroidStore();

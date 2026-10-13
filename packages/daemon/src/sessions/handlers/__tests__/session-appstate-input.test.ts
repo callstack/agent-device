@@ -11,7 +11,10 @@ import {
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SessionState } from '../../../core/session-state.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
-import { handleSessionCommands, mockInspectDeviceRuntimeFacts } from '../../../__tests__/support/handlers/session-command-harness.ts';
+import {
+  handleSessionCommands,
+  mockInspectDeviceRuntimeFacts,
+} from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { AppError } from '@agent-device/kernel/errors';
 import type {

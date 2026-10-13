@@ -4,13 +4,19 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
-import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../../../core/session-script-publication-state.ts';
+import {
+  NO_SCRIPT_PUBLICATION,
+  scriptTargetPath,
+} from '../../../core/session-script-publication-state.ts';
 import {
   effectiveWriteForce,
   isSessionScriptPublished,
   markCloseGeneratedPublicationDone,
 } from '../../../core/session-script-publication-capability.ts';
-import { abortRepairTransaction, isRepairArmedSession } from '../../../core/session-replay-transaction.ts';
+import {
+  abortRepairTransaction,
+  isRepairArmedSession,
+} from '../../../core/session-replay-transaction.ts';
 
 export type RepairCloseCommit =
   | { kind: 'not-armed' }

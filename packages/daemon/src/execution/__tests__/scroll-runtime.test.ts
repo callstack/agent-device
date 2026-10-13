@@ -16,7 +16,10 @@ import {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DaemonCommandContext } from '../../core/context.ts';
 import { resolveBoundScrollRuntime } from '../scroll-runtime.ts';
-import type { BindDeviceRuntime, InspectDeviceRuntimeFacts } from '../../core/request-runtime-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { makeIosSession, makeMacOsSession } from '../../__tests__/support/session-factories.ts';

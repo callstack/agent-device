@@ -13,14 +13,23 @@ import {
 } from '../core/context.ts';
 import { assertSessionSelectorMatches } from '../core/session-selector.ts';
 import { resolveEffectiveSessionName } from '../sessions/session-routing.ts';
-import { assertRequestLeaseAdmissionPreflight, scopeRequestSession } from '../sessions/request-admission.ts';
-import { admitRequestLeaseForLockedScope, cleanupExpiredLeasedSession } from '../sessions/lease-lifecycle.ts';
+import {
+  assertRequestLeaseAdmissionPreflight,
+  scopeRequestSession,
+} from '../sessions/request-admission.ts';
+import {
+  admitRequestLeaseForLockedScope,
+  cleanupExpiredLeasedSession,
+} from '../sessions/lease-lifecycle.ts';
 import {
   prepareLockedRequestBinding,
   resolveRequestExecutionLockPlan,
   type RequestExecutionLockPlan,
 } from './request-binding.ts';
-import { beginOpenDeviceWait, readOpenWaitBudgetMs } from '../sessions/open-device-contention-wait.ts';
+import {
+  beginOpenDeviceWait,
+  readOpenWaitBudgetMs,
+} from '../sessions/open-device-contention-wait.ts';
 import { createRequestExecutionLocks } from './request-execution-locks.ts';
 import { isRequestCanceled, throwIfRequestCanceled } from '@agent-device/host-kit/request';
 import { finalizeDaemonResponse } from './request-finalization.ts';
@@ -40,7 +49,10 @@ import {
 } from '@agent-device/session-journal/session-event-log';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import { type SessionStore } from '../core/session-store.ts';
-import { resolveSessionRequestLog, resolveSessionRunnerLogPath } from '../core/session-artifact-paths.ts';
+import {
+  resolveSessionRequestLog,
+  resolveSessionRunnerLogPath,
+} from '../core/session-artifact-paths.ts';
 import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { teardownSessionResources } from '../sessions/session-teardown.ts';
@@ -73,7 +85,10 @@ import {
   assertDaemonPolicyAdmitsRequest,
 } from '../core/daemon-policy.ts';
 import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
-import { requestDispatchLedger, type RequestDispatchLedger } from '../core/request-dispatch-ledger.ts';
+import {
+  requestDispatchLedger,
+  type RequestDispatchLedger,
+} from '../core/request-dispatch-ledger.ts';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.
