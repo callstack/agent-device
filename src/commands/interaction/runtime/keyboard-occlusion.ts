@@ -1,9 +1,9 @@
-import {
-  type Point,
-  type Rect,
-  type SnapshotKeyboardBandFact,
-  type SnapshotNode,
-  type SnapshotState,
+import type {
+  Point,
+  Rect,
+  SnapshotKeyboardBandFact,
+  SnapshotNode,
+  SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';

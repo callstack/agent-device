@@ -258,7 +258,7 @@ async function movePointer(send: AgentBrowserSend, x: number, y: number): Promis
 }
 
 async function captureAgentBrowserSnapshot(
-  runJson: (args: string[], signal?: AbortSignal) => Promise<unknown>,
+  runJson: (args: string[]) => Promise<unknown>,
   options: WebSnapshotOptions | undefined,
 ): Promise<WebSnapshotResult> {
   const data = await runJson(buildSnapshotArgs(options));
@@ -284,7 +284,7 @@ function buildSnapshotArgs(options: WebSnapshotOptions | undefined): string[] {
 }
 
 async function fetchRefRect(
-  runJson: (args: string[], signal?: AbortSignal) => Promise<unknown>,
+  runJson: (args: string[]) => Promise<unknown>,
   ref: string,
 ): Promise<Rect | undefined> {
   try {
