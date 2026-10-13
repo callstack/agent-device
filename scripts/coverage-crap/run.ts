@@ -16,8 +16,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { parseScriptArgs } from '../lib/cli-args.ts';
-import { parseLcov, parseUnifiedDiff } from '../coverage-changed/model.ts';
-import { readChangedLinesDiff } from '../lib/repo-git.ts';
+import { parseLcov } from '../coverage-changed/model.ts';
+import { parseUnifiedDiff, readChangedLinesDiff } from '../lib/repo-git.ts';
 import { repoRelativePath } from '../lib/repo-path.ts';
 import {
   coverageMapPaths,
@@ -42,7 +42,6 @@ const USAGE = 'Usage: pnpm check:coverage-crap [--base <ref> | --all]\n';
 const COVERAGE_PATH = 'coverage/coverage-istanbul.json';
 const LCOV_PATH = 'coverage/lcov.info';
 const SANITIZED_PATH = 'coverage/fallow-crap-coverage.json';
-const DIFF_PATH = 'coverage/fallow-crap.diff';
 const FALLOW_CONFIG = 'fallow-crap.json';
 const CRAP_THRESHOLD = 30;
 const FALLOW_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
@@ -77,15 +76,13 @@ function refuse(reason: string): number {
   return 1;
 }
 
-/**
- * The diff this verdict is scoped to, written where fallow reads it. Without it there is nothing to
- * scope to, and a `fallow-crap.diff` left by an earlier run would silently supply one, so a failure
- * here is fatal rather than a scoring of the wrong lines.
- */
-function readScopedDiff(root: string, base: string): readonly TouchedFile[] {
+/** The diff this verdict is scoped to, as fallow receives it on stdin. */
+function readScopedDiff(
+  root: string,
+  base: string,
+): { diff: string; touched: readonly TouchedFile[] } {
   const diff = readChangedLinesDiff(root, base);
-  fs.writeFileSync(path.resolve(root, DIFF_PATH), diff);
-  return readTouchedFiles(parseUnifiedDiff(diff));
+  return { diff, touched: readTouchedFiles(parseUnifiedDiff(diff)) };
 }
 
 /**
@@ -106,6 +103,8 @@ type CrapInputs = Readonly<{
   mapPaths: ReadonlySet<string>;
   /** Every file the run listed in lcov, or null when it wrote nothing usable. */
   enumeratedPaths: ReadonlySet<string> | null;
+  /** The base...HEAD diff fallow scores against, on stdin; empty in `all` scope. */
+  diff: string;
   touched: readonly TouchedFile[];
   /** Records the sanitizer refused, as repo-relative paths. */
   dropped: readonly string[];
@@ -134,10 +133,11 @@ function gatherCrapInputs(
     return { refusal: `${coveragePath}: ${describe(error)}` };
   }
 
+  let diff = '';
   let touched: readonly TouchedFile[] = [];
   if (scope === 'touched') {
     try {
-      touched = readScopedDiff(root, base);
+      ({ diff, touched } = readScopedDiff(root, base));
     } catch (error: unknown) {
       return { refusal: `the diff against ${base} failed: ${describe(error)}` };
     }
@@ -152,13 +152,18 @@ function gatherCrapInputs(
   return {
     mapPaths: coverageMapPaths(map, root),
     enumeratedPaths: readEnumeratedPaths(root),
+    diff,
     touched,
     dropped: dropped.map((file) => repoRelativePath(file, root)),
   };
 }
 
 /** Scores the sanitized map, scoped to this diff in `touched` scope. */
-function runFallowHealth(root: string, scope: CrapScope): { stdout: string } | { failure: string } {
+function runFallowHealth(
+  root: string,
+  scope: CrapScope,
+  diff: string,
+): { stdout: string } | { failure: string } {
   const fallow = runCmdSync(
     process.execPath,
     [
@@ -171,13 +176,18 @@ function runFallowHealth(root: string, scope: CrapScope): { stdout: string } | {
       String(CRAP_THRESHOLD),
       '--coverage',
       SANITIZED_PATH,
-      ...(scope === 'touched' ? ['--diff-file', DIFF_PATH] : []),
+      ...(scope === 'touched' ? ['--diff-stdin'] : []),
       '--report-only',
       '--format',
       'json',
       '--quiet',
     ],
-    { cwd: root, allowFailure: true, maxBuffer: FALLOW_MAX_BUFFER_BYTES },
+    {
+      cwd: root,
+      allowFailure: true,
+      maxBuffer: FALLOW_MAX_BUFFER_BYTES,
+      ...(scope === 'touched' ? { stdin: diff } : {}),
+    },
   );
   return fallow.exitCode === 0
     ? { stdout: fallow.stdout }
@@ -201,7 +211,7 @@ function readExemptions(root: string): CrapExemptions {
 
 /** Scores what was gathered, prints the verdict, and returns the process exit code. */
 function reportCrapVerdict(root: string, scope: CrapScope, inputs: CrapInputs): number {
-  const health = runFallowHealth(root, scope);
+  const health = runFallowHealth(root, scope, inputs.diff);
   if ('failure' in health) {
     process.stderr.write(`check:coverage-crap: ${health.failure}\n`);
     return 1;

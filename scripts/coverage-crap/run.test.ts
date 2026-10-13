@@ -218,8 +218,8 @@ test('editing a function that already scores too high blocks, even though the sc
 test("the score of an untouched file is not this change's verdict", () => {
   // Half of this is the exit code: the map holds `src/debt.ts` at CRAP 42 and the run is still green,
   // which only happens if fallow filtered its findings by this diff rather than scoring the repo.
-  // The other half is that diff itself, since a flag that silently went missing would score
-  // everything and a diff built from the wrong range would look just as clean.
+  // The other half is that the diff reaches fallow on stdin and never touches the checkout, so a
+  // `fallow-crap.diff` left by an earlier run can never silently supply a scope.
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
   write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
   commit('clean edit, debt left alone');
@@ -228,9 +228,7 @@ test("the score of an untouched file is not this change's verdict", () => {
 
   assert.equal(code, 0);
   assert.doesNotMatch(out, /src\/debt\.ts:1/);
-  const scoped = fs.readFileSync(path.join(repo, 'coverage/fallow-crap.diff'), 'utf8');
-  assert.match(scoped, /^\+\+\+ b\/src\/clean\.ts$/m);
-  assert.doesNotMatch(scoped, /^\+\+\+ b\/src\/debt\.ts$/m);
+  assert.ok(!fs.existsSync(path.join(repo, 'coverage/fallow-crap.diff')));
 });
 
 test('a pure rename does not touch the functions that moved with the file', () => {
@@ -261,7 +259,7 @@ test('a rename that also edits the body owes the edited lines', () => {
 });
 
 test('deleting lines from a debt function does not charge the function that survives them', () => {
-  // Measured, not assumed: fallow's `--diff-file` index holds added lines only, so a hunk that is
+  // Measured, not assumed: fallow's diff-scoping index holds added lines only, so a hunk that is
   // nothing but removals contributes no line to intersect a function's span with, and this run
   // agrees rather than overriding it — the same reason the whole-file and pure-rename exemptions
   // exist. The residual is deliberate and not free: a deletion can even raise a surviving

@@ -20,3 +20,15 @@ export function repoRelativePath(raw: string, root?: string): string {
     .split(path.sep)
     .join('/');
 }
+
+/**
+ * An lcov record or diff path as a repo-relative posix path: relativize, then drop the `a/`-style
+ * prefixes git writes. A key from another checkout must normalize identically on both sides of
+ * every join, or the two never meet.
+ */
+export function normalizePath(raw: string, rootDir?: string): string {
+  let p = repoRelativePath(raw, rootDir);
+  if (p.startsWith('b/')) p = p.slice(2);
+  if (p.startsWith('./')) p = p.slice(2);
+  return p;
+}

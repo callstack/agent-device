@@ -1,7 +1,7 @@
 // Pure pieces of the coverage-based CRAP verdict: which Istanbul file records fallow can trust,
 // whether the two reports of one coverage run agree about what it measured, and how the scored
 // functions are rendered. run.ts owns the git, fallow, config and file I/O.
-import type { ChangedFileDiff } from '../coverage-changed/model.ts';
+import type { ChangedFileDiff } from '../lib/repo-git.ts';
 import { repoRelativePath } from '../lib/repo-path.ts';
 
 type IstanbulCounters = Readonly<{
@@ -185,7 +185,7 @@ export type TouchedFile = Readonly<{ path: string; addedLines: number }>;
 
 /**
  * The files whose lines this change edits. A pure rename, delete, or mode change adds no lines, so
- * it contributes none — which is also exactly the set of files fallow's `--diff-file` scoping can
+ * it contributes none — which is also exactly the set of files fallow's `--diff-stdin` scoping can
  * charge a finding to, since that filter indexes the same added lines.
  */
 export function readTouchedFiles(diffs: readonly ChangedFileDiff[]): TouchedFile[] {
