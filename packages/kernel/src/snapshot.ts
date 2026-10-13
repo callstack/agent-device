@@ -398,6 +398,11 @@ export type SnapshotNode = RawSnapshotNode & {
    *
    * Every consumer that offers a node as an address must read this as an absence rather than print
    * one: a ref-less node is selectable by text and by `find`/`wait`/`get`, and refused as a target.
+   *
+   * A ref-less node also carries no `rect`. Producers that mint refs measure geometry for the refs
+   * they issued (see `RawSnapshotNode.ref`), and producers that mint none get dense numbering, so
+   * every node a geometry-requiring path can reach — promotion, the touch point, the covered and
+   * keyboard refusals — has a ref. That is why those paths print `node.ref` without a guard.
    */
   ref?: string;
   /**
@@ -815,9 +820,14 @@ export function hasSnapshotRef(node: SnapshotNode): node is SnapshotNode & { ref
   return node.ref !== undefined;
 }
 
-/** The refs a node set can be re-addressed by; ref-less nodes contribute no ref evidence. */
-export function snapshotRefBodies(nodes: readonly SnapshotNode[]): string[] {
-  return nodes.flatMap((node) => (node.ref === undefined ? [] : [node.ref]));
+/**
+ * The refs a set of ref-carrying records can be re-addressed by; a record with no ref contributes no
+ * evidence. Typed over the field rather than over `SnapshotNode` so every site holding an optional
+ * ref (a node, a competitor rect, a published match) answers the same question here instead of
+ * restating the filter.
+ */
+export function snapshotRefBodies(refCarriers: readonly { ref?: string }[]): string[] {
+  return refCarriers.flatMap((carrier) => (carrier.ref === undefined ? [] : [carrier.ref]));
 }
 
 /**

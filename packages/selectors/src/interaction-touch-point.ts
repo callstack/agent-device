@@ -1,4 +1,9 @@
-import type { Point, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  snapshotRefBodies,
+  type Point,
+  type Rect,
+  type SnapshotNode,
+} from '@agent-device/kernel/snapshot';
 import { containsPoint } from '@agent-device/kernel/rect';
 import {
   areRectsApproximatelyEqual,
@@ -47,9 +52,7 @@ export function resolveInteractionTouchPoint(
   if (!point) {
     return {
       kind: 'blocked',
-      competitorRefs: competitors.flatMap((competitor) =>
-        competitor.ref === undefined ? [] : [competitor.ref],
-      ),
+      competitorRefs: snapshotRefBodies(competitors),
       competitorCount: competitors.length,
     };
   }

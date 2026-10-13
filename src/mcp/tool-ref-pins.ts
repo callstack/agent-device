@@ -178,7 +178,7 @@ function mergeSnapshotRefPins(
   // Ref-less nodes (the web backend's on-screen-but-unaddressable content) mint no pin: there is
   // no ref to pin, and an empty body would poison the scope's pin map.
   const bodies = [
-    ...(result.refs ?? []).flatMap(({ ref }) => (ref === undefined ? [] : [ref])),
+    ...snapshotRefBodies(result.refs ?? []),
     ...snapshotRefBodies(result.nodes ?? []),
   ];
   mergeIntoScopedPins(refPinsByScope, scopeKey, bodies, refsGeneration);
