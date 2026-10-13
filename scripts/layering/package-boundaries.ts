@@ -174,7 +174,9 @@ function namedByExports(target: WorkspacePackage, specifier: string): boolean {
   return resolveWorkspaceSpecifier(specifier, target.exportTargets) !== undefined;
 }
 
-const TEST_FILE_RE = /(^|\/)__tests__\/|\.test\.[cm]?[jt]sx?$|^test\//;
+// Root `test/`, package-local `packages/*/test/`, *.test.*, and __tests__ trees are all
+// test consumers — the same file vocabulary TEST_ONLY_FIXTURE_SUBPATHS' predicate uses.
+const TEST_FILE_RE = /(^|\/)__tests__\/|\.test\.[cm]?[jt]sx?$|(?:^|\/)test\//;
 
 /**
  * Façade policy (ADR-0033 amendment): a package publishes test data only under its

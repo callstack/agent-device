@@ -103,6 +103,43 @@ test('the ./testing/ refusal bites inside packages and through the vi.mock scan'
   );
 });
 
+test('a package-local test/ tree is a test consumer, its src/ tree is not', () => {
+  // The file vocabulary TEST_ONLY_FIXTURE_SUBPATHS' predicate uses: a package's
+  // own harness tree (`packages/<pkg>/test/`) imports fixtures just like the
+  // root `test/` tree does; the same file under src/ does not (#3546 review).
+  const consumer = workspacePackagesFromManifests(
+    new Map([
+      [
+        'packages/daemon-side/package.json',
+        JSON.stringify({
+          name: '@agent-device/daemon-side',
+          private: true,
+          exports: { '.': './src/index.ts' },
+          dependencies: { '@agent-device/daemon': 'workspace:*' },
+        }),
+      ],
+    ]),
+  )[0]!;
+  const fixture = '@agent-device/daemon/testing/__tests__/store-factory';
+  assert.deepEqual(
+    checkPackageInternalSites(
+      consumer,
+      sites('packages/daemon-side/test/harness.ts', fixture),
+      [daemon, consumer],
+      true,
+    ),
+    [],
+  );
+  const denied = checkPackageInternalSites(
+    consumer,
+    sites('packages/daemon-side/src/harness.ts', fixture),
+    [daemon, consumer],
+    true,
+  );
+  assert.equal(denied.length, 1);
+  assert.match(denied[0]!.message, /publishes test data to test files only/);
+});
+
 test('a pattern entry matches deep specifiers, and an unnamed one is refused in scripts/', () => {
   // uncompiled sites resolve through the pattern rather than report "not named",
   // and a spelling no entry names still reports.
