@@ -441,7 +441,7 @@ extension RunnerTests {
     return node
   }
 
-  private func snapshotHasFocus(_ snapshot: XCUIElementSnapshot) -> Bool {
+  func snapshotHasFocus(_ snapshot: XCUIElementSnapshot) -> Bool {
     return focusBool(snapshot as! NSObject)
   }
 

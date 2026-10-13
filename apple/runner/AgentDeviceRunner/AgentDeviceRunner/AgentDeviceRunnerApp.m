@@ -504,6 +504,18 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
 // avoidance or a bottom sheet extending above the keyboard does, so the neighbouring field slides
 // into the point the focus tap hit.
 - (void)agentDeviceTextEntryDidBeginEditing:(UITextField *)textField {
+  [self moveTextEntryFieldUp];
+}
+
+// Moves the field once text arrives, the way an iOS 26 bottom search bar rises above the keyboard
+// on the first character: the focus tap and the pre-entry read both find it where it started.
+- (void)agentDeviceTextEntryMovesOnInput:(UITextField *)textField {
+  if (textField.text.length > 0) {
+    [self moveTextEntryFieldUp];
+  }
+}
+
+- (void)moveTextEntryFieldUp {
   self.textEntryFieldTop.constant =
       AgentDeviceTextEntryFieldTopInset - AgentDeviceTextEntryFieldHeight - AgentDeviceTextEntryNeighbourGap;
   [self.view layoutIfNeeded];
@@ -642,6 +654,11 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       [textField addTarget:self
                     action:@selector(agentDeviceTextEntryBecomesUnqueryable:)
           forControlEvents:UIControlEventEditingDidBegin];
+    }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-moves-on-input"]) {
+      [textField addTarget:self
+                    action:@selector(agentDeviceTextEntryMovesOnInput:)
+          forControlEvents:UIControlEventEditingChanged];
     }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-moves-on-focus"]) {
       textField.text = @"stale";
