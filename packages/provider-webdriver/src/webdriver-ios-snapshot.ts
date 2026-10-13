@@ -3,10 +3,7 @@ import {
   resolveIosViewportEvidenceFromRoots,
 } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
-import {
-  annotateKeyboardOwnership,
-  observeProviderKeyboard,
-} from '@agent-device/contracts/tap-keyboard-occlusion';
+import { acquireProviderKeyboard } from '@agent-device/capture-kit/provider-keyboard-acquisition';
 import { parseWebDriverSourceFacts } from './webdriver-source.ts';
 
 const APPIUM_PRODUCER = 'appium-source' as const;
@@ -23,9 +20,8 @@ export function acquireWebDriverIosSnapshot(
     ({ kind: 'missing', reason: 'not-provided' } as const);
   return createIosSnapshotAcquisition({
     producer: APPIUM_PRODUCER,
-    nodes: annotateKeyboardOwnership(sourceFacts.nodes),
     viewport,
-    keyboard: observeProviderKeyboard({
+    ...acquireProviderKeyboard({
       nodes: sourceFacts.nodes,
       viewport: viewport.kind === 'missing' ? null : viewport.rect,
       visibility,

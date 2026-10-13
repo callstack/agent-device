@@ -104,6 +104,19 @@ export function readSnapshotKeyboardBandFact(value: unknown): SnapshotKeyboardBa
       ? { kind: 'unmeasurable', reason: value.reason }
       : { kind: 'unmeasurable', reason: 'unreported-reason' };
   }
+  if (value.kind === 'tree-rejected') {
+    if (value.derivation !== 'docked-tree') {
+      return { kind: 'unmeasurable', reason: 'unrecognized-derivation' };
+    }
+    if (value.visible !== undefined && typeof value.visible !== 'boolean') {
+      return { kind: 'unmeasurable', reason: 'invalid-visibility-probe' };
+    }
+    return {
+      kind: 'tree-rejected',
+      derivation: 'docked-tree',
+      ...(typeof value.visible === 'boolean' ? { visible: value.visible } : {}),
+    };
+  }
   if (value.kind === 'visibility-only') {
     return typeof value.visible === 'boolean'
       ? { kind: 'visibility-only', visible: value.visible }

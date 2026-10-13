@@ -288,15 +288,27 @@ The response-level `keyboard` field tells you what the capture observed:
 - `visible` carries a directly measured `frame` in the same coordinates as node bounds.
 - `derived` carries a `frame` inferred from a docked keyboard tree, with `derivation: "docked-tree"`.
 - `visibility-only` carries a boolean `visible` from a provider probe, without a frame.
+- `tree-rejected` means the full tree was checked with a usable viewport but could not establish a
+  docked band. Its optional `visible` carries probe visibility. Projecting that tree does not retry
+  the rejected geometry.
 - `absent` means the producer explicitly established absence.
 - `unmeasurable` carries a `reason` when the producer cannot establish a frame or visibility.
 
-Appium iOS and Android snapshots include the visibility probe; Appium iOS and limrun iOS can also
-report a derived docked band. Missing keyboard nodes never mean the keyboard is hidden. Element taps
-use measured or derived frames to refuse a target behind the keyboard. A positive visibility probe
-alone cannot establish occlusion. When tree geometry cannot establish a docked band, visibility-only evidence may establish presence
-or absence but cannot locate the band.
+Appium iOS and Android snapshots include a visibility probe. Each capture, including a `wait` poll
+or the capture before `fill`, adds one sequential probe with a 500 ms timeout. A timeout leaves the
+probe unknown; it does not discard the tree. Appium iOS and limrun iOS can also report a derived docked
+band during capture. Android Appium can derive the band when a tap resolves the tree's viewport.
+
+Missing keyboard nodes never mean the keyboard is hidden. A positive probe establishes presence but
+cannot locate the covered area. A negative probe establishes absence only when the tree also resolves
+no docked band. Neither probe result overrides a resolvable docked tree. Element taps use measured or
+derived frames to refuse an app target whose dispatched tap point is behind the keyboard.
 Run `snapshot -i` again after ending editing before retrying a refused target.
+
+Provider snapshot nodes may include `keyboardOwned: true`. This means capture witnessed keyboard
+ownership, so the keyboard's own controls remain tappable when projection removes their ancestors.
+An omitted field does not prove app ownership. App-filled assistant hosts do not pass keyboard
+ownership to their descendants.
 
 The Android keyboard band is the input method window's bounds, the box around the area it takes
 touches in. On Android 13 (API 33) and later the helper also checks that this area is one rectangle.

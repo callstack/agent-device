@@ -362,13 +362,15 @@ export type HiddenContentHint = {
  * Keyboard evidence observed during acquisition, in the capture's node coordinate space.
  * `visible` is a measured frame; `derived` is a frame established by the shared docked-tree
  * policy before projection; `visibility-only` is a boolean probe with no geometry;
- * `unmeasurable` is unknown. `absent` requires an explicit absence observation.
+ * `tree-rejected` records rejected geometry evaluated against a usable viewport, with optional
+ * probe visibility; `unmeasurable` is unknown. `absent` requires an explicit absence observation.
  * Missing keyboard nodes or an omitted fact never prove absence.
  */
 export type SnapshotKeyboardBandFact =
   | { kind: 'visible'; frame: Rect }
   | { kind: 'derived'; derivation: 'docked-tree'; frame: Rect }
   | { kind: 'visibility-only'; visible: boolean }
+  | { kind: 'tree-rejected'; derivation: 'docked-tree'; visible?: boolean }
   | { kind: 'absent' }
   | { kind: 'unmeasurable'; reason: string };
 

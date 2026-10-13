@@ -267,7 +267,7 @@ export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & 
   systemSurface?: IosSystemSurfaceProvenance;
   /**
    * Keyboard evidence acquired with this tree: measured `visible`, policy-derived `derived`,
-   * probe-only `visibility-only`, proven `absent`, or unknown `unmeasurable` facts. Measured and
+   * additive `visibility-only`, rejected `tree-rejected`, proven `absent`, or unknown `unmeasurable` facts. Measured and
    * derived frames survive projection and take precedence over tree reconstruction. Visibility-only
    * facts carry no band; rejected acquisition geometry stays rejected. Other failed measurements or
    * an omitted fact may use tree geometry, but missing nodes never prove absence.

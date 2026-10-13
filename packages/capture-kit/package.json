@@ -317,6 +317,10 @@
     "./durable-capture/session-binding": {
       "types": "./src/durable-capture/session-binding.ts",
       "default": "./src/durable-capture/session-binding.ts"
+    },
+    "./provider-keyboard-acquisition": {
+      "types": "./src/provider-keyboard-acquisition.ts",
+      "default": "./src/provider-keyboard-acquisition.ts"
     }
   },
   "devDependencies": {

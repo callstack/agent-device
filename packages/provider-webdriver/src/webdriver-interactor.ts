@@ -47,6 +47,7 @@ const TEXT_ENTRY_READINESS_POLL_MS = 100;
  * WebDriver client's much longer default request timeout.
  */
 const TEXT_ENTRY_PROBE_TIMEOUT_MS = 1_500;
+const SNAPSHOT_KEYBOARD_PROBE_TIMEOUT_MS = 500;
 
 const SNAPSHOT_VIEWPORT_PROBE_TIMEOUT_MS = 500;
 
@@ -336,9 +337,9 @@ class WebDriverInteractor implements Interactor {
       return acquireWebDriverIosSnapshot(source, this.targetId, visibility);
     }
     const { parseWebDriverAndroidSnapshotNodes } = await import('./webdriver-android-source.ts');
-    const { annotateKeyboardOwnership, observeProviderKeyboard } =
-      await import('@agent-device/contracts/tap-keyboard-occlusion');
-    const nodes = annotateKeyboardOwnership(parseWebDriverAndroidSnapshotNodes(source));
+    const { acquireProviderKeyboard } =
+      await import('@agent-device/capture-kit/provider-keyboard-acquisition');
+    const nodes = parseWebDriverAndroidSnapshotNodes(source);
     const viewportAfter =
       viewportBefore === undefined ? undefined : await this.readAndroidSnapshotViewport(signal);
     const viewport =
@@ -351,8 +352,7 @@ class WebDriverInteractor implements Interactor {
     return {
       backend: 'android' as const,
       producer: 'appium-source' as const,
-      nodes,
-      keyboard: observeProviderKeyboard({ nodes, viewport: null, visibility }),
+      ...acquireProviderKeyboard({ nodes, viewport: null, visibility }),
       ...(viewport === undefined ? {} : { viewport }),
     };
   }
@@ -379,7 +379,10 @@ class WebDriverInteractor implements Interactor {
     signal?: AbortSignal,
   ): Promise<boolean | 'unsupported' | 'failed'> {
     try {
-      const visibility = await this.client.isKeyboardShown(TEXT_ENTRY_PROBE_TIMEOUT_MS, signal);
+      const visibility = await this.client.isKeyboardShown(
+        SNAPSHOT_KEYBOARD_PROBE_TIMEOUT_MS,
+        signal,
+      );
       signal?.throwIfAborted();
       return visibility;
     } catch {

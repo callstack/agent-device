@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
+import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { resolveKeyboardTapOcclusion } from '@agent-device/contracts/tap-keyboard-occlusion';
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
@@ -933,7 +934,7 @@ test('snapshot carries a bounded visibility probe on both Appium platforms', asy
           ? { kind: 'visibility-only', visible }
           : { kind: 'unmeasurable', reason: `keyboard-visibility-probe-${visible}` },
       );
-      assert.deepEqual(probe.mock.calls, [[1_500, controller.signal]]);
+      assert.deepEqual(probe.mock.calls, [[500, controller.signal]]);
     }
   }
 });
@@ -957,33 +958,38 @@ test('snapshot cancellation during an optional keyboard probe is not swallowed',
   );
 });
 
-test('Android acquisition cannot derive a docked IME from app content bounds', async () => {
-  const interactor = createWebDriverInteractor({
-    client: {
-      source: async () =>
-        '<hierarchy><node class="android.widget.FrameLayout" resource-id="com.android.systemui:id/status_bar" bounds="[0,0][1080,100]"/><node class="android.widget.FrameLayout" bounds="[0,100][1080,2400]"><node class="android.widget.Button" text="Form" bounds="[100,1800][300,1840]"/></node><node class="android.widget.FrameLayout" resource-id="com.google.android.inputmethod.latin:id/input_view" bounds="[0,1500][1080,2400]"/></hierarchy>',
-      isKeyboardShown: async () => true,
-    } as unknown as WebDriverClient,
-    backend: 'android',
-    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
-  });
-  const snapshot = await interactor.snapshot();
-  assert.ok(!('stage' in snapshot));
-  assert.deepEqual(snapshot.keyboard, { kind: 'visibility-only', visible: true });
-  assert.ok(snapshot.nodes);
-  const form = snapshot.nodes.find((node) => node.label === 'Form')!;
-  assert.equal(
-    resolveKeyboardTapOcclusion({
-      nodes: [form],
-      node: form,
-      viewport: null,
-      point: { x: 200, y: 1820 },
-      keyboard: snapshot.keyboard,
-    }).kind,
-    'undetermined',
-  );
-  assert.equal(
-    snapshot.nodes.find((node) => node.identifier?.includes('input_view'))?.keyboardOwned,
-    true,
-  );
-});
+test.each([true, false, 'failed'] as const)(
+  'Android probe %s preserves tap-time docked IME derivation with a tree-resolved viewport',
+  async (visibility) => {
+    const interactor = createWebDriverInteractor({
+      client: {
+        source: async () =>
+          '<hierarchy><node class="android.widget.FrameLayout" resource-id="com.android.systemui:id/status_bar" bounds="[0,0][1080,100]"/><node class="android.widget.FrameLayout" bounds="[0,100][1080,2400]"><node class="android.widget.Button" text="Form" bounds="[100,1800][300,1840]"/></node><node class="android.widget.FrameLayout" resource-id="com.google.android.inputmethod.latin:id/input_view" bounds="[0,1500][1080,2400]"/></hierarchy>',
+        isKeyboardShown: async () => {
+          if (visibility === 'failed') throw new Error('probe failed');
+          return visibility;
+        },
+      } as unknown as WebDriverClient,
+      backend: 'android',
+      capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
+    });
+    const snapshot = await interactor.snapshot();
+    assert.ok(!('stage' in snapshot));
+    assert.ok(snapshot.nodes);
+    const form = snapshot.nodes.find((node) => node.label === 'Form')!;
+    assert.equal(
+      resolveKeyboardTapOcclusion({
+        nodes: snapshot.nodes,
+        node: form,
+        viewport: createSnapshotVisibility(snapshot.nodes).resolveViewport(form.rect!),
+        point: { x: 200, y: 1820 },
+        keyboard: snapshot.keyboard,
+      }).kind,
+      'occluded',
+    );
+    assert.equal(
+      snapshot.nodes.find((node) => node.identifier?.includes('input_view'))?.keyboardOwned,
+      true,
+    );
+  },
+);

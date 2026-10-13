@@ -42,8 +42,6 @@ import { normalizeType } from './snapshot-text.ts';
 /** The one reason a tap refuses because the visible keyboard owns its tap point. */
 export const TAP_KEYBOARD_OCCLUDES_TARGET_REASON = 'tap_keyboard_occludes_target';
 
-const KEYBOARD_TREE_GEOMETRY_UNUSABLE_REASON = 'keyboard-tree-geometry-unusable';
-
 /**
  * The hint every owner publishes beside the reason, naming the recovery that actually works.
  * `keyboard dismiss` taps the keyboard's own dismiss control and refuses when it exposes none
@@ -356,29 +354,25 @@ export function observeProviderKeyboard(params: {
 }): SnapshotKeyboardBandFact {
   const surface = resolveVisibleKeyboardSurface(params.nodes, params.viewport);
   if (surface) return { kind: 'derived', derivation: 'docked-tree', frame: surface.frame };
+  if (isMeasurableViewport(params.viewport) && params.nodes.some(isKeyboardAnchorNode)) {
+    return {
+      kind: 'tree-rejected',
+      derivation: 'docked-tree',
+      ...(typeof params.visibility === 'boolean' ? { visible: params.visibility } : {}),
+    };
+  }
   if (typeof params.visibility === 'boolean') {
     return { kind: 'visibility-only', visible: params.visibility };
   }
   return {
     kind: 'unmeasurable',
-    reason: params.nodes.some(isKeyboardAnchorNode)
-      ? KEYBOARD_TREE_GEOMETRY_UNUSABLE_REASON
-      : params.visibility === 'failed'
+    reason:
+      params.visibility === 'failed'
         ? 'keyboard-visibility-probe-failed'
         : params.visibility === 'unsupported'
           ? 'keyboard-visibility-probe-unsupported'
           : 'keyboard-not-observed',
   };
-}
-
-function keyboardFactDisallowsTreeDerivation(
-  keyboard: SnapshotKeyboardBandFact | undefined,
-): boolean {
-  return (
-    keyboard?.kind === 'visibility-only' ||
-    (keyboard?.kind === 'unmeasurable' &&
-      keyboard.reason === KEYBOARD_TREE_GEOMETRY_UNUSABLE_REASON)
-  );
 }
 
 /**
@@ -394,9 +388,11 @@ function keyboardFactDisallowsTreeDerivation(
  * acquisition. Keyboard ownership on surviving nodes retains its acquisition witness after projection.
  * The keyboard's own controls still come from the
  * tree — which node the keyboard rather than the app is responsible for is a different question from
- * where the band is, and only the tree can answer it. Visibility-only observations carry no band, and
- * rejected acquisition geometry stays rejected
- * after projection. Other failed direct measurements may still use the tree; missing nodes remain
+ * where the band is, and only the tree can answer it. Visibility-only observations are additive and never prevent
+ * tree derivation. Only
+ * `tree-rejected` records a failed full-tree evaluation with a usable viewport and prevents
+ * reconstruction after projection. Other failed direct measurements may still use the tree;
+ * missing nodes remain
  * undetermined.
  */
 export function resolveKeyboardTapOcclusion(params: {
@@ -408,19 +404,21 @@ export function resolveKeyboardTapOcclusion(params: {
   /** This capture's measured, acquisition-derived, visibility-only, or unknown keyboard evidence. */
   keyboard?: SnapshotKeyboardBandFact;
 }): KeyboardTapOcclusion {
-  if (
-    params.keyboard?.kind === 'absent' ||
-    (params.keyboard?.kind === 'visibility-only' && !params.keyboard.visible)
-  ) {
-    return { kind: 'no-keyboard' };
+  if (params.keyboard?.kind === 'absent') return { kind: 'no-keyboard' };
+  if (params.keyboard?.kind === 'tree-rejected') {
+    return { kind: params.keyboard.visible === false ? 'no-keyboard' : 'undetermined' };
   }
-  if (keyboardFactDisallowsTreeDerivation(params.keyboard)) return { kind: 'undetermined' };
   const surface =
     params.keyboard?.kind === 'visible' || params.keyboard?.kind === 'derived'
       ? { frame: params.keyboard.frame, controlRects: collectKeyboardControlRects(params.nodes) }
       : resolveVisibleKeyboardSurface(params.nodes, params.viewport);
   if (!surface) {
-    return { kind: 'undetermined' };
+    return {
+      kind:
+        params.keyboard?.kind === 'visibility-only' && !params.keyboard.visible
+          ? 'no-keyboard'
+          : 'undetermined',
+    };
   }
   if (!params.node) return classifyKeyboardPoint(params.point, surface);
   // A resolved element is excused only by belonging to the keyboard, never by sitting under a key:

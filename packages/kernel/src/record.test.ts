@@ -83,7 +83,30 @@ test('keyboard provenance validation rejects malformed derived bands and visibil
       'invalid-derived-frame',
     ],
     [{ kind: 'visibility-only', visible: 'false' }, 'invalid-visibility-probe'],
+    [{ kind: 'tree-rejected' }, 'unrecognized-derivation'],
+    [
+      { kind: 'tree-rejected', derivation: 'docked-tree', visible: 'true' },
+      'invalid-visibility-probe',
+    ],
   ] as const) {
     assert.deepEqual(readSnapshotKeyboardBandFact(fact), { kind: 'unmeasurable', reason });
   }
+});
+
+test('typed tree rejection preserves optional visibility without trusting a reason string', () => {
+  for (const visible of [undefined, true, false]) {
+    const fact = {
+      kind: 'tree-rejected',
+      derivation: 'docked-tree',
+      ...(visible === undefined ? {} : { visible }),
+    };
+    assert.deepEqual(readSnapshotKeyboardBandFact(fact), fact);
+  }
+  assert.deepEqual(
+    readSnapshotKeyboardBandFact({
+      kind: 'unmeasurable',
+      reason: 'keyboard-tree-geometry-unusable',
+    }),
+    { kind: 'unmeasurable', reason: 'keyboard-tree-geometry-unusable' },
+  );
 });

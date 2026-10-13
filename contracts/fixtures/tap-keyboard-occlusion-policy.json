@@ -5,6 +5,172 @@
   },
   "cases": [
     {
+      "name": "Gboard docked tree + visibility-only:true -> occluded",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 2400
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 2400
+          }
+        },
+        {
+          "index": 1,
+          "type": "android.widget.Button",
+          "label": "Submit",
+          "bundleId": "com.example.app",
+          "parentIndex": 0,
+          "rect": {
+            "x": 440,
+            "y": 1800,
+            "width": 200,
+            "height": 120
+          }
+        },
+        {
+          "index": 2,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 1517,
+            "width": 1080,
+            "height": 883
+          }
+        },
+        {
+          "index": 8,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 1517,
+          "width": 1080,
+          "height": 883
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        ]
+      },
+      "keyboard": {
+        "kind": "visibility-only",
+        "visible": true
+      }
+    },
+    {
+      "name": "Gboard docked tree + visibility-only:false -> occluded",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 2400
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 2400
+          }
+        },
+        {
+          "index": 1,
+          "type": "android.widget.Button",
+          "label": "Submit",
+          "bundleId": "com.example.app",
+          "parentIndex": 0,
+          "rect": {
+            "x": 440,
+            "y": 1800,
+            "width": 200,
+            "height": 120
+          }
+        },
+        {
+          "index": 2,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 1517,
+            "width": 1080,
+            "height": 883
+          }
+        },
+        {
+          "index": 8,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 1517,
+          "width": 1080,
+          "height": 883
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        ]
+      },
+      "keyboard": {
+        "kind": "visibility-only",
+        "visible": false
+      }
+    },
+    {
       "name": "iPhone tab-bar item whose center is under the key plane is refused",
       "viewport": {
         "x": 0,
@@ -4353,8 +4519,8 @@
         "index": 1
       },
       "keyboard": {
-        "kind": "unmeasurable",
-        "reason": "keyboard-tree-geometry-unusable"
+        "kind": "tree-rejected",
+        "derivation": "docked-tree"
       },
       "expected": {
         "kind": "undetermined"
@@ -4598,6 +4764,89 @@
             "height": 264
           }
         ]
+      }
+    },
+    {
+      "name": "an unknown producer reason cannot reject docked tree geometry",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 2400
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 2400
+          }
+        },
+        {
+          "index": 1,
+          "type": "android.widget.Button",
+          "label": "Submit",
+          "bundleId": "com.example.app",
+          "parentIndex": 0,
+          "rect": {
+            "x": 440,
+            "y": 1800,
+            "width": 200,
+            "height": 120
+          }
+        },
+        {
+          "index": 2,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 1517,
+            "width": 1080,
+            "height": 883
+          }
+        },
+        {
+          "index": 8,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 1517,
+          "width": 1080,
+          "height": 883
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        ]
+      },
+      "keyboard": {
+        "kind": "unmeasurable",
+        "reason": "keyboard-tree-geometry-unusable"
       }
     }
   ]

@@ -95,8 +95,8 @@ test('an offscreen provider keyboard never publishes an empty derived frame', ()
     '<XCUIElementTypeKeyboard x="0" y="844" width="390" height="233" /></XCUIElementTypeApplication>',
   );
   assert.deepEqual(acquireWebDriverIosSnapshot(source).acquisition.keyboard, {
-    kind: 'unmeasurable',
-    reason: 'keyboard-tree-geometry-unusable',
+    kind: 'tree-rejected',
+    derivation: 'docked-tree',
   });
 });
 
@@ -127,3 +127,24 @@ test.each([
   assert.equal(acquired.nodes.find((node) => node.role === role)?.keyboardOwned, true);
   assert.equal(acquired.nodes.find((node) => node.label === 'Done')?.keyboardOwned, true);
 });
+
+test.each([true, false, 'failed'] as const)(
+  'Appium iOS probe %s without a viewport preserves later tree derivation',
+  (visibility) => {
+    const source =
+      '<AppiumAUT><XCUIElementTypeOther><XCUIElementTypeOther x="0" y="0" width="390" height="844"><XCUIElementTypeButton name="Continue" x="20" y="700" width="100" height="40" /></XCUIElementTypeOther><XCUIElementTypeKeyboard x="0" y="580" width="390" height="264" /></XCUIElementTypeOther></AppiumAUT>';
+    const acquired = acquireWebDriverIosSnapshot(source, undefined, visibility).acquisition;
+    assert.equal(acquired.viewport.kind, 'missing');
+    const node = acquired.nodes.find((node) => node.label === 'Continue')!;
+    assert.equal(
+      resolveKeyboardTapOcclusion({
+        nodes: acquired.nodes,
+        node,
+        viewport: { x: 0, y: 0, width: 390, height: 844 },
+        point: { x: 70, y: 720 },
+        keyboard: acquired.keyboard,
+      }).kind,
+      'occluded',
+    );
+  },
+);

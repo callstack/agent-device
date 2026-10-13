@@ -118,5 +118,5 @@ test('Limrun carries docked tree evidence and never infers absence from missing 
   tree.children!.at(-1)!.frame = { x: 100, y: 60, width: 140, height: 80 };
   expect(
     (await captureLimrunIosSnapshot(createLimrunSnapshotSession(tree))).acquisition.keyboard,
-  ).toEqual({ kind: 'unmeasurable', reason: 'keyboard-tree-geometry-unusable' });
+  ).toEqual({ kind: 'tree-rejected', derivation: 'docked-tree' });
 });
