@@ -9,17 +9,14 @@ import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapsho
  */
 export const ANDROID_SYSTEM_CHROME_PACKAGE = 'com.android.systemui';
 
-/**
- * Resource-ids of the status-bar / navigation-bar WINDOW containers. Matched as an id
- * segment, not a prefix, so an expanded shade's `split_shade_status_bar` counts.
- */
+/** Persistent bar roots and the shade header whose icon churn settle ignores. */
 export function isAndroidSystemChromeWindowResourceId(
   resourceId: string | null | undefined,
 ): boolean {
-  const identifier = resourceId ?? '';
-  if (!identifier.startsWith(`${ANDROID_SYSTEM_CHROME_PACKAGE}:id/`)) return false;
-  const leaf = identifier.slice(`${ANDROID_SYSTEM_CHROME_PACKAGE}:id/`.length);
-  return /(^|_)(status_bar|navigation_bar)(_|$)/.test(leaf);
+  return (
+    androidSystemBarMembership(ANDROID_SYSTEM_CHROME_PACKAGE, resourceId) !== undefined ||
+    resourceId === 'com.android.systemui:id/split_shade_status_bar'
+  );
 }
 
 /**

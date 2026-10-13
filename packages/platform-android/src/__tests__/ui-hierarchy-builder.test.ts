@@ -1,3 +1,5 @@
+import { attachRefs } from '@agent-device/kernel/snapshot';
+import { withoutSettleChrome } from '@agent-device/capture-kit/snapshot-chrome';
 import { expect, test } from 'vitest';
 import { parseUiHierarchyTree } from '../ui-hierarchy.ts';
 import { buildUiHierarchySnapshot } from '../ui-hierarchy-builder.ts';
@@ -48,6 +50,11 @@ test('system-bar membership survives omitted containers and stays separate from 
     const { nodes } = buildUiHierarchySnapshot(tree, undefined, options);
     expect(nodes.find((node) => node.label === 'Back')?.systemBar).toBe('navigation');
     if (options.scope) continue;
+    expect(
+      withoutSettleChrome(attachRefs(nodes), 'com.example').some(
+        (node) => node.label === 'Notification',
+      ),
+    ).toBe(true);
     if (!options.interactiveOnly)
       expect(nodes.find((node) => node.label === 'Clock')?.systemBar).toBe('status');
     for (const label of [

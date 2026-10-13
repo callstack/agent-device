@@ -39,4 +39,10 @@ test('shade settle provenance is private and does not imply public bar membershi
   const identifier = 'com.android.systemui:id/split_shade_status_bar';
   expect(isAndroidSystemChromeWindowResourceId(identifier)).toBe(true);
   expect(androidSystemBarMembership('com.android.systemui', identifier)).toBeUndefined();
+  expect(
+    isAndroidSystemChromeWindowResourceId('com.android.systemui:id/status_bar_notification_row'),
+  ).toBe(false);
+  expect(
+    isAndroidSystemChromeWindowResourceId('com.android.systemui:id/navigation_bar_dialog'),
+  ).toBe(false);
 });

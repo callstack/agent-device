@@ -5,6 +5,7 @@ import {
   scrollFrameFromAndroidWebDriverSource,
   scrollFrameFromIosWebDriverSource,
 } from './webdriver-scroll-frame.ts';
+import { withoutSettleChrome } from '@agent-device/capture-kit/snapshot-chrome';
 import { parseWebDriverSourceFacts } from './webdriver-source.ts';
 
 test('Android WebDriver facts keep platform defaults and derive hittability from geometry', () => {
@@ -369,5 +370,14 @@ test('Android WebDriver carries package identity and system-bar membership per s
     parseWebDriverSourceFacts(source, 'ios').nodes.every(
       (node) => !('systemBar' in node) && !('bundleId' in node),
     ),
+  );
+});
+
+test('Android Appium popup ids containing status_bar stay actionable through chrome classification', () => {
+  const source = `<hierarchy><android.widget.Button package="com.android.systemui" resource-id="com.android.systemui:id/status_bar_notification_row" text="Open notification" bounds="[0,0][100,40]" /></hierarchy>`;
+  const nodes = attachRefs(parseWebDriverSourceFacts(source, 'android').nodes);
+  assert.deepEqual(
+    withoutSettleChrome(nodes, 'com.example').map((node) => node.label),
+    ['Open notification'],
   );
 });
