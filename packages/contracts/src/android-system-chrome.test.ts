@@ -48,17 +48,20 @@ test('bar inheritance requires SystemUI ownership at each edge', () => {
   ).toBeUndefined();
 });
 
-test('shade settle provenance is private and does not imply public bar membership', () => {
-  const identifier = 'com.android.systemui:id/split_shade_status_bar';
-  expect(isAndroidSystemChromeWindowResourceId(identifier)).toBe(true);
-  expect(androidSystemBarMembership('com.android.systemui', identifier)).toBeUndefined();
-  expect(
-    isAndroidSystemChromeWindowResourceId('com.android.systemui:id/status_bar_notification_row'),
-  ).toBe(false);
-  expect(
-    isAndroidSystemChromeWindowResourceId('com.android.systemui:id/navigation_bar_dialog'),
-  ).toBe(false);
-});
+test.each(['split_shade_status_bar', 'keyguard_status_bar'])(
+  '%s settle provenance is private and does not imply public bar membership',
+  (leaf) => {
+    const identifier = `com.android.systemui:id/${leaf}`;
+    expect(isAndroidSystemChromeWindowResourceId(identifier)).toBe(true);
+    expect(androidSystemBarMembership('com.android.systemui', identifier)).toBeUndefined();
+    expect(
+      isAndroidSystemChromeWindowResourceId('com.android.systemui:id/status_bar_notification_row'),
+    ).toBe(false);
+    expect(
+      isAndroidSystemChromeWindowResourceId('com.android.systemui:id/navigation_bar_dialog'),
+    ).toBe(false);
+  },
+);
 
 test.each(['com.android.launcher3', 'com.google.android.apps.nexuslauncher'])(
   'launcher navigation is the navbuttons subtree only: %s',

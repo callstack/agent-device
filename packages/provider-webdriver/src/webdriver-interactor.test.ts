@@ -271,10 +271,10 @@ test('iOS WebDriver interactor routes snapshots through the acquisition adapter'
   assert.equal(result.acquisition.nodes[0]?.type, 'XCUIElementTypeApplication');
 });
 
-test('Android WebDriver interactor keeps legacy-derived source facts at its call site', async () => {
+test('Android WebDriver interactor returns source facts with system-bar membership', async () => {
   const source = vi.fn(
     async () =>
-      '<hierarchy rotation="0"><android.widget.Button bounds="[0,0][100,40]" displayed="true" enabled="true" /></hierarchy>',
+      '<hierarchy rotation="0"><android.widget.FrameLayout index="0" class="android.widget.FrameLayout" package="com.android.systemui" resource-id="com.android.systemui:id/status_bar" bounds="[0,0][100,40]"><android.widget.Button index="0" class="android.widget.Button" package="com.android.systemui" bounds="[0,0][100,40]" displayed="true" enabled="true" /></android.widget.FrameLayout></hierarchy>',
   );
   const interactor = createWebDriverInteractor({
     client: { source } as unknown as WebDriverClient,
@@ -287,8 +287,13 @@ test('Android WebDriver interactor keeps legacy-derived source facts at its call
   if ('stage' in result) throw new Error('Android snapshot must be presented by the interactor');
   assert.equal(result.backend, 'android');
   assert.equal(result.nodes?.[0]?.type, 'hierarchy');
-  assert.equal(result.nodes?.[1]?.type, 'android.widget.Button');
-  assert.equal(result.nodes?.[1]?.hittable, true);
+  assert.equal(result.nodes?.[1]?.type, 'android.widget.FrameLayout');
+  assert.equal(result.nodes?.[2]?.type, 'android.widget.Button');
+  assert.equal(result.nodes?.[2]?.hittable, true);
+  for (const node of result.nodes!.slice(1)) {
+    assert.equal(node.bundleId, 'com.android.systemui');
+    assert.equal(node.systemBar, 'status');
+  }
   assert.equal(source.mock.calls.length, 1);
 });
 

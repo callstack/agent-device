@@ -9,13 +9,14 @@ import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapsho
  */
 export const ANDROID_SYSTEM_CHROME_PACKAGE = 'com.android.systemui';
 
-/** Persistent bar roots and the shade header whose icon churn settle ignores. */
+/** Persistent bar roots and shade/keyguard headers whose icon churn settle ignores. */
 export function isAndroidSystemChromeWindowResourceId(
   resourceId: string | null | undefined,
 ): boolean {
   return (
     androidSystemBarMembership(ANDROID_SYSTEM_CHROME_PACKAGE, resourceId) !== undefined ||
-    resourceId === 'com.android.systemui:id/split_shade_status_bar'
+    resourceId === 'com.android.systemui:id/split_shade_status_bar' ||
+    resourceId === 'com.android.systemui:id/keyguard_status_bar'
   );
 }
 

@@ -61,7 +61,7 @@ test('Android native wrappers retain unknown ownership barriers for membership a
   const nodes = parseWebDriverAndroidSnapshotNodes(
     `<hierarchy>
     <android.widget.FrameLayout package="com.android.systemui" resource-id="com.android.systemui:id/status_bar">
-      <android.widget.FrameLayout>
+      <android.widget.FrameLayout index="0" class="android.widget.FrameLayout" bounds="[0,0][100,40]">
         <android.widget.Button package="com.android.systemui" text="Unknown subtree action" bounds="[0,0][100,40]" />
       </android.widget.FrameLayout>
     </android.widget.FrameLayout>

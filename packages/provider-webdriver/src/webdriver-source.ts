@@ -117,10 +117,8 @@ function appendSourceNodes(
 }
 
 function isSourceContainer(xmlNode: XmlNode, platform: WebDriverSourcePlatform): boolean {
+  if (Object.keys(xmlNode.attributes).length === 0) return true;
   const name = xmlNode.name.toLowerCase();
-  if (Object.keys(xmlNode.attributes).length === 0) {
-    return platform === 'ios' || name === 'hierarchy';
-  }
   return platform === 'ios' && (name === 'hierarchy' || name === 'appiumaut');
 }
 
