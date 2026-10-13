@@ -188,6 +188,15 @@ files have no seam (published facade, public-type collision, root dependency fac
   moved there by [#3297](https://github.com/callstack/agent-device/pull/3297)) are now
   `packages/daemon-contracts/src/` behind narrow per-file subpath exports.
 
+2026-10-13 (11b, #3546): `src/daemon/` moved to `packages/daemon/src/` as
+`@agent-device/daemon`. Its export surface settles on a façade, not importer reach:
+one named subpath per production/script consumer, plus ONE `./testing/*` pattern
+entry publishing test data that R11 refuses for any non-test importer (a package
+test double reached through the boundary is production code depending on a fake).
+`internal/` modules are reached only by tests living inside the package. Moving the
+`daemon-request` wire types down to `@agent-device/daemon-contracts` so the client
+stops depending on the server package is a follow-up, keeping 11b a pure move.
+
 ## Refuted alternatives
 
 - **Move every ≥80% community match into its dominant zone.** Rejected: the measure is
