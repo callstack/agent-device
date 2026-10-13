@@ -241,3 +241,15 @@ test('an unmeasurable fact leaves every golden-table decision exactly as the tre
     assert.deepEqual(withFact, treeOnly, fixture.name);
   }
 });
+
+test('keyboard anchors without an acquisition viewport name the missing geometry and preserve tap derivation', () => {
+  const fixture = tableCase('Gboard docked tree + visibility-only:true -> occluded');
+  const fact = observeProviderKeyboard({ nodes: fixture.nodes, viewport: null });
+  assert.deepEqual(fact, { kind: 'unmeasurable', reason: 'keyboard-viewport-unavailable' });
+  assert.equal(resolveWithFact(fixture, fact).kind, 'occluded');
+  const noKeyboard = tableCase('no keyboard in the tree means nothing to refuse');
+  assert.deepEqual(observeProviderKeyboard({ nodes: noKeyboard.nodes, viewport: null }), {
+    kind: 'unmeasurable',
+    reason: 'keyboard-not-observed',
+  });
+});

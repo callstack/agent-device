@@ -366,8 +366,9 @@ export function observeProviderKeyboard(params: {
   }
   return {
     kind: 'unmeasurable',
-    reason:
-      params.visibility === 'failed'
+    reason: params.nodes.some(isKeyboardAnchorNode)
+      ? 'keyboard-viewport-unavailable'
+      : params.visibility === 'failed'
         ? 'keyboard-visibility-probe-failed'
         : params.visibility === 'unsupported'
           ? 'keyboard-visibility-probe-unsupported'
