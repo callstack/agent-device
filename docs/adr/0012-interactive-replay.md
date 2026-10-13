@@ -730,7 +730,7 @@ path — no text editing, no silent similarity-heal.
 
 **Core mechanism — the healed script IS `session.actions`.** No new splice engine. `session.actions`
 already accumulates every executed action for the session's lifetime
-(`packages/daemon/src/session-action-recorder.ts:37`, unconditional push), and the divergence refusal is
+(`packages/daemon/src/session-action-recorder.ts:92`, unconditional push), and the divergence refusal is
 pre-dispatch (target verification refuses before the device action, decision 3), so a divergent step is
 never pushed. Across a repair session: original steps that verified and dispatched land in
 `session.actions`; the divergent step is absent (refused pre-dispatch, never recorded); the agent's
@@ -772,7 +772,7 @@ works" and "healed scripts are always valid":
   divergence at step N and the corrective action, the agent must continue with `replay --from k
   --plan-digest <original>`, not a fresh full `replay`. A full re-replay on the same session re-appends
   the already-recorded prefix `1..N-1` to `session.actions` — duplication, because
-  `session-action-recorder.ts:37` pushes unconditionally and replay dispatch does not inject `noRecord`.
+  `session-action-recorder.ts:92` pushes unconditionally and replay dispatch does not inject `noRecord`.
   The two sub-flows differ in `k`: app-state uses `k = N` (re-run the unchanged step after fixing state);
   selector-drift uses `k = N + 1` (the agent already performed step N manually; do not re-run it).
 - **R3 — a mechanical `repairHint` on the divergence payload gates the sub-flow; no LLM-only routing.**
@@ -809,7 +809,7 @@ works" and "healed scripts are always valid":
 - **R4 — corrective actions must materialize to selector form; the writer fails loudly on a bare `@ref`
   cross-session export.** A `press @e12` normally resolves a `selectorChain` at runtime
   (`packages/daemon/src/interaction/internal/interaction-touch-targets.ts`), which `buildOptimizedActions`
-  (`packages/daemon/src/session-script-writer.ts:69-83`) rewrites to a selector line. If no `selectorChain` was
+  (`packages/daemon/src/session-script-writer.ts:368-377`) rewrites to a selector line. If no `selectorChain` was
   captured, the writer must refuse to emit a bare `@ref` line into a persisted `.ad` — a session-bound
   ref will not resolve in a fresh run. It **fails loudly**: an error surfaced to the user with a non-zero
   exit, never a swallowed or silently-dropped line (existing session-write paths swallow such failures;
@@ -893,7 +893,7 @@ by construction. The healed `.ad` is written only when the repair ends (below) a
 - The healed `.ad` is published when a teardown commits the transaction at state `COMPLETE` — normally the
   agent's own `close`/`close --save-script <out>`, but any teardown of a completed transaction commits
   (see the commit state machine below) — reusing the existing `session.actions` serializer
-  (`SessionScriptWriter.write`, `packages/daemon/src/session-script-writer.ts:30-52`) over the post-watermark slice
+  (`SessionScriptWriter.write`, `packages/daemon/src/session-script-writer.ts:120-158`) over the post-watermark slice
   only (R6). When no
   `<out>` path is given, the default is the **`<original-stem>.healed.ad` sibling**: the original script's
   path with its `.ad` extension replaced by `.healed.ad` (e.g. `flows/login.ad` → `flows/login.healed.ad`),
@@ -1289,15 +1289,15 @@ both `.ad` and Maestro paths) grounds the same conclusions from the caller's sea
   "Retry with --debug and inspect diagnostics log for details." (`defaultHintForCode`,
   `src/kernel/errors.ts:253-254`).
 - **Recordings contain zero verification steps.** The script writer strips every recorded `snapshot`
-  action (`buildOptimizedActions`, `packages/daemon/src/session-script-writer.ts:69`: `if (action.command ===
+  action (`buildOptimizedActions`, `packages/daemon/src/session-script-writer.ts:315`: `if (action.command ===
   'snapshot') continue;` — only synthetic ref-scoped snapshots are re-inserted, as resolution aids, not
-  observations), and the record-time flag allowlist (`SANITIZED_FLAG_KEYS`,
-  `packages/daemon/src/session-action-recorder.ts:46-77`) carries neither `settle`/`settleQuietMs` nor `verify`,
+  observations), and the record-time flag allowlist (`RECORDED_FLAG_KEYS` from the flag
+  declarations' `recorded` field, `packages/daemon/src/session-action-recorder.ts:367-381`) carries neither `settle`/`settleQuietMs` nor `verify`,
   so `--settle`/`--verify` are dropped from recorded steps. A recording therefore replays actions with
   no outcome observation at all — exactly the gap decision 3's record-time identity evidence fills.
 
 A related, currently under-used precedent: recorded `@ref` steps already carry an optional identity
-hint in the `.ad` file. `appendRefLabel` (`packages/daemon/src/session-script-writer.ts:235-240`) writes the
+hint in the `.ad` file. `appendRefLabel` (`packages/daemon/src/session-script-writer.ts:532-537`) writes the
 node's label as a trailing token, parsed back into `action.result.refLabel`
 (`src/replay/script.ts:269,295,315`). Today that label is used only as a fallback LOOKUP key
 (`tryResolveRefNode`'s `fallbackLabel`, `resolution.ts:393,413-430`) when the ref itself fails to
