@@ -13,16 +13,41 @@ test('Stryker aliases every exported workspace subpath exactly', () => {
 
   for (const [specifier, target] of targets) {
     const matches = aliases.filter(({ find }) => find.test(specifier));
-    assert.deepEqual(
-      matches.map(({ replacement }) => replacement),
-      [path.join(repoRoot, target)],
-      `${specifier} must resolve to its own export instead of a package-root prefix`,
-    );
+    if (!specifier.endsWith('*')) {
+      assert.deepEqual(
+        matches.map(({ replacement }) => replacement),
+        [path.join(repoRoot, target)],
+        `${specifier} must resolve to its own export instead of a package-root prefix`,
+      );
+      continue;
+    }
+    // A pattern entry aliases through a capture group filling its target's `*`,
+    // so concrete imports resolve in the sandbox to the same module id as the
+    // exports map gives them outside it (#3546 review).
+    const pattern = matches.find(({ replacement }) => replacement.includes('$1'));
+    assert.ok(pattern, `${specifier} must alias as a capture-group pattern`);
+    const suffix = 'probe/nested';
+    const applied = `${specifier.slice(0, -1)}${suffix}`.replace(pattern.find, pattern.replacement);
+    assert.equal(applied, path.join(repoRoot, target).replace('*', suffix));
   }
 
   assert.equal(
     aliases.some(({ find }) => find.test('@agent-device/selectors/not-exported')),
     false,
+  );
+});
+
+test('a named alias wins over a pattern alias that also matches it', () => {
+  // Vite applies the first matching alias, so exact entries are ordered first;
+  // a named `./testing/x` under a `./testing/*` pattern keeps its own export.
+  const aliases = workspaceSourceAliases(repoRoot, 'tracked-manifests');
+  const firstExact = aliases.findIndex(
+    ({ find, replacement }) => !replacement.includes('$1') && find.source.includes('testing/'),
+  );
+  const lastPattern = aliases.findLastIndex(({ replacement }) => replacement.includes('$1'));
+  assert.ok(
+    firstExact === -1 || lastPattern === -1 || firstExact < lastPattern,
+    'every exact alias must precede every pattern alias',
   );
 });
 

@@ -190,12 +190,20 @@ files have no seam (published facade, public-type collision, root dependency fac
 
 2026-10-13 (11b, #3546): `src/daemon/` moved to `packages/daemon/src/` as
 `@agent-device/daemon`. Its export surface settles on a façade, not importer reach:
-one named subpath per production/script consumer, plus ONE `./testing/*` pattern
-entry publishing test data that R11 refuses for any non-test importer (a package
-test double reached through the boundary is production code depending on a fake).
-`internal/` modules are reached only by tests living inside the package. Moving the
-`daemon-request` wire types down to `@agent-device/daemon-contracts` so the client
-stops depending on the server package is a follow-up, keeping 11b a pure move.
+one named subpath per production/script consumer, plus test data published only
+under the `./testing/` namespace — named `./testing/<fixture>` entries and, per
+fixture folder, a `./testing/<dir>/*` pattern whose target template reconstructs
+the source path — never a wildcard that also exposes production modules. R11
+refuses any `./testing/` import from a non-test file (a package test double
+reached through the boundary is production code depending on a fake). What root
+tests need from production modules becomes a named subpath, so every module has
+one spelling. The exports keys stay exact except the per-folder fixture patterns;
+`resolveWorkspaceSpecifier` (layering model) is the single owner that expands
+those patterns for the layering edges, the depgraph, mutation ownership, and the
+Stryker alias table, so no gate resolves a pattern-exported module to nothing.
+Moving the `daemon-request` wire types down to `@agent-device/daemon-contracts`
+so the client stops depending on the server package is a follow-up, keeping 11b
+a pure move.
 
 ## Refuted alternatives
 

@@ -9,8 +9,32 @@ export type WorkspaceSourceAlias = {
 
 export type ManifestSource = 'tracked-manifests' | 'disk-manifests';
 
+function escapeRegExp(literal: string): string {
+  return literal.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+}
+
 function exactSpecifier(specifier: string): RegExp {
-  return new RegExp(`^${specifier.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)}$`);
+  return new RegExp(`^${escapeRegExp(specifier)}$`);
+}
+
+/**
+ * An alias pair for one exports entry: exact for a named subpath, and a capture-
+ * group pattern for a `*` pattern entry (ADR-0033's `./testing/<dir>/*`). Emitting
+ * the pattern key as a literal matches nothing, so every concrete import of a
+ * pattern-exported module would load the UNaliased path in the Stryker sandbox —
+ * a different module id than its `vi.mock` registers, and the mock silently misses
+ * (#3546 review). Vite substitutes `$1` into the target template the way Node
+ * fills the exports target's `*`.
+ */
+function aliasFor(specifier: string, target: string, repoRoot: string): WorkspaceSourceAlias {
+  if (specifier.endsWith('*') && target.includes('*')) {
+    const template = path.join(repoRoot, target);
+    return {
+      find: new RegExp(`^${escapeRegExp(specifier.slice(0, -1))}(.*)$`),
+      replacement: template.replaceAll('$', '$$').replace('*', '$1'),
+    };
+  }
+  return { find: exactSpecifier(specifier), replacement: path.join(repoRoot, target) };
 }
 
 function specifierTargets(repoRoot: string, source: ManifestSource): ReadonlyMap<string, string> {
@@ -50,13 +74,19 @@ function* manifestSpecifierTargets(
   }
 }
 
-/** Exact exported workspace-package aliases for Vitest, from the declared manifest source. */
+/**
+ * Exported workspace-package aliases for Vitest, from the declared manifest source:
+ * one per exports entry, exact for named subpaths and capture-group patterns for
+ * `*` entries. Vite applies aliases in list order, so exact entries are emitted
+ * first — a named subpath under a pattern's prefix keeps its own export.
+ */
 export function workspaceSourceAliases(
   repoRoot: string,
   source: ManifestSource,
 ): WorkspaceSourceAlias[] {
-  return [...specifierTargets(repoRoot, source)].map(([specifier, target]) => ({
-    find: exactSpecifier(specifier),
-    replacement: path.join(repoRoot, target),
-  }));
+  const targets = [...specifierTargets(repoRoot, source)];
+  return [
+    ...targets.filter(([specifier]) => !specifier.endsWith('*')),
+    ...targets.filter(([specifier]) => specifier.endsWith('*')),
+  ].map(([specifier, target]) => aliasFor(specifier, target, repoRoot));
 }

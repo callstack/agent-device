@@ -176,29 +176,29 @@ function namedByExports(target: WorkspacePackage, specifier: string): boolean {
 const TEST_FILE_RE = /(^|\/)__tests__\/|\.test\.[cm]?[jt]sx?$|^test\//;
 
 /**
- * Façade policy (ADR-0033 amendment): a package may publish test data only under a
- * `./testing/*` pattern entry, and only test files may import it. Production code that
- * reaches a fixture through the package boundary is production code depending on a test
- * double — it must inject the real port instead.
+ * Façade policy (ADR-0033 amendment): a package publishes test data only under its
+ * `./testing/` namespace — named `./testing/<fixture>` entries and per-folder
+ * `./testing/<dir>/*` patterns — and only test files may import it. The gate is the
+ * namespace, not a pattern entry: narrowing the surface to exact keys must not
+ * smuggle a fixture past the test-file rule. Production code that reaches a fixture
+ * through the package boundary is production code depending on a test double — it
+ * must inject the real port instead.
  */
 function checkTestDataOnlySites(
   site: SpecifierSite,
   target: WorkspacePackage,
 ): PackageBoundaryViolation | undefined {
-  const prefix = [...target.exportTargets.keys()]
-    .filter((key) => key.endsWith('/testing/*'))
-    .map((key) => key.slice(0, -1))
-    .find((p) => site.specifier.startsWith(p));
-  if (!prefix) return undefined;
+  if (!site.specifier.startsWith(`${target.name}/testing/`)) return undefined;
+  if (!namedByExports(target, site.specifier)) return undefined;
   if (TEST_FILE_RE.test(site.file)) return undefined;
   return {
     rule: 'R11 package-boundaries',
     file: site.file,
     line: site.line,
     message:
-      `'${site.specifier}' resolves through ${target.dir}/package.json#exports './testing/*', ` +
-      `which publishes test data to test files only. '${site.file}' is not a test file: ` +
-      `import a production subpath or inject the port.`,
+      `'${site.specifier}' resolves through ${target.dir}/package.json#exports './testing/' ` +
+      `namespace, which publishes test data to test files only. '${site.file}' is not a test ` +
+      `file: import a production subpath or inject the port.`,
   };
 }
 
