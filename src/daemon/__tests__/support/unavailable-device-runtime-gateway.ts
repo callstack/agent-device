@@ -10,13 +10,16 @@ import type { BindDeviceRuntime, BindExactDeviceRuntime } from '../../request-ru
 
 /**
  * The `DeviceRuntimeGateway` port answering that no owner on this host can bind the device:
- * every operation fact unavailable, no operations, nothing to dispose.
+ * every operation fact unavailable, no operations, nothing to dispose. An exact-owner intent
+ * answers with the REQUESTED owner so the refusal exercises the same owner identity the caller
+ * selected; only an ordinary bind falls back to the local owner.
  */
 export const unavailableDeviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> =
   Object.freeze({
     inspectFacts: async (device) => (await unavailableBinding(device)).facts,
-    bind: async ({ device }) => {
-      const owner = localRuntimeOwner(device.platform);
+    bind: async ({ device, intent }) => {
+      const owner =
+        intent.kind === 'exact-owner' ? intent.owner : localRuntimeOwner(device.platform);
       return {
         device,
         owner,
