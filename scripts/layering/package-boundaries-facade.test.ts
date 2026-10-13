@@ -85,7 +85,7 @@ test('the ./testing/ refusal bites inside packages and through the vi.mock scan'
     checkPackageInternalSites(
       daemon,
       sites(
-        'packages/daemon/src/handlers/production.ts',
+        'packages/daemon/src/sessions/handlers/production.ts',
         '@agent-device/daemon/testing/__tests__/store-factory',
       ),
       [daemon],

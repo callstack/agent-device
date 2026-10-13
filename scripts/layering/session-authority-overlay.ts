@@ -1,4 +1,4 @@
-import { isProductionSourceFile } from './tracked-sources.ts';
+import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 import { sessionStateDeclarationFile } from './session-state.ts';
 
@@ -20,12 +20,12 @@ export const SESSION_AUTHORITY_OVERLAY_RULE = 'R75 session-authority-overlay';
 
 /** The handler folders: the layer folders the pre-fold handlers/ tree split into. */
 const HANDLER_ROOTS = [
-  'packages/daemon/src/sessions/handlers/',
-  'packages/daemon/src/execution/handlers/',
+  `${DAEMON_SOURCE_ROOT}sessions/handlers/`,
+  `${DAEMON_SOURCE_ROOT}execution/handlers/`,
 ];
 
 /** The SessionStore authority module; the merge-base measurement canonicalizes onto this path. */
-const SESSION_STORE_AUTHORITY_TARGET = 'packages/daemon/src/core/session-store.ts';
+const SESSION_STORE_AUTHORITY_TARGET = `${DAEMON_SOURCE_ROOT}core/session-store.ts`;
 
 export type SessionAuthorityOverlay = Readonly<{
   /** Production files importing the SessionState symbol from its declaring module, sorted. */

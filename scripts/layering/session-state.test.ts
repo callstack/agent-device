@@ -28,7 +28,7 @@ test('explicit owner patches name their writes and retain direct assignment chec
   assert.ok(SESSION_STATE_FIELD_OWNERS.appLogFailure!.includes(OWNER));
   const foreign = scan(
     'sessionStore.update(ref, { appLogFailure: error });',
-    'packages/daemon/src/handlers/probe.ts',
+    'packages/daemon/src/sessions/handlers/probe.ts',
   )[0]!;
   assert.equal(foreign.field, 'appLogFailure');
   assert.ok(!SESSION_STATE_FIELD_OWNERS[foreign.field]!.includes(foreign.file));

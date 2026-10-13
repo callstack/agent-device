@@ -12,7 +12,7 @@ test('session resources are constructed only by their durable domain owners', ()
   assert.deepEqual(
     summaries([
       [
-        'packages/daemon/src/handlers/planted.ts',
+        'packages/daemon/src/sessions/handlers/planted.ts',
         `sessionStore.set(name, {
           ...session,
           appLog: log,
@@ -46,11 +46,11 @@ test('session resources are constructed only by their durable domain owners', ()
       ],
     ]),
     [
-      'packages/daemon/src/handlers/planted.ts: session appLog record constructed outside its owner',
-      'packages/daemon/src/handlers/planted.ts: session appLogFailure record constructed outside its owner',
-      'packages/daemon/src/handlers/planted.ts: session audioProbe record constructed outside its owner',
-      'packages/daemon/src/handlers/planted.ts: session perfCapture record constructed outside its owner',
-      'packages/daemon/src/handlers/planted.ts: session screenRecording record constructed outside its owner',
+      'packages/daemon/src/sessions/handlers/planted.ts: session appLog record constructed outside its owner',
+      'packages/daemon/src/sessions/handlers/planted.ts: session appLogFailure record constructed outside its owner',
+      'packages/daemon/src/sessions/handlers/planted.ts: session audioProbe record constructed outside its owner',
+      'packages/daemon/src/sessions/handlers/planted.ts: session perfCapture record constructed outside its owner',
+      'packages/daemon/src/sessions/handlers/planted.ts: session screenRecording record constructed outside its owner',
       'packages/daemon/src/screen-recording-session-binding.ts: session screenRecording record constructed outside its owner',
       'packages/capture-kit/src/capture-admission/audio-probe-session-resource.ts: session audioProbe record constructed outside its owner',
       'packages/capture-kit/src/capture-admission/perf-capture-session-resource.ts: session perfCapture record constructed outside its owner',
@@ -80,10 +80,13 @@ test('teardown app-log discriminants are policy input rather than session constr
         `teardownSessionResources({ appLog: 'run' });
          teardownSessionResources({ appLog: 'already-settled' });`,
       ],
-      ['packages/daemon/src/handlers/planted.ts', `teardownSessionResources({ appLog: 'skip' });`],
+      [
+        'packages/daemon/src/sessions/handlers/planted.ts',
+        `teardownSessionResources({ appLog: 'skip' });`,
+      ],
     ]),
     [
-      'packages/daemon/src/handlers/planted.ts: session appLog record constructed outside its owner',
+      'packages/daemon/src/sessions/handlers/planted.ts: session appLog record constructed outside its owner',
     ],
   );
 });

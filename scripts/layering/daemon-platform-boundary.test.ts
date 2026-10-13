@@ -87,12 +87,12 @@ test('R65 rejects static, type-only, dynamic, type, and re-export dependencies w
 
 test('R65 recognizes side-effect and aliased imports, including nested daemon paths', () => {
   const source = [
-    "import '../../../../src/platforms/web/runtime.ts';",
+    "import '../../../../../src/platforms/web/runtime.ts';",
     "import { runtime as platformRuntime } from '@agent-device/platform-web/runtime';",
   ].join('\n');
 
   assert.deepEqual(
-    dependencies(source, 'packages/daemon/src/handlers/terminal-boundary-fixture.ts').map(
+    dependencies(source, 'packages/daemon/src/sessions/handlers/terminal-boundary-fixture.ts').map(
       (found) => ({
         kind: found.kind,
         line: found.line,
@@ -104,7 +104,7 @@ test('R65 recognizes side-effect and aliased imports, including nested daemon pa
       {
         kind: 'static import',
         line: 1,
-        spec: '../../../../src/platforms/web/runtime.ts',
+        spec: '../../../../../src/platforms/web/runtime.ts',
         target: 'src/platforms/web/runtime.ts',
       },
       {

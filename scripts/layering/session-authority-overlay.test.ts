@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import { resolveImportEdges } from './model.ts';
+import { mergeBaseRatchets } from './ratchet-reference.ts';
+import { readCommittedSources } from '../__tests__/committed-source-tree.ts';
 import {
   checkSessionAuthorityOverlay,
   handlerOwnedOverlay,
@@ -163,6 +166,56 @@ test('the end-to-end measurement feeds the ratchet: a new handler importer is re
   const violations = checkSessionAuthorityOverlay(measured, reference);
   assert.equal(violations.length, 1);
   assert.equal(violations[0]!.file, 'packages/daemon/src/sessions/handlers/new.ts');
+});
+
+test('the overlay classifies handler writes in both live handler roots, measured end to end', () => {
+  // A write planted in each live layer folder must land in the ratcheted subset; the pre-fold
+  // flat handlers/ spelling is dead in both trees (R10's retired-path guards own re-creation
+  // there), so a write there stays out of scope even though the raw measurement sees it.
+  const sources = {
+    'packages/daemon/src/core/session-state.ts': STATE_STUB,
+    'packages/daemon/src/core/session-store.ts': STORE_STUB,
+    'packages/daemon/src/sessions/handlers/session-runtime.ts':
+      "import { SessionStore } from '../../core/session-store.ts';\n",
+    'packages/daemon/src/execution/handlers/snapshot-route.ts':
+      "import type { SessionState } from '../../core/session-state.ts';\n",
+    'packages/daemon/src/handlers/legacy.ts':
+      "import type { SessionState } from '../core/session-state.ts';\n",
+  };
+  const measured = handlerOwnedOverlay(overlayOf(sources));
+  assert.deepEqual(measured, {
+    shapeFiles: ['packages/daemon/src/execution/handlers/snapshot-route.ts'],
+    authorityFiles: ['packages/daemon/src/sessions/handlers/session-runtime.ts'],
+  });
+  // The raw overlay sees the stale spelling, so the exclusion above is the root filter's doing.
+  assert.ok(overlayOf(sources).shapeFiles.includes('packages/daemon/src/handlers/legacy.ts'));
+});
+
+test('the merge-base overlay arrives in head coordinates through the rename mapping', () => {
+  // The merge-base tree declares SessionState under src/daemon/... and holds no layer folders.
+  // mergeBaseRatchets canonicalizes every base path through renamedSince (the base's
+  // src/daemon/handlers/*.ts pair with the head's layer-folder handlers/*.ts, and
+  // session-store.ts pairs under core/), so the reference handler-owned set must already name
+  // the live roots. This is what lets checkSessionAuthorityOverlay compare paths directly and
+  // what makes the old flat handlers/ spellings in this rule dead weight.
+  const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
+    encoding: 'utf8',
+  }).trim();
+  const reference = mergeBaseRatchets(repoRoot);
+  const scoped = handlerOwnedOverlay(reference.sessionAuthority);
+  assert.ok(scoped.shapeFiles.length > 0 && scoped.authorityFiles.length > 0);
+  for (const file of [...scoped.shapeFiles, ...scoped.authorityFiles]) {
+    assert.match(
+      file,
+      /^packages\/daemon\/src\/(?:sessions|execution)\/handlers\//,
+      `merge-base handler member left the live roots: ${file}`,
+    );
+  }
+  const baseSources = readCommittedSources(repoRoot, reference.ref).sources;
+  assert.ok(
+    [...baseSources.keys()].some((file) => file.startsWith('src/daemon/handlers/')),
+    'the merge-base tree is expected to hold the pre-layer-folder src/daemon/handlers/ root',
+  );
 });
 
 test('R75 catches a new handler shape edge expressed as an import type', () => {

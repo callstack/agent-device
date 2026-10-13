@@ -61,16 +61,16 @@ test('measureRatchets reports all ratchets from one tree', () => {
     sessionAuthority: { shapeFiles: [], authorityFiles: [] },
   });
   const withAuthority = tree({
-    'packages/daemon/src/handlers/fixture.ts':
-      "import type { SessionState } from '../core/session-state.ts';\n" +
-      "import { SessionStore } from '../core/session-store.ts';",
+    'packages/daemon/src/sessions/handlers/fixture.ts':
+      "import type { SessionState } from '../../core/session-state.ts';\n" +
+      "import { SessionStore } from '../../core/session-store.ts';",
     'packages/daemon/src/core/session-store.ts': 'export class SessionStore {}',
   });
   assert.deepEqual(
     measureRatchets(withAuthority, resolveImportEdges(withAuthority)).sessionAuthority,
     {
-      shapeFiles: ['packages/daemon/src/handlers/fixture.ts'],
-      authorityFiles: ['packages/daemon/src/handlers/fixture.ts'],
+      shapeFiles: ['packages/daemon/src/sessions/handlers/fixture.ts'],
+      authorityFiles: ['packages/daemon/src/sessions/handlers/fixture.ts'],
     },
   );
 });

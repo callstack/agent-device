@@ -591,7 +591,7 @@ test('session-state writes are found by field, and non-daemon or undeclared name
         "if (session.refFrame === 'active') return;",
       ],
       // a write into a sub-object is not a write to the field itself
-      ['packages/daemon/src/handlers/session-probe.ts', 'session.refFrame.inner = 1;'],
+      ['packages/daemon/src/sessions/handlers/session-probe.ts', 'session.refFrame.inner = 1;'],
       // a different binding that happens to have a matching property
       [
         'packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
