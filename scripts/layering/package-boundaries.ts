@@ -8,7 +8,7 @@
 // Evidence: 76453add71 (#1494, #1490 W0) established the workspace split this rule protects;
 //   83322a3f2f (#1574) pinned exact facade symbols for every workspace package; #3279 moved the
 //   type-check onto `tsc -b` project references and retired the checks it now enforces.
-// Cost: 447 LOC (rule) + 978 LOC (test).
+// Cost: 510 LOC (rule) + 998 LOC (test).
 // Kill criterion: retire a remaining branch only when something owns its mechanism, not merely
 //   its symptom. An undeclared `workspace:*` sibling is type-clean and runtime-green INSIDE
 //   this repo because pnpm links every workspace package under the root `node_modules` — the
@@ -25,6 +25,8 @@
 // and via its package specifier instantiates twice in one process — duplicate AppError, broken
 // instanceof), and, for `scripts/` files which sit outside the type graph by design, the
 // root-side unknown-package and exports-map checks that compiled files get from TS2307.
+// On top, `TEST_ONLY_FIXTURE_SUBPATHS` mirrors R13's Android fixture gate for the non-platform
+// packages: a production file importing one of those fixture subpaths is an R11 violation.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -170,6 +172,24 @@ export function insideCompiledSources(file: string): boolean {
 }
 
 /**
+ * Workspace fixture subpaths only non-production files may import — the same claim R13's
+ * `ANDROID_TEST_ONLY_SUBPATHS` makes for the platform packages, which R13 cannot express for
+ * non-platform packages. A production file (root or package) importing one is a violation.
+ */
+export const TEST_ONLY_FIXTURE_SUBPATHS: ReadonlySet<string> = new Set([
+  '@agent-device/device-selection/inventory-gateways-fixtures',
+  '@agent-device/replay-port/replay-script-source-fixtures',
+]);
+
+/** Consumer side of `TEST_ONLY_FIXTURE_SUBPATHS`, mirroring R13's non-production predicate. */
+function importsTestOnlyFixtureFromProduction(file: string, specifier: string): boolean {
+  if (!TEST_ONLY_FIXTURE_SUBPATHS.has(specifier)) return false;
+  const isTestConsumer =
+    file.startsWith('test/') || file.endsWith('.test.ts') || file.includes('/__tests__/');
+  return !isTestConsumer;
+}
+
+/**
  * Rules for files INSIDE a package. An undeclared sibling import is R11's alone: pnpm links
  * every workspace package under the root `node_modules`, so the import resolves, compiles, and
  * runs in this repo even when the manifest never declares it — and a published bundle
@@ -217,6 +237,16 @@ export function checkPackageInternalSites(
     }
     const name = specifierPackageName(site.specifier);
     if (!name || !name.startsWith('@agent-device/')) continue;
+    if (importsTestOnlyFixtureFromProduction(site.file, site.specifier)) {
+      violations.push({
+        rule: 'R11 package-boundaries',
+        file: site.file,
+        line: site.line,
+        message:
+          `'${site.specifier}' is a test-only fixture subpath — production code may not ` +
+          `import it; use the package's production subpath instead.`,
+      });
+    }
     const target = packageByName(allPackages, name);
     if (!target) {
       if (!compiled) {
@@ -288,6 +318,16 @@ export function checkRootSites(
     }
     const name = specifierPackageName(site.specifier);
     if (!name || !name.startsWith('@agent-device/')) continue;
+    if (importsTestOnlyFixtureFromProduction(site.file, site.specifier)) {
+      violations.push({
+        rule: 'R11 package-boundaries',
+        file: site.file,
+        line: site.line,
+        message:
+          `'${site.specifier}' is a test-only fixture subpath — production code may not ` +
+          `import it; use the package's production subpath instead.`,
+      });
+    }
     const target = packageByName(packages, name);
     if (!target) {
       if (!compiled) {

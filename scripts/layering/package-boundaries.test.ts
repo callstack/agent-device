@@ -19,6 +19,7 @@ import {
   rootExternalDependencyRanges,
   rootWorkspaceDependencyNames,
   specifierSites,
+  TEST_ONLY_FIXTURE_SUBPATHS,
   workspacePackagesFromManifests,
   type WorkspacePackage,
 } from './package-boundaries.ts';
@@ -323,6 +324,39 @@ test('a cross-package import needs a workspace:* declaration; the exports map is
     "import { internal } from '@agent-device/kernel/internal/secret';",
   );
   assert.equal(checkPackageInternalSites(contracts, deep, ALL, true).length, 0);
+});
+
+test('the test-only fixture subpaths accept test consumers and deny production ones', () => {
+  // A consumer package declaring both fixture owners, so only the fixture predicate can fire.
+  const consumer: WorkspacePackage = {
+    dir: 'packages/daemon-side',
+    name: '@agent-device/daemon-side',
+    exportTargets: new Map(),
+    workspaceDependencies: new Set(['@agent-device/device-selection', '@agent-device/replay-port']),
+    workspaceDependencyField: 'dependencies',
+    externalDependencies: new Map(),
+  };
+  const rootDeps = new Set(consumer.workspaceDependencies);
+  for (const specifier of TEST_ONLY_FIXTURE_SUBPATHS) {
+    const sites = (file: string) => specifierSites(file, `import { f } from '${specifier}';`);
+    for (const file of [
+      'src/daemon/__tests__/consumer.test.ts',
+      'test/integration/consumer.ts',
+      'packages/daemon-side/src/__tests__/consumer.test.ts',
+    ]) {
+      assert.deepEqual(checkRootSites(sites(file), ALL, rootDeps, true), [], file);
+      assert.deepEqual(checkPackageInternalSites(consumer, sites(file), ALL, true), [], file);
+    }
+    // Production consumers ride no seam: the same import from a root or package
+    // production file is an R11 violation in both scans.
+    for (const file of ['src/commands/inventory.ts', 'packages/daemon-side/src/inventory.ts']) {
+      const violations = file.startsWith('src/')
+        ? checkRootSites(sites(file), ALL, rootDeps, true)
+        : checkPackageInternalSites(consumer, sites(file), ALL, true);
+      assert.equal(violations.length, 1, file);
+      assert.match(violations[0]!.message, /test-only fixture subpath/);
+    }
+  }
 });
 
 test('a root src file tunnelling into packages/*/src relatively is a violation', () => {
