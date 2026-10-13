@@ -107,7 +107,7 @@ test('overlapping patterns alias in longest-prefix order regardless of declarati
       `${probe} must alias through the longer pattern even though the shorter one was declared first`,
     );
     const targets = new Map([
-      ['@agent-device/demo/testing/*', 'packages/demo/src/*.ts'],
+      ['@agent-device/demo/testing/*', 'packages/demo/src/shadow/*.ts'],
       ['@agent-device/demo/testing/handlers/*', 'packages/demo/src/handlers/*.ts'],
     ]);
     assert.equal(
