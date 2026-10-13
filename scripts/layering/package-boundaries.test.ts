@@ -504,6 +504,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/png-size',
     '@agent-device/capture-kit/png-worker-client',
     '@agent-device/capture-kit/post-gesture-stability',
+    '@agent-device/capture-kit/provider-keyboard-acquisition',
     '@agent-device/capture-kit/quality-warnings',
     '@agent-device/capture-kit/react-native-overlay',
     '@agent-device/capture-kit/recording-artifact-fixtures',
