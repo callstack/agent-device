@@ -381,10 +381,10 @@ test('custom Android fields carry reported hint facts beside their content', () 
     'android',
   ).nodes;
   assert.deepEqual(
-    nodes.map((node) => [node.placeholder, node.hintShowing]),
+    nodes.map((node) => [node.value, node.placeholder, node.hintShowing]),
     [
-      ['Your name', false],
-      ['Your name', true],
+      ['Your name', 'Your name', false],
+      ['', 'Your name', true],
     ],
   );
 });
