@@ -61,15 +61,21 @@ test('a test root file importing ./testing/ passes, and a named entry stays open
     ),
     [],
   );
-  assert.deepEqual(
-    checkRootSites(
-      sites('src/cli.ts', '@agent-device/daemon/testing/session-store'),
-      [daemon],
-      PROD,
-      true,
-    ),
-    [],
-  );
+  // The exact spelling the fixture manifest names. A compiled site skips
+  // resolution, so `[]` there would pass even for a specifier no entry exports;
+  // the uncompiled pass reports "not named" for exactly that, so asserting []
+  // in both modes is what proves this specifier resolves through the named entry.
+  for (const compiled of [true, false]) {
+    assert.deepEqual(
+      checkRootSites(
+        sites('src/cli.ts', '@agent-device/daemon/session-store'),
+        [daemon],
+        PROD,
+        compiled,
+      ),
+      [],
+    );
+  }
 });
 
 test('the ./testing/ refusal bites inside packages and through the vi.mock scan', () => {
