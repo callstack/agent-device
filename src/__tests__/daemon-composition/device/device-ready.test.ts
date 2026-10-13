@@ -38,8 +38,8 @@ const mockEnsureBootedSimulator = vi.mocked(ensureBootedSimulator);
 const mockWaitForAndroidBoot = vi.mocked(waitForAndroidBoot);
 // This suite pins what the REAL composed readiness port does per device family: it runs in the
 // composition lane on the root-composed services fixture, with the platform leaves mocked above.
-// The daemon-lane port fixture answers readiness with a canned spy and owns only the TTL-cache
-// contract, pinned by the daemon's own claim suites.
+// The daemon-lane port fixture answers readiness with a canned spy; this suite separately
+// pins the readiness cache contract, including its TTL behavior.
 const platformServices = daemonPlatformServicesFixture();
 
 beforeEach(() => {

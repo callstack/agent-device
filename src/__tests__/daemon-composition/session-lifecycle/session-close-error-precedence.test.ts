@@ -109,10 +109,10 @@ test('targeted close skips platform dispatch and preserves the error when the re
     reason: 'runner_stop_failed',
     hint: 'Retry once the runner is reachable.',
   });
-  // Scoped to this test's own two internal calls (pre-close stop, then the later
-  // independent-cleanup retry) — a persistent `mockRejectedValue` here would leak into every
-  // later test that exercises an Apple-platform runner stop, since `vi.clearAllMocks()` in
-  // `beforeEach` clears call history but not a mock's implementation.
+  // Scoped to this test's pre-close stop: this one-shot rejection is consumed there,
+  // so it cannot leak into later tests when `vi.clearAllMocks()` clears only call
+  // history — a persistent `mockRejectedValue` would leak into every later test that
+  // exercises an Apple-platform runner stop.
   mockStopIosRunnerSession.mockRejectedValueOnce(preCloseError);
 
   await expect(
