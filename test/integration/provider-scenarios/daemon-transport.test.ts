@@ -7,7 +7,7 @@ import {
   createSocketServer,
   listenHttpServer,
   listenNetServer,
-} from '@agent-device/daemon/server/transport';
+} from '@agent-device/daemon/testing/server/transport';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
 

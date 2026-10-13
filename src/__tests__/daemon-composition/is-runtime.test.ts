@@ -14,7 +14,7 @@ import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fix
 import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
 import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { selectorCaptureFixture } from '@agent-device/daemon/testing/__tests__/selector-capture-fixture';
-import { markDeferredInteractionOutcome } from '@agent-device/daemon/deferred-interaction-outcome';
+import { markDeferredInteractionOutcome } from '@agent-device/daemon/testing/deferred-interaction-outcome';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
@@ -26,7 +26,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { dispatchIsViaRuntime } from '@agent-device/daemon/selector-runtime';
+import { dispatchIsViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
 
 beforeEach(() => {
   mockRunAppleRunnerCommand.mockReset();

@@ -15,8 +15,8 @@ import { AppError } from '@agent-device/kernel/errors';
 import {
   cleanupDownloadableArtifact,
   trackDownloadableArtifact,
-} from '@agent-device/daemon/artifact-tracking';
-import { createDaemonHttpServer } from '@agent-device/daemon/server/http-server';
+} from '@agent-device/daemon/testing/artifact-tracking';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { downloadRemoteArtifact } from '../../../src/remote/daemon-artifacts.ts';
 import {
   closeLoopbackServer,

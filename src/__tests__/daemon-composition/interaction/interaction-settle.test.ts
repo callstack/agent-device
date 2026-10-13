@@ -5,18 +5,18 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import {
   createInteractionRuntime,
   handleInteractionCommands,
-} from '@agent-device/daemon/interaction/index';
-import type { SessionStore } from '@agent-device/daemon/session-store';
-import type { SessionRef, SessionState } from '@agent-device/daemon/session-state';
+} from '@agent-device/daemon/testing/interaction/index';
+import type { SessionStore } from '@agent-device/daemon/testing/session-store';
+import type { SessionRef, SessionState } from '@agent-device/daemon/testing/session-state';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import { setSessionSnapshot } from '@agent-device/daemon/session-snapshot';
+import { setSessionSnapshot } from '@agent-device/daemon/testing/session-snapshot';
 import {
   activateCompleteRefFrame,
   expireRefFrame,
   refFrameState,
   refFrameTree,
-} from '@agent-device/daemon/ref-frame';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/snapshot-interactor-capture';
+} from '@agent-device/daemon/testing/ref-frame';
+import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import {
@@ -39,7 +39,7 @@ import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 // beyond a few poll ticks.
 
 const mockCaptureSnapshotForSession = vi.hoisted(() => vi.fn());
-vi.mock('@agent-device/daemon/snapshot-interactor-capture', () => ({
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 const nativeCapture = vi.mocked(captureSnapshotWithInteractor);

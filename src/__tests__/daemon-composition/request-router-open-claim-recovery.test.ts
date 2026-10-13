@@ -10,14 +10,14 @@ import {
   composedPlatformServicesFixture,
 } from './platform-services-fixture.ts';
 import { getResolveTargetDeviceMock } from '@agent-device/daemon/testing/__tests__/request-router-dispatch-mocks';
-import { LeaseRegistry } from '@agent-device/daemon/lease-registry';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 // Open-time claim reconciliation runs on the root-composed claim-recovery gateway: the router
 // must hand the acquire path the OWNER-scoped reconciler, so a foreign dead owner's recording
 // recovery executes against that owner's state dir, never the daemon's own store (#2168).
 
-vi.mock('@agent-device/daemon/device/device-ready', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => {

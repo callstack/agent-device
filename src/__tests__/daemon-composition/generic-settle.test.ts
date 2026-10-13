@@ -10,11 +10,11 @@ import {
 } from '@agent-device/contracts/ios-system-surface';
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { activateCompleteRefFrame, refFrameState } from '@agent-device/daemon/ref-frame';
-import { setSessionSnapshot } from '@agent-device/daemon/session-snapshot';
-import type { SessionStore } from '@agent-device/daemon/session-store';
+import { activateCompleteRefFrame, refFrameState } from '@agent-device/daemon/testing/ref-frame';
+import { setSessionSnapshot } from '@agent-device/daemon/testing/session-snapshot';
+import type { SessionStore } from '@agent-device/daemon/testing/session-store';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
-import type { SessionRef, SessionState } from '@agent-device/daemon/session-state';
+import type { SessionRef, SessionState } from '@agent-device/daemon/testing/session-state';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { selectorCaptureFixture } from '@agent-device/daemon/testing/__tests__/selector-capture-fixture';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
@@ -25,8 +25,9 @@ import { testCreateCommandSurface } from './command-surface-fixture.ts';
 // a resolution, and the observation must run after the deferred-outcome
 // markers. Quiet windows are tuned down so no test waits real time.
 
-vi.mock('@agent-device/daemon/interaction/index', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/daemon/interaction/index')>();
+vi.mock('@agent-device/daemon/testing/interaction/index', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/interaction/index')>();
   return {
     ...actual,
     captureSnapshotForSession: vi.fn(async () => ({
@@ -38,9 +39,9 @@ vi.mock('@agent-device/daemon/interaction/index', async (importOriginal) => {
   };
 });
 
-import { captureSnapshotForSession } from '@agent-device/daemon/interaction/index';
-import { dispatchGenericCommand } from '@agent-device/daemon/request-generic-dispatch';
-import { pendingSurfaceStabilization } from '@agent-device/daemon/deferred-interaction-outcome';
+import { captureSnapshotForSession } from '@agent-device/daemon/testing/interaction/index';
+import { dispatchGenericCommand } from '@agent-device/daemon/testing/request-generic-dispatch';
+import { pendingSurfaceStabilization } from '@agent-device/daemon/testing/deferred-interaction-outcome';
 
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
 

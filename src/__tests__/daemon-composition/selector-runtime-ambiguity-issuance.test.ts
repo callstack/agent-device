@@ -3,9 +3,9 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { selectorCaptureFixture } from '@agent-device/daemon/testing/__tests__/selector-capture-fixture';
-import { refFrameScope, refFrameState } from '@agent-device/daemon/ref-frame';
+import { refFrameScope, refFrameState } from '@agent-device/daemon/testing/ref-frame';
 import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
-import { dispatchIsViaRuntime } from '@agent-device/daemon/selector-runtime';
+import { dispatchIsViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   getRuntimeBindings,
@@ -17,7 +17,7 @@ import {
   makeStaleRefSession,
   readPressPoint,
 } from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
-import { handleInteractionCommands } from '@agent-device/daemon/interaction/index';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 // #2870 review, the reviewer's pinned invariant: a response that prints
@@ -43,9 +43,11 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('@agent-device/daemon/snapshot-interactor-capture', async (importOriginal) => {
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@agent-device/daemon/snapshot-interactor-capture')>();
+    await importOriginal<
+      typeof import('@agent-device/daemon/testing/snapshot-interactor-capture')
+    >();
   return { ...actual, captureSnapshotWithInteractor: mockCaptureSnapshotWithInteractor };
 });
 

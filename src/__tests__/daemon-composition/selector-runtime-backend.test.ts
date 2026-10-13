@@ -5,9 +5,9 @@ import type {
   CaptureSnapshotInput,
   SnapshotResult,
 } from '@agent-device/contracts/snapshot-runtime';
-import { createSelectorRuntimeForDevice } from '@agent-device/daemon/selector-runtime-backend';
-import { SessionStore } from '@agent-device/daemon/session-store';
-import type { SessionState } from '@agent-device/daemon/session-state';
+import { createSelectorRuntimeForDevice } from '@agent-device/daemon/testing/selector-runtime-backend';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';

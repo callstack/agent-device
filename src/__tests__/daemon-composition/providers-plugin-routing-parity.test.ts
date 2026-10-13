@@ -32,7 +32,7 @@ import {
   createRequestPlatformProviders,
   type PlatformProviderResolvers,
 } from '../../platform-runtime.ts';
-import { resolvePlatformProviderRequestContext } from '@agent-device/daemon/request-platform-provider-context';
+import { resolvePlatformProviderRequestContext } from '@agent-device/daemon/testing/request-platform-provider-context';
 import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 
 // Phase 3 step b.3 (issue #974) parity gate for the request-scope provider

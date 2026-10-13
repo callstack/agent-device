@@ -14,7 +14,7 @@ import { daemonPlatformServicesFixture } from '@agent-device/daemon/testing/__te
 import { expect, test, vi } from 'vitest';
 import { testCreateCommandSurface } from '../../../__tests__/daemon-composition/command-surface-fixture.ts';
 
-vi.mock('@agent-device/daemon/snapshot-interactor-capture', () => ({
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
   captureSnapshotWithInteractor: vi.fn(async () => {
     throw new Error('no device runner available in this test');
   }),
@@ -25,7 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import { handleSessionCommands } from '@agent-device/daemon/testing/handlers/__tests__/session-command-harness';
-import { SessionStore } from '@agent-device/daemon/session-store';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { withRequestProgressSink } from '@agent-device/host-kit/request';
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '@agent-device/device-selection/inventory-gateways-fixtures';

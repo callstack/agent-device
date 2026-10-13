@@ -4,7 +4,7 @@ import { resolveCommandRequestTimeoutMs } from '@agent-device/command-registry/t
 import { MAX_FOLD_DURATION_MS } from '@agent-device/contracts/device';
 import type { AppleToolProvider } from '@agent-device/platform-apple/tool-provider';
 import type { ExecResult } from '@agent-device/host-kit/command';
-import { recordActionEntry } from '@agent-device/daemon/session-action-recorder';
+import { recordActionEntry } from '@agent-device/daemon/testing/session-action-recorder';
 import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { makeIosAppSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import assert from 'node:assert/strict';

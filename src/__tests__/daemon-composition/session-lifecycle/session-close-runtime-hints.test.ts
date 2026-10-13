@@ -1,8 +1,8 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
-import { SessionStore } from '@agent-device/daemon/session-store';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
-import type { SessionState } from '@agent-device/daemon/session-state';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { fakeCreateCommandSurface } from '@agent-device/daemon/testing/__tests__/support/command-surface-fake';
 
 // These close cases pin when the REAL composed lifecycle reaches the root runtime-hints module

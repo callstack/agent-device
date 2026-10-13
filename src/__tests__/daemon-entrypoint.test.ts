@@ -11,7 +11,7 @@ import type { DaemonRuntimeController } from '@agent-device/daemon/server/daemon
 import {
   cleanupDownloadableArtifact,
   trackDownloadableArtifact,
-} from '@agent-device/daemon/artifact-tracking';
+} from '@agent-device/daemon/testing/artifact-tracking';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
   createOwnedProcessRecordStore,

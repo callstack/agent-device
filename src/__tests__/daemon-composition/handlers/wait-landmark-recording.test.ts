@@ -13,7 +13,7 @@
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
-import { dispatchWaitViaRuntime } from '@agent-device/daemon/wait-runtime';
+import { dispatchWaitViaRuntime } from '@agent-device/daemon/testing/wait-runtime';
 import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
@@ -34,13 +34,13 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   };
 });
 
-vi.mock('@agent-device/daemon/snapshot-interactor-capture', async () => {
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
   const fixture =
     await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
-vi.mock('@agent-device/daemon/device/device-ready', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 

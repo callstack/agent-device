@@ -6,8 +6,8 @@ import { test } from 'vitest';
 import {
   cleanupUploadedArtifact,
   prepareUploadedArtifact,
-} from '@agent-device/daemon/artifact-tracking';
-import { createDaemonHttpServer } from '@agent-device/daemon/server/http-server';
+} from '@agent-device/daemon/testing/artifact-tracking';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import type { DaemonResponse } from '@agent-device/daemon/daemon-request';
 import {
   closeLoopbackServer,

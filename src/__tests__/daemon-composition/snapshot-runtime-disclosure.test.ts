@@ -4,16 +4,16 @@ import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-targe
 import type { IosTargetActivation, PostGestureOutcome } from '@agent-device/kernel/snapshot';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { markDeferredInteractionOutcome } from '@agent-device/daemon/deferred-interaction-outcome';
+import { markDeferredInteractionOutcome } from '@agent-device/daemon/testing/deferred-interaction-outcome';
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { SessionStore } from '@agent-device/daemon/session-store';
-import { handleSnapshotCommands } from '@agent-device/daemon/handlers/snapshot';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import { handleSnapshotCommands } from '@agent-device/daemon/testing/handlers/snapshot';
 import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
-vi.mock('@agent-device/daemon/snapshot-interactor-capture', async () => {
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
   const fixture =
     await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };

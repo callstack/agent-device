@@ -62,7 +62,12 @@ test('a test root file importing ./testing/ passes, and a named entry stays open
     [],
   );
   assert.deepEqual(
-    checkRootSites(sites('src/cli.ts', '@agent-device/daemon/session-store'), [daemon], PROD, true),
+    checkRootSites(
+      sites('src/cli.ts', '@agent-device/daemon/testing/session-store'),
+      [daemon],
+      PROD,
+      true,
+    ),
     [],
   );
 });

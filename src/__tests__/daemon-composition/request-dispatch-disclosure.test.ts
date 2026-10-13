@@ -10,7 +10,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 
-vi.mock('@agent-device/daemon/device/device-ready', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
@@ -33,10 +33,10 @@ import {
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
-import { discloseRequestDispatch } from '@agent-device/daemon/request-dispatch-disclosure';
-import { createRequestDispatchLedger } from '@agent-device/daemon/request-dispatch-ledger';
-import { LeaseRegistry } from '@agent-device/daemon/lease-registry';
-import type { SessionState } from '@agent-device/daemon/session-state';
+import { discloseRequestDispatch } from '@agent-device/daemon/testing/request-dispatch-disclosure';
+import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { clearAndroidObservationFixture } from '@agent-device/daemon/testing/__tests__/android-observation-fixture';
 import {
   createRequestHandler,

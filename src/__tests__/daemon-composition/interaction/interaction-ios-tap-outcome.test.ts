@@ -7,13 +7,13 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import { handleInteractionCommands } from '@agent-device/daemon/interaction/index';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
 import {
   makeIosSession,
   authoringPublication,
 } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { SessionScriptWriter } from '@agent-device/daemon/session-script-writer';
+import { SessionScriptWriter } from '@agent-device/daemon/testing/session-script-writer';
 import { runReplayForTest } from '@agent-device/daemon/testing/__tests__/replay-runtime/replay-command-fixture';
 import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import {
@@ -33,13 +33,13 @@ import {
   mockTapPoint,
   resetGetRuntimeFixture,
 } from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/snapshot-interactor-capture';
-import { corroborateIosTapFailure } from '@agent-device/daemon/interaction/internal/interaction-ios-tap-outcome';
-import { movingTargetBaseline } from '@agent-device/daemon/deferred-interaction-outcome';
+import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
+import { corroborateIosTapFailure } from '@agent-device/daemon/testing/interaction/internal/interaction-ios-tap-outcome';
+import { movingTargetBaseline } from '@agent-device/daemon/testing/deferred-interaction-outcome';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
-vi.mock('@agent-device/daemon/snapshot-interactor-capture', async () => {
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
   const fixture =
     await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return {

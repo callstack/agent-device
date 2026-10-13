@@ -10,7 +10,7 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { installFakeManagedAgentBrowser } from '@agent-device/test-kit/web-managed-agent-browser';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { runCmd } from '@agent-device/host-kit/command';
-import { SessionStore } from '@agent-device/daemon/session-store';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import { makeWebSession } from '@agent-device/daemon/testing/__tests__/session-teardown.fixtures';
 import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/server/daemon-runtime';
 

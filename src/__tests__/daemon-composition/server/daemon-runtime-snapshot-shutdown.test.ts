@@ -10,15 +10,15 @@ import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support
 import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
-import { DAEMON_SESSION_TEARDOWN_TIMEOUT_MS } from '@agent-device/daemon/session-teardown-budget';
-import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/snapshot-runtime';
+import { DAEMON_SESSION_TEARDOWN_TIMEOUT_MS } from '@agent-device/daemon/testing/session-teardown-budget';
+import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
 import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/server/daemon-runtime';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({
   resolveTargetDevice: vi.fn(async () => ANDROID_EMULATOR),
 }));
-vi.mock('@agent-device/daemon/device/device-ready', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 vi.mock('../../../platform-runtime-resource-cleanup.ts', () => ({

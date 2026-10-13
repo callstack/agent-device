@@ -10,8 +10,8 @@ import {
 } from '@agent-device/kernel/contracts';
 import { LimrunRuntime } from '../sdk/limrun.ts';
 import { createAgentDeviceClient } from '../agent-device-client.ts';
-import { handleLeaseCommands } from '@agent-device/daemon/handlers/lease';
-import { LeaseRegistry } from '@agent-device/daemon/lease-registry';
+import { handleLeaseCommands } from '@agent-device/daemon/testing/handlers/lease';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { createProviderDeviceRuntimeRequestProviders } from '../provider-device-runtime.ts';
 import {
   hashRemoteConfigFile,

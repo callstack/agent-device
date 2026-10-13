@@ -27,8 +27,8 @@ import type {
   DaemonRequest,
   DaemonResponse,
 } from '@agent-device/daemon/daemon-request';
-import { createDaemonHttpServer } from '@agent-device/daemon/server/http-server';
-import { createSocketServer, listenNetServer } from '@agent-device/daemon/server/transport';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
+import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
 import { createAgentDeviceClient } from '../../agent-device-client.ts';
 import { currentDaemonCodeSignature } from '../../__tests__/test-utils/daemon-http-fixture.ts';
 import {

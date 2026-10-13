@@ -3,11 +3,11 @@ import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fix
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
-import { contextFromFlags as buildDaemonContext } from '@agent-device/daemon/context';
-import { handleInteractionCommands } from '@agent-device/daemon/interaction/index';
+import { contextFromFlags as buildDaemonContext } from '@agent-device/daemon/testing/context';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
 import { getRuntimeBindings } from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
 import { getInteractor } from '../../../core/interactors.ts';
-import { installInteractorResolution } from '@agent-device/daemon/interactor-resolution';
+import { installInteractorResolution } from '@agent-device/daemon/testing/interactor-resolution';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 // Root composition hands the daemon its interactor resolution; this test drives the real

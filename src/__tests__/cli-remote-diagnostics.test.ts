@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeError, AppError } from '@agent-device/kernel/errors';
-import { createDaemonHttpServer } from '@agent-device/daemon/server/http-server';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { resolveSessionRequestLogPath } from '@agent-device/daemon/session-artifact-paths';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';

@@ -21,11 +21,11 @@ import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
-} from '@agent-device/daemon/request-runtime-binding';
+} from '@agent-device/daemon/testing/request-runtime-binding';
 import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
-import { handleInteractionCommands } from '@agent-device/daemon/interaction/index';
-import type { SessionStore } from '@agent-device/daemon/session-store';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import type { SessionStore } from '@agent-device/daemon/testing/session-store';
 
 // #3510: the capture an interaction's post-action observation polls. A coordinate-targeted press or
 // fill acts through a use that declares no capture, so before this its settle loop read the screen
@@ -56,7 +56,7 @@ const BRIDGE_PRODUCED = Object.freeze({
 });
 
 const mockInteractorCapture = vi.hoisted(() => vi.fn());
-vi.mock('@agent-device/daemon/snapshot-interactor-capture', () => ({
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
   captureSnapshotWithInteractor: mockInteractorCapture,
 }));
 

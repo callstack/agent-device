@@ -7,7 +7,7 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
     resolveTargetDevice: actual.resolveTargetDevice,
   };
 });
-vi.mock('@agent-device/daemon/snapshot-interactor-capture', async () => {
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
   const fixture =
     await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
@@ -18,7 +18,7 @@ import {
   runFindClickScenario,
 } from '@agent-device/daemon/testing/interaction/internal/__tests__/find-touch-runtime-fixture';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
-import { refFrameScope, refFrameState } from '@agent-device/daemon/ref-frame';
+import { refFrameScope, refFrameState } from '@agent-device/daemon/testing/ref-frame';
 
 beforeEach(() => {
   resetFindTouchRuntimeFixture();

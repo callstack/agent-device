@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { resolveWorkspaceSpecifier } from '../layering/model.ts';
 import { workspaceSpecifierTargets } from '../layering/package-boundaries.ts';
 import { workspaceSourceAliases } from './workspace-aliases.ts';
 
@@ -37,6 +38,26 @@ test('Stryker aliases every exported workspace subpath exactly', () => {
     aliases.some(({ find }) => find.test('@agent-device/selectors/not-exported')),
     false,
   );
+});
+
+test('every exports map resolves through the alias table exactly as resolveWorkspaceSpecifier does', () => {
+  // One semantics, three consumers: the alias table Vite applies first-match,
+  // resolveWorkspaceSpecifier's longest-prefix rule, and Node's exports
+  // resolution must pick the same module id for every concrete specifier.
+  const targets = workspaceSpecifierTargets(repoRoot);
+  const aliases = workspaceSourceAliases(repoRoot, 'tracked-manifests');
+  for (const key of targets.keys()) {
+    const probe = key.endsWith('*') ? `${key.slice(0, -1)}probe/nested` : key;
+    const expected = resolveWorkspaceSpecifier(probe, targets);
+    assert.ok(expected, `${probe} must resolve through the exports map`);
+    const alias = aliases.find(({ find }) => find.test(probe));
+    assert.ok(alias, `${probe} must hit an alias`);
+    assert.equal(
+      probe.replace(alias.find, alias.replacement),
+      path.join(repoRoot, expected),
+      `${probe} must hit the alias for its longest-prefix export`,
+    );
+  }
 });
 
 test('a named alias wins over a pattern alias that also matches it', () => {

@@ -13,10 +13,11 @@ import type { DaemonRuntimeDepsInput } from '@agent-device/daemon/server/daemon-
 // the proof is about the store the server hands to the composition callbacks, not one the test
 // fabricates.
 const storeProbe = vi.hoisted(() => ({
-  store: undefined as import('@agent-device/daemon/session-store').SessionStore | undefined,
+  store: undefined as import('@agent-device/daemon/testing/session-store').SessionStore | undefined,
 }));
-vi.mock('@agent-device/daemon/session-store', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/daemon/session-store')>();
+vi.mock('@agent-device/daemon/testing/session-store', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/session-store')>();
   return {
     ...actual,
     SessionStore: class extends actual.SessionStore {

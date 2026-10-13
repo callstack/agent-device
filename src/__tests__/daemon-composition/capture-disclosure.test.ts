@@ -1,9 +1,9 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
-import { handleFindCommands } from '@agent-device/daemon/interaction/index';
+import { handleFindCommands } from '@agent-device/daemon/testing/interaction/index';
 import { getRuntimeBindings } from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
-import { dispatchFindReadOnlyViaRuntime } from '@agent-device/daemon/selector-runtime';
-import { dispatchWaitViaRuntime } from '@agent-device/daemon/wait-runtime';
+import { dispatchFindReadOnlyViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
+import { dispatchWaitViaRuntime } from '@agent-device/daemon/testing/wait-runtime';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
@@ -25,19 +25,19 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   };
 });
 
-vi.mock('@agent-device/daemon/snapshot-interactor-capture', async () => {
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
   const fixture =
     await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
-vi.mock('@agent-device/daemon/device/device-ready', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { withSystemSurfaceDisclosure } from '@agent-device/daemon/capture-disclosure';
+import { withSystemSurfaceDisclosure } from '@agent-device/daemon/testing/capture-disclosure';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { TARGET_ACTIVATION_FACT } from '@agent-device/daemon/testing/__tests__/capture-disclosure-target-activation-fact';
 

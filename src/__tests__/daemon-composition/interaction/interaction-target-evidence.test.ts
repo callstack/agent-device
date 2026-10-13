@@ -3,7 +3,7 @@ import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/le
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { handleInteractionCommands } from '@agent-device/daemon/interaction/index';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import {
@@ -11,8 +11,8 @@ import {
   makeAuthoringSession,
   authoringPublication,
 } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { SessionScriptWriter } from '@agent-device/daemon/session-script-writer';
-import type { SessionState } from '@agent-device/daemon/session-state';
+import { SessionScriptWriter } from '@agent-device/daemon/testing/session-script-writer';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
@@ -27,7 +27,7 @@ const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
 
-vi.mock('@agent-device/daemon/snapshot-interactor-capture', async () => {
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
   const fixture =
     await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };

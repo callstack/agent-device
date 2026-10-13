@@ -333,14 +333,15 @@ const PACKAGE_SRC_PREFIX = /^packages\/[^/]+\/src\//;
 
 /**
  * Resolve a workspace specifier against an exports-derived targets map, mirroring
- * Node's exports semantics for `*` pattern entries: the longest matching prefix
- * wins and the matched suffix fills the target's `*`. The map keeps a pattern
- * entry as its literal key (`@agent-device/daemon/testing/handlers/__tests__/*`),
- * so a plain `get` misses every concrete import of it — which is how the layering
- * edges, the depgraph, mutation ownership, and the Stryker alias table each
- * started resolving pattern-exported specifiers to nothing (#3546 review). One
- * owner resolves: `resolveTargetFile` and `workspaceSourceAliases` both consume
- * this, so a pattern-exported module names the same module id in every lane.
+ * Node's exports semantics: exact keys first, then `*` pattern entries with the
+ * longest matching prefix winning and the matched suffix filling the target's
+ * `*`. The map keeps a pattern entry as its literal key
+ * (`@agent-device/daemon/testing/handlers/__tests__/*`), so a plain `get` misses
+ * every concrete import of it — which is how the layering edges, the depgraph,
+ * mutation ownership, and R11's named-surface check each started resolving
+ * pattern-exported specifiers to nothing (#3546 review). This is the single
+ * semantics every in-repo consumer applies: `resolveTargetFile`, `namedByExports`,
+ * and — by ordering its Vite first-match list to this rule — `workspaceSourceAliases`.
  */
 export function resolveWorkspaceSpecifier(
   specifier: string,

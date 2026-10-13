@@ -24,8 +24,8 @@ import {
   type ScreenshotRuntimeFixtureOptions,
 } from '@agent-device/daemon/testing/__tests__/screenshot-runtime-fixture';
 import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
-import type { SessionState } from '@agent-device/daemon/session-state';
-import { LeaseRegistry } from '@agent-device/daemon/lease-registry';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { PNG } from '@agent-device/capture-kit/png';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';

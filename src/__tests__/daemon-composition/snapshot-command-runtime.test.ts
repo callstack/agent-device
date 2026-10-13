@@ -7,8 +7,8 @@ import {
   markRequestCanceled,
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
-import { dispatchSnapshotDiffViaRuntime } from '@agent-device/daemon/snapshot-diff-runtime';
-import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/snapshot-runtime';
+import { dispatchSnapshotDiffViaRuntime } from '@agent-device/daemon/testing/snapshot-diff-runtime';
+import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
 import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';

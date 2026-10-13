@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { isActiveProviderDevice } from '@agent-device/daemon/provider-device-admission';
-import { handleDoctorCommand } from '@agent-device/daemon/handlers/session-doctor';
+import { isActiveProviderDevice } from '@agent-device/daemon/testing/provider-device-admission';
+import { handleDoctorCommand } from '@agent-device/daemon/testing/handlers/session-doctor';
 import { createHostDiagnostics } from '../../../platform-runtime-host-diagnostics.ts';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
@@ -15,13 +15,13 @@ vi.mock('@agent-device/platform-apple/doctor', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/platform-apple/doctor')>()),
   appleRunnerWarmupCheck: mockAppleRunnerWarmupCheck,
 }));
-vi.mock('@agent-device/daemon/handlers/session-doctor-app', () => ({
+vi.mock('@agent-device/daemon/testing/handlers/session-doctor-app', () => ({
   appendAppChecks: vi.fn(async () => {}),
 }));
-vi.mock('@agent-device/daemon/handlers/session-doctor-metro', () => ({
+vi.mock('@agent-device/daemon/testing/handlers/session-doctor-metro', () => ({
   probeMetro: vi.fn(async () => ({ id: 'metro', status: 'pass', summary: 'mocked' })),
 }));
-vi.mock('@agent-device/daemon/provider-device-admission', () => ({
+vi.mock('@agent-device/daemon/testing/provider-device-admission', () => ({
   isActiveProviderDevice: vi.fn(() => false),
 }));
 

@@ -4,10 +4,10 @@ import { expect, test } from 'vitest';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
-import { SessionStore } from '@agent-device/daemon/session-store';
-import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/snapshot-runtime';
-import type { DownloadableArtifactRegistration } from '@agent-device/daemon/artifact-tracking';
-import { finalizeDaemonResponse } from '@agent-device/daemon/request-finalization';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
+import type { DownloadableArtifactRegistration } from '@agent-device/daemon/testing/artifact-tracking';
+import { finalizeDaemonResponse } from '@agent-device/daemon/testing/request-finalization';
 import {
   screenshotRuntimeFixture,
   writeSolidPng,

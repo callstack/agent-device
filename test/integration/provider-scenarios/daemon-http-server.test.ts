@@ -10,9 +10,9 @@ import {
   cleanupUploadedArtifact,
   prepareUploadedArtifact,
   trackDownloadableArtifact,
-} from '@agent-device/daemon/artifact-tracking';
+} from '@agent-device/daemon/testing/artifact-tracking';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
-import { createDaemonHttpServer } from '@agent-device/daemon/server/http-server';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import {
   emitRequestProgress,
   getRequestSignal,

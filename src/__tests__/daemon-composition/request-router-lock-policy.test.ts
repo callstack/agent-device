@@ -13,7 +13,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 
-vi.mock('@agent-device/daemon/device/device-ready', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
@@ -23,8 +23,8 @@ import {
   systemRuntimeSpies,
 } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
 import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
-import type { SessionState } from '@agent-device/daemon/session-state';
-import { LeaseRegistry } from '@agent-device/daemon/lease-registry';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import {

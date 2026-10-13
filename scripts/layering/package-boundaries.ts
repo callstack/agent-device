@@ -31,7 +31,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseImports } from './model.ts';
+import { parseImports, resolveWorkspaceSpecifier } from './model.ts';
 import { listTrackedPackageManifests, listTrackedProductionSources } from './tracked-sources.ts';
 
 export type PackageBoundaryViolation = {
@@ -164,13 +164,14 @@ function packageByName(packages: readonly WorkspacePackage[], name: string) {
   return packages.find((pkg) => pkg.name === name);
 }
 
-/** A specifier is named by the exports map when it matches a key or a `*` pattern prefix. */
+/**
+ * A specifier is named by the exports map when it matches a named key or resolves
+ * through a `*` pattern entry. Delegates to `resolveWorkspaceSpecifier` so every
+ * consumer (this rule, the layering edges, the depgraph, mutation ownership, and
+ * the Stryker alias table) applies one Node-exports semantics, not a private scan.
+ */
 function namedByExports(target: WorkspacePackage, specifier: string): boolean {
-  if (target.exportTargets.has(specifier)) return true;
-  for (const key of target.exportTargets.keys()) {
-    if (key.endsWith('*') && specifier.startsWith(key.slice(0, -1))) return true;
-  }
-  return false;
+  return resolveWorkspaceSpecifier(specifier, target.exportTargets) !== undefined;
 }
 
 const TEST_FILE_RE = /(^|\/)__tests__\/|\.test\.[cm]?[jt]sx?$|^test\//;

@@ -16,9 +16,9 @@ import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLimrunRuntime } from '@agent-device/provider-limrun';
 import { describe, expect, test, vi } from 'vitest';
-import { handleAppStateCommand } from '@agent-device/daemon/handlers/session-appstate';
-import { createRequestRuntimeBindings } from '@agent-device/daemon/request-runtime-binding';
-import { createRequestDispatchLedger } from '@agent-device/daemon/request-dispatch-ledger';
+import { handleAppStateCommand } from '@agent-device/daemon/testing/handlers/session-appstate';
+import { createRequestRuntimeBindings } from '@agent-device/daemon/testing/request-runtime-binding';
+import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';

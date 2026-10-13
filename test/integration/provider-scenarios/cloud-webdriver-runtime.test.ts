@@ -11,7 +11,7 @@ import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webd
 import type { CloudArtifact } from '@agent-device/contracts/observability';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
-import { createExpiredProviderLeaseReleaser } from '@agent-device/daemon/provider-lease-expiry';
+import { createExpiredProviderLeaseReleaser } from '@agent-device/daemon/testing/provider-lease-expiry';
 import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { assertRpcOk } from './assertions.ts';
 import {

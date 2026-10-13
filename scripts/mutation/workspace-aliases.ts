@@ -90,8 +90,13 @@ export function workspaceSourceAliases(
   source: ManifestSource,
 ): WorkspaceSourceAlias[] {
   const targets = [...specifierTargets(repoRoot, source)];
-  return [
-    ...targets.filter(([specifier]) => !specifier.endsWith('*')),
-    ...targets.filter(([specifier]) => specifier.endsWith('*')),
-  ].map(([specifier, target]) => aliasFor(specifier, target, repoRoot));
+  const patterns = targets.filter(([specifier]) => specifier.endsWith('*'));
+  // Vite applies the first matching alias, so exact entries lead (Node's exact
+  // precedence) and patterns follow sorted by prefix length descending (Node's
+  // longest-prefix rule) — the same order resolveWorkspaceSpecifier resolves in,
+  // so the sandbox never picks a different module id than the exports semantics.
+  patterns.sort(([a], [b]) => b.length - a.length);
+  return [...targets.filter(([specifier]) => !specifier.endsWith('*')), ...patterns].map(
+    ([specifier, target]) => aliasFor(specifier, target, repoRoot),
+  );
 }

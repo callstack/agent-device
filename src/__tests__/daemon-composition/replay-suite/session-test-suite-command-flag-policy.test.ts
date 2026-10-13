@@ -8,11 +8,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { SessionStore } from '@agent-device/daemon/session-store';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import {
   createReplaySession,
   replayDaemonDependencies,
-} from '@agent-device/daemon/handlers/session-replay-command';
+} from '@agent-device/daemon/testing/handlers/session-replay-command';
 import { runReplayTestCommand } from '@agent-device/replay-port/test-command';
 import {
   replayInvokeOverDispatch,

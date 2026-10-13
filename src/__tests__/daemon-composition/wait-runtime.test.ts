@@ -27,10 +27,10 @@ import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-d
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
-} from '@agent-device/daemon/request-runtime-binding';
-import { handleSnapshotCommands } from '@agent-device/daemon/handlers/snapshot';
-import { resolveBoundSelectorCapture } from '@agent-device/daemon/selector-capture-binding';
-import { dispatchGetViaRuntime } from '@agent-device/daemon/selector-runtime';
+} from '@agent-device/daemon/testing/request-runtime-binding';
+import { handleSnapshotCommands } from '@agent-device/daemon/testing/handlers/snapshot';
+import { resolveBoundSelectorCapture } from '@agent-device/daemon/testing/selector-capture-binding';
+import { dispatchGetViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
 import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 

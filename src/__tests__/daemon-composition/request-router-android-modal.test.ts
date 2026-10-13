@@ -14,14 +14,14 @@ import {
   gestureDeviceRuntimeGateway,
   gestureRuntimeSpies,
 } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
-import type { SessionState } from '@agent-device/daemon/session-state';
-import { LeaseRegistry } from '@agent-device/daemon/lease-registry';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import {
   createProviderDeviceRuntimeRequestProviders,
   isActiveProviderDevice,
 } from '../../provider-device-runtime.ts';
-import { installProviderDeviceAdmission } from '@agent-device/daemon/provider-device-admission';
+import { installProviderDeviceAdmission } from '@agent-device/daemon/testing/provider-device-admission';
 
 // Root composition installs the daemon's provider-device admission; this test composes the
 // request providers the same way, so it installs the fact the same way.

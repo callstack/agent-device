@@ -18,18 +18,18 @@ import {
   mockTapPoint,
   resetGetRuntimeFixture,
 } from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/snapshot-interactor-capture';
-import { discloseRequestDispatch } from '@agent-device/daemon/request-dispatch-disclosure';
+import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
+import { discloseRequestDispatch } from '@agent-device/daemon/testing/request-dispatch-disclosure';
 import {
   createRequestDispatchLedger,
   recordBoundMutations,
-} from '@agent-device/daemon/request-dispatch-ledger';
-import type { BindDeviceRuntime } from '@agent-device/daemon/request-runtime-binding';
+} from '@agent-device/daemon/testing/request-dispatch-ledger';
+import type { BindDeviceRuntime } from '@agent-device/daemon/testing/request-runtime-binding';
 import { clearAndroidObservationFixture } from '@agent-device/daemon/testing/__tests__/android-observation-fixture';
-import { activateCompleteRefFrame, expireRefFrame } from '@agent-device/daemon/ref-frame';
-import { handleInteractionCommands } from '@agent-device/daemon/interaction/index';
-import type { InteractionRouteInput } from '@agent-device/daemon/interaction/internal/types';
-import { assertAndroidPressStayedInApp } from '@agent-device/daemon/interaction/internal/interaction-android-escape';
+import { activateCompleteRefFrame, expireRefFrame } from '@agent-device/daemon/testing/ref-frame';
+import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import type { InteractionRouteInput } from '@agent-device/daemon/testing/interaction/internal/types';
+import { assertAndroidPressStayedInApp } from '@agent-device/daemon/testing/interaction/internal/interaction-android-escape';
 import { gestureRuntimeBindingsFixture } from '@agent-device/daemon/testing/interaction/internal/__tests__/gesture-runtime-bindings.fixtures';
 import {
   contextFromFlags,
@@ -42,7 +42,7 @@ import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 // drive a real `press` through the daemon interaction handler, inside the router's dispatch seam,
 // with only the device touch mocked; the guard row drives the guard itself.
 
-vi.mock('@agent-device/daemon/snapshot-interactor-capture', () => ({
+vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
