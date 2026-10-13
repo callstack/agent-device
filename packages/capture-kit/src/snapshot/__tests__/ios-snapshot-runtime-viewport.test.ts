@@ -192,3 +192,54 @@ test('depth filtering and state normalization never promote app content into key
     'occluded',
   );
 });
+
+test('depth projection cannot promote a rejected split keyboard into a trusted band', () => {
+  const viewport = SCREEN;
+  const nodes: RawSnapshotNode[] = [
+    { index: 0, depth: 0, type: 'Application', rect: viewport },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Between clusters',
+      rect: { x: 150, y: 650, width: 40, height: 20 },
+    },
+    {
+      index: 2,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Keyboard',
+      rect: { x: 0, y: 580, width: 390, height: 264 },
+    },
+    ...[0, 310].map((x, offset) => ({
+      index: 3 + offset,
+      depth: 2,
+      parentIndex: 2,
+      type: 'Key',
+      rect: { x, y: 600, width: 80, height: 40 },
+    })),
+  ];
+  for (const visibility of [undefined, true] as const) {
+    const acquired = createIosSnapshotAcquisition({
+      producer: 'appium-source',
+      nodes,
+      viewport: { kind: 'reported', rect: viewport },
+      lineage: {},
+      keyboard: observeProviderKeyboard({ nodes, viewport, visibility }),
+    });
+    const projected = presentIosSnapshotAcquisition(acquired, { raw: true, depth: 1 });
+    const state = buildSnapshotState(projected, { snapshotRaw: true });
+    const node = state.nodes.find((n) => n.label === 'Between clusters')!;
+    assert.equal(
+      resolveKeyboardTapOcclusion({
+        nodes: state.nodes,
+        viewport,
+        keyboard: state.keyboard,
+        node,
+        point: { x: 170, y: 660 },
+      }).kind,
+      'undetermined',
+    );
+  }
+});

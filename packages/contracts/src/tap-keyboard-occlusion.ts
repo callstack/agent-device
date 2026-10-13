@@ -35,6 +35,8 @@ import { normalizeType } from './snapshot-text.ts';
 /** The one reason a tap refuses because the visible keyboard owns its tap point. */
 export const TAP_KEYBOARD_OCCLUDES_TARGET_REASON = 'tap_keyboard_occludes_target';
 
+const KEYBOARD_TREE_GEOMETRY_UNUSABLE_REASON = 'keyboard-tree-geometry-unusable';
+
 /**
  * The hint every owner publishes beside the reason, naming the recovery that actually works.
  * `keyboard dismiss` taps the keyboard's own dismiss control and refuses when it exposes none
@@ -339,13 +341,23 @@ export function observeProviderKeyboard(params: {
   return {
     kind: 'unmeasurable',
     reason: params.nodes.some(isKeyboardAnchorNode)
-      ? 'keyboard-tree-geometry-unusable'
+      ? KEYBOARD_TREE_GEOMETRY_UNUSABLE_REASON
       : params.visibility === 'failed'
         ? 'keyboard-visibility-probe-failed'
         : params.visibility === 'unsupported'
           ? 'keyboard-visibility-probe-unsupported'
           : 'keyboard-not-observed',
   };
+}
+
+function keyboardFactDisallowsTreeDerivation(
+  keyboard: SnapshotKeyboardBandFact | undefined,
+): boolean {
+  return (
+    keyboard?.kind === 'visibility-only' ||
+    (keyboard?.kind === 'unmeasurable' &&
+      keyboard.reason === KEYBOARD_TREE_GEOMETRY_UNUSABLE_REASON)
+  );
 }
 
 /**
@@ -358,10 +370,13 @@ export function observeProviderKeyboard(params: {
  *
  * A measured or acquisition-derived frame in `keyboard` survives projection. Measured frames need no
  * docking, column-run, or orientation inference; derived bands already passed those rules during
- * acquisition. Keyboard ownership on surviving nodes retains its acquisition witness after projection. The keyboard's own controls still come from the
+ * acquisition. Keyboard ownership on surviving nodes retains its acquisition witness after projection.
+ * The keyboard's own controls still come from the
  * tree — which node the keyboard rather than the app is responsible for is a different question from
- * where the band is, and only the tree can answer it. Unknown or visibility-only positive observations
- * may derive geometry from the current tree; missing nodes leave the decision undetermined.
+ * where the band is, and only the tree can answer it. Visibility-only observations carry no band, and
+ * rejected acquisition geometry stays rejected
+ * after projection. Other failed direct measurements may still use the tree; missing nodes remain
+ * undetermined.
  */
 export function resolveKeyboardTapOcclusion(params: {
   nodes: readonly RawSnapshotNode[];
@@ -378,6 +393,7 @@ export function resolveKeyboardTapOcclusion(params: {
   ) {
     return { kind: 'no-keyboard' };
   }
+  if (keyboardFactDisallowsTreeDerivation(params.keyboard)) return { kind: 'undetermined' };
   const surface =
     params.keyboard?.kind === 'visible' || params.keyboard?.kind === 'derived'
       ? { frame: params.keyboard.frame, controlRects: collectKeyboardControlRects(params.nodes) }

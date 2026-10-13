@@ -154,9 +154,8 @@ test('cloud iOS fill lands text in the field it tapped', async () => {
     assert.equal(data.textEntryReadiness, 'focused-element');
     // The keys reached the focused field, not the void.
     assert.equal(server.fieldValues.email, 'user@example.com');
-    // Both pre-tap readings, the tap, then polling until focus lands. The keys
-    // come last — that ordering IS the fix.
     assert.deepEqual(textEntryTranscript(server), [
+      'keyboard',
       'keyboard',
       'active',
       'tap',
@@ -172,9 +171,12 @@ test('cloud iOS fill lands text in the field it tapped', async () => {
       { ...leaseFlags(lease.leaseId), snapshotInteractiveOnly: true },
       { meta: leaseMeta(lease.leaseId) },
     );
-    const nodes = assertRpcOk<{ nodes?: Array<{ identifier?: string; value?: string }> }>(
-      snapshot,
-    ).nodes;
+    const snapshotData = assertRpcOk<{
+      nodes?: Array<{ identifier?: string; value?: string }>;
+      keyboard?: { kind: string; visible?: boolean };
+    }>(snapshot);
+    assert.deepEqual(snapshotData.keyboard, { kind: 'visibility-only', visible: true });
+    const nodes = snapshotData.nodes;
     assert.equal(nodes?.find((node) => node.identifier === 'email')?.value, 'user@example.com');
   });
 }, 15_000);

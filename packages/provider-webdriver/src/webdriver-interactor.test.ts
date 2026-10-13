@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
+import { resolveKeyboardTapOcclusion } from '@agent-device/contracts/tap-keyboard-occlusion';
 import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
 import { createCloudWebDriverCapabilities } from './capabilities.ts';
@@ -953,5 +954,39 @@ test('snapshot cancellation during an optional keyboard probe is not swallowed',
   await assert.rejects(
     interactor.snapshot({ signal: controller.signal }),
     (error: unknown) => error === controller.signal.reason,
+  );
+});
+
+test('Android acquisition derives a docked IME before projection removes its tree', async () => {
+  const interactor = createWebDriverInteractor({
+    client: {
+      source: async () =>
+        '<hierarchy><node class="android.widget.FrameLayout" resource-id="com.android.systemui:id/status_bar" bounds="[0,0][1080,100]"/><node class="android.widget.FrameLayout" bounds="[0,100][1080,2400]"><node class="android.widget.Button" text="Form" bounds="[100,1800][300,1840]"/></node><node class="android.widget.FrameLayout" resource-id="com.google.android.inputmethod.latin:id/input_view" bounds="[0,1500][1080,2400]"/></hierarchy>',
+      isKeyboardShown: async () => true,
+    } as unknown as WebDriverClient,
+    backend: 'android',
+    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
+  });
+  const snapshot = await interactor.snapshot();
+  assert.ok(!('stage' in snapshot));
+  assert.deepEqual(snapshot.keyboard, {
+    kind: 'derived',
+    derivation: 'docked-tree',
+    frame: { x: 0, y: 1500, width: 1080, height: 900 },
+  });
+  const form = snapshot.nodes.find((node) => node.label === 'Form')!;
+  assert.equal(
+    resolveKeyboardTapOcclusion({
+      nodes: [form],
+      node: form,
+      viewport: null,
+      point: { x: 200, y: 1820 },
+      keyboard: snapshot.keyboard,
+    }).kind,
+    'occluded',
+  );
+  assert.equal(
+    snapshot.nodes.find((node) => node.identifier?.includes('input_view'))?.keyboardOwned,
+    true,
   );
 });
