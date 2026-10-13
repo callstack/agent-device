@@ -11,7 +11,7 @@ import { createInteractionDevice } from './__tests__/test-utils/index.ts';
 // resolution.test.ts uses (createInteractionDevice), mocking
 // `confirmOffscreenTargetVisible` directly rather than the local XCTest
 // runner — the runner-level probe I/O is covered separately in
-// packages/daemon/src/__tests__/offscreen-target-probe.test.ts.
+// packages/daemon/src/execution/__tests__/offscreen-target-probe.test.ts.
 
 // The bulk tree's ScrollView ancestor is corrupted (squeezed to a sliver),
 // so the target's rect doesn't overlap it — the guard rejects even though
