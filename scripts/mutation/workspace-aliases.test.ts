@@ -28,7 +28,9 @@ test('Stryker aliases every exported workspace subpath exactly', () => {
     assert.ok(pattern, `${specifier} must alias as a capture-group pattern`);
     const suffix = 'probe/nested';
     const applied = `${specifier.slice(0, -1)}${suffix}`.replace(pattern.find, pattern.replacement);
-    assert.equal(applied, path.join(repoRoot, target).replace('*', suffix));
+    const expected = path.join(repoRoot, target);
+    const star = expected.indexOf('*');
+    assert.equal(applied, expected.slice(0, star) + suffix + expected.slice(star + 1));
   }
 
   assert.equal(

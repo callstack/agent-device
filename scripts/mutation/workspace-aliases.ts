@@ -28,10 +28,15 @@ function exactSpecifier(specifier: string): RegExp {
  */
 function aliasFor(specifier: string, target: string, repoRoot: string): WorkspaceSourceAlias {
   if (specifier.endsWith('*') && target.includes('*')) {
+    // Node requires exactly one `*` in the target, so it splices at a known
+    // index; `$` in the repo path is escaped so Vite sees only the `$1` fill.
     const template = path.join(repoRoot, target);
+    const star = template.indexOf('*');
+    const escapeDollar = (text: string) => text.replaceAll('$', '$$');
     return {
       find: new RegExp(`^${escapeRegExp(specifier.slice(0, -1))}(.*)$`),
-      replacement: template.replaceAll('$', '$$').replace('*', '$1'),
+      replacement:
+        escapeDollar(template.slice(0, star)) + '$1' + escapeDollar(template.slice(star + 1)),
     };
   }
   return { find: exactSpecifier(specifier), replacement: path.join(repoRoot, target) };
