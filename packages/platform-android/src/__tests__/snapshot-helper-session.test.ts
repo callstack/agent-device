@@ -3,7 +3,6 @@ import { afterEach, beforeEach, test } from 'vitest';
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { isAndroidSnapshotHelperRuntimeOccupiedError } from '../snapshot-helper-retirement.ts';
-import { resolveAndroidSnapshotHelperSessionRequestTimeoutMs } from '../snapshot-helper-session-protocol.ts';
 import {
   createSessionProvider,
   type FakeAndroidProcess,
@@ -25,14 +24,6 @@ test('allows a persistent session snapshot to use the helper command budget', as
   const calls: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, responseDelayMs: 25 });
 
-  assert.equal(
-    resolveAndroidSnapshotHelperSessionRequestTimeoutMs({
-      timeoutMs: 10,
-      commandTimeoutMs: 4_000,
-    }),
-    3_010,
-  );
-
   const output = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,
     adbProvider: provider,
@@ -44,6 +35,33 @@ test('allows a persistent session snapshot to use the helper command budget', as
   assert.match(output?.xml ?? '', /snapshot 1/);
   assert.equal(output?.metadata.transport, 'persistent-session');
   assert.equal(output?.metadata.sessionReused, false);
+});
+
+test('a capture waits out the whole session command budget, not the native connect wait', async () => {
+  // The device-side `timeoutMs` bounds only the UiAutomation connect wait. The socket deadline used
+  // to be that wait plus a fixed overhead, so a healthy capture that merely took longer (a React
+  // Native debug build repainting a list every second, tester-army/e2e#841) was retired into the
+  // one-shot transport and a restart on every read. The budgets here are scaled down so the test
+  // does not wait real time; the production share is pinned in the lifecycle test.
+  const calls: (readonly string[])[] = [];
+  const spawnArgs: (readonly string[])[] = [];
+  const provider = createSessionProvider({ calls, spawnArgs, responseDelayMs: 120 });
+
+  const output = await captureAndroidSnapshotWithHelperSession({
+    adb: provider.exec,
+    adbProvider: provider,
+    deviceKey: 'android:emulator-5554',
+    timeoutMs: 1,
+    commandTimeoutMs: 400,
+  });
+
+  assert.match(output?.xml ?? '', /snapshot 1/);
+  assert.equal(output?.metadata.transport, 'persistent-session');
+  assert.equal(spawnArgs.length, 1);
+  assert.equal(
+    calls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
+    false,
+  );
 });
 
 test('retires a persistent session that exceeds the helper command budget', async () => {
