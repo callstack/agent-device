@@ -382,17 +382,21 @@ test('Android Appium popup ids containing status_bar stay actionable through chr
   );
 });
 
-test('Android bar inheritance stops at an omitted XML node with unknown ownership', () => {
+test('Android native wrappers retain unknown ownership barriers for membership and settle', () => {
   const nodes = parseWebDriverSourceFacts(
     `<hierarchy>
     <android.widget.FrameLayout package="com.android.systemui" resource-id="com.android.systemui:id/status_bar">
       <android.widget.FrameLayout>
-        <android.widget.TextView package="com.android.systemui" text="Unknown subtree clock" />
+        <android.widget.Button package="com.android.systemui" text="Unknown subtree action" bounds="[0,0][100,40]" />
       </android.widget.FrameLayout>
     </android.widget.FrameLayout>
   </hierarchy>`,
     'android',
   ).nodes;
   assert.equal(nodes[0]?.systemBar, 'status');
-  assert.equal(nodes.find((node) => node.label === 'Unknown subtree clock')?.systemBar, undefined);
+  assert.equal(nodes.find((node) => node.label === 'Unknown subtree action')?.systemBar, undefined);
+  assert.deepEqual(
+    withoutSettleChrome(attachRefs(nodes), 'com.example').map((node) => node.label),
+    [undefined, 'Unknown subtree action'],
+  );
 });

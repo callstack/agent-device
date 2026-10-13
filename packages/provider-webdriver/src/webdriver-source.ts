@@ -97,6 +97,17 @@ export function parseWebDriverSourceFacts(
   for (const root of roots) {
     appendSourceNodes(nodes, root, undefined, 0, sourceRoots, platform);
   }
+  if (platform === 'android') {
+    for (const node of nodes) {
+      const parent = node.parentIndex === undefined ? undefined : nodes[node.parentIndex];
+      const systemBar = androidSystemBarMembership(
+        node.bundleId,
+        node.identifier,
+        parent?.systemBar,
+      );
+      if (systemBar) node.systemBar = systemBar;
+    }
+  }
   return { nodes, roots: sourceRoots };
 }
 
@@ -107,28 +118,21 @@ function appendSourceNodes(
   depth: number,
   sourceRoots: WebDriverSourceRootFact[],
   platform: WebDriverSourcePlatform,
-  ancestorSystemBar?: RawSnapshotNode['systemBar'],
 ): void {
-  const systemBar =
-    platform === 'android'
-      ? androidSystemBarMembership(
-          xmlNode.attributes.package,
-          sourceIdentifier(xmlNode.attributes),
-          ancestorSystemBar,
-        )
-      : undefined;
   const currentIndex = isSourceContainer(xmlNode, platform)
     ? parentIndex
-    : appendSourceNode(nodes, xmlNode, parentIndex, depth, sourceRoots, platform, systemBar);
+    : appendSourceNode(nodes, xmlNode, parentIndex, depth, sourceRoots, platform);
   const childDepth = currentIndex === parentIndex ? depth : depth + 1;
   for (const child of xmlNode.children) {
-    appendSourceNodes(nodes, child, currentIndex, childDepth, sourceRoots, platform, systemBar);
+    appendSourceNodes(nodes, child, currentIndex, childDepth, sourceRoots, platform);
   }
 }
 
 function isSourceContainer(xmlNode: XmlNode, platform: WebDriverSourcePlatform): boolean {
-  if (Object.keys(xmlNode.attributes).length === 0) return true;
   const name = xmlNode.name.toLowerCase();
+  if (Object.keys(xmlNode.attributes).length === 0) {
+    return platform === 'ios' || name === 'hierarchy';
+  }
   return platform === 'ios' && (name === 'hierarchy' || name === 'appiumaut');
 }
 
@@ -149,22 +153,13 @@ function appendSourceNode(
   depth: number,
   sourceRoots: WebDriverSourceRootFact[],
   platform: WebDriverSourcePlatform,
-  systemBar: RawSnapshotNode['systemBar'],
 ): number {
   const index = nodes.length;
   const rect = rectFromWebDriverAttributes(xmlNode.attributes);
   const type = publishedType(xmlNode, platform);
-  const node = sourceNodeFromAttributes(
-    index,
-    type,
-    xmlNode.attributes,
-    parentIndex,
-    depth,
-    rect,
-    platform,
+  nodes.push(
+    sourceNodeFromAttributes(index, type, xmlNode.attributes, parentIndex, depth, rect, platform),
   );
-  if (systemBar) node.systemBar = systemBar;
-  nodes.push(node);
   if (parentIndex === undefined) {
     sourceRoots.push({
       type,
@@ -173,10 +168,6 @@ function appendSourceNode(
     });
   }
   return index;
-}
-
-function sourceIdentifier(attrs: Record<string, string>): string | undefined {
-  return firstWebDriverAttribute(attrs, ['resource-id', 'id', 'accessibility-id', 'name']);
 }
 
 function sourceNodeFromAttributes(
@@ -195,7 +186,7 @@ function sourceNodeFromAttributes(
     role: roleFromWebDriverType(type, attrs),
     ...labelFacts(attrs, platform),
     value: field === undefined ? nonEmptyWebDriverAttribute(attrs.value) : field.value,
-    identifier: sourceIdentifier(attrs),
+    identifier: firstWebDriverAttribute(attrs, ['resource-id', 'id', 'accessibility-id', 'name']),
     ...(platform === 'android' && attrs.package ? { bundleId: attrs.package } : {}),
     rect,
     ...sourceStateFacts(attrs, rect, platform),
