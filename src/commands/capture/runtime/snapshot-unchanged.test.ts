@@ -79,6 +79,8 @@ test.each<Partial<SnapshotNode>>([
   { placeholder: 'Key echo' },
   { hittable: false },
   { bundleId: 'com.example.app' },
+  { systemBar: 'status' },
+  { systemBar: 'navigation' },
   { appName: 'Example' },
   { windowTitle: 'Compose' },
   { surface: 'app' },

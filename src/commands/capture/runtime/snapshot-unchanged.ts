@@ -121,6 +121,7 @@ const PRESENTATION_SCALAR_FIELDS = {
   placeholder: true,
   hittable: true,
   bundleId: true,
+  systemBar: true,
   appName: true,
   windowTitle: true,
   surface: true,

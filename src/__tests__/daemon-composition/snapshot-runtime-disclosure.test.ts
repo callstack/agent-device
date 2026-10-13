@@ -213,6 +213,7 @@ test('Android public snapshots preserve system-bar membership and strip only pri
   });
   const response = await dispatchSnapshot(input);
   expect(response.ok).toBe(true);
+  if (!response.ok) throw new Error(response.error.message);
   const nodes = JSON.parse(JSON.stringify(response.data?.nodes));
   expect(nodes[0].systemBar).toBe('navigation');
   expect(nodes[1]).not.toHaveProperty('systemBar');
