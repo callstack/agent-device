@@ -1,3 +1,6 @@
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { coveredInteractionHint } from '@agent-device/kernel/snapshot';
+
 /** Machine-readable `error.details.reason` values shared by interaction producers and adapters. */
 export const INTERACTION_ERROR_REASONS = {
   selectorNotFound: 'selector_not_found',
@@ -21,3 +24,28 @@ export const INTERACTION_ERROR_REASONS = {
   /** The target resolved, but another visible element covers it. */
   targetCovered: 'target_covered',
 } as const;
+
+/** The part of a covered node a refusal reports. */
+type CoveredNodeFacts = Pick<SnapshotNode, 'ref' | 'interactionBlocked' | 'coveredBy'>;
+
+/**
+ * The whole `error.details` shape of a covered refusal, shared by every producer (the interaction
+ * runtime's `click`/`press`/`fill`/`focus` guard and `find ... focus`) so both paths report the same
+ * reason, hint, ref and cover description. The hint names the cover when the occlusion scan found
+ * one and stays generic when a backend policy reported only the boolean; `coveredBy` is absent in
+ * that case rather than guessed. The cover is diagnosis only — the detail never carries its ref.
+ */
+export function coveredInteractionDetails(
+  node: CoveredNodeFacts,
+  subject: { selector?: string } = {},
+): Record<string, unknown> {
+  const coveredBy = node.coveredBy;
+  return {
+    reason: INTERACTION_ERROR_REASONS.targetCovered,
+    hint: coveredInteractionHint(coveredBy),
+    ...(subject.selector ? { selector: subject.selector } : {}),
+    ref: `@${node.ref}`,
+    interactionBlocked: node.interactionBlocked,
+    ...(coveredBy ? { coveredBy } : {}),
+  };
+}

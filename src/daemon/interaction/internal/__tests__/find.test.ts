@@ -520,6 +520,9 @@ test('handleFindCommands focus rejects covered matches before dispatching coordi
   expect(response.ok).toBe(false);
   if (!response.ok) {
     expect(response.error.message).toContain('is covered by another visible element');
+    // The shared covered-refusal detail: same reason, ref and cover description as press/click.
+    expect(response.error.details?.reason).toBe('target_covered');
+    expect(response.error.details?.ref).toBe('@e2');
     expect(response.error.details?.interactionBlocked).toBe('covered');
     // The refusal names the cover the scan found and never advertises its ref.
     expect(response.error.details?.coveredBy).toEqual({

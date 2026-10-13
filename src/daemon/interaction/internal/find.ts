@@ -7,9 +7,9 @@ import {
 } from '@agent-device/selectors';
 import { runNodePipelineStages } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
+import { coveredInteractionDetails } from '@agent-device/selectors/interaction-error';
 import {
   centerOfRect,
-  coveredInteractionHint,
   type SnapshotKeyboardBandFact,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
@@ -420,16 +420,10 @@ async function dispatchFocusForFindMatch(
 function rejectCoveredFindMatch(match: ResolvedMatch, interaction: string): DaemonResponse | null {
   const blockedNode = match.occludedNode;
   if (!blockedNode) return null;
-  const coveredBy = blockedNode.coveredBy;
   return errorResponse(
     'COMMAND_FAILED',
     `Matched element ${match.ref} is covered by another visible element and cannot ${interaction} safely`,
-    {
-      ref: `@${blockedNode.ref}`,
-      interactionBlocked: blockedNode.interactionBlocked,
-      hint: coveredInteractionHint(coveredBy),
-      ...(coveredBy ? { coveredBy } : {}),
-    },
+    coveredInteractionDetails(blockedNode),
   );
 }
 

@@ -145,6 +145,80 @@ test('annotateCoveredSnapshotNodes clips a covering label to the bounded length'
   assert.equal(result[0]?.coveredBy?.label?.length, SNAPSHOT_COVERING_LABEL_MAX_LENGTH);
 });
 
+// Shapes below are the live iPhone 18 Pro (iOS 27.0) capture of the Agent Device Tester home tab
+// with its confirmation alert open. The alert's container publishes as the generic `group` kind and
+// is only recognizable through the alert title carried as its accessible label.
+const LIVE_HOME_APPLICATION: RawSnapshotNode = {
+  index: 0,
+  type: 'Application',
+  role: 'UIApplication',
+  label: 'Agent Device Tester',
+  rect: { x: 0, y: 0, width: 402, height: 874 },
+};
+
+const LIVE_COVERED_SWITCH: RawSnapshotNode = {
+  index: 1,
+  type: 'Switch',
+  role: 'UISwitch',
+  label: 'Lab online',
+  value: '1',
+  hittable: true,
+  parentIndex: 0,
+  rect: { x: 304.6666774749756, y: 322.66666634877515, width: 63, height: 28 },
+};
+
+const LIVE_ALERT_CONTAINER: RawSnapshotNode = {
+  index: 2,
+  type: 'Group',
+  role: '_UIAlertControllerPhoneTVMacView',
+  label: 'Confirm catalog refresh',
+  hittable: true,
+  parentIndex: 0,
+  rect: { x: 41, y: 327, width: 320, height: 248 },
+};
+
+test('a live alert container is named through the label it publishes, not its generic kind', () => {
+  const result = annotateCoveredSnapshotNodes([
+    LIVE_HOME_APPLICATION,
+    LIVE_COVERED_SWITCH,
+    LIVE_ALERT_CONTAINER,
+  ]);
+
+  assert.equal(result[1]?.interactionBlocked, 'covered');
+  assert.deepEqual(result[1]?.coveredBy, {
+    kind: 'group',
+    label: 'Confirm catalog refresh',
+    rect: { x: 41, y: 327, width: 320, height: 248 },
+  });
+});
+
+test('an anonymous container cover publishes no cover instead of naming a faceless box', () => {
+  // Same live nodes with the alert title removed: `the group at (41, 327 320x248)` describes a box
+  // no reader would recognize or dismiss, so the refusal falls back to the generic recovery.
+  const result = annotateCoveredSnapshotNodes([
+    LIVE_HOME_APPLICATION,
+    LIVE_COVERED_SWITCH,
+    { ...LIVE_ALERT_CONTAINER, label: undefined },
+  ]);
+
+  assert.equal(result[1]?.interactionBlocked, 'covered');
+  assert.equal(result[1]?.hittable, false);
+  assert.equal(result[1]?.coveredBy, undefined);
+});
+
+test('a named cover kind still describes itself with no label to lean on', () => {
+  const result = annotateCoveredSnapshotNodes([
+    LIVE_HOME_APPLICATION,
+    LIVE_COVERED_SWITCH,
+    { ...LIVE_ALERT_CONTAINER, type: 'Sheet', role: undefined, label: undefined },
+  ]);
+
+  assert.deepEqual(result[1]?.coveredBy, {
+    kind: 'sheet',
+    rect: { x: 41, y: 327, width: 320, height: 248 },
+  });
+});
+
 test('annotateSnapshotNodesCoveredByPolicy refuses without guessing a cover', () => {
   // The Android replacement-surface lane reports only the covered boolean; the refusal must not
   // invent a culprit it never observed.

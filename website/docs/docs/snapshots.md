@@ -131,6 +131,33 @@ Every node in `snapshot --json` output carries `kind`, next to `type` when the p
 On iOS, `role` (when present) is the native AX class (`UIButton`), carried only on iOS nodes.
 `kind` is the cross-platform role, present on every node on every platform.
 
+A node the occlusion scan finds covered carries `interactionBlocked: "covered"` and, next to it,
+`coveredBy` naming what draws on top of it — the cover's `kind`, its accessible `label` when it has
+one, and its `rect`:
+
+```json
+{
+  "ref": "e10",
+  "kind": "text",
+  "label": "Session health",
+  "interactionBlocked": "covered",
+  "coveredBy": {
+    "kind": "group",
+    "label": "Confirm catalog refresh",
+    "rect": { "x": 41, "y": 327, "width": 320, "height": 248 }
+  }
+}
+```
+
+`coveredBy.kind` is the same presented role any other node carries, so a cover can be a generic
+container — an alert's container often arrives as `group` — and the label is what makes it nameable.
+
+A `click`/`press`/`fill`/`find ... focus` refused on that node repeats the same description in
+`error.details.coveredBy` and names it in `error.hint`. `coveredBy` is diagnosis only: it carries no
+ref, so the cover is not an actionable target. It is absent when nothing nameable covers — an
+anonymous container with no accessible name, or a backend policy that reports only the boolean, such
+as an Android replacement surface — and those refusals say only that the target is covered.
+
 `role=` selectors (and `find role=...`) match the `kind` vocabulary: a node whose `kind` is `text`
 or `text-field` always matches `role=text` / `role=text-field`, the bracketed word a snapshot
 shows for that node. The raw leaf classes — `role=statictext`, `role=edittext`, `role=textview`,
@@ -227,8 +254,9 @@ decides which backends it tries.
   overlay nodes can appear next to the app's own tree. `androidSnapshot.captureMode` and
   `androidSnapshot.windowCount` describe what was captured.
 - Default and `-i` snapshots keep covered surfaces in the same window visible for diagnosis, and
-  mark controls whose drawing order shows they are covered with `interactionBlocked: "covered"`, so
-  selectors can't act on a stale React Native screen underneath.
+  mark controls whose drawing order shows they are covered with `interactionBlocked: "covered"` plus
+  a `coveredBy` description of the cover, so selectors can't act on a stale React Native screen
+  underneath.
 - Android 6.0 (API 23) doesn't report the drawing order of sibling views, so this check falls back
   to conservative behavior there, and `androidSnapshot.occlusionScanUnavailable: true` tells you so.
 - `--raw` returns the tree as captured. It also keeps nodes Android marks invisible and stale

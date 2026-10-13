@@ -355,8 +355,10 @@ export type RawSnapshotNode = {
    * Bounded description of the element the geometric occlusion scan found drawing on top of this
    * node, published together with `interactionBlocked: 'covered'` so a refusal can name the culprit
    * instead of only the fact of coverage. Absent when the covered decision came from a
-   * backend-policy annotation that reports a boolean and names no cover. This is a description, not
-   * an authorization: it carries no ref and is never an actionable target.
+   * backend-policy annotation that reports a boolean, and when the cover the scan found is an
+   * anonymous container no reader could recognize; both refusals keep the generic recovery rather
+   * than guessing a culprit. This is a description, not an authorization: it carries no ref and is
+   * never an actionable target.
    */
   coveredBy?: SnapshotCoveringNode;
   presentationHints?: string[];

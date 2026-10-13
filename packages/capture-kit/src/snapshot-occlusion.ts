@@ -121,21 +121,35 @@ export function annotateCoveredSnapshotNodes(
   for (const [position, node] of nodes.entries()) {
     if (!isCandidateTouchNode(node)) continue;
     const coveringNode = findCoveringNode(scan, position, node, options);
-    if (coveringNode)
-      coveredPositions.push({ position, coveredBy: describeCoveringNode(coveringNode) });
+    if (!coveringNode) continue;
+    const coveredBy = describeCoveringNode(coveringNode);
+    coveredPositions.push(coveredBy ? { position, coveredBy } : { position });
   }
   return annotateCoveredPositions(nodes, coveredPositions);
 }
 
+/** Presented roles that name a box rather than a surface a reader would recognize and dismiss. */
+const ANONYMOUS_CONTAINER_KINDS = new Set(['element', 'group', 'other']);
+
 /**
- * The bounded, non-actionable description of the cover the scan found. No ref is ever carried — see
- * {@link SnapshotCoveringNode}.
+ * The bounded, non-actionable description of the cover the scan found, or nothing when the cover has
+ * no name. No ref is ever carried — see {@link SnapshotCoveringNode}.
+ *
+ * A live iPhone 18 Pro capture pins the boundary: a `UIAlertController`'s container publishes as the
+ * generic `group` kind and is nameable only through the alert's title carried as its accessible
+ * label, so the refusal reads `the group "Confirm catalog refresh" at (41, 327 320x248)` and names
+ * the surface to dismiss. Strip that label and the same node would say `the group at (...)`, which
+ * points at a box nobody would recognize; an anonymous container of that shape therefore publishes
+ * no cover, and the refusal keeps its generic recovery. A named kind (`dialog`, `tab-bar`, `sheet`)
+ * still describes itself with no label to lean on.
  */
-function describeCoveringNode(node: RawSnapshotNode): SnapshotCoveringNode {
+function describeCoveringNode(node: RawSnapshotNode): SnapshotCoveringNode | null {
   const label = node.label?.trim();
+  const kind = formatRole(node.type ?? 'Element');
+  if (!label && ANONYMOUS_CONTAINER_KINDS.has(kind)) return null;
   const rect = positiveRect(node.rect);
   return {
-    kind: formatRole(node.type ?? 'Element'),
+    kind,
     ...(label ? { label: label.slice(0, SNAPSHOT_COVERING_LABEL_MAX_LENGTH) } : {}),
     ...(rect ? { rect } : {}),
   };
