@@ -76,14 +76,12 @@ function areSnapshotPresentationsEquivalent(
   );
 }
 
-// Native text-entry/visibility facts are not rendered; refs and process ids are volatile.
+// Some native text-entry/visibility facts are not rendered; refs and process ids are volatile.
 // Inheritance markers are output-only: this comparison runs before label deduplication.
 type ComparableSnapshotNode = Omit<
   SnapshotNode,
   | 'ref'
   | 'pid'
-  | 'editable'
-  | 'password'
   | 'hintShowing'
   | 'selectionStart'
   | 'selectionEnd'
@@ -114,6 +112,8 @@ const PRESENTATION_SCALAR_FIELDS = {
   contentDescription: true,
   identifier: true,
   enabled: true,
+  editable: true,
+  password: true,
   selected: true,
   checked: true,
   focused: true,
