@@ -41,9 +41,9 @@ test.each([
   },
 );
 
-test('the value stays what the platform reported: the hint while showing, the text once filled', () => {
+test('a showing hint means empty content and a filled field keeps its text', () => {
   const byId = nodesById(false);
-  expect(byId('name-input')?.value).toBe('Key echo');
+  expect(byId('name-input')?.value).toBe('');
   expect(byId('email-input')?.value).toBe('ada@example.com');
 });
 

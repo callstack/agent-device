@@ -171,7 +171,10 @@ function sourceNodeFromAttributes(
     type,
     role: roleFromWebDriverType(type, attrs),
     ...labelFacts(attrs, platform),
-    value: field === undefined ? nonEmptyWebDriverAttribute(attrs.value) : field.value,
+    value:
+      platform === 'android'
+        ? androidFieldValue(type, attrs)
+        : nonEmptyWebDriverAttribute(attrs.value),
     identifier: firstWebDriverAttribute(attrs, ['resource-id', 'id', 'accessibility-id', 'name']),
     rect,
     ...sourceStateFacts(attrs, rect, platform),
@@ -220,7 +223,6 @@ function labelFacts(
 }
 
 type TextFieldFacts = Readonly<{
-  value: string | undefined;
   facts: Pick<RawSnapshotNode, 'editable' | 'password' | 'placeholder' | 'hintShowing'>;
 }>;
 
@@ -238,12 +240,6 @@ function textFieldFacts(
   return platform === 'android' ? androidTextFieldFacts(type, attrs) : undefined;
 }
 
-/**
- * A field showing its hint reports the hint as its text, so that text is the placeholder and the
- * label, not a value. The page source offers no other signal, so a typed value equal to the hint
- * reads as the hint showing; the native helper's `hint-showing` fact has no counterpart here. A
- * disabled field is not editable, whatever its class.
- */
 function androidTextFieldFacts(
   type: string,
   attrs: Record<string, string>,
@@ -253,16 +249,26 @@ function androidTextFieldFacts(
     return undefined;
   }
   const placeholder = nonEmptyWebDriverAttribute(attrs.hint);
-  const text = nonEmptyWebDriverAttribute(attrs.text);
-  const hintShowing = placeholder !== undefined && text === placeholder;
+  const hintShowing = parseWebDriverBoolean(attrs['hint-showing'] ?? attrs.hintShowing);
   return {
-    value: hintShowing ? undefined : text,
     facts: {
       editable: parseWebDriverBoolean(attrs.enabled, true) === true,
       ...optionalFact('password', password),
-      ...(placeholder === undefined ? {} : { placeholder, hintShowing }),
+      ...optionalFact('placeholder', placeholder),
+      ...optionalFact('hintShowing', hintShowing),
     },
   };
+}
+
+function androidFieldValue(type: string, attrs: Record<string, string>): string | undefined {
+  const isField =
+    parseWebDriverBoolean(attrs.editable) === true ||
+    parseWebDriverBoolean(attrs.password) === true ||
+    ANDROID_TEXT_FIELD_CLASS.test(classNameSegment(type));
+  if (!isField) return undefined;
+  return parseWebDriverBoolean(attrs['hint-showing'] ?? attrs.hintShowing) === true
+    ? ''
+    : attrs.text;
 }
 
 function optionalFact<Key extends keyof RawSnapshotNode>(

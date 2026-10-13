@@ -1,0 +1,141 @@
+{
+  "cases": [
+    {
+      "name": "native showing hint",
+      "attributes": {
+        "class": "android.widget.EditText",
+        "text": "Your name",
+        "hint": "Your name",
+        "hint-showing": "true"
+      },
+      "value": ""
+    },
+    {
+      "name": "typed hint-equal text",
+      "attributes": {
+        "class": "android.widget.EditText",
+        "text": "Your name",
+        "hint": "Your name",
+        "hint-showing": "false"
+      },
+      "value": "Your name"
+    },
+    {
+      "name": "unknown hint state preserves equal text",
+      "attributes": {
+        "class": "android.widget.EditText",
+        "text": "Your name",
+        "hint": "Your name"
+      },
+      "value": "Your name"
+    },
+    {
+      "name": "invalid hint state preserves equal text",
+      "attributes": {
+        "class": "android.widget.EditText",
+        "text": "Your name",
+        "hint": "Your name",
+        "hint-showing": "unknown"
+      },
+      "value": "Your name"
+    },
+    {
+      "name": "static text has no echoed value",
+      "attributes": {
+        "class": "android.widget.TextView",
+        "text": "Name"
+      },
+      "value": null
+    },
+    {
+      "name": "static explicit value is not field content",
+      "attributes": {
+        "class": "android.widget.TextView",
+        "text": "Name",
+        "value": "Name"
+      },
+      "value": null
+    },
+    {
+      "name": "read-only selectable text",
+      "attributes": {
+        "class": "android.widget.TextView",
+        "text": "Read-only text",
+        "editable": "false",
+        "selection-start": "2",
+        "selection-end": "5"
+      },
+      "value": null
+    },
+    {
+      "name": "custom editable field",
+      "attributes": {
+        "class": "com.example.CustomInput",
+        "text": "Ada",
+        "editable": "true"
+      },
+      "value": "Ada"
+    },
+    {
+      "name": "custom empty hinted field",
+      "attributes": {
+        "class": "com.example.CustomInput",
+        "text": "Prompt",
+        "editable": "true",
+        "hint": "Prompt",
+        "hint-showing": "true"
+      },
+      "value": ""
+    },
+    {
+      "name": "disabled input keeps content",
+      "attributes": {
+        "class": "android.widget.EditText",
+        "text": "locked",
+        "enabled": "false",
+        "editable": "false"
+      },
+      "value": "locked"
+    },
+    {
+      "name": "empty reported input",
+      "attributes": {
+        "class": "android.widget.EditText",
+        "text": ""
+      },
+      "value": ""
+    },
+    {
+      "name": "missing input text",
+      "attributes": {
+        "class": "android.widget.EditText"
+      },
+      "value": null
+    },
+    {
+      "name": "password field keeps masked content",
+      "attributes": {
+        "class": "com.example.SecureInput",
+        "text": "••••",
+        "password": "true"
+      },
+      "value": "••••"
+    },
+    {
+      "name": "autocomplete field",
+      "attributes": {
+        "class": "android.widget.AutoCompleteTextView",
+        "text": "Warsaw"
+      },
+      "value": "Warsaw"
+    },
+    {
+      "name": "package-name lookalike is not a field",
+      "attributes": {
+        "class": "com.edittext.sample.CustomButton",
+        "text": "Go"
+      },
+      "value": null
+    }
+  ]
+}

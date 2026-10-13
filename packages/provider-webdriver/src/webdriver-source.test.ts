@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { test } from 'vitest';
@@ -52,7 +53,7 @@ test("Android WebDriver facts name a node by its text, carry a content descripti
       field!.hintShowing,
       field!.editable,
     ],
-    ['Ada Lovelace', 'Ada Lovelace', 'Name field', 'Your name', false, true],
+    ['Ada Lovelace', 'Ada Lovelace', 'Name field', 'Your name', undefined, true],
   );
   assert.deepEqual(
     [label!.label, label!.value, 'editable' in label!],
@@ -63,7 +64,7 @@ test("Android WebDriver facts name a node by its text, carry a content descripti
 test('Android WebDriver facts read a hinted field as empty, a masked field as a password, and a disabled field as not editable', () => {
   const [hinted, secure, disabled, lookalike] = parseWebDriverSourceFacts(
     '<hierarchy>' +
-      '<android.widget.EditText text="Your name" hint="Your name" bounds="[0,40][100,80]" />' +
+      '<android.widget.EditText text="Your name" hint="Your name" hint-showing="true" bounds="[0,40][100,80]" />' +
       '<android.widget.EditText text="••••••" password="true" bounds="[0,80][100,120]" />' +
       '<android.widget.EditText text="locked" enabled="false" bounds="[0,120][100,160]" />' +
       '<com.edittext.sample.CustomButton text="Go" bounds="[0,160][100,200]" />' +
@@ -74,7 +75,7 @@ test('Android WebDriver facts read a hinted field as empty, a masked field as a 
   // The hint is the label, as the native helper reads it, so `label="Your name"` still finds the field.
   assert.deepEqual(
     [hinted!.value, hinted!.label, hinted!.placeholder, hinted!.hintShowing],
-    [undefined, 'Your name', 'Your name', true],
+    ['', 'Your name', 'Your name', true],
   );
   assert.deepEqual([secure!.password, secure!.editable], [true, true]);
   assert.deepEqual([disabled!.value, disabled!.editable], ['locked', false]);
@@ -327,4 +328,45 @@ test('iOS WebDriver facts keep the tag as the type whatever a class attribute sa
   ).nodes;
 
   assert.equal(node!.type, 'XCUIElementTypeButton');
+});
+
+const fieldValues = JSON.parse(
+  readFileSync(
+    new URL('../../../contracts/fixtures/android-field-values.json', import.meta.url),
+    'utf8',
+  ),
+) as { cases: { name: string; attributes: Record<string, string>; value: string | null }[] };
+
+for (const { name, attributes, value } of fieldValues.cases) {
+  test(`Appium field value contract: ${name}`, () => {
+    const attrs = Object.entries(attributes)
+      .map(([key, text]) => `${key}="${text}"`)
+      .join(' ');
+    const [node] = parseWebDriverSourceFacts(
+      `<hierarchy><node ${attrs} bounds="[0,0][200,100]" /></hierarchy>`,
+      'android',
+    ).nodes;
+    assert.equal(node?.value, value ?? undefined);
+  });
+}
+
+test('Appium hint state uses reported evidence instead of text equality', () => {
+  const nodes = parseWebDriverSourceFacts(
+    '<hierarchy>' +
+      '<android.widget.EditText text="Prompt" hint="Prompt" hint-showing="false" />' +
+      '<android.widget.EditText text="Prompt" hint="Prompt" />' +
+      '<android.widget.EditText text="Prompt" hint="Prompt" hint-showing="invalid" />' +
+      '<android.widget.EditText text="Prompt" hint="Prompt" hintShowing="true" />' +
+      '</hierarchy>',
+    'android',
+  ).nodes;
+  assert.deepEqual(
+    nodes.map((node) => [node.value, node.hintShowing]),
+    [
+      ['Prompt', false],
+      ['Prompt', undefined],
+      ['Prompt', undefined],
+      ['', true],
+    ],
+  );
 });

@@ -327,7 +327,7 @@ function normalizeAndroidUiHierarchyNode(
     {
       type: attrs.className,
       label,
-      value: attrs.text,
+      value: androidFieldValue(attrs),
       passiveFacts: {
         contentDescription: attrs.desc && attrs.desc !== label ? attrs.desc : undefined,
         enabled: attrs.enabled,
@@ -365,4 +365,17 @@ function normalizeAndroidUiHierarchyNode(
     },
     attrs.drawingOrder === undefined ? undefined : { parent, order: attrs.drawingOrder },
   );
+}
+
+function androidFieldValue(attrs: AndroidUiNodeMetadata): string | null {
+  const type = attrs.className ?? '';
+  const segment = type
+    .slice(Math.max(type.lastIndexOf('.'), type.lastIndexOf('/')) + 1)
+    .toLowerCase();
+  const isField =
+    attrs.editable === true ||
+    attrs.password === true ||
+    /edittext|autocompletetextview/.test(segment);
+  if (!isField) return null;
+  return attrs.hintShowing === true ? '' : attrs.text;
 }

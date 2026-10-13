@@ -134,6 +134,12 @@ Every node in `snapshot --json` output carries `kind`, next to `type` when the p
 { "ref": "e40", "type": "Button", "role": "UIButton", "kind": "button", "label": "Continue to catalog" }
 ```
 
+On Android, `value` contains a text field's content, including custom controls that report they are
+editable. Static labels carry their text in `label` and have no `value`. A field that reports its hint
+is showing has `value: ""`; a missing text reading leaves `value` absent. `placeholder` carries the
+hint separately. With Appium, when hint state is unavailable, reported field text is preserved even
+when it equals the placeholder; `hintShowing` stays absent.
+
 On iOS, `role` (when present) is the native AX class (`UIButton`), carried only on iOS nodes.
 `kind` is the cross-platform role, present on every node on every platform.
 
