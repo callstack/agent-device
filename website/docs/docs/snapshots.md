@@ -134,12 +134,6 @@ Every node in `snapshot --json` output carries `kind`, next to `type` when the p
 { "ref": "e40", "type": "Button", "role": "UIButton", "kind": "button", "label": "Continue to catalog" }
 ```
 
-On Android, `value` contains a text field's content, including custom controls that report they are
-editable. Static labels carry their text in `label` and have no `value`. A field that reports its hint
-is showing has `value: ""`; a missing text reading leaves `value` absent. `placeholder` carries the
-hint separately. With Appium, when hint state is unavailable, reported field text is preserved even
-when it equals the placeholder; `hintShowing` stays absent.
-
 On iOS, `role` (when present) is the native AX class (`UIButton`), carried only on iOS nodes.
 `kind` is the cross-platform role, present on every node on every platform.
 
@@ -316,12 +310,13 @@ them. Explicit `false` and `0` are kept; an absent field means the fact was unav
 - `roleDescription` is the localized role description an app sets beside the native class, verbatim
   (React Native writes `Tab`, `Tab List`, `Radio Group`, `Link`, `Menu`), when the class alone would
   not say what the control is. The `type` stays the class; a consumer maps the description to a role.
-- `value: ""` is an explicitly empty accessibility text; a missing `value` means no text was
-  reported. The text of an empty field is its hint on modern Android, so check `hintShowing`
-  before reading `value` as the entered contents.
-- `placeholder` is the field's hint text itself, present whether the field is empty or filled: an
-  empty field shows it (`hintShowing: true`, and `value` repeats it), a filled field no longer does.
-  A field without a hint omits it. iOS nodes carry the same fact from the field's
+- `value` contains an Android text field's content, including custom controls that report they are
+  editable. Static labels carry text in `label` and have no `value`. `value: ""` means the field
+  reports empty text or `hintShowing: true`; an absent `value` means no field text was reported.
+- `placeholder` carries the hint separately, whether the field is empty or filled. A field showing
+  its hint reports `hintShowing: true` and `value: ""`; a field without a hint omits `placeholder`.
+  With Appium, when hint state is unavailable, reported field text is preserved even when it equals
+  the placeholder, and `hintShowing` stays absent. iOS nodes carry the same fact from the field's
   `placeholderValue`, on every producer (the XCTest tree, the Simulator AX bridge, and the runner's
   private-AX reader). XCTest reports an empty field's placeholder as its `value` too, so a `value`
   equal to `placeholder` is either an empty field or one holding exactly that text; equality alone

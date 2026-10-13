@@ -171,10 +171,9 @@ function sourceNodeFromAttributes(
     type,
     role: roleFromWebDriverType(type, attrs),
     ...labelFacts(attrs, platform),
-    value:
-      platform === 'android'
-        ? androidFieldValue(type, attrs)
-        : nonEmptyWebDriverAttribute(attrs.value),
+    ...(platform === 'android'
+      ? androidValueFacts(type, attrs)
+      : { value: nonEmptyWebDriverAttribute(attrs.value) }),
     identifier: firstWebDriverAttribute(attrs, ['resource-id', 'id', 'accessibility-id', 'name']),
     rect,
     ...sourceStateFacts(attrs, rect, platform),
@@ -223,7 +222,7 @@ function labelFacts(
 }
 
 type TextFieldFacts = Readonly<{
-  facts: Pick<RawSnapshotNode, 'editable' | 'password' | 'placeholder' | 'hintShowing'>;
+  facts: Pick<RawSnapshotNode, 'editable' | 'password'>;
 }>;
 
 /**
@@ -248,27 +247,28 @@ function androidTextFieldFacts(
   if (!ANDROID_TEXT_FIELD_CLASS.test(classNameSegment(type)) && password !== true) {
     return undefined;
   }
-  const placeholder = nonEmptyWebDriverAttribute(attrs.hint);
-  const hintShowing = parseWebDriverBoolean(attrs['hint-showing'] ?? attrs.hintShowing);
   return {
     facts: {
       editable: parseWebDriverBoolean(attrs.enabled, true) === true,
       ...optionalFact('password', password),
-      ...optionalFact('placeholder', placeholder),
-      ...optionalFact('hintShowing', hintShowing),
     },
   };
 }
 
-function androidFieldValue(type: string, attrs: Record<string, string>): string | undefined {
+function androidValueFacts(
+  type: string,
+  attrs: Record<string, string>,
+): Pick<RawSnapshotNode, 'value' | 'placeholder' | 'hintShowing'> {
   const isField =
     parseWebDriverBoolean(attrs.editable) === true ||
     parseWebDriverBoolean(attrs.password) === true ||
     ANDROID_TEXT_FIELD_CLASS.test(classNameSegment(type));
-  if (!isField) return undefined;
-  return parseWebDriverBoolean(attrs['hint-showing'] ?? attrs.hintShowing) === true
-    ? ''
-    : attrs.text;
+  const hintShowing = parseWebDriverBoolean(attrs['hint-showing'] ?? attrs.hintShowing);
+  return {
+    value: isField ? (hintShowing === true ? '' : attrs.text) : undefined,
+    ...optionalFact('placeholder', nonEmptyWebDriverAttribute(attrs.hint)),
+    ...optionalFact('hintShowing', hintShowing),
+  };
 }
 
 function optionalFact<Key extends keyof RawSnapshotNode>(

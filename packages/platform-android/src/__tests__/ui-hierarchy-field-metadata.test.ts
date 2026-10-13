@@ -74,5 +74,7 @@ test.each(fieldValues.cases)('ADB field value contract: $name', ({ attributes, v
     `<hierarchy><node ${attrs} resource-id="field" bounds="[0,0][200,100]" /></hierarchy>`,
   );
   const { nodes } = buildUiHierarchySnapshot(tree, undefined, { raw: true });
-  expect(nodes.find((node) => node.identifier === 'field')?.value).toBe(value ?? undefined);
+  const node = nodes.find((node) => node.identifier === 'field');
+  expect(node).toBeDefined();
+  expect(node?.value).toBe(value ?? undefined);
 });

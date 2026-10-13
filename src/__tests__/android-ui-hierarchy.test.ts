@@ -899,4 +899,5 @@ test('parseUiHierarchy ignores attribute-name prefix spoofing', () => {
   const result = parseUiHierarchy(xml, 800, {});
   assert.equal(result.nodes.length, 1);
   assert.equal(result.nodes[0]!.value, undefined);
+  assert.equal(result.nodes[0]!.label, 'Actual');
 });

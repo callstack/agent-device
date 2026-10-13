@@ -346,7 +346,8 @@ for (const { name, attributes, value } of fieldValues.cases) {
       `<hierarchy><node ${attrs} bounds="[0,0][200,100]" /></hierarchy>`,
       'android',
     ).nodes;
-    assert.equal(node?.value, value ?? undefined);
+    assert.ok(node);
+    assert.equal(node.value, value ?? undefined);
   });
 }
 
@@ -367,6 +368,23 @@ test('Appium hint state uses reported evidence instead of text equality', () => 
       ['Prompt', undefined],
       ['Prompt', undefined],
       ['', true],
+    ],
+  );
+});
+
+test('custom Android fields carry reported hint facts beside their content', () => {
+  const nodes = parseWebDriverSourceFacts(
+    '<hierarchy>' +
+      '<com.example.CustomInput editable="true" text="Your name" hint="Your name" hint-showing="false" />' +
+      '<com.example.CustomInput editable="true" text="Your name" hint="Your name" hint-showing="true" />' +
+      '</hierarchy>',
+    'android',
+  ).nodes;
+  assert.deepEqual(
+    nodes.map((node) => [node.placeholder, node.hintShowing]),
+    [
+      ['Your name', false],
+      ['Your name', true],
     ],
   );
 });
