@@ -262,13 +262,30 @@ function androidValueFacts(
   const isField =
     parseWebDriverBoolean(attrs.editable) === true ||
     parseWebDriverBoolean(attrs.password) === true ||
-    ANDROID_TEXT_FIELD_CLASS.test(classNameSegment(type));
-  const hintShowing = parseWebDriverBoolean(attrs['hint-showing'] ?? attrs.hintShowing);
+    ANDROID_TEXT_FIELD_CLASS.test(classNameSegment(type)) ||
+    hasAndroidInputType(attrs['input-type']);
+  const hintShowing = parseWebDriverBoolean(
+    attrs['showing-hint'] ?? attrs['hint-showing'] ?? attrs.hintShowing,
+  );
   return {
     value: isField ? (hintShowing === true ? '' : attrs.text) : undefined,
     ...optionalFact('placeholder', nonEmptyWebDriverAttribute(attrs.hint)),
     ...optionalFact('hintShowing', hintShowing),
   };
+}
+
+function hasAndroidInputType(value: string | undefined): boolean {
+  const inputType = numberFromWebDriverAttribute(value);
+  if (
+    inputType === undefined ||
+    !Number.isInteger(inputType) ||
+    inputType < 0 ||
+    inputType > 0x7fffffff
+  ) {
+    return false;
+  }
+  const inputClass = inputType & 0xf;
+  return inputClass >= 1 && inputClass <= 4;
 }
 
 function optionalFact<Key extends keyof RawSnapshotNode>(

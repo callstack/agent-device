@@ -388,3 +388,62 @@ test('custom Android fields carry reported hint facts beside their content', () 
     ],
   );
 });
+
+test('UiAutomator2 showing-hint distinguishes an empty field from hint-equal content', () => {
+  const nodes = parseWebDriverSourceFacts(
+    '<hierarchy>' +
+      '<android.widget.EditText text="Your name" hint="Your name" showing-hint="true" input-type="1" />' +
+      '<android.widget.EditText text="Your name" hint="Your name" showing-hint="false" input-type="1" />' +
+      '<android.widget.EditText text="Your name" hint="Your name" showing-hint="unknown" input-type="1" />' +
+      '</hierarchy>',
+    'android',
+  ).nodes;
+  assert.deepEqual(
+    nodes.map((node) => [node.value, node.placeholder, node.hintShowing]),
+    [
+      ['', 'Your name', true],
+      ['Your name', 'Your name', false],
+      ['Your name', 'Your name', undefined],
+    ],
+  );
+});
+
+test('UiAutomator2 input-type retains custom field content without echoing non-field labels', () => {
+  const nodes = parseWebDriverSourceFacts(
+    '<hierarchy>' +
+      '<com.example.CustomField text="Custom content" hint="Custom hint" showing-hint="false" input-type="1" />' +
+      '<com.example.CustomField text="Custom hint" hint="Custom hint" showing-hint="true" input-type="1" />' +
+      ['2', '3', '4', '129']
+        .map(
+          (inputType) =>
+            `<com.example.CustomField text="Typed content" input-type="${inputType}" />`,
+        )
+        .join('') +
+      ['0', '5', '16', '-1', '1.5', 'invalid', '4294967297']
+        .map(
+          (inputType) =>
+            `<android.widget.TextView text="Static label" input-type="${inputType}" />`,
+        )
+        .join('') +
+      '</hierarchy>',
+    'android',
+  ).nodes;
+  assert.deepEqual(
+    nodes.map((node) => node.value),
+    [
+      'Custom content',
+      '',
+      'Typed content',
+      'Typed content',
+      'Typed content',
+      'Typed content',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ],
+  );
+});
