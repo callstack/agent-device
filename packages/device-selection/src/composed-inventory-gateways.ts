@@ -1,6 +1,4 @@
 import {
-  assertProviderOutcome,
-  assertSourceFamily,
   filterDeviceInventoryProjection,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
   projectProviderDeviceInventoryRequest,
@@ -26,6 +24,7 @@ import {
   type Platform,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 
 export function createComposedDeviceInventoryGateways(
   options: Readonly<{
@@ -205,6 +204,33 @@ async function discoverFamily(
   scope.signal.throwIfAborted();
   assertSourceFamily(family, devices);
   return filterDeviceInventoryProjection(devices, request);
+}
+
+// The composition-level contract every device-inventory source must honor: a family's
+// source only ever reports devices of its own family.
+function assertSourceFamily(family: Platform, devices: readonly DeviceInfo[]): void {
+  const outside = devices.find((device) => device.platform !== family);
+  if (!outside) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Platform inventory source ${family} returned a ${outside.platform} device.`,
+    { expectedFamily: family, actualFamily: outside.platform, deviceId: outside.id },
+  );
+}
+
+// A malformed provider outcome (not a declined/inventory tagged object) is a provider
+// contract violation, not a local-inventory fallback.
+function assertProviderOutcome(
+  value: unknown,
+): asserts value is Awaited<ReturnType<ProviderDeviceInventorySource['discover']>> {
+  if (value !== null && typeof value === 'object') {
+    const outcome = value as { kind?: unknown; devices?: unknown };
+    if (outcome.kind === 'declined' && !('devices' in outcome)) return;
+    if (outcome.kind === 'inventory' && Array.isArray(outcome.devices)) return;
+  }
+  throw new AppError('COMMAND_FAILED', 'Provider device inventory returned an invalid outcome.', {
+    reason: 'provider_inventory_contract_violation',
+  });
 }
 
 function familyForSelector(selector: PlatformSelector): Platform {
