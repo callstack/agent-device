@@ -430,6 +430,31 @@ test('the Android mechanics facet is the named consumer seam and adb host wiring
   );
 });
 
+test('the Android test-only fixture subpaths accept test consumers and deny production ones', () => {
+  const fixtureImport =
+    "import { createAndroidSnapshotCapture } from '@agent-device/platform-android/snapshot-capture-fixtures';";
+  const allowed = validSources();
+  allowed.set('src/__tests__/android-ui-hierarchy.test.ts', fixtureImport);
+  allowed.set('src/daemon/__tests__/android-system-dialog-occlusion.test.ts', fixtureImport);
+  allowed.set('test/integration/provider-scenarios/android.test.ts', fixtureImport);
+  assert.deepEqual(
+    messages(allowed).filter((message) => message.includes('may import')),
+    [],
+  );
+
+  // Production consumers ride no facet seam: importing a fixture is an R13 violation, even
+  // from a file the mechanics facet would otherwise accept.
+  for (const file of ['src/commands/replay/index.ts', 'src/core/interactors/android.ts']) {
+    const denied = validSources();
+    denied.set(file, fixtureImport);
+    assert.match(
+      messages(denied).join('\n'),
+      /may import '@agent-device\/platform-android\/snapshot-capture-fixtures'/,
+      file,
+    );
+  }
+});
+
 test('contracts never depend on a concrete platform package in production or tests', () => {
   for (const statement of [
     "import { applePlatformMetadata } from '@agent-device/platform-apple';",
