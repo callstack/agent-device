@@ -101,10 +101,10 @@ export const platformModuleRegistry = createPlatformModuleRegistry([
   webInventoryModule,
 ]);
 
-export function createPlatformDeviceInventoryGateways(
+export async function createPlatformDeviceInventoryGateways(
   provider?: ProviderDeviceInventorySource,
-): ComposedDeviceInventoryGateways {
-  return createComposedDeviceInventoryGateways({
+): Promise<ComposedDeviceInventoryGateways> {
+  return await createComposedDeviceInventoryGateways({
     registry: platformModuleRegistry,
     loadHost: async () => {
       const { createDeviceInventoryHost } = await import('./platform-runtime-host.ts');

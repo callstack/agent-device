@@ -11,6 +11,10 @@
     "@agent-device/kernel": "workspace:*"
   },
   "exports": {
+    "./composed-inventory-gateways": {
+      "types": "./src/composed-inventory-gateways.ts",
+      "default": "./src/composed-inventory-gateways.ts"
+    },
     "./dispatch-resolve": {
       "types": "./src/dispatch-resolve.ts",
       "default": "./src/dispatch-resolve.ts"

@@ -1,25 +1,21 @@
 import {
-  assertProviderOutcome,
-  filterDeviceInventoryProjection,
-  LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
-  projectProviderDeviceInventoryRequest,
   type DeviceInventoryProvider,
   type DeviceInventoryRequest,
   type ProviderDeviceInventorySource,
 } from '@agent-device/contracts/device';
-import type {
-  ComposedDeviceInventoryGateways,
-  DeviceInventoryGateway,
-  InstalledAppProbe,
-  ProviderAwareDeviceInventoryGateway,
-} from '@agent-device/contracts/platform-module';
-import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import {
-  isApplePlatform,
-  type DeviceInfo,
-  type Platform,
-  type PlatformSelector,
-} from '@agent-device/kernel/device';
+  type ComposedDeviceInventoryGateways,
+  type DeviceInventorySource,
+  type InstalledAppProbe,
+  type InventoryPlatformModule,
+  createPlatformModuleRegistry,
+} from '@agent-device/contracts/platform-module';
+import type {
+  DeviceInventoryHost,
+  PlatformRequestScope,
+} from '@agent-device/contracts/platform-runtime-host';
+import type { DeviceInfo, Platform } from '@agent-device/kernel/device';
+import { createComposedDeviceInventoryGateways } from './composed-inventory-gateways.ts';
 import { withDeviceInventoryContext } from './device-inventory-context.ts';
 
 export type TestDeviceInventoryOptions = Readonly<{
@@ -34,100 +30,56 @@ const testRequestScope: PlatformRequestScope = Object.freeze({
   progress: Object.freeze({ report: () => {} }),
 });
 
-type LocalDiscover = (request: Readonly<DeviceInventoryRequest>) => Promise<readonly DeviceInfo[]>;
+const testInventoryHost: DeviceInventoryHost = Object.freeze({
+  commands: Object.freeze({
+    which: async () => undefined,
+    run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+  }),
+  appleTools: Object.freeze({
+    isXcrunAvailable: async () => false,
+    run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+  }),
+  toolchains: Object.freeze({ prepare: async () => {} }),
+  files: Object.freeze({
+    isExecutable: async () => false,
+    createTemporaryTextFile: async () => {
+      throw new Error('unused test inventory temporary file');
+    },
+  }),
+  hostOs: 'other',
+  hostName: 'test-host',
+  homeDirectory: '/tmp/test-home',
+  observations: Object.freeze({ deviceBooted: async () => {} }),
+});
 
-async function discoverLocalFamily(
-  localDiscover: LocalDiscover,
-  platform: PlatformSelector,
-  request: Readonly<DeviceInventoryRequest>,
-  scope: PlatformRequestScope,
-): Promise<DeviceInfo[]> {
-  scope.signal.throwIfAborted();
-  const family: Platform = isApplePlatform(platform) ? 'apple' : platform;
-  // `local` is a flat whole-inventory discoverer fanned out per family, so this filter is
-  // the adapter to the per-family source contract, not a place production would assert.
-  const devices = (await localDiscover(request)).filter((device) => device.platform === family);
-  return filterDeviceInventoryProjection(devices, request);
-}
-
-async function discoverLocal(
-  localDiscover: LocalDiscover,
-  request: Readonly<DeviceInventoryRequest>,
-  scope: PlatformRequestScope,
-): Promise<DeviceInfo[]> {
-  scope.signal.throwIfAborted();
-  if (request.platform) {
-    return await discoverLocalFamily(localDiscover, request.platform, request, scope);
-  }
-  const perFamily = await Promise.all(
-    LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS.map(async (selector) => {
-      try {
-        return await discoverLocalFamily(
-          localDiscover,
-          selector,
-          { ...request, platform: selector },
-          scope,
-        );
-      } catch {
-        return [];
-      }
-    }),
-  );
-  scope.signal.throwIfAborted();
-  return perFamily.flat();
+function testInventoryModules(
+  discover: (request: Readonly<DeviceInventoryRequest>) => Promise<readonly DeviceInfo[]>,
+): readonly InventoryPlatformModule[] {
+  const source = (family: Platform): DeviceInventorySource => ({
+    discover: async (request) =>
+      (await discover(request)).filter((device) => device.platform === family),
+  });
+  return [
+    { family: 'apple', loadInventory: async () => source('apple') },
+    { family: 'android', loadInventory: async () => source('android') },
+    { family: 'harmonyos', loadInventory: async () => source('harmonyos') },
+    { family: 'vega', loadInventory: async () => source('vega') },
+    { family: 'linux', loadInventory: async () => source('linux') },
+    { family: 'web', loadInventory: async () => source('web') },
+  ];
 }
 
 export function createTestDeviceInventoryGateways(
   options: TestDeviceInventoryOptions = {},
 ): ComposedDeviceInventoryGateways {
-  const localDiscover = options.local ?? (async () => [] as readonly DeviceInfo[]);
-  const localOnly: DeviceInventoryGateway = Object.freeze({
-    discover: (request, scope) => discoverLocal(localDiscover, request, scope),
-  });
-  const provider = options.provider;
-  const discoverWithSource: ProviderAwareDeviceInventoryGateway['discoverWithSource'] = async (
-    request,
-    scope,
-  ) => {
-    if (provider) {
-      scope.signal.throwIfAborted();
-      const result = await provider.discover(
-        projectProviderDeviceInventoryRequest(request),
-        scope.signal,
-      );
-      scope.signal.throwIfAborted();
-      assertProviderOutcome(result);
-      if (result.kind === 'inventory') {
-        return {
-          devices: filterDeviceInventoryProjection(
-            result.devices.map((device) => ({ ...device })),
-            request,
-          ),
-          source: 'provider',
-        };
-      }
-    }
-    return { devices: await localOnly.discover(request, scope), source: 'local' };
-  };
-  const providerFirst: ProviderAwareDeviceInventoryGateway = Object.freeze({
-    discover: async (request, scope) => (await discoverWithSource(request, scope)).devices,
-    discoverWithSource,
-  });
-  return Object.freeze({
-    providerFirst,
-    localOnly,
+  return createComposedDeviceInventoryGateways({
+    registry: createPlatformModuleRegistry(
+      testInventoryModules(options.local ?? (async () => [] as readonly DeviceInfo[])),
+    ),
+    loadHost: async () => testInventoryHost,
+    provider: options.provider,
     findInstalledApp: options.findInstalledApp,
   });
-}
-
-export async function withTestDeviceInventory<T>(
-  options: TestDeviceInventoryOptions,
-  task: () => Promise<T>,
-): Promise<T> {
-  return await withDeviceInventoryContext(
-    { ...createTestDeviceInventoryGateways(options), requestScope: testRequestScope },
-    task,
-  );
 }
 
 /** Test-only bridge for fixtures that still implement the public nullable provider port. */
@@ -145,6 +97,16 @@ export function createTestDeviceInventoryGatewaysFromProvider(
       },
     },
   });
+}
+
+export async function withTestDeviceInventory<T>(
+  options: TestDeviceInventoryOptions,
+  task: () => Promise<T>,
+): Promise<T> {
+  return await withDeviceInventoryContext(
+    { ...createTestDeviceInventoryGateways(options), requestScope: testRequestScope },
+    task,
+  );
 }
 
 export async function withTestDeviceInventoryProvider<T>(
