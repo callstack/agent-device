@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { providerDeviceAdmissionFixture } from '../../daemon/__tests__/support/provider-device-admission-fixture.ts';
 import { fakeCreateCommandSurface } from '../../daemon/__tests__/support/command-surface-fake.ts';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
@@ -18,7 +17,6 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 // must hand the acquire path the OWNER-scoped reconciler, so a foreign dead owner's recording
 // recovery executes against that owner's state dir, never the daemon's own store (#2168).
 
-providerDeviceAdmissionFixture();
 
 vi.mock('../../daemon/device/device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),

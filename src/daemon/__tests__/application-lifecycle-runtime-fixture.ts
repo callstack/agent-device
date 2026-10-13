@@ -135,12 +135,11 @@ export async function applicationLifecycleRuntimeFixture(
         ...(input.target === undefined ? {} : { appName: input.target }),
       });
     },
-    prepareApplicationOpen: async (input) => {
+    prepareApplicationOpen: async (_input) => {
       await awaitFixtureReadiness(device);
       if (device.platform === 'android' && device.booted !== true) {
         await discoverReadyAndroidEmulators(device);
       }
-      void input;
     },
     openApplication: async (input) => {
       if (input.applyRuntimeHints) {

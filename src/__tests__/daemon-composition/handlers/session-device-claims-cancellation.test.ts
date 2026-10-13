@@ -68,7 +68,9 @@ const reconcileOrphanedDeviceClaim = async () => ({
 
 // The post-open test-IME activation is the real Android lifecycle's sequencing step after the
 // open dispatch — the daemon-lane canned binding performs no IME leg, so this claim-retention
-// case runs in the composition lane on the real composed lifecycle.
+// case runs in the composition lane on the real composed lifecycle. The gateway seam's bind
+// takes a full request context, which this suite's open call owns; the binding shape here
+// mirrors it at the (device, use) seam the open command passes.
 async function realLifecycleBinding(
   device: DeviceInfo,
 ): Promise<DeviceBinding<PlatformRuntimeOperations>> {

@@ -32,6 +32,16 @@ import {
 } from './platform-services-fixture.ts';
 import { platformResourceCleanupFixture } from './support/platform-resource-cleanup-fixture.ts';
 import { providerCredentialsFixture } from './support/provider-credentials-fixture.ts';
+import {
+  unavailableBinding,
+  unavailableDeviceRuntimeGateway,
+} from './support/unavailable-device-runtime-gateway.ts';
+export {
+  unavailableBindDevice,
+  unavailableBindExactDevice,
+  unavailableDeviceRuntimeGateway,
+  unavailableInspectFacts,
+} from './support/unavailable-device-runtime-gateway.ts';
 
 const unavailable = Object.freeze({
   available: false as const,
@@ -137,21 +147,6 @@ export function createLifecycleDeviceRuntimeGatewaySpies(
   };
   return { gateway, inspectFacts, bind };
 }
-
-import {
-  unavailableBinding,
-  unavailableBindDevice,
-  unavailableBindExactDevice,
-  unavailableDeviceRuntimeGateway,
-  unavailableInspectFacts,
-} from './support/unavailable-device-runtime-gateway.ts';
-
-export {
-  unavailableBindDevice,
-  unavailableBindExactDevice,
-  unavailableDeviceRuntimeGateway,
-  unavailableInspectFacts,
-};
 
 /**
  * Spies for the gesture surface a router-level test drives. They replace the retired

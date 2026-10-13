@@ -25,11 +25,6 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/command')>();
   return { ...actual, runCmd: vi.fn() };
 });
-vi.mock('../../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../../platform-runtime-runtime-hints.ts')>();
-  return { ...actual, clearRuntimeHintValues: vi.fn(async () => {}) };
-});
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return { ...actual, resolveTargetDevice: vi.fn() };

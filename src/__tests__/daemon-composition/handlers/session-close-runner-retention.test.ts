@@ -1,10 +1,7 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import * as path from 'node:path';
 import { LeaseRegistry } from '../../../daemon/lease-registry.ts';
-import { providerDeviceAdmissionFixture } from '../../../daemon/__tests__/support/provider-device-admission-fixture.ts';
 import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
-
-providerDeviceAdmissionFixture();
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
 import { makeSession } from '../../../daemon/__tests__/support/session-factories.ts';
