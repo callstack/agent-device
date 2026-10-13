@@ -98,6 +98,25 @@ extension RunnerTests {
     }
   }
 
+  // A masked value is bullets and nothing else. Anything with a real character in it is a value
+  // the runner can verify, and an empty string is "empty", not "masked", so a replacement into
+  // an empty field still skips the clear.
+  func testMaskedTextValueIsBulletsOnly() {
+    let masked = [
+      "\u{2022}",
+      String(repeating: "\u{2022}", count: 8),
+      String(repeating: "\u{25CF}", count: 3),
+      " \u{2022}\u{2022} ",
+    ]
+    for value in masked {
+      XCTAssertTrue(Self.isMaskedTextValue(value), "value: \(value)")
+    }
+    let readable = ["", "   ", "not-a-secret-123", "\u{2022} bullet point", "*****", "Password"]
+    for value in readable {
+      XCTAssertFalse(Self.isMaskedTextValue(value), "value: \(value)")
+    }
+  }
+
   // A value with a hole in the middle is neither a matching prefix nor an exact match, and must
   // never settle. These are the two corruption strings actually observed in CI on `fill`
   // (id="field-name" "Ada Lovelace" -> "Avelace", id="field-email" "ada@example" -> "aexample";

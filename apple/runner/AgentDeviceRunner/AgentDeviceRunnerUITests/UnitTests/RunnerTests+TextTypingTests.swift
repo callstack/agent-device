@@ -383,6 +383,44 @@ extension RunnerTests {
     XCTAssertEqual(observed, text)
   }
 
+  // A React Native `secureTextEntry` field is a `.textField` whose value reads back as bullets, so
+  // the typed text can never match it. The fill must report typed and unverified instead of a
+  // mismatch, and must not run the repair, whose clear taps the field's right edge where a
+  // show/hide toggle commonly sits (tester-army/e2e#872).
+  @MainActor
+  func testFillIntoMaskedTextFieldIsUnverifiedRatherThanAMismatch() throws {
+    app.launchArguments = [
+      "--agent-device-text-entry-regression",
+      "--agent-device-text-entry-masked-value",
+    ]
+    app.launch()
+    addTeardownBlock { [self] in
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    let textField = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    let togglePresses = app.staticTexts["agent-device-masked-toggle-presses"]
+    XCTAssertTrue(togglePresses.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertEqual(togglePresses.label, "presses=0")
+    try tapHardwareKeyboardInput(commandId: "tap-masked-input")
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let fillResponse = executeTypeCommand(
+      activeApp: app,
+      command: try runnerCommandFixture(
+        #"{"command":"type","commandId":"fill-masked-input","text":"not-a-secret-123","textEntryMode":"replace"}"#
+      )
+    )
+
+    XCTAssertTrue(fillResponse.ok, String(describing: fillResponse.error))
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertEqual(fillResponse.data?.message, "typed")
+    XCTAssertEqual(textField.value as? String, String(repeating: "\u{2022}", count: 8))
+    XCTAssertEqual(togglePresses.label, "presses=0")
+  }
+
   private struct UnavailableTextEntrySynthesizer: TextEntrySynthesizing {
     func enterText(
       app _: XCUIApplication,

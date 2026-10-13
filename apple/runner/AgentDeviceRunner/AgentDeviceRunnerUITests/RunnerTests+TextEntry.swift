@@ -458,6 +458,12 @@ extension RunnerTests {
       if treatingPlaceholderAsEmpty && isPlaceholderValue(value, for: element) {
         return ""
       }
+      // A React Native `secureTextEntry` field reports as a plain text field whose value is the
+      // masked rendering, so it is as unreadable as a `.secureTextField` and must not be compared
+      // against the typed text (tester-army/e2e#872).
+      if Self.isMaskedTextValue(value) {
+        return nil
+      }
       return value
     case .secureTextField:
       return nil
@@ -465,6 +471,21 @@ extension RunnerTests {
       return nil
     }
   }
+
+  /// Whether an accessibility value is a masked rendering of a secure field: one or more
+  /// password bullets and nothing else. The bullet count need not match the typed length, so
+  /// such a value carries no information about what the field holds.
+  static func isMaskedTextValue(_ value: String) -> Bool {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      return false
+    }
+    return trimmed.allSatisfy { Self.passwordMaskCharacters.contains($0) }
+  }
+
+  /// U+2022 is what UIKit renders for a secure field; U+25CF is the other bullet some custom
+  /// inputs substitute for it.
+  private static let passwordMaskCharacters: Set<Character> = ["\u{2022}", "\u{25CF}"]
 
   private func isPlaceholderValue(_ value: String, for element: any XCUIElementAttributes) -> Bool {
     if Self.textMatchesPlaceholder(value, placeholder: element.placeholderValue) {
