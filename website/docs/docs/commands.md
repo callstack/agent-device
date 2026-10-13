@@ -841,6 +841,7 @@ agent-device react-devtools profile report @c5
 - `agent-device` global flags work before or after `react-devtools`. Put `--` before downstream flags only when they share an `agent-device` global flag name.
 - Development builds connect to the DevTools daemon on port 8097. If an Android emulator or device cannot reach the host, run `adb reverse tcp:8097 tcp:8097`. Android `open` of a local Metro URL with a port sets up host reachability; for app/package launches, run `adb reverse tcp:8081 tcp:8081` if the app cannot reach Metro.
 - Remote bridge sessions (Android and iOS) work through the same command; the CLI keeps a tunnel to the remote DevTools daemon alive until `react-devtools stop` or `disconnect`. See [Remote bridge sessions](/docs/debugging-profiling#remote-bridge-sessions) for the iOS relaunch order and supported React Native versions.
+- `react-devtools stop` reports the tunnel's pid and keeps tracking it when it cannot confirm the tunnel exited — it belongs to another user, for example — instead of starting a second one on the next run. Stop that process as its owner and run `react-devtools stop` again.
 - For cross-platform validation, use separate sessions/devices and restart `react-devtools` between iOS and Android runs.
 
 ```bash

@@ -3,17 +3,20 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import type { AppError } from '@agent-device/kernel/errors';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
   runCmdDetached: vi.fn(),
 }));
+// `stopProcessAndConfirmExit` is the seam this suite owns: what it proved is decided by the case
+// table, and these tests assert what the companion layer does with the verdict.
 vi.mock('@agent-device/host-kit/process', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/process')>()),
   isProcessAlive: vi.fn(),
   readProcessCommand: vi.fn(),
   readProcessStartTime: vi.fn(),
-  waitForProcessExit: vi.fn(),
+  stopProcessAndConfirmExit: vi.fn(),
 }));
 
 import { runCmdDetached } from '@agent-device/host-kit/command';
@@ -21,11 +24,13 @@ import {
   isProcessAlive,
   readProcessCommand,
   readProcessStartTime,
-  waitForProcessExit,
+  stopProcessAndConfirmExit,
+  type ConfirmedProcessStop,
 } from '@agent-device/host-kit/process';
 
 import { ensureMetroCompanion, stopMetroCompanion } from '../metro/client-metro-companion.ts';
 import { ensureReactDevtoolsCompanion } from '../client/client-react-devtools-companion.ts';
+import { METRO_COMPANION_RUN_ARG } from '../client/client-companion-tunnel-contract.ts';
 
 const TEST_BRIDGE_SCOPE = {
   tenantId: 'tenant-1',
@@ -55,6 +60,32 @@ function assertCompanionRunArg(callIndex: number, runArg: string): void {
   assert.equal(call[1].at(-1), runArg);
 }
 
+/** The stops the code asked host-kit for: the identity recorded beside the pid, and the budget. */
+const COMPANION_STOP_BUDGET = { termTimeoutMs: 1_000, killTimeoutMs: 1_000 };
+const COMPANION_TUNNEL_COMMAND = `${process.execPath} src/client/companion-tunnel.ts ${METRO_COMPANION_RUN_ARG}`;
+const UNRELATED_COMMAND = '/usr/bin/nginx -g daemon off;';
+// A predicate compares by identity, so deepEqual cannot see whether it would accept the tunnel or
+// refuse a stranger. Projecting its verdicts is what makes a dropped or inverted matcher fail here.
+const stopRequests = () =>
+  vi.mocked(stopProcessAndConfirmExit).mock.calls.map(([target, budget]) => ({
+    pid: target.pid,
+    startTime: target.identity.startTime,
+    namesCompanion: target.identity.matches?.(COMPANION_TUNNEL_COMMAND) ?? null,
+    namesStranger: target.identity.matches?.(UNRELATED_COMMAND) ?? null,
+    budget,
+  }));
+
+const STOPPED: ConfirmedProcessStop = { status: 'stopped' };
+
+/** One projected stop request, with the matcher having accepted the tunnel and refused a stranger. */
+const companionStop = (pid: number, startTime: string) => ({
+  pid,
+  startTime,
+  namesCompanion: true,
+  namesStranger: false,
+  budget: COMPANION_STOP_BUDGET,
+});
+
 test('companion ownership is profile-scoped and consumer-counted', async () => {
   const projectRoot = mkdtempForTestSync('agent-device-metro-companion-state-');
   try {
@@ -66,8 +97,7 @@ test('companion ownership is profile-scoped and consumer-counted', async () => {
     vi.mocked(readProcessCommand).mockImplementation(
       () => `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
-    vi.mocked(waitForProcessExit).mockResolvedValue(true);
-    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    vi.mocked(stopProcessAndConfirmExit).mockResolvedValue(STOPPED);
 
     const stagingFirst = await ensureMetroCompanion({
       projectRoot,
@@ -119,7 +149,7 @@ test('companion ownership is profile-scoped and consumer-counted', async () => {
       consumerKey: 'session-a',
     });
     assert.equal(partialStop.stopped, false);
-    assert.equal(killSpy.mock.calls.length, 0);
+    assert.equal(vi.mocked(stopProcessAndConfirmExit).mock.calls.length, 0);
 
     const remainingState = JSON.parse(fs.readFileSync(stagingFirst.statePath, 'utf8')) as {
       consumers: string[];
@@ -132,8 +162,7 @@ test('companion ownership is profile-scoped and consumer-counted', async () => {
       consumerKey: 'session-b',
     });
     assert.equal(finalStop.stopped, true);
-    assert.equal(killSpy.mock.calls.length, 1);
-    assert.deepEqual(killSpy.mock.calls[0], [111, 'SIGTERM']);
+    assert.deepEqual(stopRequests(), [companionStop(111, 'start-111')]);
     assert.equal(fs.existsSync(stagingFirst.statePath), false);
     assert.equal(fs.existsSync(stagingFirst.logPath), false);
 
@@ -143,8 +172,10 @@ test('companion ownership is profile-scoped and consumer-counted', async () => {
       consumerKey: 'session-prod',
     });
     assert.equal(prodStop.stopped, true);
-    assert.equal(killSpy.mock.calls.length, 2);
-    assert.deepEqual(killSpy.mock.calls[1], [222, 'SIGTERM']);
+    assert.deepEqual(stopRequests(), [
+      companionStop(111, 'start-111'),
+      companionStop(222, 'start-222'),
+    ]);
     assert.equal(fs.existsSync(prod.statePath), false);
     assert.equal(fs.existsSync(prod.logPath), false);
   } finally {
@@ -163,8 +194,7 @@ test('launchUrl changes force a companion respawn for the same profile', async (
     vi.mocked(readProcessCommand).mockImplementation(
       () => `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
-    vi.mocked(waitForProcessExit).mockResolvedValue(true);
-    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    vi.mocked(stopProcessAndConfirmExit).mockResolvedValue(STOPPED);
 
     const first = await ensureMetroCompanion({
       projectRoot,
@@ -190,9 +220,8 @@ test('launchUrl changes force a companion respawn for the same profile', async (
     assert.equal(first.spawned, true);
     assert.equal(second.spawned, true);
     assert.equal(vi.mocked(runCmdDetached).mock.calls.length, 2);
-    assert.equal(killSpy.mock.calls.length, 1);
+    assert.deepEqual(stopRequests(), [companionStop(333, 'start-333')]);
     assertCompanionSpawnTarget();
-    assert.deepEqual(killSpy.mock.calls[0], [333, 'SIGTERM']);
 
     const state = JSON.parse(fs.readFileSync(second.statePath, 'utf8')) as {
       launchUrl?: string;
@@ -328,6 +357,7 @@ function writeOwnCompanionState(projectRoot: string, pid: number): string {
     statePath,
     `${JSON.stringify({
       pid,
+      startTime: `start-${pid}`,
       serverBaseUrl: 'https://bridge.example.test',
       localBaseUrl: 'http://127.0.0.1:8081',
       tokenHash: 'token-hash',
@@ -337,206 +367,201 @@ function writeOwnCompanionState(projectRoot: string, pid: number): string {
   return statePath;
 }
 
-function errnoException(code: string): NodeJS.ErrnoException {
-  return Object.assign(new Error(`simulated ${code}`), { code });
-}
-
-const COMPANION_TUNNEL_COMMAND = `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`;
-
 type CompanionTeardownCase = Readonly<{
   name: string;
   pid: number;
   processAlive: boolean;
   processCommand: string | null;
-  /** One entry per `process.kill` call: an errno to throw, or true when the signal is accepted. */
-  killOutcomes: Array<true | 'EPERM' | 'ESRCH' | 'EACCES'>;
-  /** One entry per `waitForProcessExit` call: whether the companion exited in that window. */
-  exitOutcomes: boolean[];
-  expect: Readonly<{
-    rejection?: string;
-    stopped?: boolean;
-    killCalls: Array<[number, 'SIGTERM' | 'SIGKILL']>;
-    exitWaitCalls: Array<[number, number]>;
-    keepsState: boolean;
-  }>;
+  /** What host-kit's stop proves, or the host fault it propagates. */
+  stop: ConfirmedProcessStop | { throws: Error };
+  /** What the operator has to be able to read off the failure for this verdict. */
+  says?: string[];
+  keepsState: boolean;
 }>;
+
+const RETAINED_ON_TERM: ConfirmedProcessStop = {
+  status: 'retained',
+  reason: 'signal-failed',
+  signal: 'SIGTERM',
+  errno: 'EPERM',
+};
+
+const IDENTITY_UNVERIFIED: ConfirmedProcessStop = {
+  status: 'retained',
+  reason: 'identity-unverified',
+};
 
 const COMPANION_TEARDOWN_CASES: CompanionTeardownCase[] = [
   {
-    // The recorded pid is already gone: nothing to signal, and the artifacts are cleared.
-    name: 'clears artifacts when the recorded pid is already gone',
+    name: 'clears artifacts when the host proves the recorded process is gone',
     pid: 4001,
     processAlive: false,
     processCommand: COMPANION_TUNNEL_COMMAND,
-    killOutcomes: [],
-    exitOutcomes: [],
-    expect: { stopped: true, killCalls: [], exitWaitCalls: [], keepsState: false },
+    stop: STOPPED,
+    keepsState: false,
   },
   {
-    // The process is alive but its command line is unreadable: never signal an unknown pid.
-    name: 'never signals a pid whose command line is unreadable',
+    // The #3540 companion: an elevated process this profile cannot describe. Dropping the state here
+    // is what let a second companion start beside a live one, so the reason has to reach the operator.
+    name: 'keeps the state when the host cannot verify the companion identity',
     pid: 4002,
     processAlive: true,
     processCommand: null,
-    killOutcomes: [],
-    exitOutcomes: [],
-    expect: { stopped: true, killCalls: [], exitWaitCalls: [], keepsState: false },
+    stop: IDENTITY_UNVERIFIED,
+    says: ['could not be confirmed as the Metro companion', 'no signal was sent'],
+    keepsState: true,
   },
   {
-    // SIGTERM is refused (EPERM). The shared stopper reads "signal refused" as already-exited, so
-    // teardown reports stopped, skips the exit wait and SIGKILL, and drops the state file without
-    // confirming an exit. EPERM can also mean a companion still running under another owner, which
-    // is why the daemon's own stopper keeps its registration instead (`signal-failed` in
-    // src/daemon/daemon-stop.ts); companion teardown keeps the weaker local-dev contract that a pid
-    // we cannot signal is not ours to keep tracking.
-    name: 'reads a refused SIGTERM as already exited',
+    // Reporting `stopped` on EPERM is what used to let a second companion start beside this one.
+    name: 'keeps the state when the stop reports a refused signal',
     pid: 4003,
     processAlive: true,
     processCommand: COMPANION_TUNNEL_COMMAND,
-    killOutcomes: ['EPERM'],
-    exitOutcomes: [],
-    expect: {
-      stopped: true,
-      killCalls: [[4003, 'SIGTERM']],
-      exitWaitCalls: [],
-      keepsState: false,
-    },
+    stop: RETAINED_ON_TERM,
+    says: ['refused SIGTERM (EPERM)', 'sudo kill 4003'],
+    keepsState: true,
   },
   {
-    // SIGTERM is ignored: escalate to SIGKILL and wait for the exit again.
-    name: 'escalates an ignored SIGTERM to SIGKILL',
-    pid: 4004,
-    processAlive: true,
-    processCommand: COMPANION_TUNNEL_COMMAND,
-    killOutcomes: [true, true],
-    exitOutcomes: [false, true],
-    expect: {
-      stopped: true,
-      killCalls: [
-        [4004, 'SIGTERM'],
-        [4004, 'SIGKILL'],
-      ],
-      exitWaitCalls: [
-        [4004, 1_000],
-        [4004, 1_000],
-      ],
-      keepsState: false,
-    },
-  },
-  {
-    // SIGKILL loses the race (ESRCH): stop without waiting on a pid that is already gone.
-    name: 'skips the second exit wait when SIGKILL loses the race',
-    pid: 4005,
-    processAlive: true,
-    processCommand: COMPANION_TUNNEL_COMMAND,
-    killOutcomes: [true, 'ESRCH'],
-    exitOutcomes: [false],
-    expect: {
-      stopped: true,
-      killCalls: [
-        [4005, 'SIGTERM'],
-        [4005, 'SIGKILL'],
-      ],
-      exitWaitCalls: [[4005, 1_000]],
-      keepsState: false,
-    },
-  },
-  {
-    // A signalling failure that is not a race is reported, and the state file survives so the
-    // companion can be retried instead of being orphaned silently.
-    name: 'reports a non-race SIGTERM failure and keeps the state for retry',
+    // A fault that is not a stop outcome is not swallowed either: the state stays for the retry.
+    name: 'propagates a host fault that carries no errno and keeps the state',
     pid: 4006,
     processAlive: true,
     processCommand: COMPANION_TUNNEL_COMMAND,
-    killOutcomes: ['EACCES'],
-    exitOutcomes: [],
-    expect: {
-      rejection: 'simulated EACCES',
-      killCalls: [[4006, 'SIGTERM']],
-      exitWaitCalls: [],
-      keepsState: true,
-    },
-  },
-  {
-    // The same holds when only the escalation fails for a non-race reason: the retry stops the
-    // same still-recorded companion and fails on SIGKILL.
-    name: 'reports a non-race SIGKILL escalation failure and keeps the state for retry',
-    pid: 4007,
-    processAlive: true,
-    processCommand: COMPANION_TUNNEL_COMMAND,
-    killOutcomes: [true, 'EACCES'],
-    exitOutcomes: [false],
-    expect: {
-      rejection: 'simulated EACCES',
-      killCalls: [
-        [4007, 'SIGTERM'],
-        [4007, 'SIGKILL'],
-      ],
-      exitWaitCalls: [[4007, 1_000]],
-      keepsState: true,
-    },
+    stop: { throws: new TypeError('kill refused: bad signal') },
+    keepsState: true,
   },
 ];
 
-// Each case owns its projectRoot, state file, pid, and mock outcomes, so one failure cannot hide
-// the later scenarios the way the original chained test allowed.
 test.each(COMPANION_TEARDOWN_CASES)(
-  'stopping a companion survives the teardown race: $name',
-  async ({
-    pid,
-    processAlive,
-    processCommand,
-    killOutcomes,
-    exitOutcomes,
-    expect: expectation,
-  }) => {
+  'stopping a companion confirms the exit before dropping state: $name',
+  async ({ pid, processAlive, processCommand, stop, says, keepsState }) => {
     const projectRoot = mkdtempForTestSync('agent-device-metro-companion-teardown-');
     const statePath = writeOwnCompanionState(projectRoot, pid);
     try {
       vi.mocked(isProcessAlive).mockReturnValue(processAlive);
       vi.mocked(readProcessCommand).mockReturnValue(processCommand);
-      let killIndex = 0;
-      const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => {
-        const outcome = killOutcomes[killIndex];
-        if (outcome === undefined) {
-          throw new Error(`unexpected process.kill call #${killIndex + 1}`);
-        }
-        killIndex += 1;
-        if (outcome !== true) throw errnoException(outcome);
-        return true;
-      });
-      let exitIndex = 0;
-      vi.mocked(waitForProcessExit).mockImplementation(async () => {
-        const outcome = exitOutcomes[exitIndex];
-        if (outcome === undefined) {
-          throw new Error(`unexpected waitForProcessExit call #${exitIndex + 1}`);
-        }
-        exitIndex += 1;
-        return outcome;
-      });
+      const stopMock = vi.mocked(stopProcessAndConfirmExit);
+      if ('throws' in stop) stopMock.mockRejectedValue(stop.throws);
+      else stopMock.mockResolvedValue(stop);
 
-      if (expectation.rejection !== undefined) {
+      if ('throws' in stop) {
+        await assert.rejects(() => stopMetroCompanion({ projectRoot }), stop.throws);
+      } else if (stop.status === 'retained') {
         await assert.rejects(
           () => stopMetroCompanion({ projectRoot }),
-          new RegExp(expectation.rejection),
+          (error: unknown) => {
+            const failure = error as AppError;
+            const details = failure.details;
+            assert.equal(details?.reason, stop.reason);
+            assert.equal(details?.signal, 'signal' in stop ? stop.signal : undefined);
+            assert.equal(details?.errno, 'errno' in stop ? stop.errno : undefined);
+            assert.equal(details?.pid, pid);
+            for (const said of says ?? [])
+              assert.ok(failure.message.includes(said), failure.message);
+            return true;
+          },
         );
       } else {
-        assert.equal(
-          (await stopMetroCompanion({ projectRoot })).stopped,
-          expectation.stopped === true,
-        );
+        assert.equal((await stopMetroCompanion({ projectRoot })).stopped, true);
       }
-      assert.deepEqual(killSpy.mock.calls, expectation.killCalls);
-      assert.deepEqual(
-        vi.mocked(waitForProcessExit).mock.calls.map((call) => [call[0], call[1]]),
-        expectation.exitWaitCalls,
-      );
-      assert.equal(fs.existsSync(statePath), expectation.keepsState);
+      // Whatever the host went on to prove, the caller handed over the identity it recorded.
+      assert.deepEqual(stopRequests(), [companionStop(pid, `start-${pid}`)]);
+      assert.equal(fs.existsSync(statePath), keepsState);
     } finally {
       fs.rmSync(projectRoot, { recursive: true, force: true });
     }
   },
 );
+
+test('a companion whose stop was refused keeps its state and is not replaced by a second one', async () => {
+  // ensure stops before spawning, so an unconfirmed stop aborts the respawn with the state tracked.
+  const pid = 4101;
+  const projectRoot = mkdtempForTestSync('agent-device-metro-companion-refused-ensure-');
+  const statePath = writeOwnCompanionState(projectRoot, pid);
+  const before = fs.readFileSync(statePath, 'utf8');
+  try {
+    // The state does not match these options (different launchUrl), so ensure must stop it first.
+    vi.mocked(isProcessAlive).mockReturnValue(true);
+    vi.mocked(readProcessCommand).mockReturnValue(COMPANION_TUNNEL_COMMAND);
+    vi.mocked(readProcessStartTime).mockReturnValue('start-4101');
+    vi.mocked(stopProcessAndConfirmExit).mockResolvedValue(RETAINED_ON_TERM);
+
+    const failure = (await ensureMetroCompanion({
+      projectRoot,
+      serverBaseUrl: 'https://bridge.example.test',
+      bearerToken: 'token',
+      localBaseUrl: 'http://127.0.0.1:8081',
+      bridgeScope: TEST_BRIDGE_SCOPE,
+      launchUrl: 'myapp://second',
+      consumerKey: 'session-a',
+    }).catch((error: unknown) => error)) as AppError;
+    assert.equal(failure.details?.reason, 'signal-failed', String(failure));
+    assert.equal(vi.mocked(runCmdDetached).mock.calls.length, 0, 'no second companion was spawned');
+    assert.equal(fs.readFileSync(statePath, 'utf8'), before, 'the tracked state is untouched');
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test('a half-spawned companion whose stop cannot be confirmed keeps its record', async () => {
+  // The state write fails once after the spawn produced a pid, so the stop verdict decides whether
+  // the record goes: an unconfirmed exit keeps it, with the spawn failure as the cause.
+  const pid = 4201;
+  const projectRoot = mkdtempForTestSync('agent-device-metro-companion-spawn-cleanup-');
+  const statePath = path.join(projectRoot, '.agent-device', 'metro-companion.json');
+  try {
+    vi.mocked(isProcessAlive).mockReturnValue(true);
+    vi.mocked(readProcessStartTime).mockReturnValue('start-4201');
+    vi.mocked(readProcessCommand).mockReturnValue(COMPANION_TUNNEL_COMMAND);
+    vi.mocked(stopProcessAndConfirmExit).mockResolvedValue(RETAINED_ON_TERM);
+    vi.mocked(runCmdDetached).mockReturnValue(pid);
+    const writeFault = Object.assign(new Error('simulated EIO'), { code: 'EIO' });
+    const realWriteFileSync = fs.writeFileSync;
+    let faultPending = true;
+    vi.spyOn(fs, 'writeFileSync').mockImplementation(((
+      target: fs.PathOrFileDescriptor,
+      ...rest
+    ) => {
+      if (faultPending && String(target) === statePath) {
+        faultPending = false;
+        throw writeFault;
+      }
+      return realWriteFileSync(target, ...rest);
+    }) as typeof fs.writeFileSync);
+
+    const failure = (await ensureMetroCompanion({
+      projectRoot,
+      serverBaseUrl: 'https://bridge.example.test',
+      bearerToken: 'token',
+      localBaseUrl: 'http://127.0.0.1:8081',
+      bridgeScope: TEST_BRIDGE_SCOPE,
+      consumerKey: 'session-a',
+    }).catch((error: unknown) => error)) as AppError;
+    assert.equal(failure.details?.reason, 'signal-failed', String(failure));
+    assert.equal(failure.cause, writeFault, 'the spawn failure stays the cause');
+    const kept = JSON.parse(fs.readFileSync(statePath, 'utf8')) as { pid: number };
+    assert.equal(kept.pid, pid, 'the profile keeps tracking the surviving pid');
+    assert.equal(vi.mocked(runCmdDetached).mock.calls.length, 1, 'nothing was spawned twice');
+
+    // What the kept record is for: a later ensure stops that same pid instead of registering a
+    // second companion beside the one that refused to die.
+    vi.mocked(stopProcessAndConfirmExit).mockClear();
+    const retry = (await ensureMetroCompanion({
+      projectRoot,
+      serverBaseUrl: 'https://bridge.example.test',
+      bearerToken: 'token',
+      localBaseUrl: 'http://127.0.0.1:8081',
+      bridgeScope: TEST_BRIDGE_SCOPE,
+      launchUrl: 'myapp://second',
+      consumerKey: 'session-a',
+    }).catch((error: unknown) => error)) as AppError;
+    assert.equal(retry.details?.reason, 'signal-failed', String(retry));
+    assert.deepEqual(stopRequests(), [companionStop(pid, `start-${pid}`)]);
+    assert.equal(vi.mocked(runCmdDetached).mock.calls.length, 1, 'the retry did not spawn either');
+  } finally {
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  }
+});
 
 test('legacy state without bridge scope is stopped before respawn', async () => {
   const projectRoot = mkdtempForTestSync('agent-device-metro-companion-legacy-');
@@ -562,8 +587,7 @@ test('legacy state without bridge scope is stopped before respawn', async () => 
     vi.mocked(readProcessCommand).mockReturnValue(
       `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
-    vi.mocked(waitForProcessExit).mockResolvedValue(true);
-    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+    vi.mocked(stopProcessAndConfirmExit).mockResolvedValue(STOPPED);
 
     const spawned = await ensureMetroCompanion({
       projectRoot,
@@ -577,7 +601,7 @@ test('legacy state without bridge scope is stopped before respawn', async () => 
     assert.equal(spawned.spawned, true);
     assert.equal(spawned.pid, 666);
     assert.equal(vi.mocked(runCmdDetached).mock.calls.length, 1);
-    assert.deepEqual(killSpy.mock.calls[0], [555, 'SIGTERM']);
+    assert.deepEqual(stopRequests(), [companionStop(555, 'start-555')]);
     const state = JSON.parse(fs.readFileSync(spawned.statePath, 'utf8')) as {
       bridgeScope?: unknown;
     };
