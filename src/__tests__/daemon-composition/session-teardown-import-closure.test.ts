@@ -20,7 +20,7 @@ const repoRoot = path.resolve(import.meta.dirname, '../../..');
 // Derived from the layering constant rather than a fresh literal: the daemon moved to
 // packages/daemon/src and a hand-written `daemon/...` under src/ silently ENOENTs (#3546 CI).
 const daemonRoot = path.join(repoRoot, DAEMON_SOURCE_ROOT);
-const teardownFile = path.join(daemonRoot, 'session-teardown.ts');
+const teardownFile = path.join(daemonRoot, 'sessions/session-teardown.ts');
 const LAZY_ANDROID_HELPERS = [
   /platforms[/\\]android[/\\]perf\.ts$/,
   /platforms[/\\]android[/\\]snapshot-helper\.ts$/,
@@ -59,5 +59,5 @@ test('the teardown closure walk is reachable and the dynamic seam exists', () =>
   // guard above pass while proving nothing, so pin a real lower bound…
   const closure = eagerClosureOf(teardownFile);
   expect(closure.length).toBeGreaterThan(20);
-  expect(closure).toContain(path.join(daemonRoot, 'materialized-path-registry.ts'));
+  expect(closure).toContain(path.join(daemonRoot, 'sessions/materialized-path-registry.ts'));
 });
