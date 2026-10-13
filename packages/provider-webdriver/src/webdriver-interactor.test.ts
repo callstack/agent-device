@@ -974,6 +974,7 @@ test('Android acquisition derives a docked IME before projection removes its tre
     derivation: 'docked-tree',
     frame: { x: 0, y: 1500, width: 1080, height: 900 },
   });
+  assert.ok(snapshot.nodes);
   const form = snapshot.nodes.find((node) => node.label === 'Form')!;
   assert.equal(
     resolveKeyboardTapOcclusion({

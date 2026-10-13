@@ -1,8 +1,3 @@
-import { resolveViewportRect } from '@agent-device/contracts/snapshot';
-import {
-  annotateKeyboardOwnership,
-  observeProviderKeyboard,
-} from '@agent-device/contracts/tap-keyboard-occlusion';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { BackMode } from '@agent-device/contracts/back-mode';
 import type {
@@ -341,6 +336,8 @@ class WebDriverInteractor implements Interactor {
       return acquireWebDriverIosSnapshot(source, this.targetId, visibility);
     }
     const { parseWebDriverAndroidSnapshotNodes } = await import('./webdriver-android-source.ts');
+    const { annotateKeyboardOwnership, observeProviderKeyboard } =
+      await import('@agent-device/contracts/tap-keyboard-occlusion');
     const nodes = annotateKeyboardOwnership(parseWebDriverAndroidSnapshotNodes(source));
     const viewportAfter =
       viewportBefore === undefined ? undefined : await this.readAndroidSnapshotViewport(signal);

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import {
+  annotateKeyboardOwnership,
   observeProviderKeyboard,
   resolveKeyboardTapOcclusion,
 } from '@agent-device/contracts/tap-keyboard-occlusion';
@@ -121,7 +122,7 @@ test('a scoped keyboard control retains its acquired ownership after reindexing'
   const keyboard = observeProviderKeyboard({ nodes, viewport: SCREEN });
   const acquired = createIosSnapshotAcquisition({
     producer: 'appium-source',
-    nodes,
+    nodes: annotateKeyboardOwnership(nodes),
     viewport: { kind: 'reported', rect: SCREEN },
     lineage: {},
     keyboard,

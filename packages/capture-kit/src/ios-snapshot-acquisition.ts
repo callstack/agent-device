@@ -8,7 +8,6 @@ import type {
   IosSnapshotProducer,
   IosViewportEvidence,
 } from '@agent-device/contracts/ios-snapshot';
-import { annotateKeyboardOwnership } from '@agent-device/contracts/tap-keyboard-occlusion';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
 import type {
@@ -111,10 +110,7 @@ export function createIosSnapshotAcquisition(
     acquisition: {
       producer: input.producer,
       intent: 'full',
-      nodes:
-        input.keyboard?.kind === 'derived' || input.keyboard?.kind === 'visible'
-          ? annotateKeyboardOwnership(input.nodes)
-          : input.nodes,
+      nodes: input.nodes,
       viewport: input.viewport,
       ...(input.keyboard ? { keyboard: input.keyboard } : {}),
       lineage: input.lineage,

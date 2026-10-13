@@ -77,9 +77,11 @@ test('Appium carries visibility-only and derived keyboard facts before projectio
   });
   const withKeyboard = SOURCE.replace(
     '</XCUIElementTypeApplication>',
-    '<XCUIElementTypeKeyboard x="0" y="580" width="390" height="264" /></XCUIElementTypeApplication>',
+    '<XCUIElementTypeKeyboard x="0" y="580" width="390" height="264"><XCUIElementTypeButton name="Done" x="200" y="600" width="100" height="40" /></XCUIElementTypeKeyboard></XCUIElementTypeApplication>',
   );
-  assert.deepEqual(acquireWebDriverIosSnapshot(withKeyboard).acquisition.keyboard, {
+  const acquired = acquireWebDriverIosSnapshot(withKeyboard).acquisition;
+  assert.equal(acquired.nodes.find((node) => node.label === 'Done')?.keyboardOwned, true);
+  assert.deepEqual(acquired.keyboard, {
     kind: 'derived',
     derivation: 'docked-tree',
     frame: { x: 0, y: 580, width: 390, height: 264 },
