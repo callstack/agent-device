@@ -87,10 +87,10 @@ function countsAreValid(record: IstanbulCounters): boolean {
  * `ast-v8-to-istanbul` subtracts located branch paths from a region that did not contain them,
  * which an awaited continuation can make negative. Vitest 5 fixed the other upstream (#10506,
  * #10643): the v8 provider used to resolve a module's script wrapper length from whichever coverage
- * file it read last, so an unmeasured one shifted every offset off its source. Any rule can also
- * merge into a record measured correctly and pull its counts down, so a record is dropped whole
- * rather than repaired; zeroed counts from the same shift are indistinguishable from untested code
- * and stay. A dropped file gets no CRAP score rather than a wrong one.
+ * file it read last, so an unmeasured one shifted every offset off its source. Either defect's
+ * counts could also merge into a record measured correctly and pull them down, so a record is
+ * dropped whole rather than repaired; zeroed counts from the same shift are indistinguishable from
+ * untested code and stay. A dropped file gets no CRAP score rather than a wrong one.
  */
 export function sanitizeIstanbulCoverage(map: IstanbulCoverageMap): SanitizedCoverage {
   const kept: Record<string, IstanbulCounters> = {};
