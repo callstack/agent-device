@@ -251,13 +251,17 @@ test('react-devtools stop reports a companion whose stop could not be confirmed'
 
 test('react-devtools stop keeps its own failure ahead of an unconfirmed companion stop', async () => {
   const actionFault = new Error('devtools package failed');
+  const stopFault = new AppError('COMMAND_FAILED', 'companion pid 4322 is still running', {
+    reason: 'signal-failed',
+    pid: 4322,
+  });
   vi.mocked(runCmdStreaming).mockRejectedValueOnce(actionFault);
-  vi.mocked(stopReactDevtoolsCompanion).mockRejectedValueOnce(
-    new AppError('COMMAND_FAILED', 'companion pid 4322 is still running'),
-  );
+  vi.mocked(stopReactDevtoolsCompanion).mockRejectedValueOnce(stopFault);
 
-  await assert.rejects(runRemoteStop, actionFault);
+  const stderr = await withCapturedStderrAsync(() => assert.rejects(runRemoteStop(), actionFault));
   assert.equal(vi.mocked(stopReactDevtoolsCompanion).mock.calls.length, 1, 'cleanup still ran');
+  // The action's fault is what the command reports, so the surviving companion has to be named here.
+  assert.match(stderr, /companion pid 4322 is still running/);
 });
 
 // The stop's own transport can reject with anything, and an unconfirmed exit may only ever be

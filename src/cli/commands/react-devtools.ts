@@ -3,7 +3,7 @@ import {
   ensureReactDevtoolsCompanion,
   stopReactDevtoolsCompanion,
 } from '../../client/client-react-devtools-companion.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, errorMessage } from '@agent-device/kernel/errors';
 import { isRemoteBridgeBackend } from './remote-bridge.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
@@ -131,8 +131,8 @@ async function withRemoteDevtoolsCompanion<T>(
     flags?.remoteConfig ?? `${bridgeConfig.tenantId}:${bridgeConfig.runId}:${bridgeConfig.leaseId}`;
 
   if (args[0] === 'stop') {
-    // A companion that could not be confirmed stopped is this command's own verdict, so it is
-    // reported — but never in place of the failure the stop was cleaning up after.
+    // An unconfirmed companion stop fails this command, except when the action failed too: then the
+    // action's fault is the verdict and the surviving companion is named on stderr beside it.
     const acted = await action().then(
       (value) => ({ value }) as const,
       (error: unknown) => ({ error }) as const,
@@ -146,7 +146,12 @@ async function withRemoteDevtoolsCompanion<T>(
       () => ({}) as const,
       (error: unknown) => ({ error }) as const,
     );
-    if ('error' in acted) throw acted.error;
+    if ('error' in acted) {
+      if ('error' in stopped) {
+        process.stderr.write(`Warning: ${errorMessage(stopped.error)}\n`);
+      }
+      throw acted.error;
+    }
     if ('error' in stopped) throw stopped.error;
     return acted.value;
   }
