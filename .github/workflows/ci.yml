@@ -338,11 +338,12 @@ jobs:
             --base
             ${{ github.event.pull_request.base.sha }}
 
-      # Blocking: scores the functions this PR touches with the coverage map the coverage step wrote
-      # (fallow-crap.json) and fails the job when one is at or above the threshold, or when the map
-      # cannot be trusted to answer. `!cancelled()` keeps it running after a failed changed-line
-      # gate; it still needs `run-coverage` to have succeeded, because without a coverage map there
-      # is no verdict to report — only the coverage step's own red.
+      # Blocking: scores the functions this PR touches against the coverage map the coverage step
+      # wrote, using the ceilings in `.fallowrc.json` and the CLI's `--max-crap` threshold, and
+      # fails the job when one is at or above the threshold, or when the map cannot be trusted to
+      # answer. `!cancelled()` keeps it running after a failed changed-line gate; it still needs
+      # `run-coverage` to have succeeded, because without a coverage map there is no verdict to
+      # report — only the coverage step's own red.
       - name: Check coverage-based CRAP of touched functions
         if: ${{ !cancelled() && steps.run-coverage.outcome == 'success' && github.event_name == 'pull_request' }}
         uses: ./.github/actions/run-gate

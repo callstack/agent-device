@@ -358,8 +358,44 @@
     "healthBaseline": "fallow-baselines/health.json"
   },
   // CRAP needs measured coverage: estimated from imports it disagrees with measured scores on most
-  // findings. fallow-crap.json re-enables it for the CI Coverage job, which supplies the coverage map.
-  "health": { "maxCrap": 0 },
+  // findings, so it stays off here and the CI Coverage job's `check:coverage-crap` re-enables it
+  // with `--max-crap 30` beside the Vitest coverage map. Functions that cannot be instrumented by
+  // the Node coverage run (browser-evaluated scripts, worker threads) carry a per-function ceiling
+  // below, high enough for their current score and low enough that growth still blocks.
+  "health": {
+    "maxCrap": 0,
+    "thresholdOverrides": [
+      {
+        // These seven are the audioProbe* functions already scoring at or above the global CRAP
+        // bar under 0% measured coverage: they are serialized with Function.toString into one
+        // string and evaluated inside the browser page (buildAudioProbeEvalScript is what ships
+        // them; the normalize side is unit-tested), so no test added in Node can move their
+        // number. Their untested siblings keep the global bar, where one added branch would
+        // block. The ceiling is 90: every one scores 72 or less today, so growth past that blocks.
+        "files": ["packages/platform-web/src/agent-browser-audio-probe.ts"],
+        "functions": [
+          "audioProbeStop",
+          "audioProbeEvalScript",
+          "audioProbeCreateElementAudioSource",
+          "audioProbeDiscover",
+          "audioProbeStart",
+          "audioProbeSample",
+          "audioProbeGetContext"
+        ],
+        "maxCrap": 90,
+        "reason": "Browser-evaluated page script; the Node coverage map never records it."
+      },
+      {
+        // `pnpm exec vitest run packages/capture-kit/src/png-worker-client.test.ts` proves every
+        // job kind answers on the worker thread, but that thread's execution is not in the
+        // coverage map, so the job switch always measures 0% (CRAP 72 today; 90 blocks growth).
+        "files": ["packages/capture-kit/src/png-worker.ts"],
+        "functions": ["runJob"],
+        "maxCrap": 90,
+        "reason": "node:worker_threads entry; the coverage map only records the main thread."
+      }
+    ]
+  },
   "includeEntryExports": true,
   "ignoreExportsUsedInFile": {
     "type": true,
