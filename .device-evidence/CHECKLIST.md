@@ -99,8 +99,10 @@ appended warning:
 ### Proof the review asked for on this lane
 
 The false-attribution class is covered by unit tests rather than a device run, because the device
-cannot show a cache hit on command: `packages/daemon/src/__tests__/capture-disclosure-target-activation.test.ts`
-pins that a cache-reused tree discloses nothing, and
+cannot show a cache hit on command: `packages/daemon/src/__tests__/selector-capture-runtime.test.ts`
+drives a session-snapshot cache hit and pins that the consumed tree earns no repair proof and
+discloses nothing, `packages/daemon/src/__tests__/capture-disclosure-target-activation.test.ts`
+pins that the response builder never borrows a repair the stored snapshot happens to carry, and
 `src/__tests__/daemon-composition/interaction/interaction-capture-disclosure.test.ts` pins that
 a press which consumed no capture is not disclosed against an older tree.
 
