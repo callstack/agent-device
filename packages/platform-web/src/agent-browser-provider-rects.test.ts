@@ -247,10 +247,9 @@ test('agent-browser provider refuses geometry when the batch answers with an obj
   });
 });
 
-test('agent-browser provider refuses geometry when a batch entry is not an entry', async () => {
-  // Right number of answers, one of them not an object at all. The point of this test is the shape
-  // guard, so the member has to be one the guard alone rejects: an object would be refused further
-  // down by the echo check and the branch under test would go unpinned.
+test('agent-browser provider refuses geometry when a batch entry is not an object', async () => {
+  // Right number of answers, one of them not an object at all. A member that is not an object never
+  // reaches the echo check, so only the shape guard can refuse it.
   await withWebProvider(async (provider) => {
     await assert.rejects(
       () =>
@@ -262,6 +261,36 @@ test('agent-browser provider refuses geometry when a batch entry is not an entry
               commands.map((command, index) =>
                 index === 0
                   ? null
+                  : { command, success: true, error: null, result: boxRect(command[2]) },
+              ),
+              1,
+            );
+          },
+          async () => await provider.snapshot({ includeRects: true }),
+        ),
+      refusedFor('entry-shape'),
+    );
+  });
+});
+
+test('agent-browser provider refuses geometry when a batch entry carries no verdict', async () => {
+  // An entry that echoes the right command and carries a box but states no `success` is the shape
+  // the echo check cannot catch: it passes the echo and would be read as an ordinary failed ref,
+  // dropping that node's geometry with no error so it reads as "this element has no box". Only the
+  // shape guard's boolean-`success` clause refuses it.
+  await withWebProvider(async (provider) => {
+    await assert.rejects(
+      () =>
+        withCommandExecutorOverride(
+          async (_cmd, args, options) => {
+            if (agentBrowserCliArgs(args)[0] !== 'batch') return snapshotPayload();
+            const commands = readBatchCommands(options.stdin);
+            return jsonResult(
+              commands.map((command, index) =>
+                // index 0 echoes the command it answers (`command` IS `commands[0]` there) and
+                // carries a plausible box, so only the missing `success` distinguishes it.
+                index === 0
+                  ? { command, result: boxRect(command[2]) }
                   : { command, success: true, error: null, result: boxRect(command[2]) },
               ),
               1,
