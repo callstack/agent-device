@@ -506,6 +506,48 @@ test('a renamed entry is followed to its path at the base, not treated as first-
   ).toBe(null);
 });
 
+test('rename detection survives a git mv with an edit and a hostile renameLimit', () => {
+  // The daemon move is the load-bearing case: `git mv` PLUS a per-file edit makes the rename
+  // inexact, and a clone-side `diff.renameLimit` below the file count silently disables the
+  // scan. `renamedSince` pins the limit off, so both must still pair.
+  const repo = mkGitFixtureRepo('renamed-since-inexact-');
+  // git mv PLUS an edit: inexact rename detection has to score similarity to pair this one.
+  // The fixture files are one statement long, so an appended edit would be a rewrite git
+  // refuses to pair at all; pad in the base commit first, then move and touch a line the
+  // way the daemon files were touched.
+  for (const file of ['packages/demo/src/entry.ts', 'packages/demo/src/facades/top.ts'])
+    fs.appendFileSync(
+      path.join(repo, file),
+      Array.from({ length: 40 }, (_, i) => `export const pad${i} = ${i};`).join('\n') + '\n',
+    );
+  execFileSync('git', ['commit', '-aqm', 'pad'], { cwd: repo });
+  execFileSync('git', ['mv', 'packages/demo/src/entry.ts', 'packages/demo/src/moved.ts'], {
+    cwd: repo,
+  });
+  fs.appendFileSync(path.join(repo, 'packages/demo/src/moved.ts'), '\nexport const touched = 1;\n');
+  execFileSync('git', ['mv', 'packages/demo/src/facades/top.ts', 'packages/demo/src/facades/top2.ts'], {
+    cwd: repo,
+  });
+  fs.appendFileSync(
+    path.join(repo, 'packages/demo/src/facades/top2.ts'),
+    '\nexport const t2 = 1;\n',
+  );
+  execFileSync('git', ['add', '-A'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'two moved edits'], { cwd: repo });
+  const withEdits = renamedSince(repo, 'HEAD~1', 'HEAD');
+  expect(withEdits.get('packages/demo/src/moved.ts')).toBe('packages/demo/src/entry.ts');
+  expect(withEdits.get('packages/demo/src/facades/top2.ts')).toBe('packages/demo/src/facades/top.ts');
+  // A clone-side limit BELOW the two inexact renames must not disable detection: the helper
+  // passes its own `-c diff.renameLimit=0` (unlimited).
+  execFileSync('git', ['config', 'diff.renameLimit', '1'], { cwd: repo });
+  const underLimit = renamedSince(repo, 'HEAD~1', 'HEAD');
+  expect(underLimit.get('packages/demo/src/moved.ts')).toBe('packages/demo/src/entry.ts');
+  expect(underLimit.get('packages/demo/src/facades/top2.ts')).toBe('packages/demo/src/facades/top.ts');
+  // The base -> head direction the wire-compat ledger canonicalizes with (#3546 review).
+  const baseToHead = new Map([...underLimit].map(([headPath, basePath]) => [basePath, headPath]));
+  expect(baseToHead.get('packages/demo/src/entry.ts')).toBe('packages/demo/src/moved.ts');
+});
+
 test('discovery is recursive and reads TRACKED files only', () => {
   // Two holes in one fixture, because both are about discovery seeing the wrong set of files.
   //

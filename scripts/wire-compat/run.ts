@@ -20,6 +20,7 @@
 
 import path from 'node:path';
 import { repoGit, requireUnshallowHistory } from '../lib/repo-git.ts';
+import { renamedSince } from '../__tests__/committed-source-tree.ts';
 import { digestDeclaration } from '../../test/wire-compat/declaration-digest.ts';
 import {
   digestWireSurface,
@@ -81,15 +82,11 @@ if (!baseline) {
  * Digests travel unchanged: a pure move is not a wire change.
  */
 function tagToHeadRenames(tag: string): Map<string, string> {
-  const fields = git(['diff', '--name-status', '-M', '--diff-filter=R', '-z', tag, 'HEAD'])
-    .split('\0')
-    .filter(Boolean);
-  const renames = new Map<string, string>();
-  for (let index = 0; index + 2 < fields.length; index += 3) {
-    const [, from, to] = fields.slice(index, index + 3) as [string, string, string];
-    renames.set(from, to);
-  }
-  return renames;
+  // head -> base at [tag, HEAD]; flipped into the base -> head direction the ledger needs.
+  const flipped = new Map<string, string>();
+  for (const [headPath, basePath] of renamedSince(repoRoot, tag, 'HEAD'))
+    flipped.set(basePath, headPath);
+  return flipped;
 }
 
 function canonicalizeLedgerRef(ref: string, renames: ReadonlyMap<string, string>): string {

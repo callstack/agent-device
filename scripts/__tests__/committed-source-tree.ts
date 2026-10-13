@@ -42,10 +42,29 @@ export function headCommit(repoRoot: string): string {
   return git(repoRoot, ['rev-parse', 'HEAD']).toString('utf8').trim();
 }
 
-/** Files renamed since `base`, current path -> path at `base`, so a rename is not a new entry. */
-export function renamedSince(repoRoot: string, base: string): ReadonlyMap<string, string> {
+/**
+ * Files renamed between `base` and `head` (the working tree unless a commit is given),
+ * head path -> base path, so a rename is not a new entry. The explicit rename limit keeps
+ * inexact detection on regardless of the clone's `diff.renameLimit` config — a bulk move
+ * with edits (the daemon extraction) is exactly the inexact case the ratchets must see.
+ */
+export function renamedSince(
+  repoRoot: string,
+  base: string,
+  head?: string,
+): ReadonlyMap<string, string> {
   const renamed = new Map<string, string>();
-  const status = git(repoRoot, ['diff', '--name-status', '-M', '--diff-filter=R', '-z', base]);
+  const status = git(repoRoot, [
+    '-c',
+    'diff.renameLimit=0',
+    'diff',
+    '--name-status',
+    '-M',
+    '--diff-filter=R',
+    '-z',
+    base,
+    ...(head ? [head] : []),
+  ]);
   const fields = status.toString('utf8').split('\0');
   for (let index = 0; index + 2 < fields.length; index += 3) {
     const [from, to] = [fields[index + 1], fields[index + 2]];
