@@ -9,7 +9,10 @@ import { runRequestHandlerChain } from '@agent-device/daemon/testing/request-han
 import { getDaemonRouteOwnerFiles } from '@agent-device/daemon/testing/route-owner-files';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/testing/daemon-request';
 import { LINUX_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { makeIosSession, makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import {
+  makeIosSession,
+  makeSession,
+} from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
@@ -109,19 +112,27 @@ test('route owner files match the production module loaders', () => {
 });
 
 test('request handler chain keeps interaction routes out of its eager import closure', () => {
-  const chainFile = path.resolve(import.meta.dirname, '../../../packages/daemon/src/request-handler-chain.ts');
+  const chainFile = path.resolve(
+    import.meta.dirname,
+    '../../../packages/daemon/src/request-handler-chain.ts',
+  );
   const closure = eagerClosureOf(chainFile);
 
   assert.ok(closure.length > 20, 'eager closure walk must reach the request chain');
   assert.equal(
-    closure.includes(path.resolve(import.meta.dirname, '../../../packages/daemon/src/interaction/index.ts')),
+    closure.includes(
+      path.resolve(import.meta.dirname, '../../../packages/daemon/src/interaction/index.ts'),
+    ),
     false,
     'interaction routes must stay behind the request chain lazy import',
   );
 });
 
 test('interaction facade keeps route implementations out of its eager import closure', () => {
-  const facadeFile = path.resolve(import.meta.dirname, '../../../packages/daemon/src/interaction/index.ts');
+  const facadeFile = path.resolve(
+    import.meta.dirname,
+    '../../../packages/daemon/src/interaction/index.ts',
+  );
   const closure = eagerClosureOf(facadeFile);
   const snapshotComposition = path.resolve(
     import.meta.dirname,

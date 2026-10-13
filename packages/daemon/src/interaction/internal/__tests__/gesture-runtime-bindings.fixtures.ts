@@ -26,11 +26,19 @@ export function gestureRuntimeBindingsFixture(
       ? ({ available: false, reason: 'unsupported-platform-leaf' } as const)
       : available;
   const operationSpies = {
-    captureSnapshot: vi.fn(async () => ({ backend: 'xctest' as const, nodes: [] })) as Mock<() => Promise<{ backend: 'xctest'; nodes: [] }>>,
+    captureSnapshot: vi.fn(async () => ({ backend: 'xctest' as const, nodes: [] })) as Mock<
+      () => Promise<{ backend: 'xctest'; nodes: [] }>
+    >,
     performGesturePlan: vi.fn(async () => ({})) as Mock<() => Promise<Record<string, never>>>,
-    performDirectionalFlingPlan: vi.fn(async () => ({})) as Mock<() => Promise<Record<string, never>>>,
-    performMultiTouchGesturePlan: vi.fn(async () => ({})) as Mock<() => Promise<Record<string, never>>>,
-    performTargetAuthoredDrag: vi.fn(async () => ({})) as Mock<() => Promise<Record<string, never>>>,
+    performDirectionalFlingPlan: vi.fn(async () => ({})) as Mock<
+      () => Promise<Record<string, never>>
+    >,
+    performMultiTouchGesturePlan: vi.fn(async () => ({})) as Mock<
+      () => Promise<Record<string, never>>
+    >,
+    performTargetAuthoredDrag: vi.fn(async () => ({})) as Mock<
+      () => Promise<Record<string, never>>
+    >,
     gestureViewport: vi.fn(
       async () => options.viewport ?? { x: 0, y: 0, width: 400, height: 800 },
     ) as Mock<() => Promise<Rect>>,
@@ -47,7 +55,8 @@ export function gestureRuntimeBindingsFixture(
       gestureViewport: cell('gestureViewport'),
     },
   } as unknown as RuntimeFacts<PlatformRuntimeOperations>;
-  const inspectFacts = vi.fn(async () => facts) as unknown as InspectDeviceRuntimeFacts & Mock<() => Promise<RuntimeFacts<PlatformRuntimeOperations>>>;
+  const inspectFacts = vi.fn(async () => facts) as unknown as InspectDeviceRuntimeFacts &
+    Mock<() => Promise<RuntimeFacts<PlatformRuntimeOperations>>>;
   const bindDevice = vi.fn(
     async () =>
       ({

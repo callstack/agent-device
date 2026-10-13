@@ -46,7 +46,10 @@ test('type-only, dynamic and same-zone imports never close a zone cycle', () => 
         'src/remote/diagnostics.ts',
         "import { logPath } from '../../packages/daemon/src/paths.ts';",
       ],
-      ['packages/daemon/src/paths.ts', "import type { TempPath } from '../../../src/remote/temp-path.ts';"],
+      [
+        'packages/daemon/src/paths.ts',
+        "import type { TempPath } from '../../../src/remote/temp-path.ts';",
+      ],
       ['packages/daemon/src/lease.ts', "void import('../../../src/remote/temp-path.ts');"],
       ['packages/daemon/src/capture.ts', "import { logPath } from './paths.ts';"],
       ['src/remote/temp-path.ts', 'export type TempPath = string;'],

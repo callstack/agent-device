@@ -55,7 +55,8 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
 // The blocking-dialog readiness check runs for real (its focus probe is mocked
 // above); the recovery regression below swaps in a recovering implementation.
 vi.mock('@agent-device/daemon/testing/android-system-dialog', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/daemon/testing/android-system-dialog')>();
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/android-system-dialog')>();
   androidDialogReadiness.actual = actual.ensureAndroidBlockingSystemDialogReady;
   return { ...actual, ensureAndroidBlockingSystemDialogReady: androidDialogReadiness.spy };
 });

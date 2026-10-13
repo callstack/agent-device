@@ -88,7 +88,10 @@ import {
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
-import { makeIosDevice, openRequest } from '@agent-device/daemon/testing/__tests__/request-router-open-harness';
+import {
+  makeIosDevice,
+  openRequest,
+} from '@agent-device/daemon/testing/__tests__/request-router-open-harness';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());

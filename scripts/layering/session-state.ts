@@ -160,8 +160,7 @@ export function sessionStateDeclarationFile(
   sources: ReadonlyMap<string, string>,
 ): string | undefined {
   for (const [file, source] of sources) {
-    if (file.startsWith(DAEMON_SOURCE_ROOT) && SESSION_STATE_DECLARATION.test(source))
-      return file;
+    if (file.startsWith(DAEMON_SOURCE_ROOT) && SESSION_STATE_DECLARATION.test(source)) return file;
   }
   return undefined;
 }

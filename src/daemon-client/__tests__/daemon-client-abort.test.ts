@@ -12,7 +12,11 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '@agent-device/daemon/testing/daemon-request';
+import type {
+  DaemonInvokeFn,
+  DaemonRequest,
+  DaemonResponse,
+} from '@agent-device/daemon/testing/daemon-request';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
 import { sendRequest } from '../daemon-client-transport.ts';

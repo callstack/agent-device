@@ -435,7 +435,10 @@ test('the Android test-only fixture subpaths accept test consumers and deny prod
     "import { createAndroidSnapshotCapture } from '@agent-device/platform-android/snapshot-capture-fixtures';";
   const allowed = validSources();
   allowed.set('src/__tests__/android-ui-hierarchy.test.ts', fixtureImport);
-  allowed.set('packages/daemon/src/__tests__/android-system-dialog-occlusion.test.ts', fixtureImport);
+  allowed.set(
+    'packages/daemon/src/__tests__/android-system-dialog-occlusion.test.ts',
+    fixtureImport,
+  );
   allowed.set('test/integration/provider-scenarios/android.test.ts', fixtureImport);
   assert.deepEqual(
     messages(allowed).filter((message) => message.includes('may import')),

@@ -525,9 +525,13 @@ test('rename detection survives a git mv with an edit and a hostile renameLimit'
     cwd: repo,
   });
   fs.appendFileSync(path.join(repo, 'packages/demo/src/moved.ts'), '\nexport const touched = 1;\n');
-  execFileSync('git', ['mv', 'packages/demo/src/facades/top.ts', 'packages/demo/src/facades/top2.ts'], {
-    cwd: repo,
-  });
+  execFileSync(
+    'git',
+    ['mv', 'packages/demo/src/facades/top.ts', 'packages/demo/src/facades/top2.ts'],
+    {
+      cwd: repo,
+    },
+  );
   fs.appendFileSync(
     path.join(repo, 'packages/demo/src/facades/top2.ts'),
     '\nexport const t2 = 1;\n',
@@ -536,13 +540,17 @@ test('rename detection survives a git mv with an edit and a hostile renameLimit'
   execFileSync('git', ['commit', '-qm', 'two moved edits'], { cwd: repo });
   const withEdits = renamedSince(repo, 'HEAD~1', 'HEAD');
   expect(withEdits.get('packages/demo/src/moved.ts')).toBe('packages/demo/src/entry.ts');
-  expect(withEdits.get('packages/demo/src/facades/top2.ts')).toBe('packages/demo/src/facades/top.ts');
+  expect(withEdits.get('packages/demo/src/facades/top2.ts')).toBe(
+    'packages/demo/src/facades/top.ts',
+  );
   // A clone-side limit BELOW the two inexact renames must not disable detection: the helper
   // passes its own `-c diff.renameLimit=0` (unlimited).
   execFileSync('git', ['config', 'diff.renameLimit', '1'], { cwd: repo });
   const underLimit = renamedSince(repo, 'HEAD~1', 'HEAD');
   expect(underLimit.get('packages/demo/src/moved.ts')).toBe('packages/demo/src/entry.ts');
-  expect(underLimit.get('packages/demo/src/facades/top2.ts')).toBe('packages/demo/src/facades/top.ts');
+  expect(underLimit.get('packages/demo/src/facades/top2.ts')).toBe(
+    'packages/demo/src/facades/top.ts',
+  );
   // The base -> head direction the wire-compat ledger canonicalizes with (#3546 review).
   const baseToHead = new Map([...underLimit].map(([headPath, basePath]) => [basePath, headPath]));
   expect(baseToHead.get('packages/demo/src/entry.ts')).toBe('packages/demo/src/moved.ts');

@@ -51,11 +51,14 @@ const shutdownProbe = vi.hoisted(() => ({
   store: undefined as import('@agent-device/daemon/testing/session-store').SessionStore | undefined,
   drain: undefined as (() => Promise<void>) | undefined,
   finalize: vi.fn(async () => {}),
-  dispatch: undefined as import('@agent-device/daemon/testing/daemon-request').DaemonInvokeFn | undefined,
+  dispatch: undefined as
+    | import('@agent-device/daemon/testing/daemon-request').DaemonInvokeFn
+    | undefined,
   closeTimeout: undefined as number | undefined,
 }));
 vi.mock('@agent-device/daemon/testing/session-store', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/daemon/testing/session-store')>();
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/session-store')>();
   return {
     ...actual,
     SessionStore: class extends actual.SessionStore {
@@ -67,7 +70,8 @@ vi.mock('@agent-device/daemon/testing/session-store', async (importOriginal) => 
   };
 });
 vi.mock('@agent-device/daemon/testing/server/server-shutdown', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/daemon/testing/server/server-shutdown')>();
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/server/server-shutdown')>();
   return {
     ...actual,
     closeDaemonServers: async (...args: Parameters<typeof actual.closeDaemonServers>) => {
@@ -77,7 +81,8 @@ vi.mock('@agent-device/daemon/testing/server/server-shutdown', async (importOrig
   };
 });
 vi.mock('@agent-device/daemon/testing/request-router', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/daemon/testing/request-router')>();
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/request-router')>();
   return {
     ...actual,
     createRequestHandler: (...args: Parameters<typeof actual.createRequestHandler>) => {
@@ -88,7 +93,9 @@ vi.mock('@agent-device/daemon/testing/request-router', async (importOriginal) =>
   };
 });
 vi.mock('@agent-device/daemon/testing/application-lifecycle-recovery', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/daemon/testing/application-lifecycle-recovery')>()),
+  ...(await importOriginal<
+    typeof import('@agent-device/daemon/testing/application-lifecycle-recovery')
+  >()),
   finalizeDaemonSessionApplicationLifecycle: shutdownProbe.finalize,
 }));
 const leaseProbe = vi.hoisted(() => ({
@@ -97,7 +104,8 @@ const leaseProbe = vi.hoisted(() => ({
 }));
 
 vi.mock('@agent-device/daemon/testing/lease-registry', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/daemon/testing/lease-registry')>();
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/lease-registry')>();
   class RecordedLeaseRegistry extends actual.LeaseRegistry {
     constructor(...args: ConstructorParameters<typeof actual.LeaseRegistry>) {
       super(...args);
@@ -108,7 +116,8 @@ vi.mock('@agent-device/daemon/testing/lease-registry', async (importOriginal) =>
 });
 
 vi.mock('@agent-device/daemon/testing/provider-lease-expiry', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/daemon/testing/provider-lease-expiry')>();
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/provider-lease-expiry')>();
   return {
     ...actual,
     createExpiredProviderLeaseReleaser: (

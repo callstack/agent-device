@@ -508,7 +508,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'human_control',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['packages/daemon/src/handlers/human-control.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/daemon/src/handlers/human-control.ts'] as const }
+      : {}),
     catalog: { group: 'internal', key: 'humanControl' },
     recordsSessionAction: false,
     daemon: {
@@ -526,7 +528,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'lease_allocate',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['packages/daemon/src/handlers/lease.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/daemon/src/handlers/lease.ts'] as const }
+      : {}),
     catalog: { group: 'internal', key: 'leaseAllocate' },
     recordsSessionAction: false,
     daemon: {
@@ -541,7 +545,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'lease_heartbeat',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['packages/daemon/src/handlers/lease.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/daemon/src/handlers/lease.ts'] as const }
+      : {}),
     catalog: { group: 'internal', key: 'leaseHeartbeat' },
     recordsSessionAction: false,
     daemon: {
@@ -557,7 +563,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   {
     name: 'lease_release',
     deviceClaimPolicy: 'none',
-    ...(ownerFilesEnabled ? { ownerFiles: ['packages/daemon/src/handlers/lease.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/daemon/src/handlers/lease.ts'] as const }
+      : {}),
     catalog: { group: 'internal', key: 'leaseRelease' },
     recordsSessionAction: false,
     daemon: {
@@ -1502,7 +1510,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'scroll',
-    ...(ownerFilesEnabled ? { ownerFiles: ['packages/daemon/src/scroll-runtime.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['packages/daemon/src/scroll-runtime.ts'] as const }
+      : {}),
     catalog: { group: 'public' },
     frameworkTier: 'core',
     // R53 retires this command's capability bucket and its `dispatch` leaf together: admission is

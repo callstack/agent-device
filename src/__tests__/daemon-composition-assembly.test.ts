@@ -16,7 +16,8 @@ const storeProbe = vi.hoisted(() => ({
   store: undefined as import('@agent-device/daemon/testing/session-store').SessionStore | undefined,
 }));
 vi.mock('@agent-device/daemon/testing/session-store', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/daemon/testing/session-store')>();
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/session-store')>();
   return {
     ...actual,
     SessionStore: class extends actual.SessionStore {

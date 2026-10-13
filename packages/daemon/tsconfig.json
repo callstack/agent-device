@@ -9,9 +9,7 @@
     "rootDir": "./src",
     "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
   },
-  "include": [
-    "src"
-  ],
+  "include": ["src"],
   "references": [
     {
       "path": "../ad-replay"

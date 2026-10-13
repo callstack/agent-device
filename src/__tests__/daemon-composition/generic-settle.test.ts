@@ -26,7 +26,8 @@ import { testCreateCommandSurface } from './command-surface-fixture.ts';
 // markers. Quiet windows are tuned down so no test waits real time.
 
 vi.mock('@agent-device/daemon/testing/interaction/index', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/daemon/testing/interaction/index')>();
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/interaction/index')>();
   return {
     ...actual,
     captureSnapshotForSession: vi.fn(async () => ({

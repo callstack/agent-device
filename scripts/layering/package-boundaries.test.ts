@@ -247,14 +247,14 @@ test('a package vi.mock route into root src is an R11 escape, and a sibling rout
       ALL,
       compiled,
     );
-  const rootMock = kernelViolations(
-    true,
-    "vi.mock('../../../../src/utils/exec.ts', () => ({}));",
-  );
+  const rootMock = kernelViolations(true, "vi.mock('../../../../src/utils/exec.ts', () => ({}));");
   assert.equal(rootMock.length, 1);
   assert.match(rootMock[0]!.message, /escapes packages\/kernel/);
   assert.equal(kernelViolations(true, "vi.doMock('../../../../src/utils/exec.ts');").length, 1);
-  assert.equal(kernelViolations(true, 'vi.importActual("../../../../src/utils/exec.ts")').length, 1);
+  assert.equal(
+    kernelViolations(true, 'vi.importActual("../../../../src/utils/exec.ts")').length,
+    1,
+  );
 
   // Legitimate mock routes keep working: a declared sibling's exported subpath is not an
   // escape, an undeclared sibling is still the undeclared-sibling branch, and a mock of the

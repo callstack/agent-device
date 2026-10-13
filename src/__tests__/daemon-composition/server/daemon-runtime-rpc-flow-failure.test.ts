@@ -15,7 +15,8 @@ const requestProbe = vi.hoisted(() => ({
 }));
 
 vi.mock('@agent-device/daemon/testing/request-router', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/daemon/testing/request-router')>();
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/request-router')>();
   return {
     ...actual,
     createRequestHandler: (...args: Parameters<typeof actual.createRequestHandler>) => {

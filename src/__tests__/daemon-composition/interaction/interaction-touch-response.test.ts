@@ -67,7 +67,6 @@ beforeEach(() => {
   mockRunAppleRunnerCommand.mockResolvedValue({});
 });
 
-
 test('press @ref --verify surfaces evidence through the interactionResultExtra allowlist', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'verify-press';

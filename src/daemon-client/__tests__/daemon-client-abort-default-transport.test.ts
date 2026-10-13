@@ -22,7 +22,11 @@ import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '@agent-device/daemon/testing/daemon-request';
+import type {
+  DaemonInvokeFn,
+  DaemonRequest,
+  DaemonResponse,
+} from '@agent-device/daemon/testing/daemon-request';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
 import { createAgentDeviceClient } from '../../agent-device-client.ts';

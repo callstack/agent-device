@@ -45,7 +45,9 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
 
 vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/snapshot-interactor-capture')>();
+    await importOriginal<
+      typeof import('@agent-device/daemon/testing/snapshot-interactor-capture')
+    >();
   return { ...actual, captureSnapshotWithInteractor: mockCaptureSnapshotWithInteractor };
 });
 

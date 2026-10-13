@@ -6,7 +6,8 @@ const leaseProbe = vi.hoisted(() => ({
   registries: [] as import('@agent-device/daemon/testing/lease-registry').LeaseRegistry[],
 }));
 vi.mock('@agent-device/daemon/testing/lease-registry', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/daemon/testing/lease-registry')>();
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/lease-registry')>();
   class RecordedLeaseRegistry extends actual.LeaseRegistry {
     constructor(...args: ConstructorParameters<typeof actual.LeaseRegistry>) {
       super(...args);

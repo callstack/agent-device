@@ -5,7 +5,10 @@ import { test } from 'vitest';
 const SIMPLE_PUBLISHERS = [
   // device-claims.ts delegates every write to device-claim-store.ts's writeDeviceClaim.
   new URL('../device/device-claim-store.ts', import.meta.url),
-  new URL('../../../../packages/daemon-contracts/src/daemon-registration-owner.ts', import.meta.url),
+  new URL(
+    '../../../../packages/daemon-contracts/src/daemon-registration-owner.ts',
+    import.meta.url,
+  ),
   new URL('../provider-lease-expiry.ts', import.meta.url),
   new URL('../session-script-writer.ts', import.meta.url),
   new URL('../../../../packages/platform-apple/src/runner/runner-lease.ts', import.meta.url),

@@ -40,7 +40,8 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
-  const fixture = await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
+  const fixture =
+    await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return {
     captureSnapshotWithInteractor: vi.fn(fixture.captureSnapshotThroughLegacyDispatchFixture),
   };

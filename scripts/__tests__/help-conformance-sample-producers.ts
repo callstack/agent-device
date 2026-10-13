@@ -24,7 +24,10 @@ import { buildAmbiguousMatchError } from '@agent-device/daemon/testing/selector-
 import { refMutationAdmissionResponse } from '@agent-device/daemon/testing/interaction/index';
 import { buildDeviceInUseBySessionError } from '@agent-device/daemon/testing/session-recovery-hints';
 import { buildDeviceClaimConflictError } from '@agent-device/daemon/testing/device/device-claim-conflict';
-import { activateCompleteRefFrame, readRefMutationFrame } from '@agent-device/daemon/testing/ref-frame';
+import {
+  activateCompleteRefFrame,
+  readRefMutationFrame,
+} from '@agent-device/daemon/testing/ref-frame';
 import { resolveRefStalenessWarning } from '@agent-device/daemon/testing/session-snapshot';
 import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { buildAppNotInstalledError } from '@agent-device/platform-apple/app-resolution';
