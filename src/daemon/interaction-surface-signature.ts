@@ -1,10 +1,9 @@
 import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
 import { collectKeyboardChromeRefs } from '@agent-device/capture-kit/snapshot-chrome';
 import { stateMarkers } from '@agent-device/capture-kit/snapshot-lines';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import type { InteractionSurfaceEntry } from './session-state.ts';
-
-const RECT_TOLERANCE_PX = 1;
 
 export type InteractionSurfaceSignature = InteractionSurfaceEntry[];
 
@@ -39,23 +38,6 @@ export function snapshotSurfaceComparisonKey(
   return snapshot?.comparisonKey ?? snapshot?.snapshotQuality?.backend;
 }
 
-/**
- * Shared rect-tolerance comparison for the surface-stability checks in this
- * module. Entry rects are already rounded by `buildInteractionSurfaceEntry`,
- * so one `RECT_TOLERANCE_PX` band absorbs residual drift consistently.
- */
-function rectsWithinTolerance(
-  a: Pick<InteractionSurfaceSignature[number], 'x' | 'y' | 'width' | 'height'>,
-  b: Pick<InteractionSurfaceSignature[number], 'x' | 'y' | 'width' | 'height'>,
-): boolean {
-  return (
-    Math.abs(a.x - b.x) <= RECT_TOLERANCE_PX &&
-    Math.abs(a.y - b.y) <= RECT_TOLERANCE_PX &&
-    Math.abs(a.width - b.width) <= RECT_TOLERANCE_PX &&
-    Math.abs(a.height - b.height) <= RECT_TOLERANCE_PX
-  );
-}
-
 export function areInteractionSurfaceSignaturesStable(
   left: InteractionSurfaceSignature,
   right: InteractionSurfaceSignature,
@@ -65,7 +47,7 @@ export function areInteractionSurfaceSignaturesStable(
     const a = left[index];
     const b = right[index];
     if (!a || !b || a.key !== b.key) return false;
-    if (!rectsWithinTolerance(a, b)) return false;
+    if (!areCapturedRectsAtSamePosition(a, b)) return false;
   }
   return true;
 }
@@ -128,7 +110,7 @@ export function classifyBaselineSurfaceEvidence(
       continue;
     }
     shared += 1;
-    if (!rectsWithinTolerance(seen, now)) return 'changed';
+    if (!areCapturedRectsAtSamePosition(seen, now)) return 'changed';
   }
   if (shared === 0) return 'ambiguous';
   const addedSinceBaseline = after.size > shared;
@@ -189,7 +171,7 @@ export function haveIdenticalDiscriminatingSurfaces(
   for (const entry of leftEntries) {
     const other = rightByKey.get(entry.key);
     if (!other) return false;
-    if (!rectsWithinTolerance(entry, other)) return false;
+    if (!areCapturedRectsAtSamePosition(entry, other)) return false;
   }
   return true;
 }
@@ -222,7 +204,7 @@ export function summarizeDiscriminatingSurfaceDivergence(
     }
     currentByKey.delete(entry.key);
     shared += 1;
-    if (!rectsWithinTolerance(entry, other)) rectMismatched += 1;
+    if (!areCapturedRectsAtSamePosition(entry, other)) rectMismatched += 1;
   }
   return { onlyInBaseline, onlyInCurrent: currentByKey.size, rectMismatched, shared };
 }
@@ -249,7 +231,7 @@ export function discriminatingSurfaceChangedWithinRect(
   for (const [content, entry] of beforeInRect) {
     const other = afterInRect.get(content);
     if (!other) return true;
-    if (!rectsWithinTolerance(entry, other)) return true;
+    if (!areCapturedRectsAtSamePosition(entry, other)) return true;
     afterInRect.delete(content);
   }
   return afterInRect.size > 0;

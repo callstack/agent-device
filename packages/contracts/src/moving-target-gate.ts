@@ -1,5 +1,3 @@
-import type { Rect } from '@agent-device/kernel/snapshot';
-import { normalizeRect } from '@agent-device/kernel/rect-center';
 import type { SurfaceScopedNodes } from './interaction.ts';
 
 /**
@@ -10,11 +8,13 @@ import type { SurfaceScopedNodes } from './interaction.ts';
  * has already left and report success on the vacancy. The exposure is the runtime path's own
  * capture-to-dispatch distance, so the gate is backend-neutral.
  *
- * Two judgements decide when it is real, both pure over values the caller already holds so neither
- * is re-derived per platform: {@link movingTargetGateDecision} asks whether this position is still
- * owed a second observation, {@link movingTargetRectsStable} asks whether the target has stopped.
- * The window is anchored on the mutation's END, so the gate waits out only what is LEFT of it —
- * which is also why the refusal's hint names `--settle` as the caller-opted superset.
+ * Two judgements decide when it is real: {@link movingTargetGateDecision} asks whether this position
+ * is still owed a second observation, and kernel's `areCapturedRectsAtSamePosition` asks whether the
+ * target has stopped — that one lives in `@agent-device/kernel/rect-center` because the post-gesture
+ * no-effect comparison judges the same pair of capture rects and must not hold its own band. Both
+ * are pure over values the caller already holds, so neither is re-derived per platform. The window is
+ * anchored on the mutation's END, so the gate waits out only what is LEFT of it — which is also why
+ * the refusal's hint names `--settle` as the caller-opted superset.
  *
  * What cannot be decided over values — spending the window, taking the re-observations, and the
  * refusal with its reason (`INTERACTION_ERROR_REASONS.targetStillMoving`) and hint — lives in
@@ -31,13 +31,6 @@ export const MOVING_TARGET_GATE_WINDOW_MS = 500;
  * `max(remaining window, this)` before re-observing.
  */
 export const MOVING_TARGET_GATE_SAMPLE_GAP_MS = 50;
-
-/**
- * How far a rect may shift between the two observations and still count as the same position.
- * Matches the tolerance the post-gesture surface comparison uses
- * (`src/daemon/interaction-surface-signature.ts`), so capture rounding never reads as motion.
- */
-export const MOVING_TARGET_GATE_RECT_TOLERANCE_PX = 1;
 
 /**
  * The tree a mutation resolved against, kept on the session with the instant that mutation
@@ -89,29 +82,4 @@ export function movingTargetGateDecision(params: {
     kind: 'recheck',
     waitMs: Math.max(MOVING_TARGET_GATE_WINDOW_MS - ageMs, MOVING_TARGET_GATE_SAMPLE_GAP_MS),
   };
-}
-
-/**
- * Whether two consecutive observations put the target at the same position. A rect either
- * observation could not measure is not stable: absence is the surface having changed under the
- * point, which is the exposure the gate exists to catch.
- */
-export function movingTargetRectsStable(
-  first: Rect | undefined,
-  second: Rect | undefined,
-): boolean {
-  // `normalizeRect` is the repository's one "this rect reports a position" rule, so the gate can
-  // never measure a target the tap-point resolver itself would refuse to place. The tolerance stays
-  // here rather than in kernel's 0.5 px `areRectsApproximatelyEqual`: that one asks whether two
-  // values denote one point, this one asks whether capture rounding counts as motion, and 1 px is
-  // the band the post-gesture surface comparison already uses.
-  const a = normalizeRect(first);
-  const b = normalizeRect(second);
-  if (!a || !b) return false;
-  return (
-    Math.abs(a.x - b.x) <= MOVING_TARGET_GATE_RECT_TOLERANCE_PX &&
-    Math.abs(a.y - b.y) <= MOVING_TARGET_GATE_RECT_TOLERANCE_PX &&
-    Math.abs(a.width - b.width) <= MOVING_TARGET_GATE_RECT_TOLERANCE_PX &&
-    Math.abs(a.height - b.height) <= MOVING_TARGET_GATE_RECT_TOLERANCE_PX
-  );
 }

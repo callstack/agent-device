@@ -126,7 +126,7 @@ export function demoteNonUniqueLocalIdentity(
  * role/id/label, NOT element identity, so two sibling rows both reading `label="Item"` are one
  * identity — and an ambiguous identity answers nothing, the same fail-closed direction
  * `demoteNonUniqueLocalIdentity` takes for a non-unique id. `#3471`'s moving-target gate pairs this
- * with `movingTargetRectsStable` to ask whether one node held its position between two trees.
+ * with `areCapturedRectsAtSamePosition` to ask whether one node held its position between two trees.
  */
 export function nodeRectByIdentity(
   nodes: readonly IdentityPositionedNode[],

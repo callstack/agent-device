@@ -1,7 +1,6 @@
 import {
   MOVING_TARGET_GATE_SAMPLE_GAP_MS,
   movingTargetGateDecision,
-  movingTargetRectsStable,
   type MovingTargetBaseline,
   type MovingTargetGateDecision,
 } from '@agent-device/contracts/moving-target-gate';
@@ -11,6 +10,7 @@ import type {
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
 import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import type {
@@ -118,7 +118,7 @@ function baselineShowsTargetAtRest(
 ): boolean {
   if (baseline.tree.surfaceBundleId !== resolvedSurface?.surfaceBundleId) return false;
   const carried = nodeRectByIdentity(baseline.tree.nodes, resolvedNode);
-  return carried !== undefined && movingTargetRectsStable(carried, resolvedNode.rect);
+  return carried !== undefined && areCapturedRectsAtSamePosition(carried, resolvedNode.rect);
 }
 
 /**
@@ -158,7 +158,8 @@ async function resolveAtRestTarget(
   if (!first.measured) throw motionRefusal(resolved, undefined, now(runtime) - waitedFrom);
   await sleep(runtime, MOVING_TARGET_GATE_SAMPLE_GAP_MS);
   const second = onSameSurface(first, await reObserveTarget(runtime, options, params));
-  if (second.measured && movingTargetRectsStable(first.rect, second.rect)) return second.resolved;
+  if (second.measured && areCapturedRectsAtSamePosition(first.rect, second.rect))
+    return second.resolved;
   throw motionRefusal(resolved, second.rect, now(runtime) - waitedFrom);
 }
 
@@ -260,7 +261,7 @@ function measureRefObservation(
     rect !== undefined &&
     dispatchedNode !== undefined &&
     captured !== undefined &&
-    movingTargetRectsStable(captured.rect, rect) &&
+    areCapturedRectsAtSamePosition(captured.rect, rect) &&
     localIdentitiesEqual(readNodeLocalIdentity(captured), readNodeLocalIdentity(dispatchedNode));
   return measured
     ? { measured: true, rect, surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
