@@ -317,6 +317,10 @@
     "./durable-capture/session-binding": {
       "types": "./src/durable-capture/session-binding.ts",
       "default": "./src/durable-capture/session-binding.ts"
+    },
+    "./ios-react-native-value": {
+      "types": "./src/ios-react-native-value.ts",
+      "default": "./src/ios-react-native-value.ts"
     }
   },
   "devDependencies": {

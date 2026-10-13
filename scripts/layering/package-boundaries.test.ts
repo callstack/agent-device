@@ -485,6 +485,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/durable-capture-runtime-recovery',
     '@agent-device/capture-kit/durable-capture/session-binding',
     '@agent-device/capture-kit/durable-json',
+    '@agent-device/capture-kit/ios-react-native-value',
     '@agent-device/capture-kit/ios-snapshot-acquisition',
     '@agent-device/capture-kit/ios-snapshot-engine',
     '@agent-device/capture-kit/ios-snapshot-planning',
