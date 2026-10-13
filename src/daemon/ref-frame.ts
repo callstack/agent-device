@@ -94,8 +94,8 @@ export function expireRefFrame(session: SessionState): void {
   markSessionSnapshotOutdated(session);
   session.refFrame = expiredRefFrame(refFrame(session));
   session.snapshotScopeSource = undefined;
-  // #3471: a side effect this session did not resolve a target through leaves a tree that predates a
-  // change nobody measured, so it cannot screen a later press.
+  // #3471: a side effect no resolved target was aimed through leaves a tree predating an unmeasured
+  // change, so it cannot screen a later press.
   retireMovingTargetBaseline(session);
 }
 

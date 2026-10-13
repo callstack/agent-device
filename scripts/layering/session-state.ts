@@ -52,10 +52,8 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
 
   trace: ['src/daemon/handlers/trace-runtime.ts'],
   // #3471 and #1542 share one field: what the session still owes after its last mutation. The two
-  // variants are mutually exclusive by construction, and every transition — a gesture marking the
-  // capture-side loop, a press recording its resolving tree (#3471), a side effect retiring it, a
-  // capture discharging it — lives in this module, so neither mechanism can quietly overwrite the
-  // other's claim about the surface.
+  // variants are mutually exclusive, and every transition between them is owned by
+  // `deferred-interaction-outcome.ts`, so neither mechanism can overwrite the other's claim.
   deferredSurface: ['src/daemon/deferred-interaction-outcome.ts'],
 
   // App identity follows open, deployment and observation through named patches.

@@ -157,9 +157,9 @@ function markSurfaceStabilization(
  * older snapshot would attribute to this action a surface it never looked at. A tree that names no
  * nodes records nothing either, for the same reason — an empty tree would make every later target
  * read as newly arrived, which is a claim about motion no action here ever observed. That is also
- * why the routes that dispatch without a daemon tree (a raw coordinate, a Maestro direct-selector
- * tap, `back`, an app open) leave the session idle: the ordinary navigate-then-tap step pays the
- * gate nothing.
+ * why the routes that dispatch with no tree of their own leave the session idle: a raw coordinate
+ * unless `--verify`/`--settle` made it capture one, a Maestro direct-selector tap, `back`, an app
+ * open. The ordinary navigate-then-tap step pays the gate nothing.
  *
  * `restProved` switches the tree to the session's published one, and is set only when the action's
  * own settle loop converged AND stored its settled tree. Everything else keeps the pre-action tree,

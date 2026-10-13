@@ -85,12 +85,11 @@ export const INTERACTION_GUARANTEES = [
   'outcomeObservation',
   // The position the path dispatches at is one the target is confirmed to be at REST in (#3471).
   // Distinct from every guard above: those judge a tree, this judges the tree against the previous
-  // action's tree. A capture is one instant's photograph of a surface that may still be
-  // rearranging itself, and the ADB-backed Android helper is measured reporting frames in flight,
-  // so a press issued right after an action that animated the UI can resolve a point the target has
-  // already vacated and report success on the vacancy. The gate is backend-neutral: it re-observes
-  // past the window and refuses rather than dispatching at a position two observations disagree
-  // about.
+  // action's tree. A capture is one instant's photograph of a surface that may still be rearranging
+  // itself — the ADB-backed Android helper is measured reporting frames in flight — so a press
+  // issued right after an action that animated the UI can resolve a point the target has already
+  // vacated and report success on the vacancy. The gate is backend-neutral: it re-observes past the
+  // window and refuses rather than dispatching at a position two observations disagree about.
   'targetStability',
 ] as const;
 

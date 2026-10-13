@@ -48,7 +48,10 @@ export type MovingTargetBaseline = Readonly<{
    * clock's time too. Production installs none, so both sides read the wall clock.
    */
   finishedAt: number;
-  /** The pre-action tree — the observation the action's own resolution came out of. */
+  /**
+   * The tree the action acted through: its resolution's own observation, or the settled one its
+   * `--settle` published as rest.
+   */
   tree: SurfaceScopedNodes;
 }>;
 

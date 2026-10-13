@@ -99,7 +99,7 @@ export type DeferredSurface =
       /**
        * Pre-gesture interaction-surface signature, captured from the session's
        * last-known snapshot before the gesture dispatched (no extra capture — see
-       * `markPostGestureStabilization`). Populated only when
+       * `markSurfaceStabilization`). Populated only when
        * `requiresPostGestureBaselineDistrust` is true for the session's device
        * (Apple mobile only, #1542 defect 2): a post-gesture quiet-poll match that
        * still equals this baseline is a stale-but-internally-consistent AX read,

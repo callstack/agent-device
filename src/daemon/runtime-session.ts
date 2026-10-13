@@ -27,11 +27,8 @@ function toRuntimeSessionRecord(
 ): CommandSessionRecord | undefined {
   if (!session) return undefined;
   const frameTree = refFrameTree(session);
-  // #3471: the moving-target gate judges a freshly resolved rect against the tree the PREVIOUS
-  // action acted through, so that tree has to reach the command layer — the `snapshot` beside it is
-  // the newest observation, which is the one thing that cannot show a target having moved. Absent
-  // whenever the session is idle or owes the capture-side loop instead, which is what makes an
-  // ordinary press pay the gate nothing.
+  // #3471: the gate judges a fresh rect against the tree the PREVIOUS action acted through, so that
+  // tree has to reach the command layer; the `snapshot` beside it cannot show a target having moved.
   const baseline = movingTargetBaseline(session);
   return {
     name,
