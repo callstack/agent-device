@@ -1,3 +1,4 @@
+import { interpretIosReactNativeValue } from '@agent-device/capture-kit/ios-react-native-value';
 import {
   isGeometricallyActionable,
   isPositiveFiniteRect,
@@ -231,7 +232,7 @@ export function decodeSnapshotBridgeTree(
     }
     const index = nodes.length;
     const node = nodeFacts(value, index, parentIndex, depth);
-    nodes.push(node);
+    nodes.push(interpretIosReactNativeValue(node));
     maxTraversalDepth = Math.max(maxTraversalDepth, depth);
     if (isHostedRemoteLeaf(node, children.length, underRemoteHost)) {
       hostedRemoteLeaves.push(node.rect);

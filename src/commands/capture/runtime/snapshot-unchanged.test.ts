@@ -326,3 +326,31 @@ test('force-full and raw snapshots do not emit unchanged metadata', () => {
     buildUnchangedSnapshotMetadata({ previous, current, options: { raw: true } }),
   ).toBeUndefined();
 });
+
+test('unchanged metadata compares RN evidence by content and detects state/provenance loss', () => {
+  const previous = snapshot('Preferences');
+  previous.nodes[0]!.iosValueSemantics = {
+    source: 'react-native-ios-value-heuristic',
+    encoding: 'en',
+    role: 'checkbox',
+    checked: 'mixed',
+    expanded: true,
+    busy: true,
+  };
+  const current = structuredClone(previous);
+  expect(buildUnchangedSnapshotMetadata({ previous, current, options: {} })).toMatchObject({
+    nodeCount: 1,
+  });
+  for (const change of [
+    { iosValueSemantics: undefined },
+    { iosValueSemantics: { ...previous.nodes[0]!.iosValueSemantics, role: 'radio' } },
+    { iosValueSemantics: { ...previous.nodes[0]!.iosValueSemantics, checked: false as const } },
+    { iosValueSemantics: { ...previous.nodes[0]!.iosValueSemantics, expanded: false } },
+    { iosValueSemantics: { ...previous.nodes[0]!.iosValueSemantics, busy: undefined } },
+  ]) {
+    const changed = snapshot('Preferences', { nodes: [{ ...current.nodes[0]!, ...change }] });
+    expect(
+      buildUnchangedSnapshotMetadata({ previous, current: changed, options: {} }),
+    ).toBeUndefined();
+  }
+});

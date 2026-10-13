@@ -119,6 +119,7 @@ const SELECTOR_DIGEST_NODE_FIELDS = [
   'enabled',
   'selected',
   'checked',
+  'iosValueSemantics',
   'focused',
   'heading',
   'roleDescription',

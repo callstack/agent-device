@@ -264,6 +264,16 @@ export type SnapshotCoveringNode = {
 /** Upper bound for a covering-node label carried in diagnostics; longer names are clipped. */
 export const SNAPSHOT_COVERING_LABEL_MAX_LENGTH = 80;
 
+/** Evidence from an exact English React Native iOS value signature, not proof of its renderer. */
+export type IosValueSemantics = {
+  source: 'react-native-ios-value-heuristic';
+  encoding: 'en';
+  role?: string;
+  checked?: boolean | 'mixed';
+  expanded?: boolean;
+  busy?: true;
+};
+
 export type RawSnapshotNode = {
   index: number;
   type?: string;
@@ -271,6 +281,8 @@ export type RawSnapshotNode = {
   subrole?: string;
   label?: string;
   value?: string;
+  /** Derived RN evidence; value and native type/role remain verbatim. Explicit facts take precedence. */
+  iosValueSemantics?: IosValueSemantics;
   /**
    * Android content description when it is not already the `label`. An Android node is
    * labelled by its text and falls back to the content description only when it has none,

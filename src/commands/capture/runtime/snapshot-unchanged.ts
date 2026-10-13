@@ -95,7 +95,7 @@ type ComparableSnapshotNode = Omit<
 
 type ScalarPresentationField = Exclude<
   keyof ComparableSnapshotNode,
-  'rect' | 'coveredBy' | 'presentationHints' | 'actions'
+  'rect' | 'coveredBy' | 'presentationHints' | 'actions' | 'iosValueSemantics'
 >;
 
 const PRESENTATION_SCALAR_FIELDS = {
@@ -140,6 +140,7 @@ function areSnapshotNodesEquivalent(previous: SnapshotNode, current: SnapshotNod
     PRESENTATION_SCALAR_KEYS.every((field) => previous[field] === current[field]) &&
     areRectsEquivalent(previous.rect, current.rect) &&
     areCoveringNodesEquivalent(previous.coveredBy, current.coveredBy) &&
+    areIosValueSemanticsEquivalent(previous.iosValueSemantics, current.iosValueSemantics) &&
     areStringArraysEquivalent(previous.presentationHints, current.presentationHints) &&
     areStringArraysEquivalent(previous.actions, current.actions)
   );
@@ -175,5 +176,20 @@ function areStringArraysEquivalent(
   if (!previous || !current) return previous === current;
   return (
     previous.length === current.length && previous.every((value, index) => value === current[index])
+  );
+}
+
+function areIosValueSemanticsEquivalent(
+  previous: SnapshotNode['iosValueSemantics'],
+  current: SnapshotNode['iosValueSemantics'],
+): boolean {
+  if (!previous || !current) return previous === current;
+  return (
+    previous.source === current.source &&
+    previous.encoding === current.encoding &&
+    previous.role === current.role &&
+    previous.checked === current.checked &&
+    previous.expanded === current.expanded &&
+    previous.busy === current.busy
   );
 }

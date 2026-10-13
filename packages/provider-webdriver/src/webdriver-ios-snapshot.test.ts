@@ -159,3 +159,17 @@ test.each([true, false, 'failed'] as const)(
     );
   },
 );
+
+test('Appium acquisition interprets an RN tuple but keeps native-control and bare-state values', () => {
+  const result = acquireWebDriverIosSnapshot(`<AppiumAUT>
+    <XCUIElementTypeOther value="radio button, checked" />
+    <XCUIElementTypeTextField value="checkbox, checked" />
+    <XCUIElementTypeOther value="unchecked" />
+  </AppiumAUT>`);
+  const [radio, field, literal] = result.acquisition.nodes;
+  assert.equal(radio?.checked, true);
+  assert.equal(radio?.value, 'radio button, checked');
+  assert.equal(radio?.iosValueSemantics?.role, 'radio');
+  assert.equal(field?.iosValueSemantics, undefined);
+  assert.equal(literal?.iosValueSemantics, undefined);
+});

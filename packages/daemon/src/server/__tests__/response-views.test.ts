@@ -642,3 +642,18 @@ test('screenshot digest keeps the capture display rotation', () => {
   );
   expect(digest.displayRotation).toBe('landscape-left');
 });
+
+test('attrs digests preserve interpreted RN mixed, expanded and busy evidence with provenance', () => {
+  const iosValueSemantics = {
+    source: 'react-native-ios-value-heuristic',
+    encoding: 'en',
+    role: 'checkbox',
+    checked: 'mixed',
+    expanded: false,
+    busy: true,
+  };
+  for (const view of [findView, getView]) {
+    const digest = view!({ ref: 'e7', node: { ...MATCHED_NODE, iosValueSemantics } }, 'digest');
+    expect(digest.node).toEqual({ ...COMPACT_NODE, iosValueSemantics });
+  }
+});

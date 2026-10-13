@@ -1,3 +1,4 @@
+import { interpretIosReactNativeValue } from '@agent-device/capture-kit/ios-react-native-value';
 import {
   createIosSnapshotAcquisition,
   resolveIosViewportEvidenceFromRoots,
@@ -22,7 +23,7 @@ export function acquireWebDriverIosSnapshot(
     producer: APPIUM_PRODUCER,
     viewport,
     ...acquireProviderKeyboard({
-      nodes: sourceFacts.nodes,
+      nodes: sourceFacts.nodes.map(interpretIosReactNativeValue),
       viewport: viewport.kind === 'missing' ? null : viewport.rect,
       visibility,
     }),

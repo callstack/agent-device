@@ -120,3 +120,21 @@ test('Limrun carries docked tree evidence and never infers absence from missing 
     (await captureLimrunIosSnapshot(createLimrunSnapshotSession(tree))).acquisition.keyboard,
   ).toEqual({ kind: 'tree-rejected', derivation: 'docked-tree' });
 });
+
+test('limrun acquisition shares RN interpretation and preserves native values', async () => {
+  const result = await captureLimrunIosSnapshot(
+    createLimrunSnapshotSession({
+      elementType: 'Other',
+      value: 'checkbox, unchecked',
+      children: [{ elementType: 'TextField', value: 'checkbox, checked' }],
+    }),
+  );
+  const [checkbox, field] = result.acquisition.nodes;
+  expect(checkbox).toMatchObject({
+    type: 'Other',
+    value: 'checkbox, unchecked',
+    checked: false,
+    iosValueSemantics: { role: 'checkbox', checked: false },
+  });
+  expect(field?.iosValueSemantics).toBeUndefined();
+});
