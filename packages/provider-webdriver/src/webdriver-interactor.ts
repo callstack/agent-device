@@ -48,7 +48,7 @@ const TEXT_ENTRY_READINESS_POLL_MS = 100;
  */
 const TEXT_ENTRY_PROBE_TIMEOUT_MS = 1_500;
 
-const SNAPSHOT_VIEWPORT_PROBE_TIMEOUT_MS = 1_000;
+const SNAPSHOT_VIEWPORT_PROBE_TIMEOUT_MS = 500;
 
 /** The Android `KEYCODE_ENTER` the IME's return key sends. */
 const ANDROID_KEYCODE_ENTER = 66;
@@ -326,6 +326,8 @@ class WebDriverInteractor implements Interactor {
    * driver keeps walking the tree and every later command queues behind it (#2509).
    */
   private async captureSource(signal?: AbortSignal) {
+    const viewportBefore =
+      this.backend === 'android' ? await this.readAndroidSnapshotViewport(signal) : undefined;
     const source = await this.readSource(signal);
     if (this.backend === 'xctest') {
       const { acquireWebDriverIosSnapshot } = await import('./webdriver-ios-snapshot.ts');
@@ -333,7 +335,15 @@ class WebDriverInteractor implements Interactor {
     }
     const { parseWebDriverSourceFacts } = await import('./webdriver-source.ts');
     const nodes = parseWebDriverSourceFacts(source, 'android').nodes;
-    const viewport = await this.readAndroidSnapshotViewport(signal);
+    const viewportAfter =
+      viewportBefore === undefined ? undefined : await this.readAndroidSnapshotViewport(signal);
+    const viewport =
+      viewportBefore !== undefined &&
+      viewportAfter !== undefined &&
+      viewportBefore.width === viewportAfter.width &&
+      viewportBefore.height === viewportAfter.height
+        ? viewportBefore
+        : undefined;
     return {
       backend: 'android' as const,
       producer: 'appium-source' as const,

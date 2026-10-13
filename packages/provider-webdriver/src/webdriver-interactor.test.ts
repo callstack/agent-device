@@ -716,16 +716,30 @@ for (const [name, source] of [
   ],
 ] as const) {
   test(`Android snapshot measures its viewport independently of ${name}`, async () => {
-    const windowRect = vi.fn(async () => ({ x: 0, y: 0, width: 1080, height: 2400 }));
+    const transcript: string[] = [];
+    const windowRect = vi.fn(async () => {
+      transcript.push('rect');
+      return { x: 0, y: 0, width: 1080, height: 2400 };
+    });
     const interactor = createWebDriverInteractor({
-      client: { source: async () => source, windowRect } as unknown as WebDriverClient,
+      client: {
+        source: async () => {
+          transcript.push('source');
+          return source;
+        },
+        windowRect,
+      } as unknown as WebDriverClient,
       backend: 'android',
       capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
     });
     const result = await interactor.snapshot();
     if ('stage' in result) throw new Error('expected Android snapshot');
     assert.deepEqual(result.viewport, { width: 1080, height: 2400 });
-    assert.deepEqual(windowRect.mock.calls, [[{ timeoutMs: 1000, retryAttempts: 0 }]]);
+    assert.deepEqual(transcript, ['rect', 'source', 'rect']);
+    assert.deepEqual(windowRect.mock.calls, [
+      [{ timeoutMs: 500, retryAttempts: 0 }],
+      [{ timeoutMs: 500, retryAttempts: 0 }],
+    ]);
   });
 }
 
@@ -734,7 +748,7 @@ test('Android viewport follows fresh display measurements through rotation and k
     { x: 0, y: 0, width: 1080, height: 2400 },
     { x: 0, y: 0, width: 2400, height: 1080 },
     { x: 0, y: 0, width: 2400, height: 1080 },
-  ];
+  ].flatMap((rect) => [rect, rect]);
   const sources = [
     '<hierarchy><android.widget.FrameLayout bounds="[0,100][1080,2300]" /></hierarchy>',
     '<hierarchy><android.widget.FrameLayout bounds="[0,100][2400,1000]" /></hierarchy>',
@@ -759,7 +773,7 @@ test('Android viewport follows fresh display measurements through rotation and k
       { width: 2400, height: 1080 },
     ],
   );
-  assert.equal(windowRect.mock.calls.length, 3);
+  assert.equal(windowRect.mock.calls.length, 6);
 });
 
 for (const rect of [
@@ -804,26 +818,81 @@ test('Android optional viewport probe forwards its request signal and preserves 
   assert.equal(result.viewport, undefined);
   assert.equal(result.nodes?.[0]?.label, 'OK');
   assert.deepEqual(windowRect.mock.calls, [
-    [{ timeoutMs: 1000, retryAttempts: 0, signal: controller.signal }],
+    [{ timeoutMs: 500, retryAttempts: 0, signal: controller.signal }],
   ]);
 });
 
-test('Android snapshot rejects cancellation during the viewport probe', async () => {
-  const controller = new AbortController();
-  const cancelled = new Error('request cancelled');
-  const interactor = createWebDriverInteractor({
-    client: {
-      source: async () => '<android.widget.Button text="OK" />',
-      windowRect: async () => {
-        controller.abort(cancelled);
-        throw cancelled;
-      },
-    } as unknown as WebDriverClient,
-    backend: 'android',
-    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
+for (const phase of ['before', 'after'] as const) {
+  test(`Android snapshot rejects cancellation during the ${phase}-source viewport probe`, async () => {
+    const controller = new AbortController();
+    const cancelled = new Error('request cancelled');
+    let calls = 0;
+    const source = vi.fn(async () => '<android.widget.Button text="OK" />');
+    const interactor = createWebDriverInteractor({
+      client: {
+        source,
+        windowRect: async () => {
+          calls += 1;
+          if (phase === 'before' || calls === 2) {
+            controller.abort(cancelled);
+            throw cancelled;
+          }
+          return { x: 0, y: 0, width: 1080, height: 2400 };
+        },
+      } as unknown as WebDriverClient,
+      backend: 'android',
+      capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
+    });
+    await assert.rejects(
+      interactor.snapshot({ signal: controller.signal }),
+      (error) => error === cancelled,
+    );
+    assert.equal(source.mock.calls.length, phase === 'before' ? 0 : 1);
   });
-  await assert.rejects(
-    interactor.snapshot({ signal: controller.signal }),
-    (error) => error === cancelled,
-  );
-});
+}
+
+for (const after of [
+  { x: 0, y: 0, width: 1081, height: 2400 },
+  { x: 0, y: 0, width: 1080, height: 2401 },
+  { x: 0, y: 0, width: 2400, height: 1080 },
+]) {
+  test(`Android snapshot omits viewport when display changes during source capture to ${after.width}x${after.height}`, async () => {
+    const rects = [{ x: 0, y: 0, width: 1080, height: 2400 }, after];
+    const interactor = createWebDriverInteractor({
+      client: {
+        source: async () => '<android.widget.Button text="OK" />',
+        windowRect: async () => rects.shift()!,
+      } as unknown as WebDriverClient,
+      backend: 'android',
+      capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
+    });
+    const result = await interactor.snapshot();
+    if ('stage' in result) throw new Error('expected Android snapshot');
+    assert.equal(result.viewport, undefined);
+    assert.equal(result.nodes?.[0]?.label, 'OK');
+  });
+}
+
+for (const failure of ['invalid', 'unavailable'] as const) {
+  test(`Android snapshot keeps source when its after-source viewport is ${failure}`, async () => {
+    let calls = 0;
+    const interactor = createWebDriverInteractor({
+      client: {
+        source: async () => '<android.widget.Button text="OK" />',
+        windowRect: async () => {
+          calls += 1;
+          if (calls === 1) return { x: 0, y: 0, width: 1080, height: 2400 };
+          if (failure === 'unavailable') throw new AppError('COMMAND_FAILED', 'probe failed');
+          return { x: 0, y: 0, width: 0, height: 2400 };
+        },
+      } as unknown as WebDriverClient,
+      backend: 'android',
+      capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
+    });
+    const result = await interactor.snapshot();
+    if ('stage' in result) throw new Error('expected Android snapshot');
+    assert.equal(result.viewport, undefined);
+    assert.equal(result.nodes?.[0]?.label, 'OK');
+    assert.equal(calls, 2);
+  });
+}

@@ -117,7 +117,7 @@ With Android Appium, `snapshot --json` includes `viewport: { "width": …, "heig
 driver can measure the display. These dimensions use the same coordinates as node rectangles and
 are refreshed for each capture, including after rotation. Opening the keyboard can shrink the app's
 content without shrinking the display viewport. An empty or sparse tree can still have a viewport;
-when the measurement is unavailable, `viewport` is absent.
+when the display changes during capture or either measurement is unavailable, `viewport` is absent.
 
 ## Structured node fields (`--json`)
 
