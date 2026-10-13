@@ -1,4 +1,5 @@
 import { beforeEach, expect, test } from 'vitest';
+import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
@@ -19,10 +20,15 @@ const {
 
 // The harness takes the lifecycle-operations loader per call, exactly like the gateway factories:
 // these composition cases pass the REAL composed fixture instead of the daemon's canned default.
+// The resource-cleanup capability is the production-composed one too: what defeats runner
+// retention here is its real close policy reading `hasScreenRecording`, observed at the runner
+// release below. The daemon-lane cleanup fixture answers retention with a canned false, which
+// would let a policy that ignores the recording pass these cases.
 const handleSessionCommands = (params: Parameters<typeof handleHarnessSessionCommands>[0]) =>
   handleHarnessSessionCommands({
     ...params,
     lifecycleOperationsLoader: applicationLifecycleRuntimeFixture,
+    platformResourceCleanup,
   });
 
 // These cases pin the REAL Apple close finalization around an active recording: the recorder is
