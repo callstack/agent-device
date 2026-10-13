@@ -262,6 +262,8 @@ Domain client methods:
 
 `client.capture.snapshot()` carries an optional `viewport: { width, height }` beside `nodes`: the box those rects are measured in, in the same coordinate space and orientation. Scale and clip against it instead of inferring the screen from the largest rect. When no box was measured, the field is absent rather than zero; see [Coordinates and viewport](/docs/snapshots#coordinates-and-viewport) for what each producer answers with.
 
+It also carries an optional `presentedSurface: 'presented' | 'absent' | 'unknown'` on iOS captures: whether the capture saw a modal presentation over your app's content. `'absent'` is a reading that was earned, so it is safe to act on; `'unknown'` says the capture could not tell and is not `'absent'`. The field is absent on other platforms. See [Presented surface](/docs/snapshots#presented-surface).
+
 `client.observability.events({ cursor, limit })` reads the session event timeline as paged JSON entries. Use `nextCursor` from the previous page to continue from the daemon-owned `events.ndjson` file without replaying already uploaded/displayed events. Cursors are absolute and survive the file's size rotation; a cursor older than the retained window rejects with `COMMAND_FAILED`, `details.reason: "EVENT_LOG_CURSOR_EXPIRED"`, and `details.earliestCursor` to resume from.
 The timeline leaves out user-entered content such as typed text, selector values, and payloads; see [Sessions](/docs/sessions#find-a-sessions-logs-and-artifacts) for what it keeps.
 
