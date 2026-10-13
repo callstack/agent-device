@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../../../daemon/__tests__/platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {

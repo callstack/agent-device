@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../../../daemon/__tests__/platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';

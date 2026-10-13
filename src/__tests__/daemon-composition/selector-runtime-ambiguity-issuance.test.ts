@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../../daemon/__tests__/platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';

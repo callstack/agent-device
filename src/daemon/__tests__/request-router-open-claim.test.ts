@@ -44,17 +44,9 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
     resolveIosApp: vi.fn(async (_device, app) => app),
   };
 });
-// Claim settlement asks the device when its current boot began; these tests answer by hand rather
-// than reading the host's real process table.
-const mockObserveSimulatorBoot = vi.hoisted(() =>
-  vi.fn(async (): Promise<DeviceBootObservation> => ({
-    observed: false,
-    reason: 'unobserved',
-  })),
-);
-vi.mock('@agent-device/platform-apple/simulator-boot', () => ({
-  observeSimulatorBootTimeMs: mockObserveSimulatorBoot,
-}));
+// Claim settlement asks the device when its current boot began; the daemon port fixture answers at
+// `observeBootTimeMsFixture`, so these tests answer through that spy rather than mocking a leaf.
+import { observeBootTimeMsFixture } from './platform-services-fixture.ts';
 
 import {
   createRequestHandler,
@@ -67,7 +59,6 @@ import {
 } from './application-lifecycle-runtime-fixture.ts';
 import { ensureDeviceReady } from '../device/device-ready.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DeviceBootObservation } from '@agent-device/contracts/device-boot';
 import { makeSessionStore } from './support/store-factory.ts';
 import { inspectDeviceClaims } from '../device/device-claim-inspection.ts';
 import { makeIosDevice, openRequest, storedClaimUpdatedAt } from './request-router-open-harness.ts';
@@ -76,6 +67,7 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const mockDiscoverReadyAndroidEmulators = vi.mocked(discoverReadyAndroidEmulators);
+const mockObserveBoot = vi.mocked(observeBootTimeMsFixture);
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
 
 function createOpenHandler(
@@ -100,11 +92,8 @@ beforeEach(() => {
   mockEnsureDeviceReady.mockResolvedValue(undefined);
   mockAwaitFixtureReadiness.mockReset();
   mockAwaitFixtureReadiness.mockResolvedValue(undefined);
-  mockObserveSimulatorBoot.mockReset();
-  mockObserveSimulatorBoot.mockImplementation(async () => ({
-    observed: false,
-    reason: 'unobserved',
-  }));
+  mockObserveBoot.mockReset();
+  mockObserveBoot.mockResolvedValue({ observed: false, reason: 'unobserved' });
   mockDiscoverReadyAndroidEmulators.mockReset();
 });
 
@@ -145,7 +134,7 @@ test('open takes a live foreign claim whose device rebooted after the claim was 
   const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
   process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
   const bootedAtMs = Date.now();
-  mockObserveSimulatorBoot.mockResolvedValueOnce({ observed: true, bootedAtMs });
+  mockObserveBoot.mockResolvedValueOnce({ observed: true, bootedAtMs });
 
   try {
     seedLiveForeignClaim(claimsDir, device, foreignStateDir);
@@ -156,7 +145,7 @@ test('open takes a live foreign claim whose device rebooted after the claim was 
 
     expect(response.ok).toBe(true);
     if (!response.ok) return;
-    expect(mockObserveSimulatorBoot).toHaveBeenCalledWith(device);
+    expect(mockObserveBoot).toHaveBeenCalledWith(device);
     expect(response.data?.warnings).toContain(
       'Took the device from session "shared" in workspace "/worktrees/live": that device rebooted after its claim was taken, so its app and runner were already gone.',
     );
@@ -194,7 +183,7 @@ test('open renews the claim of an existing session that reopened its app after a
     expect(reopened.ok).toBe(true);
     expect(storedClaimUpdatedAt(device)).toBeGreaterThan(claimedAtMs);
 
-    mockObserveSimulatorBoot.mockResolvedValueOnce({
+    mockObserveBoot.mockResolvedValueOnce({
       observed: true,
       bootedAtMs: claimedAtMs + 1,
     });

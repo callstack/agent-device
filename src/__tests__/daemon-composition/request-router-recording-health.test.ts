@@ -5,7 +5,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import path from 'node:path';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
-import { daemonPlatformServicesFixture } from '../../daemon/__tests__/platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import {
   createRequestHandler,
   gestureDeviceRuntimeGateway,

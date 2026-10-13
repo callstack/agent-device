@@ -8,9 +8,8 @@ import type {
   ApplicationLifecycleRuntimeOperations,
   RuntimeHintsApplicationInput,
 } from '@agent-device/contracts/application-lifecycle-runtime';
-import { fixtureResolveSessionAppBundleIdForTarget } from './platform-services-fixture.ts';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
-import { isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
+import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 
 type LifecycleEffectContext = ApplicationLifecycleExecution &
@@ -73,11 +72,57 @@ const prepareAppleRunnerFixture = vi.fn(
 );
 
 /**
+ * The canned `resolveOpenTarget` answer: the contract's canonical direct-lifecycle resolution for
+ * the fixture owner (a dotted, non-deep-link target is the bundle id; otherwise the session's
+ * current one), reached through the `directResolve` the fixture passes in. No open-target, surface,
+ * or platform rule lives here — the real owners' resolution rules (apple/android target identity,
+ * macOS frontmost surfaces, Safari and deep-link fallbacks) are pinned under
+ * `src/__tests__/daemon-composition/` (`session-open-target.test.ts` and siblings). A daemon suite
+ * that needs a different bundle id answers per case through this spy.
+ */
+export const resolveOpenTargetFixture = vi.fn(
+  async (
+    _device: DeviceInfo,
+    directResolve: NonNullable<ApplicationLifecycleRuntimeOperations['resolveOpenTarget']>,
+    input: Parameters<NonNullable<ApplicationLifecycleRuntimeOperations['resolveOpenTarget']>>[0],
+  ) => await directResolve(input),
+);
+
+/**
+ * The canned `prepareApplicationOpen` answer: pause at the fixture's readiness seam and succeed.
+ * The per-platform readiness sequencing (android discovery for a stopped AVD, simulator cold boot)
+ * is the composed owners' rule, pinned under `src/__tests__/daemon-composition/`.
+ */
+export const prepareApplicationOpenFixture = vi.fn(async (device: DeviceInfo): Promise<void> => {
+  await awaitFixtureReadiness(device);
+});
+
+/**
+ * The canned `openApplication` answer: apply the fact-admitted runtime hints at the port when the
+ * open requests them, then run the contract's canonical direct open (the `directOpen` the fixture
+ * passes in). Relaunch identity, runner prewarm policy, and post-open observation are the composed
+ * owners' rules, pinned under `src/__tests__/daemon-composition/`.
+ */
+export const openApplicationFixture = vi.fn(
+  async (
+    _device: DeviceInfo,
+    directOpen: NonNullable<ApplicationLifecycleRuntimeOperations['openApplication']>,
+    input: Parameters<NonNullable<ApplicationLifecycleRuntimeOperations['openApplication']>>[0],
+  ) => {
+    if (input.applyRuntimeHints) {
+      await input.applyRuntimeHints({ appId: input.appBundleId, values: input.runtimeHints });
+    }
+    return await directOpen(input);
+  },
+);
+
+/**
  * The `ApplicationLifecycleRuntimeOperations` port as the daemon suites need it: the contract's
- * canonical direct lifecycle over the fixture interactor's spies, with readiness, runtime hints,
- * and runner preparation answered by port spies. The real apple/android sequencing (boot, runner
- * prewarm policy, relaunch identity, post-open observation) belongs to the platform packages and
- * is pinned under `src/__tests__/daemon-composition/`.
+ * canonical direct lifecycle over the fixture interactor's spies, with open-target resolution,
+ * readiness, open sequencing, runtime hints, and runner preparation answered by port spies whose
+ * canned answers carry no platform rule. The real apple/android sequencing (boot, runner prewarm
+ * policy, relaunch identity, post-open observation) belongs to the platform packages and is pinned
+ * under `src/__tests__/daemon-composition/`.
  */
 export async function applicationLifecycleRuntimeFixture(
   device: DeviceInfo,
@@ -103,50 +148,16 @@ export async function applicationLifecycleRuntimeFixture(
     }),
   });
   const directOpenApplication = direct.openApplication;
+  const directResolveOpenTarget = direct.resolveOpenTarget;
   return Object.freeze({
     ...direct,
-    resolveOpenTarget: async (input) => {
-      if (
-        isMacOs(device) &&
-        input.surface !== undefined &&
-        input.surface !== 'app' &&
-        input.surface !== 'desktop' &&
-        input.surface !== 'menubar'
-      ) {
-        // Frontmost surfaces resolve through the macos package leaf the suites already mock.
-        const { resolveFrontmostMacOsApp } = await import('@agent-device/platform-apple/macos');
-        const frontmost = await resolveFrontmostMacOsApp();
-        return Object.freeze({
-          ...(frontmost.bundleId === undefined ? {} : { appBundleId: frontmost.bundleId }),
-          ...(input.target === undefined
-            ? frontmost.appName === undefined
-              ? {}
-              : { appName: frontmost.appName }
-            : { appName: input.target }),
-        });
-      }
-      const appBundleId = await fixtureResolveSessionAppBundleIdForTarget(
-        device,
-        input.target,
-        input.currentAppBundleId,
-      );
-      return Object.freeze({
-        ...(appBundleId === undefined ? {} : { appBundleId }),
-        ...(input.target === undefined ? {} : { appName: input.target }),
-      });
+    resolveOpenTarget: async (input) =>
+      await resolveOpenTargetFixture(device, directResolveOpenTarget, input),
+    prepareApplicationOpen: async () => {
+      await prepareApplicationOpenFixture(device);
     },
-    prepareApplicationOpen: async (_input) => {
-      await awaitFixtureReadiness(device);
-      if (device.platform === 'android' && device.booted !== true) {
-        await discoverReadyAndroidEmulators(device);
-      }
-    },
-    openApplication: async (input) => {
-      if (input.applyRuntimeHints) {
-        await input.applyRuntimeHints({ appId: input.appBundleId, values: input.runtimeHints });
-      }
-      return await directOpenApplication(input);
-    },
+    openApplication: async (input) =>
+      await openApplicationFixture(device, directOpenApplication, input),
     applyRuntimeHints: async (input) => {
       await applyRuntimeHintsFixture({ device, ...input });
     },

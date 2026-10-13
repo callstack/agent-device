@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../../daemon/__tests__/platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 import type {
   GestureCommandInput,

@@ -40,8 +40,8 @@ import {
 } from '@agent-device/platform-android/mechanics';
 import {
   applyRuntimeHintsFixture,
-  discoverReadyAndroidEmulators,
   dispatchApplicationLifecycleEffect,
+  prepareApplicationOpenFixture,
 } from '../../__tests__/application-lifecycle-runtime-fixture.ts';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
 import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../../device/device-claims.ts';
@@ -65,7 +65,7 @@ import {
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
-const mockDiscoverReadyAndroidEmulators = vi.mocked(discoverReadyAndroidEmulators);
+const mockPrepareApplicationOpen = vi.mocked(prepareApplicationOpenFixture);
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsFixture);
@@ -128,14 +128,14 @@ const android: DeviceInfo = {
 
 test('failed local open before device setup rolls its device claim back', async () => {
   const { store, stateDir } = setup();
-  // A stopped AVD, so preparation actually runs emulator discovery. Readiness is package-owned
-  // now, so this is where a pre-device-effect failure surfaces.
   const stoppedAvd = { ...android, id: 'pixel-avd', booted: false };
   mockResolveTargetDevice.mockResolvedValue(stoppedAvd);
   // The point of this test is claim-rollback behavior around an opaque pre-device-effect
   // failure, not any particular error shape, so assert identity of the propagated error.
+  // Readiness is package-owned, so the failure is injected at the lifecycle port's prepare
+  // step; which devices the real owners run discovery for is pinned in the composition lane.
   const rejectionError = new Error('device not ready');
-  mockDiscoverReadyAndroidEmulators.mockRejectedValue(rejectionError);
+  mockPrepareApplicationOpen.mockRejectedValueOnce(rejectionError);
 
   await assert.rejects(
     async () =>

@@ -59,6 +59,7 @@ import {
   applyRuntimeHintsFixture,
   clearRuntimeHintsFixture,
   dispatchApplicationLifecycleEffect,
+  resolveOpenTargetFixture,
 } from '../../../__tests__/application-lifecycle-runtime-fixture.ts';
 import { resolveAndroidPackageForOpen } from '@agent-device/platform-android/mechanics';
 import {
@@ -73,6 +74,7 @@ const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsFixture);
 const mockClearRuntimeHints = vi.mocked(clearRuntimeHintsFixture);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
+const mockResolveOpenTarget = vi.mocked(resolveOpenTargetFixture);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -99,7 +101,12 @@ test('open runtime payload replaces stored session runtime atomically', async ()
   }> = [];
 
   mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator());
-  mockResolveAndroidPackage.mockResolvedValue('com.example.demo');
+  // The open-target identity is a canned per-case answer at the port; what the real owners
+  // resolve for an Android name is pinned in the composition lane.
+  mockResolveOpenTarget.mockImplementation(async (_device, _direct, input) => ({
+    appBundleId: 'com.example.demo',
+    appName: input.target,
+  }));
   mockApplyRuntimeHints.mockImplementation(async ({ appId, values }) => {
     runtimeApplyCalls.push({
       appId,

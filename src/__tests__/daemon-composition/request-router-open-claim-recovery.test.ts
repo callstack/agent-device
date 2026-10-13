@@ -17,7 +17,6 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 // must hand the acquire path the OWNER-scoped reconciler, so a foreign dead owner's recording
 // recovery executes against that owner's state dir, never the daemon's own store (#2168).
 
-
 vi.mock('../../daemon/device/device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));

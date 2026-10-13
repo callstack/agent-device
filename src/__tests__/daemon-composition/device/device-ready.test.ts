@@ -1,6 +1,6 @@
-import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
@@ -28,13 +28,18 @@ import {
   IOS_DEVICE,
   IOS_SIMULATOR,
 } from '@agent-device/test-kit/device-fixtures';
-import { DEVICE_READY_CACHE_TTL_MS, ensureDeviceReady } from '../device-ready.ts';
+import {
+  DEVICE_READY_CACHE_TTL_MS,
+  ensureDeviceReady,
+} from '../../../daemon/device/device-ready.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockEnsureBootedSimulator = vi.mocked(ensureBootedSimulator);
 const mockWaitForAndroidBoot = vi.mocked(waitForAndroidBoot);
-// Readiness mechanics stay the real ones: the fixture delegates to the root adapter, so the
-// platform-leaf mocks above still own what the port actually calls.
+// This suite pins what the REAL composed readiness port does per device family: it runs in the
+// composition lane on the root-composed services fixture, with the platform leaves mocked above.
+// The daemon-lane port fixture answers readiness with a canned spy and owns only the TTL-cache
+// contract, pinned by the daemon's own claim suites.
 const platformServices = daemonPlatformServicesFixture();
 
 beforeEach(() => {

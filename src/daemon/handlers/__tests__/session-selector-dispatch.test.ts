@@ -1,4 +1,7 @@
-import { daemonPlatformServicesFixture } from '../../__tests__/platform-services-fixture.ts';
+import {
+  daemonPlatformServicesFixture,
+  resolveSessionAppBundleIdForTargetFixture,
+} from '../../__tests__/platform-services-fixture.ts';
 import { test, expect, vi } from 'vitest';
 import * as path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
@@ -39,10 +42,16 @@ const keyboardFamilyDenial = Object.freeze({
   reason: 'owner-capability-missing' as const,
 });
 
+const mockResolveSessionAppBundleId = vi.mocked(resolveSessionAppBundleIdForTargetFixture);
+
 test.each(['rebuild', 'retire'] as const)(
   'app-event metadata and action stay in the admitted lifetime across %s',
   async (transition) => {
     vi.stubEnv('AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE', 'https://example.test/{event}');
+    // The event URL's app identity is a canned per-case answer at the services port (what the
+    // real open-target rule answers for a web URL is pinned in the composition lane); this
+    // suite pins the daemon's admitted-lifetime behavior around it.
+    mockResolveSessionAppBundleId.mockResolvedValue('com.apple.mobilesafari');
     try {
       const sessionStore = makeSessionStore();
       const address = 'cwd:held-app-event:default';

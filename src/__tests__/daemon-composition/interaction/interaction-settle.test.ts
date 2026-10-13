@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../../../daemon/__tests__/platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { legacyDispatchCapture } from '../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';

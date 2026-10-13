@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../../daemon/__tests__/platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { WAIT_REASONS, type ReadinessPhase } from '@agent-device/contracts/wait';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';

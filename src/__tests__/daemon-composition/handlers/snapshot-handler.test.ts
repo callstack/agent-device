@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../../../daemon/__tests__/platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { test, expect, vi, afterEach, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from '../../../daemon/__tests__/legacy-snapshot-capture-fixture.ts';
 import { resetGetRuntimeFixture } from '../../../daemon/__tests__/interaction-get-runtime-fixture.ts';
