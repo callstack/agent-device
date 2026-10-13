@@ -215,10 +215,9 @@ export type SessionState = {
   lastComparisonSafeSnapshot?: SnapshotState;
   androidSnapshotFreshness?: SnapshotFreshnessWindow;
   /**
-   * What this session's last mutation left owed before its surface can be trusted again: the
-   * capture-side quiet-window loop, or the #3471 moving-target baseline the next resolved target is
-   * screened against. One field because one mutation leaves room for one of the two; the transitions
-   * are `deferred-interaction-outcome.ts`'s (R7).
+   * The one writer's view of `DeferredSurface`: what this session's last mutation left owed. One
+   * field because one mutation leaves room for one of the two; the transitions are
+   * `deferred-interaction-outcome.ts`'s (R7).
    */
   deferredSurface?: DeferredSurface;
   snapshotDiagnostics?: SnapshotDiagnosticsState;

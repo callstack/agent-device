@@ -30,14 +30,11 @@ export function finalizeTouchInteraction(params: {
   actionFinishedAt: number;
   androidFreshnessBaseline?: SnapshotState | undefined;
   /**
-   * The tree this action resolved its target against (#3471), forwarded to the moving-target
-   * baseline. Absent for the dispatches that acted without a daemon tree.
+   * The tree this action resolved its target against, plus its own `--settle` observation when it ran
+   * one — both forwarded to the deferred-outcome marker, which reads the settled-tree signal from the
+   * second (#3471). Absent for the dispatches that acted without a daemon tree.
    */
   preActionTree?: SurfaceScopedNodes | undefined;
-  /**
-   * The action's own `--settle` observation, forwarded to the deferred-outcome marker, which reads
-   * the settled-tree signal from it (#3471).
-   */
   settle?: SettleObservation | undefined;
 }): DaemonResponse {
   const {

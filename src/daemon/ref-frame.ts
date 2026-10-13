@@ -94,11 +94,8 @@ export function expireRefFrame(session: SessionState): void {
   markSessionSnapshotOutdated(session);
   session.refFrame = expiredRefFrame(refFrame(session));
   session.snapshotScopeSource = undefined;
-  // #3471: the same seam retires the moving-target baseline, because a side effect this session did
-  // not resolve a target through leaves a tree that predates a change nobody measured — screening a
-  // later press against it would be the positional coincidence ADR 0014 exists to stop. A pending
-  // capture-side stabilization survives this: the seam fires on the way INTO every device op,
-  // including the gesture that just marked one.
+  // #3471: a side effect this session did not resolve a target through leaves a tree that predates a
+  // change nobody measured, so it cannot screen a later press.
   retireMovingTargetBaseline(session);
 }
 

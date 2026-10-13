@@ -267,50 +267,55 @@ test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'targetStability')[0]!, async () =
   assert.equal(captures, 3, 'one resolution capture plus the gate two re-observations');
 });
 
-test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'targetStability')[1]!, async () => {
-  const taps: Point[] = [];
-  let captures = 0;
-  // Still moving when the window ran out: the two re-observations disagree.
-  const positions = [
-    continueButtonAtRect(240, 20),
-    continueButtonAtRect(300, 20),
-    continueButtonAtRect(360, 20),
-  ];
-  const device = createContractDevice(positions[0]!, {
-    captureSnapshot: async () => ({ snapshot: positions[captures++] ?? positions[2]! }),
-    tap: async (_context, point) => {
-      taps.push(point);
-    },
-    clock: createContractClock(),
-    sessionState: {
-      movingTargetBaseline: { finishedAt: 0, tree: { nodes: viewportOnlySnapshot().nodes } },
-    },
-  });
-
-  await assert.rejects(
-    () => device.interactions.press(selector('label=Continue'), { session: 'default' }),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      // Names the failed confirmation, not motion: the unmeasured shape cannot claim that.
-      assert.match(
-        error.message,
-        /label=Continue had no confirmed resting position when the transition window ran out/,
+// The wiring, through the real daemon route rather than an injected session record: press A must
+// LEAVE the tree it acted through on the session (#3471) and press B must be screened against it.
+// Deleting either half of that — the writer in `dispatchRuntimeInteraction` or the carrier in
+// `toRuntimeSessionRecord` — leaves B idle, so it taps the vacated point and this fails.
+test(
+  scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'targetStability')[1]!,
+  async () => {
+    // The shared runner tree with the Continue button's frame translated to `y`.
+    const runnerNodesAtY = (y: number) =>
+      RUNNER_CONTINUE_NODES.map((node) =>
+        node.index === 1 ? { ...node, rect: { ...node.rect, y } } : node,
       );
-      const details = (error as { details?: Record<string, unknown> }).details;
-      assert.equal(details?.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
-      assert.equal(details?.dispatched, 'no');
-      assert.equal(details?.selector, 'label=Continue');
-      // The position the caller resolved and the one the re-observations found: the pair that says
-      // which way the surface is going.
-      assert.deepEqual(details?.rect, { x: 240, y: 20, width: 100, height: 40 });
-      assert.deepEqual(details?.movedToRect, { x: 360, y: 20, width: 100, height: 40 });
-      assert.equal(typeof details?.waitedMs, 'number');
-      assert.match(String(details?.hint), /label=Continue/);
-      return true;
-    },
-  );
-  assert.deepEqual(taps, []);
-});
+    await withIosContractDaemon(
+      [
+        // A resolves and taps at y=300; B resolves at 360 and its two re-observations disagree.
+        runnerSnapshotEntry(runnerNodesAtY(300)),
+        runnerTapEntry({ x: 200, y: 322 }),
+        runnerSnapshotEntry(runnerNodesAtY(360)),
+        runnerSnapshotEntry(runnerNodesAtY(420)),
+        runnerSnapshotEntry(runnerNodesAtY(480)),
+      ],
+      async (daemon, transcript) => {
+        assertRpcOk(await daemon.callCommand('press', ['label=Continue']));
+        const refusal = await daemon.callCommand('press', ['label=Continue']);
+        const data = assertRpcError(
+          refusal,
+          'COMMAND_FAILED',
+          /label=Continue had no confirmed resting position when the transition window ran out/,
+        );
+        const details = data.details as Record<string, unknown>;
+        assert.equal(details.reason, INTERACTION_ERROR_REASONS.targetStillMoving);
+        assert.equal(details.dispatched, 'no');
+        assert.deepEqual(details.rect, { x: 100, y: 360, width: 200, height: 44 });
+        assert.deepEqual(details.movedToRect, { x: 100, y: 480, width: 200, height: 44 });
+        // A: one capture. B: its resolution plus the gate's two. Any other count is the harness's
+        // `assertComplete` failing, which is what makes the unused deletion above visible.
+        assert.equal(
+          transcript.calls.filter((call) => call.command === 'ios.runner.snapshot').length,
+          4,
+        );
+        assert.equal(
+          transcript.calls.filter((call) => call.command === 'ios.runner.tap').length,
+          1,
+        );
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
 // The cost contract, as a scenario: the gate reads a tree the session already holds, so a press
 // whose target the previous action left in place spends the one capture it always spent.

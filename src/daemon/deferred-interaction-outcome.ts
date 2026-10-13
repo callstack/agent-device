@@ -162,11 +162,11 @@ function markSurfaceStabilization(
  * gate nothing.
  *
  * `restProved` switches the tree to the session's published one, and is set only when the action's
- * own settle loop converged AND stored its settled tree. Everything else keeps the pre-action tree:
- * the session's snapshot may hold a freshness capture, a `@ref` press's authorized frame, or a lone
- * `--verify` capture, and none of those proves rest. Inferring it from a snapshot that merely
- * differs from the tree the action resolved against would attribute to this action a surface it may
- * never have looked at — the substitution this marker exists to prevent.
+ * own settle loop converged AND stored its settled tree. Everything else keeps the pre-action tree,
+ * a timed-out loop included: the session's snapshot may hold a freshness capture, a `@ref` press's
+ * authorized frame, a lone `--verify` capture, or the newest read of a surface that never quieted,
+ * and none of those proves rest. Preferring it because it merely differs from the tree the action
+ * resolved against is the same forbidden substitution, from the other side.
  */
 function markMovingTargetBaseline(
   session: SessionState,
@@ -185,12 +185,10 @@ function markMovingTargetBaseline(
 }
 
 /**
- * Retires the `recheck` variant only. Called from ADR 0014's device side-effect seam: a side effect
- * this session did not resolve a target through leaves a tree that predates a change nobody
- * measured, and screening a later press against it would be positional coincidence rather than
- * evidence. A gate out of evidence goes idle rather than reconstructing a baseline from another
- * source. A pending stabilization is left alone — the seam fires on the way INTO every device op,
- * including the gesture that just marked one, and the capture side still owes that loop.
+ * Retires the `recheck` variant only, from ADR 0014's device side-effect seam. A gate out of evidence
+ * goes idle rather than reconstructing a baseline from another source. A pending stabilization is
+ * left alone: the seam fires on the way INTO every device op, including the gesture that just marked
+ * one, and the capture side still owes that loop.
  */
 export function retireMovingTargetBaseline(session: SessionState): void {
   if (session.deferredSurface?.kind !== 'recheck') return;
