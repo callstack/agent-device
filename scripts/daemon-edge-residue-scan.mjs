@@ -70,10 +70,16 @@ for (const file of files) {
       const resolved = path
         .normalize(path.join(path.dirname(rel), specifier))
         .replace(/\.tsx?$/, '');
-      if (resolved === 'src/daemon' || resolved.startsWith('src/daemon/')) continue;
+      // path.join yields backslashes on Windows, so compare against the native separator.
+      const daemonDir = path.join('src', 'daemon');
+      if (resolved === daemonDir || resolved.startsWith(`${daemonDir}${path.sep}`)) continue;
       if (seen.has(resolved)) continue;
       seen.add(resolved);
-      const line = source.slice(0, match.index).split('\n').length;
+      // The static forms anchor at the preceding `;`/newline, so slice(0, match.index)
+      // counts lines only up to that separator and reports one early. Count to the
+      // keyword inside the match (position 0 for the unanchored forms).
+      const keywordAt = match[0].search(/import|export|require|vi\./);
+      const line = source.slice(0, match.index + keywordAt).split('\n').length;
       edges.push(`${rel}:${line} -> ${resolved}`);
     }
   }
