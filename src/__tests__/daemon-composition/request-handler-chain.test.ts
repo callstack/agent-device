@@ -95,15 +95,18 @@ test('route owner files match the production module loaders', () => {
     );
 
   assert.equal(definitions.length + 1, Object.keys(ownerFiles).length);
+  // The loaders are relative to the chain module, which lives in a layer folder; resolve them
+  // the same way the runtime does instead of assuming the package root.
+  const CHAIN_DIR = 'packages/daemon/src/sessions/';
   for (const [, route, modulePath] of definitions) {
     assert.ok(route && modulePath);
     assert.equal(
       ownerFiles[route as keyof typeof ownerFiles],
-      `packages/daemon/src/${modulePath.slice(2)}`,
+      path.posix.normalize(`${CHAIN_DIR}${modulePath}`),
     );
   }
   assert.ok(genericModulePath && genericRouteMatches);
-  assert.equal(ownerFiles.generic, `packages/daemon/src/${genericModulePath.slice(2)}`);
+  assert.equal(ownerFiles.generic, path.posix.normalize(`${CHAIN_DIR}${genericModulePath}`));
 
   assert.ok(
     !/ownerFile/.test(source),
@@ -147,7 +150,7 @@ test('interaction facade keeps route implementations out of its eager import clo
   for (const routeModule of ['find.ts', 'interaction.ts']) {
     const routePath = path.resolve(
       import.meta.dirname,
-      `../../../packages/daemon/src/interaction/internal/${routeModule}`,
+      `../../../packages/daemon/src/execution/interaction/internal/${routeModule}`,
     );
     assert.equal(
       fs.existsSync(routePath),

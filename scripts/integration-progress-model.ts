@@ -11,7 +11,6 @@ const EMPTY_STATEMENT_COVERAGE = { covered: 0, pct: 0, total: 0 };
 export function buildIntegrationProgressModel({ root = process.cwd() } = {}) {
   const coverageSummary = path.join(root, 'coverage/coverage-summary.json');
   const handlerTestDirs = [
-    path.join(root, 'packages/daemon/src/core/handlers/__tests__'),
     path.join(root, 'packages/daemon/src/sessions/handlers/__tests__'),
     path.join(root, 'packages/daemon/src/execution/handlers/__tests__'),
   ];

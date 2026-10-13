@@ -3,6 +3,7 @@
 // a tooling change beside it still fails open to the full set.
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'node:test';
 import { deviceLaneLeaf, deviceLanesFor, isDeviceLaneSurface, isUnitTest } from './device-lanes.ts';
 import { selectChecks, type CheckId } from './model.ts';
@@ -137,7 +138,11 @@ test('unit tests under src/ and packages/*/src own no lane', () => {
     assert.deepEqual(lanes(file), [], file);
   }
   // Non-TypeScript under __tests__ is a fixture the selector cannot place, not a unit test.
-  assert.ok(!isUnitTest('packages/platform-android/src/fixtures/android-ime-capture.raw.json'));
+  // The existence pin keeps this from going vacuous when the fixture moves again: a path that
+  // no longer exists satisfies !isUnitTest for the wrong reason.
+  const imeFixture = 'packages/platform-android/src/fixtures/android-ime-capture.raw.json';
+  assert.ok(fs.existsSync(imeFixture), imeFixture);
+  assert.ok(!isUnitTest(imeFixture));
   // Package tests outside src/ have no owner and keep failing open.
   assert.ok(!isUnitTest('packages/maestro/test/conformance/verify.test.ts'));
   assert.equal(

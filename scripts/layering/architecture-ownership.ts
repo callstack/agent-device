@@ -143,20 +143,29 @@ export const LOGICAL_MODULE_POLICIES = [
   {
     name: 'daemon-session-lifecycle',
     roots: ['packages/daemon/src/sessions/session-lifecycle/'],
-    forbiddenTargetRoots: ['packages/daemon/src/sessions/handlers/', 'packages/daemon/src/execution/handlers/'],
+    forbiddenTargetRoots: [
+      'packages/daemon/src/sessions/handlers/',
+      'packages/daemon/src/execution/handlers/',
+    ],
     facade: DAEMON_SESSION_LIFECYCLE_FACADE,
   },
   {
     name: 'daemon-interaction',
     roots: ['packages/daemon/src/execution/interaction/'],
     forbiddenTargetRoots: [],
-    internalForbiddenTargetRoots: ['packages/daemon/src/sessions/handlers/', 'packages/daemon/src/execution/handlers/'],
+    internalForbiddenTargetRoots: [
+      'packages/daemon/src/sessions/handlers/',
+      'packages/daemon/src/execution/handlers/',
+    ],
     facade: DAEMON_INTERACTION_FACADE,
   },
   {
     name: 'daemon-session-observability',
     roots: ['packages/daemon/src/sessions/session-observability/'],
-    forbiddenTargetRoots: ['packages/daemon/src/sessions/handlers/', 'packages/daemon/src/execution/handlers/'],
+    forbiddenTargetRoots: [
+      'packages/daemon/src/sessions/handlers/',
+      'packages/daemon/src/execution/handlers/',
+    ],
     facade: DAEMON_SESSION_OBSERVABILITY_FACADE,
   },
 ] as const satisfies readonly LogicalModulePolicy[];

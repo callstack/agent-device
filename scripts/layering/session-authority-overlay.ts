@@ -63,10 +63,7 @@ export function measureSessionAuthorityOverlay(
     ) {
       shape.add(edge.file);
     }
-    if (
-      SESSION_STORE_AUTHORITY_TARGETS.has(edge.target) &&
-      edge.symbols.includes('SessionStore')
-    ) {
+    if (SESSION_STORE_AUTHORITY_TARGETS.has(edge.target) && edge.symbols.includes('SessionStore')) {
       authority.add(edge.file);
     }
   }

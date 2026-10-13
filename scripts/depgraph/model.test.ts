@@ -39,15 +39,15 @@ function authorityFixture(): Map<string, string> {
       "import type { ProgressShape } from '@agent-device/contracts/progress';",
     ].join('\n'),
     'packages/daemon/src/capability-consumer.ts': [
-      "import { createRequestRuntimeBindings } from './request-runtime-binding.ts';",
-      "import { isSessionRecording } from './session-script-publication-capability.ts';",
+      "import { createRequestRuntimeBindings } from './core/request-runtime-binding.ts';",
+      "import { isSessionRecording } from './core/session-script-publication-capability.ts';",
     ].join('\n'),
     'packages/daemon/src/state-consumer.ts': [
-      "import type { SessionState } from './session-state.ts';",
-      "import { SessionStore } from './session-store.ts';",
+      "import type { SessionState } from './core/session-state.ts';",
+      "import { SessionStore } from './core/session-store.ts';",
     ].join('\n'),
     'packages/daemon/src/type-consumer.ts':
-      "import type { SessionStore } from './session-store.ts';\n",
+      "import type { SessionStore } from './core/session-store.ts';\n",
     'packages/capture-kit/src/snapshot/policy-consumer.ts': [
       "import type { SessionState } from '../../../../packages/daemon/src/core/session-state.ts';",
       "import type { SessionRef } from '../../../../packages/daemon/src/core/session-state.ts';",
@@ -55,7 +55,7 @@ function authorityFixture(): Map<string, string> {
     ].join('\n'),
     'packages/daemon/src/ordinary-consumer.ts': [
       "import { SessionState } from './session-state-store.ts';",
-      "import { createRequestRuntimeBindingsExtra } from './request-runtime-binding.ts';",
+      "import { createRequestRuntimeBindingsExtra } from './core/request-runtime-binding.ts';",
     ].join('\n'),
     'packages/daemon/src/core/session-state.ts':
       'export type SessionState = { name: string };\nexport type SessionRef = unknown;\n',

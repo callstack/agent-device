@@ -395,9 +395,10 @@ test('coordinator ownership scanning catches aliases, namespaces, and dynamic im
     void import('../../session-replay-coordinator.ts');
   `;
   assert.deepEqual(
-    coordinatorConstructionSites('packages/daemon/src/sessions/replay/internal/probe.ts', source).map(
-      ({ kind }) => kind,
-    ),
+    coordinatorConstructionSites(
+      'packages/daemon/src/sessions/replay/internal/probe.ts',
+      source,
+    ).map(({ kind }) => kind),
     ['call', 'call', 'dynamic-import'],
   );
 });

@@ -89,12 +89,12 @@ test('commandsReaching follows the dynamic import a route uses to load its handl
   // These are in-memory arbitrary paths for graph traversal, not repository ownership metadata.
   const edges = edgesOf({
     'packages/daemon/src/sessions/handlers/session.ts':
-      "import { helper } from '../../../../src/utils/helper.ts';\nexport const h = helper;",
+      "import { helper } from '../../../../../src/utils/helper.ts';\nexport const h = helper;",
     'packages/daemon/src/execution/interaction/index.ts': 'export const f = 1;',
     'src/utils/helper.ts': 'export const helper = 1;',
     'packages/daemon/src/chain.ts': [
-      "export const routes = { session: () => import('./handlers/session.ts'),",
-      "  find: () => import('./interaction/index.ts') };",
+      "export const routes = { session: () => import('./sessions/handlers/session.ts'),",
+      "  find: () => import('./execution/interaction/index.ts') };",
     ].join('\n'),
   });
   const chains = [
