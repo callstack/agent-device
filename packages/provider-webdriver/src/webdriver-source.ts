@@ -1,4 +1,3 @@
-import { androidSystemBarMembership } from '@agent-device/contracts/android-system-chrome';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { parseBounds } from '@agent-device/kernel/bounds';
 import { AppError } from '@agent-device/kernel/errors';
@@ -96,13 +95,6 @@ export function parseWebDriverSourceFacts(
   const sourceRoots: WebDriverSourceRootFact[] = [];
   for (const root of roots) {
     appendSourceNodes(nodes, root, undefined, 0, sourceRoots, platform);
-  }
-  if (platform === 'android') {
-    for (const node of nodes) {
-      const parent = node.parentIndex === undefined ? undefined : nodes[node.parentIndex];
-      const systemBar = androidSystemBarMembership(node.bundleId, node.identifier, parent);
-      if (systemBar) node.systemBar = systemBar;
-    }
   }
   return { nodes, roots: sourceRoots };
 }

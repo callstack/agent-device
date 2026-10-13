@@ -333,8 +333,8 @@ class WebDriverInteractor implements Interactor {
       const { acquireWebDriverIosSnapshot } = await import('./webdriver-ios-snapshot.ts');
       return acquireWebDriverIosSnapshot(source, this.targetId);
     }
-    const { parseWebDriverSourceFacts } = await import('./webdriver-source.ts');
-    const nodes = parseWebDriverSourceFacts(source, 'android').nodes;
+    const { parseWebDriverAndroidSnapshotNodes } = await import('./webdriver-android-source.ts');
+    const nodes = parseWebDriverAndroidSnapshotNodes(source);
     const viewportAfter =
       viewportBefore === undefined ? undefined : await this.readAndroidSnapshotViewport(signal);
     const viewport =
