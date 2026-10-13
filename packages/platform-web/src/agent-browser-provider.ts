@@ -421,7 +421,8 @@ const AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS: ReadonlySet<string> = new Set([
  * agent-browser call.
  *
  * Any failure may be the first command that finds the fleet died or restarted between calls, so
- * it refreshes; so do `open` and `close`, which launch and end the fleet. A plain successful call
+ * it refreshes; so do the {@link AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS} members, which launch,
+ * end, and extend the fleet. A plain successful call
  * acts on a fleet the record already describes, and re-deriving that fleet means a process-tool
  * snapshot of every host process, which is the cost this seam exists to avoid.
  * {@link managedWebBrowserProcessRecordIsLive} answers for the recorded pids from one same-pid
