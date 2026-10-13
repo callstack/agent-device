@@ -86,11 +86,11 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
 3. **Session state and store authority are measured as a symbol-level overlay and ratcheted
    on the handler-owned slice.** At `27a97ee619` the overlay is 112 `SessionState` shape edges
    and 68 `SessionStore` authority edges repo-wide, of which 14 shape / 22 authority files are
-   handler-owned (`packages/daemon/src/handlers/**`). Gate rule **R75 `session-authority-overlay`**
+   handler-owned (`packages/daemon/src/{sessions,execution}/handlers/**`). Gate rule **R75 `session-authority-overlay`**
    (reference measured via `measureRatchets` in `scripts/layering/ratchet-reference.ts`) holds
    the handler-owned file sets at or under the merge-base: handler code may lose files from
    either set, never gain them. The ratchet is added now that the edges are classified;
-   cross-module reads outside `packages/daemon/src/handlers/**` are owned by the logical-module
+   cross-module reads outside `packages/daemon/src/{sessions,execution}/handlers/**` are owned by the logical-module
    declarations (R7/R10) and are not ratcheted here.
 
 4. **The entry-to-platform hop trace was re-run with hop roles**

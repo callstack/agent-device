@@ -89,7 +89,7 @@ before the continuation), and `packages/host-kit/src/internal/request-cancel.ts`
 | 20 | `packages/platform-android/src/index.ts` | `loadRuntime` pairs the plugin with the runtime module | pass-through | KEEP — declared ADR §2 `loadRuntime` boundary |
 | 21 | `packages/platform-android/src/runtime.ts` | `bind`: `inspectFacts` (fan-out site), builds the tap operation | orchestration | KEEP — android runtime owner |
 | 22 | `packages/contracts/src/local-interactor-operation-set.ts` | `bindLocalInteractorOperationSet` → `bindLocalTouchInteractor` | translation | KEEP — tap op mapped to the interactor |
-| 23 | `src/daemon/device-claim-admission.ts` | `admit`: owner claim rule; ordinary owner | policy | KEEP — device claim admission |
+| 23 | `packages/daemon/src/resources/device/device-claim-admission.ts` | `admit`: owner claim rule; ordinary owner | policy | KEEP — device claim admission |
 | 24 | `packages/daemon/src/execution/interaction/internal/interaction-touch-runtime.ts` | `dispatchRuntimeInteraction` → `createInteractionRuntimeForRoute` | orchestration | KEEP — interaction runtime dispatch |
 | 25 | `packages/daemon/src/execution/interaction/internal/interaction-runtime.ts` | `createInteractionAgentDevice` with the executor backend | orchestration | KEEP — agent device construction |
 | 26 | `src/runtime.ts` | `createAgentDevice`: backend + `bindCommands` | orchestration | KEEP — agent device facade |
