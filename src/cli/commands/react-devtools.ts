@@ -131,16 +131,24 @@ async function withRemoteDevtoolsCompanion<T>(
     flags?.remoteConfig ?? `${bridgeConfig.tenantId}:${bridgeConfig.runId}:${bridgeConfig.leaseId}`;
 
   if (args[0] === 'stop') {
-    try {
-      return await action();
-    } finally {
-      await stopReactDevtoolsCompanion({
-        projectRoot: options.cwd ?? process.cwd(),
-        stateDir,
-        profileKey,
-        consumerKey: session,
-      });
-    }
+    // A companion that could not be confirmed stopped is this command's own verdict, so it is
+    // reported — but never in place of the failure the stop was cleaning up after.
+    const acted = await action().then(
+      (value) => ({ value }) as const,
+      (error: unknown) => ({ error }) as const,
+    );
+    const stopped = await stopReactDevtoolsCompanion({
+      projectRoot: options.cwd ?? process.cwd(),
+      stateDir,
+      profileKey,
+      consumerKey: session,
+    }).then(
+      () => ({}) as const,
+      (error: unknown) => ({ error }) as const,
+    );
+    if ('error' in acted) throw acted.error;
+    if ('error' in stopped) throw stopped.error;
+    return acted.value;
   }
 
   await ensureReactDevtoolsCompanion({
