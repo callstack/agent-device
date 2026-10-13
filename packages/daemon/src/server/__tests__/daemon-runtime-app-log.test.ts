@@ -18,7 +18,7 @@ import type { SessionState } from '../../core/session-state.ts';
 import { unavailableDeviceRuntimeGateway } from '../../__tests__/support/unavailable-device-runtime-gateway.ts';
 
 test('daemon startup awaits app-log recovery after acquiring the lock and before opening servers', () => {
-  const source = fs.readFileSync(new URL('../server/daemon-runtime.ts', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../http/daemon-runtime.ts', import.meta.url), 'utf8');
   const acquiredLock = source.indexOf("if (acquisition.status !== 'acquired')");
   const legacyRecovery = source.indexOf('await deps.ownerLifecycle.recoverLegacyAppLogMarkers(');
   const recovery = source.indexOf('await recoverAppLogResourcesAfterDaemonLock(');
@@ -34,7 +34,7 @@ test('daemon startup configures the Apple runner owner after acquiring the lock,
   // #2333/#2415 review: the daemon-owned lease-owner state dir and claim-authority probe must
   // publish only once this process actually holds the daemon lock, so a losing process never
   // configures a global platform owner it does not own.
-  const source = fs.readFileSync(new URL('../server/daemon-runtime.ts', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('../http/daemon-runtime.ts', import.meta.url), 'utf8');
   const acquiredLock = source.indexOf("if (acquisition.status !== 'acquired')");
   const runnerOwnerConfigured = source.indexOf('await deps.ownerLifecycle.configureForDaemonLock(');
   const lockFailureExit = source.indexOf('exit(', acquiredLock);

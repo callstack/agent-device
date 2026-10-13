@@ -367,7 +367,7 @@ test('createReplayCoordinator has exactly one production call site', () => {
 });
 
 test('coordinator ownership scanning catches re-exports and unresolved dynamic imports', () => {
-  const probe = 'packages/daemon/src/replay/internal/probe.ts';
+  const probe = 'packages/daemon/src/sessions/replay/internal/probe.ts';
   const source = `
     export { createReplayCoordinator } from '../../session-replay-coordinator.ts';
     export * from '../../session-replay-coordinator.ts';
@@ -395,7 +395,7 @@ test('coordinator ownership scanning catches aliases, namespaces, and dynamic im
     void import('../../session-replay-coordinator.ts');
   `;
   assert.deepEqual(
-    coordinatorConstructionSites('packages/daemon/src/replay/internal/probe.ts', source).map(
+    coordinatorConstructionSites('packages/daemon/src/sessions/replay/internal/probe.ts', source).map(
       ({ kind }) => kind,
     ),
     ['call', 'call', 'dynamic-import'],
@@ -464,11 +464,11 @@ test('the divergence-report chain rejects unresolved dynamic imports', () => {
 
 test('SessionStore ownership scanning catches dynamic imports and re-exports', () => {
   const sites = collectImportSites(
-    'packages/daemon/src/replay/internal/probe.ts',
+    'packages/daemon/src/sessions/replay/internal/probe.ts',
     [
-      "void import('../../session-store.ts');",
-      "export { SessionStore } from '../../session-store.ts';",
-      "export * from '../../session-store.ts';",
+      "void import('../../../core/session-store.ts');",
+      "export { SessionStore } from '../../../core/session-store.ts';",
+      "export * from '../../../core/session-store.ts';",
     ].join('\n'),
   );
   assert.equal(sites.filter((site) => importsAnyBinding(site, SESSION_STORE_MODULE)).length, 3);
