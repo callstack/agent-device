@@ -12,6 +12,9 @@ import { runXcrun } from './tool-provider.ts';
  */
 const HINGE_ANGLE_SAMPLE = /Angle:\s*(-?\d+(?:[.,]\d+)?)\s*°/g;
 
+/** The stream printed no sample: the toolchain has no `device motion` subcommand or it reports nothing. */
+export const HINGE_ANGLE_UNAVAILABLE_REASON = 'fold-hinge-angle-unavailable';
+
 const HINGE_ANGLE_UNSUPPORTED_HINT =
   "This Xcode/CoreDevice toolchain does not stream 'devicectl device motion hinge-angle' for this device. Foldable poses can be verified only through that stream; update Xcode to a version that ships it.";
 
@@ -56,6 +59,7 @@ export async function readAppleHingeAngle(
       stdout: result.stdout,
       stderr: result.stderr,
       deviceId: device.id,
+      reason: HINGE_ANGLE_UNAVAILABLE_REASON,
       hint: HINGE_ANGLE_UNSUPPORTED_HINT,
     }),
   );

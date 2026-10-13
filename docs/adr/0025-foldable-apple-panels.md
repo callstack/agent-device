@@ -252,6 +252,8 @@ unverified, because the pose it ended in is not the one that was asked for.
 The attempt count, the per-read timeout, cancellation, and the open/closed end-stop
 rule are unchanged: an unsettled fold costs the same four hinge streams it always did.
 
+A toolchain with no `devicectl device motion` subcommand (devicectl 651.13.5, Xcode 27.1 RC build 27A9275) cannot read the hinge at all, and answers the first read with no sample. The HID command has already been delivered by then, so `fold` refuses with `fold-pose-dispatched-unverified`: sent, not confirmed, distinct from a pose the hinge contradicted. The error carries the lit panel as evidence; panel power cannot separate `half-open` from `open`, so it is never promoted to a verified pose.
+
 ## Pose is derived from panel power, and official control does not exist
 
 Apple ships fold state as an **app-side, read-only** API: `UIHinge.status`
