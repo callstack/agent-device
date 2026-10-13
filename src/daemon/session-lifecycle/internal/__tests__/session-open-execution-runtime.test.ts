@@ -101,9 +101,11 @@ test('open runtime payload replaces stored session runtime atomically', async ()
   }> = [];
 
   mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator());
-  // The open-target identity is a canned per-case answer at the port; what the real owners
-  // resolve for an Android name is pinned in the composition lane.
-  mockResolveOpenTarget.mockImplementation(async (_device, _direct, input) => ({
+  // The open-target identity is a canned one-shot answer at the port; what the real owners
+  // resolve for an Android name is pinned in the composition lane. One-shot so a later open
+  // in this file falls back to the fixture's canonical `directResolve` answer instead of
+  // inheriting this case's bundle id (a persistent implementation survives `clearAllMocks`).
+  mockResolveOpenTarget.mockImplementationOnce(async (_device, _direct, input) => ({
     appBundleId: 'com.example.demo',
     appName: input.target,
   }));
