@@ -3,6 +3,14 @@ import type { BoundDeviceRuntime, RuntimeFacts } from '@agent-device/contracts/p
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { Rect } from '@agent-device/kernel/snapshot';
 import type {
+  GesturePlanInput,
+  GestureViewportInput,
+} from '@agent-device/contracts/gesture-runtime';
+import type {
+  CaptureSnapshotInput,
+  SnapshotResult,
+} from '@agent-device/contracts/snapshot-runtime';
+import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../request-runtime-binding.ts';
@@ -26,22 +34,25 @@ export function gestureRuntimeBindingsFixture(
       ? ({ available: false, reason: 'unsupported-platform-leaf' } as const)
       : available;
   const operationSpies = {
-    captureSnapshot: vi.fn(async () => ({ backend: 'xctest' as const, nodes: [] })) as Mock<
-      () => Promise<{ backend: 'xctest'; nodes: [] }>
+    captureSnapshot: vi.fn(async () => ({
+      backend: 'xctest' as const,
+      nodes: [],
+    })) as unknown as Mock<(input: CaptureSnapshotInput) => Promise<SnapshotResult>>,
+    performGesturePlan: vi.fn(async () => ({})) as Mock<
+      (input: GesturePlanInput) => Promise<Record<string, never>>
     >,
-    performGesturePlan: vi.fn(async () => ({})) as Mock<() => Promise<Record<string, never>>>,
     performDirectionalFlingPlan: vi.fn(async () => ({})) as Mock<
-      () => Promise<Record<string, never>>
+      (input: GesturePlanInput) => Promise<Record<string, never>>
     >,
     performMultiTouchGesturePlan: vi.fn(async () => ({})) as Mock<
-      () => Promise<Record<string, never>>
+      (input: GesturePlanInput) => Promise<Record<string, never>>
     >,
     performTargetAuthoredDrag: vi.fn(async () => ({})) as Mock<
-      () => Promise<Record<string, never>>
+      (input: GesturePlanInput) => Promise<Record<string, never>>
     >,
     gestureViewport: vi.fn(
       async () => options.viewport ?? { x: 0, y: 0, width: 400, height: 800 },
-    ) as Mock<() => Promise<Rect>>,
+    ) as Mock<(input: GestureViewportInput) => Promise<Rect>>,
   };
   const facts = {
     device: { family: 'apple', kind: 'simulator', providerMode: 'local' },
