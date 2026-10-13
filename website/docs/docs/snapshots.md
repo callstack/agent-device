@@ -131,9 +131,9 @@ Every node in `snapshot --json` output carries `kind`, next to `type` when the p
 On iOS, `role` (when present) is the native AX class (`UIButton`), carried only on iOS nodes.
 `kind` is the cross-platform role, present on every node on every platform.
 
-A node the occlusion scan finds covered carries `interactionBlocked: "covered"` and, next to it,
-`coveredBy` naming what draws on top of it — the cover's `kind`, its accessible `label` when it has
-one, and its `rect`:
+A node the occlusion scan finds covered carries `interactionBlocked: "covered"`, and when the scan
+can name what draws on top of it, `coveredBy` beside it: the cover's `kind`, its accessible `label`
+when it has one, and its `rect`:
 
 ```json
 {
@@ -254,9 +254,10 @@ decides which backends it tries.
   overlay nodes can appear next to the app's own tree. `androidSnapshot.captureMode` and
   `androidSnapshot.windowCount` describe what was captured.
 - Default and `-i` snapshots keep covered surfaces in the same window visible for diagnosis, and
-  mark controls whose drawing order shows they are covered with `interactionBlocked: "covered"` plus
-  a `coveredBy` description of the cover, so selectors can't act on a stale React Native screen
-  underneath.
+  mark controls whose drawing order shows they are covered with `interactionBlocked: "covered"`, so
+  selectors can't act on a stale React Native screen underneath. Such a node also carries a
+  `coveredBy` description whenever the cover has a name, as
+  [Structured node fields (`--json`)](#structured-node-fields---json) describes.
 - Android 6.0 (API 23) doesn't report the drawing order of sibling views, so this check falls back
   to conservative behavior there, and `androidSnapshot.occlusionScanUnavailable: true` tells you so.
 - `--raw` returns the tree as captured. It also keeps nodes Android marks invisible and stale
