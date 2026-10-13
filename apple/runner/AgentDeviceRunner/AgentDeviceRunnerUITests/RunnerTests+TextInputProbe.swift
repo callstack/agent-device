@@ -65,11 +65,9 @@ extension RunnerTests {
 
   /// What `target`'s input reads between a replacement's clear passes, read inside the same issue
   /// containment, with a placeholder read as empty. A read that cannot answer is `.unavailable`.
-  func clearedFieldRead(app: XCUIApplication, target: TextEntryTarget) -> ClearedFieldRead {
-    let probed = containingTextInputProbeIssues(fallback: ClearedFieldRead.unavailable) { _ in
-      guard let input = resolveTextEntryElement(app: app, target: target) else { return .unavailable }
-      if input.elementType == .secureTextField { return .unreadable }
-      return editableTextValue(for: input, treatingPlaceholderAsEmpty: true).map { .text($0) } ?? .unavailable
+  func clearedFieldRead(app: XCUIApplication, target: TextEntryTarget) -> TextValueRead {
+    let probed = containingTextInputProbeIssues(fallback: TextValueRead.unavailable) { _ in
+      textValueRead(for: resolveTextEntryElement(app: app, target: target), treatingPlaceholderAsEmpty: true)
     }
     guard case .success(let read) = probed else { return .unavailable }
     return read

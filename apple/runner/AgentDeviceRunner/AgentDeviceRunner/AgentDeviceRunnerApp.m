@@ -663,6 +663,9 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       ]];
     }
     if (maskedValue) {
+      if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-prefilled"]) {
+        textField.text = @"stale-secret";
+      }
       // The show/hide toggle sits over the field's right edge, where the runner's caret edge-tap
       // lands. Counting its presses tells the test whether a repair reached for the field again.
       UIButton *toggle = [UIButton buttonWithType:UIButtonTypeSystem];
