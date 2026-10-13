@@ -102,10 +102,9 @@ export function checkDaemonLayers(
     }
   }
 
-  const layerOfEdgeEnd = (file: string) => daemonLayerOf(file);
   const rankedPair = (edge: ResolvedImportEdge) => {
-    const from = layerOfEdgeEnd(edge.file);
-    const to = layerOfEdgeEnd(edge.target);
+    const from = daemonLayerOf(edge.file);
+    const to = daemonLayerOf(edge.target);
     return from !== null && to !== null ? { from, to } : null;
   };
 
