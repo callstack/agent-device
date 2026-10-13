@@ -34,7 +34,7 @@ const settleFields = () => ({
     'After the action, wait for the UI to go quiet and return the settled diff vs the pre-action tree in the same response. Best-effort; never fails the action.',
   ),
   settleQuietMs: integerField(
-    'Settle: quiet window in milliseconds (default 500). On iOS, a broad screen replacement such as a modal dismissal is confirmed for at least 1500 whatever window is asked for, within the timeoutMs settle deadline.',
+    'Settle: quiet window in milliseconds (default 500; 300 when the settled tree comes from the iOS simulator snapshot bridge). On iOS, a broad screen replacement such as a modal dismissal is confirmed for at least 1500ms whatever window is asked for, within the timeoutMs settle deadline.',
     { min: 0 },
   ),
   timeoutMs: integerField('Settle: wait deadline in milliseconds (default 10000).', { min: 1 }),

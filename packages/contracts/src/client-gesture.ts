@@ -25,7 +25,8 @@ export type RepeatedPressOptions = {
  * Opt-in (#1101): after the action, wait for the UI to go quiet and return the
  * settled diff vs the pre-action tree (`settle` on the result) in the same
  * response. Best-effort — never fails the action. `settleQuietMs` tunes the
- * quiet window (default 500ms); `timeoutMs` bounds the settle wait (default
+ * quiet window (default 500ms, or 300ms when the settled tree comes from the iOS
+ * simulator snapshot bridge); `timeoutMs` bounds the settle wait (default
  * 10s) when `settle` is true. A bare `timeoutMs` without `settle` is ignored
  * for compatibility; `settleQuietMs` still requires `settle`.
  */

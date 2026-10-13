@@ -126,12 +126,20 @@ async function settleAfterAction(
   options: CommandContext,
   params: SettleParams & { baseline: SurfaceScopedNodes; actionPoint?: Point },
 ): Promise<SettleOutcome> {
-  const quietMs = params.quietMs ?? DEFAULT_STABLE_QUIET_MS;
+  // The loop resolves an unrequested window from the capture that pays it, so the window is only
+  // known once one is taken. `base` carries the general default for the pre-capture shape the
+  // observation still has to report; `readSettledOutcome` replaces it with the window the loop ran.
   const timeoutMs = params.timeoutMs ?? DEFAULT_STABLE_TIMEOUT_MS;
-  const base: SettleObservation = { settled: false, waitedMs: 0, captures: 0, quietMs, timeoutMs };
+  const base: SettleObservation = {
+    settled: false,
+    waitedMs: 0,
+    captures: 0,
+    quietMs: params.quietMs ?? DEFAULT_STABLE_QUIET_MS,
+    timeoutMs,
+  };
   try {
     const outcome = await runStableCaptureLoop(runtime, options, {
-      quietMs,
+      ...(params.quietMs === undefined ? {} : { quietMs: params.quietMs }),
       timeoutMs,
       resetBudgetOnPrivateAxRecovery: true,
       broadTransitionBaselineNodes: params.baseline.nodes,
@@ -162,6 +170,9 @@ async function readSettledOutcome(
     settled: outcome.settled,
     waitedMs: outcome.waitedMs,
     captures: outcome.captures,
+    // The window the loop actually ran. For an unrequested settle that is the one its own captures
+    // priced, which `base` cannot know because it is built before the first read.
+    quietMs: outcome.quietMs,
   };
   if (!outcome.lastCapture) {
     return {

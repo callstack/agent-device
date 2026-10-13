@@ -326,6 +326,37 @@ test('settle confirms a tiny modal replacement through a partial post-action pro
   );
 });
 
+test('a dismissal confirmation is not dropped by a later empty projection', async () => {
+  // The confirmation is a fact about the transition, so it survives a capture that stops qualifying.
+  // The comparison refuses a node-less side, so re-deciding it per capture hands the loop its short
+  // window again mid-confirmation — and the next empty read matches it, settling on two empty
+  // projections 302ms after a dismissal that owed 1.5s (#3470).
+  const { runtime } = transitionRuntime({
+    settledAtMs: 0,
+    emptyProjectionAtCaptures: [2, 3],
+  });
+
+  const outcome = await runStableCaptureLoop(
+    runtime,
+    { session: 'default' },
+    {
+      quietMs: 150,
+      timeoutMs: 5_000,
+      broadTransitionBaselineNodes: elementThreadsNoticeSnapshot.nodes,
+    },
+  );
+
+  assert.equal(outcome.settled, true);
+  assert.ok(
+    outcome.waitedMs >= 1_500,
+    `empty projection disarmed the confirmation: settled after ${outcome.waitedMs}ms`,
+  );
+  assert.ok(
+    outcome.lastCapture!.snapshot.nodes.length > 0,
+    'settled on an empty projection instead of the dismissed screen',
+  );
+});
+
 test('settle keeps the default quiet window for a larger partial projection', async () => {
   const { runtime } = transitionRuntime({ omitViewportRoot: true, settledAtMs: 1_200 });
 
@@ -458,6 +489,8 @@ function transitionRuntime(
     omitViewportRoot?: boolean;
     settledAtMs?: number;
     sessionSnapshot?: SnapshotState;
+    /** 1-based capture indices that answer with an empty projection (mid-animation read). */
+    emptyProjectionAtCaptures?: number[];
   } = {},
 ) {
   const captureBackend = options.captureBackend ?? 'tree';
@@ -476,6 +509,14 @@ function transitionRuntime(
       captureSnapshot: async () => {
         const keepsBaseline = options.firstCaptureKeepsBaseline === true && captures === 0;
         captures += 1;
+        if (options.emptyProjectionAtCaptures?.includes(captures)) {
+          return {
+            snapshot: withCaptureBackend(
+              { ...elementSettledRoomSnapshot, nodes: [] },
+              captureBackend,
+            ),
+          };
+        }
         const snapshot = keepsBaseline
           ? elementThreadsNoticeSnapshot
           : withCaptureBackend(

@@ -211,7 +211,7 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 0,
     usageLabel: '--settle-quiet <ms>',
     usageDescription:
-      'Settle: quiet window the UI must hold to count as settled (default 500ms). On iOS, a broad screen replacement such as a modal dismissal is confirmed for at least 1500ms whatever window is asked for, within the --timeout settle deadline',
+      'Settle: quiet window the UI must hold to count as settled (default 500ms; 300ms when the settled tree comes from the iOS simulator snapshot bridge). On iOS, a broad screen replacement such as a modal dismissal is confirmed for at least 1500ms whatever window is asked for, within the --timeout settle deadline',
     projectConfig: true,
     recorded: false,
   },
