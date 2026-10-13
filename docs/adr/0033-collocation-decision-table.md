@@ -188,26 +188,22 @@ files have no seam (published facade, public-type collision, root dependency fac
   moved there by [#3297](https://github.com/callstack/agent-device/pull/3297)) are now
   `packages/daemon-contracts/src/` behind narrow per-file subpath exports.
 
-2026-10-13 (11b, #3546): `src/daemon/` moved to `packages/daemon/src/` as
-`@agent-device/daemon`. Its export surface settles on a façade, not importer reach:
-one named subpath per production/script consumer — a subpath that only tests
-import is not production surface — and everything else a root test reaches
-lives under the `./testing/` namespace: named `./testing/<module>` entries for
-production modules tests drive, named `./testing/<fixture>` entries, and, per
-fixture folder, a `./testing/<dir>/*` pattern whose target template reconstructs
-the source path. Never a wildcard that also exposes production modules. R11
-refuses any `./testing/` import from a non-test file, so root production code
-cannot import a module the package publishes for tests (a package test double
-reached through the boundary is production code depending on a fake), and root
-production imports are limited to the named production surface. The exports
-keys stay exact except the per-folder fixture patterns; `resolveWorkspaceSpecifier`
-(layering model) owns Node's exports semantics — the layering edges, the depgraph,
-mutation ownership, and R11's named-surface check call it, and the Stryker alias
-table orders its Vite first-match list to resolve in exactly its order — so every
-lane gives a specifier the module id Node's exports resolution gives it. Moving
-the `daemon-request` wire types down to `@agent-device/daemon-contracts` so the
-client stops depending on the server package is a follow-up, keeping 11b a pure
-move.
+## The daemon package's export surface
+
+`@agent-device/daemon` publishes a façade, not importer reach: one named subpath per
+production/script consumer — a subpath that only tests import is not production surface.
+Everything else a root test reaches lives under the `./testing/` namespace: named
+`./testing/<module>` entries for production modules tests drive, named `./testing/<fixture>`
+entries, and, per fixture folder, a `./testing/<dir>/*` pattern whose target template
+reconstructs the source path. Never a wildcard that also exposes production modules. R11
+refuses any `./testing/` import from a non-test file, so root production code cannot import
+a module the package publishes for tests (a package test double reached through the
+boundary is production code depending on a fake), and root production imports are limited
+to the named production surface. The exports keys stay exact except the per-folder fixture
+patterns; `resolveWorkspaceSpecifier` (layering model) owns Node's exports semantics — the
+layering edges, the depgraph, mutation ownership, and R11's named-surface check call it, and
+the Stryker alias table orders its Vite first-match list to resolve in exactly its order —
+so every lane gives a specifier the module id Node's exports resolution gives it.
 
 ## Refuted alternatives
 
