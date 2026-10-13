@@ -240,11 +240,7 @@ function readQualityPayload(
       systemSurface,
     );
   }
-  return {
-    nodes: value.nodes as RawSnapshotNode[],
-    truncated: value.truncated,
-    scope: null,
-  };
+  return { nodes: value.nodes as RawSnapshotNode[], truncated: value.truncated, scope: null };
 }
 
 function runnerViewportEvidence(
