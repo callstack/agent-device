@@ -135,7 +135,7 @@ export const APPROVED_OVER_CEILING: Readonly<
 > = Object.freeze({
   // The single owner of the client-collected replay source bundles tests carry (#1802). Its
   // weight is the real collector it exists to share, not fixture code.
-  'packages/replay-port/src/daemon-port/replay-script-source.fixtures.ts': {
+  'packages/replay-port/src/replay-script-source.fixtures.ts': {
     issue: '#3517',
     reason:
       'Test-only request fixture whose whole contract is running the real client collector ' +

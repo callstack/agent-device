@@ -5,7 +5,7 @@ import {
   loadReplayScriptSourceBundle,
   REPLAY_SCRIPT_SOURCE_BUNDLE_MAX_BYTES,
 } from '@agent-device/replay-port/script-source-bundle';
-import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
+import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 
 // #1802: the caller reads every script file a replay run needs and sends the text. These pin the
 // collection itself; that the daemon consumes only the result is pinned beside the replay handler.

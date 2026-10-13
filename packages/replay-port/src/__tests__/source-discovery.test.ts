@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { discoverReplaySourcePaths } from '@agent-device/replay-port/source-discovery';
-import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
+import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
 
 // #1802: path expansion, traversal ordering and file-type routing are CALLER work — `test`
 // inputs name files on the machine that typed the command. These pin the traversal itself;
