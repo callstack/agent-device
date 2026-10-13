@@ -134,6 +134,7 @@ import { checkDaemonClientEntry } from './daemon-client-entry.ts';
 import { checkDaemonLayers, readDaemonLayerManifest } from './daemon-layers.ts';
 import { checkSessionAuthorityOverlay, handlerOwnedOverlay } from './session-authority-overlay.ts';
 import {
+  DAEMON_SOURCE_ROOT,
   listTrackedPlatformZoneFiles,
   listTrackedProductionSources,
   listTrackedSrcUtilsFiles,
@@ -426,7 +427,8 @@ function report(
         `${ratchets.largestTypeCycle.length} files (R9); ${daemonModularitySummary(reference)}; ` +
         `${packageBoundariesSummary(repoRoot)}; ${platformPackagePolicySummary()}; ` +
         `runtime facts remain the only device-command admission authority and daemon code cannot ` +
-        `manufacture narrowed runtime proof (R66); R65 keeps production src/daemon free of ` +
+        `manufacture narrowed runtime proof (R66); R65 keeps production packages/daemon/src ` +
+        `free of ` +
         `concrete platform imports in every executable and type-only form; ` +
         `no production daemon file reaches the root platform-runtime family or a hub that ` +
         `does (R76); and the handler-owned SessionState/SessionStore ` +
@@ -584,7 +586,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     ),
   'daemon-layers': (context) =>
     checkDaemonLayers(
-      context.sourceFiles.filter((file) => file.startsWith('packages/daemon/src/')),
+      context.sourceFiles.filter((file) => file.startsWith(DAEMON_SOURCE_ROOT)),
       context.edges,
       readDaemonLayerManifest(repoRoot),
     ),

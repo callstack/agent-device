@@ -1,6 +1,7 @@
 /** SessionState field ownership for assignments, named patches and record copies. */
 
 import { parseSync } from 'oxc-parser';
+import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
 import { memberName, memberPath, propertyName, visitAst } from './layering-ast.ts';
 import path from 'node:path';
 
@@ -159,7 +160,7 @@ export function sessionStateDeclarationFile(
   sources: ReadonlyMap<string, string>,
 ): string | undefined {
   for (const [file, source] of sources) {
-    if (file.startsWith('packages/daemon/src/') && SESSION_STATE_DECLARATION.test(source))
+    if (file.startsWith(DAEMON_SOURCE_ROOT) && SESSION_STATE_DECLARATION.test(source))
       return file;
   }
   return undefined;
@@ -412,7 +413,7 @@ function patchObjects(value: unknown): AstNode[] | undefined {
 }
 
 const SESSION_STATE_SCAN_ROOTS = [
-  'packages/daemon/src/',
+  DAEMON_SOURCE_ROOT,
   'packages/capture-kit/src/capture-admission/',
 ];
 const SESSION_DRAFT_CONSTRUCTORS: Readonly<Record<string, string>> = {

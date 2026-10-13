@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { parseSync } from 'oxc-parser';
-import { isProductionSourceFile } from './tracked-sources.ts';
+import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts';
 import type { LayeringViolation } from './model.ts';
 
 /**
@@ -346,7 +346,7 @@ export function findDaemonPlatformDependencies(
 ): DaemonPlatformDependency[] {
   return sources
     .filter(
-      ({ path: file }) => file.startsWith('packages/daemon/src/') && isProductionSourceFile(file),
+      ({ path: file }) => file.startsWith(DAEMON_SOURCE_ROOT) && isProductionSourceFile(file),
     )
     .flatMap(({ path: file, source }) => [
       ...staticDependencies(file, source),

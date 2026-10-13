@@ -15,6 +15,7 @@
 //   into a sibling's src still compiles; project references are a build cache, not a boundary.
 
 import path from 'node:path';
+import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
 import { PLATFORMS } from '@agent-device/kernel/device';
 import { parseImports, type LayeringViolation } from './model.ts';
 import { checkPlatformComposition } from './platform-composition-policy.ts';
@@ -113,7 +114,7 @@ function isAndroidFacetSubpathImport(file: string, specifier: string): boolean {
   // The named facets are the implementation seam for root/core/SDK consumers. Daemon production
   // code still reaches platform behavior through the request-bound runtime gateway; tests may
   // import a facet to exercise the package-owned mechanics directly.
-  return !file.startsWith('packages/daemon/src/') || !isProductionSource(file);
+  return !file.startsWith(DAEMON_SOURCE_ROOT) || !isProductionSource(file);
 }
 
 function isAppleFacadeSubpathImport(specifier: string): boolean {

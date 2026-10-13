@@ -10,6 +10,7 @@
 //   are plain mutable properties on the shared session record, so an outside write type-checks.
 
 import { parseSync } from 'oxc-parser';
+import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
 import { propertyName, visitAst } from './layering-ast.ts';
 import type { LayeringViolation } from './model.ts';
 
@@ -22,10 +23,7 @@ export const SESSION_RESOURCE_OWNERSHIP_RULE = 'R68 session-resource-ownership';
  * `@agent-device/capture-kit`, so the scan covers that directory alongside the daemon: the rule
  * guards the field, not the folder it happens to live in.
  */
-const SCANNED_ROOTS = [
-  'packages/daemon/src/',
-  'packages/capture-kit/src/capture-admission/',
-] as const;
+const SCANNED_ROOTS = [DAEMON_SOURCE_ROOT, 'packages/capture-kit/src/capture-admission/'] as const;
 
 const RESOURCE_OWNERS: Readonly<Record<string, ReadonlySet<string>>> = {
   appLog: new Set([

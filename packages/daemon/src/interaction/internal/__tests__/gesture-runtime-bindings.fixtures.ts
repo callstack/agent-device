@@ -31,9 +31,9 @@ export function gestureRuntimeBindingsFixture(
     performDirectionalFlingPlan: vi.fn(async () => ({})) as Mock<() => Promise<Record<string, never>>>,
     performMultiTouchGesturePlan: vi.fn(async () => ({})) as Mock<() => Promise<Record<string, never>>>,
     performTargetAuthoredDrag: vi.fn(async () => ({})) as Mock<() => Promise<Record<string, never>>>,
-    gestureViewport: vi.fn(async () => options.viewport ?? { x: 0, y: 0, width: 400, height: 800 }) as Mock<
-      () => Promise<Rect>,
-    >,
+    gestureViewport: vi.fn(
+      async () => options.viewport ?? { x: 0, y: 0, width: 400, height: 800 },
+    ) as Mock<() => Promise<Rect>>,
   };
   const facts = {
     device: { family: 'apple', kind: 'simulator', providerMode: 'local' },

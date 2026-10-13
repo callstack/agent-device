@@ -1,4 +1,5 @@
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
+import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
 
 // The declared daemon-entry surface for the client (#2559). `src/daemon-client/**` composes the
 // daemon over the network, not over its module graph, so it is NOT an entry point into daemon
@@ -94,7 +95,7 @@ export function checkDaemonClientEntry(edges: readonly ResolvedImportEdge[]): La
   const measured = new Map<string, MeasuredEdge>();
   for (const edge of edges) {
     if (!edge.file.startsWith('src/daemon-client/')) continue;
-    if (!edge.target.startsWith('packages/daemon/src/')) continue;
+    if (!edge.target.startsWith(DAEMON_SOURCE_ROOT)) continue;
     const key = keyOf(edge.file, edge.target);
     const entry = measured.get(key) ?? {
       file: edge.file,

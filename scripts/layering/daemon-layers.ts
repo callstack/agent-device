@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
-import { isProductionSourceFile } from './tracked-sources.ts';
+import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts';
 
 export const DAEMON_LAYER_RULE = 'R81 daemon-layers';
 
@@ -58,7 +58,7 @@ export function readDaemonLayerManifest(repoRoot: string): DaemonLayerManifest {
 
 /** `packages/daemon/src/<…>.ts` and not a test or fixture path — the only entries the manifest may name. */
 function isDaemonProductionPath(file: string): boolean {
-  return file.startsWith('packages/daemon/src/') && isProductionSourceFile(file);
+  return file.startsWith(DAEMON_SOURCE_ROOT) && isProductionSourceFile(file);
 }
 
 /** The partition flattened to one lookup; a path in two layers keeps its first claim. */

@@ -62,13 +62,15 @@ describe('production device inventory composition', () => {
     // The fake answers through the production tool-provider scope — the same seam the
     // package's own tests install with — so no module mock has to guess which loader
     // identity the probe's dynamic import will land on.
-    const { withAppleToolProvider } = await import('@agent-device/platform-apple/tool-provider');
+    const { withAppleToolProvider, createLocalAppleToolProvider } = await import(
+      '@agent-device/platform-apple/tool-provider'
+    );
     const selection = await withAppleToolProvider(
-      {
+      createLocalAppleToolProvider({
         runCommand: async () => ({ stdout: '', stderr: '', exitCode: 1 }),
         simctl: {
           run: async (args) => {
-            const [command, deviceId] = args as string[];
+            const [command, deviceId] = args as readonly string[];
             if (command !== 'listapps') return { stdout: '{}', stderr: '', exitCode: 0 };
             simctl.calls.push(deviceId!);
             const entry = simctl.listapps.find((l) => l.deviceId === deviceId);
@@ -76,7 +78,7 @@ describe('production device inventory composition', () => {
           },
         },
         devicectl: { run: async () => ({ stdout: '', stderr: '', exitCode: 1 }) },
-      },
+      }),
       () =>
         withDeviceInventoryContext({ ...gateways, requestScope: scope }, () =>
           resolveTargetDeviceSelection(

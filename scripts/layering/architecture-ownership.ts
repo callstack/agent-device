@@ -1,3 +1,5 @@
+import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
+
 type FacadeDeclaration = Readonly<{
   root: string;
   exports: readonly string[];
@@ -103,7 +105,7 @@ export const LOGICAL_MODULE_POLICIES = [
     name: 'ad-replay',
     roots: ['packages/ad-replay/src/'],
     forbiddenTargetRoots: [
-      'packages/daemon/src/',
+      DAEMON_SOURCE_ROOT,
       'src/providers/',
       'src/compat/',
       'packages/maestro/',
@@ -114,7 +116,7 @@ export const LOGICAL_MODULE_POLICIES = [
     name: 'maestro',
     roots: ['packages/maestro/src/'],
     forbiddenTargetRoots: [
-      'packages/daemon/src/',
+      DAEMON_SOURCE_ROOT,
       'src/providers/',
       'packages/ad-replay/',
       'packages/replay-port/',
@@ -124,7 +126,7 @@ export const LOGICAL_MODULE_POLICIES = [
     name: 'replay-test',
     roots: ['packages/replay-test/src/'],
     forbiddenTargetRoots: [
-      'packages/daemon/src/',
+      DAEMON_SOURCE_ROOT,
       'src/providers/',
       'src/request/',
       'src/compat/',
@@ -136,7 +138,7 @@ export const LOGICAL_MODULE_POLICIES = [
   {
     name: 'replay-port',
     roots: ['packages/replay-port/src/'],
-    forbiddenTargetRoots: ['packages/daemon/src/', 'src/providers/', 'src/compat/'],
+    forbiddenTargetRoots: [DAEMON_SOURCE_ROOT, 'src/providers/', 'src/compat/'],
   },
   {
     name: 'daemon-session-lifecycle',
@@ -239,7 +241,7 @@ export const ARCHITECTURE_OWNERSHIP = {
       name: 'snapshot-policy',
       kind: 'executable-policy',
       roots: ['packages/capture-kit/src/snapshot/'],
-      forbiddenTargetRoots: ['packages/daemon/src/'],
+      forbiddenTargetRoots: [DAEMON_SOURCE_ROOT],
     },
   ],
 } as const;

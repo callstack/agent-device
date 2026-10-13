@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
 import {
   INTERACTION_RETIRED_HANDLER_PATHS,
   LOGICAL_MODULE_POLICIES,
@@ -218,7 +219,7 @@ function checkDaemonTypesImporters(edges: readonly ResolvedImportEdge[]): Layeri
   const allowed = new Set<string>(DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters);
   const importers = new Map<string, ResolvedImportEdge>();
   for (const edge of edges) {
-    if (!DAEMON_TYPE_MODULES.includes(edge.target) || edge.file.startsWith('packages/daemon/src/'))
+    if (!DAEMON_TYPE_MODULES.includes(edge.target) || edge.file.startsWith(DAEMON_SOURCE_ROOT))
       continue;
     // #2559: the client's daemon-request/session-state reads are owned by the stricter
     // R78 `daemon-client-entry` gate, which also bans runtime imports and names each edge.

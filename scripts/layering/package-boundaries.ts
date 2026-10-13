@@ -164,6 +164,44 @@ function packageByName(packages: readonly WorkspacePackage[], name: string) {
   return packages.find((pkg) => pkg.name === name);
 }
 
+/** A specifier is named by the exports map when it matches a key or a `*` pattern prefix. */
+function namedByExports(target: WorkspacePackage, specifier: string): boolean {
+  if (target.exportTargets.has(specifier)) return true;
+  for (const key of target.exportTargets.keys()) {
+    if (key.endsWith('*') && specifier.startsWith(key.slice(0, -1))) return true;
+  }
+  return false;
+}
+
+const TEST_FILE_RE = /(^|\/)__tests__\/|\.test\.[cm]?[jt]sx?$|^test\//;
+
+/**
+ * Façade policy (ADR-0033 amendment): a package may publish test data only under a
+ * `./testing/*` pattern entry, and only test files may import it. Production code that
+ * reaches a fixture through the package boundary is production code depending on a test
+ * double — it must inject the real port instead.
+ */
+function checkTestDataOnlySites(
+  site: SpecifierSite,
+  target: WorkspacePackage,
+): PackageBoundaryViolation | undefined {
+  const prefix = [...target.exportTargets.keys()]
+    .filter((key) => key.endsWith('/testing/*'))
+    .map((key) => key.slice(0, -1))
+    .find((p) => site.specifier.startsWith(p));
+  if (!prefix) return undefined;
+  if (TEST_FILE_RE.test(site.file)) return undefined;
+  return {
+    rule: 'R11 package-boundaries',
+    file: site.file,
+    line: site.line,
+    message:
+      `'${site.specifier}' resolves through ${target.dir}/package.json#exports './testing/*', ` +
+      `which publishes test data to test files only. '${site.file}' is not a test file: ` +
+      `import a production subpath or inject the port.`,
+  };
+}
+
 function specifierPackageName(specifier: string): string | undefined {
   const match = /^(@[^/]+\/[^/]+)/.exec(specifier);
   return match?.[1];
@@ -329,7 +367,12 @@ export function checkPackageInternalSites(
           `in ${pkg.dir}/package.json ${pkg.workspaceDependencyField}.`,
       });
     }
-    if (!compiled && !target.exportTargets.has(site.specifier)) {
+    const testDataOnly = checkTestDataOnlySites(site, target);
+    if (testDataOnly) {
+      violations.push(testDataOnly);
+      continue;
+    }
+    if (!compiled && !namedByExports(target, site.specifier)) {
       violations.push({
         rule: 'R11 package-boundaries',
         file: site.file,
@@ -420,7 +463,12 @@ export function checkRootSites(
           `package.json devDependencies.`,
       });
     }
-    if (!compiled && !target.exportTargets.has(site.specifier)) {
+    const testDataOnly = checkTestDataOnlySites(site, target);
+    if (testDataOnly) {
+      violations.push(testDataOnly);
+      continue;
+    }
+    if (!compiled && !namedByExports(target, site.specifier)) {
       violations.push({
         rule: 'R11 package-boundaries',
         file: site.file,

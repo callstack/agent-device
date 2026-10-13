@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
 import { PLATFORMS } from '@agent-device/kernel/device';
 import { createGraph, genDFS, getStronglyConnectedComponents, getSubgraph } from '@statelyai/graph';
 import { parseSync } from 'oxc-parser';
@@ -307,7 +308,7 @@ export function topFolder(file: string): string {
 export function targetDagZone(file: string): string {
   // #2342 relocated the daemon client to its own `src/daemon-client/` folder, so the
   // client zone now falls out of the folder itself; `packages/daemon/src/` is server-only.
-  if (file.startsWith('packages/daemon/src/')) return 'daemon-server';
+  if (file.startsWith(DAEMON_SOURCE_ROOT)) return 'daemon-server';
   return declaredRootModuleZone(file) ?? topFolder(file);
 }
 
