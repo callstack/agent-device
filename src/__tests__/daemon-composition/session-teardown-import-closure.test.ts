@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import path from 'node:path';
+import { DAEMON_SOURCE_ROOT } from '../../../scripts/layering/tracked-sources.ts';
 import { eagerClosureOf } from '../eager-import-closure.fixtures.ts';
 
 /**
@@ -15,8 +16,11 @@ import { eagerClosureOf } from '../eager-import-closure.fixtures.ts';
  * eager closure and fails here.
  */
 
-const srcRoot = path.resolve(import.meta.dirname, '../..');
-const teardownFile = path.resolve(srcRoot, 'daemon/session-teardown.ts');
+const repoRoot = path.resolve(import.meta.dirname, '../../..');
+// Derived from the layering constant rather than a fresh literal: the daemon moved to
+// packages/daemon/src and a hand-written `daemon/...` under src/ silently ENOENTs (#3546 CI).
+const daemonRoot = path.join(repoRoot, DAEMON_SOURCE_ROOT);
+const teardownFile = path.join(daemonRoot, 'session-teardown.ts');
 const LAZY_ANDROID_HELPERS = [
   /platforms[/\\]android[/\\]perf\.ts$/,
   /platforms[/\\]android[/\\]snapshot-helper\.ts$/,
@@ -29,7 +33,7 @@ test('the session teardown eager import closure never evaluates the android clea
   );
 
   expect(
-    offenders.map((file) => path.relative(srcRoot, file)),
+    offenders.map((file) => path.relative(daemonRoot, file)),
     'Load the android perf/snapshot-helper cleanup helpers on demand instead: teardown is shared ' +
       'by every platform, and eagerly evaluating these drags their whole subtree into sessions ' +
       'that never ran an android capture.',
@@ -42,7 +46,7 @@ test('the session teardown eager import closure never evaluates the web managed-
   );
 
   expect(
-    offenders.map((file) => path.relative(srcRoot, file)),
+    offenders.map((file) => path.relative(daemonRoot, file)),
     'Load the agent-browser web provider on demand instead: teardown is shared by every ' +
       'platform, and eagerly evaluating it drags its whole subtree (agent-browser tool ' +
       'resolution, selectors, snapshot/network normalization) into sessions that never opened a ' +
@@ -55,5 +59,5 @@ test('the teardown closure walk is reachable and the dynamic seam exists', () =>
   // guard above pass while proving nothing, so pin a real lower bound…
   const closure = eagerClosureOf(teardownFile);
   expect(closure.length).toBeGreaterThan(20);
-  expect(closure).toContain(path.resolve(srcRoot, 'daemon/materialized-path-registry.ts'));
+  expect(closure).toContain(path.join(daemonRoot, 'materialized-path-registry.ts'));
 });

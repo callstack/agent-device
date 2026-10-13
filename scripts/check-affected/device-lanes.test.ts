@@ -127,7 +127,7 @@ test('the fixture app owns the mobile lanes whichever subtree changes', () => {
 
 test('unit tests under src/ and packages/*/src own no lane', () => {
   for (const file of [
-    'src/daemon/selectors.test.ts',
+    'packages/daemon/src/handlers/snapshot-runtime-route.test.ts',
     'src/__tests__/contracts/interaction-guarantees.test.ts',
     'packages/platform-apple/src/core/__tests__/apps.test.ts',
     'packages/platform-apple/src/runtime.test.ts',

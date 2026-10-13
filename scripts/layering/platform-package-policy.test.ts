@@ -171,7 +171,7 @@ test('composition policy does not pin local platform-module identifier spelling'
 test('external consumers use root facades with static imports only at the interactor seam', () => {
   const staticImport = validSources();
   staticImport.set(
-    'src/daemon/not-the-root.ts',
+    'packages/daemon/src/not-the-root.ts',
     "import { applePlatformMetadata } from '@agent-device/platform-apple';",
   );
   assert.match(
@@ -184,7 +184,7 @@ test('external consumers use root facades with static imports only at the intera
     "void import('@agent-device/platform-apple');",
   ]) {
     const sources = validSources();
-    sources.set('src/daemon/not-the-root.ts', statement);
+    sources.set('packages/daemon/src/not-the-root.ts', statement);
     assert.match(
       messages(sources).join('\n'),
       /production static imports of '@agent-device\/platform-apple' are limited to/,
@@ -231,7 +231,7 @@ test('external consumers use root facades with static imports only at the intera
 
   const reExport = validSources();
   reExport.set(
-    'src/daemon/not-the-root.ts',
+    'packages/daemon/src/not-the-root.ts',
     "export { applePlatformMetadata } from '@agent-device/platform-apple';",
   );
   assert.match(
@@ -241,7 +241,7 @@ test('external consumers use root facades with static imports only at the intera
 
   const deep = validSources();
   deep.set(
-    'src/daemon/not-the-root.ts',
+    'packages/daemon/src/not-the-root.ts',
     "import { implementation } from '@agent-device/platform-apple/internal';",
   );
   assert.match(
@@ -392,7 +392,7 @@ test('the Android mechanics facet is the named consumer seam and adb host wiring
   const allowed = validSources();
   allowed.set('src/core/interactors/android.ts', mechanicsImport);
   allowed.set('src/sdk/android-adb.ts', mechanicsImport);
-  allowed.set('src/daemon/handlers/session.test.ts', mechanicsImport);
+  allowed.set('packages/daemon/src/handlers/__tests__/session.test.ts', mechanicsImport);
   allowed.set('src/platform-runtime-android-adb-host.ts', hostImport);
   assert.deepEqual(
     messages(allowed).filter((message) => message.includes('may import')),

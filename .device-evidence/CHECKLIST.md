@@ -101,7 +101,7 @@ appended warning:
 The false-attribution class is covered by unit tests rather than a device run, because the device
 cannot show a cache hit on command: `packages/daemon/src/__tests__/capture-disclosure-target-activation.test.ts`
 pins that a cache-reused tree discloses nothing, and
-`src/daemon/interaction/internal/__tests__/interaction-target-activation-disclosure.test.ts` pins that
+`src/__tests__/daemon-composition/interaction/interaction-capture-disclosure.test.ts` pins that
 a press which consumed no capture is not disclosed against an older tree.
 
 ## Why the live activation lane is manual
