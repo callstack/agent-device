@@ -1,3 +1,4 @@
+import { androidFieldValue as fieldValue } from '@agent-device/contracts/snapshot';
 import {
   type AndroidSystemChromeProvenance,
   isAndroidSystemChromeWindowResourceId,
@@ -368,14 +369,13 @@ function normalizeAndroidUiHierarchyNode(
 }
 
 function androidFieldValue(attrs: AndroidUiNodeMetadata): string | null {
-  const type = attrs.className ?? '';
-  const segment = type
-    .slice(Math.max(type.lastIndexOf('.'), type.lastIndexOf('/')) + 1)
-    .toLowerCase();
-  const isField =
-    attrs.editable === true ||
-    attrs.password === true ||
-    /edittext|autocompletetextview/.test(segment);
-  if (!isField) return null;
-  return attrs.hintShowing === true ? '' : attrs.text;
+  return (
+    fieldValue({
+      type: attrs.className,
+      text: attrs.text,
+      editable: attrs.editable,
+      password: attrs.password,
+      hintShowing: attrs.hintShowing,
+    }) ?? null
+  );
 }

@@ -1,3 +1,4 @@
+import { androidFieldValue, isFillableType, normalizeType } from '@agent-device/contracts/snapshot';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { parseBounds } from '@agent-device/kernel/bounds';
 import { AppError } from '@agent-device/kernel/errors';
@@ -185,20 +186,6 @@ function sourceNodeFromAttributes(
 }
 
 /**
- * The Android text entry classes, the same rule `isFillableType` in
- * `@agent-device/contracts/snapshot-text` applies to the class name's last segment; that module is
- * not a package subpath, so the rule is restated here.
- */
-const ANDROID_TEXT_FIELD_CLASS = /edittext|autocompletetextview/;
-
-/** The class name's last segment, lowercased, as `normalizeType` reads a type. */
-function classNameSegment(className: string): string {
-  return className
-    .slice(Math.max(className.lastIndexOf('.'), className.lastIndexOf('/')) + 1)
-    .toLowerCase();
-}
-
-/**
  * How a node is named. An Android node is labelled by its text and falls back to the content
  * description only when it has none, as `normalizeAndroidUiHierarchyNode` reads the same
  * attributes for the native helper; a content description beside visible text travels as
@@ -244,7 +231,7 @@ function androidTextFieldFacts(
   attrs: Record<string, string>,
 ): TextFieldFacts | undefined {
   const password = parseWebDriverBoolean(attrs.password);
-  if (!ANDROID_TEXT_FIELD_CLASS.test(classNameSegment(type)) && password !== true) {
+  if (!(normalizeType(type) && isFillableType(type, 'android')) && password !== true) {
     return undefined;
   }
   return {
@@ -259,16 +246,18 @@ function androidValueFacts(
   type: string,
   attrs: Record<string, string>,
 ): Pick<RawSnapshotNode, 'value' | 'placeholder' | 'hintShowing'> {
-  const isField =
-    parseWebDriverBoolean(attrs.editable) === true ||
-    parseWebDriverBoolean(attrs.password) === true ||
-    ANDROID_TEXT_FIELD_CLASS.test(classNameSegment(type)) ||
-    hasAndroidInputType(attrs['input-type']);
   const hintShowing = parseWebDriverBoolean(
     attrs['showing-hint'] ?? attrs['hint-showing'] ?? attrs.hintShowing,
   );
   return {
-    value: isField ? (hintShowing === true ? '' : attrs.text) : undefined,
+    value: androidFieldValue({
+      type,
+      text: attrs.text,
+      editable:
+        parseWebDriverBoolean(attrs.editable) === true || hasAndroidInputType(attrs['input-type']),
+      password: parseWebDriverBoolean(attrs.password),
+      hintShowing,
+    }),
     ...optionalFact('placeholder', nonEmptyWebDriverAttribute(attrs.hint)),
     ...optionalFact('hintShowing', hintShowing),
   };

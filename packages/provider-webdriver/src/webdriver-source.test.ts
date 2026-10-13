@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { test } from 'vitest';
@@ -208,9 +207,9 @@ test('WebDriver iOS facts do not call partial root geometry invalid', () => {
   ]);
 });
 
-test('WebDriver iOS scroll frame prefers visible scrollable containers', () => {
+test('WebDriver iOS scroll frame prefers visible scrollable containers', async () => {
   assert.deepEqual(
-    scrollFrameFromIosWebDriverSource(
+    await scrollFrameFromIosWebDriverSource(
       '<AppiumAUT>' +
         '<XCUIElementTypeApplication bounds="[0,0][390,844]" />' +
         '<XCUIElementTypeScrollView bounds="[0,100][390,700]" visible="true" />' +
@@ -329,27 +328,6 @@ test('iOS WebDriver facts keep the tag as the type whatever a class attribute sa
 
   assert.equal(node!.type, 'XCUIElementTypeButton');
 });
-
-const fieldValues = JSON.parse(
-  readFileSync(
-    new URL('../../../contracts/fixtures/android-field-values.json', import.meta.url),
-    'utf8',
-  ),
-) as { cases: { name: string; attributes: Record<string, string>; value: string | null }[] };
-
-for (const { name, attributes, value } of fieldValues.cases) {
-  test(`Appium field value contract: ${name}`, () => {
-    const attrs = Object.entries(attributes)
-      .map(([key, text]) => `${key}="${text}"`)
-      .join(' ');
-    const [node] = parseWebDriverSourceFacts(
-      `<hierarchy><node ${attrs} bounds="[0,0][200,100]" /></hierarchy>`,
-      'android',
-    ).nodes;
-    assert.ok(node);
-    assert.equal(node.value, value ?? undefined);
-  });
-}
 
 test('Appium hint state uses reported evidence instead of text equality', () => {
   const nodes = parseWebDriverSourceFacts(

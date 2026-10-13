@@ -30,6 +30,27 @@ export function isFillableType(type: string, platform: Platform | PublicPlatform
   );
 }
 
+export function androidFieldValue({
+  type,
+  text,
+  editable,
+  password,
+  hintShowing,
+}: {
+  type?: string | null;
+  text?: string | null;
+  editable?: boolean;
+  password?: boolean;
+  hintShowing?: boolean;
+}): string | undefined {
+  const isField =
+    editable === true ||
+    password === true ||
+    (Boolean(normalizeType(type ?? '')) && isFillableType(type ?? '', 'android'));
+  if (!isField) return undefined;
+  return hintShowing === true ? '' : (text ?? undefined);
+}
+
 export function isMeaningfulLabel(value: string): boolean {
   const trimmed = value.trim();
   if (!trimmed) return false;

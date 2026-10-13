@@ -311,7 +311,9 @@ them. Explicit `false` and `0` are kept; an absent field means the fact was unav
   (React Native writes `Tab`, `Tab List`, `Radio Group`, `Link`, `Menu`), when the class alone would
   not say what the control is. The `type` stays the class; a consumer maps the description to a role.
 - `value` contains an Android text field's content, including custom controls that report they are
-  editable. Static labels carry text in `label` and have no `value`. `value: ""` means the field
+  editable. Static labels carry text in `label` and have no `value`. Saved selectors and replay
+  scripts that use `value=` for static labels no longer match; change them to `label=`.
+  `value: ""` means the field
   reports empty text or `hintShowing: true`; an absent `value` means no field text was reported.
 - `placeholder` carries the hint separately, whether the field is empty or filled. A field showing
   its hint reports `hintShowing: true` and `value: ""`; a field without a hint omits `placeholder`.

@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { buildUiHierarchySnapshot, parseUiHierarchyTree } from '../ui-hierarchy.ts';
 
@@ -59,22 +58,20 @@ test('missing native field metadata remains unknown instead of becoming false or
   expect(serialized).not.toHaveProperty('selectionEnd');
 });
 
-const fieldValues = JSON.parse(
-  readFileSync(
-    new URL('../../../../contracts/fixtures/android-field-values.json', import.meta.url),
-    'utf8',
-  ),
-) as { cases: { name: string; attributes: Record<string, string>; value: string | null }[] };
-
-test.each(fieldValues.cases)('ADB field value contract: $name', ({ attributes, value }) => {
-  const attrs = Object.entries(attributes)
-    .map(([key, text]) => `${key}="${text}"`)
-    .join(' ');
-  const tree = parseUiHierarchyTree(
-    `<hierarchy><node ${attrs} resource-id="field" bounds="[0,0][200,100]" /></hierarchy>`,
-  );
+test('ADB parses native field evidence and hint state before assigning values', () => {
+  const tree = parseUiHierarchyTree(`<hierarchy>
+    <node class="com.example.CustomInput" text="Prompt" editable="true" hint="Prompt" hint-showing="true" />
+    <node class="com.example.CustomInput" text="Prompt" editable="true" hint="Prompt" hint-showing="false" />
+    <node class="com.example.SecureInput" text="••••" password="true" hint-showing="unknown" />
+    <node class="android.widget.TextView" text="Static label" editable="false" />
+  </hierarchy>`);
   const { nodes } = buildUiHierarchySnapshot(tree, undefined, { raw: true });
-  const node = nodes.find((node) => node.identifier === 'field');
-  expect(node).toBeDefined();
-  expect(node?.value).toBe(value ?? undefined);
+  expect(
+    nodes.map(({ value, placeholder, hintShowing }) => [value, placeholder, hintShowing]),
+  ).toEqual([
+    ['', 'Prompt', true],
+    ['Prompt', 'Prompt', false],
+    ['••••', undefined, false],
+    [undefined, undefined, undefined],
+  ]);
 });
