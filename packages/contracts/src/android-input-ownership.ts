@@ -154,8 +154,8 @@ function normalizeAndroidPackageName(value: string | null | undefined): string |
  * cannot reach them; each node still carries its producing UIKit class in `role`. The table is
  * exact class names only, so a near miss fails closed rather than widening what counts as
  * keyboard-owned (the same discipline the snapshot geometry policy applies to private UIKit
- * roles). Classes are locale-independent, unlike every label these nodes carry, and private to
- * the keyboard surfaces — an app cannot host one in its own view tree.
+ * roles). Classes are locale-independent, unlike every label these nodes carry, and an app cannot
+ * instantiate them.
  *
  * Four ownership shapes, because "produced by the keyboard" is not one question:
  * - {@link IOS_KEYBOARD_SURFACE_ROLES}: nodes the keyboard owns PER NODE, safe for geometry
