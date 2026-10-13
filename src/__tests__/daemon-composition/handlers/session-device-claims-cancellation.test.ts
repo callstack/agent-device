@@ -86,7 +86,14 @@ async function realLifecycleBinding(
 const bindRealLifecycleRuntime: BindDeviceRuntime = async (device, use) =>
   narrowDeviceBinding(await realLifecycleBinding(device), use);
 
+let previousClaimsDir: string | undefined;
+
 afterEach(() => {
+  // The claims-dir override is this suite's scope: restore it so later tests in
+  // the same worker never inspect or write claims under this case's temp root.
+  if (previousClaimsDir === undefined) delete process.env.AGENT_DEVICE_CLAIMS_DIR;
+  else process.env.AGENT_DEVICE_CLAIMS_DIR = previousClaimsDir;
+  previousClaimsDir = undefined;
   vi.clearAllMocks();
   mockEnsureDeviceReady.mockResolvedValue(undefined);
   mockResolveAndroidPackage.mockResolvedValue(undefined);
@@ -95,6 +102,7 @@ afterEach(() => {
 function setup(): { store: SessionStore; stateDir: string } {
   const stateDir = mkdtempForTestSync('agent-device-session-device-claim-');
   const claimsDir = path.join(stateDir, 'claims');
+  previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
   process.env.AGENT_DEVICE_CLAIMS_DIR = claimsDir;
   return { store: new SessionStore(path.join(stateDir, 'sessions')), stateDir };
 }
