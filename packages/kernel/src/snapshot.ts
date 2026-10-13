@@ -309,6 +309,12 @@ export type RawSnapshotNode = {
   parentIndex?: number;
   pid?: number;
   bundleId?: string;
+  /**
+   * Android status/navigation bar subtree membership, retained when ancestors are omitted.
+   * Shade headers, dialogs, and other SystemUI overlays are not bars. Absent means the
+   * producer did not establish bar membership.
+   */
+  systemBar?: 'status' | 'navigation';
   appName?: string;
   windowTitle?: string;
   surface?: string;

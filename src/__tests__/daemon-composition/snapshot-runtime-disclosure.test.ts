@@ -5,7 +5,7 @@ import type { IosTargetActivation, PostGestureOutcome } from '@agent-device/kern
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { markDeferredInteractionOutcome } from '@agent-device/daemon/testing/deferred-interaction-outcome';
-import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeAndroidSession, makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import { handleSnapshotCommands } from '@agent-device/daemon/testing/handlers/snapshot';
@@ -148,11 +148,13 @@ test('a snapshot after a scroll that moved nothing warns and stamps the no-effec
   expect(input.sessionStore.get(input.sessionName)?.snapshot?.postGestureOutcome).toEqual(outcome);
 });
 
-function scenario(params: { storedRepair?: boolean }) {
+function scenario(params: { storedRepair?: boolean; android?: boolean }) {
   const root = mkdtempForTestSync('agent-device-snapshot-target-activation');
   const sessionName = 'default';
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  const session = makeIosSession(sessionName, { appBundleId: 'com.example.app' });
+  const session = params.android
+    ? makeAndroidSession(sessionName)
+    : makeIosSession(sessionName, { appBundleId: 'com.example.app' });
   if (params.storedRepair) {
     session.snapshot = {
       createdAt: Date.now(),
@@ -186,3 +188,33 @@ async function dispatchSnapshot(
   if (!response) throw new Error('snapshot route did not answer');
   return response;
 }
+
+test('Android public snapshots preserve system-bar membership and strip only private settle provenance', async () => {
+  const input = scenario({ android: true });
+  legacyDispatchCapture.mockResolvedValue({
+    backend: 'android',
+    nodes: [
+      {
+        index: 0,
+        type: 'android.widget.Button',
+        label: 'Back',
+        bundleId: 'com.android.systemui',
+        systemBar: 'navigation',
+        systemChrome: true,
+      },
+      {
+        index: 1,
+        type: 'android.widget.TextView',
+        label: 'Shade clock',
+        bundleId: 'com.android.systemui',
+        systemChrome: true,
+      },
+    ],
+  });
+  const response = await dispatchSnapshot(input);
+  expect(response.ok).toBe(true);
+  const nodes = JSON.parse(JSON.stringify(response.data?.nodes));
+  expect(nodes[0].systemBar).toBe('navigation');
+  expect(nodes[1]).not.toHaveProperty('systemBar');
+  expect(nodes.every((node: object) => !('systemChrome' in node))).toBe(true);
+});

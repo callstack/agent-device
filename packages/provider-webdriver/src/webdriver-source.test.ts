@@ -328,3 +328,46 @@ test('iOS WebDriver facts keep the tag as the type whatever a class attribute sa
 
   assert.equal(node!.type, 'XCUIElementTypeButton');
 });
+
+test('Android WebDriver carries package identity and system-bar membership per same-package subtree', () => {
+  const source = `<hierarchy>
+    <android.widget.FrameLayout package="com.android.systemui" resource-id="com.android.systemui:id/status_bar">
+      <android.widget.TextView package="com.android.systemui" text="Clock" />
+      <android.widget.Button package="com.example" text="Foreign" />
+      <android.widget.TextView text="Unknown owner" />
+    </android.widget.FrameLayout>
+    <android.widget.FrameLayout package="com.android.systemui" resource-id="com.android.systemui:id/navigation_bar_frame">
+      <android.widget.Button package="com.android.systemui" text="Back" />
+    </android.widget.FrameLayout>
+    <android.widget.FrameLayout package="com.android.systemui" resource-id="com.android.systemui:id/split_shade_status_bar">
+      <android.widget.TextView package="com.android.systemui" text="Shade clock" />
+    </android.widget.FrameLayout>
+    <android.widget.Button package="com.android.systemui" resource-id="com.android.systemui:id/status_bar_notification_row" text="Popup" />
+    <android.widget.Button package="android" text="Dialog" />
+  </hierarchy>`;
+  const nodes = parseWebDriverSourceFacts(source, 'android').nodes;
+  assert.deepEqual(
+    nodes.map((node) => node.systemBar),
+    [
+      'status',
+      'status',
+      undefined,
+      undefined,
+      'navigation',
+      'navigation',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ],
+  );
+  assert.equal(nodes.find((node) => node.label === 'Clock')?.bundleId, 'com.android.systemui');
+  assert.equal(nodes.find((node) => node.label === 'Foreign')?.bundleId, 'com.example');
+  assert.equal(nodes.find((node) => node.label === 'Dialog')?.bundleId, 'android');
+  assert.equal(nodes.find((node) => node.label === 'Unknown owner')?.bundleId, undefined);
+  assert.ok(
+    parseWebDriverSourceFacts(source, 'ios').nodes.every(
+      (node) => !('systemBar' in node) && !('bundleId' in node),
+    ),
+  );
+});

@@ -1,3 +1,4 @@
+import { androidSystemBarMembership } from '@agent-device/contracts/android-system-chrome';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { parseBounds } from '@agent-device/kernel/bounds';
 import { AppError } from '@agent-device/kernel/errors';
@@ -96,6 +97,17 @@ export function parseWebDriverSourceFacts(
   for (const root of roots) {
     appendSourceNodes(nodes, root, undefined, 0, sourceRoots, platform);
   }
+  if (platform === 'android') {
+    for (const node of nodes) {
+      const parent = node.parentIndex === undefined ? undefined : nodes[node.parentIndex];
+      const systemBar = androidSystemBarMembership(
+        node.bundleId,
+        node.identifier,
+        parent?.systemBar,
+      );
+      if (systemBar) node.systemBar = systemBar;
+    }
+  }
   return { nodes, roots: sourceRoots };
 }
 
@@ -173,6 +185,7 @@ function sourceNodeFromAttributes(
     ...labelFacts(attrs, platform),
     value: field === undefined ? nonEmptyWebDriverAttribute(attrs.value) : field.value,
     identifier: firstWebDriverAttribute(attrs, ['resource-id', 'id', 'accessibility-id', 'name']),
+    ...(platform === 'android' && attrs.package ? { bundleId: attrs.package } : {}),
     rect,
     ...sourceStateFacts(attrs, rect, platform),
     ...(field === undefined ? {} : field.facts),

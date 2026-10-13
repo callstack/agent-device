@@ -546,3 +546,20 @@ test('a subtree-role host with no surface or marker sibling still strips its sub
   );
   assert.equal(chromeRefs.size, 4);
 });
+
+test('public bar membership classifies an ancestor-free leaf without hiding an actionable SystemUI overlay', () => {
+  const nodes = attachRefs([
+    { index: 0, bundleId: 'com.android.systemui', label: 'Back', systemBar: 'navigation' },
+    {
+      index: 1,
+      bundleId: 'com.android.systemui',
+      label: 'Volume',
+      identifier: 'com.android.systemui:id/volume_dialog',
+    },
+  ]);
+  assert.deepEqual([...collectSettleChromeRefs(nodes, 'com.example')], [nodes[0]!.ref]);
+  assert.deepEqual(
+    withoutSettleChrome(nodes, 'com.example').map((node) => node.label),
+    ['Volume'],
+  );
+});

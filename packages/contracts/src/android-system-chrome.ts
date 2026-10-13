@@ -1,4 +1,4 @@
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 /**
  * Android status-bar/navigation-bar chrome identity, shared by the settle-chrome
@@ -22,7 +22,31 @@ export function isAndroidSystemChromeWindowResourceId(
   return /(^|_)(status_bar|navigation_bar)(_|$)/.test(leaf);
 }
 
-/** Android-internal provenance retained in daemon session snapshots only. */
+/**
+ * Persistent bar container membership, separate from the broader settle-chrome predicate.
+ * The expanded shade's `split_shade_status_bar` is a shade header, not a persistent bar.
+ * Ownership is checked at every edge so a foreign or unknown-owner child cannot inherit it.
+ */
+export function androidSystemBarMembership(
+  packageName: string | null | undefined,
+  resourceId: string | null | undefined,
+  ancestorMembership?: RawSnapshotNode['systemBar'],
+): RawSnapshotNode['systemBar'] {
+  if (packageName !== ANDROID_SYSTEM_CHROME_PACKAGE) return undefined;
+  switch (resourceId) {
+    case 'com.android.systemui:id/status_bar':
+    case 'com.android.systemui:id/status_bar_container':
+    case 'com.android.systemui:id/status_bar_launch_animation_container':
+      return 'status';
+    case 'com.android.systemui:id/navigation_bar':
+    case 'com.android.systemui:id/navigation_bar_frame':
+      return 'navigation';
+    default:
+      return ancestorMembership;
+  }
+}
+
+/** Android-internal settle provenance retained in daemon session snapshots only. */
 export type AndroidSystemChromeProvenance = {
   systemChrome?: true;
 };
