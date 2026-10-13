@@ -20,8 +20,5 @@ export function providerDeviceAdmissionFixture(runtimes: ProviderDeviceRuntime[]
     setActive: (next: ProviderDeviceRuntime[]) => {
       activeRuntimes = [...next];
     },
-    reset: () => {
-      activeRuntimes = [];
-    },
   };
 }
