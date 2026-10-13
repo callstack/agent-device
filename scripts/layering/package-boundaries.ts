@@ -32,7 +32,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseImports, resolveWorkspaceSpecifier } from './model.ts';
-import { listTrackedPackageManifests, listTrackedProductionSources } from './tracked-sources.ts';
+import {
+  DAEMON_SOURCE_ROOT,
+  listTrackedPackageManifests,
+  listTrackedProductionSources,
+} from './tracked-sources.ts';
 
 export type PackageBoundaryViolation = {
   rule: string;
@@ -174,9 +178,19 @@ function namedByExports(target: WorkspacePackage, specifier: string): boolean {
   return resolveWorkspaceSpecifier(specifier, target.exportTargets) !== undefined;
 }
 
-// Root `test/`, package-local `packages/*/test/`, *.test.*, and __tests__ trees are all
-// test consumers — the same file vocabulary TEST_ONLY_FIXTURE_SUBPATHS' predicate uses.
-const TEST_FILE_RE = /(^|\/)__tests__\/|\.test\.[cm]?[jt]sx?$|(?:^|\/)test\//;
+const TEST_CONSUMER_RE = /(^|\/)__tests__\/|\.test\.[cm]?[jt]sx?$|(?:^|\/)test\//;
+
+/**
+ * The one file vocabulary for "this file consumes test data": the root `test/` tree, a
+ * package-local `test/` harness tree, `*.test.*` files, and `__tests__/` trees (root or
+ * nested). Both test-data gates call this — the `./testing/` façade check and the
+ * TEST_ONLY_FIXTURE_SUBPATHS predicate — so what counts as a test consumer is one rule,
+ * not two spellings that drift. Pinned by an accept/deny table in
+ * `package-boundaries-facade.test.ts`.
+ */
+export function isTestConsumerFile(file: string): boolean {
+  return TEST_CONSUMER_RE.test(file);
+}
 
 /**
  * Façade policy (ADR-0033 amendment): a package publishes test data only under its
@@ -193,7 +207,7 @@ function checkTestDataOnlySites(
 ): PackageBoundaryViolation | undefined {
   if (!site.specifier.startsWith(`${target.name}/testing/`)) return undefined;
   if (!namedByExports(target, site.specifier)) return undefined;
-  if (TEST_FILE_RE.test(site.file)) return undefined;
+  if (isTestConsumerFile(site.file)) return undefined;
   return {
     rule: 'R11 package-boundaries',
     file: site.file,
@@ -244,12 +258,6 @@ export const TEST_ONLY_FIXTURE_SUBPATHS: ReadonlySet<string> = new Set([
   '@agent-device/replay-port/replay-script-source-fixtures',
 ]);
 
-// Root `test/`, package-local `packages/<pkg>/test/`, *.test.ts, and __tests__ trees are test
-// consumers; anything else is production. Mirrors R13's non-production predicate.
-function isTestConsumerFile(file: string): boolean {
-  return /(?:^|\/)test\//.test(file) || file.endsWith('.test.ts') || file.includes('/__tests__/');
-}
-
 /** Consumer side of `TEST_ONLY_FIXTURE_SUBPATHS`. */
 function importsTestOnlyFixtureFromProduction(file: string, specifier: string): boolean {
   return TEST_ONLY_FIXTURE_SUBPATHS.has(specifier) && !isTestConsumerFile(file);
@@ -265,8 +273,7 @@ export const CLIENT_ONLY_SUBPATHS: ReadonlySet<string> = new Set([
   '@agent-device/replay-port/source-discovery',
 ]);
 
-const DAEMON_SOURCE_FILE = /^(?:src\/daemon|packages\/daemon\/src)\//;
-// The daemon process also runs its root entry and composition root, outside the daemon tree.
+// The daemon process also runs its root entry and composition root, outside the daemon package.
 const DAEMON_PROCESS_ROOT_FILES: ReadonlySet<string> = new Set([
   'src/daemon.ts',
   'src/daemon-composition.ts',
@@ -275,7 +282,7 @@ const DAEMON_PROCESS_ROOT_FILES: ReadonlySet<string> = new Set([
 function importsClientOnlyFromDaemon(file: string, specifier: string): boolean {
   return (
     CLIENT_ONLY_SUBPATHS.has(specifier) &&
-    (DAEMON_SOURCE_FILE.test(file) || DAEMON_PROCESS_ROOT_FILES.has(file)) &&
+    (file.startsWith(DAEMON_SOURCE_ROOT) || DAEMON_PROCESS_ROOT_FILES.has(file)) &&
     !isTestConsumerFile(file)
   );
 }

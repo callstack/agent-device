@@ -36,7 +36,6 @@ test('the caller-side replay source subpaths are denied to daemon production cod
         : checkPackageInternalSites(daemon, sites(file), [], true);
     for (const file of [
       'src/commands/replay/index.ts',
-      'src/daemon/__tests__/replay.test.ts',
       'packages/daemon/src/__tests__/replay.test.ts',
     ]) {
       assert.deepEqual(
@@ -46,7 +45,6 @@ test('the caller-side replay source subpaths are denied to daemon production cod
       );
     }
     for (const file of [
-      'src/daemon/replay-runtime.ts',
       'packages/daemon/src/replay-runtime.ts',
       'src/daemon.ts',
       'src/daemon-composition.ts',

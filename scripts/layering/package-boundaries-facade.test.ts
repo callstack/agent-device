@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import {
   checkPackageInternalSites,
   checkRootSites,
+  isTestConsumerFile,
   specifierSites,
   workspacePackagesFromManifests,
 } from './package-boundaries.ts';
@@ -138,6 +139,36 @@ test('a package-local test/ tree is a test consumer, its src/ tree is not', () =
   );
   assert.equal(denied.length, 1);
   assert.match(denied[0]!.message, /publishes test data to test files only/);
+});
+
+test('isTestConsumerFile accepts the test vocabulary and denies production files', () => {
+  // One spelling serves both test-data gates (the ./testing/ façade check and the
+  // TEST_ONLY_FIXTURE_SUBPATHS predicate), so the vocabulary itself is pinned here:
+  // every accepted shape forwards to both gates, and the shapes that once spelled
+  // differently across the two copies (.test.tsx, .mts, a root __tests__/ tree) are
+  // in the accepted set (#3546 review).
+  for (const file of [
+    'test/integration/consumer.ts',
+    'packages/daemon-side/test/harness.ts',
+    'src/daemon/__tests__/consumer.ts',
+    '__tests__/root-consumer.ts',
+    'scripts/layering/daemon-layers.test.tsx',
+    'src/daemon/session-store.test.mts',
+    'src/foo.test.js',
+    'src/foo.test.cjs',
+  ]) {
+    assert.equal(isTestConsumerFile(file), true, file);
+  }
+  for (const file of [
+    'src/commands/inventory.ts',
+    'packages/kernel/src/errors.ts',
+    'scripts/layering/package-boundaries.ts',
+    'testbed/notes.ts',
+    'docs/writing/tests.ts',
+    'src/foo.ts',
+  ]) {
+    assert.equal(isTestConsumerFile(file), false, file);
+  }
 });
 
 test('a pattern entry matches deep specifiers, and an unnamed one is refused in scripts/', () => {
