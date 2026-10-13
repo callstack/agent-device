@@ -1,7 +1,7 @@
 export {
   type ConfirmedProcessStop,
-  type ConfirmedProcessStopDetails,
   confirmedProcessStopDetails,
+  type ConfirmedProcessStopDetails,
   describeUnconfirmedProcessStop,
   expandProcessTree,
   hostCurrentWorkingDirectory,
@@ -20,6 +20,7 @@ export {
   type ProcessStopBudget,
   type ProcessStopIdentity,
   type ProcessStopTarget,
+  readConfirmedProcessStopDetails,
   readHostCpuArch,
   readHostCpuArchSync,
   readHostEnvironmentVariable,

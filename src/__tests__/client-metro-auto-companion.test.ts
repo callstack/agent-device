@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { AppError } from '@agent-device/kernel/errors';
 
 vi.mock('../metro/client-metro-companion.ts', () => ({
   ensureMetroCompanion: vi.fn(),
@@ -224,7 +225,7 @@ test('prepareMetroRuntime rejects bridged descriptors without iOS bundle URLs', 
   }
 });
 
-test('prepareMetroRuntime preserves the initial bridge error if companion startup fails', async () => {
+test('prepareMetroRuntime preserves the initial bridge error and companion stop verdict', async () => {
   const tempRoot = mkdtempForTestSync('agent-device-metro-companion-error-');
   const projectRoot = path.join(tempRoot, 'project');
   fs.mkdirSync(path.join(projectRoot, 'node_modules'), { recursive: true });
@@ -239,7 +240,21 @@ test('prepareMetroRuntime preserves the initial bridge error if companion startu
     }),
   );
 
-  vi.mocked(ensureMetroCompanion).mockRejectedValue(new Error('companion startup failed'));
+  vi.mocked(ensureMetroCompanion).mockRejectedValue(
+    // A companion stop that could not confirm the exit arrives typed, and the wrapper flattens the
+    // message into a `bridgeError=` fragment: the verdict has to travel in `details` to be usable.
+    // The companion's own artifact paths and advice travel beside it, and must not be forwarded:
+    // they describe a file this caller did not ask about.
+    new AppError('COMMAND_FAILED', 'companion startup failed', {
+      reason: 'signal-failed',
+      signal: 'SIGTERM',
+      errno: 'EPERM',
+      pid: 4101,
+      statePath: '/tmp/project/.agent-device/metro-companion.json',
+      logPath: '/tmp/project/.agent-device/metro-companion.log',
+      hint: 'a retry acts on that same companion',
+    }),
+  );
 
   const fetchMock = vi.fn();
   fetchMock.mockResolvedValueOnce({
@@ -269,6 +284,14 @@ test('prepareMetroRuntime preserves the initial bridge error if companion startu
         assert.match(error.message, /bridgeError=companion startup failed/);
         assert.match(error.message, /initialBridgeError=initial bridge auth failed/);
         assert.doesNotMatch(error.message, /metroCompanionLog=/);
+        const details = (error as AppError).details;
+        assert.equal(details?.reason, 'signal-failed');
+        assert.equal(details?.signal, 'SIGTERM');
+        assert.equal(details?.errno, 'EPERM');
+        assert.equal(details?.pid, 4101);
+        assert.equal(details?.statePath, undefined);
+        assert.equal(details?.logPath, undefined);
+        assert.equal(details?.hint, undefined);
         return true;
       },
     );

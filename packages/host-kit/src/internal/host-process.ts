@@ -606,6 +606,38 @@ export function describeUnconfirmedProcessStop(pid: number, claimedAs: string): 
   return `pid ${pid} could not be confirmed as ${claimedAs}, so no signal was sent to it`;
 }
 
+/** Which verdict a retained stop recorded, as it travels through untyped error `details`. */
+type ConfirmedProcessStopReason = Extract<ConfirmedProcessStop, { status: 'retained' }>['reason'];
+
+/**
+ * Whether `reason` names a retained stop verdict. Forwarding gates on this rather than on error text,
+ * so an unrelated failure's details cannot be forwarded as one.
+ */
+function isConfirmedProcessStopReason(value: unknown): value is ConfirmedProcessStopReason {
+  return value === 'signal-failed' || value === 'exit-timeout' || value === 'identity-unverified';
+}
+
+/**
+ * The verdict a nested layer published, or nothing when the error carries no stop verdict. A wrapper
+ * that flattens the inner message keeps the verdict in `details` and drops the inner surface's file
+ * paths and advice, which describe a file the caller of the wrapper was not asked about.
+ */
+export function readConfirmedProcessStopDetails(
+  details: Record<string, unknown> | undefined,
+): ConfirmedProcessStopDetails | undefined {
+  const reason = details?.reason;
+  const pid = details?.pid;
+  if (!isConfirmedProcessStopReason(reason) || typeof pid !== 'number') return undefined;
+  const signal = details?.signal;
+  const errno = details?.errno;
+  return {
+    reason,
+    signal: signal === 'SIGTERM' || signal === 'SIGKILL' ? signal : undefined,
+    errno: reason === 'signal-failed' && typeof errno === 'string' ? errno : undefined,
+    pid,
+  };
+}
+
 /**
  * The process to stop, and what the caller recorded about it. A stop signals only a process it can
  * name: an `identity` that claims nothing is unverifiable, and so is one whose claims the host will
