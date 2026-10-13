@@ -50,10 +50,18 @@ export function TickerScreen() {
             </Text>
             <Text style={styles.cell}>{(tick + item) * 2}</Text>
             <Text style={styles.cell}>{(tick + item) * 3}</Text>
-            <Pressable accessibilityRole="button" style={styles.rowButton} testID={`ticker-a-${item}`}>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.rowButton}
+              testID={`ticker-a-${item}`}
+            >
               <Text style={styles.rowButtonLabel}>A{item}</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" style={styles.rowButton} testID={`ticker-b-${item}`}>
+            <Pressable
+              accessibilityRole="button"
+              style={styles.rowButton}
+              testID={`ticker-b-${item}`}
+            >
               <Text style={styles.rowButtonLabel}>B{item}</Text>
             </Pressable>
           </View>
@@ -73,11 +81,31 @@ function createStyles(colors: AppColors) {
   return StyleSheet.create({
     frame: { flex: 1, backgroundColor: colors.surface, padding: 12 },
     title: { color: colors.text, fontSize: 18, fontWeight: '600', marginBottom: 8 },
-    button: { alignSelf: 'flex-start', backgroundColor: colors.accent, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6, marginBottom: 8 },
+    button: {
+      alignSelf: 'flex-start',
+      backgroundColor: colors.accent,
+      borderRadius: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      marginBottom: 8,
+    },
     buttonLabel: { color: colors.surface, fontWeight: '600' },
-    row: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 4,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.line,
+    },
     cell: { color: colors.text, minWidth: 44 },
-    rowButton: { borderWidth: 1, borderColor: colors.line, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+    rowButton: {
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: 4,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
     rowButtonLabel: { color: colors.text, fontSize: 12 },
   });
 }
