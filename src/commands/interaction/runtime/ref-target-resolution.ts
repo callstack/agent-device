@@ -16,7 +16,7 @@ import { STALE_REF_HINT } from '@agent-device/selectors';
 import type { InteractionSnapshot } from './interaction-snapshot-capture.ts';
 import { requireSnapshotSession } from './selector-read-shared.ts';
 import { findNodeByLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
-import { surfaceScopedNodes } from './post-action-surface.ts';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import type {
   InteractionTarget,
   PreresolvedInteractionTarget,
@@ -86,6 +86,7 @@ function adoptPreresolvedRefTarget(
       ...(preresolved.iosSystemSurfaceBundleId
         ? { surfaceBundleId: preresolved.iosSystemSurfaceBundleId }
         : {}),
+      ...(preresolved.presentedSurface ? { presentedSurface: preresolved.presentedSurface } : {}),
     },
     ...(preresolved.keyboard ? { keyboard: preresolved.keyboard } : {}),
     resolved: buildRefResolution(ref, preresolved.node, 'exact'),

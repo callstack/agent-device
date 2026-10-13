@@ -1,5 +1,6 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import type {
   SettleObservation,
   SettleParams,
@@ -84,12 +85,7 @@ export function planGenericSettleObservation(
   const settle = readSettleRequest(params.flags);
   if (!settle) return {};
   const snapshot = params.session.snapshot;
-  const baseline: SurfaceScopedNodes = {
-    nodes: snapshot?.nodes ?? [],
-    ...(snapshot?.iosSystemSurfaceBundleId
-      ? { surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
-      : {}),
-  };
+  const baseline = surfaceScopedNodes(snapshot);
   return { observe: async () => await observeSettled(params, settle, baseline) };
 }
 

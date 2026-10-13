@@ -1,6 +1,12 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceKind, DeviceTarget, PublicPlatform } from '@agent-device/kernel/device';
-import type { Point, Rect, SnapshotKeyboardBandFact } from '@agent-device/kernel/snapshot';
+import type {
+  Point,
+  PresentedSurface,
+  Rect,
+  SnapshotKeyboardBandFact,
+} from '@agent-device/kernel/snapshot';
+import { PRESENTED_SURFACE_STATES } from '@agent-device/kernel/snapshot';
 
 function readRequired<T>(
   record: Record<string, unknown>,
@@ -151,6 +157,22 @@ function readKeyboardFrameFact(
   return kind === 'derived'
     ? { kind: 'derived', derivation: 'docked-tree', frame }
     : { kind: 'visible', frame };
+}
+
+/**
+ * Reads a producer's presented-surface fact (#3565) out of an untyped payload, shared by the Apple
+ * runner's wire reader and the daemon's Node client reader. The argument is the value already read
+ * under the fact's own key, so `undefined` is the producer stating nothing and stays silence. A
+ * value under that key which is not one of the three states is restated as `'unknown'` rather than
+ * dropped: the reader cannot tell a malformed `'absent'` from a genuine one, and silence would leave
+ * a consumer that arms a dismissal confirmation on `undefined` — which is exactly the guessing this
+ * fact retires. Only a named state is trusted.
+ */
+export function readPresentedSurfaceFact(value: unknown): PresentedSurface | undefined {
+  if (value === undefined) return undefined;
+  return (PRESENTED_SURFACE_STATES as readonly unknown[]).includes(value)
+    ? (value as PresentedSurface)
+    : 'unknown';
 }
 
 export function parsePoint(value: unknown): Point | undefined {

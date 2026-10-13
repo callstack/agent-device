@@ -1,4 +1,9 @@
-import type { Point, SnapshotKeyboardBandFact, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type {
+  PresentedSurface,
+  Point,
+  SnapshotKeyboardBandFact,
+  SnapshotNode,
+} from '@agent-device/kernel/snapshot';
 import type { ResponseCost } from '@agent-device/kernel/contracts';
 import type { ClickButton } from './click-button.ts';
 import type { FillUnconfirmedVerification } from './fill-evidence.ts';
@@ -128,6 +133,11 @@ export type PreresolvedInteractionTarget = {
    */
   iosSystemSurfaceBundleId?: string;
   /**
+   * Whether the capture `nodes` came from read a modal presentation over the app (#3565), carried so
+   * the adopting leaf's settle baseline keeps the fact its own capture established.
+   */
+  presentedSurface?: PresentedSurface;
+  /**
    * The keyboard band the capture of `nodes` measured, carried so the adopting consumer's keyboard
    * guard reads the same band the tree was captured with instead of re-deriving one (#2660).
    */
@@ -148,6 +158,13 @@ export type SurfaceScopedNodes = {
   nodes: SnapshotNode[];
   /** Bundle id of the in-place iOS system surface; absent for ordinary app content. */
   surfaceBundleId?: string;
+  /**
+   * Whether the capture these nodes came from read a modal presentation over the app (#3565). The
+   * settle baseline is carried in this type, so the fact has to travel with the nodes: a consumer
+   * that arms #1831's dismissal confirmation reads it here instead of guessing from the tree.
+   * Absent means the capture's producer published no fact.
+   */
+  presentedSurface?: PresentedSurface;
 };
 
 /** Which tree a resolved `@ref`'s node was read from (ADR 0014 step 5). */

@@ -17,6 +17,7 @@ import type {
   IosSnapshotComparisonIdentity,
 } from './ios-snapshot.ts';
 import type {
+  PresentedSurface,
   RawSnapshotNode,
   Point,
   Rect,
@@ -265,6 +266,12 @@ export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & 
    * over the session app rather than the app itself (#2438).
    */
   systemSurface?: IosSystemSurfaceProvenance;
+  /**
+   * Whether this capture read a modal presentation over the app (#3565), computed by the producer on
+   * the acquired tree before any projection. Absent means the producer published no fact at all,
+   * which a consumer must treat as `'unknown'`.
+   */
+  presentedSurface?: PresentedSurface;
   /**
    * Keyboard evidence acquired with this tree: measured `visible`, policy-derived `derived`,
    * additive `visibility-only`, rejected `tree-rejected`, proven `absent`, or unknown `unmeasurable` facts. Measured and

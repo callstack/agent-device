@@ -264,6 +264,7 @@ async function captureAppleRunnerSnapshot(
     ...(presentation.viewport ? { viewport: presentation.viewport } : {}),
     ...(result.quality ? { quality: result.quality } : {}),
     ...(result.systemSurface ? { systemSurface: result.systemSurface } : {}),
+    ...(result.presentedSurface ? { presentedSurface: result.presentedSurface } : {}),
     ...(result.keyboard ? { keyboard: result.keyboard } : {}),
     ...(result.targetActivation ? { targetActivation: result.targetActivation } : {}),
     ...(result.observation ? { observation: result.observation } : {}),

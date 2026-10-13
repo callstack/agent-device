@@ -13,7 +13,7 @@ import {
 } from './interaction-snapshot-capture.ts';
 import { containsPoint } from '@agent-device/kernel/rect';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
-import { surfaceScopedNodes } from './post-action-surface.ts';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import type {
   InteractionTarget,
   PointTarget,

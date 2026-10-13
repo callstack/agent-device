@@ -10,7 +10,7 @@ import { errorResponse } from '@agent-device/kernel/contracts';
 
 /** The tree a mutating find resolves its target against, plus what the capture disclosed. */
 export type FindTargetTree = CaptureProvenance &
-  Pick<SnapshotState, 'nodes' | 'snapshotQuality' | 'keyboard'>;
+  Pick<SnapshotState, 'nodes' | 'snapshotQuality' | 'keyboard' | 'presentedSurface'>;
 
 /**
  * Find's target capture. A mutating find (click/fill/focus/type) resolves its target from its

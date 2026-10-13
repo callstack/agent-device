@@ -10,6 +10,7 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import type {
+  PresentedSurface,
   SnapshotKeyboardBandFact,
   SnapshotNode,
   SnapshotState,
@@ -67,6 +68,13 @@ export type SnapshotCommandResult = {
    * a zero. See `CaptureSnapshotResult.viewport` for what each producer measures.
    */
   viewport?: SnapshotViewportSize;
+  /**
+   * iOS: whether this capture read a modal presentation over the app (#3565), decided on the acquired
+   * tree before interactive filtering, compaction, depth, or scope. `'absent'` is read, never
+   * defaulted; a producer that could not decide says `'unknown'` and one that never classified — every
+   * non-iOS backend — publishes nothing.
+   */
+  presentedSurface?: PresentedSurface;
 } & PublicSnapshotCaptureAnnotations;
 
 type SnapshotCapture = {
@@ -111,6 +119,9 @@ export const snapshotCommand: RuntimeCommand<
       : {}),
     ...(capture.snapshot.keyboard ? { keyboard: capture.snapshot.keyboard } : {}),
     ...(capture.snapshot.viewport ? { viewport: capture.snapshot.viewport } : {}),
+    ...(capture.snapshot.presentedSurface
+      ? { presentedSurface: capture.snapshot.presentedSurface }
+      : {}),
     ...snapshotAppFields(capture),
   });
 };
@@ -225,6 +236,7 @@ function normalizeBackendSnapshot(
       ...result.snapshot,
       ...(result.keyboard ? { keyboard: result.keyboard } : {}),
       ...(result.viewport ? { viewport: result.viewport } : {}),
+      ...(result.presentedSurface ? { presentedSurface: result.presentedSurface } : {}),
     });
   }
   return {
@@ -234,6 +246,7 @@ function normalizeBackendSnapshot(
     createdAt: now(runtime),
     ...(result.keyboard ? { keyboard: result.keyboard } : {}),
     ...(result.viewport ? { viewport: result.viewport } : {}),
+    ...(result.presentedSurface ? { presentedSurface: result.presentedSurface } : {}),
   };
 }
 

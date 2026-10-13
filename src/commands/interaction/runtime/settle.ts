@@ -5,6 +5,7 @@ import type {
   CommandSessionRecord,
 } from '@agent-device/contracts/runtime-contract';
 import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import { buildSnapshotDiff } from '@agent-device/capture-kit/snapshot-diff';
 import { displayLabel, formatRole } from '@agent-device/capture-kit/snapshot-lines';
 import {
@@ -33,7 +34,6 @@ import {
   crossSurfaceSettleHint,
   resolvePostActionSurfaceChange,
   summarizePostActionEvidence,
-  surfaceScopedNodes,
 } from './post-action-surface.ts';
 
 /**
@@ -242,13 +242,11 @@ function authorizedRefBaseline(
   session: CommandSessionRecord | undefined,
 ): SurfaceScopedNodes | undefined {
   if (resolved.kind !== 'ref') return undefined;
-  const frame = session?.refFrameSnapshot;
-  return frame ? nonEmptyBaseline(surfaceScopedNodes(frame)) : undefined;
+  return nonEmptyBaseline(surfaceScopedNodes(session?.refFrameSnapshot));
 }
 
 function sessionBaseline(session: CommandSessionRecord | undefined): SurfaceScopedNodes {
-  const tree = session?.refFrameSnapshot ?? session?.snapshot;
-  return tree ? surfaceScopedNodes(tree) : { nodes: [] };
+  return surfaceScopedNodes(session?.refFrameSnapshot ?? session?.snapshot);
 }
 
 function nonEmptyBaseline(

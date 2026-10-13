@@ -35,6 +35,7 @@ function snapshotView(data: DaemonResponseData, level: ResponseLevel): DaemonRes
   const carriedFields = [
     'visibility',
     'viewport',
+    'presentedSurface',
     'snapshotQuality',
     'targetActivation',
     'observation',

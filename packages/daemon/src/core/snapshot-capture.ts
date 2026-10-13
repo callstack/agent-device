@@ -11,6 +11,7 @@ import {
   normalizeRef,
   SNAPSHOT_CAPTURE_OPTION_KEYS,
   snapshotOptionsFromFlags,
+  type PresentedSurface,
   type RawSnapshotNode,
   type SnapshotCaptureProvenance,
   type SnapshotKeyboardBandFact,
@@ -54,6 +55,11 @@ type SnapshotData = {
   keyboard?: SnapshotKeyboardBandFact;
   /** The box the capture's rects are measured in (#3182), carried to the state the response reads. */
   viewport?: SnapshotViewportSize;
+  /**
+   * iOS: whether the capture read a modal presentation over the app (#3565), carried to the state
+   * settle's presented-surface confirmation arms on. Absent means the producer published no fact.
+   */
+  presentedSurface?: PresentedSurface;
 } & Omit<SnapshotCaptureAnnotations, 'quality'> &
   SnapshotCaptureProvenance;
 

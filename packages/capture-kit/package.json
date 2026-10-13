@@ -230,6 +230,10 @@
       "types": "./src/snapshot/scroll-edge-state.ts",
       "default": "./src/snapshot/scroll-edge-state.ts"
     },
+    "./snapshot-baseline": {
+      "types": "./src/snapshot-baseline.ts",
+      "default": "./src/snapshot-baseline.ts"
+    },
     "./snapshot-chrome": {
       "types": "./src/snapshot-chrome.ts",
       "default": "./src/snapshot-chrome.ts"

@@ -438,6 +438,11 @@ struct DataPayload: Codable {
   var snapshotQuality: SnapshotQuality?
   /// Set when the capture describes an in-place system surface, not the app itself (#2438).
   var systemSurface: SystemSurfaceProvenancePayload?
+  /// Whether this capture read a modal presentation over the app's own content (#3565). The runner's
+  /// accessibility tree reports no UIKit class names, so a runner capture states `presented` from
+  /// positive evidence and `unknown` otherwise; `absent` belongs to a producer that can read window
+  /// structure, and a tier that classified nothing publishes no key at all.
+  var presentedSurface: PresentedSurface?
   /// The keyboard band this capture measured, when the tier that answered reads keyboards at all
   /// (#2660). Absent means the query-sweep or private-AX tier answered, and the daemon's tap guard
   /// keeps deriving the band from the tree.
