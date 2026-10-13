@@ -74,6 +74,52 @@ test('a named alias wins over a pattern alias that also matches it', () => {
   );
 });
 
+test('overlapping patterns alias in longest-prefix order regardless of declaration order', () => {
+  // The real manifests may happen to declare patterns in the order that hides a
+  // missing sort, so plant the hostile order: `./testing/*` declared BEFORE
+  // `./testing/handlers/*`. Vite applies the first matching alias, so the table
+  // must still hand `testing/handlers/x` to the longer pattern — the same target
+  // resolveWorkspaceSpecifier picks by Node's longest-prefix rule (#3546 review).
+  fs.mkdirSync(path.join(repoRoot, '.tmp'), { recursive: true });
+  const sandboxRoot = fs.mkdtempSync(path.join(repoRoot, '.tmp', 'stryker-overlap-fixture-'));
+  try {
+    const packageDir = path.join(sandboxRoot, 'packages', 'demo');
+    fs.mkdirSync(path.join(packageDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(packageDir, 'package.json'),
+      JSON.stringify({
+        name: '@agent-device/demo',
+        // The targets must differ per pattern or the suffix fill would land both
+        // on the same file and the probe could not tell which alias fired.
+        exports: {
+          './testing/*': { default: './src/shadow/*.ts' },
+          './testing/handlers/*': { default: './src/handlers/*.ts' },
+        },
+      }),
+    );
+    const diskAliases = workspaceSourceAliases(sandboxRoot, 'disk-manifests');
+    const probe = '@agent-device/demo/testing/handlers/x';
+    const alias = diskAliases.find(({ find }) => find.test(probe));
+    assert.ok(alias, `${probe} must hit an alias`);
+    assert.equal(
+      probe.replace(alias.find, alias.replacement),
+      path.join(sandboxRoot, 'packages', 'demo', 'src', 'handlers', 'x.ts'),
+      `${probe} must alias through the longer pattern even though the shorter one was declared first`,
+    );
+    const targets = new Map([
+      ['@agent-device/demo/testing/*', 'packages/demo/src/*.ts'],
+      ['@agent-device/demo/testing/handlers/*', 'packages/demo/src/handlers/*.ts'],
+    ]);
+    assert.equal(
+      probe.replace(alias.find, alias.replacement),
+      path.join(sandboxRoot, resolveWorkspaceSpecifier(probe, targets)!),
+      'the first-matched alias must agree with resolveWorkspaceSpecifier on hostile declaration order too',
+    );
+  } finally {
+    fs.rmSync(sandboxRoot, { recursive: true, force: true });
+  }
+});
+
 test('disk manifests alias an untracked sandbox copy the tracked reader cannot see', () => {
   fs.mkdirSync(path.join(repoRoot, '.tmp'), { recursive: true });
   const sandboxRoot = fs.mkdtempSync(path.join(repoRoot, '.tmp', 'stryker-sandbox-fixture-'));
