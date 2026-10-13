@@ -271,6 +271,11 @@ test(scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'targetStability')[0]!, async () =
 // LEAVE the tree it acted through on the session (#3471) and press B must be screened against it.
 // Deleting either half of that — the writer in `dispatchRuntimeInteraction` or the carrier in
 // `toRuntimeSessionRecord` — leaves B idle, so it taps the vacated point and this fails.
+//
+// Flake surface: this route installs no runtime clock (production never does), so the 500 ms window
+// runs on the wall clock and B must reach its gate read inside it. A host loaded enough to starve
+// this process past the window sends B idle, and B taps — the same `Unexpected provider call:
+// ios.runner.tap` a wiring regression gives. Re-run it unloaded before reading it as one.
 test(
   scenarioNames(RUNTIME_SELECTOR_COVERAGE, 'targetStability')[1]!,
   async () => {
