@@ -305,6 +305,7 @@ no docked band. Neither probe result overrides a resolvable docked tree. Element
 derived frames to refuse an app target whose dispatched tap point is behind the keyboard.
 Run `snapshot -i` again after ending editing before retrying a refused target.
 
+Android Appium nodes carry the reported native package in `bundleId`.
 Provider snapshot nodes may include `keyboardOwned: true`. This means capture witnessed keyboard
 ownership, so the keyboard's own controls remain tappable when projection removes their ancestors.
 An omitted field does not prove app ownership. App-filled assistant hosts do not pass keyboard

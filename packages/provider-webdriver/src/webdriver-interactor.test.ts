@@ -964,7 +964,7 @@ test.each([true, false, 'failed'] as const)(
     const interactor = createWebDriverInteractor({
       client: {
         source: async () =>
-          '<hierarchy><node class="android.widget.FrameLayout" resource-id="com.android.systemui:id/status_bar" bounds="[0,0][1080,100]"/><node class="android.widget.FrameLayout" bounds="[0,100][1080,2400]"><node class="android.widget.Button" text="Form" bounds="[100,1800][300,1840]"/></node><node class="android.widget.FrameLayout" resource-id="com.google.android.inputmethod.latin:id/input_view" bounds="[0,1500][1080,2400]"/></hierarchy>',
+          '<hierarchy><node class="android.widget.FrameLayout" resource-id="com.android.systemui:id/status_bar" bounds="[0,0][1080,100]"/><node class="android.widget.FrameLayout" bounds="[0,100][1080,2400]"><node class="android.widget.Button" text="Form" bounds="[100,1800][300,1840]"/></node><node class="android.widget.FrameLayout" package="com.google.android.inputmethod.latin" bounds="[0,1500][1080,2400]"><node class="android.widget.FrameLayout" package="com.google.android.inputmethod.latin" resource-id="android:id/content" bounds="[0,1500][1080,2274]"/><node class="android.view.View" package="com.google.android.inputmethod.latin" resource-id="android:id/navigationBarBackground" bounds="[0,2274][1080,2400]"/></node></hierarchy>',
         isKeyboardShown: async () => {
           if (visibility === 'failed') throw new Error('probe failed');
           return visibility;
@@ -988,7 +988,8 @@ test.each([true, false, 'failed'] as const)(
       'occluded',
     );
     assert.equal(
-      snapshot.nodes.find((node) => node.identifier?.includes('input_view'))?.keyboardOwned,
+      snapshot.nodes.find((node) => node.bundleId === 'com.google.android.inputmethod.latin')
+        ?.keyboardOwned,
       true,
     );
   },

@@ -425,3 +425,14 @@ test('UiAutomator2 input-type retains custom field content without echoing non-f
     ],
   );
 });
+
+test('Android source preserves native package provenance on anonymous IME windows', () => {
+  const source =
+    '<hierarchy><android.widget.FrameLayout package="com.google.android.inputmethod.latin" bounds="[0,1517][1080,2400]"><android.view.View package="com.google.android.inputmethod.latin" resource-id="android:id/navigationBarBackground" bounds="[0,2274][1080,2400]"/></android.widget.FrameLayout></hierarchy>';
+  const nodes = parseWebDriverSourceFacts(source, 'android').nodes;
+  assert.deepEqual(
+    nodes.map((node) => node.bundleId),
+    ['com.google.android.inputmethod.latin', 'com.google.android.inputmethod.latin'],
+  );
+  assert.equal(nodes[0]?.identifier, undefined);
+});
