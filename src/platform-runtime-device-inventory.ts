@@ -7,11 +7,8 @@ import type {
 import type { DeviceInventoryHost } from '@agent-device/contracts/platform-runtime-host';
 import type { ProviderDeviceInventorySource } from '@agent-device/contracts/device';
 
-// The composition flow lives in @agent-device/device-selection/composed-inventory-gateways, so
-// the test fake there builds on the real one. This module is the production wiring: it attaches
-// the Apple simulator app probe the host owns.
-
-export function createComposedDeviceInventoryGateways(
+// Composes the package-level gateways and attaches the Apple installed-app probe this host owns.
+export async function attachAppleInstalledAppProbe(
   options: Readonly<{
     registry: PlatformModuleRegistry<InventoryPlatformModule>;
     loadHost: () => Promise<DeviceInventoryHost>;
@@ -20,10 +17,9 @@ export function createComposedDeviceInventoryGateways(
 ): Promise<ComposedDeviceInventoryGateways> {
   // Function-scoped: the composition root's eager closure is the hub every daemon start and CLI
   // run pays for, so the package composer is evaluated only when an inventory composition runs.
-  return import('@agent-device/device-selection/composed-inventory-gateways').then(
-    ({ createComposedDeviceInventoryGateways: compose }) =>
-      compose({ ...options, findInstalledApp: appleInstalledAppProbe }),
-  );
+  const { createComposedDeviceInventoryGateways: compose } =
+    await import('@agent-device/device-selection/composed-inventory-gateways');
+  return compose({ ...options, findInstalledApp: appleInstalledAppProbe });
 }
 
 // Function-scoped: device selection reads this probe from the request context, and loading it

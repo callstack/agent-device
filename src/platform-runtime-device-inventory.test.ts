@@ -11,7 +11,7 @@ import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dis
 import { withDeviceInventoryContext } from '@agent-device/device-selection/device-inventory-context';
 import { PLATFORMS, type DeviceInfo } from '@agent-device/kernel/device';
 import { describe, expect, test, vi } from 'vitest';
-import { createComposedDeviceInventoryGateways } from './platform-runtime-device-inventory.ts';
+import { attachAppleInstalledAppProbe } from './platform-runtime-device-inventory.ts';
 
 const simctl = vi.hoisted(() => ({
   listapps: [] as Array<{ deviceId: string; apps: Record<string, unknown> }>,
@@ -90,7 +90,7 @@ describe('production device inventory composition', () => {
       loadInventory: async () =>
         source(family === 'apple' ? [simulator('sim-a'), simulator('sim-b')] : []),
     }));
-    const gateways = await createComposedDeviceInventoryGateways({
+    const gateways = await attachAppleInstalledAppProbe({
       registry: createPlatformModuleRegistry(modules),
       loadHost: async () => host,
     });
