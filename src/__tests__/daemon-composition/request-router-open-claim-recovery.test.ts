@@ -123,9 +123,13 @@ beforeEach(() => {
 // The dead owner's recorded recorder must still run as an orphan: recovery
 // then takes the descriptor-cleanup path — the one that terminates it and
 // clears the owned-process store it was composed with. A plain sleeper with
-// its real observed command and start time satisfies the exact match.
+// its real observed command and start time satisfies the exact match. The
+// sleeper is the current Node binary on a parked timer, so the case runs on
+// every platform (`sleep` is not a Windows command).
 async function spawnOrphanRecorder() {
-  const child = spawn('sleep', ['120'], { stdio: 'ignore' });
+  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 120_000)'], {
+    stdio: 'ignore',
+  });
   await new Promise((resolve) => child.once('spawn', resolve));
   const pid = child.pid ?? 0;
   const marker = {
