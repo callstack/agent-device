@@ -6,10 +6,11 @@ import {
 } from '@agent-device/contracts/moving-target-gate';
 import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
 import type {
+  InteractionTarget,
   ResolvedInteractionTarget,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
-import type { Rect, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
@@ -18,15 +19,11 @@ import type {
   CommandContext,
   CommandSessionRecord,
 } from '@agent-device/contracts/runtime-contract';
-import {
-  localIdentitiesEqual,
-  nodeRectByIdentity,
-  readNodeLocalIdentity,
-} from '@agent-device/ad-script';
+import { nodeRectByIdentity } from '@agent-device/ad-script';
 import { now, sleep } from '../../runtime-common.ts';
 import { captureInteractionSnapshot } from './interaction-snapshot-capture.ts';
-import { tryResolveRefNode } from './ref-target-resolution.ts';
-import { resolveInteractionTarget, type InteractionTarget } from './resolution.ts';
+import { surfaceScopedNodes } from './post-action-surface.ts';
+import { resolveInteractionTarget } from './resolution.ts';
 import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
 
 /**
@@ -233,38 +230,30 @@ async function reObserveTarget(
   }
   const { snapshot } = await captureInteractionSnapshot(runtime, options, true);
   const resolved = await resolveInteractionTarget(runtime, options, params);
-  return { resolved, ...measureRefObservation(options.target, snapshot, resolved) };
+  return { resolved, ...measureRefObservation(surfaceScopedNodes(snapshot), resolved) };
 }
 
 /**
- * Whether this look measured the target, stated over the two values that survive the session store's
- * clone.
+ * Whether this look measured the target, stated over the provenance the resolution itself reports.
  *
  * Rect agreement alone is not enough, and this is the hole that makes it so: ADR 0014 keeps the
  * authorized frame node when the captured node's identity differs, so a DIFFERENT control that took
  * over the ref at the frame's own coordinates would produce two agreeing "observations" while the
- * dispatch went to the stale point. The look measured something only when the node it dispatched is
- * the node this capture names — same position and same local identity.
+ * dispatch went to the stale point. The look measured something only when that reconciliation
+ * REPORTED reading the dispatched node out of the observation — the one account of what got
+ * dispatched that cannot drift from the rule it applied, whatever the rule becomes. The surface
+ * comes from the same capture through `surfaceScopedNodes`, the way the selector branch reads its
+ * resolution's `preAction`.
  */
 function measureRefObservation(
-  target: Extract<InteractionTarget, { kind: 'ref' }>,
-  snapshot: SnapshotState,
+  capture: SurfaceScopedNodes,
   resolved: ResolvedInteractionTarget,
 ): MovingTargetMeasurement {
   const rect = resolvedRect(resolved);
-  const dispatchedNode = 'node' in resolved ? resolved.node : undefined;
-  const inCapture = tryResolveRefNode(snapshot.nodes, target.ref, {
-    fallbackLabel: target.fallbackLabel ?? '',
-  });
-  const captured = inCapture.kind === 'resolved' ? inCapture.resolved.node : undefined;
   const measured =
-    rect !== undefined &&
-    dispatchedNode !== undefined &&
-    captured !== undefined &&
-    areCapturedRectsAtSamePosition(captured.rect, rect) &&
-    localIdentitiesEqual(readNodeLocalIdentity(captured), readNodeLocalIdentity(dispatchedNode));
+    rect !== undefined && 'adoptedFrom' in resolved && resolved.adoptedFrom === 'observation';
   return measured
-    ? { measured: true, rect, surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
+    ? { measured: true, rect, surfaceBundleId: capture.surfaceBundleId }
     : { measured: false, rect: undefined };
 }
 
