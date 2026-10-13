@@ -2,11 +2,11 @@
 context platform=ios target=mobile
 
 open com.apple.Preferences --relaunch
-is visible 'role=cell label=General'
-is absent 'role=cell label=Apps'
-scroll down --until 'role=cell label=Apps'
-is visible 'role=cell label=Apps'
+is visible 'role=button label=General'
+is absent 'role=button label=Apps'
+scroll down --until 'role=button label=Apps'
+is visible 'role=button label=Apps'
 
-is absent 'role=cell label=General'
-scroll up --until 'role=cell label=General'
-is visible 'role=cell label=General'
+is absent 'role=button label=General'
+scroll up --until 'role=button label=General'
+is visible 'role=button label=General'
