@@ -17,6 +17,7 @@ import {
 } from '@agent-device/contracts/scroll-gesture';
 import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SettingOptions } from '@agent-device/contracts/settings';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   capabilitySupported,
@@ -46,6 +47,8 @@ const TEXT_ENTRY_READINESS_POLL_MS = 100;
  * WebDriver client's much longer default request timeout.
  */
 const TEXT_ENTRY_PROBE_TIMEOUT_MS = 1_500;
+
+const SNAPSHOT_VIEWPORT_PROBE_TIMEOUT_MS = 1_000;
 
 /** The Android `KEYCODE_ENTER` the IME's return key sends. */
 const ANDROID_KEYCODE_ENTER = 66;
@@ -329,11 +332,28 @@ class WebDriverInteractor implements Interactor {
       return acquireWebDriverIosSnapshot(source, this.targetId);
     }
     const { parseWebDriverSourceFacts } = await import('./webdriver-source.ts');
+    const nodes = parseWebDriverSourceFacts(source, 'android').nodes;
+    const viewport = await this.readAndroidSnapshotViewport(signal);
     return {
       backend: 'android' as const,
       producer: 'appium-source' as const,
-      nodes: parseWebDriverSourceFacts(source, 'android').nodes,
+      nodes,
+      ...(viewport === undefined ? {} : { viewport }),
     };
+  }
+
+  private async readAndroidSnapshotViewport(signal?: AbortSignal) {
+    try {
+      const rect = await this.client.windowRect({
+        timeoutMs: SNAPSHOT_VIEWPORT_PROBE_TIMEOUT_MS,
+        retryAttempts: 0,
+        ...(signal === undefined ? {} : { signal }),
+      });
+      return snapshotViewportSizeFrom(rect);
+    } catch {
+      signal?.throwIfAborted();
+      return undefined;
+    }
   }
 
   private async readSource(signal?: AbortSignal): Promise<string> {

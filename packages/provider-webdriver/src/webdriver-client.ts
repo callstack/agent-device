@@ -284,8 +284,8 @@ export class WebDriverClient {
     await fs.writeFile(outPath, Buffer.from(value, 'base64'));
   }
 
-  async windowRect(): Promise<WebDriverWindowRect> {
-    return readWindowRect(await this.sessionRequest('GET', '/window/rect'));
+  async windowRect(options?: WebDriverRequestOverrides): Promise<WebDriverWindowRect> {
+    return readWindowRect(await this.sessionRequest('GET', '/window/rect', undefined, options));
   }
 
   /** A script that may change device state; it is sent once. */

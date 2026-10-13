@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { WebDriverClient } from './webdriver-client.ts';
 
@@ -404,3 +404,41 @@ function webDriverResponse(status: number, body: unknown): typeof globalThis.fet
       headers: { 'Content-Type': 'application/json' },
     });
 }
+
+test('windowRect honors a bounded single-attempt probe and forwards cancellation', async () => {
+  vi.useFakeTimers();
+  try {
+    let calls = 0;
+    let requestSignal: AbortSignal | undefined;
+    const client = await connectedClient(async (_input, init) => {
+      calls += 1;
+      requestSignal = init?.signal ?? undefined;
+      return await new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason as Error));
+      });
+    });
+    const timedOut = assert.rejects(
+      client.windowRect({ timeoutMs: 25, retryAttempts: 0 }),
+      (error: AppError) => {
+        assert.equal(error.details?.reason, 'webdriver_request_timeout');
+        assert.equal(error.details?.timeoutMs, 25);
+        return true;
+      },
+    );
+    await vi.advanceTimersByTimeAsync(25);
+    await timedOut;
+    assert.equal(calls, 1);
+    const controller = new AbortController();
+    const cancelled = assert.rejects(
+      client.windowRect({ timeoutMs: 1000, retryAttempts: 0, signal: controller.signal }),
+      /request cancelled/,
+    );
+    await Promise.resolve();
+    controller.abort(new Error('request cancelled'));
+    await cancelled;
+    assert.equal(requestSignal?.aborted, true);
+    assert.equal(calls, 2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
