@@ -30,6 +30,9 @@ vi.mock('../agent-browser-process-record.ts', async (importOriginal) => {
 const mockProcessRecordScan = vi.mocked(processRecordScanMock);
 const mockFleetRecordLive = vi.mocked(fleetRecordLiveMock);
 
+/** What the provider appends to every CLI call, after the command itself. */
+const CLI_TAIL = ['--json', '--session', 'web-session'];
+
 /** A session with a fleet record to consult, which is what makes the gate decide at all. */
 function providerOptions() {
   return {
@@ -86,6 +89,34 @@ test('open re-derives the fleet record without consulting the probe', async () =
   });
   assert.equal(mockProcessRecordScan.mock.calls.length, 1);
   assert.equal(mockFleetRecordLive.mock.calls.length, 0);
+});
+
+test('recording re-derives the fleet record without consulting the probe', async () => {
+  // 0.27.1's `record start` mints an ffmpeg child of the agent-browser daemon, outside Chrome's
+  // tree. The probe vouches for recorded pids only, so a scan is the only path that can own it.
+  mockFleetRecordLive.mockResolvedValue(true);
+  const executor = recordingAgentBrowserExecutor();
+  await withManagedAgentBrowserProvider(providerOptions(), async (provider) => {
+    await withCommandExecutorOverride(executor.override, async () => {
+      await provider.startRecording?.('/tmp/clip.webm');
+    });
+  });
+  assert.equal(mockProcessRecordScan.mock.calls.length, 1);
+  assert.equal(mockFleetRecordLive.mock.calls.length, 0);
+  assert.deepEqual(executor.commands()[0], ['record', 'start', '/tmp/clip.webm', ...CLI_TAIL]);
+});
+
+test('stopping a recording re-derives the fleet record without consulting the probe', async () => {
+  mockFleetRecordLive.mockResolvedValue(true);
+  const executor = recordingAgentBrowserExecutor();
+  await withManagedAgentBrowserProvider(providerOptions(), async (provider) => {
+    await withCommandExecutorOverride(executor.override, async () => {
+      await provider.stopRecording?.();
+    });
+  });
+  assert.equal(mockProcessRecordScan.mock.calls.length, 1);
+  assert.equal(mockFleetRecordLive.mock.calls.length, 0);
+  assert.deepEqual(executor.commands()[0], ['record', 'stop', ...CLI_TAIL]);
 });
 
 test('a command the backend answers with a failure re-derives the fleet record', async () => {

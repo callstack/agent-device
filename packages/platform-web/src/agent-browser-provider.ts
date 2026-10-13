@@ -371,10 +371,21 @@ async function finalizeAgentBrowserProcessRecord(params: {
 }
 
 /**
- * The agent-browser commands that can change the owned browser fleet: `open` may launch the
- * agent-browser daemon and its Chrome, and `close` can end them.
+ * The agent-browser commands that can change the owned browser fleet.
+ *
+ * `open` may launch the agent-browser daemon and its Chrome, and `close` can end them. `record`
+ * joins them because in the pinned 0.27.1 CLI, `record start` mints an `ffmpeg` child of the
+ * daemon — the WebM encoder outlives the CLI process, which returns while the recording runs, and
+ * `record stop` is a later command that pipes into it. That helper is outside Chrome's tree, so
+ * only a scan reached by a lifecycle boundary can add it to the record the startup reaper signals;
+ * a probe over already-recorded pids never learns of a process the fleet minted after the last
+ * scan. `record stop` re-scanning too is the cheap side of one set: the fleet can also shrink.
  */
-const AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS: ReadonlySet<string> = new Set(['open', 'close']);
+const AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS: ReadonlySet<string> = new Set([
+  'open',
+  'close',
+  'record',
+]);
 
 /**
  * Whether the process-table scan that rewrites the owned-process record has to run for one
