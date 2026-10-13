@@ -10,9 +10,12 @@ import type { Interactor, SnapshotOptions } from '@agent-device/contracts/intera
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { bindAndroidApplicationLifecycle } from './lifecycle.ts';
-import { killAndroidApp } from './app-lifecycle.ts';
+import { closeAndroidApp, killAndroidApp } from './app-lifecycle.ts';
+import { withAndroidAdbProvider } from './adb-executor.ts';
+import { bindAndroidAdbHostStub } from './adb-host.fixtures.ts';
 
-vi.mock('./app-lifecycle.ts', () => ({
+vi.mock('./app-lifecycle.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./app-lifecycle.ts')>()),
   killAndroidApp: vi.fn(async () => {}),
 }));
 
@@ -28,6 +31,7 @@ const device: DeviceInfo = {
 };
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   mockKillAndroidApp.mockClear();
 });
@@ -50,6 +54,7 @@ function createLifecycle(
       input: Readonly<{ stateDir: string; shutdownTarget: boolean; signal: AbortSignal }>,
     ) => Promise<void>;
     shutdownTarget?: () => Promise<unknown>;
+    close?: Interactor['close'];
   }> = {},
 ): LifecycleFixture {
   const calls: string[] = [];
@@ -69,6 +74,7 @@ function createLifecycle(
         openDevice: async () => {},
         close: async (app: string) => {
           calls.push(`close:${app}`);
+          await params.close?.(app);
         },
         setSetting: async () => {},
         snapshot: async (options: SnapshotOptions) => {
@@ -142,6 +148,43 @@ function openInput(overrides: Partial<OpenApplicationInput> = {}): OpenApplicati
     ...overrides,
   };
 }
+
+test('relaunch refuses to open or observe after the Android process close fence expires', async () => {
+  vi.useFakeTimers();
+  bindAndroidAdbHostStub({});
+  const { calls, lifecycle } = createLifecycle({
+    close: async (app) => await closeAndroidApp(device, app),
+  });
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => ({
+        stdout:
+          args[1] === 'pidof'
+            ? '12345\n'
+            : args[1] === 'dumpsys'
+              ? 'mCurrentFocus=Window{43 u0 com.android.launcher/.Launcher}\n'
+              : '',
+        stderr: '',
+        exitCode: 0,
+      }),
+    },
+    { serial: device.id },
+    async () => {
+      const rejection = expect(
+        lifecycle.openApplication(openInput({ relaunch: true })),
+      ).rejects.toMatchObject({
+        code: 'COMMAND_FAILED',
+        details: {
+          reason: 'android-app-close-timeout',
+          phase: 'process',
+          packageName: 'com.example.app',
+        },
+      });
+      await Promise.all([rejection, vi.runAllTimersAsync()]);
+    },
+  );
+  expect(calls).toEqual(['close:com.example.app']);
+});
 
 test('preserves a runtime launch URL duration after the admitted Android follow-up open', async () => {
   const { calls, lifecycle } = createLifecycle();

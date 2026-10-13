@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { closeAndroidApp, openAndroidApp } from '../app-lifecycle.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
@@ -161,6 +161,55 @@ test('closeAndroidApp waits until package process exits after force-stop', async
     ['shell', 'pidof', 'com.example.app'],
   ]);
 });
+
+test.each(['foreground', 'process'] as const)(
+  'closeAndroidApp refuses an exhausted %s fence',
+  async (phase) => {
+    vi.useFakeTimers();
+    const calls: (readonly string[])[] = [];
+    try {
+      await withAndroidAdbProvider(
+        {
+          exec: async (args) => {
+            calls.push(args);
+            const stdout =
+              args[1] === 'pidof'
+                ? '12345\n'
+                : args[1] === 'dumpsys'
+                  ? `mCurrentFocus=Window{42 u0 ${phase === 'foreground' ? 'com.example.app/.MainActivity' : 'com.android.launcher/.Launcher'}}\n`
+                  : '';
+            return { stdout, stderr: '', exitCode: 0 };
+          },
+        },
+        { serial: ANDROID_EMULATOR.id },
+        async () => {
+          const rejection = assert.rejects(
+            closeAndroidApp(ANDROID_EMULATOR, 'com.example.app'),
+            (error: unknown) => {
+              assert.ok(error instanceof AppError);
+              assert.equal(error.code, 'COMMAND_FAILED');
+              assert.deepEqual(error.details, {
+                reason: 'android-app-close-timeout',
+                phase,
+                packageName: 'com.example.app',
+                timeoutMs: 2_000,
+              });
+              return true;
+            },
+          );
+          await Promise.all([rejection, vi.runAllTimersAsync()]);
+        },
+      );
+      assert.deepEqual(calls[0], ['shell', 'am', 'force-stop', 'com.example.app']);
+      assert.equal(
+        calls.filter((args) => args[1] === 'pidof').length,
+        phase === 'process' ? 40 : 0,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
 
 test('openAndroidApp ensures Android reverse before localhost deep link launch', async () => {
   const device: DeviceInfo = {
