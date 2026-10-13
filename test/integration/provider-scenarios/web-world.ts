@@ -55,7 +55,10 @@ export async function createWebDesktopWorld(): Promise<WebDesktopWorld> {
         String(options?.interactiveOnly ?? ''),
         String(options?.surface ?? ''),
       ]);
-      return { nodes: webSnapshotNodes(state), truncated: false };
+      return {
+        nodes: webSnapshotNodes(state, options?.interactiveOnly === true),
+        truncated: false,
+      };
     },
     screenshot: async (outPath, options) => {
       semanticCalls.push([
@@ -142,7 +145,7 @@ export async function createWebDesktopWorld(): Promise<WebDesktopWorld> {
   };
 }
 
-function webSnapshotNodes(state: WebPageState): RawSnapshotNode[] {
+function webSnapshotNodes(state: WebPageState, interactiveOnly: boolean): RawSnapshotNode[] {
   // Every element of the emulated page carries a ref, in the tree order the backend mints them in:
   // a web capture publishes its producer's refs and mints no replacement, so a page that wants to be
   // addressable has to issue them itself.
@@ -219,6 +222,24 @@ function webSnapshotNodes(state: WebPageState): RawSnapshotNode[] {
       depth: 1,
       parentIndex: 0,
     },
+    // On-screen text the backend reports but issues no ref for, exactly as a real agent-browser
+    // capture prints a ref-less line: text on `value`, no ref, and no box to ask for. Nothing may
+    // mint it an address (#2283) — every web tree reaching `buildSnapshotState` publishes only the
+    // refs its producer issued. `--interactive` prints only the lines carrying a handle, so the
+    // interactive capture leaves it out.
+    ...(interactiveOnly
+      ? []
+      : [
+          {
+            index: 6,
+            type: 'StaticText',
+            role: 'StaticText',
+            value: 'Order saved',
+            visibleToUser: true,
+            depth: 1,
+            parentIndex: 0,
+          },
+        ]),
   ];
 }
 
