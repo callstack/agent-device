@@ -55,6 +55,7 @@ export function presentIosSnapshotAcquisition(
         ? {}
         : { truncated: acquired.acquisition.truncated }),
       ...(validatedViewport ? { viewport: validatedViewport } : {}),
+      ...(presentation.presentedSurface ? { presentedSurface: presentation.presentedSurface } : {}),
       ...snapshotWarnings(acquired.acquisition.residue),
     };
   } catch (error) {

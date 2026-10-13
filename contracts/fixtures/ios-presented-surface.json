@@ -1,0 +1,343 @@
+{
+  "description": "The iOS rule that decides whether a capture read a modal presentation over the app's own content (issue #3565), and the tree shapes it is pinned on. Source of truth shared by the TypeScript classifier (collectPresentedSurface in packages/capture-kit/src/ios-snapshot-engine/engine.ts) and the Swift one (SnapshotPresentedSurface in apple/snapshot-presentation); a change here must keep both parity tests green, and each side mirrors the vocabulary below by hand the way contracts/fixtures/ios-system-surface-hosts.json does. Every case states the answer for a capture whose producer reports UIKit class names (`expected`) and for the same tree read by a producer that reports none (`classBlindExpected`) — both tests run both readings. `presented` comes only from positive evidence: a dimming view, an alert-root class, or an element type that names a presentation itself. `absent` is the claim that every window the capture read showed only its own content, so it needs class facts, a completeness statement, one content window, and one container in it; anything else answers `unknown`. Each case's `note` says whether the shape was read from a device or is anticipated, and the anticipated ones are why `unknown` exists.",
+  "vocabulary": {
+    "presentationContainerClass": "UITransitionView",
+    "presentationContainerNote": "UIKit appends each modal presentation as a later sibling of the container it presents over, directly under the window, and presents the app's own content inside one too. A window carrying more than one container therefore holds a presentation of some kind; one container is just the window's content.",
+    "dimmingViewClass": "UIDimmingView",
+    "dimmingViewNote": "The dimming view a presentation dims the content behind it with. Only a presentation installs one, so wherever a capture reads one inside the app's own windows, something is presented. Its depth is not a fact this rule can rely on: the capture of the lab app's sheet holds one as a direct child of the presenting container AND one two levels deep under the app's own container's drop shadow, so the rule reads a dimming view as evidence without asking which container it sits in or whether it is a direct child of anything. A sheet resting at an undimmed detent keeps one with user interaction disabled, so this rule must NOT read its enablement — the occlusion cut in geometry-policy.ts is the reader that cares about touches.",
+    "alertRootClassPrefix": "_UIAlertController",
+    "alertRootClassNote": "Private root classes of a UIAlertController. An iPhone alert arrives in its own UIWindow with no dimming view anywhere, so the class is the only evidence that screen holds.",
+    "systemWindowClasses": ["UITextEffectsWindow", "UIRemoteKeyboardWindow"],
+    "systemWindowNote": "Windows UIKit hosts outside the app's scene, so they can carry none of its presentations and their internal shape says nothing about one. A capture taken with the keyboard up still reads as one content window. A denylist of the hosts iOS is known to name, deliberately not an allowlist of app content: an app hosting its scene in a UIWindow subclass stays readable, while an unlisted host carrying a dimming view of its own would read as presented. No such host has been observed.",
+    "presentingElementTypes": [
+      { "name": "Sheet", "elementType": 5 },
+      { "name": "Drawer", "elementType": 6 },
+      { "name": "Alert", "elementType": 7 },
+      { "name": "Dialog", "elementType": 8 }
+    ],
+    "presentingElementTypesNote": "Element types that name a presentation wherever they appear, keyed by the element-type numbering every iOS producer reads. A producer whose name table stops short of a name publishes `Element(<elementType>)` for the same node, so both spellings count and both are derived from these numbers rather than listed twice. The number must be written bare: `Element(+7)` is not a spelling of Alert, because a lenient numeric parse would let each language's integer parser decide the answer.",
+    "classNameMatchingNote": "Class names are matched after normalization, not byte for byte: trim, drop every case-insensitive `XCUIElementType`, drop a leading `AX`, lowercase, then keep only what follows the last `.` or `/`. That is `normalizeType` in packages/contracts/src/snapshot-text.ts, which the occlusion cut already matches UIKit classes through, and the Swift rule mirrors it. Producers spell one class differently — the bridge prefixes it with its module, the runner prefixes roles with AX — so a reader that compared raw bytes would answer a different question about the same capture than one that normalized. presentationContainerClass, dimmingViewClass, alertRootClassPrefix and systemWindowClasses are all read through it, so the spellings below name those classes however a producer writes them.",
+    "absentRequirementsNote": "absent additionally requires: `truncated` stated false (a producer that never observed completeness proves nothing about what it may have capped), a class name on every node (a producer that reports none can show no window structure), exactly one window outside systemWindowClasses (a second is a presentation UIKit hosts in its own window, or an overlay window, and the tree cannot tell those apart), and exactly one presentation container in that window (more than one is a full-screen or custom presentation, which this rule has no positive read on, and none means there is no container structure to read), and an index that identifies each node once (window structure is read through parent links, which cannot tell two nodes sharing a number apart). Positive evidence is exempt from that last requirement because it is keyed on the node occurrence it was read off, not on its number: a repeated index costs this rule the answer it declines to make, never a false absent."
+  },
+  "cases": [
+    {
+      "name": "home, one container per window",
+      "note": "Read from a device: iPhone 17 simulator, RN lab app, `snapshot --raw` over the simulator AX bridge. The app window carries a single UITransitionView with only a drop shadow, beside the keyboard host window.",
+      "truncated": false,
+      "expected": "absent",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "Other", "role": "UIDropShadowView" },
+        { "index": 4, "parentIndex": 3, "type": "StaticText", "role": "RCTParagraphComponentView" },
+        { "index": 5, "parentIndex": 0, "type": "Application", "role": "UITextEffectsWindow" },
+        { "index": 6, "parentIndex": 5, "type": "Other", "role": "UIKeyboardLayoutStar" }
+      ]
+    },
+    {
+      "name": "RN pageSheet modal, second container carrying a dimming view",
+      "note": "Read from a device: the same screen with the lab app's RN Modal (pageSheet) open. The window's second UITransitionView carries a UIDimmingView that takes touches. Through the XCTest runner the same sheet shows no positive evidence at all, which is the coverage gap this fact discloses rather than hides.",
+      "truncated": false,
+      "expected": "presented",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "StaticText", "role": "RCTParagraphComponentView" },
+        { "index": 4, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        {
+          "index": 5,
+          "parentIndex": 4,
+          "type": "Other",
+          "role": "UIDimmingView",
+          "userInteractionEnabled": true
+        },
+        { "index": 6, "parentIndex": 4, "type": "Other", "role": "UIDropShadowView" },
+        { "index": 7, "parentIndex": 6, "type": "StaticText", "role": "RCTParagraphComponentView" },
+        { "index": 8, "parentIndex": 0, "type": "Application", "role": "UITextEffectsWindow" }
+      ]
+    },
+    {
+      "name": "sheet resting at an undimmed detent",
+      "note": "Anticipated, not read from a device: a sheet pulled down to a detent keeps its dimming view with user interaction disabled, so touches reach the content under it while the sheet is still presented. A dimming view's enablement must not change the answer.",
+      "truncated": false,
+      "expected": "presented",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "StaticText", "role": "UIView" },
+        { "index": 4, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        {
+          "index": 5,
+          "parentIndex": 4,
+          "type": "Other",
+          "role": "UIDimmingView",
+          "userInteractionEnabled": false
+        },
+        { "index": 6, "parentIndex": 4, "type": "StaticText", "role": "UIView" }
+      ]
+    },
+    {
+      "name": "RN alert in its own window, alert-root class, no dimming view",
+      "note": "Read from a device: the lab app's RN Alert.alert over UIAlertController. A second content window appears under the app root holding the alert, and no UIDimmingView exists anywhere in the capture, so only the alert's own class names say what it is.",
+      "truncated": false,
+      "expected": "presented",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "StaticText", "role": "RCTParagraphComponentView" },
+        { "index": 4, "parentIndex": 0, "type": "Application", "role": "UITextEffectsWindow" },
+        { "index": 5, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 6, "parentIndex": 5, "type": "Other", "role": "UITransitionView" },
+        { "index": 7, "parentIndex": 6, "type": "Other", "role": "UIDropShadowView" },
+        { "index": 8, "parentIndex": 5, "type": "Other", "role": "UITransitionView" },
+        { "index": 9, "parentIndex": 8, "type": "Group", "role": "_UIAlertControllerGradientView" },
+        {
+          "index": 10,
+          "parentIndex": 9,
+          "type": "Button",
+          "role": "_UIAlertControllerLayoutObservingContainerView"
+        }
+      ]
+    },
+    {
+      "name": "the same alert through a producer whose name table stops short",
+      "note": "Read from a device: that alert through the XCTest runner, which reports no class names and names raw element type 7 nothing, so the presenting node arrives as `Element(7)` — the shared numbering's spelling for Alert.",
+      "truncated": false,
+      "expected": "presented",
+      "classBlindExpected": "presented",
+      "nodes": [
+        { "index": 0, "type": "Application" },
+        { "index": 1, "parentIndex": 0, "type": "Window" },
+        { "index": 2, "parentIndex": 1, "type": "Other" },
+        { "index": 3, "parentIndex": 0, "type": "Window" },
+        { "index": 4, "parentIndex": 3, "type": "Element(7)" },
+        { "index": 5, "parentIndex": 4, "type": "Button" },
+        { "index": 6, "parentIndex": 4, "type": "Button" }
+      ]
+    },
+    {
+      "name": "presentation named by its element type alone",
+      "note": "Anticipated, not read from a device: a host that reports the Sheet element type on the presenting node, in a tree whose window shape is otherwise unremarkable. The vocabulary test pins that Alert, Dialog and Drawer count the same way.",
+      "truncated": false,
+      "expected": "presented",
+      "classBlindExpected": "presented",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "Sheet", "role": "RCTModalHostViewComponentView" }
+      ]
+    },
+    {
+      "name": "second container with no dimming view",
+      "note": "Anticipated, not read from a device: a full-screen or custom presentation appends a container without dimming anything, and nothing else in the tree says whether it presents. Neither `presented` nor `absent` is supported here, which is why this case exists.",
+      "truncated": false,
+      "expected": "unknown",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "StaticText", "role": "UIView" },
+        { "index": 4, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 5, "parentIndex": 4, "type": "Other", "role": "UIDropShadowView" },
+        { "index": 6, "parentIndex": 5, "type": "StaticText", "role": "UIView" }
+      ]
+    },
+    {
+      "name": "a window with no presentation container at all",
+      "note": "Anticipated, not read from a device: a window whose content sits directly under it has no container structure for this rule to read, so it cannot be called un-presented either.",
+      "truncated": false,
+      "expected": "unknown",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "StaticText", "role": "UIView" }
+      ]
+    },
+    {
+      "name": "a second content window this rule cannot name",
+      "note": "Anticipated, not read from a device: a React Native `<Modal>` host window and an RN debug-build overlay window both arrive as a second ordinary window holding its own content, so a capture with two of them cannot be called un-presented.",
+      "truncated": false,
+      "expected": "unknown",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "StaticText", "role": "UIView" },
+        { "index": 4, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 5, "parentIndex": 4, "type": "Other", "role": "UITransitionView" },
+        { "index": 6, "parentIndex": 5, "type": "StaticText", "role": "UIView" }
+      ]
+    },
+    {
+      "name": "a system window with internal presentation containers",
+      "note": "Anticipated, not read from a device: the keyboard host window's own view tree can hold containers of its own. It is outside the app's scene, so it neither presents the app nor stops absence, and a rule that counted containers across every root would be wrong here.",
+      "truncated": false,
+      "expected": "absent",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "StaticText", "role": "UIView" },
+        { "index": 4, "parentIndex": 0, "type": "Application", "role": "UIRemoteKeyboardWindow" },
+        { "index": 5, "parentIndex": 4, "type": "Other", "role": "UITransitionView" },
+        { "index": 6, "parentIndex": 5, "type": "Other", "role": "UIDimmingView" },
+        { "index": 7, "parentIndex": 4, "type": "Other", "role": "UITransitionView" }
+      ]
+    },
+    {
+      "name": "a capture whose producer never stated completeness",
+      "note": "Anticipated, not read from a device: an Appium page source or Limrun element tree reports nothing about truncation, so nothing about its windows can add up to absence even when the shape is ordinary. Positive evidence still answers, as the capped dimming-view case shows.",
+      "truncated": null,
+      "expected": "unknown",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "StaticText", "role": "UIView" }
+      ]
+    },
+    {
+      "name": "a capture its producer capped",
+      "note": "Anticipated, not read from a device: a truncated tree proves nothing about the windows or containers it dropped, so it cannot be called un-presented even when everything it kept looks ordinary.",
+      "truncated": true,
+      "expected": "unknown",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "StaticText", "role": "UIView" }
+      ]
+    },
+    {
+      "name": "a capped capture over a dimming view",
+      "note": "Anticipated, not read from a device: truncation blocks absence, not the positive half — a dimming view the producer did read is evidence of what it read.",
+      "truncated": true,
+      "expected": "presented",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        {
+          "index": 3,
+          "parentIndex": 2,
+          "type": "Other",
+          "role": "UIDimmingView",
+          "userInteractionEnabled": true
+        }
+      ]
+    },
+    {
+      "name": "one node the producer reported no class name for",
+      "note": "Read from a device, then degraded: the lab app's ordinary home screen, with one node's class name dropped. The bridge omits the class name when the attribute is absent (snapshot-source/tree.ts), so a capture can be partly class-blind while looking ordinary. The bridge publishes the element type from the accessibility raw value while omitting a class name it did not read (snapshot-source/tree.ts: type without role), so a capture can be partly class-blind and still look ordinary. Absence is the claim that every window the capture read showed only its own content, and a tree that cannot name one of its own nodes cannot support it, however unremarkable the rest reads.",
+      "truncated": false,
+      "expected": "unknown",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "Other", "role": "UIDropShadowView" },
+        { "index": 4, "parentIndex": 3, "type": "StaticText" },
+        { "index": 5, "parentIndex": 0, "type": "Application", "role": "UITextEffectsWindow" }
+      ]
+    },
+    {
+      "name": "an element type spelled with a sign",
+      "note": "Malformed producer output, not read from a device: the same shape as an ordinary screen, with one node typed `Element(+7)`. A parser that reads a leading plus as a number would call this an Alert and answer presented; the answer has to come from the table's numbers, not from how lenient one language's integer parser is.",
+      "truncated": false,
+      "expected": "absent",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "Element(+7)", "role": "UIView" },
+        { "index": 4, "parentIndex": 3, "type": "StaticText", "role": "UIView" }
+      ]
+    },
+    {
+      "name": "a producer whose repeated index closes a cycle",
+      "note": "Malformed producer output, not read from a device: under the keyboard host window, a node repeats the index of an ancestor of itself, so following parent links walks that loop forever. Both languages have to terminate on it: the Swift classification runs outside the runner's bounded main-thread work, so no timeout would catch a spin there. The repeated index is also the answer: once two nodes share one, parent links no longer say which node is which, so the tree cannot show that every window holds only its own content.",
+      "truncated": false,
+      "expected": "unknown",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "StaticText", "role": "UIView" },
+        { "index": 4, "parentIndex": 0, "type": "Application", "role": "UITextEffectsWindow" },
+        { "index": 5, "parentIndex": 4, "type": "Other", "role": "UIKeyboardLayoutView" },
+        { "index": 6, "parentIndex": 5, "type": "Other", "role": "UIKeyboardKeyView" },
+        { "index": 7, "parentIndex": 6, "type": "Other", "role": "UIKeyboardKeyView" },
+        { "index": 5, "parentIndex": 7, "type": "Other", "role": "UIKeyboardKeyView" }
+      ]
+    },
+    {
+      "name": "an app node sharing its number with a node inside the keyboard host window",
+      "note": "Anticipated malformed output, not read from a device: the app window holds a real dimming view whose index repeats a number used inside the keyboard host window. Excluding that host reaches the node the walk stood on, not this one, so the app window's own read survives and answers presented — keying the exclusion on node numbers would discard a fact the producer plainly reported. Absence is still out of reach on a tree that numbers a node twice, which is what the second case below pins.",
+      "truncated": false,
+      "expected": "presented",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "StaticText", "role": "UIView" },
+        { "index": 4, "parentIndex": 0, "type": "Application", "role": "UIRemoteKeyboardWindow" },
+        { "index": 5, "parentIndex": 4, "type": "Other", "role": "UIKeyboardLayoutView" },
+        { "index": 5, "parentIndex": 1, "type": "Other", "role": "UIDimmingView" }
+      ]
+    },
+    {
+      "name": "a dimming view hanging under a number two nodes carry",
+      "note": "Anticipated malformed output, not read from a device: the same repeated number one step further — the app window's dimming view reports the shared number as its parent, so the walk from the keyboard host reaches it through that link and cannot know it is standing on the app's own node. The exclusion does cover it here, and the tree answers unknown: it numbers a node twice, so window structure is unreadable in either direction.",
+      "truncated": false,
+      "expected": "unknown",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "StaticText", "role": "UIView" },
+        { "index": 4, "parentIndex": 0, "type": "Application", "role": "UIRemoteKeyboardWindow" },
+        { "index": 5, "parentIndex": 4, "type": "Other", "role": "UIKeyboardLayoutView" },
+        { "index": 5, "parentIndex": 1, "type": "Other", "role": "UIDropShadowView" },
+        { "index": 6, "parentIndex": 5, "type": "Other", "role": "UIDimmingView" }
+      ]
+    },
+    {
+      "name": "a page sheet whose classes are spelled with module and AX prefixes",
+      "note": "Anticipated producer output, not read from a device: a page-sheet capture in which every UIKit class is written a little differently from the way this table names it — the app window carries its module prefix, the dimming view carries the AX prefix the runner adds, and the keyboard host window is lowercased. Normalization is what lets this read as presented with two containers in the app window and that host window excluded; a rule comparing class names byte for byte would call the same tree undecided, and the two languages would then disagree about one capture.",
+      "truncated": false,
+      "expected": "presented",
+      "classBlindExpected": "unknown",
+      "nodes": [
+        { "index": 0, "type": "Application", "role": "UIApplication" },
+        { "index": 1, "parentIndex": 0, "type": "Window", "role": "com.apple.internal.UIWindow" },
+        { "index": 2, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 3, "parentIndex": 2, "type": "StaticText", "role": "UIView" },
+        { "index": 4, "parentIndex": 1, "type": "Other", "role": "UITransitionView" },
+        { "index": 5, "parentIndex": 4, "type": "Other", "role": "AXUIDimmingView" },
+        { "index": 6, "parentIndex": 0, "type": "Application", "role": "uitexteffectswindow" },
+        { "index": 7, "parentIndex": 6, "type": "Other", "role": "UIKeyboardLayoutStar" }
+      ]
+    }
+  ]
+}

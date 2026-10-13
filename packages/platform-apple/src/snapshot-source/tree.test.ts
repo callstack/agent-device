@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'vitest';
 import { SnapshotSourceError } from './errors.ts';
 import { decodeSnapshotBridgeTree } from './tree.ts';
@@ -649,4 +651,42 @@ test('the AX bridge publishes native switch and text entry facts without inventi
   assert.deepEqual([tree[2]!.editable, tree[2]!.password], [true, true]);
   assert.deepEqual([tree[3]!.enabled, tree[3]!.editable, tree[3]!.password], [false, true, false]);
   assert.equal(tree[4]!.checked, undefined);
+});
+
+/**
+ * The presented-surface rule reads Sheet, Drawer, Alert and Dialog as positive evidence and derives the
+ * `Element(<n>)` spelling from the same numbers (#3565). Those numbers are the name table above, and the
+ * rule lives in capture-kit below this package, so nothing imports across that boundary. This decodes
+ * each raw value the way a real capture does and holds the published name against the golden table both
+ * classifier parity tests read, so a renumbering that leaves the rule behind fails at the owner.
+ */
+test('the element-type names the presented-surface rule reads are the ones this table publishes', () => {
+  const fixture = path.resolve(
+    import.meta.dirname,
+    '..',
+    '..',
+    '..',
+    '..',
+    'contracts',
+    'fixtures',
+    'ios-presented-surface.json',
+  );
+  const { presentingElementTypes } = JSON.parse(fs.readFileSync(fixture, 'utf8')).vocabulary as {
+    presentingElementTypes: Array<{ name: string; elementType: number }>;
+  };
+  assert.ok(presentingElementTypes.length > 0);
+
+  for (const { name, elementType: rawValue } of presentingElementTypes) {
+    const decoded = decodeSnapshotBridgeTree(
+      {
+        [application]: 'Application',
+        [frame]: { X: 0, Y: 0, Width: 390, Height: 844 },
+        [children]: [{ [automationType]: rawValue, [children]: [] }],
+      },
+      { truncated: false },
+      limits,
+    );
+
+    assert.equal(decoded.nodes[1]?.type, name, `raw element type ${rawValue}`);
+  }
 });

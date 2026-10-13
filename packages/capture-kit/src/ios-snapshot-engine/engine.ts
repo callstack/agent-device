@@ -13,6 +13,7 @@ import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot'
 import { buildIosInteractiveSnapshotPresentation } from './semantic-index.ts';
 import { validateIosSnapshotGraph } from './graph.ts';
 import { foldIosSnapshot } from './geometry.ts';
+import { collectPresentedSurface, type PresentedSurfaceCompleteness } from './geometry-policy.ts';
 import { resolveIosViewport, validateIosPayload } from './invariants.ts';
 import { projectIosQualitySnapshot, projectIosSnapshot } from './projection.ts';
 import { presentIosRunnerSnapshot } from './runner-presentation.ts';
@@ -49,7 +50,27 @@ export function publishIosSnapshot(
     ...(presentation.validatedViewport
       ? { validatedViewport: presentation.validatedViewport }
       : {}),
+    ...(input.stage === 'acquired'
+      ? {
+          presentedSurface: collectPresentedSurface(
+            input.acquisition.nodes,
+            acquisitionCompleteness(input.acquisition),
+          ),
+        }
+      : {}),
   };
+}
+
+/**
+ * What an acquisition claims about its own completeness, from the producer's truncation statement and
+ * never from the tree: a producer that reports nothing about truncation has stated nothing, and a
+ * presented-surface classification may not read a silent field as "complete" (#2188 invariant 5).
+ */
+function acquisitionCompleteness(
+  acquisition: IosSnapshotAcquisition,
+): PresentedSurfaceCompleteness {
+  if (acquisition.truncated === undefined) return 'unstated';
+  return acquisition.truncated ? 'capped' : 'complete';
 }
 
 export function presentIosSnapshot(
