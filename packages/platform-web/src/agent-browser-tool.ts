@@ -215,7 +215,7 @@ function hasManifest(installDir: string): boolean {
 /**
  * The backend's declared `bin` entry. Read from the installed manifest rather
  * than hard-coded, because the path inside the package is the package's to
- * choose (`bin/agent-browser.js` in 0.27.1, a native binary in 0.39.0).
+ * choose (`bin/agent-browser.js` in 0.27.1).
  */
 function resolveManagedEntryScript(packageDir: string): string | undefined {
   let bin: unknown;

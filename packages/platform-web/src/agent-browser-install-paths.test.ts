@@ -32,3 +32,18 @@ test('listing finds every installed version and tolerates a missing tools root',
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+test('listing skips the install lock file beside the version directories', () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-installs-');
+  try {
+    const { installDir } = managedInstallPaths(stateDir, '0.39.0');
+    fs.mkdirSync(installDir, { recursive: true });
+    fs.writeFileSync(path.join(installDir, '..', '.agent-browser-install.lock'), '');
+
+    expect(listManagedInstallPaths(stateDir).map((install) => install.installDir)).toEqual([
+      installDir,
+    ]);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});

@@ -1,6 +1,10 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { hostTemporaryDirectory, readHostDirectorySync } from '@agent-device/host-kit/host-file';
+import {
+  hostFileStatSync,
+  hostTemporaryDirectory,
+  readHostDirectorySync,
+} from '@agent-device/host-kit/host-file';
 import { hostPlatform } from '@agent-device/host-kit/process';
 
 /** Everything that locates one version's managed install, its home, and its sockets. */
@@ -29,13 +33,17 @@ export function managedInstallPaths(stateDir: string, version: string): ManagedI
  * them rather than the one the running pin names.
  */
 export function listManagedInstallPaths(stateDir: string): ManagedInstallPaths[] {
-  let versions: string[];
+  const root = managedToolsRoot(stateDir);
+  let entries: string[];
   try {
-    versions = readHostDirectorySync(managedToolsRoot(stateDir));
-  } catch {
-    return [];
+    entries = readHostDirectorySync(root);
+  } catch (error) {
+    if (isNoEntryError(error)) return [];
+    throw error;
   }
-  return versions.map((version) => managedInstallPaths(stateDir, version));
+  return entries
+    .filter((entry) => isDirectory(path.join(root, entry)))
+    .map((version) => managedInstallPaths(stateDir, version));
 }
 
 function managedToolsRoot(stateDir: string): string {
@@ -53,4 +61,17 @@ function resolveManagedSocketDir(installDir: string): string {
 
 function installHash(installDir: string): string {
   return crypto.createHash('sha1').update(installDir).digest('hex').slice(0, 12);
+}
+
+function isDirectory(entryPath: string): boolean {
+  try {
+    return hostFileStatSync(entryPath).isDirectory();
+  } catch (error) {
+    if (isNoEntryError(error)) return false;
+    throw error;
+  }
+}
+
+function isNoEntryError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }

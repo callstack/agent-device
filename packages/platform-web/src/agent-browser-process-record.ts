@@ -62,51 +62,31 @@ export function matchAgentBrowserChromeProcess(
   processInfo: HostProcessInfo,
   status: AgentBrowserToolStatus,
 ): AgentBrowserProcessMatch | undefined {
-  if (processInfo.pid === hostProcessId() || !isChromeLikeCommand(processInfo.command))
-    return undefined;
-  const installs = managedInstalls(status);
-  if (
-    installs.some((install) =>
-      processInfo.command.includes(agentBrowserChromeLaunchMarker(install)),
-    )
-  ) {
-    return { process: processInfo, reason: 'launch-marker' };
-  }
-  if (
-    installs
-      .flatMap(managedBrowserHomeMarkers)
-      .some((marker) => isCommandUnderPath(processInfo, marker))
-  ) {
-    return { process: processInfo, reason: 'managed-browser-home' };
-  }
-  return undefined;
+  return matchChromeProcess(processInfo, managedFleetOwnership(status));
 }
 
 export function summarizeAgentBrowserProcesses(
   processes: HostProcessInfo[],
   status: AgentBrowserToolStatus,
 ): AgentBrowserProcessSummary {
-  return summarizeMatches(processes, (processInfo) =>
-    matchAgentBrowserChromeProcess(processInfo, status),
-  );
+  const ownership = managedFleetOwnership(status);
+  return summarizeMatches(processes, (processInfo) => matchChromeProcess(processInfo, ownership));
 }
 
 function matchManagedAgentBrowserProcess(
   processInfo: HostProcessInfo,
-  status: AgentBrowserToolStatus,
+  ownership: ManagedFleetOwnership,
 ): AgentBrowserProcessMatch | undefined {
-  return (
-    matchAgentBrowserChromeProcess(processInfo, status) ??
-    matchAgentBrowserDaemonProcess(processInfo, status)
-  );
+  return matchChromeProcess(processInfo, ownership) ?? matchDaemonProcess(processInfo, ownership);
 }
 
 export function summarizeManagedAgentBrowserProcesses(
   processes: HostProcessInfo[],
   status: AgentBrowserToolStatus,
 ): AgentBrowserProcessSummary {
+  const ownership = managedFleetOwnership(status);
   return summarizeMatches(processes, (processInfo) =>
-    matchManagedAgentBrowserProcess(processInfo, status),
+    matchManagedAgentBrowserProcess(processInfo, ownership),
   );
 }
 
@@ -121,14 +101,17 @@ export async function recordManagedAgentBrowserProcesses(
   store: OwnedProcessRecordStore,
 ): Promise<AgentBrowserProcessSummary> {
   const processes = await listRealHostProcesses();
-  const roots = summarizeManagedAgentBrowserProcesses(processes, status);
+  const ownership = managedFleetOwnership(status);
+  const roots = summarizeMatches(processes, (processInfo) =>
+    matchManagedAgentBrowserProcess(processInfo, ownership),
+  );
   const ownedProcesses = expandProcessTree(roots.pids, processes);
   const summary: AgentBrowserProcessSummary = {
     count: ownedProcesses.length,
     pids: ownedProcesses.map(({ pid }) => pid),
     processes: ownedProcesses.map((process) => ({
       process,
-      reason: matchManagedAgentBrowserProcess(process, status)?.reason ?? 'descendant',
+      reason: matchManagedAgentBrowserProcess(process, ownership)?.reason ?? 'descendant',
     })),
   };
   const records: OwnedProcessRecord[] = summary.processes.flatMap(({ process: processInfo }) => {
@@ -222,38 +205,65 @@ function isChromeLikeCommand(command: string): boolean {
   );
 }
 
-function matchAgentBrowserDaemonProcess(
+/**
+ * What marks a process as part of the managed fleet: the current install plus every sibling
+ * version directory under the same state dir, so a fleet left running by a previous pin still
+ * matches after an upgrade moves the current install.
+ */
+type ManagedFleetOwnership = {
+  launchMarkers: string[];
+  browserHomeRoots: string[];
+  installRoots: string[];
+};
+
+function managedFleetOwnership(status: AgentBrowserToolStatus): ManagedFleetOwnership {
+  const siblings = listManagedInstallPaths(status.stateDir).filter(
+    (install) => path.resolve(install.installDir) !== path.resolve(status.installDir),
+  );
+  const installs: ManagedInstallPaths[] = [status, ...siblings];
+  return {
+    launchMarkers: installs.map(agentBrowserChromeLaunchMarker),
+    browserHomeRoots: uniqueStrings(installs.flatMap(managedBrowserHomeMarkers)),
+    installRoots: installs.map(
+      (install) => `${normalizePathSeparators(path.resolve(install.installDir))}/`,
+    ),
+  };
+}
+
+function matchChromeProcess(
   processInfo: HostProcessInfo,
-  status: AgentBrowserToolStatus,
+  ownership: ManagedFleetOwnership,
+): AgentBrowserProcessMatch | undefined {
+  if (processInfo.pid === hostProcessId() || !isChromeLikeCommand(processInfo.command))
+    return undefined;
+  if (ownership.launchMarkers.some((marker) => processInfo.command.includes(marker))) {
+    return { process: processInfo, reason: 'launch-marker' };
+  }
+  if (ownership.browserHomeRoots.some((root) => isCommandUnderPath(processInfo, root))) {
+    return { process: processInfo, reason: 'managed-browser-home' };
+  }
+  return undefined;
+}
+
+function matchDaemonProcess(
+  processInfo: HostProcessInfo,
+  ownership: ManagedFleetOwnership,
 ): AgentBrowserProcessMatch | undefined {
   if (processInfo.pid === hostProcessId() || isChromeLikeCommand(processInfo.command))
     return undefined;
   const command = normalizePathSeparators(processInfo.command);
-  return managedInstalls(status).some((install) =>
-    command.includes(`${normalizePathSeparators(path.resolve(install.installDir))}/`),
-  )
+  return ownership.installRoots.some((root) => command.includes(root))
     ? { process: processInfo, reason: 'agent-browser-daemon' }
     : undefined;
-}
-
-/**
- * The current install plus every sibling version directory under the same state dir, so a fleet
- * left running by a previous pin still matches after an upgrade moves the current install.
- */
-function managedInstalls(status: AgentBrowserToolStatus): ManagedInstallPaths[] {
-  const siblings = listManagedInstallPaths(status.stateDir).filter(
-    (install) => path.resolve(install.installDir) !== path.resolve(status.installDir),
-  );
-  return [status, ...siblings];
 }
 
 function managedBrowserHomeMarkers(
   status: Pick<ManagedInstallPaths, 'homeDir' | 'runtimeHomeDir'>,
 ): string[] {
-  return uniqueStrings([
+  return [
     path.join(status.homeDir, '.agent-browser', 'browsers'),
     path.join(status.runtimeHomeDir, '.agent-browser', 'browsers'),
-  ]);
+  ];
 }
 
 function isCommandUnderPath(processInfo: HostProcessInfo, rootPath: string): boolean {
