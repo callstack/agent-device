@@ -184,8 +184,10 @@ export const TEST_ONLY_FIXTURE_SUBPATHS: ReadonlySet<string> = new Set([
 /** Consumer side of `TEST_ONLY_FIXTURE_SUBPATHS`, mirroring R13's non-production predicate. */
 function importsTestOnlyFixtureFromProduction(file: string, specifier: string): boolean {
   if (!TEST_ONLY_FIXTURE_SUBPATHS.has(specifier)) return false;
+  // Root `test/`, package-local `packages/*/test/`, *.test.ts, and __tests__ trees are all
+  // test consumers; anything else is production.
   const isTestConsumer =
-    file.startsWith('test/') || file.endsWith('.test.ts') || file.includes('/__tests__/');
+    /(?:^|\/)test\//.test(file) || file.endsWith('.test.ts') || file.includes('/__tests__/');
   return !isTestConsumer;
 }
 

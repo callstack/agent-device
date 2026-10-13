@@ -337,12 +337,19 @@ test('the test-only fixture subpaths accept test consumers and deny production o
     externalDependencies: new Map(),
   };
   const rootDeps = new Set(consumer.workspaceDependencies);
+  // Pin the set independently: iterating the checker's own set would let deleting an entry
+  // silently delete its accept/deny coverage with it.
+  assert.deepEqual([...TEST_ONLY_FIXTURE_SUBPATHS].sort(), [
+    '@agent-device/device-selection/inventory-gateways-fixtures',
+    '@agent-device/replay-port/replay-script-source-fixtures',
+  ]);
   for (const specifier of TEST_ONLY_FIXTURE_SUBPATHS) {
     const sites = (file: string) => specifierSites(file, `import { f } from '${specifier}';`);
     for (const file of [
       'src/daemon/__tests__/consumer.test.ts',
       'test/integration/consumer.ts',
       'packages/daemon-side/src/__tests__/consumer.test.ts',
+      'packages/daemon-side/test/harness.ts',
     ]) {
       assert.deepEqual(checkRootSites(sites(file), ALL, rootDeps, true), [], file);
       assert.deepEqual(checkPackageInternalSites(consumer, sites(file), ALL, true), [], file);
