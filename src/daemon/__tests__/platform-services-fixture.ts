@@ -36,10 +36,10 @@ export function daemonPlatformServicesFixture(
 }
 
 /** The canned runner-session observation: no live runner on any device. */
-export const observeRunnerSessionFixture = vi.fn(async (_deviceId: string) => undefined);
+const observeRunnerSessionFixture = vi.fn(async (_deviceId: string) => undefined);
 
 /** The canned foreground answer: nothing observable to name a sole foreground app. */
-export const resolveSoleForegroundAppFixture = vi.fn(
+const resolveSoleForegroundAppFixture = vi.fn(
   async (_params: Readonly<{ simulatorSetPath?: string }>) => undefined,
 );
 
@@ -54,14 +54,14 @@ export const observeBootTimeMsFixture = vi.fn(
 );
 
 /** The canned readiness answer: local readiness succeeds; a suite rejects this to fail an open. */
-export const ensureLocalDeviceReadyFixture = vi.fn(async (_device: DeviceInfo) => true);
+const ensureLocalDeviceReadyFixture = vi.fn(async (_device: DeviceInfo) => true);
 
 /**
  * The canned surface answer: no platform validation, just the session's own surface carried
  * forward or `app`. Suites needing another surface pass one through `overrides`. The macOS and
  * Linux surface rules are pinned in the composition lane.
  */
-export const resolveRequestedOpenSurfaceFixture = vi.fn(
+const resolveRequestedOpenSurfaceFixture = vi.fn(
   (params: {
     device: DeviceInfo;
     surfaceFlag: string | undefined;
@@ -71,7 +71,7 @@ export const resolveRequestedOpenSurfaceFixture = vi.fn(
 );
 
 /** The canned relaunch answer: every requested relaunch target is acceptable. */
-export const validateOpenRelaunchTargetFixture = vi.fn(
+const validateOpenRelaunchTargetFixture = vi.fn(
   async (_params: {
     target: string | undefined;
     platform: string | undefined;

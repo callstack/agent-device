@@ -29,6 +29,9 @@
     "scripts/patch-xcuitest-runner-icon.ts",
     "scripts/write-xcuitest-cache-metadata.ts",
     "scripts/xcuitest-build-settings.ts",
+    // The 11a-4 residue scan runs by hand (and from CI prose until R11 in #3546 owns
+    // the rule); nothing in the dependency graph imports it.
+    "scripts/daemon-edge-residue-scan.mjs",
     "packages/capture-kit/src/ios-snapshot-engine/replay.ts",
     // #1596 regression fixture: runs as a real `node --experimental-strip-types`
     // subprocess (test/integration/daemon-replace-exit-flush.test.ts), so

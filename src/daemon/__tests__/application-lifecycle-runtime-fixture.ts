@@ -103,7 +103,7 @@ export const prepareApplicationOpenFixture = vi.fn(async (device: DeviceInfo): P
  * passes in). Relaunch identity, runner prewarm policy, and post-open observation are the composed
  * owners' rules, pinned under `src/__tests__/daemon-composition/`.
  */
-export const openApplicationFixture = vi.fn(
+const openApplicationFixture = vi.fn(
   async (
     _device: DeviceInfo,
     directOpen: NonNullable<ApplicationLifecycleRuntimeOperations['openApplication']>,
