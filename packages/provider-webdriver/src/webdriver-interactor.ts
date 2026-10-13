@@ -352,6 +352,10 @@ class WebDriverInteractor implements Interactor {
     };
   }
 
+  /**
+   * W3C window rect has no server-side deadline. The transport bound limits client
+   * waiting; Appium can keep its command lock until the downstream read finishes.
+   */
   private async readAndroidSnapshotViewport(signal?: AbortSignal) {
     try {
       const rect = await this.client.windowRect({
