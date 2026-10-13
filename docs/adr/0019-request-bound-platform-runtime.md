@@ -935,7 +935,7 @@ The targets below are proposed defaults, not an accepted commitment. No tracking
 line authorizes work against them yet; they exist to give the next migration wave a numeric
 baseline and are open for revision or rejection.
 
-**Daemon top-level footprint.** `git ls-tree --name-only origin/main packages/daemon/src/ | grep -E
+**Daemon top-level footprint.** `git ls-tree --name-only origin/main src/daemon/ | grep -E
 '\.ts$' | grep -vE '\.test\.ts$' | wc -l` measured 199 production files at `e624ef9d3f`. Proposed
 target: ≤ 60. `packages/daemon/src/**` is a permanent zone under R65; the target is about what remains
 there, not about retiring the directory.
