@@ -9,36 +9,23 @@ import { sessionStateDeclarationFile } from './session-state.ts';
 // (field ownership); this overlay owns the read side. The shape target is found by the
 // declaration, not a recorded path: a path constant would silently measure zero shape importers
 // the moment the declaration moves (#2346 moved it from types.ts to session-state.ts). The
-// ratchet applies to the handler-owned subset — the flat packages/daemon/src/handlers/ surface the
-// #2132 migration targeted — and is a membership ratchet against the merge-base: the set may
-// only shrink, so a handler file gaining state-shape or store authority fails instead of
-// silently regrowing the hotspot.
+// ratchet applies to the handler-owned subset — the handler surface the #2132 migration targeted
+// — and is a membership ratchet against the merge-base: the set may only shrink, so a handler
+// file gaining state-shape or store authority fails instead of silently regrowing the hotspot.
+// Both trees are measured in head coordinates: mergeBaseRatchets canonicalizes every merge-base
+// path through renamedSince, so the reference set names the same layer folders as the working
+// tree and membership compares paths directly.
 
 export const SESSION_AUTHORITY_OVERLAY_RULE = 'R75 session-authority-overlay';
 
-// The flat handler surface: the pre-layer-folder path plus the layer folders it split into.
-// The ratchet measures the merge-base tree with these same constants, so all spellings stay
-// live until the merge-base moves past the layer-folder split.
+/** The handler folders: the layer folders the pre-fold handlers/ tree split into. */
 const HANDLER_ROOTS = [
-  'packages/daemon/src/handlers/',
   'packages/daemon/src/sessions/handlers/',
   'packages/daemon/src/execution/handlers/',
 ];
 
-// The SessionStore authority module lives at its layer path in this tree and at its pre-layer-
-// folder path in the merge-base tree; both spellings measure the same authority.
-const SESSION_STORE_AUTHORITY_TARGETS = new Set([
-  'packages/daemon/src/core/session-store.ts',
-  'packages/daemon/src/session-store.ts',
-]);
-
-/** Fold a handler file to its handler-relative membership key across the layer-folder move. */
-function handlerKey(file: string): string {
-  for (const root of HANDLER_ROOTS) {
-    if (file.startsWith(root)) return file.slice(root.length);
-  }
-  return file;
-}
+/** The SessionStore authority module; the merge-base measurement canonicalizes onto this path. */
+const SESSION_STORE_AUTHORITY_TARGET = 'packages/daemon/src/core/session-store.ts';
 
 export type SessionAuthorityOverlay = Readonly<{
   /** Production files importing the SessionState symbol from its declaring module, sorted. */
@@ -63,14 +50,14 @@ export function measureSessionAuthorityOverlay(
     ) {
       shape.add(edge.file);
     }
-    if (SESSION_STORE_AUTHORITY_TARGETS.has(edge.target) && edge.symbols.includes('SessionStore')) {
+    if (edge.target === SESSION_STORE_AUTHORITY_TARGET && edge.symbols.includes('SessionStore')) {
       authority.add(edge.file);
     }
   }
   return { shapeFiles: [...shape].sort(), authorityFiles: [...authority].sort() };
 }
 
-/** The ratcheted subset: the flat handler surface, the one #2132's migration drove down. */
+/** The ratcheted subset: the handler surface, the one #2132's migration drove down. */
 export function handlerOwnedOverlay(overlay: SessionAuthorityOverlay): SessionAuthorityOverlay {
   const inHandlers = (file: string) => HANDLER_ROOTS.some((root) => file.startsWith(root));
   return {
@@ -81,7 +68,7 @@ export function handlerOwnedOverlay(overlay: SessionAuthorityOverlay): SessionAu
 
 /**
  * Catches: the handler-owned SessionState-shape / SessionStore-authority surface regrowing —
- *   a file under packages/daemon/src/handlers/ importing either symbol that the merge-base does not
+ *   a file under the daemon handler folders importing either symbol that the merge-base does not
  *   already import it, which is exactly the deep-import the #2132 migration paid to delete.
  *   Both overlays are full-scope; the handler-owned subset is filtered here, at the single
  *   place the ratchet applies it, so the message can never name a file outside its scope.
@@ -101,14 +88,12 @@ export function checkSessionAuthorityOverlay(
   const scopedMeasured = handlerOwnedOverlay(measured);
   const scopedReference = handlerOwnedOverlay(reference);
   const violations: LayeringViolation[] = [];
-  // Membership compares handler-relative keys: the merge-base names each file under the flat
-  // handlers/ root, this tree under its layer folder; the key folds both to one member.
-  const known = (files: readonly string[]) => new Set(files.map(handlerKey));
+  const known = (files: readonly string[]) => new Set(files);
   const referenceShape = known(scopedReference.shapeFiles);
   const referenceAuthority = known(scopedReference.authorityFiles);
 
   for (const file of scopedMeasured.shapeFiles) {
-    if (referenceShape.has(handlerKey(file))) continue;
+    if (referenceShape.has(file)) continue;
     violations.push({
       rule: SESSION_AUTHORITY_OVERLAY_RULE,
       file,
@@ -120,7 +105,7 @@ export function checkSessionAuthorityOverlay(
     });
   }
   for (const file of scopedMeasured.authorityFiles) {
-    if (referenceAuthority.has(handlerKey(file))) continue;
+    if (referenceAuthority.has(file)) continue;
     violations.push({
       rule: SESSION_AUTHORITY_OVERLAY_RULE,
       file,

@@ -69,7 +69,7 @@ export function recordRuntimeDaemonMechanicsViolations(
 }
 
 function isDaemonRecordOwner(filePath: string): boolean {
-  return /^packages\/daemon\/src\/(?:handlers|sessions\/handlers|execution\/handlers)\/record-runtime(?:-[^/]+)?\.ts$/.test(
+  return /^packages\/daemon\/src\/sessions\/handlers\/record-runtime(?:-[^/]+)?\.ts$/.test(
     filePath,
   );
 }
