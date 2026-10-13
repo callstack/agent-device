@@ -218,17 +218,27 @@ test('editing a function that already scores too high blocks, even though the sc
 test("the score of an untouched file is not this change's verdict", () => {
   // Half of this is the exit code: the map holds `src/debt.ts` at CRAP 42 and the run is still green,
   // which only happens if fallow filtered its findings by this diff rather than scoring the repo.
-  // The other half is that the diff reaches fallow on stdin and never touches the checkout, so a
-  // `fallow-crap.diff` left by an earlier run can never silently supply a scope.
+  // The diff reaches fallow on stdin and never through the checkout, so seed the artifact an
+  // earlier release wrote with a scope charging the untouched debt file: a gate that read that
+  // file again would report `src/debt.ts:1` at 42 and exit 1, and one that rewrote it would leave
+  // different content behind. Scoping on stdin does neither.
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
   write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
   commit('clean edit, debt left alone');
+  const staleDiff = [
+    'diff --git a/src/debt.ts b/src/debt.ts',
+    '--- a/src/debt.ts',
+    '+++ b/src/debt.ts',
+    '@@ -1,0 +1,1 @@',
+    '+export const planted = 1;',
+  ].join('\n');
+  write('coverage/fallow-crap.diff', staleDiff);
 
   const { code, out } = check(['--base', HEADS[0]!]);
 
   assert.equal(code, 0);
   assert.doesNotMatch(out, /src\/debt\.ts:1/);
-  assert.ok(!fs.existsSync(path.join(repo, 'coverage/fallow-crap.diff')));
+  assert.equal(fs.readFileSync(path.join(repo, 'coverage/fallow-crap.diff'), 'utf8'), staleDiff);
 });
 
 test('a pure rename does not touch the functions that moved with the file', () => {
