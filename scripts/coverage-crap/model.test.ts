@@ -7,7 +7,7 @@ import {
   parseFallowJsonReport,
   parseIstanbulCoverageMap,
   readCrapFindings,
-  readCrapExemptions,
+  readCrapOverrides,
   renderCrapAnnotations,
   renderCrapReport,
   sanitizeIstanbulCoverage,
@@ -96,6 +96,7 @@ const render = (input: Partial<Parameters<typeof renderCrapReport>[0]> = {}) =>
     threshold: 30,
     scope: 'touched',
     verdict: clean('touched'),
+    overrides: { matched: [], stale: [] },
     ...input,
   });
 
@@ -180,55 +181,105 @@ test('the same gap in the whole-repo report is a note, not a verdict', () => {
   assert.match(report, /\(9 recorded, 12 enumerated\)/);
 });
 
-// Only an override that raises `maxCrap` above the default exempts a file: the others are caps, and
-// reading a cap as an exemption would hide debt the report is supposed to show.
-const CONFIGURED = JSON.stringify({
-  health: {
-    thresholdOverrides: [
-      { files: ['src/worker.ts'], maxCrap: 1e12, reason: 'Worker thread.' },
-      { files: ['src/cheaper.ts'], maxCrap: 12, reason: 'A cap, not an exemption.' },
-      { files: ['src/no-crap.ts'], reason: 'Raises nothing.' },
-    ],
-  },
-});
+// The same shape fallow echoes in its health JSON for one health run: each configured override
+// with the function this run matched it to. `insufficient` is the growth case: the function scored
+// above its ceiling. `stale` and `no_match` mean the ceiling is no longer doing anything — the
+// function no longer needs it, or no longer exists.
+const HEALTH_REPORT = {
+  threshold_overrides: [
+    {
+      status: 'active',
+      dimension: 'crap',
+      path: 'src/worker.ts',
+      function: 'runJob',
+      configured_thresholds: { max_crap: 90 },
+      // The merged ceiling differs (an overlapping entry set it lower), so a report that read the
+      // merge instead of this entry's own config would print the wrong number.
+      effective_thresholds: { max_cyclomatic: 20, max_cognitive: 15, max_crap: 45 },
+      reason: 'Worker thread.',
+    },
+    {
+      status: 'insufficient',
+      dimension: 'crap',
+      path: 'src/probe.ts',
+      function: 'probePage',
+      configured_thresholds: { max_crap: 90 },
+      effective_thresholds: { max_crap: 90 },
+      reason: 'Browser-evaluated.',
+    },
+    {
+      status: 'stale',
+      dimension: 'crap',
+      path: 'src/fixed.ts',
+      function: 'nowCovered',
+      effective_thresholds: { max_crap: 90 },
+      reason: 'Was untestable.',
+    },
+    {
+      status: 'no_match',
+      dimension: 'crap',
+      configured_thresholds: { max_crap: 90 },
+      reason: 'Moved away.',
+    },
+    {
+      // A unit-size override is a different dimension and none of this report's business.
+      status: 'active',
+      dimension: 'unit_size',
+      path: 'src/big.ts',
+      function: 'bigThing',
+      effective_thresholds: { max_unit_size: 200 },
+      reason: 'Generated.',
+    },
+  ],
+  findings: [],
+};
 
-test('the exemptions are read from the resolved config and stated with their file-wide scope', () => {
-  const exemptions = readCrapExemptions(CONFIGURED);
-  assert.deepEqual(exemptions.exemptions, [
-    { files: ['src/worker.ts'], maxCrap: 1e12, reason: 'Worker thread.' },
+test('the exemptions are read from the health report with the ceiling each one carries', () => {
+  const overrides = readCrapOverrides(HEALTH_REPORT);
+  assert.deepEqual(overrides.matched, [
+    {
+      file: 'src/worker.ts',
+      name: 'runJob',
+      maxCrap: 90,
+      reason: 'Worker thread.',
+      exceeded: false,
+    },
+    {
+      file: 'src/probe.ts',
+      name: 'probePage',
+      maxCrap: 90,
+      reason: 'Browser-evaluated.',
+      exceeded: true,
+    },
   ]);
-  const report = render({
-    scope: 'all',
-    verdict: clean('all'),
-    exemptions,
-  });
-  assert.match(report, /exemptions in `fallow-crap\.json` \(1\).*every function in its files/s);
-  assert.match(report, /- `src\/worker\.ts` — `maxCrap: 1e\+12`: Worker thread\./);
+  assert.deepEqual(overrides.stale, [
+    { file: 'src/fixed.ts', name: 'nowCovered', reason: 'Was untestable.' },
+    { file: null, name: null, reason: 'Moved away.' },
+  ]);
+  const report = render({ scope: 'all', verdict: clean('all'), overrides });
+  assert.match(
+    report,
+    /CRAP exemptions from `\.fallowrc\.json` \(2 applied\).*one function only, so growth above it still blocks/s,
+  );
+  assert.match(report, /- `src\/worker\.ts` `runJob` — ceiling 90: Worker thread\./);
+  assert.match(
+    report,
+    /`src\/probe\.ts` `probePage` — ceiling 90 \*\*\(exceeded: scored above the ceiling\)\*\*/,
+  );
+  assert.match(
+    report,
+    /No longer needed by any function and can be deleted: `src\/fixed\.ts` `nowCovered` \(“Was untestable\.”\), an override \(“Moved away\.”\)/,
+  );
+  assert.doesNotMatch(report, /`src\/big\.ts`/);
 });
 
-test('the exemption listing distinguishes none, empty, and unreadable', () => {
-  // None and unknown are different claims, and an unreadable one must not be a crash: fallow can
-  // exit 0 and print a warning with no report, and which files are exempt is reporting, not gating.
-  // Throwing there would turn a clean advisory `--all` run into exit 1.
-  assert.deepEqual(readCrapExemptions('{"health":{}}'), { available: true, exemptions: [] });
-  assert.deepEqual(readCrapExemptions('{"health":{"thresholdOverrides":[]}}'), {
-    available: true,
-    exemptions: [],
-  });
-  assert.deepEqual(readCrapExemptions('Error: no config'), {
-    available: false,
-    detail: 'fallow printed no JSON report:',
-  });
-});
-
-test('exemptions that could not be read are reported as unknown rather than as none', () => {
-  const report = render({
-    scope: 'all',
-    verdict: clean('all'),
-    exemptions: { available: false, detail: 'fallow config exited with code 1' },
-  });
-  assert.match(report, /could not be read from the config \(fallow config exited with code 1\)/);
-  assert.doesNotMatch(report, /exemptions in `fallow-crap\.json` \(0\)/);
+test('a report with no overrides section lists neither exemptions nor a gap', () => {
+  // An absent `threshold_overrides` is not "all stale" and not a crash: an advisory `--all` run
+  // must stay green when fallow echoes nothing.
+  assert.deepEqual(readCrapOverrides({ findings: [] }), { matched: [], stale: [] });
+  assert.deepEqual(readCrapOverrides('not json'), { matched: [], stale: [] });
+  const report = render({ scope: 'all', verdict: clean('all'), overrides: readCrapOverrides({}) });
+  assert.doesNotMatch(report, /exemptions/i);
 });
 
 /**

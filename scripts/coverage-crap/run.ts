@@ -24,14 +24,13 @@ import {
   decideCrapVerdict,
   parseFallowJsonReport,
   parseIstanbulCoverageMap,
-  readCrapExemptions,
   readCrapFindings,
+  readCrapOverrides,
   readEstimatedFindings,
   readTouchedFiles,
   renderCrapAnnotations,
   renderCrapReport,
   sanitizeIstanbulCoverage,
-  type CrapExemptions,
   type CrapFinding,
   type CrapScope,
   type IstanbulCoverageMap,
@@ -42,7 +41,7 @@ const USAGE = 'Usage: pnpm check:coverage-crap [--base <ref> | --all]\n';
 const COVERAGE_PATH = 'coverage/coverage-istanbul.json';
 const LCOV_PATH = 'coverage/lcov.info';
 const SANITIZED_PATH = 'coverage/fallow-crap-coverage.json';
-const FALLOW_CONFIG = 'fallow-crap.json';
+const FALLOW_CONFIG = '.fallowrc.json';
 const CRAP_THRESHOLD = 30;
 const FALLOW_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
 
@@ -158,7 +157,7 @@ function gatherCrapInputs(
   };
 }
 
-/** Scores the sanitized map, scoped to this diff in `touched` scope. */
+/** Scores the sanitized map against `.fallowrc.json`, scoped to this diff in `touched` scope. */
 function runFallowHealth(
   root: string,
   scope: CrapScope,
@@ -194,21 +193,6 @@ function runFallowHealth(
     : { failure: `fallow health failed:\n${fallow.stderr}` };
 }
 
-/**
- * The exemptions come from the resolved config, not from a copy in this diff: the report then states
- * the scope fallow actually applied. Reading them is reporting, not gating, so a failure says so.
- */
-function readExemptions(root: string): CrapExemptions {
-  const config = runCmdSync(
-    process.execPath,
-    [FALLOW_BIN, 'config', '--config', FALLOW_CONFIG, '--format', 'json'],
-    { cwd: root, allowFailure: true, maxBuffer: FALLOW_MAX_BUFFER_BYTES },
-  );
-  return config.exitCode === 0
-    ? readCrapExemptions(config.stdout)
-    : { available: false, detail: firstLine(config.stderr) };
-}
-
 /** Scores what was gathered, prints the verdict, and returns the process exit code. */
 function reportCrapVerdict(root: string, scope: CrapScope, inputs: CrapInputs): number {
   const health = runFallowHealth(root, scope, inputs.diff);
@@ -235,7 +219,7 @@ function reportCrapVerdict(root: string, scope: CrapScope, inputs: CrapInputs): 
     threshold: CRAP_THRESHOLD,
     scope,
     verdict,
-    exemptions: readExemptions(root),
+    overrides: readCrapOverrides(report),
   });
   publish(rendered, scope, verdict.offenders);
   return verdict.blocking ? 1 : 0;
