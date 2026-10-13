@@ -70,7 +70,7 @@ export function readAppleSnapshotResult(
   device: Pick<DeviceInfo, 'platform' | 'appleOs' | 'target'>,
 ): AppleRunnerSnapshotResult {
   const systemSurface = readSystemSurfaceProvenance(result.systemSurface);
-  const presentedSurface = readPresentedSurfaceFact(result.presentedSurface);
+  const presentedSurface = readPresentedSurfaceFact(result);
   const keyboard = readSnapshotKeyboardBandFact(result.keyboard);
   const observation = readSnapshotObservation(result.observation);
   const targetActivation = readTargetActivationFact(result[TARGET_ACTIVATION_WIRE_KEY], (detail) =>

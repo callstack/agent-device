@@ -133,8 +133,8 @@ export type PreresolvedInteractionTarget = {
    */
   iosSystemSurfaceBundleId?: string;
   /**
-   * Whether the capture `nodes` came from read a modal presentation over the app (#3565), carried so
-   * the adopting leaf's settle baseline keeps the fact its own capture established.
+   * Whether the producer that captured `nodes` read a modal presentation over the app (#3565),
+   * carried so the adopting leaf's settle baseline keeps the fact its own capture established.
    */
   presentedSurface?: PresentedSurface;
   /**
@@ -159,8 +159,8 @@ export type SurfaceScopedNodes = {
   /** Bundle id of the in-place iOS system surface; absent for ordinary app content. */
   surfaceBundleId?: string;
   /**
-   * Whether the capture these nodes came from read a modal presentation over the app (#3565). The
-   * settle baseline is carried in this type, so the fact has to travel with the nodes: a consumer
+   * Whether the producer that captured these nodes read a modal presentation over the app (#3565).
+   * The settle baseline is carried in this type, so the fact has to travel with the nodes: a consumer
    * that arms #1831's dismissal confirmation reads it here instead of guessing from the tree.
    * Absent means the capture's producer published no fact.
    */

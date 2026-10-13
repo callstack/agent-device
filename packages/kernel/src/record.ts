@@ -6,7 +6,6 @@ import type {
   Rect,
   SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
-import { PRESENTED_SURFACE_STATES } from '@agent-device/kernel/snapshot';
 
 function readRequired<T>(
   record: Record<string, unknown>,
@@ -160,18 +159,44 @@ function readKeyboardFrameFact(
 }
 
 /**
- * Reads a producer's presented-surface fact (#3565) out of an untyped payload, shared by the Apple
- * runner's wire reader and the daemon's Node client reader. The argument is the value already read
- * under the fact's own key, so `undefined` is the producer stating nothing and stays silence. A
- * value under that key which is not one of the three states is restated as `'unknown'` rather than
- * dropped: the reader cannot tell a malformed `'absent'` from a genuine one, and silence would leave
- * a consumer that arms a dismissal confirmation on `undefined` — which is exactly the guessing this
- * fact retires. Only a named state is trusted.
+ * The declared states, each keyed by its own name so a payload string is a state only when this table
+ * has that exact key. Keyed by `PresentedSurface`, so a state added to the vocabulary without a row
+ * here fails to compile instead of silently reading as `unknown`.
+ *
+ * A local table rather than `PRESENTED_SURFACE_STATES`: this module is the shared wire reader every
+ * response seam imports, and a load-time edge to `kernel/snapshot.ts` from here makes that module
+ * eager for every consumer of `kernel/record` — which ADR 0019's loading-shape probe measures per
+ * entry (`scripts/__tests__/eager-closure-budgets.test.ts`). The type is the tie that keeps the two
+ * in agreement, and `presented-surface.test.ts` reads both against the same payloads.
  */
-export function readPresentedSurfaceFact(value: unknown): PresentedSurface | undefined {
-  if (value === undefined) return undefined;
-  return (PRESENTED_SURFACE_STATES as readonly unknown[]).includes(value)
-    ? (value as PresentedSurface)
+const PRESENTED_SURFACE_BY_NAME: Readonly<Record<PresentedSurface, PresentedSurface>> = {
+  presented: 'presented',
+  absent: 'absent',
+  unknown: 'unknown',
+};
+
+/** The key a producer publishes its presented-surface fact under (#3565). */
+const PRESENTED_SURFACE_WIRE_KEY = 'presentedSurface';
+
+/**
+ * Reads a producer's presented-surface fact (#3565) out of a response or runner payload, shared by the
+ * Apple runner's wire reader and the Node client's. Taking the payload rather than the value is the
+ * point: reading a wire fact is a property lookup on data the producer controls, so it has to be
+ * own-property both ways. A missing key is the producer stating nothing and stays silence — and an
+ * inherited one is not silence's substitute, since a plain lookup walks to `Object.prototype`, where
+ * anything sharing the process could park `'absent'`, the one state that disarms the confirmation
+ * #1831 arms. A value under the fact's own key which is not one of the three states is restated as
+ * `'unknown'` rather than dropped: the reader cannot tell a malformed `'absent'` from a genuine one,
+ * and silence would leave a consumer arming a dismissal confirmation on nothing — the guessing this
+ * fact retires. Only a name in this table is trusted, so a payload naming `constructor` is not.
+ */
+export function readPresentedSurfaceFact(
+  payload: Record<string, unknown>,
+): PresentedSurface | undefined {
+  if (!Object.hasOwn(payload, PRESENTED_SURFACE_WIRE_KEY)) return undefined;
+  const value = payload[PRESENTED_SURFACE_WIRE_KEY];
+  return typeof value === 'string' && Object.hasOwn(PRESENTED_SURFACE_BY_NAME, value)
+    ? PRESENTED_SURFACE_BY_NAME[value as PresentedSurface]
     : 'unknown';
 }
 

@@ -388,7 +388,14 @@ export function createAgentDeviceClient(
         // `nodes` tree and would collapse it to an empty snapshot. Pass the
         // leveled payload through verbatim. (Mirrors capture.screenshot; the
         // caller opted into the level, so the runtime value is the leveled shape.)
-        if (isLeveledResponse(options)) return data as unknown as CaptureSnapshotResult;
+        if (isLeveledResponse(options)) {
+          // Verbatim is not unchecked: the digest carries the presented-surface fact (#3565), which
+          // the normalizer skipped above would have read. `readPresentedSurfaceFact` owns its rules.
+          const presentedSurface = readPresentedSurfaceFact(data);
+          return (presentedSurface === undefined
+            ? data
+            : { ...data, presentedSurface }) as unknown as CaptureSnapshotResult;
+        }
         return normalizeSnapshotResult(data, session);
       },
       screenshot: async (options: CaptureScreenshotOptions = {}) => {
@@ -554,7 +561,7 @@ function optionalSnapshotResponseFields(
   const keyboard = readSnapshotKeyboardBandFact(data.keyboard);
   const viewport = readSnapshotViewportSize(data.viewport);
   const snapshotDiagnostics = readSnapshotDiagnosticsSummary(data.snapshotDiagnostics);
-  const presentedSurface = readPresentedSurfaceFact(data.presentedSurface);
+  const presentedSurface = readPresentedSurfaceFact(data);
   return {
     ...(keyboard ? { keyboard } : {}),
     ...(viewport ? { viewport } : {}),

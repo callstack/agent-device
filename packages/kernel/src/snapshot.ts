@@ -399,7 +399,7 @@ export type SnapshotKeyboardBandFact =
  * a tree from a producer that reports no UIKit class facts, an unexplained extra container, a
  * truncated capture — answers `'unknown'`, never `'absent'`.
  */
-export const PRESENTED_SURFACE_STATES = ['presented', 'absent', 'unknown'] as const;
+export const PRESENTED_SURFACE_STATES = Object.freeze(['presented', 'absent', 'unknown'] as const);
 
 export type PresentedSurface = (typeof PRESENTED_SURFACE_STATES)[number];
 
