@@ -2,10 +2,11 @@
 context platform=ios target=mobile
 
 open com.apple.Preferences --relaunch
-scroll down --until 'label=Accessibility'
-wait 500
-find text "Accessibility" exists
+is visible 'label=General'
+is absent 'label=Apps'
+scroll down --until 'label=Apps'
+is visible 'label=Apps'
 
+is absent 'label=General'
 scroll up --until 'label=General'
-wait 500
-find text "General" exists
+is visible 'label=General'
