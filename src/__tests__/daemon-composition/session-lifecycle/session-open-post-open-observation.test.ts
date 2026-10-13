@@ -22,7 +22,7 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
     resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(mockResolveTargetDevice)),
   };
 });
-vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
+vi.mock('@agent-device/daemon/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 vi.mock('../../../platform-runtime-apple-application-tools.ts', async (importOriginal) => {

@@ -1,8 +1,8 @@
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { handleInteractionCommands } from '@agent-device/daemon/interaction/index';
 import { getRuntimeBindings } from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
 import { contextFromFlags } from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
-import type { SessionStore } from '@agent-device/daemon/testing/session-store';
+import type { SessionStore } from '@agent-device/daemon/session-store';
 
 /**
  * The real command-surface legs the relocated interaction suites drive through the handler.

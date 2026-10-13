@@ -16,8 +16,8 @@ import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
 } from '@agent-device/contracts/daemon-http';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
+import { LeaseRegistry } from '@agent-device/daemon/lease-registry';
+import { createDaemonHttpServer } from '@agent-device/daemon/server/http-server';
 import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';

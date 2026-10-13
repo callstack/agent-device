@@ -8,9 +8,9 @@ import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import {
   cleanupDownloadableArtifact,
   trackDownloadableArtifact,
-} from '@agent-device/daemon/testing/artifact-tracking';
-import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
+} from '@agent-device/daemon/artifact-tracking';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import { createDaemonHttpServer } from '@agent-device/daemon/server/http-server';
 import { attachRemoteReplayTestArtifacts } from '@agent-device/replay-port/test-command';
 import {
   downloadRemoteArtifact,

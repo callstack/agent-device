@@ -16,9 +16,9 @@ import type {
   DaemonInvokeFn,
   DaemonRequest,
   DaemonResponse,
-} from '@agent-device/daemon/testing/daemon-request';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
+} from '@agent-device/daemon/daemon-request';
+import { createDaemonHttpServer } from '@agent-device/daemon/server/http-server';
+import { createSocketServer, listenNetServer } from '@agent-device/daemon/server/transport';
 import { sendRequest } from '../daemon-client-transport.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {

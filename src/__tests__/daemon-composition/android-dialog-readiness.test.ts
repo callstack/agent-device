@@ -38,7 +38,7 @@ import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { ensureAndroidBlockingSystemDialogReady as ensureOwnedAndroidBlockingSystemDialogReady } from '@agent-device/daemon/testing/android-system-dialog';
+import { ensureAndroidBlockingSystemDialogReady as ensureOwnedAndroidBlockingSystemDialogReady } from '@agent-device/daemon/android-system-dialog';
 import { androidObservation } from '../../platform-runtime.ts';
 
 const ensureAndroidBlockingSystemDialogReady = (

@@ -14,7 +14,7 @@ import { createTestDeviceInventoryGateways } from '@agent-device/device-selectio
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { LeaseRegistry } from '@agent-device/daemon/lease-registry';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
 import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
@@ -32,7 +32,7 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   return { ...actual, resolveTargetDevice: vi.fn(async () => DEVICE) };
 });
 
-vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
+vi.mock('@agent-device/daemon/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 

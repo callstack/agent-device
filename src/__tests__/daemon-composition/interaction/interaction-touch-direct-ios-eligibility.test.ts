@@ -2,7 +2,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { handleInteractionCommands } from '@agent-device/daemon/interaction/index';
 import {
   getRuntimeBindings,
   mockFillPoint,
@@ -30,7 +30,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
+vi.mock('@agent-device/daemon/snapshot-interactor-capture', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
@@ -45,7 +45,7 @@ import {
   getAndroidBlockingDialogObservation,
   getAndroidScreenSize,
 } from '@agent-device/platform-android/mechanics';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
+import { captureSnapshotWithInteractor } from '@agent-device/daemon/snapshot-interactor-capture';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);

@@ -4,10 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { runRequestHandlerChain } from '@agent-device/daemon/testing/request-handler-chain';
-import { getDaemonRouteOwnerFiles } from '@agent-device/daemon/testing/route-owner-files';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/testing/daemon-request';
+import { LeaseRegistry } from '@agent-device/daemon/lease-registry';
+import { runRequestHandlerChain } from '@agent-device/daemon/request-handler-chain';
+import { getDaemonRouteOwnerFiles } from '@agent-device/daemon/route-owner-files';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { LINUX_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import {
   makeIosSession,
@@ -15,10 +15,10 @@ import {
 } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { handleInteractionCommands } from '@agent-device/daemon/interaction/index';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
-import { createRequestRuntimeBindings } from '@agent-device/daemon/testing/request-runtime-binding';
-import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
+import { createRequestRuntimeBindings } from '@agent-device/daemon/request-runtime-binding';
+import { createRequestDispatchLedger } from '@agent-device/daemon/request-dispatch-ledger';
 import { createLocalLinuxToolProvider, withLinuxToolProvider } from '@agent-device/platform-linux';
 import {
   unavailableBindDevice,

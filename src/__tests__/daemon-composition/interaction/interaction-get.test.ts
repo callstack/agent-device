@@ -7,12 +7,12 @@ import {
   makeIosSession,
 } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { expireRefFrame } from '@agent-device/daemon/testing/ref-frame';
+import { expireRefFrame } from '@agent-device/daemon/ref-frame';
 import {
   setSessionSnapshot,
   STALE_SNAPSHOT_REFS_WARNING,
-} from '@agent-device/daemon/testing/session-snapshot';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+} from '@agent-device/daemon/session-snapshot';
+import { handleInteractionCommands } from '@agent-device/daemon/interaction/index';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import {
   contextFromFlags,
@@ -30,7 +30,7 @@ const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
   mockRunAppleRunnerCommand: vi.fn(),
 }));
 
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
+vi.mock('@agent-device/daemon/snapshot-interactor-capture', async () => {
   const fixture =
     await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };

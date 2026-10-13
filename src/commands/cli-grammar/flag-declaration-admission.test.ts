@@ -6,7 +6,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
 import type { FlagDefinition } from '@agent-device/command-registry/flag-types';
 import { resolveConfigBackedFlagDefaults } from '../schema/cli-config.ts';
-import { recordActionEntry } from '@agent-device/daemon/testing/session-action-recorder';
+import { recordActionEntry } from '@agent-device/daemon/session-action-recorder';
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeTempWorkspace } from '../../__tests__/cli-config-fixtures.ts';
 
@@ -99,7 +99,7 @@ test('recorder sanitization follows the declaration: an undeclared key is droppe
   const planted = getInRegistry(registry, 'overlayRefs');
   Object.assign(planted, { recorded: true });
   const { recordActionEntry: recordPlanted } =
-    await import('@agent-device/daemon/testing/session-action-recorder');
+    await import('@agent-device/daemon/session-action-recorder');
   const recorded = recordPlanted(makeIosSession('default'), {
     command: 'screenshot',
     positionals: [],

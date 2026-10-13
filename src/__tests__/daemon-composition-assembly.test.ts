@@ -7,17 +7,16 @@ import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createDaemonRuntimeDeps } from '../daemon-composition.ts';
 import { startDaemonRuntimeFixture } from './daemon-composition/daemon-runtime-fixture.ts';
-import type { DaemonRuntimeDepsInput } from '@agent-device/daemon/testing/server/daemon-runtime';
+import type { DaemonRuntimeDepsInput } from '@agent-device/daemon/server/daemon-runtime';
 
 // The server builds its own store, so capture that instance the same way the shutdown tests do:
 // the proof is about the store the server hands to the composition callbacks, not one the test
 // fabricates.
 const storeProbe = vi.hoisted(() => ({
-  store: undefined as import('@agent-device/daemon/testing/session-store').SessionStore | undefined,
+  store: undefined as import('@agent-device/daemon/session-store').SessionStore | undefined,
 }));
-vi.mock('@agent-device/daemon/testing/session-store', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/session-store')>();
+vi.mock('@agent-device/daemon/session-store', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/daemon/session-store')>();
   return {
     ...actual,
     SessionStore: class extends actual.SessionStore {

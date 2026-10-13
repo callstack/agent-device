@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { handleLeaseCommands } from '@agent-device/daemon/testing/handlers/lease';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
+import { handleLeaseCommands } from '@agent-device/daemon/handlers/lease';
+import { LeaseRegistry } from '@agent-device/daemon/lease-registry';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { AppError } from '@agent-device/kernel/errors';
 import {

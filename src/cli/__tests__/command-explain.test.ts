@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest';
 import { runExplainCommandCli } from '../../../scripts/explain-command.ts';
 import { commandDescriptors } from '@agent-device/command-registry/registry';
 import { ownerFilesForCommand } from '@agent-device/command-registry/owner-files';
-import { getDaemonRouteOwnerFiles } from '@agent-device/daemon/testing/route-owner-files';
+import { getDaemonRouteOwnerFiles } from '@agent-device/daemon/route-owner-files';
 import {
   explainCommand as explainCommandFromMetadata,
   formatCommandExplanation,

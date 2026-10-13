@@ -1,8 +1,8 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { expireRefFrame } from '@agent-device/daemon/testing/ref-frame';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { expireRefFrame } from '@agent-device/daemon/ref-frame';
+import { handleInteractionCommands } from '@agent-device/daemon/interaction/index';
 import {
   getRuntimeBindings,
   mockTapPoint,
@@ -19,7 +19,7 @@ import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 // blocking-dialog recovery aborts an admitted @ref rather than retargeting it.
 
 type EnsureAndroidBlockingSystemDialogReady =
-  typeof import('@agent-device/daemon/testing/android-system-dialog').ensureAndroidBlockingSystemDialogReady;
+  typeof import('@agent-device/daemon/android-system-dialog').ensureAndroidBlockingSystemDialogReady;
 
 const { androidDialogReadiness } = vi.hoisted(() => ({
   androidDialogReadiness: {
@@ -42,7 +42,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
+vi.mock('@agent-device/daemon/snapshot-interactor-capture', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 
@@ -54,9 +54,9 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
 
 // The blocking-dialog readiness check runs for real (its focus probe is mocked
 // above); the recovery regression below swaps in a recovering implementation.
-vi.mock('@agent-device/daemon/testing/android-system-dialog', async (importOriginal) => {
+vi.mock('@agent-device/daemon/android-system-dialog', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/android-system-dialog')>();
+    await importOriginal<typeof import('@agent-device/daemon/android-system-dialog')>();
   androidDialogReadiness.actual = actual.ensureAndroidBlockingSystemDialogReady;
   return { ...actual, ensureAndroidBlockingSystemDialogReady: androidDialogReadiness.spy };
 });
@@ -66,7 +66,7 @@ import {
   getAndroidBlockingDialogObservation,
   getAndroidScreenSize,
 } from '@agent-device/platform-android/mechanics';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
+import { captureSnapshotWithInteractor } from '@agent-device/daemon/snapshot-interactor-capture';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);

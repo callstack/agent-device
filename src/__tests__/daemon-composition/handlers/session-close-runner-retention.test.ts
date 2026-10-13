@@ -1,12 +1,12 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import * as path from 'node:path';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { LeaseRegistry } from '@agent-device/daemon/lease-registry';
 import { fakeCreateCommandSurface } from '@agent-device/daemon/testing/__tests__/support/command-surface-fake';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { getResolveTargetDeviceMock } from '@agent-device/daemon/testing/__tests__/request-router-dispatch-mocks';
-import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 
 // The runner-retention decision is the real `PlatformResourceCleanup` rule (a booted simulator
@@ -17,7 +17,7 @@ vi.mock('node:timers/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:timers/promises')>();
   return { ...actual, setTimeout: vi.fn(async () => undefined) };
 });
-vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
+vi.mock('@agent-device/daemon/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {

@@ -9,7 +9,7 @@ import {
 import { beforeEach, expect, test, vi } from 'vitest';
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { handleInteractionCommands } from '@agent-device/daemon/interaction/index';
 import {
   getRuntimeBindings,
   mockTapElementSelector,
@@ -22,8 +22,8 @@ import {
   makeTwoButtonNodes,
 } from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
 import { runInteraction } from './interaction-touch-runner.ts';
-import { refFrameState } from '@agent-device/daemon/testing/ref-frame';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
+import { refFrameState } from '@agent-device/daemon/ref-frame';
+import { captureSnapshotWithInteractor } from '@agent-device/daemon/snapshot-interactor-capture';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
@@ -36,7 +36,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
+vi.mock('@agent-device/daemon/snapshot-interactor-capture', () => ({
   captureSnapshotWithInteractor: vi.fn(),
 }));
 

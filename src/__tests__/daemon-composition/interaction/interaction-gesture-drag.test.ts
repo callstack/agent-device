@@ -6,16 +6,16 @@ import {
   authoringPublication,
 } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { activateCompleteRefFrame, refFrameState } from '@agent-device/daemon/testing/ref-frame';
+import { activateCompleteRefFrame, refFrameState } from '@agent-device/daemon/ref-frame';
 
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { handleInteractionCommands } from '@agent-device/daemon/interaction/index';
 import { gestureRuntimeBindingsFixture } from '@agent-device/daemon/testing/interaction/internal/__tests__/gesture-runtime-bindings.fixtures';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 const contextFromFlags = () => ({});
 const captureSnapshotForSession = async ({
   session,
-}: import('@agent-device/daemon/testing/session-state').SessionRef) => session.snapshot!;
+}: import('@agent-device/daemon/session-state').SessionRef) => session.snapshot!;
 let gestures = gestureRuntimeBindingsFixture();
 
 beforeEach(() => {

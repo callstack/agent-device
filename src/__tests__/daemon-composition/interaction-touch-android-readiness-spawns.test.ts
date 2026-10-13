@@ -1,8 +1,8 @@
 import { expect, test } from 'vitest';
 import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { withFakeAdb } from '../test-utils/fake-adb.ts';
-import { expireRefFrame } from '@agent-device/daemon/testing/ref-frame';
-import { runWithAndroidDialogReadinessCheck } from '@agent-device/daemon/testing/interaction/internal/interaction-touch-android-readiness';
+import { expireRefFrame } from '@agent-device/daemon/ref-frame';
+import { runWithAndroidDialogReadinessCheck } from '@agent-device/daemon/interaction/internal/interaction-touch-android-readiness';
 import { androidObservationPolicyFixture as androidObservation } from '@agent-device/daemon/testing/__tests__/android-observation-fixture';
 
 // What blocking-dialog readiness costs a run of taps, end to end. Every one of these `dumpsys`

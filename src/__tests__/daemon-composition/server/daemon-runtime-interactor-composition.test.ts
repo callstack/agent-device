@@ -12,7 +12,7 @@ import {
   tryAcquireDaemonRegistration,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { interactorResolution } from '@agent-device/daemon/testing/interactor-resolution';
+import { interactorResolution } from '@agent-device/daemon/interactor-resolution';
 
 vi.mock('../../../platform-runtime.ts', () => ({
   androidObservation: {},

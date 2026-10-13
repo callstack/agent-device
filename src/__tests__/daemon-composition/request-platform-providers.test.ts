@@ -30,8 +30,8 @@ import type {
   RequestPlatformProviderScope,
   PlatformProviderRequestContext,
 } from '@agent-device/contracts/platform-providers';
-import { resolvePlatformProviderRequestContext } from '@agent-device/daemon/testing/request-platform-provider-context';
-import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
+import { resolvePlatformProviderRequestContext } from '@agent-device/daemon/request-platform-provider-context';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 
 const OTHER_IOS_SIMULATOR: DeviceInfo = {
   platform: 'apple',

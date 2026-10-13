@@ -9,17 +9,17 @@ import {
 import {
   applyRecoveredWarningLatch,
   resolveRecoveredWarningLatch,
-} from '@agent-device/daemon/testing/snapshot-quality-latch';
-import { dispatchSnapshotDiffViaRuntime } from '@agent-device/daemon/testing/snapshot-diff-runtime';
-import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
-import { SessionStore } from '@agent-device/daemon/testing/session-store';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
+} from '@agent-device/daemon/snapshot-quality-latch';
+import { dispatchSnapshotDiffViaRuntime } from '@agent-device/daemon/snapshot-diff-runtime';
+import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/snapshot-runtime';
+import { SessionStore } from '@agent-device/daemon/session-store';
+import type { SessionState } from '@agent-device/daemon/session-state';
 import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
+vi.mock('@agent-device/daemon/snapshot-interactor-capture', async () => {
   const fixture =
     await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };

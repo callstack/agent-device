@@ -20,16 +20,13 @@ import { interactionCliOutputFormatters } from '../../src/commands/interaction/o
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { openCliOutput } from '../../src/commands/management/output.ts';
 import { NEVER_SETTLED_HINT } from '../../src/commands/interaction/runtime/settle.ts';
-import { buildAmbiguousMatchError } from '@agent-device/daemon/testing/selector-match-errors';
-import { refMutationAdmissionResponse } from '@agent-device/daemon/testing/interaction/index';
-import { buildDeviceInUseBySessionError } from '@agent-device/daemon/testing/session-recovery-hints';
-import { buildDeviceClaimConflictError } from '@agent-device/daemon/testing/device/device-claim-conflict';
-import {
-  activateCompleteRefFrame,
-  readRefMutationFrame,
-} from '@agent-device/daemon/testing/ref-frame';
-import { resolveRefStalenessWarning } from '@agent-device/daemon/testing/session-snapshot';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { buildAmbiguousMatchError } from '@agent-device/daemon/selector-match-errors';
+import { refMutationAdmissionResponse } from '@agent-device/daemon/interaction/index';
+import { buildDeviceInUseBySessionError } from '@agent-device/daemon/session-recovery-hints';
+import { buildDeviceClaimConflictError } from '@agent-device/daemon/device/device-claim-conflict';
+import { activateCompleteRefFrame, readRefMutationFrame } from '@agent-device/daemon/ref-frame';
+import { resolveRefStalenessWarning } from '@agent-device/daemon/session-snapshot';
+import type { SessionState } from '@agent-device/daemon/session-state';
 import { buildAppNotInstalledError } from '@agent-device/platform-apple/app-resolution';
 import {
   presentConnectReadiness,

@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach } from 'vitest';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import type { SessionState } from '@agent-device/daemon/session-state';
 import { buildSnapshotSignatures } from '@agent-device/capture-kit/snapshot-freshness';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import {
@@ -14,7 +14,7 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
     resolveTargetDevice: actual.resolveTargetDevice,
   };
 });
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
+vi.mock('@agent-device/daemon/snapshot-interactor-capture', async () => {
   const fixture =
     await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };

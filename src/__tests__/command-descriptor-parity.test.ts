@@ -6,7 +6,7 @@ import {
   listCliCommandNames,
   PUBLIC_COMMANDS,
 } from '@agent-device/command-registry/catalog';
-import { canRunReplayScopedAction } from '@agent-device/daemon/testing/daemon-command-registry';
+import { canRunReplayScopedAction } from '@agent-device/daemon/daemon-command-registry';
 import {
   deriveDaemonCommandDescriptors,
   deriveStructuredBatchCommandNames,

@@ -17,7 +17,7 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
     resolveTargetDeviceSelection: vi.fn(selectionFromResolveTargetDevice(resolveTargetDevice)),
   };
 });
-vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
+vi.mock('@agent-device/daemon/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 vi.mock('@agent-device/platform-android/mechanics', () => ({
@@ -34,26 +34,26 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
 );
 
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
-import { ensureDeviceReady } from '@agent-device/daemon/testing/device/device-ready';
+import { ensureDeviceReady } from '@agent-device/daemon/device/device-ready';
 import {
   activateAndroidTestIme,
   resolveAndroidPackageForOpen,
 } from '@agent-device/platform-android/mechanics';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
-import { inspectDeviceClaims } from '@agent-device/daemon/testing/device/device-claim-inspection';
+import { inspectDeviceClaims } from '@agent-device/daemon/device/device-claim-inspection';
 import {
   localRuntimeOwner,
   narrowDeviceBinding,
   type DeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import type { BindDeviceRuntime } from '@agent-device/daemon/testing/request-runtime-binding';
+import type { BindDeviceRuntime } from '@agent-device/daemon/request-runtime-binding';
 import {
   composedLifecycleRuntimeFixture,
   dispatchApplicationLifecycleEffect,
 } from '../application-lifecycle-runtime-fixture.ts';
-import { SessionStore } from '@agent-device/daemon/testing/session-store';
-import { handleSessionOpenCommands as handleProductionOpenCommand } from '@agent-device/daemon/testing/session-lifecycle/index';
+import { SessionStore } from '@agent-device/daemon/session-store';
+import { handleSessionOpenCommands as handleProductionOpenCommand } from '@agent-device/daemon/session-lifecycle/index';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { inspectLifecycleRuntimeFacts } from '@agent-device/daemon/testing/__tests__/application-lifecycle-runtime-harness';
 

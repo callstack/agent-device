@@ -1,10 +1,10 @@
 import { beforeEach, expect, test } from 'vitest';
 import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
-import { handleSnapshotCommands as handleProductionSnapshotCommands } from '@agent-device/daemon/testing/handlers/snapshot';
+import { handleSnapshotCommands as handleProductionSnapshotCommands } from '@agent-device/daemon/handlers/snapshot';
 import type { RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { expireRefFrame } from '@agent-device/daemon/testing/ref-frame';
+import { expireRefFrame } from '@agent-device/daemon/ref-frame';
 import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 

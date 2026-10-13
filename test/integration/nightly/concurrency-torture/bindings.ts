@@ -20,11 +20,11 @@
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
-import type { SessionRef } from '@agent-device/daemon/testing/session-state';
-import type { SessionStore } from '@agent-device/daemon/testing/session-store';
-import { resolveRequestExecutionLockPlan } from '@agent-device/daemon/testing/request-binding';
-import { shouldLockSessionExecution } from '@agent-device/daemon/testing/daemon-command-registry';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { SessionRef } from '@agent-device/daemon/session-state';
+import type { SessionStore } from '@agent-device/daemon/session-store';
+import { resolveRequestExecutionLockPlan } from '@agent-device/daemon/request-binding';
+import { shouldLockSessionExecution } from '@agent-device/daemon/daemon-command-registry';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '@agent-device/device-selection/inventory-gateways-fixtures';
 

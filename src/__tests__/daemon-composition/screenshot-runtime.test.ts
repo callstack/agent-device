@@ -7,14 +7,14 @@ import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import type { GenericPlatformExecutionParams } from '@agent-device/daemon/testing/generic-leaf-execution';
-import { resolveScreenshotGenericExecution } from '@agent-device/daemon/testing/screenshot-runtime';
+import type { GenericPlatformExecutionParams } from '@agent-device/daemon/generic-leaf-execution';
+import { resolveScreenshotGenericExecution } from '@agent-device/daemon/screenshot-runtime';
 import {
   screenshotRuntimeFixture,
   writeSolidPng,
 } from '@agent-device/daemon/testing/__tests__/screenshot-runtime-fixture';
-import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { SessionState } from '@agent-device/daemon/session-state';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 

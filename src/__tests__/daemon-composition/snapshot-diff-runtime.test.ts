@@ -18,8 +18,8 @@ import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
-} from '@agent-device/daemon/testing/request-runtime-binding';
-import { dispatchSnapshotDiffViaRuntime } from '@agent-device/daemon/testing/snapshot-diff-runtime';
+} from '@agent-device/daemon/request-runtime-binding';
+import { dispatchSnapshotDiffViaRuntime } from '@agent-device/daemon/snapshot-diff-runtime';
 import { expectRefusesUnavailableExactOwnerFact } from '@agent-device/daemon/testing/__tests__/runtime-binding-conformance';
 import { unavailableDeviceRuntimeGateway } from '@agent-device/daemon/testing/__tests__/support/unavailable-device-runtime-gateway';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';

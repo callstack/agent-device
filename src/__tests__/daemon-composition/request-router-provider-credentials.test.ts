@@ -7,7 +7,7 @@ import {
   providerCredentialFingerprint,
   readDaemonProviderCredentials,
 } from '../../provider-credential-fingerprint.ts';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { LeaseRegistry } from '@agent-device/daemon/lease-registry';
 import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 

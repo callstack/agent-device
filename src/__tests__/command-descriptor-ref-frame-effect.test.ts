@@ -5,8 +5,8 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import {
   DAEMON_COMMAND_DESCRIPTORS,
   resolveRefFrameEffect,
-} from '@agent-device/daemon/testing/daemon-command-registry';
-import type { DaemonRequest } from '@agent-device/daemon/testing/daemon-request';
+} from '@agent-device/daemon/daemon-command-registry';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 
 // ADR 0014 migration step 2: the ref-frame-effect classification is an
 // honesty/completeness guard. Every command that reaches a session-owning daemon
