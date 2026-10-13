@@ -5,7 +5,14 @@ import type {
   SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
 import { containsPoint, isPositiveFiniteRect } from '@agent-device/kernel/rect';
-import { IOS_KEYBOARD_SURFACE_ROLES, isAndroidInputMethodNode } from './android-input-ownership.ts';
+import {
+  IOS_KEYBOARD_SURFACE_ROLES,
+  IOS_KEYBOARD_SETTLE_CHROME_ROLES,
+  IOS_KEYBOARD_SUBTREE_CHROME_ROLES,
+  IOS_KEYBOARD_CHROME_MARKER_ROLES,
+  isAndroidInputMethodNode,
+  hasIosKeyboardRole,
+} from './android-input-ownership.ts';
 import { normalizeType } from './snapshot-text.ts';
 
 /**
@@ -116,20 +123,34 @@ function isKeyboardSurfaceNode(node: RawSnapshotNode): boolean {
   return isKeyboardAnchorNode(node) || IOS_KEYBOARD_SURFACE_ROLES.has(node.role ?? '');
 }
 
-/**
- * Whether this node belongs to the keyboard rather than to the app: a key, the key plane, an IME
- * node, or anything inside one of them. Ownership walks ancestors only, so a flattened projection
- * that lifts keys beside app chrome cannot promote app content into the keyboard.
- */
+/** Keyboard hosts that own descendants, until an app-fillable marker interrupts the ancestry. */
+function isKeyboardSubtreeHost(node: RawSnapshotNode): boolean {
+  return isKeyboardAnchorNode(node) || hasIosKeyboardRole(node, IOS_KEYBOARD_SUBTREE_CHROME_ROLES);
+}
+
+/** Per-node ownership and system-only ancestry never cross an app-fillable assistant marker. */
 function isKeyboardOwnedNode(
   node: RawSnapshotNode,
-  parents: ReadonlyMap<number, number | undefined>,
-  surfaceIndices: ReadonlySet<number>,
+  byIndex: ReadonlyMap<number, RawSnapshotNode>,
 ): boolean {
-  return (
-    surfaceIndices.has(node.index) ||
-    collectAncestorSurfaceIndices(parents, surfaceIndices, node.index).length > 0
-  );
+  if (
+    isKeyboardSurfaceNode(node) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_SETTLE_CHROME_ROLES) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_CHROME_MARKER_ROLES) ||
+    isKeyboardSubtreeHost(node)
+  )
+    return true;
+  const visited = new Set<number>();
+  let parentIndex = node.parentIndex;
+  while (typeof parentIndex === 'number' && !visited.has(parentIndex)) {
+    visited.add(parentIndex);
+    const parent = byIndex.get(parentIndex);
+    if (!parent) return false;
+    if (hasIosKeyboardRole(parent, IOS_KEYBOARD_CHROME_MARKER_ROLES)) return false;
+    if (isKeyboardSubtreeHost(parent)) return true;
+    parentIndex = parent.parentIndex;
+  }
+  return false;
 }
 
 /** The band needs an edge to run to, which an absent or zero-area viewport does not report. */
@@ -321,10 +342,9 @@ function resolveVisibleKeyboardSurface(
 
 /** Preserves witnessed tree ownership on nodes before projection can remove their ancestors. */
 export function annotateKeyboardOwnership(nodes: readonly RawSnapshotNode[]): RawSnapshotNode[] {
-  const parents = new Map(nodes.map((node) => [node.index, node.parentIndex] as const));
-  const surfaceIndices = new Set(nodes.filter(isKeyboardSurfaceNode).map((node) => node.index));
+  const byIndex = new Map(nodes.map((node) => [node.index, node] as const));
   return nodes.map((node) =>
-    isKeyboardOwnedNode(node, parents, surfaceIndices) ? { ...node, keyboardOwned: true } : node,
+    isKeyboardOwnedNode(node, byIndex) ? { ...node, keyboardOwned: true } : node,
   );
 }
 
@@ -334,10 +354,11 @@ export function observeProviderKeyboard(params: {
   viewport: Rect | null;
   visibility?: boolean | 'unsupported' | 'failed';
 }): SnapshotKeyboardBandFact {
-  if (params.visibility === false) return { kind: 'visibility-only', visible: false };
   const surface = resolveVisibleKeyboardSurface(params.nodes, params.viewport);
   if (surface) return { kind: 'derived', derivation: 'docked-tree', frame: surface.frame };
-  if (params.visibility === true) return { kind: 'visibility-only', visible: true };
+  if (typeof params.visibility === 'boolean') {
+    return { kind: 'visibility-only', visible: params.visibility };
+  }
   return {
     kind: 'unmeasurable',
     reason: params.nodes.some(isKeyboardAnchorNode)
@@ -363,8 +384,8 @@ function keyboardFactDisallowsTreeDerivation(
 /**
  * Whether this tap point belongs to the visible keyboard rather than to app content behind it.
  *
- * The point is the rect center an interaction would activate — the same point
- * `isTapPointInsideViewport` guards — so an element only partly under the keyboard whose center is
+ * The point is the dispatched tap point the interaction resolved — the same point
+ * `isTapPointInsideViewport` guards — so an element only partly under the keyboard whose tap point is
  * still above the key plane keeps tapping. Callers choose the consequence: an acting element path
  * refuses, while a coordinate path that never captured this tree discloses instead of refusing.
  *
@@ -384,7 +405,7 @@ export function resolveKeyboardTapOcclusion(params: {
   point: Point;
   /** The resolved element, when the caller named one; absent for a bare coordinate. */
   node?: RawSnapshotNode | null;
-  /** The band this capture's producer measured, when it measured one (#2660). */
+  /** This capture's measured, acquisition-derived, visibility-only, or unknown keyboard evidence. */
   keyboard?: SnapshotKeyboardBandFact;
 }): KeyboardTapOcclusion {
   if (
@@ -404,14 +425,8 @@ export function resolveKeyboardTapOcclusion(params: {
   if (!params.node) return classifyKeyboardPoint(params.point, surface);
   // A resolved element is excused only by belonging to the keyboard, never by sitting under a key:
   // the caller named the element, and behind the keyboard a tap does not reach it.
-  const parents = new Map(params.nodes.map((node) => [node.index, node.parentIndex] as const));
-  const surfaceIndices = new Set(
-    params.nodes.filter(isKeyboardSurfaceNode).map((node) => node.index),
-  );
-  if (
-    isKeyboardOwnedNode(params.node, parents, surfaceIndices) ||
-    params.node.keyboardOwned === true
-  ) {
+  const byIndex = new Map(params.nodes.map((node) => [node.index, node] as const));
+  if (isKeyboardOwnedNode(params.node, byIndex) || params.node.keyboardOwned === true) {
     return { kind: 'clear', surface };
   }
   return containsPoint(surface.frame, params.point.x, params.point.y)

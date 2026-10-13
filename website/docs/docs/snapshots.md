@@ -294,8 +294,8 @@ The response-level `keyboard` field tells you what the capture observed:
 Appium iOS and Android snapshots include the visibility probe; Appium iOS and limrun iOS can also
 report a derived docked band. Missing keyboard nodes never mean the keyboard is hidden. Element taps
 use measured or derived frames to refuse a target behind the keyboard. A positive visibility probe
-alone cannot establish occlusion. When tree geometry cannot establish a docked band, the keyboard
-remains uncertain.
+alone cannot establish occlusion. When tree geometry cannot establish a docked band, visibility-only evidence may establish presence
+or absence but cannot locate the band.
 Run `snapshot -i` again after ending editing before retrying a refused target.
 
 The Android keyboard band is the input method window's bounds, the box around the area it takes

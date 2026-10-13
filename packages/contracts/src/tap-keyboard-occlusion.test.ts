@@ -8,6 +8,7 @@ import type {
   SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
 import {
+  observeProviderKeyboard,
   resolveKeyboardTapOcclusion,
   TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS,
   TAP_KEYBOARD_OCCLUDES_TARGET_REASON,
@@ -32,6 +33,7 @@ type FixtureCase = {
   nodes: FixtureNode[];
   target: { index: number } | { point: { x: number; y: number } };
   keyboard?: SnapshotKeyboardBandFact;
+  observationVisibility?: boolean;
   expected: { kind: string; frame?: Rect; controlRects?: readonly Rect[] };
 };
 
@@ -71,6 +73,17 @@ test('keyboard tap occlusion agrees with every golden parity table case', () => 
       'point' in fixture.target
         ? fixture.target.point
         : resolveCenter(byIndex.get(fixture.target.index));
+    if (fixture.observationVisibility !== undefined) {
+      assert.deepEqual(
+        observeProviderKeyboard({
+          nodes,
+          viewport: fixture.viewport,
+          visibility: fixture.observationVisibility,
+        }),
+        fixture.keyboard,
+        `${fixture.name}: acquisition observation`,
+      );
+    }
     const occlusion = resolveKeyboardTapOcclusion({
       nodes,
       viewport: fixture.viewport,
@@ -128,7 +141,7 @@ function tableCase(name: string): FixtureCase {
 
 function resolveWithFact(
   fixture: FixtureCase,
-  keyboard: SnapshotKeyboardBandFact,
+  keyboard: SnapshotKeyboardBandFact | undefined,
 ): ReturnType<typeof resolveKeyboardTapOcclusion> {
   const nodes = fixture.nodes as RawSnapshotNode[];
   const byIndex = new Map(nodes.map((node) => [node.index, node]));
@@ -221,8 +234,10 @@ test('an unmeasurable fact leaves every golden-table decision exactly as the tre
   // either side of the refusal, or the table would stop describing this guard.
   for (const fixture of loadTable().cases) {
     const withFact = resolveWithFact(fixture, {
-      ...(fixture.keyboard ?? { kind: 'unmeasurable', reason: 'keyboard-frame-query-timeout' }),
+      kind: 'unmeasurable',
+      reason: 'keyboard-frame-query-timeout',
     });
-    assert.equal(withFact.kind, fixture.expected.kind, `${fixture.name}: kind`);
+    const treeOnly = resolveWithFact(fixture, undefined);
+    assert.deepEqual(withFact, treeOnly, fixture.name);
   }
 });

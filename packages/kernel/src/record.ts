@@ -90,11 +90,10 @@ export function parseRect(value: unknown): Rect | undefined {
  * distinguished from one that measured and reported.
  *
  * A payload that cannot be placed is restated as `unmeasurable` naming where it failed, never dropped
- * and never trusted: silence would tell the tap guard the producer never looked. The reasons resolve
- * in a fixed order, least to most trusted: a value that is not an object is `malformed-fact`; an
- * unrecognized `kind` is `unrecognized-kind`; an `unmeasurable` that never named its failure is
- * `unreported-reason`; a `visible` whose frame is not a positive finite rect is
- * `invalid-visible-frame`.
+ * and never trusted: silence would tell the tap guard the producer never looked. Validation reasons
+ * identify the rejected shape: `malformed-fact`, `unrecognized-kind`, `unreported-reason`,
+ * `invalid-visibility-probe`, `unrecognized-derivation`, `invalid-visible-frame`, or
+ * `invalid-derived-frame`. They describe validation failures rather than levels of trust.
  */
 export function readSnapshotKeyboardBandFact(value: unknown): SnapshotKeyboardBandFact | undefined {
   if (value === undefined) return undefined;

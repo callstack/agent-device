@@ -957,7 +957,7 @@ test('snapshot cancellation during an optional keyboard probe is not swallowed',
   );
 });
 
-test('Android acquisition derives a docked IME before projection removes its tree', async () => {
+test('Android acquisition cannot derive a docked IME from app content bounds', async () => {
   const interactor = createWebDriverInteractor({
     client: {
       source: async () =>
@@ -969,11 +969,7 @@ test('Android acquisition derives a docked IME before projection removes its tre
   });
   const snapshot = await interactor.snapshot();
   assert.ok(!('stage' in snapshot));
-  assert.deepEqual(snapshot.keyboard, {
-    kind: 'derived',
-    derivation: 'docked-tree',
-    frame: { x: 0, y: 1500, width: 1080, height: 900 },
-  });
+  assert.deepEqual(snapshot.keyboard, { kind: 'visibility-only', visible: true });
   assert.ok(snapshot.nodes);
   const form = snapshot.nodes.find((node) => node.label === 'Form')!;
   assert.equal(
@@ -984,7 +980,7 @@ test('Android acquisition derives a docked IME before projection removes its tre
       point: { x: 200, y: 1820 },
       keyboard: snapshot.keyboard,
     }).kind,
-    'occluded',
+    'undetermined',
   );
   assert.equal(
     snapshot.nodes.find((node) => node.identifier?.includes('input_view'))?.keyboardOwned,

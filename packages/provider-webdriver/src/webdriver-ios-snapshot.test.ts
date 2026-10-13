@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { resolveKeyboardTapOcclusion } from '@agent-device/contracts/tap-keyboard-occlusion';
 import { acquireWebDriverIosSnapshot } from './webdriver-ios-snapshot.ts';
 
 const SOURCE = `<AppiumAUT>
@@ -97,4 +98,32 @@ test('an offscreen provider keyboard never publishes an empty derived frame', ()
     kind: 'unmeasurable',
     reason: 'keyboard-tree-geometry-unusable',
   });
+});
+
+test.each([
+  '_UIRemoteKeyboardPlaceholderView',
+  'TUISystemInputAssistantView',
+  'TUISystemInputAssistantPageView',
+])('app controls under %s do not inherit keyboard ownership', (role) => {
+  const source = SOURCE.replace(
+    '</XCUIElementTypeApplication>',
+    `<XCUIElementTypeKeyboard x="0" y="580" width="390" height="264"><XCUIElementTypeOther class="${role}"><XCUIElementTypeButton name="Save draft" x="200" y="600" width="100" height="40" /></XCUIElementTypeOther><XCUIElementTypeOther class="UIKeyboardLayoutStar"><XCUIElementTypeButton name="Done" x="0" y="600" width="100" height="40" /></XCUIElementTypeOther></XCUIElementTypeKeyboard></XCUIElementTypeApplication>`,
+  );
+  const acquired = acquireWebDriverIosSnapshot(source).acquisition;
+  const appControl = acquired.nodes.find((node) => node.label === 'Save draft')!;
+  for (const nodes of [acquired.nodes, [appControl]]) {
+    assert.equal(
+      resolveKeyboardTapOcclusion({
+        nodes,
+        node: appControl,
+        viewport: null,
+        point: { x: 250, y: 620 },
+        keyboard: acquired.keyboard,
+      }).kind,
+      'occluded',
+    );
+  }
+  assert.equal(appControl.keyboardOwned, undefined);
+  assert.equal(acquired.nodes.find((node) => node.role === role)?.keyboardOwned, true);
+  assert.equal(acquired.nodes.find((node) => node.label === 'Done')?.keyboardOwned, true);
 });
