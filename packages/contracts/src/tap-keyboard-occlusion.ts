@@ -82,7 +82,7 @@ export type KeyboardTapOcclusion =
   /** An explicit observation established absence. */
   | { kind: 'no-keyboard' }
   /**
-   * Keyboard nodes exist but the band cannot be measured — no resolvable viewport, no usable keyboard
+   * Keyboard visibility or its band cannot be established — no resolvable viewport, no usable keyboard
    * rect, or geometry that is not docked to the bottom edge the band would need. Fails open like every
    * other missing platform fact; the distinction from `no-keyboard` exists so a caller can disclose
    * that it could not check rather than claiming the target was clear.
@@ -303,13 +303,22 @@ function resolveVisibleKeyboardSurface(
     reportedBottom: Math.max(...reportedRects.map((rect) => rect.y + rect.height)),
     viewport,
   });
-  if (!frame) return null;
+  if (!frame || !isPositiveFiniteRect(frame)) return null;
   const planeIndices = collectKeyboardPlaneIndices(nodes, surfaceNodes);
   if (!keysFormOneColumnRun({ anchorNodes, anchorRects, planeIndices })) return null;
   return {
     frame,
     controlRects: usableRects(surfaceNodes.filter((node) => !planeIndices.has(node.index))),
   };
+}
+
+/** Preserves witnessed tree ownership on nodes before projection can remove their ancestors. */
+export function annotateKeyboardOwnership(nodes: readonly RawSnapshotNode[]): RawSnapshotNode[] {
+  const parents = new Map(nodes.map((node) => [node.index, node.parentIndex] as const));
+  const surfaceIndices = new Set(nodes.filter(isKeyboardSurfaceNode).map((node) => node.index));
+  return nodes.map((node) =>
+    isKeyboardOwnedNode(node, parents, surfaceIndices) ? { ...node, keyboardOwned: true } : node,
+  );
 }
 
 /** Observes provider keyboard evidence before depth, scope, or interactive projection. */
@@ -342,9 +351,9 @@ export function observeProviderKeyboard(params: {
  * still above the key plane keeps tapping. Callers choose the consequence: an acting element path
  * refuses, while a coordinate path that never captured this tree discloses instead of refusing.
  *
- * A measured or acquisition-derived frame in `keyboard` survives projection. Measured frames need no rule
- * about docking, column runs, or which way the tree was turned is consulted, because the producer
- * that measured does not need them to answer (#2660). The keyboard's own controls still come from the
+ * A measured or acquisition-derived frame in `keyboard` survives projection. Measured frames need no
+ * docking, column-run, or orientation inference; derived bands already passed those rules during
+ * acquisition. Keyboard ownership on surviving nodes retains its acquisition witness after projection. The keyboard's own controls still come from the
  * tree — which node the keyboard rather than the app is responsible for is a different question from
  * where the band is, and only the tree can answer it. Unknown or visibility-only positive observations
  * may derive geometry from the current tree; missing nodes leave the decision undetermined.
@@ -378,7 +387,12 @@ export function resolveKeyboardTapOcclusion(params: {
   const surfaceIndices = new Set(
     params.nodes.filter(isKeyboardSurfaceNode).map((node) => node.index),
   );
-  if (isKeyboardOwnedNode(params.node, parents, surfaceIndices)) return { kind: 'clear', surface };
+  if (
+    isKeyboardOwnedNode(params.node, parents, surfaceIndices) ||
+    params.node.keyboardOwned === true
+  ) {
+    return { kind: 'clear', surface };
+  }
   return containsPoint(surface.frame, params.point.x, params.point.y)
     ? { kind: 'occluded', surface }
     : { kind: 'clear', surface };

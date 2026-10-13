@@ -125,6 +125,7 @@ const PRESENTATION_SCALAR_FIELDS = {
   appName: true,
   windowTitle: true,
   surface: true,
+  keyboardOwned: true,
   hiddenContentAbove: true,
   hiddenContentBelow: true,
   interactionBlocked: true,

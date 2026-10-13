@@ -318,6 +318,8 @@ export type RawSnapshotNode = {
   appName?: string;
   windowTitle?: string;
   surface?: string;
+  /** Keyboard ownership witnessed at acquisition; survives projections that remove its ancestors. */
+  keyboardOwned?: true;
   hiddenContentAbove?: boolean;
   hiddenContentBelow?: boolean;
   interactionBlocked?: 'covered';
@@ -719,10 +721,9 @@ export type SnapshotState = {
    */
   iosSystemSurfaceBundleId?: string;
   /**
-   * iOS and Android: the keyboard band this capture's producer measured, when it measured one. The
-   * tap-path keyboard guard prefers this over the band it would otherwise derive from `nodes`,
-   * because a producer that can query the keyboard directly answers in the tree's own space and
-   * needs no geometry to be plausible (#2660). Absent means the guard measures the tree as before.
+   * iOS and Android: keyboard observations made during acquisition. Measured and derived frames
+   * take precedence over reconstruction from the presented tree. Visibility-only and unknown facts
+   * carry no band; missing nodes or an omitted fact never establish absence.
    */
   keyboard?: SnapshotKeyboardBandFact;
   /**

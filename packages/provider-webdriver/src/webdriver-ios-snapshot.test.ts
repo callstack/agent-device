@@ -85,3 +85,14 @@ test('Appium carries visibility-only and derived keyboard facts before projectio
     frame: { x: 0, y: 580, width: 390, height: 264 },
   });
 });
+
+test('an offscreen provider keyboard never publishes an empty derived frame', () => {
+  const source = SOURCE.replace(
+    '</XCUIElementTypeApplication>',
+    '<XCUIElementTypeKeyboard x="0" y="844" width="390" height="233" /></XCUIElementTypeApplication>',
+  );
+  assert.deepEqual(acquireWebDriverIosSnapshot(source).acquisition.keyboard, {
+    kind: 'unmeasurable',
+    reason: 'keyboard-tree-geometry-unusable',
+  });
+});

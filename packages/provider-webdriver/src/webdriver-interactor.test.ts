@@ -932,7 +932,7 @@ test('snapshot carries a bounded visibility probe on both Appium platforms', asy
           ? { kind: 'visibility-only', visible }
           : { kind: 'unmeasurable', reason: `keyboard-visibility-probe-${visible}` },
       );
-      assert.deepEqual(probe.mock.calls, [[500, controller.signal]]);
+      assert.deepEqual(probe.mock.calls, [[1_500, controller.signal]]);
     }
   }
 });

@@ -378,7 +378,7 @@ class WebDriverInteractor implements Interactor {
     signal?: AbortSignal,
   ): Promise<boolean | 'unsupported' | 'failed'> {
     try {
-      const visibility = await this.client.isKeyboardShown(500, signal);
+      const visibility = await this.client.isKeyboardShown(TEXT_ENTRY_PROBE_TIMEOUT_MS, signal);
       signal?.throwIfAborted();
       return visibility;
     } catch {
