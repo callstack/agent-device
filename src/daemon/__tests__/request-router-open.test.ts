@@ -2,6 +2,7 @@ import { createTestDeviceInventoryGateways } from '@agent-device/device-selectio
 import {
   daemonPlatformServicesFixture,
   daemonClaimRecoveryGatewayFixture,
+  observeBootTimeMsFixture,
 } from './platform-services-fixture.ts';
 import { legacyDispatchCapture } from './legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
@@ -61,16 +62,6 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
     resolveIosApp: vi.fn(async (_device, app) => app),
   };
 });
-// The reboot-stale claim probe (#2538) must never reach the host's real process table here.
-const mockObserveSimulatorBoot = vi.hoisted(() =>
-  vi.fn(async (): Promise<DeviceBootObservation> => ({
-    observed: false,
-    reason: 'unobserved',
-  })),
-);
-vi.mock('@agent-device/platform-apple/simulator-boot', () => ({
-  observeSimulatorBootTimeMs: mockObserveSimulatorBoot,
-}));
 
 import {
   createRequestHandler,
@@ -86,7 +77,6 @@ import {
   discoverReadyAndroidEmulators,
 } from './application-lifecycle-runtime-fixture.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DeviceBootObservation } from '@agent-device/contracts/device-boot';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from './support/store-factory.ts';
 import { inspectDeviceClaims } from '../device/device-claim-inspection.ts';
@@ -103,6 +93,7 @@ const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 // The open path reaches readiness through its admitted package binding, so router-level
 // serialization is observed at the fixture's emulator-discovery seam.
 const mockDiscoverReadyAndroidEmulators = vi.mocked(discoverReadyAndroidEmulators);
+const mockObserveBoot = vi.mocked(observeBootTimeMsFixture);
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
 
 function createOpenHandler(
@@ -130,11 +121,8 @@ beforeEach(() => {
   mockAwaitFixtureReadiness.mockReset();
   mockAwaitFixtureReadiness.mockResolvedValue(undefined);
   mockDiscoverReadyAndroidEmulators.mockReset();
-  mockObserveSimulatorBoot.mockReset();
-  mockObserveSimulatorBoot.mockImplementation(async () => ({
-    observed: false,
-    reason: 'unobserved',
-  }));
+  mockObserveBoot.mockReset();
+  mockObserveBoot.mockResolvedValue({ observed: false, reason: 'unobserved' });
   mockDiscoverReadyAndroidEmulators.mockImplementation(async (device) => [
     {
       ...device,
@@ -711,10 +699,10 @@ test('an open that booted the device keeps the device against a foreign open', a
   // during preparation arms it here and the fake device reports that boot to every later probe.
   let bootedAtMs: number | undefined;
   let bootArmed = false;
-  mockObserveSimulatorBoot.mockImplementation(async () =>
+  mockObserveBoot.mockImplementation(async () =>
     bootedAtMs === undefined
-      ? { observed: false, reason: 'unobserved' }
-      : { observed: true, bootedAtMs },
+      ? ({ observed: false, reason: 'unobserved' } as const)
+      : ({ observed: true, bootedAtMs } as const),
   );
   mockAwaitFixtureReadiness.mockImplementation(async () => {
     if (bootArmed) {
