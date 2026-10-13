@@ -1,17 +1,10 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
-import type { SelectorResolution } from '@agent-device/selectors';
-import { readinessScheduleFor } from '@agent-device/selectors/selector-pipeline-policy';
 import {
   attemptSelectorResolution,
-  pollForSelectorReadiness,
-  type SelectorReadinessWait,
   selectorInteractionFailure,
-} from './selector-readiness.ts';
-import {
-  captureInteractionSnapshot,
-  type InteractionSnapshot,
-} from './interaction-snapshot-capture.ts';
+} from './selector-target-resolution.ts';
+import { captureInteractionSnapshot } from './interaction-snapshot-capture.ts';
 import { containsPoint } from '@agent-device/kernel/rect';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { surfaceScopedNodes } from './post-action-surface.ts';
@@ -137,34 +130,20 @@ async function resolveSelectorInteractionTarget(
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
   const selectorExpression = target.selector;
-  let capture: InteractionSnapshot;
-  let resolved: SelectorResolution | null;
-  let readiness: SelectorReadinessWait | undefined;
-  const readinessSchedule = readinessScheduleFor(params.pipeline.poll, params.readinessTimeoutMs);
-  if (!readinessSchedule) {
-    const attempt = await attemptSelectorResolution(runtime, options, selectorExpression, params);
-    capture = attempt.capture;
-    resolved = attempt.resolved;
-    if (!resolved || !resolved.node.rect) {
-      throw await selectorInteractionFailure({
-        runtime,
-        nodes: capture.snapshot.nodes,
-        selectorExpression,
-        action: params.action,
-        resolved,
-      });
-    }
-  } else {
-    const ready = await pollForSelectorReadiness(
+  const { capture, resolved } = await attemptSelectorResolution(
+    runtime,
+    options,
+    selectorExpression,
+    params,
+  );
+  if (!resolved || !resolved.node.rect) {
+    throw await selectorInteractionFailure({
       runtime,
-      options,
+      snapshot: capture.snapshot,
       selectorExpression,
-      params,
-      readinessSchedule,
-    );
-    capture = ready.capture;
-    resolved = ready.resolved;
-    readiness = ready.readiness;
+      action: params.action,
+      resolved,
+    });
   }
   // #1542: see the ref-target twin in ref-target-resolution.ts.
   const selected = resolved;
@@ -191,7 +170,6 @@ async function resolveSelectorInteractionTarget(
     kind: 'selector',
     point,
     target: { kind: 'selector', selector: resolved.selector },
-    ...(readiness ? { readiness } : {}),
     ...describeResolvedInteractionNode(
       runtime,
       visibleNode,

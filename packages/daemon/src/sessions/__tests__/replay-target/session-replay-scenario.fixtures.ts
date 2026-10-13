@@ -2,7 +2,6 @@ import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { makeIosAppSession } from '../../../__tests__/support/session-factories.ts';
 import { SessionStore } from '../../../core/session-store.ts';
-import type { ObservationClock } from '@agent-device/capture-kit/observe-until';
 import type {
   DaemonInvokeFn,
   DaemonRequest,
@@ -38,14 +37,9 @@ export type ReplayScriptScene = ReplaySessionScene &
     /**
      * Runs the script through `runReplayCommand`. Each request is appended to
      * `invoked` before `invoke` answers it; without `invoke` every request succeeds
-     * with empty data. `clock` paces its target-readiness waits; `requestId` lets a test cancel the
-     * replay through the request registry.
+     * with empty data. `requestId` lets a test cancel the replay through the request registry.
      */
-    replay(options?: {
-      invoke?: DaemonInvokeFn;
-      clock?: ObservationClock;
-      requestId?: string;
-    }): Promise<DaemonResponse>;
+    replay(options?: { invoke?: DaemonInvokeFn; requestId?: string }): Promise<DaemonResponse>;
   }>;
 
 /** An iOS app session plus a written `.ad` script, ready to replay. */
@@ -57,13 +51,12 @@ export function replayScriptScene(prefix: string, lines: string[]): ReplayScript
     ...scene,
     filePath,
     invoked,
-    replay: ({ invoke, clock, requestId } = {}) =>
+    replay: ({ invoke, requestId } = {}) =>
       runReplayForTest({
         req: baseReplayRequest({
           positionals: [filePath],
           ...(requestId === undefined ? {} : { meta: { requestId } }),
         }),
-        ...(clock === undefined ? {} : { clock }),
         sessionName: scene.sessionName,
         logPath: scene.logPath,
         sessionStore: scene.sessionStore,

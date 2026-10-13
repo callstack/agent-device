@@ -46,12 +46,6 @@ export type ResolveInteractionTargetParams = {
    */
   pipeline: ActingPipelinePolicy;
   /**
-   * How long a `promotedTarget` row may poll for a target that does not exist yet (never model- or
-   * CLI-writable); `resolveSelectorInteractionTarget` caps it at the row's `maxTimeoutMs`. Anything
-   * other than a positive integer, and every `resolvedTarget` row, takes one attempt.
-   */
-  readinessTimeoutMs?: number;
-  /**
    * `--verify` (#1047): also capture the pre-action node set for a `point` target
    * so `changedFromBefore` evidence has a baseline. Ref/selector targets already
    * capture a snapshot to resolve the target, so this is a no-op cost for them —

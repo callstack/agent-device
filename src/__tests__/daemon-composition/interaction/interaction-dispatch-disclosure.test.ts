@@ -126,35 +126,6 @@ async function refusedFill(positionals: string[]): Promise<unknown> {
   }
 }
 
-/** A press whose readiness wait polls a tree that never lists the selector's target. */
-async function pressWhoseTargetNeverAppears(): Promise<unknown> {
-  const capture = vi.mocked(captureSnapshotWithInteractor);
-  capture.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        type: 'Application',
-        label: 'Example',
-        rect: { x: 0, y: 0, width: 400, height: 800 },
-      },
-    ],
-    backend: 'xctest',
-    producer: 'apple-runner',
-  });
-  try {
-    await refusedPress(['label="Missing"'], { readinessTimeoutMs: 300 });
-  } catch (error) {
-    assert.ok(error instanceof AppError);
-    assert.equal(error.details?.reason, 'selector_not_found');
-    const readiness = error.details?.readiness as { polls: number } | undefined;
-    assert.ok(readiness && readiness.polls >= 2, `expected >=2 polls, got ${readiness?.polls}`);
-    throw error;
-  } finally {
-    capture.mockReset();
-  }
-  assert.fail('expected the press to be refused');
-}
-
 async function pressAfterUnclassifiedTouchFailure(
   details?: Record<string, unknown>,
 ): Promise<unknown> {
@@ -363,7 +334,6 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'daemon.refusal.ref-not-found': () => refusedPress(['@e9']),
   'daemon.refusal.admission': () => refusedPress([]),
   'daemon.refusal.fill-admission': () => refusedFill(['@e1']),
-  'daemon.refusal.selector-readiness-exhausted': pressWhoseTargetNeverAppears,
   'daemon.unclassified': () => pressAfterUnclassifiedTouchFailure(),
   'daemon.series.swipe-later-repetition-refused': swipeRefusedOnSecondRepetition,
   'daemon.refusal.gesture-drag-admission': gestureDragRefusedBeforeDispatch,

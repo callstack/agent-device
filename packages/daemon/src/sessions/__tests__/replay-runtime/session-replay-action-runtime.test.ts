@@ -3,20 +3,9 @@ import { expect, test } from 'vitest';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { recordActionEntry } from '../../../core/session-action-recorder.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
-import {
-  invokeReplayAction,
-  replayStepReadinessSchedule,
-} from '@agent-device/replay-port/session-replay-action-runtime';
-import {
-  SELECTOR_PIPELINE_POLICIES,
-  readinessScheduleFor,
-} from '@agent-device/selectors/selector-pipeline-policy';
+import { invokeReplayAction } from '@agent-device/replay-port/session-replay-action-runtime';
 import { replayDaemonDependencies } from '../../handlers/session-replay-command.ts';
 import { resolveReplayAction } from '@agent-device/ad-script';
-import {
-  commandAcceptsReadinessBudget,
-  commandDescriptors,
-} from '@agent-device/command-registry/registry';
 
 const REPLAY_REQUEST: DaemonRequest = {
   token: 'token',
@@ -69,14 +58,8 @@ test.each(['', '   '])(
   },
 );
 
-const READINESS_BUDGETED_COMMANDS = commandDescriptors
-  .map((descriptor) => descriptor.name)
-  .filter((command) => commandAcceptsReadinessBudget(command));
-
-// A replay step has no CLI flag to carry a readiness budget, so `buildReplayActionFlags` defaults
-// one in for every readiness-budgeted command.
-test.each(READINESS_BUDGETED_COMMANDS)(
-  'replay defaults readinessTimeoutMs onto a dispatched %s step',
+test.each(['click', 'press', 'longpress'])(
+  'replay dispatches a %s step with only authored and inherited flags',
   async (command) => {
     const action: SessionAction = { ts: 0, command, positionals: ['label="Continue"'], flags: {} };
     let dispatchedFlags: Record<string, unknown> | undefined;
@@ -97,47 +80,9 @@ test.each(READINESS_BUDGETED_COMMANDS)(
     });
 
     expect(response.ok).toBe(true);
-    expect(dispatchedFlags?.readinessTimeoutMs).toBe(2_000);
+    expect(dispatchedFlags).toEqual({});
   },
 );
-
-// The dispatch resolves a press/click/longpress target under the promotedTarget row with the
-// readinessTimeoutMs it receives; the pre-dispatch gate must poll under that same schedule.
-test.each([
-  ...READINESS_BUDGETED_COMMANDS.map((command) => ({ command, flags: {} })),
-  { command: 'click', flags: { readinessTimeoutMs: 700 } },
-  { command: 'press', flags: { readinessTimeoutMs: 9_000 } },
-])('the replay gate and the dispatch poll a $command step under one schedule', async (step) => {
-  const action: SessionAction = {
-    ts: 0,
-    command: step.command,
-    positionals: ['label="Continue"'],
-    flags: step.flags,
-  };
-  let dispatchedFlags: Record<string, unknown> | undefined;
-  await invokeReplayAction({
-    req: REPLAY_REQUEST,
-    sessionName: 'default',
-    action,
-    resolved: action,
-    filePath: 'flow.ad',
-    line: 1,
-    step: 1,
-    resolvedSessionScope: undefined,
-    dependencies: replayDaemonDependencies,
-    invoke: async (request) => {
-      dispatchedFlags = request.flags;
-      return { ok: true, data: {} };
-    },
-  });
-
-  const dispatchSchedule = readinessScheduleFor(
-    SELECTOR_PIPELINE_POLICIES.promotedTarget.poll,
-    dispatchedFlags?.readinessTimeoutMs as number | undefined,
-  );
-  expect(dispatchSchedule).toBeDefined();
-  expect(await replayStepReadinessSchedule(REPLAY_REQUEST.flags, action)).toEqual(dispatchSchedule);
-});
 
 // #2997: the replay/test command's own --test-ime opt-in rides the parent flags onto the
 // open this step dispatches; an authored step flag wins because mergeParentFlags only
@@ -194,62 +139,6 @@ test('replay keeps an authored open step testIme over the flow command opt-out',
   });
 
   expect(dispatchedFlags?.testIme).toBe(true);
-});
-
-test('replay keeps a readinessTimeoutMs the step already carries instead of overwriting it', async () => {
-  const action: SessionAction = {
-    ts: 0,
-    command: 'press',
-    positionals: ['label="Continue"'],
-    flags: { readinessTimeoutMs: 500 },
-  };
-  let dispatchedFlags: Record<string, unknown> | undefined;
-  const response = await invokeReplayAction({
-    req: REPLAY_REQUEST,
-    sessionName: 'default',
-    action,
-    resolved: action,
-    filePath: 'flow.ad',
-    line: 1,
-    step: 1,
-    resolvedSessionScope: undefined,
-    dependencies: replayDaemonDependencies,
-    invoke: async (request) => {
-      dispatchedFlags = request.flags;
-      return { ok: true, data: {} };
-    },
-  });
-
-  expect(response.ok).toBe(true);
-  expect(dispatchedFlags?.readinessTimeoutMs).toBe(500);
-});
-
-test('replay never defaults readinessTimeoutMs onto a non-acting step', async () => {
-  const action: SessionAction = {
-    ts: 0,
-    command: 'wait',
-    positionals: ['label="Continue"'],
-    flags: {},
-  };
-  let dispatchedFlags: Record<string, unknown> | undefined;
-  const response = await invokeReplayAction({
-    req: REPLAY_REQUEST,
-    sessionName: 'default',
-    action,
-    resolved: action,
-    filePath: 'flow.ad',
-    line: 1,
-    step: 1,
-    resolvedSessionScope: undefined,
-    dependencies: replayDaemonDependencies,
-    invoke: async (request) => {
-      dispatchedFlags = request.flags;
-      return { ok: true, data: {} };
-    },
-  });
-
-  expect(response.ok).toBe(true);
-  expect(dispatchedFlags?.readinessTimeoutMs).toBeUndefined();
 });
 
 // #3197: a script line now parses `scroll down --until <selector>` into a flag, and the

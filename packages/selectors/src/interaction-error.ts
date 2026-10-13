@@ -22,8 +22,8 @@ export const INTERACTION_ERROR_REASONS = {
   /** The target names a node with no usable centre to touch: a missing, non-finite, or negative rect. */
   targetBoundsInvalid: 'target_bounds_invalid',
   /**
-   * A readiness poll captured a tree the snapshot-quality verdict calls sparse and the selector did
-   * not resolve in it: the tree is untrustworthy, so absence proves nothing and the wait ends now.
+   * A capture's snapshot-quality verdict is sparse and the selector did not resolve in it:
+   * the tree is untrustworthy, so absence proves nothing and the interaction is refused.
    * `details.snapshotQuality` carries the verdict.
    */
   captureSparse: 'capture_sparse',

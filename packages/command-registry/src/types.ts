@@ -75,20 +75,7 @@ export type CommandTimeoutPolicy = {
   budget: CommandTimeoutBudget;
   envelopeMs: number | 'unbounded';
   onTimeout: 'preserve-daemon' | 'reset-daemon';
-  /**
-   * The descriptor's {@link CommandTargetReadiness} trait, attached by `resolveCommandTimeoutPolicy`
-   * so the envelope can widen by the readiness budget. Descriptors declare it as `targetReadiness`,
-   * never on their `timeoutPolicy`.
-   */
-  targetReadiness?: CommandTargetReadiness;
 };
-
-/**
- * `budgeted`: the command's target resolution may poll for a target that does not exist yet, under
- * a caller-supplied `readinessTimeoutMs`, capped at `READINESS_BUDGET_MAX_MS` (`timeout-policy.ts`).
- * Must match the commands the `targetReadiness` interaction guarantee cells mark `runtime`.
- */
-export type CommandTargetReadiness = 'budgeted';
 
 /**
  * #1320 "Command descriptor policy": what a command may do with the host-global
@@ -212,9 +199,6 @@ export type TargetIdentityVerification = 'pre-dispatch' | 'post-resolution';
  *                   commands that support `--settle`/`--verify`; consumed by
  *                   command surfaces and timeout policy instead of repeated
  *                   command-name lists.
- *  - `targetReadiness` — optional; the commands whose target resolution accepts a
- *                   `readinessTimeoutMs` budget. Read by replay (which supplies a
- *                   default budget) and by the request envelope (which widens by it).
  *  - `responseDataTransform` — optional public response data shaping rules for
  *                   command-owned fields in daemon responses. This keeps
  *                   response shaping on the same descriptor surface as other
@@ -237,7 +221,6 @@ type CommandDescriptorBase = {
    */
   deviceClaimPolicy: DeviceClaimPolicy;
   postActionObservation?: PostActionObservationSupport;
-  targetReadiness?: CommandTargetReadiness;
   responseDataTransform?: CommandResponseDataTransform;
   catalog: CommandCatalogFacet;
   /** Required iff `catalog.group === 'public'`; see {@link CommandFrameworkTier}. */

@@ -412,7 +412,6 @@ export function readFieldInput<TFields extends CommandFieldMap>(
   );
   const commonInput = readCommonInput(record, {
     readTargetAlias: !Object.hasOwn(fields, 'target'),
-    readinessBudgetDeclared: Object.hasOwn(fields, 'readinessTimeoutMs'),
   });
   return compactRecord({
     ...commonInput,

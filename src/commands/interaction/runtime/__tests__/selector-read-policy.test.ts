@@ -147,7 +147,7 @@ test('a read with no match at all still reports selector_not_found', async () =>
   assert.equal(details.candidates, undefined);
   // And no dispatch disclosure: the shared not-found builder threads
   // `dispatched` as a parameter because the acting route proves 'no' and
-  // this route proves nothing about reaching the device (selector-readiness
+  // this route proves nothing about reaching the device (acting selector resolution
   // pins its side).
   assert.equal(details.dispatched, undefined);
 });

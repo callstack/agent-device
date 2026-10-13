@@ -199,8 +199,6 @@ export type DaemonPressOptions = CommandContext &
   Readonly<{
     target: InteractionTarget;
     button?: ClickButton;
-    /** Polls for the target to become actionable; absent takes one attempt. */
-    readinessTimeoutMs?: number;
     expectedResolvedTarget?: ReplayTargetGuardDenotation;
     /** #1654: a mutating `find`'s already-resolved node. */
     preresolvedTarget?: PreresolvedInteractionTarget;
@@ -222,7 +220,6 @@ export type DaemonLongPressOptions = CommandContext &
   Readonly<{
     target: InteractionTarget;
     durationMs?: number;
-    readinessTimeoutMs?: number;
     expectedResolvedTarget?: ReplayTargetGuardDenotation;
     settle?: SettleParams;
   }>;
