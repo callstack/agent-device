@@ -98,21 +98,34 @@ export const prepareApplicationOpenFixture = vi.fn(async (device: DeviceInfo): P
 });
 
 /**
- * The canned `openApplication` answer: apply the fact-admitted runtime hints at the port when the
- * open requests them, then run the contract's canonical direct open (the `directOpen` the fixture
- * passes in). Relaunch identity, runner prewarm policy, and post-open observation are the composed
+ * The canned `openApplication` answer: run the contract's canonical direct lifecycle (the `direct`
+ * operations the fixture passes in) with the fact-admitted runtime hints applied at the port when
+ * the open requests them. A hinted relaunch closes first, then applies the hints, then opens —
+ * the same order the apple/android owners sequence, so daemon suites cannot encode a reversed
+ * lifecycle. Relaunch identity, runner prewarm policy, and post-open observation are the composed
  * owners' rules, pinned under `src/__tests__/daemon-composition/`.
  */
 const openApplicationFixture = vi.fn(
   async (
     _device: DeviceInfo,
-    directOpen: NonNullable<ApplicationLifecycleRuntimeOperations['openApplication']>,
-    input: Parameters<NonNullable<ApplicationLifecycleRuntimeOperations['openApplication']>>[0],
+    direct: ApplicationLifecycleRuntimeOperations,
+    input: Parameters<ApplicationLifecycleRuntimeOperations['openApplication']>[0],
   ) => {
     if (input.applyRuntimeHints) {
+      // The direct owner's close-before-relaunch happens inside its open; a hinted relaunch
+      // must close before the hints land, so take the close here and open as a fresh launch.
+      if (input.relaunch && input.target !== undefined) {
+        await direct.closeApplication({
+          positionals: [input.appBundleId ?? input.target],
+          surface: input.surface,
+          execution: input.execution,
+        });
+        await input.applyRuntimeHints({ appId: input.appBundleId, values: input.runtimeHints });
+        return await direct.openApplication({ ...input, relaunch: false });
+      }
       await input.applyRuntimeHints({ appId: input.appBundleId, values: input.runtimeHints });
     }
-    return await directOpen(input);
+    return await direct.openApplication(input);
   },
 );
 
@@ -147,7 +160,6 @@ export async function applicationLifecycleRuntimeFixture(
         applicationLifecycleFixtureInteractor(target, runner),
     }),
   });
-  const directOpenApplication = direct.openApplication;
   const directResolveOpenTarget = direct.resolveOpenTarget;
   return Object.freeze({
     ...direct,
@@ -156,8 +168,7 @@ export async function applicationLifecycleRuntimeFixture(
     prepareApplicationOpen: async () => {
       await prepareApplicationOpenFixture(device);
     },
-    openApplication: async (input) =>
-      await openApplicationFixture(device, directOpenApplication, input),
+    openApplication: async (input) => await openApplicationFixture(device, direct, input),
     applyRuntimeHints: async (input) => {
       await applyRuntimeHintsFixture({ device, ...input });
     },
