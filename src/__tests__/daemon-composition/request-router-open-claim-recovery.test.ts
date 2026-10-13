@@ -75,8 +75,8 @@ import {
 import {
   awaitFixtureReadiness,
   dispatchApplicationLifecycleEffect,
-  discoverReadyAndroidEmulators,
 } from '../../daemon/__tests__/application-lifecycle-runtime-fixture.ts';
+import { discoverReadyAndroidEmulators } from './application-lifecycle-runtime-fixture.ts';
 import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
 import { inspectDeviceClaims } from '../../daemon/device/device-claim-inspection.ts';
 import {

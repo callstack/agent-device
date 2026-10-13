@@ -22,22 +22,11 @@ type LifecycleEffectContext = ApplicationLifecycleExecution &
 /**
  * A platform-neutral readiness pause point. Package-owned readiness runs inside the admitted
  * binding, so a router-level test that needs to hold an open mid-readiness awaits this instead of
- * a per-platform host call.
+ * a per-platform host call. A daemon-lane test that needs a readiness FAILURE rejects
+ * `prepareApplicationOpenFixture` (the port's prepare step), which is where the canned answer
+ * surfaces to the open flow.
  */
 export const awaitFixtureReadiness = vi.fn(async (_device: DeviceInfo): Promise<void> => undefined);
-
-/**
- * Readiness discovery, as a seam. It reports the device under test as an already-running emulator
- * so lifecycle fixtures never launch or poll a boot; a test that needs a pre-effect readiness
- * failure rejects this instead.
- */
-export const discoverReadyAndroidEmulators = vi.fn(async (readyDevice: DeviceInfo) => [
-  {
-    ...readyDevice,
-    id: readyDevice.id.startsWith('emulator-') ? readyDevice.id : `emulator-${readyDevice.id}`,
-    booted: true,
-  },
-]);
 
 /**
  * Handler tests observe an admitted lifecycle open/close through this spy: package lifecycle

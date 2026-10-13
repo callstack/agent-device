@@ -72,10 +72,7 @@ import { providerCredentialsFixture } from './support/provider-credentials-fixtu
 import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { ensureDeviceReady } from '../device/device-ready.ts';
-import {
-  awaitFixtureReadiness,
-  discoverReadyAndroidEmulators,
-} from './application-lifecycle-runtime-fixture.ts';
+import { awaitFixtureReadiness } from './application-lifecycle-runtime-fixture.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from './support/store-factory.ts';
@@ -90,9 +87,6 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
-// The open path reaches readiness through its admitted package binding, so router-level
-// serialization is observed at the fixture's emulator-discovery seam.
-const mockDiscoverReadyAndroidEmulators = vi.mocked(discoverReadyAndroidEmulators);
 const mockObserveBoot = vi.mocked(observeBootTimeMsFixture);
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
 
@@ -120,16 +114,8 @@ beforeEach(() => {
   mockEnsureDeviceReady.mockResolvedValue(undefined);
   mockAwaitFixtureReadiness.mockReset();
   mockAwaitFixtureReadiness.mockResolvedValue(undefined);
-  mockDiscoverReadyAndroidEmulators.mockReset();
   mockObserveBoot.mockReset();
   mockObserveBoot.mockResolvedValue({ observed: false, reason: 'unobserved' });
-  mockDiscoverReadyAndroidEmulators.mockImplementation(async (device) => [
-    {
-      ...device,
-      id: device.id.startsWith('emulator-') ? device.id : `emulator-${device.id}`,
-      booted: true,
-    },
-  ]);
 });
 
 // fallow-ignore-next-line complexity

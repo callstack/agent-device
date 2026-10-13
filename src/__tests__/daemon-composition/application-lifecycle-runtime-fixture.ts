@@ -6,24 +6,38 @@ import type {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
-// The lifecycle seams (dispatch spy, readiness pauses, fixture interactor) have ONE owner: the
+import { vi } from 'vitest';
+// The lifecycle seams (dispatch spy, readiness pause, fixture interactor) have ONE owner: the
 // daemon's canned lifecycle fixture. This real-composition fixture builds the REAL root gateway
 // and platform application tools on top of the same seams, so every lane observes one spy set.
+// Android readiness discovery is the composed owners' rule (which devices discovery runs for),
+// so its already-running-emulator seam lives HERE, not in the daemon fixture.
 export {
   awaitFixtureReadiness,
-  discoverReadyAndroidEmulators,
   dispatchApplicationLifecycleEffect,
 } from '../../daemon/__tests__/application-lifecycle-runtime-fixture.ts';
 import {
   applicationLifecycleFixtureInteractor,
   awaitFixtureReadiness,
-  discoverReadyAndroidEmulators,
 } from '../../daemon/__tests__/application-lifecycle-runtime-fixture.ts';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import { createAndroidApplicationTools } from '../../platform-runtime-android-application-tools.ts';
 import { createAppleApplicationTools } from '../../platform-runtime-apple-application-tools.ts';
 import { createComposedPlatformRuntimeGateway } from '../../platform-runtime-gateway.ts';
 import { platformRuntimeModules } from '../../platform-runtime.ts';
+
+/**
+ * Readiness discovery, as a seam for the composed host. It reports the device under test as an
+ * already-running emulator so composition fixtures never launch or poll a boot; a test that needs
+ * a pre-effect readiness failure rejects this instead.
+ */
+export const discoverReadyAndroidEmulators = vi.fn(async (readyDevice: DeviceInfo) => [
+  {
+    ...readyDevice,
+    id: readyDevice.id.startsWith('emulator-') ? readyDevice.id : `emulator-${readyDevice.id}`,
+    booted: true,
+  },
+]);
 
 export async function applicationLifecycleRuntimeFixture(
   device: DeviceInfo,

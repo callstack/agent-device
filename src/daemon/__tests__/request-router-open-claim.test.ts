@@ -53,10 +53,7 @@ import {
   lifecycleDeviceRuntimeGateway,
 } from './test-device-runtime-gateway.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import {
-  awaitFixtureReadiness,
-  discoverReadyAndroidEmulators,
-} from './application-lifecycle-runtime-fixture.ts';
+import { awaitFixtureReadiness } from './application-lifecycle-runtime-fixture.ts';
 import { ensureDeviceReady } from '../device/device-ready.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from './support/store-factory.ts';
@@ -66,7 +63,6 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
-const mockDiscoverReadyAndroidEmulators = vi.mocked(discoverReadyAndroidEmulators);
 const mockObserveBoot = vi.mocked(observeBootTimeMsFixture);
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
 
@@ -94,7 +90,6 @@ beforeEach(() => {
   mockAwaitFixtureReadiness.mockResolvedValue(undefined);
   mockObserveBoot.mockReset();
   mockObserveBoot.mockResolvedValue({ observed: false, reason: 'unobserved' });
-  mockDiscoverReadyAndroidEmulators.mockReset();
 });
 
 function seedLiveForeignClaim(claimsDir: string, device: DeviceInfo, foreignStateDir: string) {
