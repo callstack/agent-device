@@ -76,3 +76,23 @@ test('system-bar membership survives omitted containers and stays separate from 
       ).toBe(false);
   }
 });
+
+test('launcher-hosted navigation survives omitted wrappers while taskbar app icons stay separate', () => {
+  const tree = parseUiHierarchyTree(`<hierarchy>
+    <node class="android.widget.FrameLayout" package="com.google.android.apps.nexuslauncher" resource-id="com.google.android.apps.nexuslauncher:id/taskbar_container" bounds="[0,760][400,800]">
+      <node class="android.widget.FrameLayout" package="com.google.android.apps.nexuslauncher" resource-id="com.google.android.apps.nexuslauncher:id/navbuttons_view" bounds="[0,760][200,800]">
+        <node class="android.widget.Button" package="com.google.android.apps.nexuslauncher" text="Back" bounds="[0,760][40,800]" clickable="true" />
+        <node class="android.widget.Button" package="com.android.systemui" text="Foreign action" bounds="[40,760][80,800]" clickable="true" />
+      </node>
+      <node class="android.widget.Button" package="com.google.android.apps.nexuslauncher" text="Dock app" bounds="[200,760][240,800]" clickable="true" />
+    </node>
+  </hierarchy>`);
+  const { nodes } = buildUiHierarchySnapshot(tree, undefined, { interactiveOnly: true });
+  expect(nodes.find((node) => node.label === 'Back')?.systemBar).toBe('navigation');
+  expect(nodes.find((node) => node.label === 'Foreign action')).not.toHaveProperty('systemBar');
+  expect(nodes.find((node) => node.label === 'Dock app')).not.toHaveProperty('systemBar');
+  expect(withoutSettleChrome(attachRefs(nodes), 'com.example').map((node) => node.label)).toEqual([
+    'Foreign action',
+    'Dock app',
+  ]);
+});

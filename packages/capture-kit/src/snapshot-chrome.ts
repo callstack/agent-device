@@ -254,8 +254,9 @@ function isAndroidSystemChromeNode(
   node: SnapshotNode,
   byIndex: Map<number, SnapshotNode>,
 ): boolean {
+  if (node.systemBar !== undefined) return true;
   if (node.bundleId !== ANDROID_SYSTEM_CHROME_PACKAGE) return false;
-  if (node.systemBar !== undefined || hasAndroidSystemChromeProvenance(node)) return true;
+  if (hasAndroidSystemChromeProvenance(node)) return true;
   const seen = new Set<number>();
   let current: SnapshotNode | undefined = node;
   while (current?.bundleId === ANDROID_SYSTEM_CHROME_PACKAGE && !seen.has(current.index)) {

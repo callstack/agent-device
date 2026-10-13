@@ -195,7 +195,7 @@ function walkUiHierarchyNode(
   ancestorSystemChrome: boolean = false,
   ancestorWindowRect?: Rect,
   ancestorClip?: Rect,
-  ancestorSystemBar?: RawSnapshotNode['systemBar'],
+  ancestorSystemBar?: Pick<RawSnapshotNode, 'bundleId' | 'systemBar'>,
 ): void {
   state.presentationBudget.check('work');
   if (shouldStopAndroidWalk(state, node, depth)) return;
@@ -230,7 +230,7 @@ function walkUiHierarchyNode(
     ancestorSystemChrome || isAndroidSystemChromeWindowResourceId(node.identifier),
     currentWindowRect,
     nextAncestorClip,
-    systemBar,
+    { bundleId: node.packageName ?? undefined, systemBar },
   );
 }
 
@@ -311,7 +311,7 @@ function walkAndroidChildren(
   ancestorSystemChrome: boolean,
   ancestorWindowRect: Rect | undefined,
   ancestorClip: Rect | undefined,
-  systemBar: RawSnapshotNode['systemBar'],
+  systemBar: Pick<RawSnapshotNode, 'bundleId' | 'systemBar'>,
 ): void {
   for (const child of node.children) {
     walkUiHierarchyNode(

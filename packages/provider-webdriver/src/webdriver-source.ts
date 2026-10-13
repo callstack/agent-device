@@ -100,11 +100,7 @@ export function parseWebDriverSourceFacts(
   if (platform === 'android') {
     for (const node of nodes) {
       const parent = node.parentIndex === undefined ? undefined : nodes[node.parentIndex];
-      const systemBar = androidSystemBarMembership(
-        node.bundleId,
-        node.identifier,
-        parent?.systemBar,
-      );
+      const systemBar = androidSystemBarMembership(node.bundleId, node.identifier, parent);
       if (systemBar) node.systemBar = systemBar;
     }
   }

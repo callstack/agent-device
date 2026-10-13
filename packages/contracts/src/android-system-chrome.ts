@@ -27,8 +27,17 @@ export function isAndroidSystemChromeWindowResourceId(
 export function androidSystemBarMembership(
   packageName: string | null | undefined,
   resourceId: string | null | undefined,
-  ancestorMembership?: RawSnapshotNode['systemBar'],
+  ancestor?: Pick<RawSnapshotNode, 'bundleId' | 'systemBar'>,
 ): RawSnapshotNode['systemBar'] {
+  if (
+    packageName === 'com.android.launcher3' ||
+    packageName === 'com.google.android.apps.nexuslauncher'
+  ) {
+    if (resourceId === `${packageName}:id/navbuttons_view`) return 'navigation';
+    return ancestor?.bundleId === packageName && ancestor.systemBar === 'navigation'
+      ? 'navigation'
+      : undefined;
+  }
   if (packageName !== ANDROID_SYSTEM_CHROME_PACKAGE) return undefined;
   switch (resourceId) {
     case 'com.android.systemui:id/status_bar':
@@ -39,7 +48,7 @@ export function androidSystemBarMembership(
     case 'com.android.systemui:id/navigation_bar_frame':
       return 'navigation';
     default:
-      return ancestorMembership;
+      return ancestor?.bundleId === packageName ? ancestor.systemBar : undefined;
   }
 }
 

@@ -25,10 +25,23 @@ test.each([
 });
 
 test('bar inheritance requires SystemUI ownership at each edge', () => {
-  expect(androidSystemBarMembership('com.android.systemui', undefined, 'status')).toBe('status');
-  expect(androidSystemBarMembership(undefined, undefined, 'status')).toBeUndefined();
   expect(
-    androidSystemBarMembership('com.example', 'com.android.systemui:id/status_bar', 'status'),
+    androidSystemBarMembership('com.android.systemui', undefined, {
+      bundleId: 'com.android.systemui',
+      systemBar: 'status',
+    }),
+  ).toBe('status');
+  expect(
+    androidSystemBarMembership(undefined, undefined, {
+      bundleId: 'com.android.systemui',
+      systemBar: 'status',
+    }),
+  ).toBeUndefined();
+  expect(
+    androidSystemBarMembership('com.example', 'com.android.systemui:id/status_bar', {
+      bundleId: 'com.android.systemui',
+      systemBar: 'status',
+    }),
   ).toBeUndefined();
   expect(
     androidSystemBarMembership('com.android.systemui', 'com.example:id/status_bar'),
@@ -46,3 +59,34 @@ test('shade settle provenance is private and does not imply public bar membershi
     isAndroidSystemChromeWindowResourceId('com.android.systemui:id/navigation_bar_dialog'),
   ).toBe(false);
 });
+
+test.each(['com.android.launcher3', 'com.google.android.apps.nexuslauncher'])(
+  'launcher navigation is the navbuttons subtree only: %s',
+  (bundleId) => {
+    expect(androidSystemBarMembership(bundleId, `${bundleId}:id/navbuttons_view`)).toBe(
+      'navigation',
+    );
+    expect(
+      androidSystemBarMembership(bundleId, `${bundleId}:id/taskbar_container`),
+    ).toBeUndefined();
+    expect(androidSystemBarMembership(bundleId, `${bundleId}:id/taskbar_view`)).toBeUndefined();
+    expect(
+      androidSystemBarMembership(bundleId, undefined, { bundleId, systemBar: 'navigation' }),
+    ).toBe('navigation');
+    expect(
+      androidSystemBarMembership('com.example', `${bundleId}:id/navbuttons_view`),
+    ).toBeUndefined();
+    expect(
+      androidSystemBarMembership('com.android.systemui', undefined, {
+        bundleId,
+        systemBar: 'navigation',
+      }),
+    ).toBeUndefined();
+    expect(
+      androidSystemBarMembership(bundleId, undefined, {
+        bundleId: 'com.android.systemui',
+        systemBar: 'status',
+      }),
+    ).toBeUndefined();
+  },
+);

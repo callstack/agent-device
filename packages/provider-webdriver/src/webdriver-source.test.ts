@@ -400,3 +400,25 @@ test('Android native wrappers retain unknown ownership barriers for membership a
     [undefined, 'Unknown subtree action'],
   );
 });
+
+test('Appium launcher navbuttons are navigation chrome while the surrounding taskbar stays content', () => {
+  const nodes = attachRefs(
+    parseWebDriverSourceFacts(
+      `<hierarchy>
+    <android.widget.FrameLayout package="com.google.android.apps.nexuslauncher" resource-id="com.google.android.apps.nexuslauncher:id/taskbar_container">
+      <android.widget.FrameLayout package="com.google.android.apps.nexuslauncher" resource-id="com.google.android.apps.nexuslauncher:id/navbuttons_view">
+        <android.widget.Button package="com.google.android.apps.nexuslauncher" text="Back" />
+      </android.widget.FrameLayout>
+      <android.widget.Button package="com.google.android.apps.nexuslauncher" text="Dock app" />
+    </android.widget.FrameLayout>
+  </hierarchy>`,
+      'android',
+    ).nodes,
+  );
+  assert.equal(nodes.find((node) => node.label === 'Back')?.systemBar, 'navigation');
+  assert.equal(nodes.find((node) => node.label === 'Dock app')?.systemBar, undefined);
+  assert.deepEqual(
+    withoutSettleChrome(nodes, 'com.example').map((node) => node.label),
+    [undefined, 'Dock app'],
+  );
+});

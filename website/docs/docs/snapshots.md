@@ -290,10 +290,11 @@ band is reported as unmeasurable and taps fall back to the tree's own keyboard c
 cannot report the area, so their bounds are used as they are.
 
 Android ADB and Appium snapshot nodes carry `systemBar: "status"` or `systemBar: "navigation"`
-when they belong to a recognized SystemUI bar subtree. Membership stays on each node when a
+when they belong to a recognized Android system-bar subtree. Membership stays on each node when a
 snapshot omits its ancestors. The notification shade, including its clock/header, dialogs,
 popups, and other SystemUI overlays have no bar membership. An absent `systemBar` means the
-capture did not establish membership. Android package identity is available as `bundleId`.
+capture did not establish membership. Launcher-hosted navigation buttons carry `"navigation"` too;
+taskbar app icons do not. Android package identity is available as `bundleId`.
 You can read these fields in snapshot JSON and nodes returned by `get attrs` and `find`.
 
 Android snapshot nodes and `get attrs` (including the digest response) carry the native
