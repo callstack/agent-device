@@ -62,8 +62,8 @@ test('measureRatchets reports all ratchets from one tree', () => {
   });
   const withAuthority = tree({
     'packages/daemon/src/handlers/fixture.ts':
-      "import type { SessionState } from '../session-state.ts';\n" +
-      "import { SessionStore } from '../session-store.ts';",
+      "import type { SessionState } from '../core/session-state.ts';\n" +
+      "import { SessionStore } from '../core/session-store.ts';",
     'packages/daemon/src/core/session-store.ts': 'export class SessionStore {}',
   });
   assert.deepEqual(

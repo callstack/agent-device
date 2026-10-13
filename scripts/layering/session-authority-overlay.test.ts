@@ -26,15 +26,15 @@ test('the overlay counts symbol-level production importers, not file-level impor
     'packages/daemon/src/core/session-state.ts': STATE_STUB,
     'packages/daemon/src/core/session-store.ts': STORE_STUB,
     'packages/daemon/src/handlers/fixture.ts':
-      "import type { SessionState } from '../session-state.ts';\n" +
-      "import { SessionStore } from '../session-store.ts';\n",
+      "import type { SessionState } from '../core/session-state.ts';\n" +
+      "import { SessionStore } from '../core/session-store.ts';\n",
     'packages/daemon/src/handlers/request-only.ts':
-      "import type { DaemonRequest } from '../session-state.ts';\n" +
-      "import { resolveDaemonStateDir } from '../session-store.ts';\n",
+      "import type { DaemonRequest } from '../core/session-state.ts';\n" +
+      "import { resolveDaemonStateDir } from '../core/session-store.ts';\n",
     'packages/daemon/src/non-handler.ts':
-      "import type { SessionState } from './session-state.ts';\n",
+      "import type { SessionState } from './core/session-state.ts';\n",
     'packages/daemon/src/handlers/fixture.test.ts':
-      "import type { SessionState } from '../session-state.ts';\n",
+      "import type { SessionState } from '../core/session-state.ts';\n",
   };
   assert.deepEqual(overlayOf(sources), {
     shapeFiles: ['packages/daemon/src/handlers/fixture.ts', 'packages/daemon/src/non-handler.ts'],
@@ -50,9 +50,9 @@ test('the overlay follows the SessionState declaration to a moved path, not a re
     'packages/daemon/src/core/session-state.ts': STATE_STUB,
     'packages/daemon/src/core/session-store.ts': STORE_STUB,
     'packages/daemon/src/handlers/fixture.ts':
-      "import type { SessionState } from '../session-state.ts';\n",
+      "import type { SessionState } from '../core/session-state.ts';\n",
     'packages/daemon/src/non-handler.ts':
-      "import type { SessionState } from './session-state.ts';\n",
+      "import type { SessionState } from './core/session-state.ts';\n",
   };
   assert.deepEqual(overlayOf(sources), {
     shapeFiles: ['packages/daemon/src/handlers/fixture.ts', 'packages/daemon/src/non-handler.ts'],
@@ -132,13 +132,13 @@ test('the end-to-end measurement feeds the ratchet: a new handler importer is re
     'packages/daemon/src/core/session-state.ts': STATE_STUB,
     'packages/daemon/src/core/session-store.ts': STORE_STUB,
     'packages/daemon/src/handlers/kept.ts':
-      "import type { SessionState } from '../session-state.ts';\n",
+      "import type { SessionState } from '../core/session-state.ts';\n",
   };
   const reference = handlerOwnedOverlay(overlayOf(base));
   const grown = {
     ...base,
     'packages/daemon/src/handlers/new.ts':
-      "import type { SessionState } from '../session-state.ts';\n",
+      "import type { SessionState } from '../core/session-state.ts';\n",
   };
   const measured = handlerOwnedOverlay(overlayOf(grown));
   assert.deepEqual(checkSessionAuthorityOverlay(reference, reference), []);
@@ -157,7 +157,7 @@ test('R75 catches a new handler shape edge expressed as an import type', () => {
     overlayOf({
       ...base,
       'packages/daemon/src/handlers/new.ts':
-        "type State = import('../session-state.ts').SessionState;\n",
+        "type State = import('../core/session-state.ts').SessionState;\n",
     }),
   );
 

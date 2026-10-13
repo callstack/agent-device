@@ -25,7 +25,7 @@ test('R76 rejects the direct-iOS selector edge the retired inventory classified'
   const sources = {
     [RETIRED_TARGET]: RETIRED_STUB,
     [RETIRED_IMPORTER]:
-      "import { queryAppleRuntimeSelector } from '../../../src/platform-runtime-apple-resources.ts';\n" +
+      "import { queryAppleRuntimeSelector } from '../../../../src/platform-runtime-apple-resources.ts';\n" +
       'void queryAppleRuntimeSelector;\n',
   };
   const found = edgeViolations(sources, RETIRED_IMPORTER);
@@ -34,7 +34,7 @@ test('R76 rejects the direct-iOS selector edge the retired inventory classified'
   assert.match(found[0]!.message, /daemon coupling to root platform mechanics is banned/);
   assert.match(
     found[0]!.message,
-    /packages\/daemon\/src\/direct-ios-selector\.ts -> src\/platform-runtime-apple-resources\.ts/,
+    /packages\/daemon\/src\/core\/direct-ios-selector\.ts -> src\/platform-runtime-apple-resources\.ts/,
   );
 });
 
@@ -78,8 +78,8 @@ test('R76 reports an import and re-export of one pair as a single violation', ()
   const sources = {
     [RETIRED_TARGET]: RETIRED_STUB,
     [RETIRED_IMPORTER]:
-      "import { queryAppleRuntimeSelector } from '../../../src/platform-runtime-apple-resources.ts';\n" +
-      "export { queryAppleRuntimeSelector } from '../../../src/platform-runtime-apple-resources.ts';\n" +
+      "import { queryAppleRuntimeSelector } from '../../../../src/platform-runtime-apple-resources.ts';\n" +
+      "export { queryAppleRuntimeSelector } from '../../../../src/platform-runtime-apple-resources.ts';\n" +
       'void queryAppleRuntimeSelector;\n',
   };
   assert.equal(edgeViolations(sources, RETIRED_IMPORTER).length, 1);
@@ -89,7 +89,7 @@ test('R76 rejects a destructured dynamic import of the root platform-runtime fam
   const sources = {
     [RETIRED_TARGET]: RETIRED_STUB,
     [RETIRED_IMPORTER]:
-      "const { queryAppleRuntimeSelector } = await import('../../../src/platform-runtime-apple-resources.ts');\n" +
+      "const { queryAppleRuntimeSelector } = await import('../../../../src/platform-runtime-apple-resources.ts');\n" +
       'void queryAppleRuntimeSelector;\n',
   };
   assert.equal(edgeViolations(sources, RETIRED_IMPORTER).length, 1);
@@ -99,7 +99,7 @@ test('R76 rejects a dynamic namespace import of a root platform-runtime module',
   const sources = {
     [RETIRED_TARGET]: RETIRED_STUB,
     [RETIRED_IMPORTER]:
-      "const appleResources = await import('../../../src/platform-runtime-apple-resources.ts');\n" +
+      "const appleResources = await import('../../../../src/platform-runtime-apple-resources.ts');\n" +
       'void appleResources;\n',
   };
   const found = edgeViolations(sources, RETIRED_IMPORTER);
@@ -107,7 +107,7 @@ test('R76 rejects a dynamic namespace import of a root platform-runtime module',
   assert.equal(found[0]!.rule, DAEMON_PLATFORM_RUNTIME_RULE);
   assert.match(
     found[0]!.message,
-    /packages\/daemon\/src\/direct-ios-selector\.ts -> src\/platform-runtime-apple-resources\.ts/,
+    /packages\/daemon\/src\/core\/direct-ios-selector\.ts -> src\/platform-runtime-apple-resources\.ts/,
   );
 });
 

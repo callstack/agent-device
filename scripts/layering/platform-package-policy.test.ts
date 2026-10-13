@@ -268,7 +268,7 @@ test('only the canonical composition root may import the private provider compos
 
   sources.set(
     'packages/daemon/src/server/request-router.ts',
-    "import { providerScope } from '../../../src/platform-runtime/request-providers.ts';",
+    "import { providerScope } from '../../../../src/platform-runtime/request-providers.ts';",
   );
   assert.match(
     messages(sources).join('\n'),

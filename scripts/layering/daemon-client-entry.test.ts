@@ -60,7 +60,7 @@ test('a planted runtime import of daemon internals by the client is red', () => 
   assert.match(violations[0]!.message, /value-imports daemon internals/);
   assert.match(
     violations[0]!.message,
-    /daemon-client-metadata\.ts -> packages\/daemon\/src\/config\.ts/,
+    /daemon-client-metadata\.ts -> packages\/daemon\/src\/core\/config\.ts/,
   );
 });
 
@@ -99,7 +99,7 @@ test('an unrecorded type import of daemon internals is red', () => {
   assert.match(violations[0]!.message, /unclassified daemon-client import of daemon internals/);
   assert.match(
     violations[0]!.message,
-    /daemon-launch-spec\.ts -> packages\/daemon\/src\/daemon-request\.ts/,
+    /daemon-launch-spec\.ts -> packages\/daemon\/src\/core\/daemon-request\.ts/,
   );
 });
 

@@ -184,13 +184,13 @@ const RECORDED_IMPORT_TYPE_CASES = [
   [
     'packages/daemon/src/execution/interaction/index.ts',
     'packages/daemon/src/core/gesture-runtime.ts',
-    '../gesture-runtime.ts',
+    '../../core/gesture-runtime.ts',
     'BoundGestureExecutor',
   ],
   [
     'packages/daemon/src/execution/interaction/index.ts',
     'packages/daemon/src/core/touch-runtime.ts',
-    '../touch-runtime.ts',
+    '../../core/touch-runtime.ts',
     'BoundTouchExecutor',
   ],
   [

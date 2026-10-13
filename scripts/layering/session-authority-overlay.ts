@@ -16,8 +16,29 @@ import { sessionStateDeclarationFile } from './session-state.ts';
 
 export const SESSION_AUTHORITY_OVERLAY_RULE = 'R75 session-authority-overlay';
 
-const SESSION_STORE_AUTHORITY_TARGET = 'packages/daemon/src/core/session-store.ts';
-const HANDLER_ROOT = 'packages/daemon/src/handlers/';
+// The flat handler surface: the pre-layer-folder path plus the layer folders it split into.
+// The ratchet measures the merge-base tree with these same constants, so all spellings stay
+// live until the merge-base moves past the layer-folder split.
+const HANDLER_ROOTS = [
+  'packages/daemon/src/handlers/',
+  'packages/daemon/src/sessions/handlers/',
+  'packages/daemon/src/execution/handlers/',
+];
+
+// The SessionStore authority module lives at its layer path in this tree and at its pre-layer-
+// folder path in the merge-base tree; both spellings measure the same authority.
+const SESSION_STORE_AUTHORITY_TARGETS = new Set([
+  'packages/daemon/src/core/session-store.ts',
+  'packages/daemon/src/session-store.ts',
+]);
+
+/** Fold a handler file to its handler-relative membership key across the layer-folder move. */
+function handlerKey(file: string): string {
+  for (const root of HANDLER_ROOTS) {
+    if (file.startsWith(root)) return file.slice(root.length);
+  }
+  return file;
+}
 
 export type SessionAuthorityOverlay = Readonly<{
   /** Production files importing the SessionState symbol from its declaring module, sorted. */
@@ -42,7 +63,10 @@ export function measureSessionAuthorityOverlay(
     ) {
       shape.add(edge.file);
     }
-    if (edge.target === SESSION_STORE_AUTHORITY_TARGET && edge.symbols.includes('SessionStore')) {
+    if (
+      SESSION_STORE_AUTHORITY_TARGETS.has(edge.target) &&
+      edge.symbols.includes('SessionStore')
+    ) {
       authority.add(edge.file);
     }
   }
@@ -51,7 +75,7 @@ export function measureSessionAuthorityOverlay(
 
 /** The ratcheted subset: the flat handler surface, the one #2132's migration drove down. */
 export function handlerOwnedOverlay(overlay: SessionAuthorityOverlay): SessionAuthorityOverlay {
-  const inHandlers = (file: string) => file.startsWith(HANDLER_ROOT);
+  const inHandlers = (file: string) => HANDLER_ROOTS.some((root) => file.startsWith(root));
   return {
     shapeFiles: overlay.shapeFiles.filter(inHandlers),
     authorityFiles: overlay.authorityFiles.filter(inHandlers),
@@ -80,12 +104,14 @@ export function checkSessionAuthorityOverlay(
   const scopedMeasured = handlerOwnedOverlay(measured);
   const scopedReference = handlerOwnedOverlay(reference);
   const violations: LayeringViolation[] = [];
-  const known = (files: readonly string[]) => new Set(files);
+  // Membership compares handler-relative keys: the merge-base names each file under the flat
+  // handlers/ root, this tree under its layer folder; the key folds both to one member.
+  const known = (files: readonly string[]) => new Set(files.map(handlerKey));
   const referenceShape = known(scopedReference.shapeFiles);
   const referenceAuthority = known(scopedReference.authorityFiles);
 
   for (const file of scopedMeasured.shapeFiles) {
-    if (referenceShape.has(file)) continue;
+    if (referenceShape.has(handlerKey(file))) continue;
     violations.push({
       rule: SESSION_AUTHORITY_OVERLAY_RULE,
       file,
@@ -97,7 +123,7 @@ export function checkSessionAuthorityOverlay(
     });
   }
   for (const file of scopedMeasured.authorityFiles) {
-    if (referenceAuthority.has(file)) continue;
+    if (referenceAuthority.has(handlerKey(file))) continue;
     violations.push({
       rule: SESSION_AUTHORITY_OVERLAY_RULE,
       file,

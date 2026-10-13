@@ -67,8 +67,8 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
     'packages/daemon/src/sessions/snapshot-command-runtime.ts',
   ],
   appBundleId: [
-    'packages/daemon/src/sessions/handlers/session-app-deployment.ts',
     'packages/daemon/src/execution/handlers/session-selector-dispatch.ts',
+    'packages/daemon/src/sessions/handlers/session-app-deployment.ts',
     'packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts',
   ],
   appLog: ['packages/daemon/src/resources/app-log-session-resource.ts'],

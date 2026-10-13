@@ -4,19 +4,19 @@ import { test } from 'vitest';
 
 const SIMPLE_PUBLISHERS = [
   // device-claims.ts delegates every write to device-claim-store.ts's writeDeviceClaim.
-  new URL('../device/device-claim-store.ts', import.meta.url),
+  new URL('../../resources/device/device-claim-store.ts', import.meta.url),
   new URL(
-    '../../../../packages/daemon-contracts/src/daemon-registration-owner.ts',
+    '../../../../../packages/daemon-contracts/src/daemon-registration-owner.ts',
     import.meta.url,
   ),
   new URL('../provider-lease-expiry.ts', import.meta.url),
-  new URL('../session-script-writer.ts', import.meta.url),
-  new URL('../../../../packages/platform-apple/src/runner/runner-lease.ts', import.meta.url),
-  new URL('../../../../src/remote/remote-connection-state.ts', import.meta.url),
+  new URL('../../core/session-script-writer.ts', import.meta.url),
+  new URL('../../../../../packages/platform-apple/src/runner/runner-lease.ts', import.meta.url),
+  new URL('../../../../../src/remote/remote-connection-state.ts', import.meta.url),
 ] as const;
 
 const PROCESS_LOCK_SOURCE = new URL(
-  '../../../../packages/host-kit/src/internal/process-lock.ts',
+  '../../../../../packages/host-kit/src/internal/process-lock.ts',
   import.meta.url,
 );
 
@@ -47,7 +47,7 @@ test('the process lock reclaims in place instead of renaming the lock path', () 
 
 test('durable publishers share the host-kit durable publication owner', () => {
   const sourcePaths = [
-    new URL('../../../../packages/capture-kit/src/durable-capture/store.ts', import.meta.url),
+    new URL('../../../../../packages/capture-kit/src/durable-capture/store.ts', import.meta.url),
   ];
   for (const sourcePath of sourcePaths) {
     const source = fs.readFileSync(sourcePath, 'utf8');
