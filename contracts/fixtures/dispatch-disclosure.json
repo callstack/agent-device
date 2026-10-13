@@ -514,13 +514,13 @@
   {
     "id": "web-agent-browser.cli-unknown-command",
     "producer": "web-agent-browser",
-    "trigger": "the CLI envelope refuses an unknown command by type: argv parsing never reached the browser daemon",
+    "trigger": "the CLI envelope refuses an unknown command by type: argv parsing never reached the browser daemon, which a newer provider against an older managed backend can hit",
     "dispatched": "no"
   },
   {
     "id": "web-agent-browser.cli-missing-arguments",
     "producer": "web-agent-browser",
-    "trigger": "the CLI envelope refuses a command with missing arguments by type: argv validation, before any browser operation",
+    "trigger": "the CLI envelope refuses keyboard type with no text by type: argv validation, before any browser operation",
     "dispatched": "no"
   },
   {

@@ -1,7 +1,8 @@
 // contracts/fixtures/dispatch-disclosure.json, web-agent-browser rows: each drives the real
 // provider entry point over a scripted agent-browser CLI and asserts the `details.dispatched`
-// (and `details.dispatchedSteps`) the failure leaves behind. The fixtures carry the envelopes the
-// managed backend really answers, including its typed CLI-refusal `type`.
+// (and `details.dispatchedSteps`) the failure leaves behind. The envelopes are what the managed
+// backend answers, including its typed CLI-refusal `type`; where the pinned 0.27.1 CLI cannot
+// produce one for a current provider argv, that row's driver says so.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test, vi } from 'vitest';
@@ -46,21 +47,28 @@ async function withScriptedBackend(
   });
 }
 
-/** Agent-browser answers a command it does not implement before it reaches the browser daemon. */
+/**
+ * Agent-browser answers a command with argv it cannot run, before it contacts the browser daemon.
+ * This is the verbatim 0.27.1 answer for the argv the driver below sends.
+ */
+function refuseMissingArguments(): ExecResult {
+  return agentBrowserJsonResult({
+    error: 'Missing arguments for: keyboard type\nUsage: agent-browser keyboard type <text>',
+    success: false,
+    type: 'missing_arguments',
+  });
+}
+
+/**
+ * Agent-browser answers a command it does not implement before it reaches the browser daemon. No
+ * argv the current provider sends is unknown to 0.27.1, so this row covers the version skew where a
+ * newer provider meets an older managed backend; the envelope is what such a CLI answers.
+ */
 function refuseUnknownCommand(): ExecResult {
   return agentBrowserJsonResult({
     error: 'Unknown command: --bogus',
     success: false,
     type: 'unknown_command',
-  });
-}
-
-/** Agent-browser answers a command with argv it cannot run the same way. */
-function refuseMissingArguments(): ExecResult {
-  return agentBrowserJsonResult({
-    error: 'Missing arguments for: click\nUsage: agent-browser click <selector>',
-    success: false,
-    type: 'missing_arguments',
   });
 }
 
@@ -153,7 +161,9 @@ const DRIVERS: Record<string, { drive: () => Promise<unknown>; dispatchedSteps?:
   'web-agent-browser.cli-missing-arguments': {
     drive: () =>
       withScriptedBackend(refuseMissingArguments, async (provider) => {
-        await provider.clickRef?.('@e3');
+        // `keyboard type` with nothing to type: the argv the provider really sends for an empty
+        // typeText, which 0.27.1 refuses by type before it reaches the browser.
+        await provider.typeText('');
       }),
   },
   'web-agent-browser.click-pointer-down-refused': {
