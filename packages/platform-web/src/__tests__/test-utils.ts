@@ -13,7 +13,7 @@ import { vi } from 'vitest';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
 import type { WebProvider } from '../provider.ts';
 
-const TEST_AGENT_BROWSER_VERSION = '0.27.1';
+const TEST_AGENT_BROWSER_VERSION = '0.39.0';
 
 export function mkdtempForTestSync(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));

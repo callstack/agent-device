@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const TEST_AGENT_BROWSER_VERSION = '0.27.1';
+const TEST_AGENT_BROWSER_VERSION = '0.39.0';
 
 type FakeManagedAgentBrowserInstall = ReturnType<typeof expectedManagedAgentBrowserInstall>;
 

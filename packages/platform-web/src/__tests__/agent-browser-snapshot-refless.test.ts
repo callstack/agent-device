@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { normalizeAgentBrowserSnapshot } from '../agent-browser-snapshot.ts';
 
 /**
- * Payloads captured from agent-browser 0.27.1 against a real page (`snapshot` with no `--compact`,
+ * Payloads captured from agent-browser against a real page (re-checked on 0.39.0) (`snapshot` with no `--compact`,
  * which is what the capture now asks for), so the projection is tested against the wording the
  * backend actually produces rather than a hand-written approximation of it.
  */

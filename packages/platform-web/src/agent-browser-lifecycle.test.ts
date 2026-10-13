@@ -30,11 +30,13 @@ import {
   agentBrowserChromeLaunchMarker,
   appendAgentDeviceChromeArgs,
   cleanupManagedAgentBrowserOrphans,
+  cleanupManagedAgentBrowserOrphansForProviderStartup,
   matchAgentBrowserChromeProcess,
   resolveAgentBrowserIdleTimeoutMs,
   summarizeManagedAgentBrowserProcesses,
   summarizeAgentBrowserProcesses,
 } from './agent-browser-lifecycle.ts';
+import { managedInstallPaths } from './agent-browser-install-paths.ts';
 import { recordManagedAgentBrowserProcesses } from './agent-browser-process-record.ts';
 import { getManagedAgentBrowserStatus } from './agent-browser-tool.ts';
 
@@ -331,6 +333,144 @@ test('managed process summary includes the recordable agent-browser daemon', () 
         status,
       ).processes[0]?.reason,
     ).toBe('agent-browser-daemon');
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+function installPreviousVersionFleet(stateDir: string) {
+  const previous = managedInstallPaths(stateDir, '0.27.1');
+  fs.mkdirSync(previous.installDir, { recursive: true });
+  const entryScript = path.join(
+    previous.installDir,
+    'package',
+    'node_modules',
+    'agent-browser',
+    'bin',
+    'agent-browser.js',
+  );
+  return {
+    previous,
+    daemonCommand: `${process.execPath} ${entryScript}`,
+    markedChromeCommand: `/Applications/Chromium.app/Contents/MacOS/Chromium ${agentBrowserChromeLaunchMarker(previous)}`,
+    homeChromeCommand: `${path.join(previous.runtimeHomeDir, '.agent-browser', 'browsers')}/chrome-150/chrome --type=renderer`,
+  };
+}
+
+test('a fleet left running by a previous version still matches after the pin moves', () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({ stateDir });
+    const { previous, daemonCommand, markedChromeCommand, homeChromeCommand } =
+      installPreviousVersionFleet(stateDir);
+    assert.notEqual(previous.installDir, status.installDir);
+
+    const summary = summarizeManagedAgentBrowserProcesses(
+      [
+        { pid: 101, command: daemonCommand },
+        { pid: 201, command: markedChromeCommand },
+        { pid: 202, command: homeChromeCommand },
+        { pid: 999, command: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' },
+      ],
+      status,
+    );
+
+    assert.deepEqual(summary.pids, [101, 201, 202]);
+    assert.deepEqual(
+      summary.processes.map(({ reason }) => reason),
+      ['agent-browser-daemon', 'launch-marker', 'managed-browser-home'],
+    );
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('a previous version fleet from another state dir is not claimed', () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  const otherStateDir = mkdtempForTestSync('agent-device-web-life-other-');
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({ stateDir });
+    const { daemonCommand, markedChromeCommand } = installPreviousVersionFleet(otherStateDir);
+
+    const summary = summarizeManagedAgentBrowserProcesses(
+      [
+        { pid: 101, command: daemonCommand },
+        { pid: 201, command: markedChromeCommand },
+      ],
+      status,
+    );
+
+    assert.equal(summary.count, 0);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+    fs.rmSync(otherStateDir, { recursive: true, force: true });
+  }
+});
+
+test('provider startup reaps a recorded fleet whose command sits in the previous version directory', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  const originalIdleTimeout = process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
+  process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS = '1';
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({ stateDir });
+    const { daemonCommand } = installPreviousVersionFleet(stateDir);
+    const ownedProcessRecords = {
+      read: () => [
+        {
+          scope: { kind: 'daemon' as const },
+          path: path.join(stateDir, 'owned-processes.json'),
+          status: 'decoded' as const,
+          records: [
+            {
+              pid: NEVER_A_PID,
+              startTime: `start-${NEVER_A_PID}`,
+              command: daemonCommand,
+              purpose: 'managed-web-browser',
+            },
+          ],
+        },
+      ],
+      replace: vi.fn(),
+      clear: vi.fn(),
+    };
+
+    const result = await cleanupManagedAgentBrowserOrphansForProviderStartup(status, {
+      openWebSessionNames: [],
+      ownedProcessRecords,
+    });
+
+    assert.deepEqual(result?.pids, [NEVER_A_PID]);
+    expect(ownedProcessRecords.clear).toHaveBeenCalledOnce();
+  } finally {
+    if (originalIdleTimeout === undefined) {
+      delete process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
+    } else {
+      process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS = originalIdleTimeout;
+    }
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('recording the fleet under the new pin keeps the previous version fleet owned', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-web-life-');
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({ stateDir });
+    const { daemonCommand, markedChromeCommand } = installPreviousVersionFleet(stateDir);
+    const store = { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
+    mockRunCmd.mockResolvedValue({
+      stdout: [`  101     1 ${daemonCommand}`, `  201   101 ${markedChromeCommand}`].join('\n'),
+      stderr: '',
+      exitCode: 0,
+    });
+
+    const summary = await recordManagedAgentBrowserProcesses(status, store);
+
+    expect(summary.pids).toEqual([101, 201]);
+    expect(store.replace).toHaveBeenCalledOnce();
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

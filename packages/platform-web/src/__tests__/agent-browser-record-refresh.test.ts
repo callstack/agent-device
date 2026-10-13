@@ -92,7 +92,7 @@ test('open re-derives the fleet record without consulting the probe', async () =
 });
 
 test('recording re-derives the fleet record without consulting the probe', async () => {
-  // 0.27.1's `record start` mints an ffmpeg child of the agent-browser daemon, outside Chrome's
+  // The pinned CLI's `record start` mints an ffmpeg child of the agent-browser daemon, outside Chrome's
   // tree. The probe vouches for recorded pids only, so a scan is the only path that can own it.
   mockFleetRecordLive.mockResolvedValue(true);
   const executor = recordingAgentBrowserExecutor();

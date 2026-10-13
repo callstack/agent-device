@@ -526,7 +526,7 @@ async function finalizeAgentBrowserProcessRecord(params: {
  * The agent-browser commands that can change the owned browser fleet.
  *
  * `open` may launch the agent-browser daemon and its Chrome, and `close` can end them. `record`
- * joins them because in the pinned 0.27.1 CLI, `record start` mints an `ffmpeg` child of the
+ * joins them because in the pinned CLI, `record start` mints an `ffmpeg` child of the
  * daemon — the WebM encoder outlives the CLI process, which returns while the recording runs, and
  * `record stop` is a later command that pipes into it. That helper is outside Chrome's tree, so
  * only a scan reached by a lifecycle boundary can add it to the record the startup reaper signals;

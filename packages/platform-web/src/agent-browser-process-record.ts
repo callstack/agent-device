@@ -14,6 +14,10 @@ import {
   type OwnedProcessRecordStore,
 } from '@agent-device/host-kit/process';
 
+import {
+  listManagedInstallPaths,
+  type ManagedInstallPaths,
+} from './agent-browser-install-paths.ts';
 import type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
 
 const HOST_PROCESS_LIST_TIMEOUT_MS = 1_500;
@@ -33,7 +37,9 @@ export type AgentBrowserProcessSummary = {
   processes: AgentBrowserProcessMatch[];
 };
 
-export function agentBrowserChromeLaunchMarker(status: AgentBrowserToolStatus): string {
+export function agentBrowserChromeLaunchMarker(
+  status: Pick<ManagedInstallPaths, 'stateDir' | 'installDir'>,
+): string {
   const hash = crypto.createHash('sha256');
   hash.update(path.resolve(status.stateDir));
   hash.update('\0');
@@ -58,10 +64,19 @@ export function matchAgentBrowserChromeProcess(
 ): AgentBrowserProcessMatch | undefined {
   if (processInfo.pid === hostProcessId() || !isChromeLikeCommand(processInfo.command))
     return undefined;
-  if (processInfo.command.includes(agentBrowserChromeLaunchMarker(status))) {
+  const installs = managedInstalls(status);
+  if (
+    installs.some((install) =>
+      processInfo.command.includes(agentBrowserChromeLaunchMarker(install)),
+    )
+  ) {
     return { process: processInfo, reason: 'launch-marker' };
   }
-  if (managedBrowserHomeMarkers(status).some((marker) => isCommandUnderPath(processInfo, marker))) {
+  if (
+    installs
+      .flatMap(managedBrowserHomeMarkers)
+      .some((marker) => isCommandUnderPath(processInfo, marker))
+  ) {
     return { process: processInfo, reason: 'managed-browser-home' };
   }
   return undefined;
@@ -214,13 +229,27 @@ function matchAgentBrowserDaemonProcess(
   if (processInfo.pid === hostProcessId() || isChromeLikeCommand(processInfo.command))
     return undefined;
   const command = normalizePathSeparators(processInfo.command);
-  const installDir = normalizePathSeparators(path.resolve(status.installDir));
-  return command.includes(`${installDir}/`)
+  return managedInstalls(status).some((install) =>
+    command.includes(`${normalizePathSeparators(path.resolve(install.installDir))}/`),
+  )
     ? { process: processInfo, reason: 'agent-browser-daemon' }
     : undefined;
 }
 
-function managedBrowserHomeMarkers(status: AgentBrowserToolStatus): string[] {
+/**
+ * The current install plus every sibling version directory under the same state dir, so a fleet
+ * left running by a previous pin still matches after an upgrade moves the current install.
+ */
+function managedInstalls(status: AgentBrowserToolStatus): ManagedInstallPaths[] {
+  const siblings = listManagedInstallPaths(status.stateDir).filter(
+    (install) => path.resolve(install.installDir) !== path.resolve(status.installDir),
+  );
+  return [status, ...siblings];
+}
+
+function managedBrowserHomeMarkers(
+  status: Pick<ManagedInstallPaths, 'homeDir' | 'runtimeHomeDir'>,
+): string[] {
   return uniqueStrings([
     path.join(status.homeDir, '.agent-browser', 'browsers'),
     path.join(status.runtimeHomeDir, '.agent-browser', 'browsers'),

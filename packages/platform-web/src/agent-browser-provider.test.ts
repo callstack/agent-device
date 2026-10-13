@@ -428,7 +428,7 @@ test('agent-browser provider preserves Node version guidance for missing managed
           error instanceof AppError &&
           error.code === 'TOOL_MISSING' &&
           error.details?.hint === 'Web automation requires Node 24+; current Node is v22.19.0.' &&
-          error.details?.version === '0.27.1' &&
+          error.details?.version === '0.39.0' &&
           typeof error.details?.installDir === 'string',
       );
     } finally {
