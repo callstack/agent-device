@@ -49,16 +49,25 @@ export function toDaemonFindData(result: DaemonFindResult): Record<string, unkno
   if (result.kind === 'list') {
     return {
       matches: result.matches.map((match) => ({
-        ref: match.ref,
+        ...daemonRefAddress(match.ref),
         node: stripAndroidSystemChromeProvenanceFromNode(match.node),
       })),
     };
   }
   return {
-    ref: result.ref,
+    ...daemonRefAddress(result.ref),
     ...(result.kind === 'text' ? { text: result.text } : {}),
     node: stripAndroidSystemChromeProvenanceFromNode(result.node),
   };
+}
+
+/**
+ * A match the producer issued no ref for carries no `ref` own-property. The wire form already hid
+ * that case, because `JSON.stringify` drops an `undefined` value; the response DATA object is what
+ * the CLI formatter and a Node consumer read, and that object is where the optional field has to hold.
+ */
+function daemonRefAddress(ref: string | undefined): { ref?: string } {
+  return ref === undefined ? {} : { ref };
 }
 
 export function buildGetRecordResult(
