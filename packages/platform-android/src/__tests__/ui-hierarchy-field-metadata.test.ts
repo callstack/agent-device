@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { buildUiHierarchySnapshot, parseUiHierarchyTree } from '../ui-hierarchy.ts';
 
@@ -75,3 +76,42 @@ test('ADB parses native field evidence and hint state before assigning values', 
     [undefined, undefined, undefined],
   ]);
 });
+
+const fieldValues = JSON.parse(
+  readFileSync(
+    new URL('../../../../contracts/fixtures/android-field-values.json', import.meta.url),
+    'utf8',
+  ),
+) as {
+  cases: {
+    name: string;
+    input: {
+      type: string;
+      text?: string;
+      editable?: boolean;
+      password?: boolean;
+      hintShowing?: boolean;
+    };
+    value: string | null;
+  }[];
+};
+
+test.each(fieldValues.cases)(
+  'ADB adapter applies the field value contract: $name',
+  ({ input, value }) => {
+    const attrs = [
+      `class="${input.type}"`,
+      input.text === undefined ? '' : `text="${input.text}"`,
+      input.editable === undefined ? '' : `editable="${input.editable}"`,
+      input.password === undefined ? '' : `password="${input.password}"`,
+      input.hintShowing === undefined ? '' : `hint-showing="${input.hintShowing}"`,
+    ].join(' ');
+    const tree = parseUiHierarchyTree(
+      `<hierarchy><node ${attrs} resource-id="field" bounds="[0,0][200,100]" /></hierarchy>`,
+    );
+    const { nodes } = buildUiHierarchySnapshot(tree, undefined, { raw: true });
+    const node = nodes.find((candidate) => candidate.identifier === 'field');
+    expect(node).toBeDefined();
+    expect(node?.value).toBe(value ?? undefined);
+  },
+);
