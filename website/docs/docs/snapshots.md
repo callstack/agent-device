@@ -269,6 +269,22 @@ decides which backends it tries.
 - `--raw` returns the tree as captured. It also keeps nodes Android marks invisible and stale
   application windows.
 
+## iOS node metadata
+
+On iOS, React Native controls can report role and state words in `value`, such as
+`"checkbox, unchecked"`. Snapshot JSON and `get attrs` preserve that value and add `iosValueSemantics`
+for recognized English encodings from Fabric or Paper. Its `source` is
+`react-native-ios-value-heuristic`: an anonymous `Other` node with an identical literal value
+cannot be distinguished from an RN control. Bare words on anonymous nodes, other languages,
+and native-control values stay uninterpreted.
+
+`iosValueSemantics.role` carries the interpreted role while `type` and native `role` retain
+their original evidence. Boolean checked state fills a missing `checked` field; an explicit
+native fact always wins. `iosValueSemantics.checked: "mixed"` never becomes `checked: false`.
+Read explicit expansion and busy evidence from `iosValueSemantics.expanded` and `.busy`;
+an absent expansion field means unknown, not collapsed. There is no general `expanded`
+node field or expansion selector.
+
 ## Android node metadata
 
 Android bounds are physical pixels, as the accessibility tree reports them, and so are the points
@@ -324,20 +340,6 @@ popups, and other SystemUI overlays have no bar membership. An absent `systemBar
 capture did not establish membership. Launcher-hosted navigation buttons carry `"navigation"` too;
 taskbar app icons do not. Android package identity is available as `bundleId`.
 You can read these fields in snapshot JSON and nodes returned by `get attrs` and `find`.
-
-On iOS, React Native controls can report role and state words in `value`, such as
-`"checkbox, unchecked"`. Snapshot JSON and `get attrs` preserve that value and add `iosValueSemantics`
-for recognized English encodings from Fabric or Paper. Its `source` is
-`react-native-ios-value-heuristic`: an anonymous `Other` node with an identical literal value
-cannot be distinguished from an RN control. Bare words on anonymous nodes, other languages,
-and native-control values stay uninterpreted.
-
-`iosValueSemantics.role` carries the interpreted role while `type` and native `role` retain
-their original evidence. Boolean checked state fills a missing `checked` field; an explicit
-native fact always wins. `iosValueSemantics.checked: "mixed"` never becomes `checked: false`.
-Read explicit expansion and busy evidence from `iosValueSemantics.expanded` and `.busy`;
-an absent expansion field means unknown, not collapsed. There is no general `expanded`
-node field or expansion selector.
 
 Android snapshot nodes and `get attrs` (including the digest response) carry the native
 `selected`, `checked`, `heading`, `roleDescription`, `editable`, `password`, `hintShowing`,

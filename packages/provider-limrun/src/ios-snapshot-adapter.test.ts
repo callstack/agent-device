@@ -136,5 +136,7 @@ test('limrun acquisition shares RN interpretation and preserves native values', 
     checked: false,
     iosValueSemantics: { role: 'checkbox', checked: false },
   });
-  expect(field?.iosValueSemantics).toBeUndefined();
+  expect(field).toMatchObject({ type: 'TextField', value: 'checkbox, checked' });
+  expect(field).not.toHaveProperty('iosValueSemantics');
+  expect(field).not.toHaveProperty('checked');
 });

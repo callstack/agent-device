@@ -37,7 +37,9 @@ test('preserves arbitrary native-control values and identities', () => {
       fc.constantFrom('TextField', 'Switch', 'Button', 'StaticText'),
       (value, type) => {
         const node = { index: 0, type, value };
+        const before = structuredClone(node);
         assert.equal(interpretIosReactNativeValue(node), node);
+        assert.deepEqual(node, before);
       },
     ),
     { numRuns: 100 },
@@ -53,9 +55,11 @@ test('preserves raw checked facts and arbitrary suffixes without mutating or rei
         value: `checkbox, mixed, payload:${suffix}`,
         checked,
       };
+      const before = structuredClone(node);
       const result = interpretIosReactNativeValue(node);
-      assert.equal(result.value, node.value);
-      assert.equal(result.checked, checked);
+      assert.deepEqual(node, before);
+      assert.equal(result.value, before.value);
+      assert.equal(result.checked, before.checked);
       assert.equal(result.iosValueSemantics?.checked, 'mixed');
       assert.equal(interpretIosReactNativeValue(result), result);
     }),
