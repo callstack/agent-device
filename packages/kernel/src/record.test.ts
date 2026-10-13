@@ -74,3 +74,16 @@ test('a band is a plane, so a zero-size frame never reads as visible', () => {
     });
   }
 });
+
+test('keyboard provenance validation rejects malformed derived bands and visibility probes', () => {
+  for (const [fact, reason] of [
+    [{ kind: 'derived', frame: FRAME }, 'unrecognized-derivation'],
+    [
+      { kind: 'derived', derivation: 'docked-tree', frame: { ...FRAME, width: 0 } },
+      'invalid-derived-frame',
+    ],
+    [{ kind: 'visibility-only', visible: 'false' }, 'invalid-visibility-probe'],
+  ] as const) {
+    assert.deepEqual(readSnapshotKeyboardBandFact(fact), { kind: 'unmeasurable', reason });
+  }
+});

@@ -901,3 +901,57 @@ for (const failure of ['invalid', 'unavailable'] as const) {
     assert.equal(calls, 2);
   });
 }
+
+test('snapshot carries a bounded visibility probe on both Appium platforms', async () => {
+  for (const backend of ['android', 'xctest'] as const) {
+    for (const visible of [true, false, 'unsupported', 'failed'] as const) {
+      const controller = new AbortController();
+      const probe = vi.fn(async () => {
+        if (visible === 'failed') throw new AppError('COMMAND_FAILED', 'grid failure');
+        return visible;
+      });
+      const interactor = createWebDriverInteractor({
+        client: {
+          source: async () =>
+            backend === 'android'
+              ? ANDROID_ONBOARDING_SOURCE
+              : '<AppiumAUT><XCUIElementTypeApplication x="0" y="0" width="390" height="844" /></AppiumAUT>',
+          isKeyboardShown: probe,
+        } as unknown as WebDriverClient,
+        backend,
+        capabilities: createCloudWebDriverCapabilities({
+          provider: 'test',
+          platform: backend === 'android' ? 'android' : 'ios',
+        }),
+      });
+      const result = await interactor.snapshot({ signal: controller.signal });
+      const keyboard = 'stage' in result ? result.acquisition.keyboard : result.keyboard;
+      assert.deepEqual(
+        keyboard,
+        typeof visible === 'boolean'
+          ? { kind: 'visibility-only', visible }
+          : { kind: 'unmeasurable', reason: `keyboard-visibility-probe-${visible}` },
+      );
+      assert.deepEqual(probe.mock.calls, [[500, controller.signal]]);
+    }
+  }
+});
+
+test('snapshot cancellation during an optional keyboard probe is not swallowed', async () => {
+  const controller = new AbortController();
+  const interactor = createWebDriverInteractor({
+    client: {
+      source: async () => ANDROID_ONBOARDING_SOURCE,
+      isKeyboardShown: async () => {
+        controller.abort();
+        throw controller.signal.reason;
+      },
+    } as unknown as WebDriverClient,
+    backend: 'android',
+    capabilities: createCloudWebDriverCapabilities({ provider: 'test', platform: 'android' }),
+  });
+  await assert.rejects(
+    interactor.snapshot({ signal: controller.signal }),
+    (error: unknown) => error === controller.signal.reason,
+  );
+});

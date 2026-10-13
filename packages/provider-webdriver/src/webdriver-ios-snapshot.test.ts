@@ -61,3 +61,27 @@ test('Appium iOS adapter carries missing viewport evidence without presenting or
     { kind: 'missing-viewport', reason: 'not-provided' },
   ]);
 });
+
+test('Appium carries visibility-only and derived keyboard facts before projection', () => {
+  assert.deepEqual(acquireWebDriverIosSnapshot(SOURCE, undefined, true).acquisition.keyboard, {
+    kind: 'visibility-only',
+    visible: true,
+  });
+  assert.deepEqual(acquireWebDriverIosSnapshot(SOURCE, undefined, false).acquisition.keyboard, {
+    kind: 'visibility-only',
+    visible: false,
+  });
+  assert.deepEqual(acquireWebDriverIosSnapshot(SOURCE).acquisition.keyboard, {
+    kind: 'unmeasurable',
+    reason: 'keyboard-not-observed',
+  });
+  const withKeyboard = SOURCE.replace(
+    '</XCUIElementTypeApplication>',
+    '<XCUIElementTypeKeyboard x="0" y="580" width="390" height="264" /></XCUIElementTypeApplication>',
+  );
+  assert.deepEqual(acquireWebDriverIosSnapshot(withKeyboard).acquisition.keyboard, {
+    kind: 'derived',
+    derivation: 'docked-tree',
+    frame: { x: 0, y: 580, width: 390, height: 264 },
+  });
+});

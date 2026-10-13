@@ -79,7 +79,7 @@ export type KeyboardSurface = {
 };
 
 export type KeyboardTapOcclusion =
-  /** No keyboard in the tree: nothing to refuse. */
+  /** An explicit observation established absence. */
   | { kind: 'no-keyboard' }
   /**
    * Keyboard nodes exist but the band cannot be measured — no resolvable viewport, no usable keyboard
@@ -312,6 +312,28 @@ function resolveVisibleKeyboardSurface(
   };
 }
 
+/** Observes provider keyboard evidence before depth, scope, or interactive projection. */
+export function observeProviderKeyboard(params: {
+  nodes: readonly RawSnapshotNode[];
+  viewport: Rect | null;
+  visibility?: boolean | 'unsupported' | 'failed';
+}): SnapshotKeyboardBandFact {
+  if (params.visibility === false) return { kind: 'visibility-only', visible: false };
+  const surface = resolveVisibleKeyboardSurface(params.nodes, params.viewport);
+  if (surface) return { kind: 'derived', derivation: 'docked-tree', frame: surface.frame };
+  if (params.visibility === true) return { kind: 'visibility-only', visible: true };
+  return {
+    kind: 'unmeasurable',
+    reason: params.nodes.some(isKeyboardAnchorNode)
+      ? 'keyboard-tree-geometry-unusable'
+      : params.visibility === 'failed'
+        ? 'keyboard-visibility-probe-failed'
+        : params.visibility === 'unsupported'
+          ? 'keyboard-visibility-probe-unsupported'
+          : 'keyboard-not-observed',
+  };
+}
+
 /**
  * Whether this tap point belongs to the visible keyboard rather than to app content behind it.
  *
@@ -320,12 +342,12 @@ function resolveVisibleKeyboardSurface(
  * still above the key plane keeps tapping. Callers choose the consequence: an acting element path
  * refuses, while a coordinate path that never captured this tree discloses instead of refusing.
  *
- * A producer that measured the band publishes it in `keyboard`, and its frame IS the band: no rule
+ * A measured or acquisition-derived frame in `keyboard` survives projection. Measured frames need no rule
  * about docking, column runs, or which way the tree was turned is consulted, because the producer
  * that measured does not need them to answer (#2660). The keyboard's own controls still come from the
  * tree — which node the keyboard rather than the app is responsible for is a different question from
- * where the band is, and only the tree can answer it. Without a fact, or with one that measured
- * nothing, every rule below applies exactly as it did.
+ * where the band is, and only the tree can answer it. Unknown or visibility-only positive observations
+ * may derive geometry from the current tree; missing nodes leave the decision undetermined.
  */
 export function resolveKeyboardTapOcclusion(params: {
   nodes: readonly RawSnapshotNode[];
@@ -336,17 +358,18 @@ export function resolveKeyboardTapOcclusion(params: {
   /** The band this capture's producer measured, when it measured one (#2660). */
   keyboard?: SnapshotKeyboardBandFact;
 }): KeyboardTapOcclusion {
-  // A producer that looked for the keyboard and found none settles the question the tree rule would
-  // otherwise be guessing about, stale key nodes in the captured tree included.
-  if (params.keyboard?.kind === 'absent') return { kind: 'no-keyboard' };
+  if (
+    params.keyboard?.kind === 'absent' ||
+    (params.keyboard?.kind === 'visibility-only' && !params.keyboard.visible)
+  ) {
+    return { kind: 'no-keyboard' };
+  }
   const surface =
-    params.keyboard?.kind === 'visible'
+    params.keyboard?.kind === 'visible' || params.keyboard?.kind === 'derived'
       ? { frame: params.keyboard.frame, controlRects: collectKeyboardControlRects(params.nodes) }
       : resolveVisibleKeyboardSurface(params.nodes, params.viewport);
   if (!surface) {
-    return params.nodes.some(isKeyboardAnchorNode)
-      ? { kind: 'undetermined' }
-      : { kind: 'no-keyboard' };
+    return { kind: 'undetermined' };
   }
   if (!params.node) return classifyKeyboardPoint(params.point, surface);
   // A resolved element is excused only by belonging to the keyboard, never by sitting under a key:

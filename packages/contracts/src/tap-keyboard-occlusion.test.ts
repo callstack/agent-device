@@ -30,6 +30,7 @@ type FixtureCase = {
   viewport: Rect | null;
   nodes: FixtureNode[];
   target: { index: number } | { point: { x: number; y: number } };
+  keyboard?: SnapshotKeyboardBandFact;
   expected: { kind: string; frame?: Rect; controlRects?: readonly Rect[] };
 };
 
@@ -74,6 +75,7 @@ test('keyboard tap occlusion agrees with every golden parity table case', () => 
       viewport: fixture.viewport,
       point,
       node,
+      keyboard: fixture.keyboard,
     });
     assert.equal(occlusion.kind, fixture.expected.kind, fixture.name);
     const surface =
@@ -167,7 +169,7 @@ test('a measured band is the band, even in a tree that reports no keyboard at al
   // The tree rule's answer here is `no-keyboard`. A refusal off a tree with no key nodes can only
   // have come from the fact, which is the assertion that the rule was not consulted at all.
   const fixture = tableCase('no keyboard in the tree means nothing to refuse');
-  assert.equal(fixture.expected.kind, 'no-keyboard');
+  assert.equal(fixture.expected.kind, 'undetermined');
   const band: SnapshotKeyboardBandFact = {
     kind: 'visible',
     frame: { x: 0, y: 583, width: 402, height: 291 },
@@ -218,8 +220,7 @@ test('an unmeasurable fact leaves every golden-table decision exactly as the tre
   // either side of the refusal, or the table would stop describing this guard.
   for (const fixture of loadTable().cases) {
     const withFact = resolveWithFact(fixture, {
-      kind: 'unmeasurable',
-      reason: 'keyboard-frame-query-timeout',
+      ...(fixture.keyboard ?? { kind: 'unmeasurable', reason: 'keyboard-frame-query-timeout' }),
     });
     assert.equal(withFact.kind, fixture.expected.kind, `${fixture.name}: kind`);
   }

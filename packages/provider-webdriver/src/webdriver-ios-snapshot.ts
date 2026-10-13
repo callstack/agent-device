@@ -3,6 +3,7 @@ import {
   resolveIosViewportEvidenceFromRoots,
 } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
+import { observeProviderKeyboard } from '@agent-device/contracts/tap-keyboard-occlusion';
 import { parseWebDriverSourceFacts } from './webdriver-source.ts';
 
 const APPIUM_PRODUCER = 'appium-source' as const;
@@ -11,6 +12,7 @@ const APPIUM_PRODUCER = 'appium-source' as const;
 export function acquireWebDriverIosSnapshot(
   source: string,
   targetId?: string,
+  visibility?: boolean | 'unsupported' | 'failed',
 ): SnapshotRuntimeAcquiredResult {
   const sourceFacts = parseWebDriverSourceFacts(source);
   const viewport =
@@ -20,6 +22,11 @@ export function acquireWebDriverIosSnapshot(
     producer: APPIUM_PRODUCER,
     nodes: sourceFacts.nodes,
     viewport,
+    keyboard: observeProviderKeyboard({
+      nodes: sourceFacts.nodes,
+      viewport: viewport.kind === 'missing' ? null : viewport.rect,
+      visibility,
+    }),
     lineage: targetId ? { targetId } : {},
   });
 }

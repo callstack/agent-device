@@ -105,7 +105,15 @@ export function readSnapshotKeyboardBandFact(value: unknown): SnapshotKeyboardBa
       ? { kind: 'unmeasurable', reason: value.reason }
       : { kind: 'unmeasurable', reason: 'unreported-reason' };
   }
-  if (value.kind === 'visible') {
+  if (value.kind === 'visibility-only') {
+    return typeof value.visible === 'boolean'
+      ? { kind: 'visibility-only', visible: value.visible }
+      : { kind: 'unmeasurable', reason: 'invalid-visibility-probe' };
+  }
+  if (value.kind === 'derived' && value.derivation !== 'docked-tree') {
+    return { kind: 'unmeasurable', reason: 'unrecognized-derivation' };
+  }
+  if (value.kind === 'visible' || value.kind === 'derived') {
     const frame = parseRect(value.frame);
     // Same rule as `isPositiveFiniteRect` in kernel/rect, inlined: this module is a leaf that
     // many facades evaluate, and a rect import here would land in every one of their closures.
@@ -116,9 +124,10 @@ export function readSnapshotKeyboardBandFact(value: unknown): SnapshotKeyboardBa
       [frame.x, frame.y, frame.width, frame.height].every(Number.isFinite) &&
       frame.width > 0 &&
       frame.height > 0;
-    return plottable
-      ? { kind: 'visible', frame }
-      : { kind: 'unmeasurable', reason: 'invalid-visible-frame' };
+    if (!plottable) return { kind: 'unmeasurable', reason: `invalid-${value.kind}-frame` };
+    return value.kind === 'derived'
+      ? { kind: 'derived', derivation: 'docked-tree', frame }
+      : { kind: 'visible', frame };
   }
   return { kind: 'unmeasurable', reason: 'unrecognized-kind' };
 }

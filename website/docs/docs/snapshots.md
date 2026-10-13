@@ -283,6 +283,20 @@ tree failed (`2` is an input method window); `windowCount` counts only the windo
 when every listed window was read. When it names an input method window, the capture reports the
 keyboard band as unmeasurable rather than absent. An older helper omits it.
 
+The response-level `keyboard` field tells you what the capture observed:
+
+- `visible` carries a directly measured `frame` in the same coordinates as node bounds.
+- `derived` carries a `frame` inferred from a docked keyboard tree, with `derivation: "docked-tree"`.
+- `visibility-only` carries a boolean `visible` from a provider probe, without a frame.
+- `absent` means the producer explicitly established absence.
+- `unmeasurable` carries a `reason` when the producer cannot establish a frame or visibility.
+
+Appium iOS and Android snapshots include the visibility probe; Appium iOS and limrun iOS can also
+report a derived docked band. Missing keyboard nodes never mean the keyboard is hidden. Element taps
+use measured or derived frames to refuse a target behind the keyboard. A positive visibility probe
+alone cannot establish occlusion; floating, split, or unnormalized tree geometry stays uncertain.
+Run `snapshot -i` again after ending editing before retrying a refused target.
+
 The Android keyboard band is the input method window's bounds, the box around the area it takes
 touches in. On Android 13 (API 33) and later the helper also checks that this area is one rectangle.
 A floating keyboard's is not (the panel plus the gesture strip, with app content between them), so the

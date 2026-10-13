@@ -1,3 +1,4 @@
+import { observeProviderKeyboard } from '@agent-device/contracts/tap-keyboard-occlusion';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { BackMode } from '@agent-device/contracts/back-mode';
 import type {
@@ -329,9 +330,11 @@ class WebDriverInteractor implements Interactor {
     const viewportBefore =
       this.backend === 'android' ? await this.readAndroidSnapshotViewport(signal) : undefined;
     const source = await this.readSource(signal);
+    signal?.throwIfAborted();
+    const visibility = await this.readSnapshotKeyboardVisibility(signal);
     if (this.backend === 'xctest') {
       const { acquireWebDriverIosSnapshot } = await import('./webdriver-ios-snapshot.ts');
-      return acquireWebDriverIosSnapshot(source, this.targetId);
+      return acquireWebDriverIosSnapshot(source, this.targetId, visibility);
     }
     const { parseWebDriverAndroidSnapshotNodes } = await import('./webdriver-android-source.ts');
     const nodes = parseWebDriverAndroidSnapshotNodes(source);
@@ -348,6 +351,7 @@ class WebDriverInteractor implements Interactor {
       backend: 'android' as const,
       producer: 'appium-source' as const,
       nodes,
+      keyboard: observeProviderKeyboard({ nodes, viewport: null, visibility }),
       ...(viewport === undefined ? {} : { viewport }),
     };
   }
@@ -367,6 +371,19 @@ class WebDriverInteractor implements Interactor {
     } catch {
       signal?.throwIfAborted();
       return undefined;
+    }
+  }
+
+  private async readSnapshotKeyboardVisibility(
+    signal?: AbortSignal,
+  ): Promise<boolean | 'unsupported' | 'failed'> {
+    try {
+      const visibility = await this.client.isKeyboardShown(500, signal);
+      signal?.throwIfAborted();
+      return visibility;
+    } catch {
+      signal?.throwIfAborted();
+      return 'failed';
     }
   }
 

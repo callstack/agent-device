@@ -82,3 +82,21 @@ test('an empty iOS acquisition still publishes the viewport it read (#3182)', ()
   assert.deepEqual(presented.nodes, []);
   assert.deepEqual(presented.viewport, { width: 390, height: 844 });
 });
+
+test('provider keyboard evidence survives projection even when the tree has no keyboard nodes', () => {
+  const keyboard = {
+    kind: 'derived' as const,
+    derivation: 'docked-tree' as const,
+    frame: { x: 0, y: 580, width: 390, height: 264 },
+  };
+  const acquired = createIosSnapshotAcquisition({
+    producer: 'appium-source',
+    nodes: NODES,
+    viewport: { kind: 'reported', rect: SCREEN },
+    lineage: {},
+    keyboard,
+  });
+  for (const options of [{ depth: 0 }, { interactiveOnly: true }, { raw: true }]) {
+    assert.deepEqual(presentIosSnapshotAcquisition(acquired, options).keyboard, keyboard);
+  }
+});

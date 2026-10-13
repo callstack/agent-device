@@ -61,3 +61,13 @@ test('client capture.snapshot reports no keyboard field for a capture that carri
 
   assert.equal('keyboard' in result, false);
 });
+
+test('client preserves provider keyboard provenance through wire normalization', async () => {
+  for (const keyboard of [
+    { kind: 'visibility-only', visible: true },
+    { kind: 'visibility-only', visible: false },
+    { kind: 'derived', derivation: 'docked-tree', frame: BAND },
+  ]) {
+    assert.deepEqual((await clientAnswering({ keyboard }).capture.snapshot()).keyboard, keyboard);
+  }
+});
