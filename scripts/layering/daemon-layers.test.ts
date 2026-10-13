@@ -7,51 +7,43 @@ import { listSourceFiles } from './check.ts';
 import { resolveImportEdges, type ResolvedImportEdge } from './model.ts';
 import {
   checkDaemonLayers,
-  daemonLayerManifestDrift,
   DAEMON_LAYER_ORDER,
-  readDaemonLayerManifest,
+  DAEMON_ROOT,
+  daemonLayerOf,
 } from './daemon-layers.ts';
 
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
 }).trim();
 
-// Fixtures sit at the real daemon paths so the layer lookup treats them like production files;
-// `listSourceFiles()` keeps the manifest half honest against the tracked tree.
-const FIXTURE_MANIFEST = {
-  'daemon-core': ['packages/daemon/src/core.ts'],
-  'daemon-resources': ['packages/daemon/src/resources.ts'],
-  'daemon-execution': ['packages/daemon/src/execution.ts'],
-  'daemon-sessions': ['packages/daemon/src/sessions.ts'],
-  'daemon-server': ['packages/daemon/src/server.ts'],
-};
-const FIXTURE_FILES = Object.values(FIXTURE_MANIFEST).flat();
+// Fixtures sit at the real layer folders so the folder-derived lookup treats them like
+// production files; `listSourceFiles()` keeps the tree half honest against the tracked tree.
+const FIXTURE_FILES = DAEMON_LAYER_ORDER.map((layer) => `${DAEMON_ROOT}/${layer}/index.ts`);
 
 function fixtureEdges(sources: ReadonlyMap<string, string>): ResolvedImportEdge[] {
   const empty = new Map(FIXTURE_FILES.map((file) => [file, ''] as const));
   return resolveImportEdges(new Map([...empty, ...sources]));
 }
 
-function driftFor(
-  manifest: Record<string, readonly string[]>,
-  files: readonly string[] = FIXTURE_FILES,
-) {
-  return daemonLayerManifestDrift(files, manifest);
-}
+const core = `${DAEMON_ROOT}/core/index.ts`;
+const resources = `${DAEMON_ROOT}/resources/index.ts`;
+const server = `${DAEMON_ROOT}/server/index.ts`;
+const sessions = `${DAEMON_ROOT}/sessions/index.ts`;
 
-test('the manifest owns every tracked daemon file exactly once, and no static edge reads upward', () => {
-  const daemonFiles = listSourceFiles().filter((file) => file.startsWith('packages/daemon/src/'));
+test('every tracked daemon production file resolves to a layer folder, and no static edge reads upward', () => {
+  const daemonFiles = listSourceFiles().filter((file) => file.startsWith(`${DAEMON_ROOT}/`));
   assert.ok(daemonFiles.length > 0, 'expected daemon production files to scan');
-  const manifest = readDaemonLayerManifest(repoRoot);
-  assert.deepEqual(Object.keys(manifest).sort(), [...DAEMON_LAYER_ORDER].sort());
-  assert.deepEqual(daemonLayerManifestDrift(daemonFiles, manifest), []);
+  assert.deepEqual(
+    daemonFiles.filter((file) => daemonLayerOf(file) === null),
+    [],
+  );
 
-  // End-to-end over the real daemon subgraph: every edge whose two ends are manifest files.
+  // End-to-end over the real daemon subgraph: every edge whose two ends are layer-folder files.
   const sources = new Map(
     daemonFiles.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]),
   );
   const reported: string[] = [];
-  const violations = checkDaemonLayers(daemonFiles, resolveImportEdges(sources), manifest, (line) =>
+  const violations = checkDaemonLayers(daemonFiles, resolveImportEdges(sources), (line) =>
     reported.push(line),
   );
   assert.deepEqual(violations, []);
@@ -63,31 +55,39 @@ test('the manifest owns every tracked daemon file exactly once, and no static ed
 test('an upward value import fails the layer order', () => {
   const violations = checkDaemonLayers(
     FIXTURE_FILES,
-    fixtureEdges(
-      new Map([['packages/daemon/src/core.ts', "import { thing } from './resources.ts';"]]),
-    ),
-    FIXTURE_MANIFEST,
+    fixtureEdges(new Map([[core, `import { thing } from '../resources/index.ts';`]])),
     () => {},
   );
   assert.equal(violations.length, 1);
   assert.equal(violations[0]!.rule, 'R81 daemon-layers');
-  assert.equal(violations[0]!.file, 'packages/daemon/src/core.ts');
+  assert.equal(violations[0]!.file, core);
   assert.match(violations[0]!.message, /value import reads up the daemon layer order/);
 });
 
 test('an upward type-only import fails the layer order too', () => {
   const violations = checkDaemonLayers(
     FIXTURE_FILES,
-    fixtureEdges(
-      new Map([
-        ['packages/daemon/src/resources.ts', "import type { Thing } from './sessions.ts';"],
-      ]),
-    ),
-    FIXTURE_MANIFEST,
+    fixtureEdges(new Map([[resources, `import type { Thing } from '../sessions/index.ts';`]])),
     () => {},
   );
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /type-only import reads up the daemon layer order/);
+});
+
+test('a nested file reads up from its layer folder and fails', () => {
+  const nested = `${DAEMON_ROOT}/core/device/ready.ts`;
+  const violations = checkDaemonLayers(
+    [...FIXTURE_FILES, nested],
+    resolveImportEdges(
+      new Map([
+        [nested, `import { thing } from '../../server/index.ts';`],
+        ...FIXTURE_FILES.map((file) => [file, ''] as const),
+      ]),
+    ),
+    () => {},
+  );
+  assert.equal(violations.length, 1);
+  assert.match(violations[0]!.message, /\(core\) imports .+ \(server\)/);
 });
 
 test('downward and same-layer static edges stay silent', () => {
@@ -95,11 +95,10 @@ test('downward and same-layer static edges stay silent', () => {
     FIXTURE_FILES,
     fixtureEdges(
       new Map([
-        ['packages/daemon/src/server.ts', "import { thing } from './core.ts';"],
-        ['packages/daemon/src/sessions.ts', "import type { CoreThing } from './core.ts';"],
+        [server, `import { thing } from '../core/index.ts';`],
+        [sessions, `import type { CoreThing } from '../core/index.ts';`],
       ]),
     ),
-    FIXTURE_MANIFEST,
     () => {},
   );
   assert.deepEqual(violations, []);
@@ -109,8 +108,7 @@ test('a dynamic cross-layer edge is reported, not rejected', () => {
   const reported: string[] = [];
   const violations = checkDaemonLayers(
     FIXTURE_FILES,
-    fixtureEdges(new Map([['packages/daemon/src/sessions.ts', "void import('./server.ts');"]])),
-    FIXTURE_MANIFEST,
+    fixtureEdges(new Map([[sessions, `void import('../server/index.ts');`]])),
     (line) => reported.push(line),
   );
   assert.deepEqual(violations, []);
@@ -118,87 +116,43 @@ test('a dynamic cross-layer edge is reported, not rejected', () => {
   assert.match(reported.join(''), /1 dynamic cross-layer daemon edge/);
   assert.match(
     reported.join(''),
-    /packages\/daemon\/src\/sessions\.ts \(daemon-sessions\) -> packages\/daemon\/src\/server\.ts \(daemon-server\) \[upward, reported only\]/,
+    new RegExp(
+      `${DAEMON_ROOT}/sessions/index\\.ts \\(sessions\\) -> ` +
+        `${DAEMON_ROOT}/server/index\\.ts \\(server\\) \\[upward, reported only\\]`,
+    ),
   );
 });
 
-test('a production daemon file missing from the manifest fails', () => {
-  const violations = driftFor(FIXTURE_MANIFEST, [
-    ...FIXTURE_FILES,
-    'packages/daemon/src/server2.ts',
-  ]);
+test('an empty daemon file set fails: a stale scan filter must not pass the rule silently', () => {
+  // The caller filters sourceFiles by DAEMON_ROOT; a call site that hardcodes a stale root
+  // hands the rule nothing. That must be a violation, not a green run.
+  const violations = checkDaemonLayers([], [], () => {});
   assert.equal(violations.length, 1);
-  assert.equal(violations[0]!.file, 'packages/daemon/src/server2.ts');
-  assert.match(violations[0]!.message, /production daemon file is in no layer/);
+  assert.equal(violations[0]!.rule, 'R81 daemon-layers');
+  assert.match(violations[0]!.message, /received no tracked production files/);
 });
 
-test('a file claimed by two layers fails', () => {
-  const manifest = {
-    ...FIXTURE_MANIFEST,
-    'daemon-resources': ['packages/daemon/src/resources.ts', 'packages/daemon/src/core.ts'],
-  };
-  const violations = driftFor(manifest);
-  assert.equal(violations.length, 1);
-  assert.match(
-    violations[0]!.message,
-    /"packages\/daemon\/src\/core\.ts" is claimed by more than one layer/,
-  );
-});
-
-test('a manifest entry that is not a tracked production file fails', () => {
-  const manifest = {
-    ...FIXTURE_MANIFEST,
-    'daemon-core': ['packages/daemon/src/core.ts', 'packages/daemon/src/gone.ts'],
-  };
-  const violations = driftFor(manifest);
-  assert.equal(violations.length, 1);
-  assert.match(
-    violations[0]!.message,
-    /"packages\/daemon\/src\/gone\.ts" is owned by "daemon-core" but is not a tracked production file/,
-  );
-});
-
-test('a test, fixture, or foreign path in the manifest fails as a non-production entry', () => {
-  const manifest = {
-    ...FIXTURE_MANIFEST,
-    'daemon-core': [
-      'packages/daemon/src/core.ts',
-      'packages/daemon/src/__tests__/core.test.ts',
-      'src/core/helper.ts',
-    ],
-  };
-  const violations = driftFor(manifest);
+test('a production file at the daemon root fails: the folder is the declaration', () => {
+  const orphans = [`${DAEMON_ROOT}/stray.ts`, `${DAEMON_ROOT}/newzone/thing.ts`];
+  const violations = checkDaemonLayers([...FIXTURE_FILES, ...orphans], [], () => {});
   assert.equal(violations.length, 2);
-  for (const violation of violations) {
-    assert.match(violation.message, /is not a production path under packages\/daemon\/src\/\./);
-  }
-});
-
-test('an unknown layer key fails, naming the declared order', () => {
-  const violations = driftFor({
-    ...FIXTURE_MANIFEST,
-    'daemon-cache': [],
-  });
-  assert.equal(violations.length, 1);
-  assert.match(violations[0]!.message, /unknown daemon layer "daemon-cache"/);
-});
-
-test('a layer key missing from the manifest fails even when no file is orphaned', () => {
-  const manifest = { ...FIXTURE_MANIFEST } as Record<string, readonly string[]>;
-  delete manifest['daemon-resources'];
-  const violations = driftFor(
-    manifest,
-    FIXTURE_FILES.filter((file) => file !== 'packages/daemon/src/resources.ts'),
+  assert.deepEqual(
+    violations.map((violation) => violation.file),
+    orphans,
   );
-  assert.equal(violations.length, 1);
-  assert.match(violations[0]!.message, /layer "daemon-resources" is missing from the manifest/);
+  assert.match(violations[0]!.message, /is not under a layer folder/);
+  assert.match(violations[1]!.message, /does not start with one/);
 });
 
-test('a declared layer whose array is empty fails, so it cannot linger after its last file moves', () => {
-  const violations = driftFor(
-    { ...FIXTURE_MANIFEST, 'daemon-resources': [] },
-    FIXTURE_FILES.filter((file) => file !== 'packages/daemon/src/resources.ts'),
+test('tests and test support carry no layer and never trip the folder claim', () => {
+  const testSide = [
+    `${DAEMON_ROOT}/core/__tests__/thing.test.ts`,
+    `${DAEMON_ROOT}/__tests__/support/store-factory.ts`,
+    `${DAEMON_ROOT}/stray-territory/thing.test.ts`,
+  ];
+  assert.deepEqual(
+    checkDaemonLayers(testSide, [], () => {}),
+    [],
   );
-  assert.equal(violations.length, 1);
-  assert.match(violations[0]!.message, /layer "daemon-resources" owns no files/);
+  for (const file of testSide) assert.equal(daemonLayerOf(file), null);
 });
