@@ -18,6 +18,7 @@ type FixtureNode = {
   index: number;
   type?: string;
   role?: string;
+  keyboardOwned?: true;
   label?: string;
   identifier?: string;
   bundleId?: string;

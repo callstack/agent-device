@@ -4232,6 +4232,161 @@
         },
         "controlRects": []
       }
+    },
+    {
+      "name": "a scoped witnessed keyboard button retains only control coordinate exemptions",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Button",
+          "label": "Done",
+          "keyboardOwned": true,
+          "rect": {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        }
+      ],
+      "target": {
+        "point": {
+          "x": 250,
+          "y": 620
+        }
+      },
+      "keyboard": {
+        "kind": "derived",
+        "derivation": "docked-tree",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        }
+      },
+      "expected": {
+        "kind": "clear",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": [
+          {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        ]
+      }
+    },
+    {
+      "name": "a scoped witnessed keyboard other retains only control coordinate exemptions",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Other",
+          "label": "Container",
+          "keyboardOwned": true,
+          "rect": {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        }
+      ],
+      "target": {
+        "point": {
+          "x": 250,
+          "y": 620
+        }
+      },
+      "keyboard": {
+        "kind": "derived",
+        "derivation": "docked-tree",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        }
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": []
+      }
+    },
+    {
+      "name": "an offscreen keyboard plane cannot produce a nonpositive band",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 390,
+            "height": 844
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Continue",
+          "parentIndex": 0,
+          "rect": {
+            "x": 24,
+            "y": 700,
+            "width": 160,
+            "height": 48
+          }
+        },
+        {
+          "index": 2,
+          "type": "Keyboard",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 844,
+            "width": 390,
+            "height": 233
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
     }
   ]
 }

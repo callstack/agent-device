@@ -279,7 +279,12 @@ function keysFormOneColumnRun(params: {
 
 /** The keyboard's own controls as the tree reports them, without deciding where its band is. */
 function collectKeyboardControlRects(nodes: readonly RawSnapshotNode[]): Rect[] {
-  const surfaceNodes = nodes.filter(isKeyboardSurfaceNode);
+  const surfaceNodes = nodes.filter(
+    (node) =>
+      isKeyboardSurfaceNode(node) ||
+      (node.keyboardOwned === true &&
+        [node.type, node.role].some((value) => normalizeType(value ?? '') === 'button')),
+  );
   const planeIndices = collectKeyboardPlaneIndices(nodes, surfaceNodes);
   return usableRects(surfaceNodes.filter((node) => !planeIndices.has(node.index)));
 }
@@ -308,7 +313,7 @@ function resolveVisibleKeyboardSurface(
   if (!keysFormOneColumnRun({ anchorNodes, anchorRects, planeIndices })) return null;
   return {
     frame,
-    controlRects: usableRects(surfaceNodes.filter((node) => !planeIndices.has(node.index))),
+    controlRects: collectKeyboardControlRects(nodes),
   };
 }
 
