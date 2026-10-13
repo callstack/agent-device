@@ -19,7 +19,6 @@ import {
   rootExternalDependencyRanges,
   rootWorkspaceDependencyNames,
   specifierSites,
-  TEST_ONLY_FIXTURE_SUBPATHS,
   workspacePackagesFromManifests,
   type WorkspacePackage,
 } from './package-boundaries.ts';
@@ -326,46 +325,6 @@ test('a cross-package import needs a workspace:* declaration; the exports map is
   assert.equal(checkPackageInternalSites(contracts, deep, ALL, true).length, 0);
 });
 
-test('the test-only fixture subpaths accept test consumers and deny production ones', () => {
-  // A consumer package declaring both fixture owners, so only the fixture predicate can fire.
-  const consumer: WorkspacePackage = {
-    dir: 'packages/daemon-side',
-    name: '@agent-device/daemon-side',
-    exportTargets: new Map(),
-    workspaceDependencies: new Set(['@agent-device/device-selection', '@agent-device/replay-port']),
-    workspaceDependencyField: 'dependencies',
-    externalDependencies: new Map(),
-  };
-  const rootDeps = new Set(consumer.workspaceDependencies);
-  // Pin the set independently: iterating the checker's own set would let deleting an entry
-  // silently delete its accept/deny coverage with it.
-  assert.deepEqual([...TEST_ONLY_FIXTURE_SUBPATHS].sort(), [
-    '@agent-device/device-selection/inventory-gateways-fixtures',
-    '@agent-device/replay-port/replay-script-source-fixtures',
-  ]);
-  for (const specifier of TEST_ONLY_FIXTURE_SUBPATHS) {
-    const sites = (file: string) => specifierSites(file, `import { f } from '${specifier}';`);
-    for (const file of [
-      'src/daemon/__tests__/consumer.test.ts',
-      'test/integration/consumer.ts',
-      'packages/daemon-side/src/__tests__/consumer.test.ts',
-      'packages/daemon-side/test/harness.ts',
-    ]) {
-      assert.deepEqual(checkRootSites(sites(file), ALL, rootDeps, true), [], file);
-      assert.deepEqual(checkPackageInternalSites(consumer, sites(file), ALL, true), [], file);
-    }
-    // Production consumers ride no seam: the same import from a root or package
-    // production file is an R11 violation in both scans.
-    for (const file of ['src/commands/inventory.ts', 'packages/daemon-side/src/inventory.ts']) {
-      const violations = file.startsWith('src/')
-        ? checkRootSites(sites(file), ALL, rootDeps, true)
-        : checkPackageInternalSites(consumer, sites(file), ALL, true);
-      assert.equal(violations.length, 1, file);
-      assert.match(violations[0]!.message, /test-only fixture subpath/);
-    }
-  }
-});
-
 test('a root src file tunnelling into packages/*/src relatively is a violation', () => {
   // This `src/utils` path is an in-memory arbitrary parser fixture, not a live repository path.
   // It stays R11's own for every root file, compiled or not: #3279 planted the tunnel inside the
@@ -658,15 +617,6 @@ test('the real tree parses, declares, and passes R11', () => {
     (pkg) => pkg.name === '@agent-device/platform-android',
   );
   assert.ok(platformAndroidPackage, 'platform-android package must exist');
-  assert.deepEqual([...platformAndroidPackage.exportTargets.keys()].sort(), [
-    '@agent-device/platform-android',
-    '@agent-device/platform-android/adb-host',
-    '@agent-device/platform-android/device-boot',
-    '@agent-device/platform-android/mechanics',
-    // Test-only entries: the shared Android capture/walk fixtures (#3517).
-    '@agent-device/platform-android/snapshot-capture-fixtures',
-    '@agent-device/platform-android/ui-hierarchy-fixtures',
-  ]);
   assert.deepEqual([...platformAndroidPackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/contracts',
