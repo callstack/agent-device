@@ -82,10 +82,13 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 
-// These cases pin how the REAL Apple open reports app observation in its timing (postOpenObservation)
-// and stages runner prewarm after the open, and how the daemon records the settle consequence.
-// The canned port fixture returns no observation timing and no runner staging, so they run in the
-// composition lane.
+// These cases pin the REAL composed runner staging around an open (the post-open prewarm calls
+// below) and how the daemon records the settle consequence of an open's observation timing
+// (postOpenObservation). The observation verdict itself is a canned per-case answer injected at
+// the binding seam, because the composed probe needs a live Simulator bridge; what the REAL Apple
+// open reports into its timing for each verdict (observable / unobservable / probe-failed with
+// typed failure) is pinned by the platform's own lane in
+// `packages/platform-apple/src/lifecycle.test.ts`.
 beforeEach(() => {
   vi.clearAllMocks();
   mockDispatch.mockImplementation(async () => ({}));
