@@ -83,8 +83,20 @@ async function close(params: {
   });
 }
 
+// The load-policy evidence must survive module loading: the mocked factory sets the
+// flag when the SUT first imports it, so the FIRST entry into a test may still see a
+// false flag only because the SUT imports the runtime-hints operation lazily. If a
+// regression made that import eager, the factory would already have run during test
+// module loading and this first assertion fails. After that proof, each case resets
+// the flag so its own negative assertion measures only its own close.
+let eagerEvaluationProofed = false;
+
 beforeEach(() => {
   vi.clearAllMocks();
+  if (!eagerEvaluationProofed) {
+    expect(runtimeHintsModule.evaluated).toBe(false);
+    eagerEvaluationProofed = true;
+  }
   runtimeHintsModule.evaluated = false;
 });
 
