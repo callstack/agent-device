@@ -128,7 +128,7 @@ only by its named composition module per ADR Decision §1).
 `packages/daemon/src/interaction/internal/interaction-touch-response.ts`,
 `packages/daemon/src/interaction/internal/interaction-common.ts`,
 `packages/daemon/src/interaction-surface-signature.ts`, `packages/daemon/src/request-finalization.ts`,
-`src/daemon/session-event-log.ts`, `packages/daemon/src/session-snapshot.ts`,
+`packages/session-journal/src/session-event-log.ts`, `packages/daemon/src/session-snapshot.ts`,
 `packages/daemon/src/recording-gestures.ts`, `packages/daemon/src/deferred-interaction-outcome.ts`.
 
 **Forks not followed**: `request-platform-provider-context.ts` (the call is guarded by the
@@ -244,7 +244,7 @@ above, as side-calls of the admission step.
 **Response path (not hops).** 22 files execute only after the platform call:
 `packages/daemon/src/ref-frame.ts`, `packages/daemon/src/session-action-recorder.ts`,
 `packages/daemon/src/snapshot-quality-latch.ts`, `packages/daemon/src/request-finalization.ts`,
-`src/daemon/session-event-request.ts`, `packages/daemon/src/session-snapshot.ts` (lineage),
+`packages/session-journal/src/session-event-request.ts`, `packages/daemon/src/session-snapshot.ts` (lineage),
 `packages/daemon/src/sparse-fallback-screenshot.ts`, `src/core/snapshot-state.ts`,
 `packages/contracts/src/capture.ts`, `packages/platform-apple/src/runner/snapshot-presentation.ts`,
 `src/snapshot/ios-snapshot-runtime.ts`, the `packages/capture-kit/src/ios-snapshot-engine/`
