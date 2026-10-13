@@ -120,6 +120,38 @@ test('overlapping patterns alias in longest-prefix order regardless of declarati
   }
 });
 
+test('a repo root containing replacement patterns survives the alias round-trip', () => {
+  // A checkout under a path like `/build/$1/app` is rare but legal. The pattern
+  // alias applies with a STRING replacement, so every `$` in the repo path must
+  // arrive doubled: with a plain `$$` string replace, `$$` means one `$` and
+  // each `$` survives UNescaped, letting `$&`/`$1` in the path expand to the
+  // match or the capture when Vite applies the alias (#3546 review).
+  fs.mkdirSync(path.join(repoRoot, '.tmp'), { recursive: true });
+  const sandboxRoot = fs.mkdtempSync(path.join(repoRoot, '.tmp', 'stryker-dollar-$&$1-fixture-'));
+  try {
+    const packageDir = path.join(sandboxRoot, 'packages', 'demo');
+    fs.mkdirSync(path.join(packageDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(packageDir, 'package.json'),
+      JSON.stringify({
+        name: '@agent-device/demo',
+        exports: { './testing/*': { default: './src/testing/*.ts' } },
+      }),
+    );
+    const alias = workspaceSourceAliases(sandboxRoot, 'disk-manifests').find(({ find }) =>
+      find.test('@agent-device/demo/testing/handlers/x'),
+    );
+    assert.ok(alias, 'the pattern export must produce an alias');
+    assert.equal(
+      '@agent-device/demo/testing/handlers/x'.replace(alias.find, alias.replacement),
+      path.join(sandboxRoot, 'packages', 'demo', 'src', 'testing', 'handlers', 'x.ts'),
+      'the $-bearing root must round-trip through the alias to its literal path',
+    );
+  } finally {
+    fs.rmSync(sandboxRoot, { recursive: true, force: true });
+  }
+});
+
 test('disk manifests alias an untracked sandbox copy the tracked reader cannot see', () => {
   fs.mkdirSync(path.join(repoRoot, '.tmp'), { recursive: true });
   const sandboxRoot = fs.mkdtempSync(path.join(repoRoot, '.tmp', 'stryker-sandbox-fixture-'));

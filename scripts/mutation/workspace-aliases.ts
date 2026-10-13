@@ -32,7 +32,10 @@ function aliasFor(specifier: string, target: string, repoRoot: string): Workspac
     // index; `$` in the repo path is escaped so Vite sees only the `$1` fill.
     const template = path.join(repoRoot, target);
     const star = template.indexOf('*');
-    const escapeDollar = (text: string) => text.replaceAll('$', '$$');
+    // The callback form is load-bearing: in a string replacement `$$` IS one
+    // literal `$`, so a string '$$' would replace each `$` with itself and
+    // leave `$1`/`$&` in the repo path to be expanded when the alias applies.
+    const escapeDollar = (text: string) => text.replaceAll('$', () => '$$');
     return {
       find: new RegExp(`^${escapeRegExp(specifier.slice(0, -1))}(.*)$`),
       replacement:
