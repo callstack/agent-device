@@ -1,10 +1,11 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { maestroReplayFixture } from './session-replay-runtime-maestro.fixtures.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';

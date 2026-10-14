@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { isActiveProviderDevice } from '@agent-device/daemon/testing/provider-device-admission';
@@ -5,7 +6,6 @@ import { handleDoctorCommand } from '@agent-device/daemon/testing/handlers/sessi
 import { createHostDiagnostics } from '../../../platform-runtime-host-diagnostics.ts';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import type { DaemonResponse } from '@agent-device/daemon/daemon-request';
 
 const { mockAppleRunnerWarmupCheck } = vi.hoisted(() => ({
   mockAppleRunnerWarmupCheck: vi.fn(),

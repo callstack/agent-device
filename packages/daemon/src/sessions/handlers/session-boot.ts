@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { resolveDeviceReadinessRuntimePlan } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { asAppError } from '@agent-device/kernel/errors';
@@ -13,7 +14,6 @@ import {
 } from '../../core/runtime-admission.ts';
 import { startupDeadlineAtMs } from '../startup-deadline.ts';
 import type { RuntimeCommandHandlerParams } from '../../core/session-runtime-admission.ts';
-import type { DaemonResponse } from '../../core/daemon-request.ts';
 import { deviceStatusReportResponse } from './session-device-status-response.ts';
 
 /** `boot --headless` reports an unsupported cell as a request error, not a device capability gap. */

@@ -1,3 +1,5 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -24,11 +26,7 @@ import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform
 import { trackDownloadableArtifact } from '@agent-device/daemon/testing/artifact-tracking';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { SessionStore } from '@agent-device/daemon/testing/session-store';
-import type {
-  DaemonInvokeFn,
-  DaemonRequest,
-  DaemonResponse,
-} from '@agent-device/daemon/daemon-request';
+import type { DaemonInvokeFn } from '@agent-device/daemon/daemon-request';
 import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
@@ -73,11 +71,11 @@ export type ProviderScenarioHarness = {
   callCommand: (
     command: string,
     positionals?: string[],
-    flags?: DaemonRequest['flags'],
+    flags?: DaemonWireRequest['flags'],
     options?: {
-      input?: DaemonRequest['input'];
-      meta?: DaemonRequest['meta'];
-      runtime?: DaemonRequest['runtime'];
+      input?: DaemonWireRequest['input'];
+      meta?: DaemonWireRequest['meta'];
+      runtime?: DaemonWireRequest['runtime'];
       session?: string;
     },
   ) => Promise<ProviderScenarioRpcResult>;
@@ -224,7 +222,7 @@ export async function createProviderScenarioHarness(
       input: req.input,
       flags: req.flags,
       runtime: req.runtime,
-      meta: req.meta as DaemonRequest['meta'],
+      meta: req.meta as DaemonWireRequest['meta'],
     });
 
   return {
@@ -331,14 +329,14 @@ function atom(type: string, payload = Buffer.alloc(0)): Buffer {
 function commandRequest(
   command: string,
   positionals: string[] = [],
-  flags: DaemonRequest['flags'] = {},
+  flags: DaemonWireRequest['flags'] = {},
   options: {
-    input?: DaemonRequest['input'];
-    meta?: DaemonRequest['meta'];
-    runtime?: DaemonRequest['runtime'];
+    input?: DaemonWireRequest['input'];
+    meta?: DaemonWireRequest['meta'];
+    runtime?: DaemonWireRequest['runtime'];
     session?: string;
   } = {},
-): DaemonRequest {
+): DaemonWireRequest {
   return {
     token: PROVIDER_SCENARIO_TOKEN,
     session: options.session ?? 'default',

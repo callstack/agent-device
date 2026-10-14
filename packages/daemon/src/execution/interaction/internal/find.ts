@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type {
   PreresolvedInteractionTarget,
   SurfaceScopedNodes,
@@ -19,11 +20,7 @@ import {
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { expireRefFrame } from '../../../core/ref-frame.ts';
-import type {
-  DaemonInvokeFn,
-  DaemonRequest,
-  DaemonResponse,
-} from '../../../core/daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { contextFromFlags } from '../../../core/context.ts';

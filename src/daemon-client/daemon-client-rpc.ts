@@ -1,3 +1,5 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   AppError,
   readDiagnosticsRecordRef,
@@ -6,7 +8,6 @@ import {
 } from '@agent-device/kernel/errors';
 import { sanitizeErrorCause } from '@agent-device/kernel/redaction';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { materializeRemoteArtifacts } from '../remote/daemon-artifacts.ts';
 import { localizeRemoteDaemonError } from '../remote/remote-request-diagnostics.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
@@ -21,7 +22,7 @@ export function handleDaemonHttpResponseBody(
   body: string,
   options: {
     info: DaemonInfo;
-    req: DaemonRequest;
+    req: DaemonWireRequest;
     stateDir: string;
     resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void;
     reject: (error: unknown) => void;
@@ -78,7 +79,7 @@ async function rejectDaemonHttpRpcError(
   error: { message?: string; data?: Record<string, unknown> },
   options: {
     info: DaemonInfo;
-    req: DaemonRequest;
+    req: DaemonWireRequest;
     stateDir: string;
     reject: (error: unknown) => void;
   },
@@ -151,7 +152,7 @@ function appErrorFromDaemonError(error: DaemonError, requestId: string | undefin
 
 async function resolveDaemonHttpResult(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   result: DaemonResponse,
   resolve: (response: DaemonResponse | PromiseLike<DaemonResponse>) => void,
   reject: (error: unknown) => void,
@@ -166,13 +167,13 @@ async function resolveDaemonHttpResult(
 }
 
 export function buildHttpRpcPayload(
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   options: { includeTokenParam: boolean },
 ): {
   jsonrpc: '2.0';
   id: string;
   method: string;
-  params: DaemonRequest | Record<string, unknown>;
+  params: DaemonWireRequest | Record<string, unknown>;
 } {
   const id = req.meta?.requestId ?? createRequestId();
   if (!isLeaseRpcCommand(req.command)) {
@@ -215,7 +216,7 @@ function leaseRpcMethodForCommand(command: LeaseRpcCommand): string {
 }
 
 function buildLeaseRpcParams(
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   command: LeaseRpcCommand,
   options: { includeTokenParam: boolean },
 ): Record<string, unknown> {

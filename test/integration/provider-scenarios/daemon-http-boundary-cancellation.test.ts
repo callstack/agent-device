@@ -1,9 +1,10 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { test } from 'vitest';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -33,7 +34,7 @@ for (const [commandClass, row] of Object.entries(CANCELLATION_ROWS)) {
 
     const server = await createDaemonHttpServer({
       token: 'boundary-cancellation-token',
-      handleRequest: async (request: DaemonRequest): Promise<DaemonResponse> => {
+      handleRequest: async (request: DaemonWireRequest): Promise<DaemonResponse> => {
         assert.equal(request.command, row.command);
         const signal = getRequestSignal(requestId);
         assert.ok(signal, 'request signal should be registered before the handler runs');

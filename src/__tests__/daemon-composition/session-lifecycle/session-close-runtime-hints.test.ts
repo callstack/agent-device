@@ -1,7 +1,8 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import path from 'node:path';
 import { SessionStore } from '@agent-device/daemon/testing/session-store';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { fakeCreateCommandSurface } from '@agent-device/daemon/testing/__tests__/support/command-surface-fake';
 

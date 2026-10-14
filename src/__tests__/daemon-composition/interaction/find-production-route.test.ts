@@ -1,7 +1,8 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { makeIosSession as makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';

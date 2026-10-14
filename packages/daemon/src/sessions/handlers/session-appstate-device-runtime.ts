@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { appStateUse } from '@agent-device/contracts/platform-runtime-operations';
 import {
   isIosFamily,
@@ -8,7 +9,6 @@ import {
 import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import { admitRuntimeUse } from '../../core/runtime-admission.ts';
 import type { RuntimeCommandHandlerParams } from '../../core/session-runtime-admission.ts';
-import type { DaemonResponse } from '../../core/daemon-request.ts';
 import { appleSessionRequiredRefusal } from './session-appstate-apple-session.ts';
 
 function sortedAndroidSerialAllowlist(value: string | undefined): string[] | undefined {

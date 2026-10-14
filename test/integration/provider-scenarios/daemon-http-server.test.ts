@@ -1,3 +1,5 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -19,7 +21,6 @@ import {
   isRequestCanceled,
 } from '@agent-device/host-kit/request';
 
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -60,7 +61,7 @@ test('Provider-backed integration daemon HTTP server maps RPC methods, auth, and
     return;
   }
 
-  const observedRequests: DaemonRequest[] = [];
+  const observedRequests: DaemonWireRequest[] = [];
   let observedCanceled: boolean | undefined;
   const server = await createDaemonHttpServer({
     token: 'provider-scenario-token',
@@ -770,7 +771,7 @@ test('Provider-backed integration daemon HTTP auth hook can scope tenants and re
   const previousHook = process.env.AGENT_DEVICE_HTTP_AUTH_HOOK;
   process.env.AGENT_DEVICE_HTTP_AUTH_HOOK = hookPath;
 
-  let observedRequest: DaemonRequest | undefined;
+  let observedRequest: DaemonWireRequest | undefined;
   let server: Awaited<ReturnType<typeof createDaemonHttpServer>> | undefined;
 
   try {

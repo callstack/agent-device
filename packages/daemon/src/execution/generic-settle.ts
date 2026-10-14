@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
@@ -20,7 +21,7 @@ import { resolveSettleObservationCapture } from '../core/settle-observation-capt
 import { isOutdatedObservation } from '../core/ref-frame.ts';
 import { issueSettleRefs } from './session-snapshot.ts';
 import type { SessionStore } from '../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 

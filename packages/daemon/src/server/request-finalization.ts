@@ -5,8 +5,12 @@ import {
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
 } from '@agent-device/host-kit/diagnostics';
-import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../core/daemon-request.ts';
-import type { DaemonArtifact } from '@agent-device/kernel/contracts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
+import type {
+  DaemonArtifact,
+  DaemonResponse,
+  DaemonResponseData,
+} from '@agent-device/kernel/contracts';
 import { isDeviceRotation, type DeviceRotation } from '@agent-device/contracts/device';
 import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
 

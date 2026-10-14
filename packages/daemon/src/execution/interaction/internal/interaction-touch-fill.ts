@@ -1,9 +1,9 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { bindInteractionSession } from './interaction-session.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { FillCommandResult, InteractionTarget } from '@agent-device/contracts/interaction';
 import { issueSettleRefs, resolveRefStalenessWarning } from '../../session-snapshot.ts';
 import { readRefMutationFrame } from '../../../core/ref-frame.ts';
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
 import { isSessionRecording } from '../../../core/session-script-publication-capability.ts';

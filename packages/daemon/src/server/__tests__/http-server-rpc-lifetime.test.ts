@@ -1,6 +1,6 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { DaemonResponse } from '../../core/daemon-request.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
 import { postRpcCommand, startRpcServer } from './http-server-rpc.fixtures.ts';

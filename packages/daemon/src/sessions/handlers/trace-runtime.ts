@@ -1,9 +1,10 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { TraceCommandResult } from '@agent-device/contracts/recording';
 import type { SessionStore } from '../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionRef } from '../../core/session-state.ts';
 import { recordSessionAction } from '../../core/session-action-recorder.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';

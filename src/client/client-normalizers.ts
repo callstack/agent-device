@@ -1,3 +1,4 @@
+import type { DaemonWireRequest, InternalRequestOptions } from '@agent-device/contracts/command';
 import type {
   AgentDeviceDevice,
   AgentDeviceSession,
@@ -8,7 +9,6 @@ import type {
   StartupPerfSample,
   DeviceSelectionMetadata,
 } from '@agent-device/contracts/client';
-import type { InternalRequestOptions } from '@agent-device/contracts/command';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
 import {
   isAppleOs,
@@ -25,7 +25,6 @@ import {
   leaseScopeFromOptions,
   leaseScopeToRequestMeta,
 } from '@agent-device/contracts/lease-scope';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import {
   asRecord,
   isRecord,
@@ -385,7 +384,7 @@ export function readSnapshotNodes(value: unknown): SnapshotNode[] {
   return Array.isArray(value) ? (value as SnapshotNode[]) : [];
 }
 
-export function buildMeta(options: InternalRequestOptions): DaemonRequest['meta'] {
+export function buildMeta(options: InternalRequestOptions): DaemonWireRequest['meta'] {
   const leaseScope = leaseScopeFromOptions(options);
   return stripUndefined({
     requestId: options.requestId,

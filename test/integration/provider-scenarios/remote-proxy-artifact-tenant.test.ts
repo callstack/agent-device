@@ -10,7 +10,8 @@ import {
 } from '@agent-device/daemon/testing/artifact-tracking';
 import { finalizeDaemonResponse } from '@agent-device/daemon/testing/request-finalization';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { normalizeAgentDeviceError } from '@agent-device/kernel/errors';
 import { downloadRemoteArtifact } from '../../../src/remote/daemon-artifacts.ts';
 import { createDaemonProxyServer } from '@agent-device/proxy';
@@ -108,7 +109,7 @@ test('Provider-backed integration local proxy materializes tenant-scoped screens
 test('Provider-backed integration authenticated proxy sends every admitted RPC method as the caller tenant', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'authenticated proxy rpc tenant coverage')) return;
 
-  const observed: DaemonRequest[] = [];
+  const observed: DaemonWireRequest[] = [];
   const upstream = await createDaemonHttpServer({
     token: 'upstream-token',
     handleRequest: async (req): Promise<DaemonResponse> => {

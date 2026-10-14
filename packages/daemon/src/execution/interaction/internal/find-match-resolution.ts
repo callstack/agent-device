@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   findBestMatchesByLocator,
   type FindLocator,
@@ -8,7 +9,7 @@ import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pip
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { isRootInteractionContainer } from '@agent-device/selectors/interaction-targeting';
 import { preferOnscreenMatches } from './find-match-ranking.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { buildAmbiguousMatchError } from '../../selector-match-errors.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';

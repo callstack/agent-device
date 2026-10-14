@@ -1,6 +1,6 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SettleParams } from '@agent-device/contracts/interaction';
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import { interactionErrorResponse } from './interaction-response.ts';
 
 export function settleFlagGuardResponse(

@@ -1,3 +1,4 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -11,7 +12,6 @@ import {
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
 import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { listenOnLoopback, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from './test-timeouts.ts';
 
@@ -282,7 +282,7 @@ function writeLeaseLostError(res: http.ServerResponse, id: unknown): void {
 }
 
 /** An install of `apkPath` against a remote daemon, under the lease the beat has to renew. */
-function installRequest(baseUrl: string, apkPath: string): Omit<DaemonRequest, 'token'> {
+function installRequest(baseUrl: string, apkPath: string): Omit<DaemonWireRequest, 'token'> {
   return {
     session: 'upload-beat',
     command: 'install',

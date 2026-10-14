@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import {
   commandRuntimeUseRequirements,
@@ -27,7 +28,7 @@ import {
 } from '../../../resources/device/device-claim-inspection.ts';
 import { canonicalLocalDeviceKey } from '../../../resources/device/device-claim-paths.ts';
 import { deviceClaimIdentity } from '../../../resources/device/device-claims.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef } from '../../../core/session-state.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { resolveSessionRunnerLogPath } from '../../../core/session-artifact-paths.ts';

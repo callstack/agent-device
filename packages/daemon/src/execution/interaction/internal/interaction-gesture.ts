@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { bindInteractionSession } from './interaction-session.ts';
 import { readOptionalInteger } from '@agent-device/contracts/command';
 import { type GesturePayload, readGesturePayload } from '@agent-device/contracts/gesture-input';
@@ -35,7 +36,6 @@ import {
   type AndroidBlockingDialogReadinessResult,
 } from '../../android-system-dialog.ts';
 import { readRefMutationFrame } from '../../../core/ref-frame.ts';
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import { thrownBeforeDispatch } from '../../request-dispatch-disclosure.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { assertRefMutationAdmitted } from './interaction-ref-policy.ts';

@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
@@ -24,7 +25,6 @@ import {
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { audioProbeDurableResource } from '@agent-device/capture-kit/audio-probe-session-resource';
 import type { SessionStore } from '../../../../core/session-store.ts';
-import type { DaemonResponse } from '../../../../core/daemon-request.ts';
 import { handleSessionObservabilityCommands } from '../../index.ts';
 import { ANDROID_AUDIO_CONTRACT_EVIDENCE } from '../../__tests__/session-audio.coverage.ts';
 import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';

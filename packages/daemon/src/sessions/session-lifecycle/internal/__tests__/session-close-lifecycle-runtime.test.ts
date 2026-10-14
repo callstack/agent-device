@@ -1,9 +1,10 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import path from 'node:path';
 import { SessionStore } from '../../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import type { SessionState } from '../../../../core/session-state.ts';
 import type { CloseApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import {

@@ -1,3 +1,4 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { afterEach, describe, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import net from 'node:net';
@@ -10,7 +11,6 @@ import {
   runProtectedLeaseWork,
 } from '../daemon-client-lease-beat.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 
 function lostLeaseError(reason: string): AppError {
   return new AppError('UNAUTHORIZED', 'Lease is not active', { reason });
@@ -529,13 +529,13 @@ describe('buildLeaseHeartbeatRequest', () => {
     // would re-send a 449 MB artifact every interval.
     assert.equal(beat.flags, undefined);
     assert.equal('installSource' in (beat.meta ?? {}), false);
-    assert.equal(beat.internal, undefined);
+    assert.equal('internal' in beat, false);
   });
 
   test('sends no ttl for an install, whose scope never carried one, so the lease keeps its own window', () => {
     // connection-runtime passes the TTL to `leases.allocate` only, so an install request's scope has
     // none. A beat that invented one would shorten a lease allocated longer.
-    const installRequest: Pick<DaemonRequest, 'flags' | 'meta'> = {
+    const installRequest: Pick<DaemonWireRequest, 'flags' | 'meta'> = {
       flags: { leaseId: 'lease-1', platform: 'android' },
       meta: { leaseId: 'lease-1', tenantId: 'acme' },
     };

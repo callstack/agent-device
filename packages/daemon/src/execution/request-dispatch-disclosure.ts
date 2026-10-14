@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   type AppError,
   asAppError,
@@ -6,7 +7,7 @@ import {
   type ErrorWireDetails,
 } from '@agent-device/kernel/errors';
 import { resolveCommandRecordingEffect } from '@agent-device/command-registry/registry';
-import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { RequestDispatchLedger } from '../core/request-dispatch-ledger.ts';
 
 type RecordingEffect = ReturnType<typeof resolveCommandRecordingEffect>;

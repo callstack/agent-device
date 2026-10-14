@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   daemonPlatformServicesFixture,
   daemonClaimRecoveryGatewayFixture,
@@ -24,7 +25,7 @@ import { inspectDeviceClaims } from '../../../resources/device/device-claim-insp
 import { createRequestExecutionScope } from '../../../server/request-execution-scope.ts';
 import { handleBootCommand } from '../session-boot.ts';
 import { handleShutdownCommand } from '../session-shutdown.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 
 // #1799: `boot`/`shutdown` route through a daemon that need not own the target
 // device. Two daemons on one host each keep their own state directory, so the

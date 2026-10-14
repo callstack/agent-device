@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -6,7 +7,6 @@ import {
   type DirectIosSelectorTarget,
 } from '../../../core/direct-ios-selector.ts';
 import { expireRefFrame } from '../../../core/ref-frame.ts';
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { finalizeTouchInteraction } from './interaction-runtime.ts';
 import type {

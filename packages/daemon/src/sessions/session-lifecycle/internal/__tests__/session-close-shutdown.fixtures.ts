@@ -1,8 +1,9 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { SessionStore } from '../../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import type { SessionState } from '../../../../core/session-state.ts';
 import { AppError } from '@agent-device/kernel/errors';
 

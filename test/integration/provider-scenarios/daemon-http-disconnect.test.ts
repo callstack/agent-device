@@ -1,9 +1,10 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { test } from 'vitest';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -136,7 +137,7 @@ test('disconnecting one HTTP request leaves another request uncanceled', async (
 
   const server = await createDaemonHttpServer({
     token: 'provider-scenario-token',
-    handleRequest: async (req: DaemonRequest): Promise<DaemonResponse> => {
+    handleRequest: async (req: DaemonWireRequest): Promise<DaemonResponse> => {
       if (req.meta?.requestId === disconnectedRequestId) {
         const signal = getRequestSignal(disconnectedRequestId);
         assert.ok(signal);

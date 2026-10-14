@@ -2,6 +2,7 @@
 // RPC from the fresh liveness probe. Confirmed reset controls use owned registration children;
 // missing or superseded identity must retain state. No control signals an unrelated process.
 
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import net from 'node:net';
 import http from 'node:http';
 
@@ -38,7 +39,6 @@ vi.mock('@agent-device/host-kit/command', async () => {
 import { AppError } from '@agent-device/kernel/errors';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { sendRequest } from '../daemon-client-transport.ts';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import type { DaemonInfo } from '../daemon-client-metadata.ts';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
@@ -127,7 +127,7 @@ function buildRequest(
   command: string,
   platform: 'android' | 'ios' | undefined,
   positionals: readonly string[] = [],
-): DaemonRequest {
+): DaemonWireRequest {
   return {
     token: 'test-token',
     session: 'default',

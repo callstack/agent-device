@@ -1,7 +1,8 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import {
   closeLoopbackServer,
   listenOnLoopback,
@@ -15,7 +16,7 @@ import {
 test('Provider-backed integration daemon HTTP lease allocate forwards provider allocation flags as request flags', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP lease allocate coverage')) return;
 
-  const observedRequests: DaemonRequest[] = [];
+  const observedRequests: DaemonWireRequest[] = [];
   const server = await createDaemonHttpServer({
     token: 'provider-scenario-token',
     handleRequest: async (req): Promise<DaemonResponse> => {

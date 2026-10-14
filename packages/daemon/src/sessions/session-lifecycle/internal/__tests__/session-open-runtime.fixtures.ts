@@ -1,6 +1,7 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import path from 'node:path';
 import { SessionStore } from '../../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import type { SessionState } from '../../../../core/session-state.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 

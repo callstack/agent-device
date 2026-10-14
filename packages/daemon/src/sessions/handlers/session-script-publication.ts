@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
@@ -9,7 +10,7 @@ import {
 } from '../../core/session-script-publication-capability.ts';
 import { isRepairArmedSession } from '../../core/session-replay-transaction.ts';
 import { SessionStore } from '../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionState } from '../../core/session-state.ts';
 
 export function handleSessionScriptPublication(params: {

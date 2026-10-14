@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { test, expect, vi, afterEach, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
@@ -13,7 +14,6 @@ import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 // The daemon reads provider ownership through its own typed admission seam; production
 // installs it from root composition, and these tests compose it the same way.
 installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
-import type { DaemonResponse } from '@agent-device/daemon/daemon-request';
 import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import {
   androidCapture,

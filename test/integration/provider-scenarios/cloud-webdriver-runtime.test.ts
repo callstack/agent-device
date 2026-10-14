@@ -1,3 +1,4 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,7 +13,6 @@ import type { CloudArtifact } from '@agent-device/contracts/observability';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import { createExpiredProviderLeaseReleaser } from '@agent-device/daemon/testing/provider-lease-expiry';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { assertRpcOk } from './assertions.ts';
 import {
   createProviderScenarioHarness,
@@ -617,7 +617,7 @@ function fakeWebDriverSource(): string {
   );
 }
 
-function leaseFlags(leaseId?: string): DaemonRequest['flags'] {
+function leaseFlags(leaseId?: string): DaemonWireRequest['flags'] {
   return {
     platform: 'android',
     tenant: 'team-a',
@@ -633,7 +633,7 @@ function leaseFlags(leaseId?: string): DaemonRequest['flags'] {
   };
 }
 
-function leaseMeta(leaseId?: string): DaemonRequest['meta'] {
+function leaseMeta(leaseId?: string): DaemonWireRequest['meta'] {
   return {
     tenantId: 'team-a',
     runId: 'run-a',

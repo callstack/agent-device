@@ -5,6 +5,8 @@
  * locator → fetch → rendered line) is observable end to end.
  */
 
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -13,7 +15,6 @@ import { normalizeError, AppError } from '@agent-device/kernel/errors';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { resolveSessionRequestLogPath } from '@agent-device/daemon/session-artifact-paths';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { runCliCapture, type CapturedCliRun } from './cli-capture.ts';
 import {
   closeLoopbackServer,
@@ -51,7 +52,7 @@ async function runAgainstRemoteDaemon(
   let requestId = '';
   let daemonLogPath = '';
 
-  const handleRequest = async (req: DaemonRequest): Promise<DaemonResponse> => {
+  const handleRequest = async (req: DaemonWireRequest): Promise<DaemonResponse> => {
     requestId = req.meta?.requestId ?? '';
     daemonLogPath = resolveRecordPath(DAEMON_SESSION, requestId);
     fs.mkdirSync(path.dirname(daemonLogPath), { recursive: true });

@@ -1,7 +1,6 @@
 import { isDeviceRotation } from '@agent-device/contracts/device';
-import type { ResponseLevel } from '@agent-device/kernel/contracts';
+import type { DaemonResponseData, ResponseLevel } from '@agent-device/kernel/contracts';
 import type { ScreenshotOverlayRef, SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { DaemonResponseData } from '../core/daemon-request.ts';
 
 /**
  * Phase 4 leveled response views. A view maps a command's `default` result data

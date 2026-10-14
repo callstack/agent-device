@@ -1,5 +1,5 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { REF_GRAMMAR_HINT, splitRefGenerationSuffix } from '@agent-device/kernel/snapshot';
-import type { DaemonResponse } from '../core/daemon-request.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 /**

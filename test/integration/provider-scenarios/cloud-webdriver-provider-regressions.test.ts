@@ -1,3 +1,4 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -10,7 +11,6 @@ import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import * as iosSnapshotRuntime from '@agent-device/capture-kit/ios-snapshot-runtime';
 import {
   createProviderScenarioHarness,
@@ -318,7 +318,7 @@ const unexpectedHostCommand: RunHostCommand = async () => {
   throw new Error('unexpected host command');
 };
 
-function browserStackIosFlags(leaseId?: string): DaemonRequest['flags'] {
+function browserStackIosFlags(leaseId?: string): DaemonWireRequest['flags'] {
   return {
     platform: 'ios',
     tenant: 'team-a',
@@ -334,7 +334,7 @@ function browserStackIosFlags(leaseId?: string): DaemonRequest['flags'] {
   };
 }
 
-function browserStackIosMeta(leaseId?: string): DaemonRequest['meta'] {
+function browserStackIosMeta(leaseId?: string): DaemonWireRequest['meta'] {
   return {
     tenantId: 'team-a',
     runId: 'run-a',

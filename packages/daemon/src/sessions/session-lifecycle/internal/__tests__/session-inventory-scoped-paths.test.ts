@@ -1,9 +1,10 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import { test, expect } from 'vitest';
 import path from 'node:path';
 import { handleSessionInventoryCommands } from '../inventory.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import type { SessionState } from '../../../../core/session-state.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { resolveImplicitSessionScope } from '../../../session-routing.ts';

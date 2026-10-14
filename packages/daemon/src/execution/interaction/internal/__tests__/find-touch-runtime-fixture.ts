@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { expect } from 'vitest';
 import { legacyDispatchCapture } from '../../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
@@ -10,7 +11,7 @@ import {
 } from '../../../__tests__/interaction-get-runtime-fixture.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
 import { makeIosSession as makeSession } from '../../../../__tests__/support/session-factories.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import type { SessionState } from '../../../../core/session-state.ts';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { handleFindCommands } from '../find.ts';

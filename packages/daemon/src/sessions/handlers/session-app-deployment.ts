@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import fs from 'node:fs';
@@ -18,7 +19,7 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../core/session-state.ts';
 import { resolvePayloadInput } from '../payload-input.ts';
 import { resolveDeployResultTarget } from '@agent-device/contracts/deploy-result-target';

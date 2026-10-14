@@ -1,7 +1,7 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { FindLocator } from '@agent-device/selectors';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { elementMatchCandidateDetails } from '@agent-device/capture-kit/snapshot-lines';
-import type { DaemonResponse } from '../core/daemon-request.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 
 // #1597: an agent reading an ambiguous-match error must be able to act on the

@@ -15,6 +15,8 @@
  * the caller's rejection is the id the daemon canceled, which is what lets a caller correlate a
  * canceled call with the daemon's own diagnostics.
  */
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
@@ -22,11 +24,7 @@ import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
-import type {
-  DaemonInvokeFn,
-  DaemonRequest,
-  DaemonResponse,
-} from '@agent-device/daemon/daemon-request';
+import type { DaemonInvokeFn } from '@agent-device/daemon/daemon-request';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
 import { createAgentDeviceClient } from '../../agent-device-client.ts';
@@ -47,7 +45,7 @@ type SeenRequest = { started: boolean; canceled: boolean[]; requestId?: string }
 // `wait` is the long request the caller abandons; it never answers on its own, so only the client's
 // disconnect ends it — through the daemon's own request-scoped cancellation.
 function hangingWaitHandler(seen: SeenRequest): DaemonInvokeFn {
-  return async (req: DaemonRequest): Promise<DaemonResponse> => {
+  return async (req: DaemonWireRequest): Promise<DaemonResponse> => {
     const requestId = req.meta?.requestId;
     seen.started = true;
     seen.requestId = requestId;

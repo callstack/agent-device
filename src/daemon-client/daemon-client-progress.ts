@@ -1,10 +1,11 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { RequestProgressSink } from '@agent-device/contracts/progress';
 // Type-only: importing `node:http` for a value eagerly initializes undici
 // (~9ms in a fresh process), which the default socket transport never needs.
 import type http from 'node:http';
 import type { Socket } from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { consumeTextLines } from '@agent-device/host-kit/transport';
 import {
   isDaemonProgressEnvelope,
@@ -19,7 +20,7 @@ type ProgressLineReader = {
 type ProgressResponseFormat = 'socket-legacy' | 'ndjson-envelope';
 
 function createInvalidDaemonResponseError(
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   line: string,
   cause?: unknown,
 ): AppError {
@@ -35,7 +36,7 @@ function createInvalidDaemonResponseError(
 }
 
 function createProgressLineReader(options: {
-  req: DaemonRequest;
+  req: DaemonWireRequest;
   onProgress?: RequestProgressSink;
   responseFormat: ProgressResponseFormat;
   onResponse(response: DaemonResponse): void;
@@ -86,7 +87,7 @@ function createProgressLineReader(options: {
 }
 
 export function shouldReadDaemonProgressStream(
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   contentType: string | string[] | undefined,
 ): boolean {
   return (
@@ -100,7 +101,7 @@ export function shouldReadDaemonProgressStream(
 export function readDaemonSocketProgressResponse(
   socket: Socket,
   options: {
-    req: DaemonRequest;
+    req: DaemonWireRequest;
     onProgress?: RequestProgressSink;
     isSettled: () => boolean;
     resolve: (response: DaemonResponse) => void;
@@ -146,7 +147,7 @@ export function readDaemonSocketProgressResponse(
 export function readDaemonHttpProgressResponse(
   res: http.IncomingMessage,
   options: {
-    req: DaemonRequest;
+    req: DaemonWireRequest;
     onProgress?: RequestProgressSink;
     handleResponseBody: (body: string) => void;
     reject: (error: unknown) => void;

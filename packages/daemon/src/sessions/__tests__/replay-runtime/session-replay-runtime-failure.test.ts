@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
@@ -13,7 +14,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { runReplayForTest } from './replay-command-fixture.ts';
 import { SessionStore } from '../../../core/session-store.ts';
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { formatReplayDivergenceReport } from '@agent-device/ad-replay/divergence';
 import { maestroScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';

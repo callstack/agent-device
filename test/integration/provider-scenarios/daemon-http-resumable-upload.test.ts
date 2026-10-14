@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -8,7 +9,6 @@ import {
   prepareUploadedArtifact,
 } from '@agent-device/daemon/testing/artifact-tracking';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import type { DaemonResponse } from '@agent-device/daemon/daemon-request';
 import {
   closeLoopbackServer,
   listenOnLoopback,

@@ -18,9 +18,8 @@
 // (by the deterministic scheduler) because `withKeyedLock`'s native microtask
 // hand-off cannot be reproduced from a seed.
 
+import type { CommandFlags, DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import type { SessionRef } from '@agent-device/daemon/testing/session-state';
 import type { SessionStore } from '@agent-device/daemon/testing/session-store';
 import { resolveRequestExecutionLockPlan } from '@agent-device/daemon/testing/request-binding';
@@ -97,24 +96,24 @@ function selectorFlagsForDevice(device: DeviceInfo): CommandFlags {
     : ({ platform: 'ios', udid: device.id } as CommandFlags);
 }
 
-function openRequest(device: DeviceInfo, sessionName: string): DaemonRequest {
+function openRequest(device: DeviceInfo, sessionName: string): DaemonWireRequest {
   return {
     command: OPEN_COMMAND,
     positionals: [],
     token: 'torture',
     session: sessionName,
     flags: selectorFlagsForDevice(device),
-  } as DaemonRequest;
+  } as DaemonWireRequest;
 }
 
-function existingSessionRequest(command: string, sessionName: string): DaemonRequest {
+function existingSessionRequest(command: string, sessionName: string): DaemonWireRequest {
   return {
     command,
     positionals: [],
     token: 'torture',
     session: sessionName,
     flags: {} as CommandFlags,
-  } as DaemonRequest;
+  } as DaemonWireRequest;
 }
 
 async function withPool<T>(task: () => Promise<T>): Promise<T> {
@@ -128,7 +127,7 @@ async function withPool<T>(task: () => Promise<T>): Promise<T> {
  * decision changes what this returns.
  */
 async function resolveExecutionLockPlan(
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   sessionName: string,
   sessionStore: SessionStore,
 ): Promise<LockKey[]> {

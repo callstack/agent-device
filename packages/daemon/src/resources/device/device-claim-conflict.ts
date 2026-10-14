@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import {
   isApplePlatform,
   publicPlatformString,
@@ -11,7 +12,6 @@ import {
   type DeviceClaimClassification,
   type InspectedDeviceClaim,
 } from './device-claim-inspection.ts';
-import type { DaemonResponse } from '../../core/daemon-request.ts';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import type { DeviceClaimConflictReason } from '@agent-device/contracts/device';
 

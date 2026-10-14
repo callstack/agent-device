@@ -1,5 +1,5 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import type { RefFrameRejectReason, RefMutationFrame } from '../../../core/ref-frame.ts';
 import { interactionErrorResponse } from './interaction-response.ts';
 

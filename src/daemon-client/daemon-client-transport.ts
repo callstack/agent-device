@@ -1,8 +1,9 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import net from 'node:net';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import { loadNodeHttpRequester, readNodeHttpResponseBody } from '@agent-device/host-kit/transport';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import type {
   DaemonPaths,
@@ -367,7 +368,7 @@ function readHealthLink(parsed: Record<string, unknown>): RemoteDaemonHealthLink
 
 export async function sendRequest(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   preference: DaemonTransportPreference,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
@@ -390,7 +391,7 @@ export async function sendRequest(
 
 async function sendRequestWithFallback(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   preference: DaemonTransportPreference,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
@@ -424,7 +425,7 @@ async function sendRequestWithFallback(
 
 async function retryAfterRemoteInstanceMismatch(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
   deadline: number | undefined,
@@ -458,7 +459,7 @@ async function retryAfterRemoteInstanceMismatch(
 }
 
 function remainingRemoteRequestTimeoutMs(
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   timeoutMs: number | undefined,
   deadline: number | undefined,
   timedOutProbeMs?: number,
@@ -489,7 +490,7 @@ function isRemoteTransportFailure(error: unknown): boolean {
 
 async function sendRequestWithTransport(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
   transport: ResolvedDaemonTransport,
@@ -591,7 +592,7 @@ function handleTransportError(
 
 async function sendSocketRequest(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   timeoutMs: number | undefined,
   options: SendRequestOptions,
 ): Promise<DaemonResponse> {
@@ -689,7 +690,7 @@ function requestTimeoutError(timeoutMs: number, requestId: string | undefined): 
 type TimeoutRequestFields = Omit<Parameters<typeof handleRequestTimeout>[0], 'info' | 'statePaths'>;
 
 function timeoutRequestContext(
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   remote: boolean,
   timeoutMs: number,
 ): TimeoutRequestFields {
@@ -722,7 +723,7 @@ function isRemoteInstanceMismatchResponse(
 
 async function sendHttpRequest(
   info: DaemonInfo,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   statePaths: DaemonPaths,
   timeoutMs: number | undefined,
   options: SendRequestOptions,

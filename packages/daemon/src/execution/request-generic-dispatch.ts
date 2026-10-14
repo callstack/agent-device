@@ -1,9 +1,10 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
 import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
 import type { SessionStore } from '../core/session-store.ts';
 import type { DaemonCommandContext } from '../core/context.ts';
-import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import {

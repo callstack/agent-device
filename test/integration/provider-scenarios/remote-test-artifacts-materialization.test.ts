@@ -1,3 +1,4 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -9,7 +10,6 @@ import {
   cleanupDownloadableArtifact,
   trackDownloadableArtifact,
 } from '@agent-device/daemon/testing/artifact-tracking';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { attachRemoteReplayTestArtifacts } from '@agent-device/replay-port/test-command';
 import {
@@ -37,7 +37,7 @@ test('the composed daemon and client path owners report the directory that was m
   fs.writeFileSync(path.join(daemonAttemptDir, 'replay.ad'), 'open "Demo"\n');
   fs.writeFileSync(path.join(daemonAttemptDir, 'result.txt'), 'status: passed\n');
 
-  const request: DaemonRequest = {
+  const request: DaemonWireRequest = {
     token: 'daemon-token',
     session: 'default',
     command: 'test',

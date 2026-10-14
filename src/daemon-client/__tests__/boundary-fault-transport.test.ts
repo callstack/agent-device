@@ -1,3 +1,4 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
@@ -12,7 +13,6 @@ import {
 } from '@agent-device/test-kit/loopback';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { sendRequest } from '../daemon-client-transport.ts';
 
 const { mockRunCmdSync } = vi.hoisted(() => ({ mockRunCmdSync: vi.fn() }));
@@ -236,7 +236,7 @@ test('socket malformed response stays typed at the daemon client seam', async ()
 function buildRequest(
   row: { command: string; positionals: readonly string[] },
   suffix: string,
-): DaemonRequest {
+): DaemonWireRequest {
   return {
     token: 'test-token',
     session: 'boundary-faults',

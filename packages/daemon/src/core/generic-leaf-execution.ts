@@ -1,7 +1,8 @@
 // Shared by the generic dispatcher and its leaves; leaves must not import the dispatcher.
 
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonCommandContext } from './context.ts';
-import type { DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { DaemonRequest } from './daemon-request.ts';
 import type { SessionState } from './session-state.ts';
 
 export type GenericPlatformExecutionParams = {

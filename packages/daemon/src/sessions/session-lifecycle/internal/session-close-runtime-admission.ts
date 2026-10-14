@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import {
   closeApplicationRuntimeUse,
@@ -5,7 +6,6 @@ import {
 } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { DaemonResponse } from '../../../core/daemon-request.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

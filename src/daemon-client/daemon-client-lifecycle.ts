@@ -1,10 +1,11 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { attachActiveSessionAddressHint } from './daemon-client-address-hints.ts';
 import fs from 'node:fs';
 import { processLockHoldsDaemonIdentity } from '@agent-device/daemon-contracts/daemon-registration';
 import net from 'node:net';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { type ExecDetachedExit } from '@agent-device/host-kit/command';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
@@ -83,7 +84,7 @@ LOOPBACK_BLOCK_LIST.addAddress('::1', 'ipv6');
 LOOPBACK_BLOCK_LIST.addSubnet('::ffff:127.0.0.0', 104, 'ipv6');
 
 export function resolveClientSettings(
-  req: Omit<DaemonRequest, 'token'>,
+  req: Omit<DaemonWireRequest, 'token'>,
   suppliedAuthToken?: string,
 ): DaemonClientSettings {
   const explicitStateDir = resolveExplicitStateDir(req);
@@ -102,12 +103,12 @@ export function resolveClientSettings(
   };
 }
 
-function resolveExplicitStateDir(req: Omit<DaemonRequest, 'token'>): string | undefined {
+function resolveExplicitStateDir(req: Omit<DaemonWireRequest, 'token'>): string | undefined {
   return req.flags?.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR;
 }
 
 function resolveRemoteClientSettings(
-  req: Omit<DaemonRequest, 'token'>,
+  req: Omit<DaemonWireRequest, 'token'>,
   suppliedAuthToken: string | undefined,
 ): {
   rawBaseUrl: string | undefined;
@@ -122,7 +123,7 @@ function resolveRemoteClientSettings(
 }
 
 function resolveTransportClientSettings(
-  req: Omit<DaemonRequest, 'token'>,
+  req: Omit<DaemonWireRequest, 'token'>,
   remoteBaseUrl: string | undefined,
 ): { preference: DaemonTransportPreference; serverMode: DaemonServerMode } {
   const rawTransport = req.flags?.daemonTransport ?? process.env.AGENT_DEVICE_DAEMON_TRANSPORT;
@@ -145,7 +146,7 @@ function resolveTransportClientSettings(
 }
 
 function shouldUseOwnedReplayStateDir(
-  req: Omit<DaemonRequest, 'token'>,
+  req: Omit<DaemonWireRequest, 'token'>,
   explicitStateDir: string | undefined,
   rawRemoteBaseUrl: string | undefined,
 ): boolean {
@@ -522,7 +523,7 @@ function isRegistrationAvailable(inspection: ProcessLockInspection): boolean {
  * overridden to surface it.
  */
 export async function cleanupDaemonAfterRequest(
-  req: Omit<DaemonRequest, 'token'>,
+  req: Omit<DaemonWireRequest, 'token'>,
   daemon: EnsuredDaemon,
   settings: DaemonClientSettings,
   response: DaemonResponse | undefined,
@@ -699,7 +700,7 @@ function isOneShotReplayCommand(command: string | undefined): boolean {
  * rather than an accident of the response shape.
  */
 function isActiveReplaySessionResponse(
-  req: Omit<DaemonRequest, 'token'>,
+  req: Omit<DaemonWireRequest, 'token'>,
   response: DaemonResponse | undefined,
 ): boolean {
   if (req.command !== PUBLIC_COMMANDS.replay) return false;
@@ -902,7 +903,7 @@ function isLoopbackHostname(hostname: string): boolean {
 
 export function attachSessionAddressHints(
   response: DaemonResponse,
-  req: Omit<DaemonRequest, 'token'>,
+  req: Omit<DaemonWireRequest, 'token'>,
   settings: DaemonClientSettings,
 ): DaemonResponse {
   if (!response.ok) {

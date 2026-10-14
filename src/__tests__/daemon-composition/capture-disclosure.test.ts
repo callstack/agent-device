@@ -1,10 +1,11 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
 import { handleFindCommands } from '@agent-device/daemon/testing/interaction/index';
 import { getRuntimeBindings } from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
 import { dispatchFindReadOnlyViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
 import { dispatchWaitViaRuntime } from '@agent-device/daemon/testing/wait-runtime';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import { ANDROID_SYSTEM_SURFACE_DISCLOSURE } from '@agent-device/contracts/android-system-surface-disclosure';
 import { iosSystemSurfaceDisclosure } from '@agent-device/contracts/ios-system-surface';
 import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
@@ -115,7 +116,7 @@ test('read-only find exists on a system-surface capture discloses the occlusion'
       command: 'find',
       positionals: ['Internet', 'exists'],
       flags: {},
-    } as DaemonRequest,
+    } as DaemonWireRequest,
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
@@ -142,7 +143,7 @@ test('wait timeout for app text hidden behind a system surface discloses the occ
       command: 'wait',
       positionals: ['Bakery list', '250'],
       flags: {},
-    } as DaemonRequest,
+    } as DaemonWireRequest,
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
@@ -168,7 +169,7 @@ test('sessionless read-only find still discloses the occluding system surface', 
       command: 'find',
       positionals: ['Internet', 'exists'],
       flags: {},
-    } as DaemonRequest,
+    } as DaemonWireRequest,
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
@@ -230,7 +231,7 @@ test('sessionless wait success on shade content still discloses the occluding sy
       command: 'wait',
       positionals: ['Internet', '250'],
       flags: {},
-    } as DaemonRequest,
+    } as DaemonWireRequest,
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
@@ -258,7 +259,7 @@ test('sessionless wait timeout still discloses the occluding system surface', as
       command: 'wait',
       positionals: ['Bakery list', '250'],
       flags: {},
-    } as DaemonRequest,
+    } as DaemonWireRequest,
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,
@@ -413,7 +414,7 @@ test('wait timeout whose polls required a foreground repair discloses the repair
       command: 'wait',
       positionals: ['Bakery list', '250'],
       flags: {},
-    } as DaemonRequest,
+    } as DaemonWireRequest,
     sessionName: 'default',
     logPath: '/tmp/test.log',
     sessionStore,

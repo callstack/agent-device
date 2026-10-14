@@ -12,7 +12,7 @@ import type { SessionSurface } from '@agent-device/contracts/session';
 import type { OpenApplicationTiming } from '@agent-device/contracts/application-lifecycle-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import {
   abortAuthoringOnSecondOpen,
@@ -63,7 +63,11 @@ import type { TakenOverDeviceClaim } from '../../../resources/device/device-clai
 import { appendResponseWarning } from './session-open-warnings.ts';
 import { buildDeviceClaimConflictError } from '../../../resources/device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../../resources/device/device-claim-rule.ts';
-import { errorResponse, type DaemonFailureResponse } from '@agent-device/kernel/contracts';
+import {
+  errorResponse,
+  type DaemonFailureResponse,
+  type DaemonResponse,
+} from '@agent-device/kernel/contracts';
 
 export type SessionOpenResult =
   | Readonly<{ type: 'opened'; response: DaemonResponse; ref: SessionRef }>

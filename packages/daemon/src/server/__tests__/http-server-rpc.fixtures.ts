@@ -1,7 +1,8 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { Server } from 'node:http';
 import http from 'node:http';
 import { createDaemonHttpServer } from '../http/http-server.ts';
-import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { listenOnLoopback } from '@agent-device/test-kit/loopback';
 
 const RPC_ANSWER_DEADLINE_MS = 1_000;

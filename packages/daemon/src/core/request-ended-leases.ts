@@ -1,5 +1,6 @@
 import type { EndedLease } from '@agent-device/contracts/client';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './daemon-request.ts';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import type { DaemonInvokeFn, DaemonRequest } from './daemon-request.ts';
 
 /** The session leases one request ended, its nested requests' included. */
 export type EndedLeaseLedger = EndedLease[];

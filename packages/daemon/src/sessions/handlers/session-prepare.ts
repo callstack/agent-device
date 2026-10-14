@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { prepareAppleRunnerRuntimeUse } from '@agent-device/contracts/application-lifecycle-runtime-plan';
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
@@ -5,7 +6,7 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { PREPARE_STARTUP_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
 import { publicPlatformString, type DeviceInfo } from '@agent-device/kernel/device';
 import { resolveRunnerLogicalLeaseContext } from '../../core/lease-context.ts';
-import type { DaemonRequest, DaemonResponse } from '../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import type {
   BindDeviceRuntime,

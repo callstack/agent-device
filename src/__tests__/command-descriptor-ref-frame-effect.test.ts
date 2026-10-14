@@ -1,3 +1,4 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { RefFrameEffect } from '@agent-device/contracts/replay';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -6,14 +7,13 @@ import {
   DAEMON_COMMAND_DESCRIPTORS,
   resolveRefFrameEffect,
 } from '@agent-device/daemon/daemon-command-registry';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 
 // ADR 0014 migration step 2: the ref-frame-effect classification is an
 // honesty/completeness guard. Every command that reaches a session-owning daemon
 // leaf must classify how it relates to the authorized ref frame, so a device
 // mutation cannot be added on a path that silently leaves stale refs admissible.
 
-function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
+function makeRequest(command: string, positionals: string[] = []): DaemonWireRequest {
   return { command, token: 'gate-token', session: 'gate-session', positionals, flags: {} };
 }
 

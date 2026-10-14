@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { vi } from 'vitest';
 
 // The Maestro replay engine resolves a real device and — through the ADR 0012
@@ -43,11 +44,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type {
-  DaemonInvokeFn,
-  DaemonRequest,
-  DaemonResponse,
-} from '../../../core/daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../../../core/daemon-request.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { SessionStore } from '../../../core/session-store.ts';
 import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';

@@ -20,10 +20,14 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef } from '../../../core/session-state.ts';
 import { bindSessionAudioProbe } from '../../../core/session-capture-binding.ts';
-import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';
+import {
+  type DaemonFailureResponse,
+  errorResponse,
+  type DaemonResponse,
+} from '@agent-device/kernel/contracts';
 
 type AudioParams = {
   req: DaemonRequest;

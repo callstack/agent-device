@@ -1,3 +1,4 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
@@ -9,7 +10,7 @@ import type { DaemonCommandContext } from '../core/context.ts';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import type { SessionStore } from '../core/session-store.ts';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '../core/daemon-request.ts';
 import type {
   BindDeviceRuntime,
   BindExactDeviceRuntime,

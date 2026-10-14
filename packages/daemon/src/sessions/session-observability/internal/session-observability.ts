@@ -32,12 +32,16 @@ import type {
   InspectDeviceRuntimeFacts,
 } from '../../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { handleAudioCommand } from './session-audio.ts';
 import { handlePerfRuntimeCommand } from './session-perf-runtime.ts';
 import { handleNetworkCommand } from './session-network.ts';
-import { type DaemonFailureResponse, errorResponse } from '@agent-device/kernel/contracts';
+import {
+  type DaemonFailureResponse,
+  errorResponse,
+  type DaemonResponse,
+} from '@agent-device/kernel/contracts';
 
 export type SessionObservabilityCommandInput = {
   req: DaemonRequest;

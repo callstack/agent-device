@@ -1,5 +1,5 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test, expect, vi, beforeEach } from 'vitest';
-import type { DaemonResponse } from '../../../../core/daemon-request.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
 import { makeIosSession } from '../../../../__tests__/support/session-factories.ts';
 import {

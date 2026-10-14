@@ -1,8 +1,9 @@
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { WAIT_REASONS } from '@agent-device/contracts/wait';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import { recordCaptureProof } from '../core/capture-disclosure.ts';
 import type { RequestCaptureProof } from '../core/capture-disclosure.ts';
-import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
 import { captureSnapshot } from '../core/snapshot-capture.ts';
 import { normalizeType } from '@agent-device/contracts/snapshot';

@@ -1,3 +1,4 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
@@ -9,7 +10,6 @@ import type {
 } from '@agent-device/contracts/device';
 import type { Interactor, SnapshotResult } from '@agent-device/contracts/interactor-types';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
@@ -210,7 +210,7 @@ function createProviderInteractor(calls: {
   ) as Interactor;
 }
 
-function leaseFlags(leaseId?: string): DaemonRequest['flags'] {
+function leaseFlags(leaseId?: string): DaemonWireRequest['flags'] {
   return {
     platform: 'ios',
     tenant: 'team-a',
@@ -220,7 +220,7 @@ function leaseFlags(leaseId?: string): DaemonRequest['flags'] {
   };
 }
 
-function leaseMeta(leaseId?: string): DaemonRequest['meta'] {
+function leaseMeta(leaseId?: string): DaemonWireRequest['meta'] {
   return {
     tenantId: 'team-a',
     runId: 'run-a',

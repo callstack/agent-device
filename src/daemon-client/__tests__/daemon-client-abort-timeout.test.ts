@@ -10,17 +10,15 @@
  * makes the abort case's empty-calls assertion evidence instead of an absent hook: delete the
  * abort path's `clearTimeout` and only the abort case fails.
  */
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { DAEMON_HTTP_INSTANCE_MISMATCH_HEADER } from '@agent-device/contracts/daemon-http';
 import { test, vi } from 'vitest';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import type {
-  DaemonInvokeFn,
-  DaemonRequest,
-  DaemonResponse,
-} from '@agent-device/daemon/daemon-request';
+import type { DaemonInvokeFn } from '@agent-device/daemon/daemon-request';
 import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
 import { sendRequest } from '../daemon-client-transport.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -54,7 +52,7 @@ const OUTLIVE_MS = 80;
 // A request the daemon never answers: the only things that can end it are the client's abort and
 // the transport's own budget, which is what makes the timer's fate observable.
 function hangingHandler(): DaemonInvokeFn {
-  return async (req: DaemonRequest): Promise<DaemonResponse> => {
+  return async (req: DaemonWireRequest): Promise<DaemonResponse> => {
     const signal = getRequestSignal(req.meta?.requestId);
     return await new Promise<DaemonResponse>((_resolve, reject) => {
       signal?.addEventListener('abort', () => reject(signal.reason), { once: true });

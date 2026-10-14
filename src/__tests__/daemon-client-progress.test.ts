@@ -1,9 +1,10 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { RequestProgressEvent } from '@agent-device/contracts/progress';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import type { Socket } from 'node:net';
 import { test } from 'vitest';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { readDaemonSocketProgressResponse } from '../daemon-client/daemon-client-progress.ts';
 import { beginStderrCapture } from './test-utils/stream-capture.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -34,7 +35,7 @@ function createMockSocket(): MockSocket {
 
 function readSocketProgressResponse(
   socket: MockSocket,
-  req: DaemonRequest,
+  req: DaemonWireRequest,
   onProgress?: (event: RequestProgressEvent) => void,
 ): Promise<DaemonResponse> {
   let settled = false;
@@ -105,7 +106,7 @@ function replayTestEvent(event: RequestProgressEvent | undefined): ReplayTestPro
 
 test('readDaemonSocketProgressResponse forwards split progress lines before response envelopes', async () => {
   const socket = createMockSocket();
-  const req: DaemonRequest = {
+  const req: DaemonWireRequest = {
     session: 'default',
     command: 'test',
     positionals: ['/tmp/replays'],
@@ -159,7 +160,7 @@ test('readDaemonSocketProgressResponse forwards split progress lines before resp
 
 test('readDaemonSocketProgressResponse hands generic command progress to the sink, rendering none itself', async () => {
   const socket = createMockSocket();
-  const req: DaemonRequest = {
+  const req: DaemonWireRequest = {
     session: 'default',
     command: 'snapshot',
     positionals: [],
@@ -205,7 +206,7 @@ test('readDaemonSocketProgressResponse hands generic command progress to the sin
 
 test('readDaemonSocketProgressResponse forwards replay progress events to the sink', async () => {
   const socket = createMockSocket();
-  const req: DaemonRequest = {
+  const req: DaemonWireRequest = {
     session: 'default',
     command: 'test',
     positionals: ['/tmp/replays'],
@@ -244,7 +245,7 @@ test('readDaemonSocketProgressResponse forwards replay progress events to the si
 
 test('readDaemonSocketProgressResponse renders nothing without a sink', async () => {
   const socket = createMockSocket();
-  const req: DaemonRequest = {
+  const req: DaemonWireRequest = {
     session: 'default',
     command: 'test',
     positionals: ['/tmp/replays'],
@@ -309,7 +310,7 @@ test('readDaemonSocketProgressResponse renders nothing without a sink', async ()
 
 test('readDaemonSocketProgressResponse rejects invalid response lines with request context', async () => {
   const socket = createMockSocket();
-  const req: DaemonRequest = {
+  const req: DaemonWireRequest = {
     session: 'default',
     command: 'snapshot',
     positionals: [],

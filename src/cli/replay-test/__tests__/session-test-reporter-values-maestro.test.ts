@@ -1,3 +1,5 @@
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '@agent-device/daemon/testing/__tests__/platform-services-fixture';
 // Characterization of the shipped reporter contract for the MAESTRO adapter (#1478 P3).
 //
@@ -43,7 +45,6 @@ import path from 'node:path';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
 import { handleSessionCommands } from '@agent-device/daemon/testing/handlers/__tests__/session-command-harness';
 import { SessionStore } from '@agent-device/daemon/testing/session-store';
-import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { withRequestProgressSink } from '@agent-device/host-kit/request';
 import {
   getReplayTestReporterExitCode,
@@ -105,8 +106,8 @@ function makeSessionStore(root: string): SessionStore {
 async function runMaestroSuiteThroughReporter(params: {
   root: string;
   requestId: string;
-  flags?: DaemonRequest['flags'];
-  invoke: (req: DaemonRequest) => Promise<DaemonResponse>;
+  flags?: DaemonWireRequest['flags'];
+  invoke: (req: DaemonWireRequest) => Promise<DaemonResponse>;
 }): Promise<{ hooks: RecordedHook[]; suite: ReplaySuiteResult; exitCode: number }> {
   const { reporter, hooks } = createRecordingReporter();
   const reporters = [reporter];
@@ -139,7 +140,7 @@ async function runMaestroSuiteThroughReporter(params: {
 }
 
 /** `snapshot` returns an empty hierarchy; every other command succeeds. */
-function maestroInvoke(req: DaemonRequest): DaemonResponse {
+function maestroInvoke(req: DaemonWireRequest): DaemonResponse {
   if (req.command === 'snapshot') return { ok: true, data: { createdAt: 0, nodes: [] } };
   if (req.command === 'runtime') {
     return { ok: true, data: { viewport: { x: 0, y: 0, width: 400, height: 800 } } };
