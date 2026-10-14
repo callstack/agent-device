@@ -5,7 +5,6 @@ import {
   asAppError,
   AppError,
   normalizeError,
-  throwDaemonError,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
@@ -48,8 +47,7 @@ import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { FlagKey } from '@agent-device/command-registry/flag-types';
 import type { CliFlags } from '@agent-device/contracts/command';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
-import { INTERNAL_COMMANDS, isKnownCliCommandName } from '@agent-device/command-registry/catalog';
-import { sendInjectedDaemonRequest } from './cli/injected-daemon-dispatch.ts';
+import { isKnownCliCommandName } from '@agent-device/command-registry/catalog';
 
 type CliDeps = {
   sendToDaemon: typeof sendToDaemon;
@@ -140,7 +138,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
       let logTailStopper: (() => void) | null = null;
       try {
         if (command === 'react-devtools') {
-          await exitAfterFlush(await runReactDevtoolsCli(ctx, deps));
+          await exitAfterFlush(await runReactDevtoolsCli(ctx));
           return;
         }
         if (command === 'web') {
@@ -350,38 +348,12 @@ async function resolveRunContextOrExit(
   }
 }
 
-async function runReactDevtoolsCli(ctx: CliRunContext, deps: CliDeps): Promise<number> {
+async function runReactDevtoolsCli(ctx: CliRunContext): Promise<number> {
   const { runReactDevtoolsCommand } = await import('./cli/commands/react-devtools.ts');
-  const { daemonAuthToken, ...directRequestFlags } = ctx.effectiveFlags;
   return await runReactDevtoolsCommand(ctx.positionals, {
-    flags: {
-      ...directRequestFlags,
-      leaseProvider: ctx.connectionDefaults?.connection?.leaseProvider,
-    },
+    flags: ctx.effectiveFlags,
     stateDir: ctx.daemonPaths.baseDir,
     session: ctx.effectiveFlags.session ?? ctx.sessionName,
-    cwd: process.cwd(),
-    env: process.env,
-    configureDirectPortReverse: async () => {
-      const response = await sendInjectedDaemonRequest({
-        route: 'react-devtools',
-        command: INTERNAL_COMMANDS.runtime,
-        request: {
-          positionals: ['port-reverse'],
-          flags: {
-            ...directRequestFlags,
-            leaseProvider: ctx.connectionDefaults?.connection?.leaseProvider,
-            devicePort: 8097,
-            hostPort: 8097,
-            portReverseName: 'react-devtools',
-          },
-          session: ctx.effectiveFlags.session ?? ctx.sessionName,
-        },
-        transport: deps.sendToDaemon,
-        transportOptions: { authToken: daemonAuthToken },
-      });
-      if (!response.ok) throwDaemonError(response.error);
-    },
   });
 }
 

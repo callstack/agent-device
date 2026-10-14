@@ -29,7 +29,6 @@ import {
 } from '@agent-device/host-kit/process';
 
 import { ensureMetroCompanion, stopMetroCompanion } from './client-metro-companion.ts';
-import { ensureReactDevtoolsCompanion } from '../client/client-react-devtools-companion.ts';
 import { METRO_COMPANION_RUN_ARG } from '../client/client-companion-tunnel-contract.ts';
 
 const TEST_BRIDGE_SCOPE = {
@@ -52,12 +51,6 @@ function assertCompanionSpawnTarget(): void {
     `expected companion entry path in ${JSON.stringify(firstCall[1])}`,
   );
   assert.equal(firstCall[1].at(-1), '--agent-device-run-metro-companion');
-}
-
-function assertCompanionRunArg(callIndex: number, runArg: string): void {
-  const call = vi.mocked(runCmdDetached).mock.calls[callIndex];
-  assert.ok(call, `expected runCmdDetached call ${callIndex}`);
-  assert.equal(call[1].at(-1), runArg);
 }
 
 /** The stops the code asked host-kit for: the identity recorded beside the pid, and the budget. */
@@ -227,54 +220,6 @@ test('launchUrl changes force a companion respawn for the same profile', async (
       launchUrl?: string;
     };
     assert.equal(state.launchUrl, 'myapp://second');
-  } finally {
-    fs.rmSync(projectRoot, { recursive: true, force: true });
-  }
-});
-
-test('metro and React DevTools companions use distinct profile state paths', async () => {
-  const projectRoot = mkdtempForTestSync('agent-device-companion-paths-');
-  try {
-    vi.mocked(runCmdDetached).mockReturnValueOnce(777).mockReturnValueOnce(888);
-    vi.mocked(readProcessStartTime).mockImplementation((pid) =>
-      pid === 777 ? 'start-777' : 'start-888',
-    );
-    vi.mocked(readProcessCommand).mockImplementation((pid) =>
-      pid === 888
-        ? `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-react-devtools-companion`
-        : `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
-    );
-
-    const profileKey = '/tmp/shared-remote.json';
-    const metro = await ensureMetroCompanion({
-      projectRoot,
-      serverBaseUrl: 'https://bridge.example.test',
-      bearerToken: 'token',
-      localBaseUrl: 'http://127.0.0.1:8081',
-      bridgeScope: TEST_BRIDGE_SCOPE,
-      launchUrl: 'myapp://open',
-      profileKey,
-      consumerKey: 'session-a',
-    });
-    const reactDevtools = await ensureReactDevtoolsCompanion({
-      projectRoot,
-      serverBaseUrl: 'https://bridge.example.test',
-      bearerToken: 'token',
-      bridgeScope: TEST_BRIDGE_SCOPE,
-      session: 'session-a',
-      profileKey,
-      consumerKey: 'session-a',
-    });
-
-    assert.notEqual(metro.statePath, reactDevtools.statePath);
-    assert.notEqual(metro.logPath, reactDevtools.logPath);
-    assert.match(metro.statePath, /metro-companion[/\\]metro-companion-[a-f0-9]+\.json$/);
-    assert.match(
-      reactDevtools.statePath,
-      /react-devtools-companion[/\\]react-devtools-companion-[a-f0-9]+\.json$/,
-    );
-    assertCompanionRunArg(0, '--agent-device-run-metro-companion');
-    assertCompanionRunArg(1, '--agent-device-run-react-devtools-companion');
   } finally {
     fs.rmSync(projectRoot, { recursive: true, force: true });
   }

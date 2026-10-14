@@ -4,7 +4,6 @@ import {
   COMPANION_TUNNEL_LEASE_CHECK_INTERVAL_MS,
   COMPANION_TUNNEL_RECONNECT_DELAY_MS,
   ENV_COMPANION_TUNNEL_BEARER_TOKEN,
-  ENV_COMPANION_TUNNEL_DEVICE_PORT,
   ENV_COMPANION_TUNNEL_LAUNCH_URL,
   ENV_COMPANION_TUNNEL_LOCAL_BASE_URL,
   ENV_COMPANION_TUNNEL_REGISTER_PATH,
@@ -12,11 +11,9 @@ import {
   ENV_COMPANION_TUNNEL_SCOPE_RUN_ID,
   ENV_COMPANION_TUNNEL_SCOPE_TENANT_ID,
   ENV_COMPANION_TUNNEL_SERVER_BASE_URL,
-  ENV_COMPANION_TUNNEL_SESSION,
   ENV_COMPANION_TUNNEL_STATE_PATH,
   ENV_COMPANION_TUNNEL_UNREGISTER_PATH,
   METRO_COMPANION_RUN_ARG,
-  REACT_DEVTOOLS_COMPANION_RUN_ARG,
   WS_READY_STATE_OPEN,
   MissingCompanionEnvError,
   type CompanionTunnelWorkerOptions,
@@ -75,9 +72,7 @@ export function buildCompanionPayload(
 ): Record<string, unknown> {
   return {
     ...options.bridgeScope,
-    ...(options.session ? { session: options.session } : {}),
     local_base_url: normalizeBaseUrl(options.localBaseUrl),
-    ...(options.devicePort ? { device_port: options.devicePort } : {}),
     ...(options.launchUrl ? { launch_url: options.launchUrl } : {}),
   };
 }
@@ -555,23 +550,12 @@ export async function runCompanionTunnelWorker(
   }
 }
 
-function parseDevicePort(value: string | undefined): number | undefined {
-  if (!value?.trim()) return undefined;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-    throw new Error('Companion worker received invalid device port configuration.');
-  }
-  return parsed;
-}
-
 function readWorkerOptions(
   argv: string[],
   env: NodeJS.ProcessEnv,
 ): CompanionTunnelWorkerOptions | null {
   const commandArg = argv[0];
-  if (commandArg !== METRO_COMPANION_RUN_ARG && commandArg !== REACT_DEVTOOLS_COMPANION_RUN_ARG) {
-    return null;
-  }
+  if (commandArg !== METRO_COMPANION_RUN_ARG) return null;
   const serverBaseUrl = env[ENV_COMPANION_TUNNEL_SERVER_BASE_URL]?.trim();
   const bearerToken = env[ENV_COMPANION_TUNNEL_BEARER_TOKEN]?.trim();
   const localBaseUrl = env[ENV_COMPANION_TUNNEL_LOCAL_BASE_URL]?.trim();
@@ -607,8 +591,6 @@ function readWorkerOptions(
     launchUrl: env[ENV_COMPANION_TUNNEL_LAUNCH_URL]?.trim(),
     statePath: env[ENV_COMPANION_TUNNEL_STATE_PATH]?.trim(),
     unregisterPath: env[ENV_COMPANION_TUNNEL_UNREGISTER_PATH]?.trim(),
-    devicePort: parseDevicePort(env[ENV_COMPANION_TUNNEL_DEVICE_PORT]?.trim()),
-    session: env[ENV_COMPANION_TUNNEL_SESSION]?.trim(),
   };
 }
 

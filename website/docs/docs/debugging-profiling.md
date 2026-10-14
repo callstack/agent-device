@@ -15,7 +15,7 @@ When UI automation is not enough, use these commands to collect runtime evidence
 - Apple crash symbolication with `debug symbols`
 - Screenshots, recordings, and replayable repro flows
 
-## React Native render profiling
+## React Native performance profiling
 
 To find out why an interaction renders slowly, record a React profile around it:
 
@@ -29,7 +29,7 @@ agent-device react-devtools profile stop
 
 ```text
 React profile 8.3s: 8 commits, 1303ms rendering, 8 over 16ms (worst #6 188ms)
-1. memo-defeated ContactRow: memo bypassed on 480/480 updates; new highlight (object), onSelect (function) every render from ContactList -> stabilize those props in ContactList with useCallback/useMemo
+1. memo-defeated ContactRow: memo bypassed on 480/480 updates; new highlight (object), onSelect (function) on those updates from ContactList -> wrap those props in useCallback/useMemo in ContactList
 ```
 
 | Finding | Meaning |
@@ -49,44 +49,11 @@ Development builds render slower than release builds. Compare profiles of the sa
 
 Render profiling has not been verified on remote bridge sessions yet.
 
-## React Native component internals
+For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to profiling or debugging evidence, start with `agent-device help react-native`. For slow-flow investigations, combine `help react-devtools` for the React profile with `help debugging` for log markers, network/audio evidence, traces, and perf samples.
 
-To inspect the React Native component tree, props, state, or hooks, use `react-devtools`:
-
-```bash
-agent-device react-devtools status
-agent-device react-devtools wait --connected
-agent-device react-devtools get tree --depth 3
-agent-device react-devtools get component @c5
-agent-device react-devtools find Button
-```
-
-These commands run a pinned version of `agent-react-devtools` and pass your arguments to it.
-
-On React Native 0.87 and later, set up the app once before `react-devtools wait --connected` can succeed, locally or through a remote bridge: install `agent-react-devtools` as a dev dependency of the app project, run `npx agent-react-devtools init` there, and rebundle. The package `react-devtools` runs is temporary and does not install it into the app. Run `npx agent-react-devtools uninit` when you no longer need the setup.
-
-For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to React DevTools or debugging evidence, start with `agent-device help react-native`. For slow-flow investigations, combine `help react-devtools` for the React profile with `help debugging` for log markers, network/audio evidence, traces, and perf samples.
-
-React Native warning and error overlays come from the app. Treat them as findings or blockers: capture them, check `react-devtools errors` when connected, run `agent-device react-native dismiss-overlay` when the overlay is unrelated, then re-snapshot and report the overlay.
+React Native warning and error overlays come from the app. Treat them as findings or blockers: capture them, run `agent-device react-native dismiss-overlay` when the overlay is unrelated, then re-snapshot and report the overlay.
 
 For permission prompts and other alerts already on screen, see [Wait and alerts](/docs/commands#wait-and-alerts).
-
-### Remote bridge sessions
-
-On Android and iOS sessions connected through a remote bridge profile, the component inspection commands open a tunnel to the DevTools daemon at `127.0.0.1:8097` inside the remote sandbox. Android uses the bridge's `adb reverse` mapping; iOS uses the bridge's wildcard Metro host tunnel. The tunnel stays up until you run `agent-device react-devtools stop` or `agent-device disconnect`.
-
-React Native tries to reach DevTools once, during JavaScript startup. On remote iOS, start DevTools before that launch:
-
-```bash
-agent-device open com.example.myapp --platform ios
-agent-device react-devtools start
-agent-device open com.example.myapp --platform ios --relaunch
-agent-device react-devtools wait --connected
-```
-
-The first `open` creates the bridge session; the relaunch lets the app find the running DevTools daemon.
-
-This path assumes the DevTools behavior bundled with React Native 0.83 and later. Browser or Chromium DevTools workflows from older versions are not available inside remote sandboxes. For Expo projects, check the React Native version your SDK bundles; no Expo SDK has been verified separately.
 
 ## React Native JS memory through CDP
 
@@ -164,7 +131,7 @@ agent-device debug symbols --artifact crash.ips --search-path ./build --out cras
 
 The command supports Apple `.ips`, `.crash`, and log-style crash artifacts that contain Binary Images or IPS `usedImages`. It matches UUIDs from the crash artifact against `dwarfdump --uuid` output from `.dSYM` bundles, runs `atos`, writes a symbolicated artifact, and prints only the output path plus a compact crash report: app/thread, exception or termination, top symbolicated frames, and the first actionable frame finding. The full symbolicated artifact stays on disk, so agent context stays small.
 
-`debug` covers symbolication only. Use `logs` for app logs, `network` for HTTP evidence, `perf` for performance samples, `record`/`trace` for media and traces, and `react-devtools` for React Native internals. `debug symbols` does not handle Android Java/R8 `mapping.txt` or native `ndk-stack`/`addr2line` symbolication; capture Android crash evidence with `logs` and symbolicate it with other tools.
+`debug` covers symbolication only. Use `logs` for app logs, `network` for HTTP evidence, `perf` for performance samples, `record`/`trace` for media and traces, and `react-devtools` for React Native performance profiling. `debug symbols` does not handle Android Java/R8 `mapping.txt` or native `ndk-stack`/`addr2line` symbolication; capture Android crash evidence with `logs` and symbolicate it with other tools.
 
 ## Core commands
 

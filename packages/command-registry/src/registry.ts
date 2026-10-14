@@ -1814,13 +1814,6 @@ export const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
     mcpExposed: false,
-    // Wave 6 residue: `react-devtools start` on a Limrun Android instance dispatches internal
-    // `runtime port-reverse` through the CLI-injected dispatch seam. `runtime` is itself fully
-    // migrated (`device-runtime`, R31), so the dispatched execution is accounted for under its
-    // own descriptor rather than hidden behind this one — this route owns no unmigrated platform
-    // execution of its own. The CLI-route dominance gate
-    // (`__tests__/platform-execution-cli-route.test.ts`) still rejects a `none` route whose
-    // CLI-injected dispatch target is still `legacy`.
     platformExecution: NO_PLATFORM_EXECUTION,
   },
   {
@@ -1921,8 +1914,7 @@ type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
  * Compile-time literalness of {@link Command}. The `as const` on {@link RAW_COMMAND_DESCRIPTORS}
  * keeps each descriptor's literal `name` through the composition and the `.map` above; an array
  * that lost it would widen this union to `string`, and nothing downstream would say so:
- * `COMMAND_DEFAULTS` below and `Record<DescriptorCliCommandName, …>` in
- * `src/cli/injected-daemon-dispatch.ts` stop rejecting an unknown key, and the `command: Command`
+ * `COMMAND_DEFAULTS` below stops rejecting an unknown key, and the `command: Command`
  * parameters in `src/cli/command-explain.ts` and `owner-files.ts` would stop excluding a name no
  * descriptor declares. That silence is why this is a type guard and not a value comparison.
  */

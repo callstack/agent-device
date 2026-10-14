@@ -242,29 +242,26 @@ afterEach(async () => {
   }
 });
 
-test('companion payload includes React DevTools session and device port', () => {
+test('companion payload carries the bridge scope, local base URL, and launch URL', () => {
   assert.deepEqual(
     buildCompanionPayload({
       serverBaseUrl: 'https://bridge.example.test',
       bearerToken: 'token',
-      localBaseUrl: 'http://127.0.0.1:8097/',
+      localBaseUrl: 'http://127.0.0.1:8081/',
       bridgeScope: {
         tenantId: 'tenant-1',
         runId: 'run-1',
         leaseId: 'lease-1',
       },
-      session: 'default',
-      devicePort: 8097,
-      registerPath: '/api/react-devtools/companion/register',
-      unregisterPath: '/api/react-devtools/companion/unregister',
+      launchUrl: 'myapp://open',
+      registerPath: '/api/metro/companion/register',
     }),
     {
       tenantId: 'tenant-1',
       runId: 'run-1',
       leaseId: 'lease-1',
-      session: 'default',
-      local_base_url: 'http://127.0.0.1:8097',
-      device_port: 8097,
+      local_base_url: 'http://127.0.0.1:8081',
+      launch_url: 'myapp://open',
     },
   );
 });
@@ -674,42 +671,6 @@ test('companion tunnel entrypoint runs only for its own run args and refuses inc
       `expected blank ${key} to be refused`,
     );
   }
-});
-
-test('companion tunnel entrypoint validates the device port before serving', async () => {
-  for (const devicePort of ['0', 'abc', '70000']) {
-    await assert.rejects(
-      () =>
-        runCompanionTunnelProcessFromEnv(
-          [METRO_COMPANION_RUN_ARG],
-          companionEnv({ AGENT_DEVICE_COMPANION_TUNNEL_DEVICE_PORT: devicePort }),
-        ),
-      /invalid device port/i,
-      `expected device port ${devicePort} to be rejected`,
-    );
-  }
-
-  // Both accepted shapes of the optional port: absent, and a valid number. Once its lease file is
-  // gone the worker returns without registering, so the entrypoint answers true without a bridge.
-  const tempRoot = mkdtempForTestSync('agent-device-companion-entrypoint-');
-  cleanupTasks.push(async () => {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
-  });
-  const withoutPort = await runCompanionTunnelProcessFromEnv(
-    [METRO_COMPANION_RUN_ARG],
-    companionEnv({ AGENT_DEVICE_COMPANION_TUNNEL_STATE_PATH: path.join(tempRoot, 'a.json') }),
-  );
-  const withPort = await runCompanionTunnelProcessFromEnv(
-    ['--agent-device-run-react-devtools-companion'],
-    companionEnv({
-      AGENT_DEVICE_COMPANION_TUNNEL_DEVICE_PORT: '8097',
-      AGENT_DEVICE_COMPANION_TUNNEL_SESSION: 'default',
-      AGENT_DEVICE_COMPANION_TUNNEL_LAUNCH_URL: 'myapp://open',
-      AGENT_DEVICE_COMPANION_TUNNEL_UNREGISTER_PATH: '/api/react-devtools/companion/unregister',
-      AGENT_DEVICE_COMPANION_TUNNEL_STATE_PATH: path.join(tempRoot, 'b.json'),
-    }),
-  );
-  assert.deepEqual([withoutPort, withPort], [true, true]);
 });
 
 test('metro companion worker proxies bridge http requests to the local server', async () => {

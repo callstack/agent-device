@@ -17,10 +17,6 @@ vi.mock('../metro/client-metro-companion.ts', () => ({
   stopMetroCompanion: vi.fn(),
 }));
 
-vi.mock('../client/client-react-devtools-companion.ts', () => ({
-  stopReactDevtoolsCompanion: vi.fn(),
-}));
-
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
 

@@ -35,7 +35,6 @@ import {
   releasePreviousLease,
   resolveRequestedLeaseBackend,
   stopMetroCleanup,
-  stopReactDevtoolsCleanup,
 } from './connection-runtime.ts';
 import { writeCommandOutput } from './shared.ts';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
@@ -86,7 +85,6 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
   writeRemoteConnectionState({ stateDir, state });
   const previousLeaseNotice = await cleanupForcedPreviousConnection(
     client,
-    stateDir,
     connectFlags,
     context.previous,
     state,
@@ -267,14 +265,12 @@ function shouldReusePreviousConnectionState(
 
 async function cleanupForcedPreviousConnection(
   client: Parameters<ClientCommandHandler>[0]['client'],
-  stateDir: string,
   flags: CliFlags,
   previous: RemoteConnectionState | null,
   next: RemoteConnectionState,
 ): Promise<PreviousLeaseReleaseNotice | undefined> {
   if (!previous || !flags.force) return undefined;
   await stopMetroCleanup(previous.metro);
-  await stopReactDevtoolsCleanup({ stateDir, state: previous });
   if (previous.leaseId && previous.leaseId === next.leaseId) return undefined;
   return await releasePreviousLease(client, previous, {
     nextDaemonBaseUrl: next.daemon?.baseUrl,
@@ -314,7 +310,6 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
     }
   }
   await stopMetroCleanup(state.metro);
-  await stopReactDevtoolsCleanup({ stateDir, state });
   let released = false;
   if (state.leaseId) {
     try {
