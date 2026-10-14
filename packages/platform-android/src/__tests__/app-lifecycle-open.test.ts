@@ -529,6 +529,37 @@ test('openAndroidApp has am force-stop the resolved intent handler when terminat
   });
 });
 
+test('openAndroidApp returns the package am start reports it launched', async () => {
+  const launched = (args: readonly string[]): FakeAdbResponse | undefined =>
+    args[2] === 'start'
+      ? 'Starting: Intent { act=android.settings.SETTINGS }\nStatus: ok\nLaunchState: COLD\nActivity: com.android.settings/.homepage.SettingsHomepageActivity\nTotalTime: 412'
+      : undefined;
+  await withFakeAdb(launched, async ({ device }) => {
+    assert.equal(await openAndroidApp(device, 'settings'), 'com.android.settings');
+  });
+  await withFakeAdb(androidOpenFakeAdb, async ({ device }) => {
+    assert.equal(await openAndroidApp(device, 'settings'), undefined);
+  });
+});
+
+test('openAndroidApp has am force-stop a deep link handler when terminating a running app', async () => {
+  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
+    await openAndroidApp(device, 'myapp://item/42', { terminateRunningApp: true });
+    assert.deepEqual(calls.at(-1)?.slice(0, 5), ['shell', 'am', 'start', '-W', '-S']);
+  });
+});
+
+test('openAndroidApp stops the bound package before an app-bound deep link when terminating', async () => {
+  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
+    await openAndroidApp(device, 'com.example.app', {
+      url: 'example://bottom-tabs',
+      terminateRunningApp: true,
+    });
+    assert.deepEqual(calls[0], ['shell', 'am', 'force-stop', 'com.example.app']);
+    assert.deepEqual(calls.at(-1)?.slice(0, 4), ['shell', 'am', 'start', '-W']);
+  });
+});
+
 test('openAndroidApp stops a resolved package before launching it when terminating a running app', async () => {
   await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
     await openAndroidApp(device, 'com.example.app', { terminateRunningApp: true });

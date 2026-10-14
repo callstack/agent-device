@@ -21,21 +21,26 @@ export async function resolveAndroidPackageForOpen(
 }
 
 /**
- * The package that owns an ADB open: the requested package, else the package the device resumed.
- * `am start -W` returns once the launched activity is resumed, so the foreground read answers for
- * intent, alias, and deep-link targets alike. A framework foreground (a chooser or cross-profile
- * forwarder) belongs to no app, so it leaves the open unidentified.
+ * The package that owns an ADB open: the requested package, else the package `am start -W` reports
+ * it launched, else the resumed foreground package when the launch named none. A framework
+ * activity (a chooser or cross-profile forwarder) belongs to no app, so it leaves the open
+ * unidentified.
  */
 export async function inferAndroidPackageAfterOpen(
   device: DeviceInfo,
   openTarget: string | undefined,
   currentAppBundleId: string | undefined,
+  launchedAppBundleId?: string,
 ): Promise<string | undefined> {
   if (currentAppBundleId) return currentAppBundleId;
   if (device.platform !== 'android' || !openTarget) return undefined;
+  const owner = launchedAppBundleId ?? (await readForegroundPackage(device));
+  return owner && owner !== ANDROID_FRAMEWORK_PACKAGE ? owner : undefined;
+}
+
+async function readForegroundPackage(device: DeviceInfo): Promise<string | undefined> {
   try {
-    const foreground = (await getAndroidAppState(device)).package?.trim();
-    return foreground && foreground !== ANDROID_FRAMEWORK_PACKAGE ? foreground : undefined;
+    return (await getAndroidAppState(device)).package?.trim();
   } catch {
     return undefined;
   }

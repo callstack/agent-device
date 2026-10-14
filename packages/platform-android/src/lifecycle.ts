@@ -127,7 +127,7 @@ async function openAndroidApplication(
     timing.runtimeHintsDurationMs = elapsed(hintsStartedAtMs);
   }
   const openStartedAtMs = Date.now();
-  await invokeApplicationOpen({
+  const launch = await invokeApplicationOpen({
     device: binding.device,
     interactor: await binding.resolveInteractor(input.execution, input.appBundleId),
     positionals: input.positionals,
@@ -174,6 +174,7 @@ async function openAndroidApplication(
     binding.device,
     input.target,
     input.appBundleId,
+    launch?.launchedAppBundleId,
   );
   if (appBundleId) {
     await host.androidApplications.resetFramePerfStats(binding.device, appBundleId);

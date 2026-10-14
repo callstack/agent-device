@@ -101,6 +101,26 @@ test('inferAndroidPackageAfterOpen never names the framework chooser as the owne
   await expect(
     inferAndroidPackageAfterOpen(androidDevice, 'https://example.com/item', undefined),
   ).resolves.toBeUndefined();
+  expect(getAndroidAppState).toHaveBeenCalledWith(androidDevice);
+});
+
+test('inferAndroidPackageAfterOpen keeps the launched package under a permission prompt', async () => {
+  getAndroidAppState.mockResolvedValue({
+    package: 'com.google.android.permissioncontroller',
+    activity: 'com.android.permissioncontroller.permission.ui.GrantPermissionsActivity',
+  });
+
+  await expect(
+    inferAndroidPackageAfterOpen(androidDevice, 'myapp://login', undefined, 'com.example.app'),
+  ).resolves.toBe('com.example.app');
+});
+
+test('inferAndroidPackageAfterOpen never names a launched framework chooser as the owner', async () => {
+  getAndroidAppState.mockResolvedValue({ package: 'com.example.app' });
+
+  await expect(
+    inferAndroidPackageAfterOpen(androidDevice, 'settings', undefined, 'android'),
+  ).resolves.toBeUndefined();
 });
 
 test('inferAndroidPackageAfterOpen swallows a foreground-state read failure', async () => {
