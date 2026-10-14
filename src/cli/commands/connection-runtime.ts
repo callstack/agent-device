@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { MetroBridgeScope } from '@agent-device/contracts/remote';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { stopReactDevtoolsCompanion } from '../../client/client-react-devtools-companion.ts';
@@ -424,6 +425,8 @@ function buildMaterializedLeaseState(
 type ConnectionLeasePolicy = {
   shouldAllocate(command: string): boolean;
   ttlMs(state: RemoteConnectionState): number | undefined;
+  /** The id this client names a new lease with; without it the daemon mints one. */
+  newLeaseId?(): string;
   resolveLeaseState(options: {
     command: string;
     client: AgentDeviceClient;
@@ -464,6 +467,8 @@ const DEFAULT_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
 const PROXY_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) => command !== 'devices' && !leaseDeferredCommands.has(command),
   ttlMs: () => PROXY_REMOTE_LEASE_TTL_MS,
+  // Known before the daemon allocates, so a host in front of it can name the lease with the same id.
+  newLeaseId: () => crypto.randomBytes(16).toString('hex'),
   resolveLeaseState: resolveProxyLeaseState,
 };
 
@@ -904,6 +909,7 @@ async function allocateOrReuseLease(
   const lease = await client.leases.allocate({
     tenant: state.tenant,
     runId: state.runId,
+    leaseId: policy.newLeaseId?.(),
     leaseBackend,
     ...connection,
     ttlMs: policy.ttlMs(state),

@@ -11,6 +11,7 @@ import {
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit/loopback';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 
 const DAEMON_LOG_PATH = '/Users/daemon-host/.agent-device/sessions/default/requests/abc123.ndjson';
 const RECORD = '{"phase":"request_failed","data":{"error":"no element"}}\n';
@@ -145,6 +146,36 @@ test('a daemon that names no record still never surfaces its own path', async ()
     );
     assert.equal(JSON.stringify(localized).includes(DAEMON_LOG_PATH), false);
   } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('the record fetch names the held lease and sends no lease header without one', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const stateDir = mkdtempForTestSync('agent-device-remote-diagnostics-');
+  const leaseHeaders: unknown[] = [];
+  const server = http.createServer((req, res) => {
+    leaseHeaders.push(req.headers[DAEMON_HTTP_LEASE_HEADER]);
+    res.statusCode = 200;
+    res.end(RECORD);
+  });
+  try {
+    const port = await listenOnLoopback(server);
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const leased = await localizeRemoteDaemonError(remoteError(), {
+      endpoint: { baseUrl, token: 'daemon-secret', leaseId: 'lease-1' },
+      stateDir,
+    });
+    const unleased = await localizeRemoteDaemonError(remoteError(), {
+      endpoint: { baseUrl, token: 'daemon-secret' },
+      stateDir,
+    });
+    assert.equal(typeof leased.logPath, 'string');
+    assert.equal(typeof unleased.logPath, 'string');
+    assert.deepEqual(leaseHeaders, ['lease-1', undefined]);
+  } finally {
+    await closeLoopbackServer(server);
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });

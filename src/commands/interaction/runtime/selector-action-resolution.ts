@@ -1,11 +1,12 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { Platform, PublicPlatform } from '@agent-device/kernel/device';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotAddressableNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { SelectorResolution } from '@agent-device/selectors';
-import { classifyActionableTouchCandidates } from '@agent-device/selectors/interaction-targeting';
-import { listSelectorPipelineMatches } from '@agent-device/selectors/selector-pipeline';
+import { resolveActionSelectorPipeline } from '@agent-device/selectors/selector-pipeline';
 import type { ActingPipelinePolicy } from '@agent-device/selectors/selector-pipeline-policy';
 import { elementMatchCandidateDetails } from '@agent-device/capture-kit/snapshot-lines';
+
+export type ActionSelectorResolution = SelectorResolution<SnapshotAddressableNode>;
 
 /**
  * How an acting row narrows its candidate set: wrapper duplicates may collapse
@@ -22,46 +23,18 @@ export function resolveActionSelector(
   selectorExpression: string,
   platform: Platform | PublicPlatform,
   policy: ActingPipelinePolicy,
-): SelectorResolution | null {
-  const { candidates, list } = listSelectorPipelineMatches(policy, nodes, selectorExpression, {
-    platform,
-  });
-  const matched = list?.matchedNodes ?? [];
-  if (!list || matched.length === 0) return null;
-
-  const diagnostics = [{ selector: list.selector, matches: matched.length }];
-  if (matched.length === 1) {
-    return {
-      node: matched[0]!,
-      selector: list.selector,
-      selectorIndex: list.selectorIndex,
-      matches: 1,
-      diagnostics,
-    };
-  }
-
-  const classification = classifyActionableTouchCandidates(candidates, matched);
-  if (classification.kind === 'ambiguous') {
+): ActionSelectorResolution | null {
+  const outcome = resolveActionSelectorPipeline(policy, nodes, selectorExpression, { platform });
+  if (outcome.kind === 'none') return null;
+  if (outcome.kind === 'ambiguous') {
     throw new AppError(
       'AMBIGUOUS_MATCH',
-      `Selector matched ${classification.candidates.length} distinct actionable elements: ${list.selector}`,
+      `Selector matched ${outcome.candidates.length} distinct actionable elements: ${outcome.selector}`,
       {
-        selector: list.selector,
-        ...elementMatchCandidateDetails(classification.candidates),
+        selector: outcome.selector,
+        ...elementMatchCandidateDetails(outcome.candidates),
       },
     );
   }
-
-  return {
-    node: classification.node,
-    selector: list.selector,
-    selectorIndex: list.selectorIndex,
-    matches: matched.length,
-    diagnostics,
-    disambiguation: {
-      matchCount: matched.length,
-      tiebreak: 'structural-equivalence',
-      alternatives: matched.filter((candidate) => candidate.index !== classification.node.index),
-    },
-  };
+  return outcome.resolution;
 }

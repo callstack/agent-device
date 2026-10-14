@@ -321,17 +321,37 @@ function resolveRunnerPlatformNameForAppleOs(
   }
 }
 
-export function resolveAppleSimulatorSetPathForSelector(params: {
-  simulatorSetPath?: string;
+const DAEMON_IOS_SIMULATOR_DEVICE_SET_ENV = 'AGENT_DEVICE_IOS_SIMULATOR_DEVICE_SET';
+
+/**
+ * The simulator set a daemon request's device inventory reaches. macOS and desktop selectors
+ * never reach a simulator set. For selectors that can reach simulators,
+ * `AGENT_DEVICE_IOS_SIMULATOR_DEVICE_SET` in the daemon's environment is the operator's set: it
+ * applies when the request names no set, and a request naming another set is refused.
+ */
+export function resolveRequestAppleSimulatorSetPath(params: {
+  requestedSetPath?: string;
   platform?: PlatformSelector;
   target?: DeviceTarget;
+  env?: NodeJS.ProcessEnv;
 }): string | undefined {
-  const { simulatorSetPath, platform, target } = params;
-  if (!simulatorSetPath) return undefined;
-  if (platform === 'macos' || target === 'desktop') {
-    return undefined;
+  const { platform, target, env = process.env } = params;
+  if (platform === 'macos' || target === 'desktop') return undefined;
+  const requested = params.requestedSetPath?.trim() || undefined;
+  if (!supportsAppleSimulatorSelection(platform)) return requested;
+  const operatorSet = env[DAEMON_IOS_SIMULATOR_DEVICE_SET_ENV]?.trim() || undefined;
+  if (!operatorSet) return requested;
+  if (requested && requested !== operatorSet) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `This daemon only reaches iOS simulators in the set "${operatorSet}" (${DAEMON_IOS_SIMULATOR_DEVICE_SET_ENV}), but the request named --ios-simulator-device-set "${requested}".`,
+      {
+        reason: 'ios_simulator_device_set_outside_daemon_set',
+        hint: `Omit --ios-simulator-device-set, or pass exactly "${operatorSet}".`,
+      },
+    );
   }
-  return simulatorSetPath;
+  return operatorSet;
 }
 
 export function sortAppleDevicesForSelection<TDevice extends DeviceInfo>(

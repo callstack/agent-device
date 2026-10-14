@@ -573,6 +573,24 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     self.alertActivationBusyAnswer = busyAnswer;
   }
 
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-native-states"]) {
+    for (NSUInteger index = 0; index < 3; index++) {
+      UITextField *field = [[UITextField alloc] initWithFrame:CGRectMake(40, 120 + index * 60, 260, 44)];
+      field.accessibilityIdentifier = @[@"native-field", @"native-secure", @"native-disabled"][index];
+      field.placeholder = @"Native input";
+      field.secureTextEntry = index == 1;
+      field.enabled = index != 2;
+      field.borderStyle = UITextBorderStyleRoundedRect;
+      [self.view addSubview:field];
+    }
+    for (NSUInteger index = 0; index < 2; index++) {
+      UISwitch *toggle = [[UISwitch alloc] initWithFrame:CGRectMake(40, 340 + index * 60, 60, 40)];
+      toggle.accessibilityIdentifier = index == 0 ? @"native-off" : @"native-on";
+      toggle.on = index == 1;
+      [self.view addSubview:toggle];
+    }
+  }
+
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-regression"]) {
     BOOL digitCountValue =
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-digit-count-value"];

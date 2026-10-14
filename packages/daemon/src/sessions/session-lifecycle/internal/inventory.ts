@@ -16,14 +16,11 @@ import {
   isMacOs,
   matchesPlatformSelector,
   publicPlatformString,
-  resolveAppleSimulatorSetPathForSelector,
+  resolveRequestAppleSimulatorSetPath,
   type DeviceInfo,
   type PlatformSelector,
 } from '@agent-device/kernel/device';
-import {
-  resolveAndroidSerialAllowlist,
-  resolveIosSimulatorDeviceSetPath,
-} from '@agent-device/kernel/device-isolation';
+import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import {
   deviceClaimOwnerCannotRelease,
   inspectDeviceClaims,
@@ -215,8 +212,8 @@ function inventoryIosSimulatorSetPath(
   platform: PlatformSelector | undefined,
   target: DeviceInfo['target'],
 ) {
-  return resolveAppleSimulatorSetPathForSelector({
-    simulatorSetPath: resolveIosSimulatorDeviceSetPath(configuredPath),
+  return resolveRequestAppleSimulatorSetPath({
+    requestedSetPath: configuredPath,
     platform,
     target,
   });

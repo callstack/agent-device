@@ -54,6 +54,26 @@ for (const operation of ['allocate', 'release'] as const) {
   });
 }
 
+test('lease_allocate answers with the lease id the request named', async () => {
+  const registry = new LeaseRegistry();
+  const leaseId = 'abcdef0123456789abcdef0123456789';
+  const response = await handleLeaseCommands({
+    req: {
+      token: 'test-token',
+      session: 'default',
+      command: 'lease_allocate',
+      positionals: [],
+      meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId },
+    },
+    sessionName: 'default',
+    sessionStore: makeSessionStore('agent-device-chosen-lease-id-'),
+    leaseRegistry: registry,
+  });
+  assert.ok(response?.ok);
+  assert.equal((response.data?.lease as DeviceLease | undefined)?.leaseId, leaseId);
+  assert.equal(registry.listActiveLeases()[0]?.leaseId, leaseId);
+});
+
 test('lease_release still releases a retainOnClose lease through the provider', async () => {
   const registry = new LeaseRegistry();
   const lease = registry.allocateLease({
@@ -90,6 +110,34 @@ test('lease_release still releases a retainOnClose lease through the provider', 
     [lease.leaseId],
   );
   assert.equal(registry.listActiveLeases().length, 0);
+});
+
+test('lease_release ends the sessions opened under the released lease', async () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  const ended: string[] = [];
+  const release = (leaseId: string) =>
+    handleLeaseCommands({
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_release',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-release-ends-session-'),
+      leaseRegistry: registry,
+      endSessionsForLease: async (id) => {
+        ended.push(id);
+      },
+    });
+
+  assert.equal((await release(lease.leaseId))?.ok, true);
+  assert.deepEqual(ended, [lease.leaseId]);
+  // A release that releases nothing has no session to end.
+  assert.equal((await release(lease.leaseId))?.ok, true);
+  assert.deepEqual(ended, [lease.leaseId]);
 });
 
 test('lease_release refuses a host-allocated macos-app lease and keeps it', async () => {

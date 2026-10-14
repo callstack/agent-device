@@ -49,6 +49,11 @@ export class LeaseRegistry {
   private readonly mutations = new DeviceMutationDrain();
   private readonly inFlightWork = new LeaseInFlightWorkRegistry();
   private readonly leases = new Map<string, DeviceLease>();
+  /**
+   * Every id this daemon has given a lease. Provider release retries and provider-session ownership
+   * stay keyed by a lease id after the lease ends, so a caller-chosen id must never name one again.
+   */
+  private readonly issuedLeaseIds = new Set<string>();
   private readonly runBindings = new Map<string, string>();
   private readonly deviceBindings = new Map<string, string>();
   /** The inactivity window the host chose for each lease it allocated; a tenant cannot exceed it. */
@@ -74,17 +79,23 @@ export class LeaseRegistry {
   }
 
   allocateLease(request: AllocateLeaseRequest): DeviceLease {
+    const chosenLeaseId =
+      request.leaseId === undefined ? undefined : normalizeRequiredLeaseId(request.leaseId);
     const normalized = normalizeAllocateLeaseRequest(request);
     this.cleanupExpiredLeases();
     const leaseTtlMs = this.resolveLeaseTtlMs(normalized.ttlMs);
     this.assertHumanControlAdmission(normalized);
     const existingLease = this.refreshExistingRunBinding(normalized, leaseTtlMs);
     if (existingLease) return existingLease;
+    if (chosenLeaseId && this.issuedLeaseIds.has(chosenLeaseId)) {
+      throw new AppError('INVALID_ARGS', 'Lease id already names a lease this daemon issued.', {
+        reason: 'LEASE_ID_IN_USE',
+      });
+    }
     this.assertDeviceAvailable(normalized);
     this.enforceCapacity(normalized.backend);
-    const lease = createDeviceLease(normalized, leaseTtlMs, this.now());
-    this.leases.set(lease.leaseId, lease);
-    this.bindLease(lease);
+    const lease = createDeviceLease(normalized, leaseTtlMs, this.now(), chosenLeaseId);
+    this.issueLease(lease);
     return { ...lease };
   }
 
@@ -117,11 +128,16 @@ export class LeaseRegistry {
       });
     }
     this.enforceCapacity(normalized.backend);
-    const lease = { ...createDeviceLease(normalized, leaseTtlMs, this.now()), leaseId: id };
-    this.leases.set(lease.leaseId, lease);
+    const lease = createDeviceLease(normalized, leaseTtlMs, this.now(), id);
+    this.issueLease(lease);
     this.hostTtlMsByLeaseId.set(id, leaseTtlMs);
-    this.bindLease(lease);
     return { ...lease };
+  }
+
+  private issueLease(lease: DeviceLease): void {
+    this.issuedLeaseIds.add(lease.leaseId);
+    this.leases.set(lease.leaseId, lease);
+    this.bindLease(lease);
   }
 
   private refreshExistingRunBinding(

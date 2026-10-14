@@ -53,12 +53,25 @@ an idle daemon alive; other leases, including human-control holds, do not. A
 retained lease the caller stops heartbeating expires after its `ttlMs`, and idle
 reap then shuts the daemon down within one more idle window.
 
+A session cannot outlive the lease it was opened under. When the lease is
+released (tenant `lease_release` or host `DELETE /admin/leases/<lease-id>`) or
+expires, the daemon tears the session down under its execution locks and clears
+its device claim, even when the device no longer answers. The daemon sweeps for
+expired leases every second, so expiry does not wait for a later request;
+in-flight work and human-control holds still keep a lease from expiring. Once
+daemon shutdown begins, no new lease-end teardown starts, and shutdown waits for
+any that already started before it tears sessions down itself.
+
 The daemon ends a session's lease on `close`, and the close reply owns the outcome. Its `lease`
 field is `released` or `retained` with the `leaseId`, or `none` when the session held no daemon
-lease. A close that fails after the release or retention carries the same field in its error
-details, and a `batch` close step carries it in that step's result. A client never sends a release
-after `close`. A client that stores the lease id forgets it on `released`, and a gateway that
-relays the close reply reads the lease end from it.
+lease. A close that finds its lease already inactive reports `released`. A close that fails after
+the release or retention carries the same field in its error details, and a `batch` close step
+carries it in that step's result. A client never sends a release after `close`. A client that
+stores the lease id forgets it on `released`, and a gateway that relays the close reply reads the
+lease end from it. Close and lease-end teardown take the same execution locks, so whichever runs
+second finds the session gone: a close after a lease end has no session and no `lease` field, and a
+client that still stores that lease id finds it inactive on its next heartbeat and allocates a new
+lease under a fresh id.
 
 ## Consequences
 

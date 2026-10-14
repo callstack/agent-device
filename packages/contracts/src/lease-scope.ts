@@ -33,6 +33,7 @@ export type LeaseRpcCommand = 'lease_allocate' | 'lease_heartbeat' | 'lease_rele
 export type LeaseAllocateRequestScope = {
   tenantId: string;
   runId: string;
+  leaseId?: string;
   leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   deviceKey?: string;
@@ -142,6 +143,7 @@ export function leaseScopeToAllocateRequest(scope: LeaseScope): LeaseAllocateReq
   return stripUndefined({
     tenantId: scope.tenantId ?? '',
     runId: scope.runId ?? '',
+    leaseId: scope.leaseId,
     leaseBackend: scope.leaseBackend,
     leaseProvider: scope.leaseProvider,
     deviceKey: scope.deviceKey,
@@ -185,6 +187,7 @@ export function leaseScopeToLeaseRpcParams(
       return {
         ...common,
         ...stripUndefined({
+          leaseId: scope.leaseId,
           ttlMs: scope.leaseTtlMs,
           retainOnClose: scope.leaseRetainOnClose,
           backend: scope.leaseBackend,

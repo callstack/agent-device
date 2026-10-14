@@ -7,7 +7,7 @@ import {
   platformSelectorsConflict,
   PLATFORMS,
   resolveApplePlatformName,
-  resolveAppleSimulatorSetPathForSelector,
+  resolveRequestAppleSimulatorSetPath,
   resolveDevice,
   runnerSynthesizesTap,
 } from '@agent-device/kernel/device';
@@ -186,29 +186,94 @@ test('resolveApplePlatformName falls back to target inference for legacy records
   assert.equal(resolveApplePlatformName('macos', undefined), 'macOS');
 });
 
-test('resolveAppleSimulatorSetPathForSelector ignores simulator scoping for desktop selectors', () => {
+const NO_OPERATOR_SET: NodeJS.ProcessEnv = {};
+const OPERATOR_SET_ENV: NodeJS.ProcessEnv = {
+  AGENT_DEVICE_IOS_SIMULATOR_DEVICE_SET: ' /tmp/operator-set ',
+};
+
+test('resolveRequestAppleSimulatorSetPath ignores simulator scoping for desktop selectors', () => {
+  for (const env of [NO_OPERATOR_SET, OPERATOR_SET_ENV]) {
+    assert.equal(
+      resolveRequestAppleSimulatorSetPath({
+        requestedSetPath: '/tmp/other-set',
+        platform: 'macos',
+        env,
+      }),
+      undefined,
+    );
+    assert.equal(
+      resolveRequestAppleSimulatorSetPath({
+        requestedSetPath: '/tmp/other-set',
+        platform: 'apple',
+        target: 'desktop',
+        env,
+      }),
+      undefined,
+    );
+  }
+});
+
+test('resolveRequestAppleSimulatorSetPath without an operator set reaches the requested set or the default set', () => {
   assert.equal(
-    resolveAppleSimulatorSetPathForSelector({
-      simulatorSetPath: '/tmp/scoped',
-      platform: 'macos',
-    }),
-    undefined,
-  );
-  assert.equal(
-    resolveAppleSimulatorSetPathForSelector({
-      simulatorSetPath: '/tmp/scoped',
-      platform: 'apple',
-      target: 'desktop',
-    }),
-    undefined,
-  );
-  assert.equal(
-    resolveAppleSimulatorSetPathForSelector({
-      simulatorSetPath: '/tmp/scoped',
+    resolveRequestAppleSimulatorSetPath({
+      requestedSetPath: ' /tmp/scoped ',
       platform: 'ios',
       target: 'mobile',
+      env: NO_OPERATOR_SET,
     }),
     '/tmp/scoped',
+  );
+  assert.equal(
+    resolveRequestAppleSimulatorSetPath({ platform: 'ios', env: NO_OPERATOR_SET }),
+    undefined,
+  );
+});
+
+test('resolveRequestAppleSimulatorSetPath applies the operator set to a simulator request that names none', () => {
+  assert.equal(
+    resolveRequestAppleSimulatorSetPath({ platform: 'ios', env: OPERATOR_SET_ENV }),
+    '/tmp/operator-set',
+  );
+  assert.equal(
+    resolveRequestAppleSimulatorSetPath({ requestedSetPath: '  ', env: OPERATOR_SET_ENV }),
+    '/tmp/operator-set',
+  );
+  assert.equal(
+    resolveRequestAppleSimulatorSetPath({
+      requestedSetPath: '/tmp/operator-set',
+      platform: 'apple',
+      target: 'tv',
+      env: OPERATOR_SET_ENV,
+    }),
+    '/tmp/operator-set',
+  );
+});
+
+test('resolveRequestAppleSimulatorSetPath refuses a simulator request naming another set than the operator set', () => {
+  for (const requestedSetPath of ['/tmp/other-set', '/tmp/operator-set/']) {
+    assert.throws(
+      () =>
+        resolveRequestAppleSimulatorSetPath({
+          requestedSetPath,
+          platform: 'ios',
+          env: OPERATOR_SET_ENV,
+        }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        error.details?.reason === 'ios_simulator_device_set_outside_daemon_set',
+    );
+  }
+});
+
+test('resolveRequestAppleSimulatorSetPath leaves the operator set out of platforms without simulator sets', () => {
+  assert.equal(
+    resolveRequestAppleSimulatorSetPath({
+      requestedSetPath: '/tmp/other-set',
+      platform: 'android',
+      env: OPERATOR_SET_ENV,
+    }),
+    '/tmp/other-set',
   );
 });
 

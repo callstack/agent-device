@@ -92,6 +92,29 @@ test('close reports the lease it released', async () => {
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 });
 
+test('close reports a lease released before its lease-end teardown reached the session as released', async () => {
+  const leaseRegistry = new LeaseRegistry();
+  const session = leasedSession(leaseRegistry);
+  const lease = session.lease!;
+  const { released } = leaseRegistry.releaseLease({
+    leaseId: lease.leaseId,
+    tenantId: lease.tenantId,
+    runId: lease.runId,
+    leaseBackend: lease.leaseBackend,
+    leaseProvider: lease.leaseProvider,
+    deviceKey: lease.deviceKey,
+    clientId: lease.clientId,
+  });
+  expect(released).toBe(true);
+
+  const response = await close(session, leaseRegistry);
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: { lease: { outcome: 'released', leaseId: lease.leaseId } },
+  });
+});
+
 test('close reports a retainOnClose lease as retained and keeps it', async () => {
   const leaseRegistry = new LeaseRegistry();
   const session = leasedSession(leaseRegistry, true);

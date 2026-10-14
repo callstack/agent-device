@@ -132,6 +132,7 @@ import { recordRuntimeRegistryJoinViolations } from './record-runtime-registry-p
 import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechanics-policy.ts';
 import { checkDaemonPlatformBoundary } from './daemon-platform-boundary.ts';
 import { checkDaemonPlatformRuntimeInventory } from './daemon-platform-runtime-inventory.ts';
+import { checkDaemonProcessReach } from './daemon-process-reach.ts';
 import { checkDaemonClientEntry } from './daemon-client-entry.ts';
 import { checkDaemonLayers, DAEMON_ROOT } from './daemon-layers.ts';
 import { checkSessionAuthorityOverlay, handlerOwnedOverlay } from './session-authority-overlay.ts';
@@ -433,7 +434,8 @@ function report(
         `free of ` +
         `concrete platform imports in every executable and type-only form; ` +
         `no production daemon file reaches the root platform-runtime family or a hub that ` +
-        `does (R76); and the handler-owned SessionState/SessionStore ` +
+        `does (R76); the daemon process reaches no caller-side replay source module over ` +
+        `static or dynamic edges (R82); and the handler-owned SessionState/SessionStore ` +
         `authority overlay holds at or under the merge-base (R75, ` +
         `${handlerOwnedShapeFiles} shape / ${handlerOwnedAuthorityFiles} authority files); and ` +
         `every production daemon file lives under a layer folder with no upward static edges ` +
@@ -516,6 +518,7 @@ export const LAYERING_RULE_IDS = [
   'provider-snapshot-presentation-ownership',
   'snapshot-assembly-presentation-neutrality',
   'daemon-platform-runtime-inventory',
+  'daemon-process-reach',
   'daemon-client-entry',
   'session-authority-overlay',
   'daemon-layers',
@@ -580,6 +583,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     snapshotAssemblyPresentationViolations(context.sources, context.edges),
   'daemon-platform-runtime-inventory': (context) =>
     checkDaemonPlatformRuntimeInventory(context.edges),
+  'daemon-process-reach': (context) => checkDaemonProcessReach(context.sourceFiles, context.edges),
   'daemon-client-entry': (context) => checkDaemonClientEntry(context.edges),
   'session-authority-overlay': (context) =>
     checkSessionAuthorityOverlay(

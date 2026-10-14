@@ -3,16 +3,13 @@ import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import {
   hasExplicitDeviceIdentitySelector,
   isApplePlatform,
-  resolveAppleSimulatorSetPathForSelector,
+  resolveRequestAppleSimulatorSetPath,
   type DeviceInfo,
   type DeviceTarget,
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import {
-  resolveAndroidSerialAllowlist,
-  resolveIosSimulatorDeviceSetPath,
-} from '@agent-device/kernel/device-isolation';
+import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
 import {
   listLocalDeviceInventory,
@@ -209,8 +206,8 @@ export function buildDeviceInventoryRequestFromFlags(
       'Device target selector requires --platform. Use --platform ios|macos|android|vega|linux|apple with --target mobile|tv|desktop.',
     );
   }
-  const iosSimulatorSetPath = resolveAppleSimulatorSetPathForSelector({
-    simulatorSetPath: resolveIosSimulatorDeviceSetPath(flags.iosSimulatorDeviceSet),
+  const iosSimulatorSetPath = resolveRequestAppleSimulatorSetPath({
+    requestedSetPath: flags.iosSimulatorDeviceSet,
     platform,
     target: flags.target,
   });

@@ -1,10 +1,15 @@
-import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type {
+  SnapshotAddressableNode,
+  SnapshotNode,
+  SnapshotState,
+} from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime } from '@agent-device/contracts/runtime-contract';
-import { type SelectorResolution, buildSelectorChainForNode } from '@agent-device/selectors';
+import { buildSelectorChainForNode } from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '@agent-device/selectors/press-retarget';
 import { resolveRefLabel } from '@agent-device/capture-kit/snapshot-node-lookup';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import { truncateUtf8 } from './truncate-utf8.ts';
+import type { ActionSelectorResolution } from './selector-action-resolution.ts';
 import type {
   RecordingTargetOverride,
   ResolutionDiagnosticEntry,
@@ -15,7 +20,7 @@ import type { InteractionAction } from './interaction-resolution-request.ts';
 
 export type ResolvedRefNode = {
   ref: string;
-  node: SnapshotNode;
+  node: SnapshotAddressableNode;
   resolution: ResolutionDisclosure;
 };
 
@@ -42,7 +47,7 @@ const LABEL_FALLBACK_REF_RESOLUTION: ResolutionDisclosure = {
 /** Shared construction site for every runtime-ref resolution disclosure. */
 export function buildRefResolution(
   ref: string,
-  node: SnapshotNode,
+  node: SnapshotAddressableNode,
   kind: 'exact' | 'label-fallback',
 ): ResolvedRefNode {
   return {
@@ -60,7 +65,7 @@ const UNIQUE_RUNTIME_RESOLUTION: ResolutionDisclosure = {
 
 // Disclosure only: the winner stays resolveSelectorChain's pick (ADR 0012).
 export function buildSelectorResolutionDisclosure(
-  resolved: SelectorResolution,
+  resolved: ActionSelectorResolution,
   nodes: SnapshotState['nodes'],
 ): ResolutionDisclosure {
   if (!resolved.disambiguation) return UNIQUE_RUNTIME_RESOLUTION;
@@ -78,7 +83,7 @@ export function buildSelectorResolutionDisclosure(
 }
 
 function buildResolutionDiagnosticEntry(
-  node: SnapshotNode,
+  node: SnapshotAddressableNode,
   nodes: SnapshotState['nodes'],
 ): ResolutionDiagnosticEntry {
   const role = normalizeType(node.type ?? '');
@@ -99,12 +104,12 @@ function buildResolutionDiagnosticEntry(
 // resolved from, and becomes the pre-action baseline this publishes.
 export function describeResolvedInteractionNode(
   runtime: AgentDeviceRuntime,
-  node: SnapshotNode,
+  node: SnapshotAddressableNode,
   tree: SurfaceScopedNodes,
   action: InteractionAction,
   resolution: ResolutionDisclosure,
 ): {
-  node: SnapshotNode;
+  node: SnapshotAddressableNode;
   selectorChain: string[];
   refLabel: string | undefined;
   targetHittable?: boolean;

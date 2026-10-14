@@ -101,12 +101,14 @@ async function openAndroidApplication(
   input: OpenApplicationInput,
 ): Promise<OpenApplicationOutcome> {
   const timing: MutableOpenTiming = {};
-  if (input.relaunch && input.target) {
+  const relaunching = input.relaunch && Boolean(input.target);
+  const relaunchOwner = relaunching ? input.appBundleId : undefined;
+  if (relaunchOwner) {
     const closeStartedAtMs = Date.now();
     await invokeApplicationClose({
       device: binding.device,
-      interactor: await binding.resolveInteractor(input.execution, input.appBundleId),
-      positionals: [input.appBundleId ?? input.target],
+      interactor: await binding.resolveInteractor(input.execution, relaunchOwner),
+      positionals: [relaunchOwner],
     });
     timing.relaunchCloseDurationMs = elapsed(closeStartedAtMs);
   }
@@ -125,12 +127,13 @@ async function openAndroidApplication(
     timing.runtimeHintsDurationMs = elapsed(hintsStartedAtMs);
   }
   const openStartedAtMs = Date.now();
-  await invokeApplicationOpen({
+  const launch = await invokeApplicationOpen({
     device: binding.device,
     interactor: await binding.resolveInteractor(input.execution, input.appBundleId),
     positionals: input.positionals,
     appBundleId: input.appBundleId,
     execution: input.execution,
+    terminateRunningApp: relaunching && !relaunchOwner,
   });
   timing.openDispatchDurationMs = elapsed(openStartedAtMs);
   if (input.enableTestIme) {
@@ -171,6 +174,7 @@ async function openAndroidApplication(
     binding.device,
     input.target,
     input.appBundleId,
+    launch?.launchedAppBundleId,
   );
   if (appBundleId) {
     await host.androidApplications.resetFramePerfStats(binding.device, appBundleId);

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type {
+  RawSnapshotNode,
+  SnapshotAddressableNode,
+  SnapshotNode,
+} from '@agent-device/kernel/snapshot';
 import { SELECTOR_RESOLUTION_POLICIES } from '@agent-device/selectors';
 import { makeSnapshotState } from './snapshot-geometry.fixtures.ts';
 import {
@@ -14,6 +18,7 @@ import {
 } from './interaction-targeting.fixtures.ts';
 import {
   listSelectorPipelineMatches,
+  resolveActionSelectorPipeline,
   resolveSelectorPipeline,
   runNodePipelineStages,
   selectorPollBudget,
@@ -118,6 +123,90 @@ const ROOT_ANCESTOR_TREE: RawSnapshotNode[] = [
     label: 'Content',
     rect: { x: 0, y: 0, width: 390, height: 844 },
     hittable: false,
+  },
+];
+
+const REFLESS_RECT_TREE: SnapshotNode[] = [
+  {
+    index: 0,
+    depth: 0,
+    type: 'XCUIElementTypeButton',
+    label: 'Addressless',
+    rect: { x: 20, y: 30, width: 100, height: 40 },
+    hittable: true,
+    kind: 'button',
+  },
+];
+
+const REFLESS_PROMOTION_TREE: SnapshotNode[] = [
+  {
+    index: 0,
+    depth: 0,
+    type: 'XCUIElementTypeApplication',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+    hittable: true,
+    kind: 'application',
+    ref: 'e1',
+  },
+  {
+    index: 1,
+    depth: 1,
+    parentIndex: 0,
+    type: 'XCUIElementTypeCell',
+    label: 'Addressless Row',
+    rect: { x: 20, y: 30, width: 180, height: 50 },
+    hittable: true,
+    kind: 'cell',
+  },
+  {
+    index: 2,
+    depth: 2,
+    parentIndex: 1,
+    type: 'XCUIElementTypeStaticText',
+    label: 'Addressless Row',
+    rect: { x: 30, y: 40, width: 120, height: 20 },
+    hittable: false,
+    kind: 'text',
+    ref: 'e3',
+  },
+];
+
+const REFLESS_STRUCTURAL_ANCESTOR_TREE: SnapshotNode[] = [
+  {
+    index: 0,
+    depth: 0,
+    type: 'XCUIElementTypeApplication',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+    kind: 'application',
+    ref: 'e1',
+  },
+  {
+    index: 1,
+    depth: 1,
+    parentIndex: 0,
+    type: 'XCUIElementTypeOther',
+    identifier: 'bridged-control',
+    rect: { x: 20, y: 30, width: 36, height: 36 },
+    kind: 'other',
+    ref: 'e2',
+  },
+  {
+    index: 2,
+    depth: 2,
+    parentIndex: 1,
+    type: 'XCUIElementTypeOther',
+    rect: { x: 20, y: 30, width: 36, height: 36 },
+    kind: 'other',
+  },
+  {
+    index: 3,
+    depth: 3,
+    parentIndex: 2,
+    type: 'XCUIElementTypeButton',
+    identifier: 'bridged-control',
+    rect: { x: 20, y: 30, width: 36, height: 36 },
+    kind: 'button',
+    ref: 'e4',
   },
 ];
 
@@ -453,6 +542,138 @@ test('a listing row cannot be handed the node stages it does not declare', () =>
   // restate it. The runtime half of the claim lives in "pipeline rows declare only the
   // stages their kind enforces" below, which pins `readList`'s key set exhaustively.
   void [nodeStages, pollBudget];
+});
+
+test('rect-requiring pipeline entries narrow outcome nodes to addressable nodes', async () => {
+  const nodes = nodesOf(PROMOTABLE_TREE);
+  const staged = await runNodePipelineStages(
+    SELECTOR_PIPELINE_POLICIES.promotedTarget,
+    nodes,
+    nodes[0]!,
+    { offscreen: async (node) => node },
+  );
+  const stagedAddressable: SnapshotAddressableNode = staged.node;
+  const stagedRef: string = staged.node.ref;
+
+  const resolved = await resolveSelectorPipeline(
+    SELECTOR_PIPELINE_POLICIES.coveredDiagnosis,
+    nodes,
+    'label="Account"',
+    MATCH,
+  );
+  if (resolved.kind === 'target') {
+    const resolvedAddressable: SnapshotAddressableNode = resolved.node;
+    const resolvedRef: string = resolved.node.ref;
+    void [resolvedAddressable, resolvedRef];
+  }
+
+  const listed = listSelectorPipelineMatches(
+    SELECTOR_PIPELINE_POLICIES.findAct,
+    nodes,
+    'label="Account"',
+    MATCH,
+  );
+  const listedAddressable: SnapshotAddressableNode = listed.list!.matchedNodes[0]!;
+  const listedRef: string = listed.list!.matchedNodes[0]!.ref;
+
+  const action = resolveActionSelectorPipeline(
+    SELECTOR_PIPELINE_POLICIES.promotedTarget,
+    nodes,
+    'label="Account"',
+    MATCH,
+  );
+  if (action.kind === 'resolved') {
+    const actionAddressable: SnapshotAddressableNode = action.resolution.node;
+    const actionRef: string = action.resolution.node.ref;
+    void [actionAddressable, actionRef];
+  }
+
+  const read = await runNodePipelineStages(SELECTOR_PIPELINE_POLICIES.readAny, nodes, nodes[0]!);
+  // @ts-expect-error read rows do not prove that a selectable node is addressable.
+  const readRef: string = read.node.ref;
+
+  const readList = listSelectorPipelineMatches(
+    SELECTOR_PIPELINE_POLICIES.readList,
+    nodes,
+    'label="Account"',
+    MATCH,
+  );
+  // @ts-expect-error listing rows without rect requirements do not prove addressability.
+  const readListRef: string = readList.list!.matchedNodes[0]!.ref;
+  void [stagedAddressable, stagedRef, listedAddressable, listedRef, readRef, readListRef];
+});
+
+test('rect-requiring pipeline entries do not expose ref-less rect nodes as addressable', async () => {
+  const listed = listSelectorPipelineMatches(
+    SELECTOR_PIPELINE_POLICIES.findAct,
+    REFLESS_RECT_TREE,
+    'label="Addressless"',
+    MATCH,
+  );
+  assert.equal(listed.list, null);
+
+  const resolved = await resolveSelectorPipeline(
+    SELECTOR_PIPELINE_POLICIES.coveredDiagnosis,
+    REFLESS_RECT_TREE,
+    'label="Addressless"',
+    MATCH,
+  );
+  assert.equal(resolved.kind, 'none');
+
+  const read = await resolveSelectorPipeline(
+    SELECTOR_PIPELINE_POLICIES.readAny,
+    REFLESS_RECT_TREE,
+    'label="Addressless"',
+    MATCH,
+  );
+  assert.equal(read.kind, 'target');
+  if (read.kind === 'target') assert.equal(read.node.ref, undefined);
+
+  const action = resolveActionSelectorPipeline(
+    SELECTOR_PIPELINE_POLICIES.promotedTarget,
+    REFLESS_RECT_TREE,
+    'label="Addressless"',
+    MATCH,
+  );
+  assert.equal(action.kind, 'none');
+});
+
+test('acting selector classification keeps full ancestry after candidate addressability filtering', () => {
+  const action = resolveActionSelectorPipeline(
+    SELECTOR_PIPELINE_POLICIES.promotedTarget,
+    REFLESS_STRUCTURAL_ANCESTOR_TREE,
+    'id="bridged-control"',
+    MATCH,
+  );
+  assert.equal(action.kind, 'resolved');
+  if (action.kind !== 'resolved') return;
+  assert.equal(action.resolution.node.index, 3);
+  assert.equal(action.resolution.matches, 2);
+  assert.equal(action.resolution.disambiguation?.tiebreak, 'structural-equivalence');
+});
+
+test('rect-requiring node stages fail closed if promotion lands on a ref-less node', async () => {
+  await assert.rejects(
+    () =>
+      runNodePipelineStages(
+        SELECTOR_PIPELINE_POLICIES.resolvedTarget,
+        REFLESS_RECT_TREE,
+        REFLESS_RECT_TREE[0]!,
+        { offscreen: async (node) => node },
+      ),
+    /requires an addressable target/,
+  );
+
+  await assert.rejects(
+    () =>
+      runNodePipelineStages(
+        SELECTOR_PIPELINE_POLICIES.promotedTarget,
+        REFLESS_PROMOTION_TREE,
+        REFLESS_PROMOTION_TREE[2]!,
+        { offscreen: async (node) => node },
+      ),
+    /requires an addressable target/,
+  );
 });
 
 test('pipeline rows declare only the stages their kind enforces', () => {

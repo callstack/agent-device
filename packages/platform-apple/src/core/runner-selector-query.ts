@@ -1,6 +1,8 @@
+import { interpretIosNode } from '@agent-device/capture-kit/ios-node-interpretation';
+import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ElementSelectorKey } from '@agent-device/contracts/interactor-types';
 import type { AppleRunnerCommandOptions } from '../runner/index.ts';
-import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isHandheldAppleDevice, type DeviceInfo } from '@agent-device/kernel/device';
 import { runAppleRunnerCommand } from './runner-client.ts';
 
 /** The single Apple runner `querySelector` command builder shared by bound and safety-probe reads. */
@@ -10,7 +12,7 @@ export async function queryAppleRunnerSelector(
   appBundleId: string | undefined,
   options: AppleRunnerCommandOptions,
 ): Promise<Record<string, unknown>> {
-  return await runAppleRunnerCommand(
+  const result = await runAppleRunnerCommand(
     device,
     {
       command: 'querySelector',
@@ -20,4 +22,16 @@ export async function queryAppleRunnerSelector(
     },
     options,
   );
+  return {
+    ...result,
+    ...(Array.isArray(result.nodes)
+      ? {
+          nodes: (result.nodes as RawSnapshotNode[]).map((node) =>
+            interpretIosNode(node, {
+              reactNativeValue: isHandheldAppleDevice(device),
+            }),
+          ),
+        }
+      : {}),
+  };
 }
