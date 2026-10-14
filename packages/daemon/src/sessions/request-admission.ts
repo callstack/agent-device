@@ -1,5 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
-import { normalizeTenantId, resolveSessionIsolationMode } from '../core/config.ts';
+import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
+import { resolveSessionIsolationMode } from '../core/config.ts';
 import { isTenantOwnedSessionName, tenantScopedSessionName } from '../core/session-tenant-scope.ts';
 import {
   isAppLeaseAllowed,

@@ -10,6 +10,7 @@ import {
   buildRemoteTempArtifactPath,
   DAEMON_RPC_PROTOCOL_VERSION,
   isRemoteTempArtifactPath,
+  normalizeTenantId,
 } from './daemon-http.ts';
 
 test('buildDaemonHttpBaseUrl appends the public agent-device base path', () => {
@@ -47,6 +48,15 @@ test('buildDaemonHttpTenantHeaders omits blank tenant identities', () => {
     'x-agent-device-tenant': 'tenant-a',
   });
   assert.deepEqual(buildDaemonHttpTenantHeaders(''), {});
+});
+
+test('normalizeTenantId trims an id and refuses blank, oversized, or out-of-alphabet ids', () => {
+  assert.equal(normalizeTenantId('  team-a.prod_1 '), 'team-a.prod_1');
+  assert.equal(normalizeTenantId('x'.repeat(128)), 'x'.repeat(128));
+  assert.equal(normalizeTenantId('x'.repeat(129)), undefined);
+  assert.equal(normalizeTenantId('alice@example.com'), undefined);
+  assert.equal(normalizeTenantId('   '), undefined);
+  assert.equal(normalizeTenantId(undefined), undefined);
 });
 
 test('buildDaemonHealthPayload takes the version from its caller and keeps the payload shape', () => {

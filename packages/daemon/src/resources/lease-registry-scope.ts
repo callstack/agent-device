@@ -6,7 +6,7 @@ import {
 } from '@agent-device/contracts/lease-scope';
 import { LEASE_BACKENDS, type LeaseBackend } from '@agent-device/kernel/contracts';
 import { AppError } from '@agent-device/kernel/errors';
-import { normalizeTenantId } from '../core/config.ts';
+import { normalizeTenantId } from '@agent-device/contracts/daemon-http';
 
 export type LeaseRegistryOptions = {
   maxActiveSimulatorLeases?: number;

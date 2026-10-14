@@ -8,10 +8,10 @@ import { pathToFileURL } from 'node:url';
 import { AppError, normalizeError, toAppErrorCode } from '@agent-device/kernel/errors';
 import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { normalizeTenantId } from '../../core/config.ts';
 import {
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
   DAEMON_HTTP_TENANT_HEADER,
+  normalizeTenantId,
 } from '@agent-device/contracts/daemon-http';
 import { sendRestJsonError } from '../http-errors.ts';
 import { resolveTrustedTenant, tenantTrustRejectionError } from './tenant-trust.ts';
