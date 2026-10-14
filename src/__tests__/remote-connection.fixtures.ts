@@ -104,6 +104,8 @@ export function createTestClient(
           tenantId: request.tenant ?? 'acme',
           runId: request.runId ?? 'run-123',
           backend: request.leaseBackend ?? 'android-instance',
+          // A daemon renews only a lease whose device matches the key the heartbeat names.
+          ...(request.deviceKey ? { deviceKey: request.deviceKey } : {}),
         })),
       release: options.release ?? (async () => ({ released: true })),
     }),

@@ -263,6 +263,40 @@ test('a daemon whose lease names no device gets that lease released and the devi
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('a renewed lease that names no device is refused and left to its owner', async () => {
+  const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-by-spec-keyless-', {
+    leaseId: 'lease-1',
+  });
+
+  await assert.rejects(
+    materializeRemoteConnectionForCommand({
+      command: 'open',
+      flags: { ...flags, device: 'iPhone 17' },
+      client: createTestClient({
+        listDevices: async () => [IPHONE_SIMULATOR],
+        allocate: unexpectedCommandCall,
+        release: unexpectedCommandCall,
+        heartbeat: async (request) => ({
+          leaseId: request.leaseId,
+          tenantId: 'proxy',
+          runId: 'proxy-client-1',
+          backend: 'ios-instance',
+          leaseProvider: 'proxy',
+          clientId: 'client-1',
+        }),
+      }),
+    }),
+    (error: AppError) =>
+      error.code === 'UNAUTHORIZED' &&
+      error.details?.reason === 'LEASE_SCOPE_MISMATCH' &&
+      error.details?.leaseId === 'lease-1',
+  );
+  const state = readRemoteConnectionState({ stateDir, session: 'adc-proxy' });
+  assert.equal(state?.leaseId, 'lease-1');
+  assert.equal(state?.deviceKey, undefined);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('proxy open with an exact udid still picks locally and allocates that device once', async () => {
   const { tempRoot, flags } = proxyWorkspace('agent-device-proxy-by-spec-exact-');
   const requests: LeaseAllocateRequest[] = [];

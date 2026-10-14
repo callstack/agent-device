@@ -82,8 +82,10 @@ async function resolveProxyLeaseStateLocally(options: {
 
 /**
  * Takes the device from a lease allocated by spec: the one its `deviceKey` names, whether the daemon
- * just picked it or the lease is renewed. A daemon that predates picking leaves the key unset, so its
- * lease is released and the device is picked here and allocated by its key, as before.
+ * just picked it or the lease is renewed. A daemon that predates picking leaves the key of a new
+ * lease unset, so that lease is released and the device is picked here and allocated by its key, as
+ * before. Every lease this client allocates therefore names its device; a renewed lease that names
+ * none was supplied from outside, so it is refused and never released.
  */
 export async function bindLeaseNamedDevice(options: {
   client: AgentDeviceClient;
@@ -109,23 +111,34 @@ export async function bindLeaseNamedDevice(options: {
       materialized,
     };
   }
-  if (acquired) {
-    await client.leases.release({
-      tenant: options.state.tenant,
-      runId: options.state.runId,
-      leaseId: lease.leaseId,
-      leaseBackend: lease.backend,
-      ...mergeRemoteConnectionRequestMetadata(lease, options.state),
-      deviceKey: lease.deviceKey,
-    });
-  }
+  if (!acquired) throw unboundLeaseError(options.state, lease);
+  await client.leases.release({
+    tenant: options.state.tenant,
+    runId: options.state.runId,
+    leaseId: lease.leaseId,
+    leaseBackend: lease.backend,
+    ...mergeRemoteConnectionRequestMetadata(lease, options.state),
+    deviceKey: lease.deviceKey,
+  });
   const resolved = await resolveProxyLeaseStateLocally(options);
   return {
     state: resolved.state,
-    materialized: acquired
-      ? await options.allocateByDeviceKey(resolved.state, flags)
-      : materialized,
+    materialized: await options.allocateByDeviceKey(resolved.state, flags),
   };
+}
+
+function unboundLeaseError(state: RemoteConnectionState, lease: Lease): AppError {
+  return new AppError(
+    'UNAUTHORIZED',
+    'The active proxy lease names no device this client can use.',
+    {
+      session: state.session,
+      leaseId: lease.leaseId,
+      deviceKey: lease.deviceKey,
+      reason: 'LEASE_SCOPE_MISMATCH',
+      hint: 'Use a lease that names its device, or drop the lease id from the remote config and flags so open allocates one.',
+    },
+  );
 }
 
 /**
