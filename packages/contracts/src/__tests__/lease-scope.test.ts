@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import {
   findMissingProxyLeaseFields,
   isInactiveLeaseError,
+  leaseDeviceKey,
   leaseScopeFromOptions,
   leaseScopeFromRequest,
   leaseScopeToAllocateRequest,
@@ -10,6 +11,7 @@ import {
   leaseScopeToConnectionMetadata,
   leaseScopeToLeaseRpcParams,
   leaseScopeToRequestMeta,
+  parseLeaseDeviceKey,
   readLeaseAllocateProviderFlags,
 } from '../lease-scope.ts';
 
@@ -266,4 +268,24 @@ test('isInactiveLeaseError recognizes the lease being gone, and refuses a reques
   );
   assert.equal(isInactiveLeaseError(new Error('LEASE_NOT_FOUND')), false);
   assert.equal(isInactiveLeaseError(undefined), false);
+});
+
+test('parseLeaseDeviceKey reads back every field leaseDeviceKey writes', () => {
+  const devices = [
+    { platform: 'ios', target: 'tv', id: 'SIM-001' },
+    { platform: 'android', target: 'mobile', id: 'emulator-5554' },
+    { platform: 'android', target: 'mobile', id: '192.168.1.20:5555' },
+    { platform: 'macos', target: 'desktop', id: 'host:a:b' },
+  ];
+  for (const device of devices) {
+    assert.deepEqual(parseLeaseDeviceKey(leaseDeviceKey(device)), device);
+  }
+  assert.deepEqual(parseLeaseDeviceKey(leaseDeviceKey({ platform: 'ios', id: 'SIM-002' })), {
+    platform: 'ios',
+    target: 'mobile',
+    id: 'SIM-002',
+  });
+  for (const malformed of [undefined, '', 'ios', 'ios:SIM-001', 'ios:mobile:', ':mobile:id']) {
+    assert.equal(parseLeaseDeviceKey(malformed), undefined, `${malformed} is not a device key`);
+  }
 });

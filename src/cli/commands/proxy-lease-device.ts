@@ -27,6 +27,12 @@ const proxyLeaseAllocatingCommands: ReadonlySet<string> = new Set([
 
 type MaterializedLease = { lease: Lease; acquired: boolean };
 
+export type ResolvedLeaseState = {
+  state: RemoteConnectionState;
+  /** The allocation names no device; the device comes from the lease the daemon returns. */
+  allocateBySpec?: boolean;
+};
+
 /**
  * Decides which device a proxy lease is for. A request with an exact identity picks the device here
  * and points `flags` at it; any other allocating request is allocated by spec.
@@ -37,11 +43,7 @@ export async function resolveProxyLeaseState(options: {
   state: RemoteConnectionState;
   flags: CliFlags;
   leaseBackend?: LeaseBackend;
-}): Promise<{
-  state: RemoteConnectionState;
-  /** The allocation names no device; the device comes from the lease the daemon returns. */
-  allocateBySpec?: boolean;
-}> {
+}): Promise<ResolvedLeaseState> {
   if (!proxyLeaseAllocatingCommands.has(options.command)) {
     if (options.state.leaseId && options.state.deviceKey) return { state: options.state };
     throw new AppError(

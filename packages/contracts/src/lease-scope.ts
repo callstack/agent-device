@@ -310,6 +310,19 @@ export function leaseDeviceKey(device: { platform: string; target?: string; id: 
   return `${device.platform}:${device.target ?? 'mobile'}:${device.id}`;
 }
 
+/**
+ * The raw fields a {@link leaseDeviceKey} key was written from, or `undefined` for a malformed key.
+ * The id is everything after the second `:`, so an id may itself contain `:`.
+ */
+export function parseLeaseDeviceKey(
+  key: string | undefined,
+): { platform: string; target: string; id: string } | undefined {
+  const match = /^([^:]+):([^:]+):(.+)$/.exec(key ?? '');
+  if (!match) return undefined;
+  const [, platform, target, id] = match;
+  return { platform: platform!, target: target!, id: id! };
+}
+
 export function isProxyLeaseScope(scope: LeaseScope): boolean {
   return scope.leaseProvider === PROXY_LEASE_PROVIDER;
 }

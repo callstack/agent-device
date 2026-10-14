@@ -38,7 +38,11 @@ import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
 import { connectionProviderCapabilities } from '../connection/provider-policy.ts';
 import { readCloudDeviceFeatureProfileFields } from '../connection/profile-fields.ts';
 import type { PreviousLeaseReleaseNotice } from './connection-presentation.ts';
-import { bindLeaseNamedDevice, resolveProxyLeaseState } from './proxy-lease-device.ts';
+import {
+  bindLeaseNamedDevice,
+  resolveProxyLeaseState,
+  type ResolvedLeaseState,
+} from './proxy-lease-device.ts';
 
 const leaseDeferredCommands = new Set([
   'artifacts',
@@ -433,12 +437,6 @@ type ConnectionLeasePolicy = {
     flags: CliFlags;
     leaseBackend?: LeaseBackend;
   }): Promise<ResolvedLeaseState>;
-};
-
-type ResolvedLeaseState = {
-  state: RemoteConnectionState;
-  /** The allocation names no device; the device comes from the lease the daemon returns. */
-  allocateBySpec?: boolean;
 };
 
 function connectionLeasePolicyForState(state: RemoteConnectionState): ConnectionLeasePolicy {

@@ -244,6 +244,10 @@ export function isPublicPlatform(value: unknown): value is PublicPlatform {
   return (PUBLIC_PLATFORMS as readonly unknown[]).includes(value);
 }
 
+export function isDeviceTarget(value: unknown): value is DeviceTarget {
+  return (DEVICE_TARGETS as readonly unknown[]).includes(value);
+}
+
 export function isAppleOs(value: unknown): value is AppleOS {
   // The stored Apple-OS discriminant carried additively on the PUBLIC device output
   // (iPhone/iPad/tvOS/visionOS/macOS). Used by the client normalizers to validate the

@@ -4,8 +4,8 @@ import path from 'node:path';
 import { resolveRemoteConfigPath, resolveRemoteConfigProfile } from './remote-config-core.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
-  DEVICE_TARGETS,
   deviceIdentityFlag,
+  isDeviceTarget,
   isPublicPlatform,
   platformSelectorsConflict,
   publicPlatformString,
@@ -28,6 +28,7 @@ import {
   leaseScopeFromOptions,
   leaseScopeToCommandFlags,
   leaseScopeToConnectionMetadata,
+  parseLeaseDeviceKey,
 } from '@agent-device/contracts/lease-scope';
 
 export type RemoteConnectionState = {
@@ -124,15 +125,11 @@ export function buildConnectionDeviceKey(scope: ConnectionDeviceScope): string {
 export function parseConnectionDeviceKey(
   deviceKey: string | undefined,
 ): ConnectionDeviceScope | undefined {
-  const match = /^([^:]+):([^:]+):(.+)$/.exec(deviceKey ?? '');
-  if (!match) return undefined;
-  const [, platform, target, id] = match;
-  if (!isPublicPlatform(platform) || !isDeviceTarget(target)) return undefined;
-  return connectionDeviceScope(platform, target, id!);
-}
-
-function isDeviceTarget(value: string | undefined): value is DeviceTarget {
-  return (DEVICE_TARGETS as readonly (string | undefined)[]).includes(value);
+  const parsed = parseLeaseDeviceKey(deviceKey);
+  if (!parsed || !isPublicPlatform(parsed.platform) || !isDeviceTarget(parsed.target)) {
+    return undefined;
+  }
+  return connectionDeviceScope(parsed.platform, parsed.target, parsed.id);
 }
 
 /**
