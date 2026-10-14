@@ -22,8 +22,11 @@ on:
 permissions:
   contents: read
 
+# Release and nightly publishing require green CI on the exact main commit, so a
+# main push never cancels or replaces another commit's run.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: >-
+    ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
