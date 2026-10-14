@@ -9,6 +9,7 @@ import type {
 } from '@agent-device/contracts/device';
 import { buildSessionLeaseFromRequest, type SessionLease } from '../core/lease-context.ts';
 import { assertRequestLeaseAdmission } from './request-admission.ts';
+import { errorMessage } from '@agent-device/kernel/errors';
 import type { SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
@@ -18,6 +19,8 @@ import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-
 export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
 
 export type SessionTeardown = (ref: SessionRef) => Promise<void>;
+
+export type LeaseEndReason = 'LEASE_RELEASED' | 'LEASE_EXPIRED';
 
 export async function releaseExpiredProviderLease(
   recoverExpiredLease: ExpiredProviderLeaseRecovery | undefined,
@@ -57,46 +60,50 @@ export async function cleanupExpiredLeasedSession(params: {
   teardownSession: SessionTeardown;
 }): Promise<boolean> {
   const ref = params.sessionStore.lookup(params.sessionName);
-  const session = ref?.session;
-  const lease = session?.lease;
-  if (!ref || !session || !lease) return false;
-  const expiredLease = params.leaseRegistry.consumeExpiredLease(lease.leaseId);
-  if (!expiredLease) return false;
+  const lease = ref?.session.lease;
+  if (!ref || !lease) return false;
+  if (!params.leaseRegistry.consumeExpiredLease(lease.leaseId)) return false;
+  await endLeasedSession(ref, params.sessionStore, params.teardownSession, 'LEASE_EXPIRED');
+  return true;
+}
+
+/**
+ * Ends one session whose lease is gone (released or expired). The device claim is cleared even when
+ * teardown fails: the lease that paid for the device has ended, so nobody may keep it.
+ */
+export async function endLeasedSession(
+  ref: SessionRef,
+  sessionStore: SessionStore,
+  teardownSession: SessionTeardown,
+  reason: LeaseEndReason,
+): Promise<void> {
+  const session = ref.session;
+  const leaseId = session.lease?.leaseId;
   emitDiagnostic({
     level: 'info',
-    phase: 'leased_session_expired',
-    data: {
-      reason: 'LEASE_EXPIRED',
-      leaseId: lease.leaseId,
-      session: session.name,
-      deviceKey: lease.deviceKey,
-    },
+    phase: 'leased_session_ended',
+    data: { reason, leaseId, session: session.name, deviceKey: session.lease?.deviceKey },
   });
-  await params.teardownSession(ref).catch((error) => {
+  await teardownSession(ref).catch((error) => {
     emitDiagnostic({
       level: 'debug',
-      phase: 'leased_session_expiry_cleanup_failed',
-      data: {
-        reason: 'LEASE_EXPIRED',
-        leaseId: lease.leaseId,
-        session: session.name,
-        error: error instanceof Error ? error.message : String(error),
-      },
+      phase: 'leased_session_end_cleanup_failed',
+      data: { reason, leaseId, session: session.name, error: errorMessage(error) },
     });
   });
   await clearDeviceClaim(session.deviceClaim).catch((error) => {
     emitDiagnostic({
       level: 'warn',
-      phase: 'leased_session_expiry_device_claim_clear_failed',
+      phase: 'leased_session_end_device_claim_clear_failed',
       data: {
         session: session.name,
         deviceKey: session.deviceClaim?.deviceKey,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage(error),
       },
     });
   });
-  params.sessionStore.retire(ref);
-  return true;
+  sessionStore.finalizeRepairTeardown(ref);
+  sessionStore.retire(ref);
 }
 
 export function admitRequestLeaseForLockedScope(params: {
