@@ -410,7 +410,10 @@ function rewriteUploadPreflightResponse(
     upload: {
       ...record.upload,
       ...(rewrittenUrl ? { url: rewrittenUrl } : {}),
-      headers: { ...upstreamTicketContentType(record.upload.headers), ...uploadHeaders },
+      headers: {
+        ...upstreamTicketContentType(record.upload.headers),
+        ...(rewrittenUrl ? uploadHeaders : {}),
+      },
     },
   });
 }

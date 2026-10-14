@@ -505,18 +505,24 @@ test('with a client token, the ticket carries the client token, never the daemon
   });
 });
 
-test('a ticket whose url the proxy cannot rewrite still drops the daemon credentials', async () => {
+test('a ticket whose url the proxy cannot rewrite carries no credentials', async () => {
   const upstream = recordingUpstream(() =>
     Response.json({
       ok: true,
-      upload: { url: 'not a url', headers: buildDaemonHttpAuthHeaders(DAEMON_TOKEN) },
+      upload: {
+        url: 'https://elsewhere.example/put/abc',
+        headers: {
+          ...buildDaemonHttpAuthHeaders(DAEMON_TOKEN),
+          'content-type': 'application/octet-stream',
+        },
+      },
     }),
   );
   const proxy = proxyWith(upstream.fetch);
 
   const ticketHeaders = await requestTicket(proxy, { authorization: 'Bearer client-secret' });
 
-  expect(ticketHeaders).toEqual(buildDaemonHttpAuthHeaders('client-secret'));
+  expect(ticketHeaders).toEqual({ 'content-type': 'application/octet-stream' });
 });
 
 test('with authenticate, request diagnostics are served only for the caller tenant sessions', async () => {
