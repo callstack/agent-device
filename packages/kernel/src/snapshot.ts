@@ -447,6 +447,8 @@ export type SnapshotNode = RawSnapshotNode & {
   inheritsIdentifier?: true;
 };
 
+export type SnapshotAddressableNode = SnapshotNode & { ref: string };
+
 /**
  * Platform role vocabulary → the text presenter's normalized label. Owned here (rather than
  * capture-kit) so `attachRefs` can publish the same `kind` on every node without capture-kit
@@ -837,7 +839,7 @@ export function attachRefs(
  * address (an overlay label, a settle tail entry, a ref pin). A ref-less node is readable and
  * searchable, never addressable.
  */
-export function hasSnapshotRef(node: SnapshotNode): node is SnapshotNode & { ref: string } {
+export function hasSnapshotRef(node: SnapshotNode): node is SnapshotAddressableNode {
   return node.ref !== undefined;
 }
 
