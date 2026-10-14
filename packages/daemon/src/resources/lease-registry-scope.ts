@@ -336,9 +336,10 @@ export function createDeviceLease(
   request: NormalizedAllocateLeaseRequest,
   leaseTtlMs: number,
   now: number,
+  leaseId = crypto.randomBytes(16).toString('hex'),
 ): DeviceLease {
   return {
-    leaseId: crypto.randomBytes(16).toString('hex'),
+    leaseId,
     tenantId: request.tenantId,
     runId: request.runId,
     backend: request.backend,
