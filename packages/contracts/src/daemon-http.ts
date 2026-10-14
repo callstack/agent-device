@@ -11,7 +11,7 @@ export const DAEMON_HTTP_TENANT_HEADER = 'x-agent-device-tenant';
 // Names the lease a non-RPC request (upload, artifact download, request diagnostics) belongs to,
 // as RPC calls name it in their body. Neither the daemon nor the proxy reads it; it lets a gateway
 // in front of many daemons route those requests to the one holding the lease.
-const DAEMON_HTTP_LEASE_HEADER = 'x-agent-device-lease-id';
+export const DAEMON_HTTP_LEASE_HEADER = 'x-agent-device-lease-id';
 export const DAEMON_HTTP_NETWORK_ACCESS_HEADER = 'x-agent-device-network-access';
 export const DAEMON_HTTP_PUBLIC_NETWORK_ACCESS = 'public-only';
 

@@ -11,6 +11,7 @@ import {
 } from '@agent-device/test-kit/loopback';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { downloadRemoteArtifactFromUrl } from '../artifact-download.ts';
+import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 
 type DownloadParams = Parameters<typeof downloadRemoteArtifactFromUrl>[0];
 
@@ -172,7 +173,7 @@ test('downloadRemoteArtifactFromUrl names the held lease and sends no lease head
   const tempRoot = mkdtempForTestSync('agent-device-artifact-lease-header-');
   const leaseHeaders: unknown[] = [];
   const server = http.createServer((req, res) => {
-    leaseHeaders.push(req.headers['x-agent-device-lease-id']);
+    leaseHeaders.push(req.headers[DAEMON_HTTP_LEASE_HEADER]);
     res.statusCode = 200;
     res.end('png-bytes');
   });

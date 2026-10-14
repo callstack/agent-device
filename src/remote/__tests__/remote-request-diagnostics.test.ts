@@ -11,6 +11,7 @@ import {
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit/loopback';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 
 const DAEMON_LOG_PATH = '/Users/daemon-host/.agent-device/sessions/default/requests/abc123.ndjson';
 const RECORD = '{"phase":"request_failed","data":{"error":"no element"}}\n';
@@ -155,7 +156,7 @@ test('the record fetch names the held lease and sends no lease header without on
   const stateDir = mkdtempForTestSync('agent-device-remote-diagnostics-');
   const leaseHeaders: unknown[] = [];
   const server = http.createServer((req, res) => {
-    leaseHeaders.push(req.headers['x-agent-device-lease-id']);
+    leaseHeaders.push(req.headers[DAEMON_HTTP_LEASE_HEADER]);
     res.statusCode = 200;
     res.end(RECORD);
   });

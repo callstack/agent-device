@@ -17,9 +17,9 @@ import {
 } from '@agent-device/test-kit/loopback';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { sendToDaemon } from '../daemon-client.ts';
+import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 
 const DAEMON_TOKEN = 'remote-secret';
-const LEASE_HEADER = 'x-agent-device-lease-id';
 
 type SeenRequest = { route: string; leaseHeader: string | undefined };
 
@@ -56,7 +56,7 @@ async function withRemoteDaemon(
         return;
       }
       if (req.url !== '/rpc') {
-        const leaseHeader = req.headers[LEASE_HEADER];
+        const leaseHeader = req.headers[DAEMON_HTTP_LEASE_HEADER];
         seen.push({
           route,
           leaseHeader: typeof leaseHeader === 'string' ? leaseHeader : undefined,

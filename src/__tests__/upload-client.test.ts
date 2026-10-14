@@ -4,11 +4,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
-import { once } from 'node:events';
 import { uploadArtifact } from '../remote/upload-client.ts';
 import type { UploadProgressEvent } from '../remote/upload-progress.ts';
 import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit/loopback';
+import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 
 const TEST_TOKEN = 'agent-device-upload-test-token';
 const tempDirs: string[] = [];
@@ -150,24 +151,15 @@ test('uploadArtifact falls back to upload when preflight is unsupported', async 
     });
     assert.equal(uploadId, 'upload-legacy');
     assert.deepEqual(requests, ['POST /upload/preflight', 'POST /upload']);
-    assert.deepEqual(
-      progressEvents.map((event) => event.type),
-      ['start', 'progress'],
-    );
-    assert.deepEqual(progressEvents[0], {
-      type: 'start',
+    const progress = {
       stage: 'legacy',
       fileName: 'app.apk',
-      transferredBytes: 0,
       totalBytes: Buffer.byteLength(content),
-    });
-    assert.deepEqual(progressEvents[1], {
-      type: 'progress',
-      stage: 'legacy',
-      fileName: 'app.apk',
-      transferredBytes: Buffer.byteLength(content),
-      totalBytes: Buffer.byteLength(content),
-    });
+    };
+    assert.deepEqual(progressEvents, [
+      { type: 'start', ...progress, transferredBytes: 0 },
+      { type: 'progress', ...progress, transferredBytes: Buffer.byteLength(content) },
+    ]);
   } finally {
     await server.close();
   }
@@ -210,6 +202,8 @@ test('uploadArtifact falls back to upload when preflight fails', async () => {
     await server.close();
   }
 });
+
+const FIVE_UPLOAD_REDIRECTS = [1, 2, 3, 4, 5].map((index) => `POST /upload-redirect-${index}`);
 
 test('uploadArtifact follows up to five upload redirects', async () => {
   const content = 'redirected-upload-payload';
@@ -259,11 +253,7 @@ test('uploadArtifact follows up to five upload redirects', async () => {
     assert.deepEqual(requests, [
       'POST /upload/preflight',
       'POST /upload',
-      'POST /upload-redirect-1',
-      'POST /upload-redirect-2',
-      'POST /upload-redirect-3',
-      'POST /upload-redirect-4',
-      'POST /upload-redirect-5',
+      ...FIVE_UPLOAD_REDIRECTS,
     ]);
   } finally {
     await server.close();
@@ -316,11 +306,7 @@ test('uploadArtifact fails cleanly on the sixth upload redirect', async () => {
     assert.deepEqual(requests, [
       'POST /upload/preflight',
       'POST /upload',
-      'POST /upload-redirect-1',
-      'POST /upload-redirect-2',
-      'POST /upload-redirect-3',
-      'POST /upload-redirect-4',
-      'POST /upload-redirect-5',
+      ...FIVE_UPLOAD_REDIRECTS,
     ]);
   } finally {
     await server.close();
@@ -463,24 +449,15 @@ test('uploadArtifact uses direct upload ticket and finalize flow', async () => {
     });
     assert.equal(uploadId, 'upload-finalized');
     assert.equal(directUploadBody, content);
-    assert.deepEqual(
-      progressEvents.map((event) => event.type),
-      ['start', 'progress'],
-    );
-    assert.deepEqual(progressEvents[0], {
-      type: 'start',
+    const progress = {
       stage: 'direct',
       fileName: 'app.apk',
-      transferredBytes: 0,
       totalBytes: Buffer.byteLength(content),
-    });
-    assert.deepEqual(progressEvents[1], {
-      type: 'progress',
-      stage: 'direct',
-      fileName: 'app.apk',
-      transferredBytes: Buffer.byteLength(content),
-      totalBytes: Buffer.byteLength(content),
-    });
+    };
+    assert.deepEqual(progressEvents, [
+      { type: 'start', ...progress, transferredBytes: 0 },
+      { type: 'progress', ...progress, transferredBytes: Buffer.byteLength(content) },
+    ]);
     assert.deepEqual(requests, [
       'POST /upload/preflight',
       'PUT /signed-upload',
@@ -918,151 +895,38 @@ test('uploadArtifact uploads APK, AAB, and IPA files without wrapping them', asy
   }
 });
 
-/**
- * A daemon fake that answers every upload route and records the lease header each request carried,
- * keyed by `METHOD path`. The direct ticket points at `ticketOrigin` (the daemon's own by default).
- */
-async function startLeaseRecordingUploadServer(options: {
-  preflight: 'direct' | 'unsupported';
-  ticketOrigin?: (baseUrl: string) => string;
-}): Promise<{
-  baseUrl: string;
-  close: () => Promise<void>;
-  leaseHeaders: Map<string, unknown>;
-}> {
-  const leaseHeaders = new Map<string, unknown>();
-  const server = await startServer(async (req, res) => {
-    leaseHeaders.set(`${req.method} ${req.url}`, req.headers['x-agent-device-lease-id']);
-    await readRequestBody(req);
-    if (req.method === 'POST' && req.url === '/upload/preflight') {
-      if (options.preflight === 'unsupported') {
-        res.statusCode = 404;
-        res.end('not found');
-        return;
+const DIRECT_ROUTES = ['POST /upload/preflight', 'PUT /upload/t', 'POST /upload/finalize'];
+
+// A `localhost` ticket reaches this fake but is another origin, as a signed storage URL is.
+test.each([
+  { flow: 'direct', host: '127.0.0.1', routes: DIRECT_ROUTES, unleased: '' },
+  { flow: 'legacy', host: '', routes: ['POST /upload/preflight', 'POST /upload'], unleased: '' },
+  { flow: 'direct', host: 'localhost', routes: DIRECT_ROUTES, unleased: 'PUT /upload/t' },
+])(
+  'uploadArtifact names a held lease on a $flow upload to ticket host "$host"',
+  async ({ flow, host, routes, unleased }) => {
+    let leases = new Map<string, unknown>();
+    const server = await startServer(async (req, res) => {
+      leases.set(`${req.method} ${req.url}`, req.headers[DAEMON_HTTP_LEASE_HEADER]);
+      await readRequestBody(req);
+      if (req.url !== '/upload/preflight') return sendJson(res, { ok: true, uploadId: 'done' });
+      if (flow === 'legacy') return sendJson(res, { ok: true, cacheHit: false });
+      const url = `${server.baseUrl.replace('127.0.0.1', host)}/upload/t`;
+      sendJson(res, { ok: true, uploadId: 't', upload: { url, headers: {} } });
+    });
+    try {
+      const localPath = createTempFile('app.apk', `${flow}-payload`);
+      for (const leaseId of ['lease-1', undefined]) {
+        leases = new Map();
+        await uploadArtifact({ localPath, baseUrl: server.baseUrl, token: TEST_TOKEN, leaseId });
+        const expected = routes.map((route) => [route, route === unleased ? undefined : leaseId]);
+        assert.deepEqual([...leases], expected);
       }
-      const origin = (options.ticketOrigin ?? ((baseUrl) => baseUrl))(server.baseUrl);
-      sendJson(res, {
-        ok: true,
-        cacheHit: false,
-        uploadId: 'ticket-1',
-        upload: { url: `${origin}/upload/direct/ticket-1`, headers: {} },
-      });
-      return;
+    } finally {
+      await server.close();
     }
-    if (req.method === 'PUT' && req.url === '/upload/direct/ticket-1') {
-      res.statusCode = 200;
-      res.end('ok');
-      return;
-    }
-    if (req.method === 'POST' && (req.url === '/upload/finalize' || req.url === '/upload')) {
-      sendJson(res, { ok: true, uploadId: 'upload-done' });
-      return;
-    }
-    res.statusCode = 404;
-    res.end('not found');
-  });
-  return { ...server, leaseHeaders };
-}
-
-test('uploadArtifact names the held lease on preflight, direct upload and finalize', async () => {
-  const artifactPath = createTempFile('app.apk', 'leased-direct-payload');
-  const server = await startLeaseRecordingUploadServer({ preflight: 'direct' });
-  try {
-    const uploadId = await uploadArtifact({
-      localPath: artifactPath,
-      baseUrl: server.baseUrl,
-      token: TEST_TOKEN,
-      leaseId: 'lease-1',
-    });
-    assert.equal(uploadId, 'upload-done');
-    assert.deepEqual(Object.fromEntries(server.leaseHeaders), {
-      'POST /upload/preflight': 'lease-1',
-      'PUT /upload/direct/ticket-1': 'lease-1',
-      'POST /upload/finalize': 'lease-1',
-    });
-  } finally {
-    await server.close();
-  }
-});
-
-test('uploadArtifact names the held lease on the legacy upload', async () => {
-  const artifactPath = createTempFile('app.apk', 'leased-legacy-payload');
-  const server = await startLeaseRecordingUploadServer({
-    preflight: 'unsupported',
-  });
-  try {
-    await uploadArtifact({
-      localPath: artifactPath,
-      baseUrl: server.baseUrl,
-      token: TEST_TOKEN,
-      leaseId: 'lease-1',
-    });
-    assert.deepEqual(Object.fromEntries(server.leaseHeaders), {
-      'POST /upload/preflight': 'lease-1',
-      'POST /upload': 'lease-1',
-    });
-  } finally {
-    await server.close();
-  }
-});
-
-test('uploadArtifact sends no lease header when no lease is held', async () => {
-  const directPath = createTempFile('app.apk', 'unleased-direct-payload');
-  const legacyPath = createTempFile('app.apk', 'unleased-legacy-payload');
-  const direct = await startLeaseRecordingUploadServer({ preflight: 'direct' });
-  const legacy = await startLeaseRecordingUploadServer({
-    preflight: 'unsupported',
-  });
-  try {
-    await uploadArtifact({
-      localPath: directPath,
-      baseUrl: direct.baseUrl,
-      token: TEST_TOKEN,
-    });
-    await uploadArtifact({
-      localPath: legacyPath,
-      baseUrl: legacy.baseUrl,
-      token: TEST_TOKEN,
-    });
-    assert.deepEqual(Object.fromEntries(direct.leaseHeaders), {
-      'POST /upload/preflight': undefined,
-      'PUT /upload/direct/ticket-1': undefined,
-      'POST /upload/finalize': undefined,
-    });
-    assert.deepEqual(Object.fromEntries(legacy.leaseHeaders), {
-      'POST /upload/preflight': undefined,
-      'POST /upload': undefined,
-    });
-  } finally {
-    await direct.close();
-    await legacy.close();
-  }
-});
-
-test('uploadArtifact keeps the lease off a direct upload ticket on another origin', async () => {
-  const artifactPath = createTempFile('app.apk', 'foreign-ticket-payload');
-  // `localhost` and `127.0.0.1` reach the same fake but are different origins, as a signed
-  // storage URL would be.
-  const server = await startLeaseRecordingUploadServer({
-    preflight: 'direct',
-    ticketOrigin: (baseUrl) => baseUrl.replace('127.0.0.1', 'localhost'),
-  });
-  try {
-    await uploadArtifact({
-      localPath: artifactPath,
-      baseUrl: server.baseUrl,
-      token: TEST_TOKEN,
-      leaseId: 'lease-1',
-    });
-    assert.deepEqual(Object.fromEntries(server.leaseHeaders), {
-      'POST /upload/preflight': 'lease-1',
-      'PUT /upload/direct/ticket-1': undefined,
-      'POST /upload/finalize': 'lease-1',
-    });
-  } finally {
-    await server.close();
-  }
-});
+  },
+);
 
 function createTempDir(): string {
   const dir = mkdtempForTestSync(`agent-device-upload-client-${randomUUID()}-`);
@@ -1101,22 +965,9 @@ async function startServer(
       res.end(error instanceof Error ? error.message : String(error));
     });
   });
-  server.listen(0, '127.0.0.1');
   server.unref();
-  await once(server, 'listening');
-  const address = server.address();
-  assert.ok(address && typeof address === 'object');
-  return {
-    baseUrl: `http://127.0.0.1:${address.port}`,
-    close: async () => {
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-          if (error) reject(error);
-          else resolve();
-        });
-      });
-    },
-  };
+  const port = await listenOnLoopback(server);
+  return { baseUrl: `http://127.0.0.1:${port}`, close: () => closeLoopbackServer(server) };
 }
 
 async function readRequestBody(req: IncomingMessage): Promise<Buffer> {
