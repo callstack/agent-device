@@ -151,6 +151,12 @@ export const APPROVED_OVER_CEILING: Readonly<
       'Moved verbatim out of the daemon so the CLI release path and the daemon share one reconciler without the CLI importing the daemon; only the daemon and the lazily loaded stale-release path import it.',
     owner: 'daemon single-entry stack (L1b)',
   },
+  'packages/maestro/src/replay-backend/replay-maestro-backend.ts': {
+    issue: '#3377',
+    reason:
+      'The Maestro replay backend plugin IS the engine behind `replay --maestro`; the registry reaches it only through a function-scoped import(), and no startup hub evaluates it (cli-startup-import-closure pins that).',
+    owner: 'thymikee',
+  },
 });
 
 /** The category is a function of the path, never a hand-written column. */

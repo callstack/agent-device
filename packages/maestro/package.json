@@ -6,6 +6,7 @@
   "type": "module",
   "description": "Private Maestro compatibility engine for agent-device.",
   "dependencies": {
+    "@agent-device/ad-script": "workspace:*",
     "@agent-device/capture-kit": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
@@ -18,9 +19,13 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./daemon-runtime-port": {
-      "types": "./src/daemon-port/daemon-runtime-port.ts",
-      "default": "./src/daemon-port/daemon-runtime-port.ts"
+    "./replay-backend": {
+      "types": "./src/replay-backend/replay-maestro-backend.ts",
+      "default": "./src/replay-backend/replay-maestro-backend.ts"
+    },
+    "./replay-backend-declaration": {
+      "types": "./src/replay-backend/replay-maestro-declaration.ts",
+      "default": "./src/replay-backend/replay-maestro-declaration.ts"
     },
     "./run-script-http": {
       "types": "./src/daemon-port/run-script-http.ts",

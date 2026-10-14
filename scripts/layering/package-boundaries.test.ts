@@ -669,15 +669,17 @@ test('the real tree parses, declares, and passes R11', () => {
   ]);
   const maestroPackage = packages.find((pkg) => pkg.name === '@agent-device/maestro');
   assert.ok(maestroPackage, 'maestro package must exist');
-  // Locks the export surface: `.` (the engine) plus the two daemon-side port entries #2544
-  // moved out of `src/daemon/adapters/maestro`. The eager-closure budget gate
-  // (scripts/__tests__/eager-closure-budgets.test.ts) is what keeps the port off `.`.
+  // Locks the export surface: `.` (the engine), the replay backend plugin (#3377) with its
+  // engine-free declaration, and the runScript HTTP helper. The eager-closure budget gate
+  // (scripts/__tests__/eager-closure-budgets.test.ts) is what keeps the plugin off `.`.
   assert.deepEqual([...maestroPackage.exportTargets.keys()].sort(), [
     '@agent-device/maestro',
-    '@agent-device/maestro/daemon-runtime-port',
+    '@agent-device/maestro/replay-backend',
+    '@agent-device/maestro/replay-backend-declaration',
     '@agent-device/maestro/run-script-http',
   ]);
   assert.deepEqual([...maestroPackage.workspaceDependencies].sort(), [
+    '@agent-device/ad-script',
     '@agent-device/capture-kit',
     '@agent-device/contracts',
     '@agent-device/host-kit',

@@ -40,6 +40,10 @@
       "types": "./src/daemon-port/replay-backend-registry.ts",
       "default": "./src/daemon-port/replay-backend-registry.ts"
     },
+    "./replay-backend-declarations": {
+      "types": "./src/daemon-port/replay-backend-declarations.ts",
+      "default": "./src/daemon-port/replay-backend-declarations.ts"
+    },
     "./replay-script-selection": {
       "types": "./src/daemon-port/replay-script-selection.ts",
       "default": "./src/daemon-port/replay-script-selection.ts"
@@ -71,22 +75,6 @@
     "./session-replay-heal": {
       "types": "./src/daemon-port/session-replay-heal.ts",
       "default": "./src/daemon-port/session-replay-heal.ts"
-    },
-    "./session-replay-maestro-failure": {
-      "types": "./src/daemon-port/session-replay-maestro-failure.ts",
-      "default": "./src/daemon-port/session-replay-maestro-failure.ts"
-    },
-    "./session-replay-maestro-observer": {
-      "types": "./src/daemon-port/session-replay-maestro-observer.ts",
-      "default": "./src/daemon-port/session-replay-maestro-observer.ts"
-    },
-    "./session-replay-maestro-request": {
-      "types": "./src/daemon-port/session-replay-maestro-request.ts",
-      "default": "./src/daemon-port/session-replay-maestro-request.ts"
-    },
-    "./session-replay-maestro-runtime": {
-      "types": "./src/daemon-port/session-replay-maestro-runtime.ts",
-      "default": "./src/daemon-port/session-replay-maestro-runtime.ts"
     },
     "./session-replay-report-action": {
       "types": "./src/daemon-port/session-replay-report-action.ts",
