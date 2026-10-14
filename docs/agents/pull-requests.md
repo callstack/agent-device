@@ -31,7 +31,8 @@ route the change adds or modifies; a neighbouring route is not evidence. If bloc
 command and device needed and the remaining risk. Close manual sessions using
 `docs/agents/device-verification.md` and report incomplete cleanup.
 
-Gross diff budget: 1,000 lines by `git diff --stat origin/main...HEAD`. Rename-only move PRs titled
+Gross diff budget: 1,000 lines by `git diff --stat origin/main...HEAD`; 2,500 for one coherent change
+in self-contained commits. Stack only layers that land independently. Rename-only move PRs titled
 `refactor(move)` are exempt when `git diff -M90% --stat origin/main...HEAD` proves no material
 content change.
 
