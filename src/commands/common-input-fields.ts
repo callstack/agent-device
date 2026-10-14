@@ -86,6 +86,17 @@ type CommonInputFieldSpec = {
  */
 const ENV_OR_OPERATOR_CONFIG = operatorAudience({ operatorConfig: true });
 
+const RETIRED_READINESS_TIMEOUT_MESSAGE =
+  'readinessTimeoutMs was removed; add an explicit wait for the target before the interaction.';
+
+/** Refuses the released `readinessTimeoutMs` key, which the target-readiness wait owned. */
+export function assertNoRetiredReadinessTimeout(record: Record<string, unknown>): undefined {
+  if (Object.hasOwn(record, 'readinessTimeoutMs')) {
+    throw new AppError('INVALID_ARGS', RETIRED_READINESS_TIMEOUT_MESSAGE);
+  }
+  return undefined;
+}
+
 const COMMON_INPUT_FIELDS = {
   session: {
     schema: { type: 'string', description: 'Agent-device session name.' },
@@ -215,6 +226,10 @@ const COMMON_INPUT_FIELDS = {
     flagKey: 'noRecord',
     flagIn: ['input', 'selection'],
   },
+  readinessTimeoutMs: {
+    audience: { kind: 'retired', message: RETIRED_READINESS_TIMEOUT_MESSAGE },
+    read: assertNoRetiredReadinessTimeout,
+  },
   daemonBaseUrl: {
     schema: { type: 'string', description: 'Remote daemon base URL.' },
     read: (record) => optionalString(record, 'daemonBaseUrl'),
@@ -249,7 +264,10 @@ const COMMON_INPUT_FIELDS = {
     schema: { type: 'boolean', description: 'Enable debug diagnostics.' },
     read: (record) => optionalBoolean(record, 'debug'),
   },
-} as const satisfies Record<keyof CommonCommandInput | 'target', CommonInputFieldSpec>;
+} as const satisfies Record<
+  keyof CommonCommandInput | 'target' | 'readinessTimeoutMs',
+  CommonInputFieldSpec
+>;
 
 const COMMON_INPUT_ROWS: ReadonlyArray<readonly [string, CommonInputFieldSpec]> =
   Object.entries(COMMON_INPUT_FIELDS);

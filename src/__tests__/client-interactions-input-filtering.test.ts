@@ -3,35 +3,36 @@ import { test } from 'vitest';
 import { createAgentDeviceClient } from '../agent-device-client.ts';
 import { createTransport } from './client-transport-fixture.ts';
 
-test('tap commands filter undeclared input without losing post-action observation', async () => {
+const RETIRED = /readinessTimeoutMs was removed; add an explicit wait for the target/;
+
+test('tap commands refuse the retired readinessTimeoutMs before sending anything', async () => {
   const setup = createTransport(async () => ({ ok: true, data: {} }));
   const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
 
-  await client.interactions.press({
-    selector: 'label=Foo',
-    settle: true,
+  const calls = [
     // @ts-expect-error readinessTimeoutMs is not a client option.
-    readinessTimeoutMs: 2_000,
-  });
-  await client.interactions.click({
-    selector: 'label=Foo',
-    settle: true,
+    () => client.interactions.press({ selector: 'label=Foo', readinessTimeoutMs: 2_000 }),
     // @ts-expect-error readinessTimeoutMs is not a client option.
-    readinessTimeoutMs: 1_500,
-  });
-  await client.interactions.longPress({
-    selector: 'label=Foo',
-    settle: true,
+    () => client.interactions.click({ selector: 'label=Foo', readinessTimeoutMs: 1_500 }),
     // @ts-expect-error readinessTimeoutMs is not a client option.
-    readinessTimeoutMs: 900,
-  });
-
-  assert.deepEqual(
-    setup.calls.map((call) => call.command),
-    ['press', 'click', 'longpress'],
-  );
-  for (const call of setup.calls) {
-    assert.equal(Object.hasOwn(call.flags ?? {}, 'readinessTimeoutMs'), false);
-    assert.equal(call.flags?.settle, true);
+    () => client.interactions.longPress({ selector: 'label=Foo', readinessTimeoutMs: 900 }),
+  ];
+  for (const call of calls) {
+    await assert.rejects(call(), (error: { code?: string; message: string }) => {
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.match(error.message, RETIRED);
+      return true;
+    });
   }
+  assert.deepEqual(setup.calls, []);
+});
+
+test('tap commands still carry post-action observation flags', async () => {
+  const setup = createTransport(async () => ({ ok: true, data: {} }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  await client.interactions.press({ selector: 'label=Foo', settle: true });
+
+  assert.equal(setup.calls[0]?.command, 'press');
+  assert.equal(setup.calls[0]?.flags?.settle, true);
 });

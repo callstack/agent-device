@@ -49,11 +49,23 @@ test('a key neither env nor config resolves states its own operator path', () =>
 // in `mcp/__tests__/command-tools-operator-inputs.test.ts`.)
 test('an operator-owned common key stays in the CLI and Node input schema', () => {
   const advertised = commonProperties();
-  const operatorKeys = Object.keys(COMMON_INPUT_AUDIENCE);
+  const operatorKeys = Object.keys(COMMON_INPUT_AUDIENCE).filter(
+    (key) => COMMON_INPUT_AUDIENCE[key]?.kind === 'operator',
+  );
   assert.ok(operatorKeys.length > 0, 'the table declares operator-owned common keys');
   for (const key of operatorKeys) {
-    assert.equal(COMMON_INPUT_AUDIENCE[key]?.kind, 'operator');
     assert.ok(key in advertised, `${key} must stay readable by the CLI and Node client`);
+  }
+});
+
+test('a retired common key is advertised on no input schema', () => {
+  const advertised = commonProperties();
+  const retiredKeys = Object.keys(COMMON_INPUT_AUDIENCE).filter(
+    (key) => COMMON_INPUT_AUDIENCE[key]?.kind === 'retired',
+  );
+  assert.deepEqual(retiredKeys, ['readinessTimeoutMs']);
+  for (const key of retiredKeys) {
+    assert.equal(key in advertised, false, `${key} is retired`);
   }
 });
 

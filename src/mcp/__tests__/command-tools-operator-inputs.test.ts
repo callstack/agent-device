@@ -86,6 +86,27 @@ test('MCP refuses every explicit operator-owned argument with guidance', async (
   assert.deepEqual(calls, [], 'a refused operator input must never reach the command route');
 });
 
+test('MCP neither advertises nor admits the retired readiness budget', async () => {
+  for (const tool of listCommandTools()) {
+    const properties = tool.inputSchema.properties ?? {};
+    assert.equal('readinessTimeoutMs' in properties, false, `${tool.name} advertises it`);
+  }
+  // The real command route (no runCommand injection), like the retired maxSize regressions:
+  // retired keys pass admission so the command's own reader answers with migration guidance.
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+  });
+
+  for (const [command, input] of [
+    ['press', { target: { kind: 'selector', selector: 'label=Continue' } }],
+    ['fill', { target: { kind: 'selector', selector: 'label=Name' }, text: 'x' }],
+  ] as const) {
+    const result = await executor.execute(command, { ...input, readinessTimeoutMs: 2_000 });
+    assert.equal(result.isError, true, command);
+    assert.match(result.content[0]?.text ?? '', /readinessTimeoutMs was removed/, command);
+  }
+});
+
 test('MCP refuses an explicit daemonAuthToken argument with env guidance', async () => {
   const calls: unknown[] = [];
   const executor = createCommandToolExecutor({
