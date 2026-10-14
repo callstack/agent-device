@@ -188,6 +188,48 @@ test('a later open naming another device on the live lease is refused instead of
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('a later open scoped to a simulator set that excludes the leased device is refused', async () => {
+  const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-by-spec-scope-', {
+    leaseId: 'lease-1',
+    deviceKey: 'ios:mobile:SIM-REMOTE',
+  });
+  const listRequests: Array<string | undefined> = [];
+  const client = createTestClient({
+    listDevices: async (options = {}) => {
+      listRequests.push(options.iosSimulatorDeviceSet);
+      return options.iosSimulatorDeviceSet === '/leased-sims' ? [LEASED_SIMULATOR] : [];
+    },
+    allocate: unexpectedCommandCall,
+    heartbeat: async (request) => ({
+      leaseId: request.leaseId,
+      tenantId: 'proxy',
+      runId: 'proxy-client-1',
+      backend: 'ios-instance',
+      leaseProvider: 'proxy',
+      clientId: 'client-1',
+      deviceKey: 'ios:mobile:SIM-REMOTE',
+    }),
+  });
+
+  await assert.rejects(
+    materializeRemoteConnectionForCommand({
+      command: 'open',
+      flags: { ...flags, iosSimulatorDeviceSet: '/other-sims' },
+      client,
+    }),
+    (error: AppError) =>
+      error.code === 'INVALID_ARGS' &&
+      error.details?.reason === 'CONNECTION_DEVICE_CONFLICT' &&
+      error.details?.deviceKey === 'ios:mobile:SIM-REMOTE',
+  );
+  assert.deepEqual(listRequests, ['/other-sims']);
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.deviceKey,
+    'ios:mobile:SIM-REMOTE',
+  );
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('a daemon whose lease names no device gets that lease released and the device picked locally', async () => {
   const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-by-spec-old-');
   const requests: LeaseAllocateRequest[] = [];

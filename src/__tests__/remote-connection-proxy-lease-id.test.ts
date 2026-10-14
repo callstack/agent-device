@@ -33,7 +33,7 @@ function recordingAllocate(requests: LeaseAllocateRequest[]) {
       backend: request.leaseBackend ?? 'android-instance',
       leaseProvider: request.leaseProvider,
       clientId: request.clientId,
-      deviceKey: request.deviceKey,
+      deviceKey: request.deviceKey ?? 'android:mobile:emulator-5554',
     };
   };
 }
