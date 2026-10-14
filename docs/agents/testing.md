@@ -133,7 +133,7 @@ Run `pnpm depgraph affected` before touching a high-fan-in module:
 
 ```sh
 pnpm depgraph affected packages/host-kit/src/command.ts
-pnpm depgraph affected packages/daemon/src/ref-frame.ts --json --limit 25
+pnpm depgraph affected packages/daemon/src/core/ref-frame.ts --json --limit 25
 ```
 
 Use its dependent, command, and guarantee-cell report to scope inspection. `pnpm check:affected --run`

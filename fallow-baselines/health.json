@@ -25,22 +25,22 @@
         "count": 1
       }
     },
-    "packages/daemon/src/interaction/internal/find.ts": {
+    "packages/daemon/src/execution/interaction/internal/find.ts": {
       "complexity_moderate": {
         "count": 1
       }
     },
-    "packages/daemon/src/handlers/snapshot-settings.ts": {
+    "packages/daemon/src/execution/handlers/snapshot-settings.ts": {
       "complexity_moderate": {
         "count": 1
       }
     },
-    "packages/daemon/src/recording-gestures.ts": {
+    "packages/daemon/src/core/recording-gestures.ts": {
       "complexity_moderate": {
         "count": 1
       }
     },
-    "packages/daemon/src/session-selector.ts": {
+    "packages/daemon/src/core/session-selector.ts": {
       "complexity_moderate": {
         "count": 1
       }
@@ -80,13 +80,13 @@
   "target_keys": [
     "src/daemon-client/daemon-client.ts:high impact",
     "src/cli/parser/args.ts:high impact",
-    "packages/daemon/src/lease-context.ts:high impact",
+    "packages/daemon/src/core/lease-context.ts:high impact",
     "packages/replay-port/src/daemon-port/session-replay-heal.ts:high impact",
-    "packages/daemon/src/context.ts:high impact",
-    "packages/daemon/src/handlers/session.ts:complexity",
+    "packages/daemon/src/core/context.ts:high impact",
+    "packages/daemon/src/sessions/handlers/session.ts:complexity",
     "packages/selectors/src/internal/predicates.ts:high impact",
     "packages/provision-kit/src/boot-diagnostics.ts:complexity",
-    "packages/daemon/src/session-routing.ts:high impact",
+    "packages/daemon/src/sessions/session-routing.ts:high impact",
     "src/commands/cli-grammar/common.ts:high impact",
     "packages/kernel/src/success-text.ts:high impact",
     "src/cli.ts:complexity",
@@ -95,8 +95,8 @@
     "packages/kernel/src/rect-center.ts:high impact",
     "packages/platform-apple/src/core/app-launch.ts:complexity",
     "packages/kernel/src/record.ts:high impact",
-    "packages/daemon/src/daemon-command-registry.ts:high impact",
-    "packages/daemon/src/handlers/session-doctor-output.ts:high impact",
+    "packages/daemon/src/core/daemon-command-registry.ts:high impact",
+    "packages/daemon/src/sessions/handlers/session-doctor-output.ts:high impact",
     "packages/platform-apple/src/core/perf-xml.ts:high impact",
     "src/client/screenshot-result.ts:high impact",
     "packages/platform-web/src/json-utils.ts:high impact",

@@ -11,7 +11,7 @@ import {
 // inventory carried, retired by #3430. Under the ban it is a violation like any other.
 const RETIRED_TARGET = 'src/platform-runtime-apple-resources.ts';
 const RETIRED_STUB = 'export const queryAppleRuntimeSelector = () => ({});\n';
-const RETIRED_IMPORTER = 'packages/daemon/src/direct-ios-selector.ts';
+const RETIRED_IMPORTER = 'packages/daemon/src/core/direct-ios-selector.ts';
 
 function violations(sources: Record<string, string>): LayeringViolation[] {
   return checkDaemonPlatformRuntimeInventory(resolveImportEdges(new Map(Object.entries(sources))));

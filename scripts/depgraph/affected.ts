@@ -96,7 +96,7 @@ export function rankByFanIn(
 
 export type CommandChain = {
   command: string;
-  /** Daemon route that owns the command (`packages/daemon/src/daemon-command-registry.ts`). */
+  /** Daemon route that owns the command (`packages/daemon/src/core/daemon-command-registry.ts`). */
   route: string;
   /** Handler entry module the route loads. */
   entry: string;

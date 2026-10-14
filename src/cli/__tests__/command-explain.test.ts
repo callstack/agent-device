@@ -80,7 +80,7 @@ describe('explainCommand', () => {
     if (!result.found) return;
     expect(result.explanation.cli?.commandFlags.map((flag) => flag.key)).toContain('settle');
     expect(result.explanation.files).toContain('src/commands/interaction/index.ts');
-    expect(result.explanation.files).toContain('packages/daemon/src/interaction/index.ts');
+    expect(result.explanation.files).toContain('packages/daemon/src/execution/interaction/index.ts');
     expect(result.explanation.files.every(fileExists)).toBe(true);
   });
 
@@ -146,18 +146,18 @@ describe('explainCommand table-driven coverage', () => {
   });
 
   test.each([
-    ['press', ['src/commands/interaction/index.ts', 'packages/daemon/src/interaction/index.ts']],
+    ['press', ['src/commands/interaction/index.ts', 'packages/daemon/src/execution/interaction/index.ts']],
     ['apps', ['src/commands/management/app.ts']],
     // R39: screenshot has no dispatch projection left, so its platform work is named directly.
     [
       'screenshot',
-      ['src/commands/capture/screenshot.ts', 'packages/daemon/src/screenshot-runtime.ts'],
+      ['src/commands/capture/screenshot.ts', 'packages/daemon/src/execution/screenshot-runtime.ts'],
     ],
-    ['react-native', ['packages/daemon/src/handlers/react-native.ts']],
-    ['record', ['packages/daemon/src/handlers/record-trace.ts']],
-    ['trace', ['packages/daemon/src/handlers/record-trace.ts']],
-    ['back', ['packages/daemon/src/request-generic-dispatch.ts']],
-    ['home', ['packages/daemon/src/request-generic-dispatch.ts']],
+    ['react-native', ['packages/daemon/src/execution/handlers/react-native.ts']],
+    ['record', ['packages/daemon/src/sessions/handlers/record-trace.ts']],
+    ['trace', ['packages/daemon/src/sessions/handlers/record-trace.ts']],
+    ['back', ['packages/daemon/src/execution/request-generic-dispatch.ts']],
+    ['home', ['packages/daemon/src/execution/request-generic-dispatch.ts']],
   ])('derives owner files for %s (split family / route variant / dispatch)', (command, owners) => {
     const result = explainCommand(command as string, { fileExists });
     expect(result.found).toBe(true);

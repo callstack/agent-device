@@ -1,0 +1,159 @@
+import type { CommandFlags } from '@agent-device/contracts/command';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
+import type {
+  SettleObservation,
+  SettleParams,
+  SurfaceScopedNodes,
+} from '@agent-device/contracts/interaction';
+import { commandSupportsSettleObservation } from '@agent-device/command-registry/registry';
+import {
+  captureSnapshotForSession,
+  createInteractionRuntime,
+  readSettleRequest,
+  settleFlagGuardResponse,
+} from './interaction/index.ts';
+import type { BoundContextFromFlags } from '../core/context.ts';
+import type { RuntimeAdmissionBindings } from '../core/request-runtime-binding.ts';
+import type { DaemonPlatformServices } from '../core/platform-services.ts';
+import { resolveSettleObservationCapture } from '../core/settle-observation-capture.ts';
+import { issueSettleRefs } from './session-snapshot.ts';
+import type { SessionStore } from '../core/session-store.ts';
+import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { SessionRef, SessionState } from '../core/session-state.ts';
+
+/**
+ * `--settle` on the generic daemon route (#1638): `scroll` and `back` change
+ * the screen without resolving an element, so they never reach the interaction
+ * handler that owns the touch commands' settle wiring — but scroll-then-observe
+ * and back-then-observe are exactly the pairs an agent wants collapsed into one
+ * call. This module is the generic route's half of that contract.
+ *
+ * It is reached through a LAZY SEAM (`await import`) from
+ * request-generic-dispatch, and hands back a CLOSURE rather than a plan object,
+ * so that dispatcher needs no static edge here — not even a type-only one. That
+ * is not incidental: observing a settled screen runs the interaction runtime, a
+ * subgraph the generic dispatcher otherwise never touches, and a static edge
+ * folds all ~18 of its files into the daemon-server type cycle (R10 caught
+ * exactly that). An ordinary scroll/back pays neither the import nor the
+ * comprehension cost.
+ *
+ * Two seams, and the order between them is load-bearing:
+ *
+ * 1. {@link planGenericSettleObservation} runs BEFORE the command dispatches and
+ *    freezes the diff baseline. The baseline is the session's STORED pre-action
+ *    tree, so the diff reads "settled tree vs the last tree you observed" — it
+ *    may be several commands old, unlike press's freshly resolved pre-action
+ *    capture. That is the honest #1101 contract for a route with no resolution
+ *    step, and the settle loop's own captures overwrite `session.snapshot`, so
+ *    reading it afterwards would compare the settled tree against itself.
+ * 2. The returned observer runs AFTER the command AND after
+ *    `markDeferredInteractionOutcome`. Marking first is what lets settle's very
+ *    first capture fold in the #1542 post-gesture stabilization instead of
+ *    racing it — every capture on this path goes through the same deferred
+ *    outcome resolution a plain snapshot would.
+ */
+
+/** Runs the settle loop and returns the observation to attach as `data.settle`. */
+export type GenericSettleObserver = () => Promise<SettleObservation | undefined>;
+
+export type GenericSettlePlan = { response: DaemonResponse } | { observe?: GenericSettleObserver };
+
+type GenericSettleContext = {
+  createCommandSurface: CreateDaemonCommandSurface;
+  sessionRef: SessionRef | undefined;
+  req: DaemonRequest;
+  session: SessionState;
+  sessionName: string;
+  logPath: string;
+  sessionStore: SessionStore;
+  contextFromFlags: BoundContextFromFlags;
+  platformServices: DaemonPlatformServices;
+} & RuntimeAdmissionBindings;
+
+/**
+ * Rejects an orphaned `--settle-quiet` up front (the shared flag grammar), and
+ * otherwise returns the observer this dispatch owes — with the pre-action
+ * baseline already captured.
+ */
+export function planGenericSettleObservation(
+  params: GenericSettleContext & { command: string; flags: CommandFlags | undefined },
+): GenericSettlePlan {
+  if (!commandSupportsSettleObservation(params.command)) return {};
+  const invalidSettleFlags = settleFlagGuardResponse(params.command, params.flags);
+  if (invalidSettleFlags) return { response: invalidSettleFlags };
+  const settle = readSettleRequest(params.flags);
+  if (!settle) return {};
+  const snapshot = params.session.snapshot;
+  const baseline: SurfaceScopedNodes = {
+    nodes: snapshot?.nodes ?? [],
+    ...(snapshot?.iosSystemSurfaceBundleId
+      ? { surfaceBundleId: snapshot.iosSystemSurfaceBundleId }
+      : {}),
+  };
+  return { observe: async () => await observeSettled(params, settle, baseline) };
+}
+
+/**
+ * Best-effort like the settle engine itself: the action already succeeded, so a
+ * runtime that cannot even be constructed (session evicted mid-request)
+ * degrades to no observation rather than failing the response. `refsGeneration`
+ * is folded in when the settled diff actually published refs (ADR 0014 — see
+ * `settle-ref-issuance.ts`).
+ */
+async function observeSettled(
+  context: GenericSettleContext,
+  settle: SettleParams,
+  baseline: SurfaceScopedNodes,
+): Promise<SettleObservation | undefined> {
+  const runtime = await createGenericSettleRuntime(context);
+  if (!runtime) return undefined;
+  // R2: the daemon reaches the settle engine through the runtime command
+  // surface, never by importing `commands/` — the same seam the touch handlers
+  // use for press/fill.
+  const observation = await runtime.interactions.settleObservation({
+    ...settle,
+    baseline,
+    session: context.sessionName,
+    requestId: context.req.meta?.requestId,
+  });
+  if (context.sessionRef && !context.sessionStore.resolveCurrent(context.sessionRef))
+    return undefined;
+  const refsGeneration = issueSettleRefs(context.sessionRef, context.sessionStore, observation);
+  return refsGeneration === undefined ? observation : { ...observation, refsGeneration };
+}
+
+/**
+ * Resolves the observation's capture before the runtime is constructed, so the loop reads the screen
+ * through the same producer the caller's next command reads it through (#3510). `back` and
+ * `scroll <direction>` are the cells that need it: their action use is the movement alone.
+ * `scroll top|bottom` and `scroll --until` already require `captureSnapshot` for their between-pass
+ * verification; there this is the request's second admit-and-bind for one operation, served from the
+ * gateway's binding cache rather than a second device acquisition.
+ */
+async function createGenericSettleRuntime(
+  context: GenericSettleContext,
+): Promise<Awaited<ReturnType<typeof createInteractionRuntime>> | undefined> {
+  try {
+    const boundCapture = await resolveSettleObservationCapture({
+      command: context.req.command,
+      session: context.session,
+      inspectFacts: context.inspectFacts,
+      platformServices: context.platformServices,
+      bindDevice: context.bindDevice,
+    });
+    return await createInteractionRuntime({
+      createCommandSurface: context.createCommandSurface,
+      req: context.req,
+      sessionName: context.sessionName,
+      sessionRef: context.sessionRef,
+      logPath: context.logPath,
+      sessionStore: context.sessionStore,
+      contextFromFlags: context.contextFromFlags,
+      platformServices: context.platformServices,
+      captureSnapshotForSession,
+      settleObservationCapture: boundCapture,
+    });
+  } catch {
+    return undefined;
+  }
+}

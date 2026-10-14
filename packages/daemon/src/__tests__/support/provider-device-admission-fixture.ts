@@ -1,6 +1,6 @@
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { installProviderDeviceAdmission } from '../../provider-device-admission.ts';
+import { installProviderDeviceAdmission } from '../../core/provider-device-admission.ts';
 
 /**
  * Provider ownership as the daemon consumes it: the `ProviderDeviceAdmission` port over a list

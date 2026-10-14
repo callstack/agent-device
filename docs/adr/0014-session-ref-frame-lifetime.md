@@ -20,7 +20,7 @@ ref-frame vocabulary is promoted into `CONTEXT.md`.
   issuance scope) — kept separate from the latest operational observation (`session.snapshot`).
   The frame is one value on `SessionState`, replaced whole by a transition and never edited in
   place; its type is nominal (`#`-private fields), so no module outside
-  `packages/daemon/src/ref-frame.ts` can construct a frame, edit one, or derive one from an existing
+  `packages/daemon/src/core/ref-frame.ts` can construct a frame, edit one, or derive one from an existing
   frame. What the type cannot judge is a whole frame moved unchanged — clearing the field, or
   assigning another session's frame — which the field-owner gate still covers.
 - A complete snapshot activates an `all` frame; `find`, settled diffs, and replay divergence

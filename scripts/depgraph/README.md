@@ -14,7 +14,7 @@ productive artifact is the JSON, queried directly.
 
 ```sh
 pnpm depgraph affected packages/host-kit/src/command.ts # bounded text
-pnpm depgraph affected packages/daemon/src/ref-frame.ts --json --limit 25
+pnpm depgraph affected packages/daemon/src/core/ref-frame.ts --json --limit 25
 ```
 
 Reverse reachability over the value-edge graph, plus the three lookups that used to follow it:
@@ -162,9 +162,9 @@ roots, exports, and named live-state symbols in `scripts/layering/architecture-o
 
 - `vocabulary` — the target is a declared contract facade root.
 - `capability` — the target is a declared capability root and the import names a declared export.
-- `live-state-shape` — the edge names the exact `SessionState` type from `packages/daemon/src/session-state.ts`.
+- `live-state-shape` — the edge names the exact `SessionState` type from `packages/daemon/src/core/session-state.ts`.
 - `live-state-authority` — the edge names the exact `SessionStore` class from
-  `packages/daemon/src/session-store.ts`.
+  `packages/daemon/src/core/session-store.ts`.
 - `executable-policy` — the source is under a declared executable-policy root.
 - `ordinary` — no declared authority evidence matches the edge.
 

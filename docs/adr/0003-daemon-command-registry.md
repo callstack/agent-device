@@ -21,7 +21,7 @@ to public command identity, and it required duplicate command sets to stay align
 Keep public command identity in `src/command-catalog.ts` and public input/output contracts in
 `src/commands/**`.
 
-Add `packages/daemon/src/daemon-command-registry.ts` as the daemon-side source of truth for command route
+Add `packages/daemon/src/core/daemon-command-registry.ts` as the daemon-side source of truth for command route
 ownership and daemon request-policy traits. Request modules consume predicate functions from the
 registry instead of recreating command string sets. Handler modules own execution logic only; they do
 not export duplicate coverage tables to prove route membership.
@@ -85,5 +85,5 @@ derived daemon registry is therefore permitted **only if** it preserves all of t
 A single flat public descriptor whose daemon fields leak into public views is **not** permitted — that is
 the "collapse daemon policy into a public command registry" failure this ADR exists to prevent. Compose
 facets owned by their domains; derive the registry from them. Until that derivation lands and is pinned
-by the registry tests, the hand-authored `packages/daemon/src/daemon-command-registry.ts` remains the source of
+by the registry tests, the hand-authored `packages/daemon/src/core/daemon-command-registry.ts` remains the source of
 truth and the operating rule in `AGENTS.md` is unchanged.

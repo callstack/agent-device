@@ -282,7 +282,7 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Layer
     return [
       {
         rule: 'R7 session-state-ownership',
-        file: 'packages/daemon/src/session-state.ts',
+        file: 'packages/daemon/src/core/session-state.ts',
         line: 1,
         message: 'no daemon module declares SessionState, so its ownership cannot be checked.',
       },

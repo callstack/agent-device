@@ -7,7 +7,7 @@ import {
   sessionStateWritePressure,
 } from './session-state.ts';
 
-const OWNER = 'packages/daemon/src/app-log-session-resource.ts';
+const OWNER = 'packages/daemon/src/resources/app-log-session-resource.ts';
 const FIELDS = ['appLog', 'appLogFailure', 'lease', 'lastPerfProfile'];
 function scan(source: string, file = OWNER) {
   assert.deepEqual(parseSync(file, source).errors, [], `fixture must parse as a module: ${file}`);
@@ -353,8 +353,8 @@ test('alias declarations and patch parameters are collected before checking writ
 
 test('draft exceptions cover only the declared constructors and fresh open publication', () => {
   for (const [file, constructor] of [
-    ['packages/daemon/src/snapshot-session.ts', 'createSnapshotSession'],
-    ['packages/daemon/src/handlers/record-runtime.ts', 'createRecordOnlySession'],
+    ['packages/daemon/src/core/snapshot-session.ts', 'createSnapshotSession'],
+    ['packages/daemon/src/sessions/handlers/record-runtime.ts', 'createRecordOnlySession'],
   ]) {
     assert.deepEqual(
       scan(
@@ -369,7 +369,7 @@ test('draft exceptions cover only the declared constructors and fresh open publi
       ),
     );
   }
-  const open = 'packages/daemon/src/session-lifecycle/internal/session-open-state.ts';
+  const open = 'packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts';
   assert.deepEqual(
     scan(
       'function publishOpenSession(session: SessionState) { return store.publish(address, { ...session }); }',
@@ -395,7 +395,7 @@ test('the owning store can merge records, while unrelated updates and platform s
   assert.deepEqual(
     scan(
       'sessionStore.update(ref, changes); session.appLogFailure = error;',
-      'packages/daemon/src/session-store.ts',
+      'packages/daemon/src/core/session-store.ts',
     ),
     [],
   );
@@ -413,7 +413,7 @@ test('pressure counts capture-kit record replacement and daemon patches with the
   const declaration =
     'export type SessionState = {\n  appLogFailure?: Error;\n  lease?: object;\n};';
   const baseline = new Map([
-    ['packages/daemon/src/session-state.ts', declaration],
+    ['packages/daemon/src/core/session-state.ts', declaration],
     ['packages/daemon/src/owner.ts', 'session.appLogFailure = error;'],
     [
       'packages/capture-kit/src/capture-admission/owner.ts',
@@ -421,7 +421,7 @@ test('pressure counts capture-kit record replacement and daemon patches with the
     ],
   ]);
   const current = new Map([
-    ['packages/daemon/src/session-state.ts', declaration],
+    ['packages/daemon/src/core/session-state.ts', declaration],
     [OWNER, 'store.update(ref, { appLogFailure: error });'],
     ['packages/daemon/src/invalid.ts', 'store.update(ref, changes);'],
   ]);

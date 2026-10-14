@@ -1,7 +1,7 @@
 import path from 'node:path';
-import { SessionStore } from '../../session-store.ts';
+import { SessionStore } from '../../core/session-store.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import type { SessionRef, SessionState } from '../../session-state.ts';
+import type { SessionRef, SessionState } from '../../core/session-state.ts';
 
 export function makeSessionStore(prefix = 'agent-device-test-'): SessionStore {
   const tempRoot = mkdtempForTestSync(prefix);

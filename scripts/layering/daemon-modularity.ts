@@ -32,8 +32,8 @@ export const DAEMON_MODULARITY_BASELINE = {
 // `@agent-device/contracts/command` as `DaemonWireRequest`). Both are ratcheted
 // together, so moving a symbol between them cannot reopen the boundary to a new outside zone.
 const DAEMON_TYPE_MODULES: readonly string[] = [
-  'packages/daemon/src/daemon-request.ts',
-  'packages/daemon/src/session-state.ts',
+  'packages/daemon/src/core/daemon-request.ts',
+  'packages/daemon/src/core/session-state.ts',
 ];
 
 const ENGINE_FILE_PREFIXES = [
@@ -127,7 +127,7 @@ export function checkRetiredInteractionPaths(sourceFiles: readonly string[]): La
     INTERACTION_RETIRED_HANDLER_PATHS,
     /^packages\/daemon\/src\/handlers\/(?:find|interaction)(?:-[^/]+)?\.ts$/,
     'interaction handler',
-    'Keep route implementations behind packages/daemon/src/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
+    'Keep route implementations behind packages/daemon/src/execution/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
   );
 }
 

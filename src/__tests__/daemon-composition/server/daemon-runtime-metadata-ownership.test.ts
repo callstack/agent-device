@@ -256,7 +256,7 @@ test('the loss watch is armed only after this daemon publishes its own record', 
   // Arming before publication would report a predecessor's record as a takeover of something this
   // daemon never owned. Ordering is the invariant, the same way the startup-ordering guards read it.
   const source = fs.readFileSync(
-    new URL('../../../../packages/daemon/src/server/daemon-runtime.ts', import.meta.url),
+    new URL('../../../../packages/daemon/src/server/http/daemon-runtime.ts', import.meta.url),
     'utf8',
   );
   const published = source.indexOf('publishDaemonInfo(socketPort, httpPort);');
@@ -272,7 +272,7 @@ test('both exits tear the watch down before they touch daemon.json', () => {
   // publication needs a real toolchain — so the invariant is read off the source, the same way the
   // arming order above is.
   const source = fs.readFileSync(
-    new URL('../../../../packages/daemon/src/server/daemon-runtime.ts', import.meta.url),
+    new URL('../../../../packages/daemon/src/server/http/daemon-runtime.ts', import.meta.url),
     'utf8',
   );
   const stops = [...source.matchAll(/stopMetadataLossWatch\(\);/g)].map((m) => m.index);

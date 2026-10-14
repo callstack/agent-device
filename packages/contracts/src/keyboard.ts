@@ -1,6 +1,6 @@
 /**
  * Closed result of the `keyboard` command, grounded in the runtime operation
- * results projected by `packages/daemon/src/keyboard-runtime.ts`.
+ * results projected by `packages/daemon/src/execution/keyboard-runtime.ts`.
  *
  * `platform` and `action` are always present; the remaining fields appear per
  * branch (Android `status`/`dismiss` carry the keyboard-state fields; `enter`

@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted; implemented on `main` (`packages/daemon/src/handlers/session-script-publication.ts`,
-`packages/daemon/src/session-script-active-publication.ts`), including the #1349 identity-level
+Accepted; implemented on `main` (`packages/daemon/src/sessions/handlers/session-script-publication.ts`,
+`packages/daemon/src/core/session-script-active-publication.ts`), including the #1349 identity-level
 destination-guard amendment.
 
 ## Rules at a glance

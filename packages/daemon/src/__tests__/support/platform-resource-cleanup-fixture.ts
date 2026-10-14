@@ -1,5 +1,5 @@
 import { vi, type Mock } from 'vitest';
-import type { PlatformResourceCleanup } from '../../platform-resource-cleanup.ts';
+import type { PlatformResourceCleanup } from '../../core/platform-resource-cleanup.ts';
 
 /** Every member observable as a spy, which is how the daemon suites read the fixture back. */
 export type PlatformResourceCleanupFixture = {

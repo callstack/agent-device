@@ -8,7 +8,7 @@
 //
 // What enumerates the surface. The import graph cannot: the daemon value-imports every
 // platform module (`src/platform-runtime.ts` composes all six families; `src/core/interactors/*`
-// import each family's actions; `packages/daemon/src/session-teardown.ts` calls Android cleanup on every
+// import each family's actions; `packages/daemon/src/sessions/session-teardown.ts` calls Android cleanup on every
 // session close), so reachability from `src/bin.ts` is the whole tree, and the layering graph
 // does not resolve relative imports inside `packages/`. The repo's *enforced* platform partition
 // can: `CANONICAL_PLATFORM_FAMILIES` names the families, layering R13 pins each family's runtime
@@ -77,7 +77,7 @@ function leafOfSegment(segment: string): Leaf | null {
 
 // Under test/integration/ the smoke files carry their lane in the leading tokens of the first
 // segment (`smoke-android-emulator.test.ts`, `ios-simulator-e2e/`, `android-emulator-e2e/`).
-// Elsewhere only directory segments tag: `packages/daemon/src/android-system-dialog.ts` is a naming
+// Elsewhere only directory segments tag: `packages/daemon/src/execution/android-system-dialog.ts` is a naming
 // convention in a shared directory, not an enforced boundary, so it stays shared.
 function tagSegments(file: string): string[] {
   const segments = file.split('/');

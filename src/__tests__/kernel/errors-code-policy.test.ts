@@ -42,7 +42,7 @@ test('AppError leaves details and cause undefined when the constructor omits the
 // --- asAppError: identity, wrapping, and duck-typing contract ---
 //
 // Every catch site that normalizes a thrown value (src/cli.ts, src/daemon.ts,
-// packages/daemon/src/server/daemon-runtime.ts, the platform runners) funnels through
+// packages/daemon/src/server/http/daemon-runtime.ts, the platform runners) funnels through
 // `asAppError`, so its branch selection is load-bearing: get it wrong and a
 // caller silently loses a real error's message/stack.
 

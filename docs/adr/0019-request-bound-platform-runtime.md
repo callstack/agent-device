@@ -841,13 +841,13 @@ therefore structurally enforced rather than periodically measured.
 Some request-path work asks the host machine something without ever taking a device runtime:
 concrete local readiness, boot-time and runner-session observation, and open-target
 classification. Those asks now cross the daemon boundary as one required dependency,
-`DaemonPlatformServices` (`packages/daemon/src/platform-services.ts`), assembled by the daemon runtime's
+`DaemonPlatformServices` (`packages/daemon/src/core/platform-services.ts`), assembled by the daemon runtime's
 root-composition module in `src/daemon-composition.ts` — which reaches the concrete adapters
 through `src/platform-runtime-daemon-services.ts` behind a function-scoped `await import` — and
 threaded composition → `startDaemonRuntime` deps → `RequestRouterDeps` → the request execution
 scope → the handlers and consumers. Stale-claim reconciliation gets the same treatment
 for the one act it may not perform itself: the composition supplies the `ClaimRecoveryGatewayFactory`
-the daemon declares in `packages/daemon/src/device/claim-recovery-gateway.ts`, built from
+the daemon declares in `packages/daemon/src/resources/device/claim-recovery-gateway.ts`, built from
 `src/platform-runtime-claim-recovery.ts` (likewise deferred), and the daemon keeps the transaction —
 what to rebuild from (the dead owner's recorded state dir), in what order, and when to dispose it.
 

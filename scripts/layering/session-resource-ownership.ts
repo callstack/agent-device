@@ -27,24 +27,24 @@ const SCANNED_ROOTS = [DAEMON_SOURCE_ROOT, 'packages/capture-kit/src/capture-adm
 
 const RESOURCE_OWNERS: Readonly<Record<string, ReadonlySet<string>>> = {
   appLog: new Set([
-    'packages/daemon/src/app-log-session-resource.ts',
-    'packages/daemon/src/session-state.ts',
+    'packages/daemon/src/resources/app-log-session-resource.ts',
+    'packages/daemon/src/core/session-state.ts',
   ]),
   appLogFailure: new Set([
-    'packages/daemon/src/app-log-session-resource.ts',
-    'packages/daemon/src/session-state.ts',
+    'packages/daemon/src/resources/app-log-session-resource.ts',
+    'packages/daemon/src/core/session-state.ts',
   ]),
   audioProbe: new Set([
-    'packages/daemon/src/session-capture-binding.ts',
-    'packages/daemon/src/session-state.ts',
+    'packages/daemon/src/core/session-capture-binding.ts',
+    'packages/daemon/src/core/session-state.ts',
   ]),
   screenRecording: new Set([
-    'packages/daemon/src/session-capture-binding.ts',
-    'packages/daemon/src/session-state.ts',
+    'packages/daemon/src/core/session-capture-binding.ts',
+    'packages/daemon/src/core/session-state.ts',
   ]),
   perfCapture: new Set([
-    'packages/daemon/src/session-capture-binding.ts',
-    'packages/daemon/src/session-state.ts',
+    'packages/daemon/src/core/session-capture-binding.ts',
+    'packages/daemon/src/core/session-state.ts',
   ]),
 };
 

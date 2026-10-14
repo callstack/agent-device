@@ -2,7 +2,7 @@
 //
 // The lane does NOT hand-write which locks an operation takes. It derives the
 // plan from the REAL router primitive `resolveRequestExecutionLockPlan`
-// (packages/daemon/src/request-binding.ts), driven with a fake in-memory device
+// (packages/daemon/src/server/request-binding.ts), driven with a fake in-memory device
 // inventory via the production `withDeviceInventoryProvider` seam. This is what
 // makes the same-device serialization invariant revert-sensitive: if production
 // stops returning a `device:` key (e.g. the router's same-device open

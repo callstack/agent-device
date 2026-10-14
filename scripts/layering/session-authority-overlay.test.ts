@@ -23,8 +23,8 @@ function overlayOf(sources: Record<string, string>): SessionAuthorityOverlay {
 
 test('the overlay counts symbol-level production importers, not file-level importers', () => {
   const sources = {
-    'packages/daemon/src/session-state.ts': STATE_STUB,
-    'packages/daemon/src/session-store.ts': STORE_STUB,
+    'packages/daemon/src/core/session-state.ts': STATE_STUB,
+    'packages/daemon/src/core/session-store.ts': STORE_STUB,
     'packages/daemon/src/handlers/fixture.ts':
       "import type { SessionState } from '../session-state.ts';\n" +
       "import { SessionStore } from '../session-store.ts';\n",
@@ -47,8 +47,8 @@ test('the overlay follows the SessionState declaration to a moved path, not a re
   // session-state.ts, so importers point there, and the overlay must still count them.
   const sources = {
     'packages/daemon/src/types.ts': 'export type DaemonRequest = { x: number; };\n',
-    'packages/daemon/src/session-state.ts': STATE_STUB,
-    'packages/daemon/src/session-store.ts': STORE_STUB,
+    'packages/daemon/src/core/session-state.ts': STATE_STUB,
+    'packages/daemon/src/core/session-store.ts': STORE_STUB,
     'packages/daemon/src/handlers/fixture.ts':
       "import type { SessionState } from '../session-state.ts';\n",
     'packages/daemon/src/non-handler.ts':
@@ -65,11 +65,11 @@ test('the handler-owned subset is the flat handlers surface only', () => {
     shapeFiles: [
       'packages/daemon/src/handlers/fixture.ts',
       'packages/daemon/src/non-handler.ts',
-      'packages/daemon/src/interaction/internal/interaction.ts',
+      'packages/daemon/src/execution/interaction/internal/interaction.ts',
     ],
     authorityFiles: [
       'packages/daemon/src/handlers/fixture.ts',
-      'packages/daemon/src/request-router.ts',
+      'packages/daemon/src/server/request-router.ts',
     ],
   };
   assert.deepEqual(handlerOwnedOverlay(overlay), {
@@ -129,8 +129,8 @@ test('R75 leaves new non-handler importers to the module declarations, not this 
 
 test('the end-to-end measurement feeds the ratchet: a new handler importer is red, an existing one is not', () => {
   const base = {
-    'packages/daemon/src/session-state.ts': STATE_STUB,
-    'packages/daemon/src/session-store.ts': STORE_STUB,
+    'packages/daemon/src/core/session-state.ts': STATE_STUB,
+    'packages/daemon/src/core/session-store.ts': STORE_STUB,
     'packages/daemon/src/handlers/kept.ts':
       "import type { SessionState } from '../session-state.ts';\n",
   };
@@ -149,8 +149,8 @@ test('the end-to-end measurement feeds the ratchet: a new handler importer is re
 
 test('R75 catches a new handler shape edge expressed as an import type', () => {
   const base = {
-    'packages/daemon/src/session-state.ts': STATE_STUB,
-    'packages/daemon/src/session-store.ts': STORE_STUB,
+    'packages/daemon/src/core/session-state.ts': STATE_STUB,
+    'packages/daemon/src/core/session-store.ts': STORE_STUB,
   };
   const reference = handlerOwnedOverlay(overlayOf(base));
   const measured = handlerOwnedOverlay(

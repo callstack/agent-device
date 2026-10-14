@@ -43,17 +43,17 @@ const KERNEL_ERRORS = 'packages/kernel/src/errors.ts';
 const KERNEL_DEVICE = 'packages/kernel/src/device.ts';
 const REQUEST_PROGRESS = 'packages/contracts/src/request-progress.ts';
 const DAEMON_HTTP = 'packages/contracts/src/daemon-http.ts';
-const HTTP_ERRORS = 'packages/daemon/src/http-errors.ts';
-const HTTP_SERVER = 'packages/daemon/src/server/http-server.ts';
-const HTTP_RPC_ENVELOPE = 'packages/daemon/src/server/http-rpc-envelope.ts';
-const HTTP_RPC_METHODS = 'packages/daemon/src/server/http-rpc-methods.ts';
-const HTTP_AUTHORIZATION = 'packages/daemon/src/server/http-authorization.ts';
-const HTTP_INSTANCE_PRECONDITION = 'packages/daemon/src/server/http-instance-precondition.ts';
-const UPLOAD_HTTP = 'packages/daemon/src/upload-http.ts';
-const ARTIFACT_HTTP = 'packages/daemon/src/downloadable-artifact-http.ts';
-const REQUEST_DIAGNOSTICS_HTTP = 'packages/daemon/src/request-diagnostics-http.ts';
-const SESSION_TENANT_SCOPE = 'packages/daemon/src/session-tenant-scope.ts';
-const HTTP_REQUEST_TARGET = 'packages/daemon/src/http-request-target.ts';
+const HTTP_ERRORS = 'packages/daemon/src/server/http-errors.ts';
+const HTTP_SERVER = 'packages/daemon/src/server/http/http-server.ts';
+const HTTP_RPC_ENVELOPE = 'packages/daemon/src/server/http/http-rpc-envelope.ts';
+const HTTP_RPC_METHODS = 'packages/daemon/src/server/http/http-rpc-methods.ts';
+const HTTP_AUTHORIZATION = 'packages/daemon/src/server/http/http-authorization.ts';
+const HTTP_INSTANCE_PRECONDITION = 'packages/daemon/src/server/http/http-instance-precondition.ts';
+const UPLOAD_HTTP = 'packages/daemon/src/server/upload-http.ts';
+const ARTIFACT_HTTP = 'packages/daemon/src/server/downloadable-artifact-http.ts';
+const REQUEST_DIAGNOSTICS_HTTP = 'packages/daemon/src/server/request-diagnostics-http.ts';
+const SESSION_TENANT_SCOPE = 'packages/daemon/src/core/session-tenant-scope.ts';
+const HTTP_REQUEST_TARGET = 'packages/daemon/src/server/http-request-target.ts';
 const REMOTE_REQUEST_DIAGNOSTICS = 'src/remote/remote-request-diagnostics.ts';
 const PROGRESS_PROTOCOL = 'packages/daemon-contracts/src/request-progress-protocol.ts';
 const CLIENT_RPC = 'src/daemon-client/daemon-client-rpc.ts';
@@ -325,7 +325,7 @@ export const WIRE_SURFACE: readonly WireSurfaceGroup[] = [
         'sendUploadedArtifactResponse',
       ),
       // The resumable-upload ticket the preflight response hands back.
-      ...from('packages/daemon/src/resumable-upload.ts', 'BeginResumableUploadOptions'),
+      ...from('packages/daemon/src/server/resumable-upload.ts', 'BeginResumableUploadOptions'),
       // `NormalizedHttpError` is `ReturnType<typeof normalizeError>`, so the
       // function and its return type — not a type alias — are what fix the
       // REST error payload a released client parses.

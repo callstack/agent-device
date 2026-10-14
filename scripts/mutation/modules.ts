@@ -50,8 +50,8 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
   {
     id: 'daemon-ref-frame',
     label: 'Ref-frame admission matrix (ADR 0014)',
-    mutate: ['packages/daemon/src/ref-frame.ts'],
-    owns: ['packages/daemon/src/ref-frame.ts'],
+    mutate: ['packages/daemon/src/core/ref-frame.ts'],
+    owns: ['packages/daemon/src/core/ref-frame.ts'],
   },
   {
     id: 'interaction-settle',

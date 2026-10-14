@@ -8,7 +8,7 @@ import type { TargetShutdownResult } from './target-shutdown-contract.ts';
 
 /**
  * Closed result of the `boot` command. Mirrors the daemon handler's only
- * success return EXACTLY (packages/daemon/src/handlers/session-boot.ts via
+ * success return EXACTLY (packages/daemon/src/sessions/handlers/session-boot.ts via
  * session-device-status-response.ts) — the fixed
  * object literal `{ platform, target, device, id, kind, booted }` plus the
  * additive `appleOs` discriminant, emitted only for Apple devices.
@@ -33,7 +33,7 @@ export type BootCommandResult = {
 
 /**
  * Closed result of the `shutdown` command. Mirrors the daemon handler's success
- * return EXACTLY (packages/daemon/src/handlers/session-shutdown.ts via
+ * return EXACTLY (packages/daemon/src/sessions/handlers/session-shutdown.ts via
  * session-device-status-response.ts) — the fixed object
  * literal `{ platform, target, device, id, kind, shutdown }` plus the additive
  * `appleOs` discriminant (Apple devices only). The `shutdown` field is the raw

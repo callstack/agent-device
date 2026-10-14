@@ -182,37 +182,37 @@ const RECORDED_IMPORT_TYPE_CASES = [
     'RunnerStartAdmission',
   ],
   [
-    'packages/daemon/src/interaction/index.ts',
-    'packages/daemon/src/gesture-runtime.ts',
+    'packages/daemon/src/execution/interaction/index.ts',
+    'packages/daemon/src/core/gesture-runtime.ts',
     '../gesture-runtime.ts',
     'BoundGestureExecutor',
   ],
   [
-    'packages/daemon/src/interaction/index.ts',
-    'packages/daemon/src/touch-runtime.ts',
+    'packages/daemon/src/execution/interaction/index.ts',
+    'packages/daemon/src/core/touch-runtime.ts',
     '../touch-runtime.ts',
     'BoundTouchExecutor',
   ],
   [
-    'packages/daemon/src/interaction/internal/interaction.ts',
+    'packages/daemon/src/execution/interaction/internal/interaction.ts',
     'packages/contracts/src/android-observation.ts',
     '@agent-device/contracts/android-observation',
     'AndroidObservationAdapter',
   ],
   [
-    'packages/daemon/src/snapshot-runtime-binding.ts',
+    'packages/daemon/src/core/snapshot-runtime-binding.ts',
     'packages/contracts/src/focus-runtime.ts',
     '@agent-device/contracts/focus-runtime',
     'FocusPointInput',
   ],
   [
-    'packages/daemon/src/snapshot-runtime-binding.ts',
+    'packages/daemon/src/core/snapshot-runtime-binding.ts',
     'packages/contracts/src/interactor-types.ts',
     '@agent-device/contracts/interactor-types',
     'TypeTextBackendResult',
   ],
   [
-    'packages/daemon/src/snapshot-runtime-binding.ts',
+    'packages/daemon/src/core/snapshot-runtime-binding.ts',
     'packages/contracts/src/type-text-runtime.ts',
     '@agent-device/contracts/type-text-runtime',
     'TypeTextInput',
@@ -574,27 +574,27 @@ test('SessionState field names come from the declaration, not a hand-kept list',
 test('session-state writes are found by field, and non-daemon or undeclared names are not', () => {
   const writes = findSessionStateWrites(
     new Map([
-      ['packages/daemon/src/ref-frame.ts', "session.refFrame = 'active';"],
-      ['packages/daemon/src/session-snapshot.ts', 'session.snapshotGeneration += 1;'],
+      ['packages/daemon/src/core/ref-frame.ts', "session.refFrame = 'active';"],
+      ['packages/daemon/src/execution/session-snapshot.ts', 'session.snapshotGeneration += 1;'],
       // the store owns the record and may write anything on it
-      ['packages/daemon/src/session-store.ts', "session.refFrame = 'expired';"],
+      ['packages/daemon/src/core/session-store.ts', "session.refFrame = 'expired';"],
       // a runner session outside the daemon is a different type that happens to share a name
       ['src/platforms/apple/runner-session.ts', 'session.refFrame = 1;'],
       // a local that is not a declared SessionState field
       [
-        'packages/daemon/src/session-observability/internal/session-audio.ts',
+        'packages/daemon/src/sessions/session-observability/internal/session-audio.ts',
         'session.somethingElse = 1;',
       ],
       // reads and comparisons are not writes
       [
-        'packages/daemon/src/interaction/internal/find.ts',
+        'packages/daemon/src/execution/interaction/internal/find.ts',
         "if (session.refFrame === 'active') return;",
       ],
       // a write into a sub-object is not a write to the field itself
       ['packages/daemon/src/handlers/session-probe.ts', 'session.refFrame.inner = 1;'],
       // a different binding that happens to have a matching property
       [
-        'packages/daemon/src/session-lifecycle/internal/session-close.ts',
+        'packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
         "other.refFrame = 'expired';",
       ],
     ]),
@@ -604,8 +604,8 @@ test('session-state writes are found by field, and non-daemon or undeclared name
   assert.deepEqual(
     writes.map(({ file, field }) => `${file}:${field}`),
     [
-      'packages/daemon/src/ref-frame.ts:refFrame',
-      'packages/daemon/src/session-snapshot.ts:snapshotGeneration',
+      'packages/daemon/src/core/ref-frame.ts:refFrame',
+      'packages/daemon/src/execution/session-snapshot.ts:snapshotGeneration',
     ],
   );
 });
@@ -697,7 +697,7 @@ test('every SessionState field is classified exactly once', () => {
   // type it claims to cover.
   const fields = sessionStateFields(
     readFileSync(
-      path.resolve(import.meta.dirname, '../../packages/daemon/src/session-state.ts'),
+      path.resolve(import.meta.dirname, '../../packages/daemon/src/core/session-state.ts'),
       'utf8',
     ),
   );
@@ -711,7 +711,7 @@ test('every SessionState field is classified exactly once', () => {
 test('classification drift is reported in all three directions', () => {
   const declared = sessionStateFields(
     readFileSync(
-      path.resolve(import.meta.dirname, '../../packages/daemon/src/session-state.ts'),
+      path.resolve(import.meta.dirname, '../../packages/daemon/src/core/session-state.ts'),
       'utf8',
     ),
   );

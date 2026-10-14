@@ -52,7 +52,7 @@ export const ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
   );
 export const ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
-    'packages/daemon/src/__tests__/viewport-runtime.test.ts',
+    'packages/daemon/src/execution/__tests__/viewport-runtime.test.ts',
     [C.viewport],
     'rejects an unavailable exact-owner fact before binding',
   );

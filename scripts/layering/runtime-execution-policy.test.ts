@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { runtimeExecutionIntegrityViolations } from './runtime-execution-policy.ts';
 
 const REGISTRY = 'packages/command-registry/src/registry.ts';
-const ADMISSION = 'packages/daemon/src/runtime-admission.ts';
+const ADMISSION = 'packages/daemon/src/core/runtime-admission.ts';
 
 function sources(entries: readonly (readonly [string, string])[]): ReadonlyMap<string, string> {
   return new Map(entries);

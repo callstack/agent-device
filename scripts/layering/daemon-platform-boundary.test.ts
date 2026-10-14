@@ -242,26 +242,26 @@ test('R65 rejects triple-slash concrete-platform type references', () => {
 test('R65 rejects platform selection inside cleanup orchestrators', () => {
   const direct = violations(
     "export const cleanup = (session: any) => session.device.platform === 'android';",
-    'packages/daemon/src/session-teardown.ts',
+    'packages/daemon/src/sessions/session-teardown.ts',
   );
   assert.match(direct[0]?.message ?? '', /may not select a concrete platform/);
 
   const predicate = violations(
     'export const cleanup = (device: any) => isIosFamily(device);',
-    'packages/daemon/src/snapshot-session.ts',
+    'packages/daemon/src/core/snapshot-session.ts',
   );
   assert.match(predicate[0]?.message ?? '', /typed root-composed cleanup capability/);
 
   const destructured = violations(
     "export const cleanup = (session: any) => { const { platform } = session.device; return platform === 'android'; };",
-    'packages/daemon/src/session-lifecycle/internal/session-close-lifecycle-teardown.ts',
+    'packages/daemon/src/sessions/session-lifecycle/internal/session-close-lifecycle-teardown.ts',
   );
   assert.match(destructured[0]?.message ?? '', /may not select a concrete platform/);
 
   assert.deepEqual(
     violations(
       'export const cleanup = (owner: any, device: any) => owner.cleanupSessionlessExecutionHost(device);',
-      'packages/daemon/src/snapshot-session.ts',
+      'packages/daemon/src/core/snapshot-session.ts',
     ),
     [],
   );

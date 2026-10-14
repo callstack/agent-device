@@ -28,7 +28,7 @@ test('every enumerated kernel path exists', () => {
 
 test('changed sources map onto the module that owns them', () => {
   assert.equal(moduleForFile('packages/kernel/src/errors.ts'), 'kernel-errors');
-  assert.equal(moduleForFile('./packages/daemon/src/ref-frame.ts'), 'daemon-ref-frame');
+  assert.equal(moduleForFile('./packages/daemon/src/core/ref-frame.ts'), 'daemon-ref-frame');
   assert.equal(moduleForFile('packages/selectors/src/internal/parse.ts'), 'selectors');
   // Selector tests live under the owned prefix; every other kernel's tests are
   // attributed by ownership.ts, not by this path match.
@@ -89,12 +89,12 @@ test('a kernel test is reachable only under root or package src', () => {
   // `scripts/__tests__/` (explicitly included by `unit-core`) and this predicate keeps them out of
   // every mutation lane. Widening the pattern to scripts/ would silently pull them back in and
   // fail every dry run.
-  assert.ok(isKernelTestFile('packages/daemon/src/__tests__/ref-frame.test.ts'));
+  assert.ok(isKernelTestFile('packages/daemon/src/core/__tests__/ref-frame.test.ts'));
   assert.ok(isKernelTestFile('packages/selectors/src/parse.test.ts'));
   assert.ok(!isKernelTestFile('scripts/__tests__/test-file-size-ratchet.test.ts'));
   assert.ok(!isKernelTestFile('scripts/__tests__/eager-closure-budgets.test.ts'));
   assert.ok(fs.existsSync(path.join(repoRoot, 'scripts/__tests__/eager-closure-budgets.test.ts')));
   assert.ok(!fs.existsSync(path.join(repoRoot, 'src/__tests__/eager-closure-budgets.test.ts')));
   assert.ok(!isKernelTestFile('test/integration/daemon.test.ts'));
-  assert.ok(!isKernelTestFile('packages/daemon/src/ref-frame.ts'));
+  assert.ok(!isKernelTestFile('packages/daemon/src/core/ref-frame.ts'));
 });

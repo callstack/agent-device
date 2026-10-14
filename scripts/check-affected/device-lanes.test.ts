@@ -71,9 +71,9 @@ test('the macOS coverage manifest selects its executable gate and macOS replay l
 
 test('shared runtime surface owns every device lane', () => {
   for (const file of [
-    'packages/daemon/src/handlers/session.ts',
+    'packages/daemon/src/sessions/handlers/session.ts',
     'packages/kernel/src/errors.ts',
-    'packages/daemon/src/android-system-dialog.ts', // naming convention in a shared dir, not a boundary
+    'packages/daemon/src/execution/android-system-dialog.ts', // naming convention in a shared dir, not a boundary
     'test/integration/smoke-daemon-clean.test.ts',
     'packages/provision-kit/src/install-source.ts',
   ]) {
@@ -127,7 +127,7 @@ test('the fixture app owns the mobile lanes whichever subtree changes', () => {
 
 test('unit tests under src/ and packages/*/src own no lane', () => {
   for (const file of [
-    'packages/daemon/src/handlers/snapshot-runtime-route.test.ts',
+    'packages/daemon/src/sessions/handlers/snapshot-runtime-route.test.ts',
     'src/__tests__/contracts/interaction-guarantees.test.ts',
     'packages/platform-apple/src/core/__tests__/apps.test.ts',
     'packages/platform-apple/src/runtime.test.ts',

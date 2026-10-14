@@ -171,8 +171,8 @@ test('a move that changes the shape is a change, acked at the path it moved to',
 // the name at its own path, a same-named declaration elsewhere cannot be
 // identified as a move of this one, so the baseline key stays a removal.
 test('a name still owned by the baseline is not a move, so it remains a removal', () => {
-  const serverSendJson = 'packages/daemon/src/server/http-rpc-envelope.ts#sendJson';
-  const uploadSendJson = 'packages/daemon/src/upload-http.ts#sendJson';
+  const serverSendJson = 'packages/daemon/src/server/http/http-rpc-envelope.ts#sendJson';
+  const uploadSendJson = 'packages/daemon/src/server/upload-http.ts#sendJson';
   const released = ledger({
     declarations: { [serverSendJson]: 'sha256:old', [uploadSendJson]: 'sha256:eee' },
   });

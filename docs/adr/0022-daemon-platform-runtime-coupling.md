@@ -11,7 +11,7 @@ ADR classified (the gateway/diagnostics/resource-cleanup/lifecycle edges, the pr
 hubs, and the platform-services and claim-recovery dynamic edges) moved out of `packages/daemon/src/` into
 the process-root composition module `src/daemon-composition.ts`, which R76 does not see because it
 is no longer a daemon-zone importer. #3430 then routed the leaked selector-query edge
-(`packages/daemon/src/direct-ios-selector.ts`) through the request-bound runtime binding, so the R76
+(`packages/daemon/src/core/direct-ios-selector.ts`) through the request-bound runtime binding, so the R76
 inventory is empty; with nothing left to classify, the same change collapsed R76 to a plain ban on
 the coupling and deleted the classification machinery, per the rule's own kill criterion. The
 section-2 outcomes below remain the record of how each was classified.
@@ -64,7 +64,7 @@ or owning issue. #2278 audited all four concerns at `27a97ee619`.
      are daemon-policy-essential. Selector production and lifecycle participation stay separate.
    - **#2333 (done)** — lifecycle participation of platform resource owners. The
      `apple-runner-owner` and `operation-host` edges are retired; `daemon-runtime.ts` now holds
-     only the typed `PlatformOwnerLifecycle` contract (`packages/daemon/src/platform-owner-lifecycle.ts`),
+     only the typed `PlatformOwnerLifecycle` contract (`packages/daemon/src/core/platform-owner-lifecycle.ts`),
      composed at the root by `platform-runtime-daemon-lifecycle.ts`, which is the sole importer of
      the Apple runner owner, the Android snapshot-helper and Web orphan cleanups, and legacy
      app-log marker recovery. The `resource-cleanup` edge stays, reclassified

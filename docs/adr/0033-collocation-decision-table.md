@@ -79,7 +79,7 @@ already owns the operations behind the vocabulary.
 | `src/diagnostics.ts` | keep | The diagnostics seam every zone imports (AGENTS.md mandates it); highest fan-in in the repo is what a substrate looks like, not misplacement. |
 | `src/internal/request-cancel.ts` | keep | Request-cancellation mechanics AGENTS.md routes to `host-kit/request`; internal beside its facade is already the collocation. |
 | `src/request.ts` | keep | Cross-layer request contracts AGENTS.md names as a host-kit seam; consumers span every zone. |
-| `src/session-paths.ts` | keep | Session-artifact path grammar the daemon, cli, and platforms all resolve; AGENTS.md keeps the path *policy* in `packages/daemon/src/session-artifact-paths.ts`, which consumes this. |
+| `src/session-paths.ts` | keep | Session-artifact path grammar the daemon, cli, and platforms all resolve; AGENTS.md keeps the path *policy* in `packages/daemon/src/core/session-artifact-paths.ts`, which consumes this. |
 
 ### kernel
 

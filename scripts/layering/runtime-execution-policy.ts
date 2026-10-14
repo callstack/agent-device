@@ -20,7 +20,7 @@ type AstNode = Record<string, unknown>;
 export const RUNTIME_EXECUTION_INTEGRITY_RULE = 'R66 runtime-execution-integrity';
 
 const COMMAND_DESCRIPTOR_MODULE = 'packages/command-registry/src/registry.ts';
-const RUNTIME_ADMISSION_MODULE = 'packages/daemon/src/runtime-admission.ts';
+const RUNTIME_ADMISSION_MODULE = 'packages/daemon/src/core/runtime-admission.ts';
 const RUNTIME_PROOF_TYPES = new Set(['AdmittedRuntimePlan', 'BoundDeviceRuntime']);
 
 /** Facts are the only admission authority, and daemon code must consume narrowed runtime proofs. */

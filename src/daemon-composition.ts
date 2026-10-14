@@ -1,4 +1,4 @@
-// The daemon runtime's dependency construction, extracted from `packages/daemon/src/server/daemon-runtime.ts`
+// The daemon runtime's dependency construction, extracted from `packages/daemon/src/server/http/daemon-runtime.ts`
 // so the operational server owns sequencing and this module owns naming runtimes (ADR 0019).
 // Everything here that names a platform runtime, a provider runtime, an interactor, host
 // diagnostics, credential fingerprinting, resource cleanup, the platform lifecycle owners, the

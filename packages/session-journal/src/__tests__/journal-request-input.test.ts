@@ -93,7 +93,7 @@ type ReachableTypes<
           : never;
 
 /**
- * The structural minimum of `packages/daemon/src/session-state.ts`'s `SessionState`. The package may not
+ * The structural minimum of `packages/daemon/src/core/session-state.ts`'s `SessionState`. The package may not
  * import that module (R11), so the live session record is named by the three required fields no
  * other shape in the public request vocabulary carries together. Anything typed as `SessionState`
  * is assignable to this, which is what `Extract` needs.

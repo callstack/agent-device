@@ -5,7 +5,7 @@ import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechani
 test('R16 rejects native mechanics in the daemon record owner without scanning prose', () => {
   const violations = recordRuntimeDaemonMechanicsViolations([
     {
-      path: 'packages/daemon/src/handlers/record-runtime.ts',
+      path: 'packages/daemon/src/sessions/handlers/record-runtime.ts',
       source: `
         import fs from 'node:fs';
         import { runCmdBackground } from '@agent-device/host-kit/command';
@@ -20,17 +20,17 @@ test('R16 rejects native mechanics in the daemon record owner without scanning p
     },
   ]);
   assert.deepEqual(violations, [
-    'packages/daemon/src/handlers/record-runtime.ts: daemon record owner imports native mechanic node:fs',
-    'packages/daemon/src/handlers/record-runtime.ts: daemon record owner imports native mechanic @agent-device/host-kit/command',
-    'packages/daemon/src/handlers/record-runtime.ts: daemon record owner calls native mechanic setTimeout',
-    'packages/daemon/src/handlers/record-runtime.ts: daemon record owner calls native mechanic runCmdBackground',
+    'packages/daemon/src/sessions/handlers/record-runtime.ts: daemon record owner imports native mechanic node:fs',
+    'packages/daemon/src/sessions/handlers/record-runtime.ts: daemon record owner imports native mechanic @agent-device/host-kit/command',
+    'packages/daemon/src/sessions/handlers/record-runtime.ts: daemon record owner calls native mechanic setTimeout',
+    'packages/daemon/src/sessions/handlers/record-runtime.ts: daemon record owner calls native mechanic runCmdBackground',
   ]);
 });
 
 test('R16 rejects child termination and platform branching in daemon record owners', () => {
   const violations = recordRuntimeDaemonMechanicsViolations([
     {
-      path: 'packages/daemon/src/handlers/record-runtime.ts',
+      path: 'packages/daemon/src/sessions/handlers/record-runtime.ts',
       source: `
         // child.kill(), process.kill(), and device.platform === 'apple' are prose.
         const prose = 'switch (device.platform)';

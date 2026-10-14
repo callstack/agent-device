@@ -88,9 +88,9 @@ test('zoneBreakdown and rankByFanIn order by weight, then name', () => {
 test('commandsReaching follows the dynamic import a route uses to load its handler', () => {
   // These are in-memory arbitrary paths for graph traversal, not repository ownership metadata.
   const edges = edgesOf({
-    'packages/daemon/src/handlers/session.ts':
+    'packages/daemon/src/sessions/handlers/session.ts':
       "import { helper } from '../../../../src/utils/helper.ts';\nexport const h = helper;",
-    'packages/daemon/src/interaction/index.ts': 'export const f = 1;',
+    'packages/daemon/src/execution/interaction/index.ts': 'export const f = 1;',
     'src/utils/helper.ts': 'export const helper = 1;',
     'packages/daemon/src/chain.ts': [
       "export const routes = { session: () => import('./handlers/session.ts'),",
@@ -98,8 +98,8 @@ test('commandsReaching follows the dynamic import a route uses to load its handl
     ].join('\n'),
   });
   const chains = [
-    { command: 'open', route: 'session', entry: 'packages/daemon/src/handlers/session.ts' },
-    { command: 'find', route: 'find', entry: 'packages/daemon/src/interaction/index.ts' },
+    { command: 'open', route: 'session', entry: 'packages/daemon/src/sessions/handlers/session.ts' },
+    { command: 'find', route: 'find', entry: 'packages/daemon/src/execution/interaction/index.ts' },
   ];
 
   assert.deepEqual(
@@ -108,7 +108,7 @@ test('commandsReaching follows the dynamic import a route uses to load its handl
   );
   // The entry module itself counts as part of its own chain.
   assert.deepEqual(
-    commandsReaching('packages/daemon/src/interaction/index.ts', chains, edges).map(
+    commandsReaching('packages/daemon/src/execution/interaction/index.ts', chains, edges).map(
       (chain) => chain.command,
     ),
     ['find'],
@@ -153,14 +153,14 @@ test('bounded lists disclose what they hid', () => {
 });
 
 test('every daemon route in the real route table resolves to a handler entry', () => {
-  const chainFile = 'packages/daemon/src/request-handler-chain.ts';
+  const chainFile = 'packages/daemon/src/sessions/request-handler-chain.ts';
   const source = readFileSync(path.join(repoRoot, chainFile), 'utf8');
   const entries = parseRouteEntries(source, chainFile);
   const declared = [...source.matchAll(/(\w+): defineDaemonRoute\(/g)].map((match) => match[1]!);
 
   assert.ok(declared.length > 0, 'route table shape changed: no defineDaemonRoute entries found');
   assert.deepEqual([...entries.keys()].sort(), [...declared].sort());
-  assert.equal(entries.get('generic'), 'packages/daemon/src/request-generic-dispatch.ts');
+  assert.equal(entries.get('generic'), 'packages/daemon/src/execution/request-generic-dispatch.ts');
 });
 
 test('the real guarantee matrix contributes module-qualified rows', () => {

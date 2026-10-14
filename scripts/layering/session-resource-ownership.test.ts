@@ -23,11 +23,11 @@ test('session resources are constructed only by their durable domain owners', ()
         });`,
       ],
       [
-        'packages/daemon/src/app-log-session-resource.ts',
+        'packages/daemon/src/resources/app-log-session-resource.ts',
         `sessionStore.update(ref, { appLog: log, appLogFailure: undefined });`,
       ],
       [
-        'packages/daemon/src/session-capture-binding.ts',
+        'packages/daemon/src/core/session-capture-binding.ts',
         `sessionStore.update(ref, { audioProbe: audio });
          sessionStore.update(ref, { perfCapture: perf });
          sessionStore.update(ref, { screenRecording: recording });`,
@@ -76,7 +76,7 @@ test('teardown app-log discriminants are policy input rather than session constr
   assert.deepEqual(
     summaries([
       [
-        'packages/daemon/src/session-teardown.ts',
+        'packages/daemon/src/sessions/session-teardown.ts',
         `teardownSessionResources({ appLog: 'run' });
          teardownSessionResources({ appLog: 'already-settled' });`,
       ],

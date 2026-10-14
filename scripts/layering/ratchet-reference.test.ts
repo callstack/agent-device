@@ -17,13 +17,13 @@ const SESSION_TYPES = [
 
 function tree(extra: Record<string, string> = {}) {
   return new Map<string, string>([
-    ['packages/daemon/src/session-state.ts', SESSION_TYPES],
+    ['packages/daemon/src/core/session-state.ts', SESSION_TYPES],
     [
-      'packages/daemon/src/session-snapshot.ts',
+      'packages/daemon/src/execution/session-snapshot.ts',
       'session.snapshot = "a"; nextSession.snapshot = "b";',
     ],
-    ['packages/daemon/src/ref-frame.ts', 'session.snapshot = undefined;'],
-    ['packages/daemon/src/handlers/trace-runtime.ts', 'session.trace ??= "t";'],
+    ['packages/daemon/src/core/ref-frame.ts', 'session.snapshot = undefined;'],
+    ['packages/daemon/src/sessions/handlers/trace-runtime.ts', 'session.trace ??= "t";'],
     ['src/client/client.ts', "import type { Loop } from '../commands/loop.ts';"],
     ['src/commands/loop.ts', "import type { Client } from '../client/client.ts';"],
     ...Object.entries(extra),
@@ -64,7 +64,7 @@ test('measureRatchets reports all ratchets from one tree', () => {
     'packages/daemon/src/handlers/fixture.ts':
       "import type { SessionState } from '../session-state.ts';\n" +
       "import { SessionStore } from '../session-store.ts';",
-    'packages/daemon/src/session-store.ts': 'export class SessionStore {}',
+    'packages/daemon/src/core/session-store.ts': 'export class SessionStore {}',
   });
   assert.deepEqual(
     measureRatchets(withAuthority, resolveImportEdges(withAuthority)).sessionAuthority,

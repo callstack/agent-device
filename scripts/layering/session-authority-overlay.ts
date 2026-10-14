@@ -4,7 +4,7 @@ import { sessionStateDeclarationFile } from './session-state.ts';
 
 // The SessionState/SessionStore authority overlay (#2278, ADR 0022): which production files
 // import the SessionState shape from the module that declares it and the SessionStore authority
-// from packages/daemon/src/session-store.ts, at symbol level so that a file importing only helper
+// from packages/daemon/src/core/session-store.ts, at symbol level so that a file importing only helper
 // functions from session-store.ts is not an authority edge. R7 already owns the write side
 // (field ownership); this overlay owns the read side. The shape target is found by the
 // declaration, not a recorded path: a path constant would silently measure zero shape importers
@@ -16,13 +16,13 @@ import { sessionStateDeclarationFile } from './session-state.ts';
 
 export const SESSION_AUTHORITY_OVERLAY_RULE = 'R75 session-authority-overlay';
 
-const SESSION_STORE_AUTHORITY_TARGET = 'packages/daemon/src/session-store.ts';
+const SESSION_STORE_AUTHORITY_TARGET = 'packages/daemon/src/core/session-store.ts';
 const HANDLER_ROOT = 'packages/daemon/src/handlers/';
 
 export type SessionAuthorityOverlay = Readonly<{
   /** Production files importing the SessionState symbol from its declaring module, sorted. */
   shapeFiles: readonly string[];
-  /** Production files importing the SessionStore symbol from packages/daemon/src/session-store.ts, sorted. */
+  /** Production files importing the SessionStore symbol from packages/daemon/src/core/session-store.ts, sorted. */
   authorityFiles: readonly string[];
 }>;
 

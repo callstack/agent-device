@@ -373,9 +373,9 @@ export function daemonPlatformBoundaryViolations(
 }
 
 const CLEANUP_ORCHESTRATORS = new Set([
-  'packages/daemon/src/session-teardown.ts',
-  'packages/daemon/src/session-lifecycle/internal/session-close-lifecycle-teardown.ts',
-  'packages/daemon/src/snapshot-session.ts',
+  'packages/daemon/src/sessions/session-teardown.ts',
+  'packages/daemon/src/sessions/session-lifecycle/internal/session-close-lifecycle-teardown.ts',
+  'packages/daemon/src/core/snapshot-session.ts',
 ]);
 
 function cleanupDispatchViolations(sources: readonly ProductionSource[]): LayeringViolation[] {

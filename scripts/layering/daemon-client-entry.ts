@@ -37,37 +37,37 @@ export type DaemonClientEntryEdge = Readonly<{
 export const DAEMON_CLIENT_ENTRY_EDGES: readonly DaemonClientEntryEdge[] = [
   {
     file: 'src/daemon-client/daemon-client.ts',
-    target: 'packages/daemon/src/daemon-request.ts',
+    target: 'packages/daemon/src/core/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
   {
     file: 'src/daemon-client/daemon-client-lifecycle.ts',
-    target: 'packages/daemon/src/daemon-request.ts',
+    target: 'packages/daemon/src/core/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
   {
     file: 'src/daemon-client/daemon-client-lease-beat.ts',
-    target: 'packages/daemon/src/daemon-request.ts',
+    target: 'packages/daemon/src/core/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
   {
     file: 'src/daemon-client/daemon-client-liveness-probe.ts',
-    target: 'packages/daemon/src/daemon-request.ts',
+    target: 'packages/daemon/src/core/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
   {
     file: 'src/daemon-client/daemon-client-progress.ts',
-    target: 'packages/daemon/src/daemon-request.ts',
+    target: 'packages/daemon/src/core/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
   {
     file: 'src/daemon-client/daemon-client-rpc.ts',
-    target: 'packages/daemon/src/daemon-request.ts',
+    target: 'packages/daemon/src/core/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
   {
     file: 'src/daemon-client/daemon-client-transport.ts',
-    target: 'packages/daemon/src/daemon-request.ts',
+    target: 'packages/daemon/src/core/daemon-request.ts',
     rationale: REQUEST_RATIONALE,
   },
 ] as const;
@@ -123,7 +123,7 @@ export function checkDaemonClientEntry(edges: readonly ResolvedImportEdge[]): La
           `the daemon client ${entry.runtimeKind} daemon internals: ${key}. The client composes the ` +
           `daemon over the network, not its module graph. Move the shared contract to ` +
           `packages/daemon-contracts (or read the DaemonRequest/DaemonResponse types in ` +
-          `packages/daemon/src/daemon-request.ts as a type).`,
+          `packages/daemon/src/core/daemon-request.ts as a type).`,
       });
       seen.add(key);
       continue;

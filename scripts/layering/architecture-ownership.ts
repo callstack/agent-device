@@ -14,7 +14,7 @@ export type LogicalModulePolicy = Readonly<{
 }>;
 
 const DAEMON_SESSION_LIFECYCLE_FACADE = {
-  root: 'packages/daemon/src/session-lifecycle/index.ts',
+  root: 'packages/daemon/src/sessions/session-lifecycle/index.ts',
   exports: [
     'SessionCloseCommandInput',
     'SessionInventoryCommandInput',
@@ -26,7 +26,7 @@ const DAEMON_SESSION_LIFECYCLE_FACADE = {
 } as const;
 
 const DAEMON_SESSION_OBSERVABILITY_FACADE = {
-  root: 'packages/daemon/src/session-observability/index.ts',
+  root: 'packages/daemon/src/sessions/session-observability/index.ts',
   exports: ['SessionObservabilityCommandInput', 'handleSessionObservabilityCommands'],
 } as const;
 
@@ -71,7 +71,7 @@ export const INTERACTION_RETIRED_HANDLER_PATHS = [
 ] as const;
 
 const DAEMON_INTERACTION_FACADE = {
-  root: 'packages/daemon/src/interaction/index.ts',
+  root: 'packages/daemon/src/execution/interaction/index.ts',
   exports: [
     'FindRouteInput',
     'InteractionRouteInput',
@@ -192,7 +192,7 @@ export const ARCHITECTURE_OWNERSHIP = {
     {
       name: 'request-runtime-binding',
       kind: 'capability',
-      root: 'packages/daemon/src/request-runtime-binding.ts',
+      root: 'packages/daemon/src/core/request-runtime-binding.ts',
       exports: [
         'BindDeviceRuntime',
         'BindExactDeviceRuntime',
@@ -207,7 +207,7 @@ export const ARCHITECTURE_OWNERSHIP = {
     {
       name: 'session-script-publication',
       kind: 'capability',
-      root: 'packages/daemon/src/session-script-publication-capability.ts',
+      root: 'packages/daemon/src/core/session-script-publication-capability.ts',
       exports: [
         'abortAuthoringOnSecondOpen',
         'applyRecordedSaveScriptFlags',
@@ -226,13 +226,13 @@ export const ARCHITECTURE_OWNERSHIP = {
     {
       name: 'session-state-shape',
       kind: 'live-state-shape',
-      root: 'packages/daemon/src/session-state.ts',
+      root: 'packages/daemon/src/core/session-state.ts',
       exports: ['SessionState'],
     },
     {
       name: 'session-store-authority',
       kind: 'live-state-authority',
-      root: 'packages/daemon/src/session-store.ts',
+      root: 'packages/daemon/src/core/session-store.ts',
       exports: ['SessionStore'],
     },
   ],

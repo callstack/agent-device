@@ -301,7 +301,7 @@ export async function runReplayTestCommand(command: ReplayTestCommand): Promise<
  * client-side *before* the suite runs, so it never contains the suite's own invocation id.
  *
  * `data.artifactsDir` (the daemon-local suite directory) is always `<redirected root>/<suite
- * invocation id>`: `createDirectoryArchive` (`packages/daemon/src/artifact-tracking.ts`) tars it as
+ * invocation id>`: `createDirectoryArchive` (`packages/daemon/src/resources/artifact-tracking.ts`) tars it as
  * `-C dirname(daemonRoot) -- basename(daemonRoot)`, so extracting that archive under the
  * caller-local root reproduces the SAME invocation-id segment there. The caller-facing root is
  * therefore `path.join(clientRoot, basename(daemonRoot))`, not `clientRoot` itself — every path
