@@ -1,16 +1,26 @@
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import type { SelectorChainMatchList, SelectorMatchOptions } from '@agent-device/selectors';
+import {
+  hasSnapshotRef,
+  type SnapshotAddressableNode,
+  type SnapshotNode,
+} from '@agent-device/kernel/snapshot';
+import type {
+  SelectorChainMatchList,
+  SelectorMatchOptions,
+  SelectorResolution,
+} from '@agent-device/selectors';
 import {
   listSelectorChainMatches,
   resolveSelectorChainWithPolicy,
 } from '@agent-device/selectors/engine';
 import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
 import {
+  classifyActionableTouchCandidates,
   isRootInteractionContainer,
   resolveActionableTouchResolution,
   resolveElementReportedTwice,
 } from './interaction-targeting.ts';
 import type {
+  ActingPipelinePolicy,
   CandidateSetPipelinePolicy,
   SelectorListPolicy,
   SelectorPipelinePolicy,
@@ -45,6 +55,9 @@ import type {
  *   A row whose RESULT is the candidate set (`find <q> list`) declares only the
  *   two stages a listing can run, so the node-stage entries below reject it at
  *   the type level rather than skipping stages it claimed.
+ * - `resolveActionSelectorPipeline` — acting rows whose candidate set may
+ *   collapse through actionable equivalence; the collapse stays inside this
+ *   owner so addressability is checked at the same exit as every other row.
  * - `runNodePipelineStages` — the node stages for a target that came from a
  *   non-chain matcher (`@ref` lookup, find's fuzzy locator) or from a narrowed
  *   candidate set. Not a bypass: it runs every stage the row declares.
@@ -66,18 +79,24 @@ export type SelectorPipelineHooks = {
   offscreen?: (node: SnapshotNode, nodes: SnapshotNode[]) => Promise<SnapshotNode>;
 };
 
-export type SelectorPipelineTarget =
-  | { kind: 'target'; node: SnapshotNode }
-  | { kind: 'occluded'; node: SnapshotNode };
+export type SelectorPipelineNodeForPolicy<TPolicy extends SelectorListPolicy> = TPolicy extends {
+  resolution: { requireRect: true };
+}
+  ? SnapshotAddressableNode
+  : SnapshotNode;
 
-export type SelectorPipelineOutcome =
+export type SelectorPipelineTarget<TNode extends SnapshotNode = SnapshotNode> =
+  | { kind: 'target'; node: TNode }
+  | { kind: 'occluded'; node: TNode };
+
+export type SelectorPipelineOutcome<TNode extends SnapshotNode = SnapshotNode> =
   | { kind: 'none' }
   | { kind: 'ambiguous'; selector: string; selectorIndex: number; matchedNodes: SnapshotNode[] }
   /** `selector` is the ALTERNATIVE that matched, which is what a refusal names. */
-  | { kind: 'occluded'; node: SnapshotNode; selector: string }
+  | { kind: 'occluded'; node: TNode; selector: string }
   | {
       kind: 'target';
-      node: SnapshotNode;
+      node: TNode;
       selector: string;
       selectorIndex: number;
       matches: number;
@@ -85,13 +104,13 @@ export type SelectorPipelineOutcome =
     };
 
 /** Rows that resolve one target: candidacy, ambiguity, then every node stage. */
-export async function resolveSelectorPipeline(
-  policy: SingleTargetPipelinePolicy,
+export async function resolveSelectorPipeline<const TPolicy extends SingleTargetPipelinePolicy>(
+  policy: TPolicy,
   nodes: SnapshotNode[],
   selector: string,
   match: SelectorMatchOptions,
   hooks: SelectorPipelineHooks = {},
-): Promise<SelectorPipelineOutcome> {
+): Promise<SelectorPipelineOutcome<SelectorPipelineNodeForPolicy<TPolicy>>> {
   const outcome = resolveSelectorChainWithPolicy(
     pipelineCandidates(policy, nodes),
     selector,
@@ -164,12 +183,12 @@ function resolveEquivalentControlTarget(
 }
 
 /** Every node stage this row declares, applied to a resolved target. */
-async function stageResolvedRow(
-  policy: SingleTargetPipelinePolicy,
+async function stageResolvedRow<const TPolicy extends SingleTargetPipelinePolicy>(
+  policy: TPolicy,
   nodes: SnapshotNode[],
   resolved: ResolvedRowTarget,
   hooks: SelectorPipelineHooks,
-): Promise<SelectorPipelineOutcome> {
+): Promise<SelectorPipelineOutcome<SelectorPipelineNodeForPolicy<TPolicy>>> {
   const staged = await runNodePipelineStages(policy, nodes, resolved.node, hooks);
   if (staged.kind === 'occluded') {
     return { kind: 'occluded', node: staged.node, selector: resolved.selector };
@@ -182,53 +201,133 @@ async function stageResolvedRow(
  * first matching alternative and must narrow or refuse it, then bring the node
  * it chose back through `runNodePipelineStages`.
  *
- * `candidates` is the tree as this row sees it — the candidacy stage's output.
- * A caller that reasons about the surroundings of a match (find's ranking, the
- * acting equivalence classification) must reason about THAT tree, or an
- * overlay-covered node would come back as a competitor the row already excluded.
+ * `candidates` is the node set as this row lets selectors see it. Acting
+ * equivalence still receives the full tree for structural ancestry, then
+ * brings the winning node back through the checked pipeline exit.
  */
-export type SelectorPipelineMatches = {
+export type SelectorPipelineMatches<TNode extends SnapshotNode = SnapshotNode> = {
   candidates: SnapshotNode[];
-  list: SelectorChainMatchList | null;
+  list: (Omit<SelectorChainMatchList, 'matchedNodes'> & { matchedNodes: TNode[] }) | null;
 };
 
-export function listSelectorPipelineMatches(
-  policy: CandidateSetPipelinePolicy,
+export type SelectorActionPipelineOutcome<TNode extends SnapshotNode = SnapshotNode> =
+  | { kind: 'none' }
+  | { kind: 'ambiguous'; selector: string; candidates: SnapshotNode[] }
+  | { kind: 'resolved'; resolution: SelectorResolution<TNode> };
+
+export function listSelectorPipelineMatches<const TPolicy extends CandidateSetPipelinePolicy>(
+  policy: TPolicy,
   nodes: SnapshotNode[],
   selector: string,
   match: SelectorMatchOptions,
-): SelectorPipelineMatches {
+): SelectorPipelineMatches<SelectorPipelineNodeForPolicy<TPolicy>> {
   const candidates = pipelineCandidates(policy, nodes);
+  const list = listSelectorChainMatches(candidates, selector, {
+    ...match,
+    requireRect: policy.resolution.requireRect,
+  });
   return {
     candidates,
-    list: listSelectorChainMatches(candidates, selector, {
-      ...match,
-      requireRect: policy.resolution.requireRect,
-    }),
+    list: pipelineMatchListForPolicy(policy, list),
+  };
+}
+
+export function resolveActionSelectorPipeline<const TPolicy extends ActingPipelinePolicy>(
+  policy: TPolicy,
+  nodes: SnapshotNode[],
+  selectorExpression: string,
+  match: SelectorMatchOptions,
+): SelectorActionPipelineOutcome<SelectorPipelineNodeForPolicy<TPolicy>> {
+  const { list } = listSelectorPipelineMatches(policy, nodes, selectorExpression, match);
+  const matched = list?.matchedNodes ?? [];
+  if (!list || matched.length === 0) return { kind: 'none' };
+
+  const diagnostics = [{ selector: list.selector, matches: matched.length }];
+  if (matched.length === 1) {
+    return {
+      kind: 'resolved',
+      resolution: {
+        node: matched[0]!,
+        selector: list.selector,
+        selectorIndex: list.selectorIndex,
+        matches: 1,
+        diagnostics,
+      },
+    };
+  }
+
+  const classification = classifyActionableTouchCandidates(nodes, matched);
+  if (classification.kind === 'ambiguous') {
+    return { kind: 'ambiguous', selector: list.selector, candidates: classification.candidates };
+  }
+
+  return {
+    kind: 'resolved',
+    resolution: {
+      node: nodeForPolicy(policy, classification.node),
+      selector: list.selector,
+      selectorIndex: list.selectorIndex,
+      matches: matched.length,
+      diagnostics,
+      disambiguation: {
+        matchCount: matched.length,
+        tiebreak: 'structural-equivalence',
+        alternatives: matched.filter((candidate) => candidate.index !== classification.node.index),
+      },
+    },
   };
 }
 
 /** Every node stage this row declares, in the order acting routes need them. */
-export async function runNodePipelineStages(
-  policy: SelectorPipelinePolicy,
+export async function runNodePipelineStages<const TPolicy extends SelectorPipelinePolicy>(
+  policy: TPolicy,
   nodes: SnapshotNode[],
   node: SnapshotNode,
   hooks: SelectorPipelineHooks = {},
-): Promise<SelectorPipelineTarget> {
+): Promise<SelectorPipelineTarget<SelectorPipelineNodeForPolicy<TPolicy>>> {
   hooks.onResolved?.(node, nodes);
   const promoted = promoteTarget(policy.promotion, nodes, node);
   if (policy.occlusion !== 'ignore') {
     if (promoted.covered || isSnapshotNodeInteractionBlocked(promoted.node)) {
-      return { kind: 'occluded', node: promoted.node };
+      return { kind: 'occluded', node: nodeForPolicy(policy, promoted.node) };
     }
   }
-  return { kind: 'target', node: await guardOffscreen(policy, nodes, promoted.node, hooks) };
+  return {
+    kind: 'target',
+    node: nodeForPolicy(policy, await guardOffscreen(policy, nodes, promoted.node, hooks)),
+  };
+}
+
+function nodeForPolicy<TPolicy extends SelectorListPolicy>(
+  policy: TPolicy,
+  node: SnapshotNode,
+): SelectorPipelineNodeForPolicy<TPolicy> {
+  if (policy.resolution.requireRect && !hasSnapshotRef(node)) {
+    throw new Error(
+      'selector pipeline row requires an addressable target, but resolved a ref-less node',
+    );
+  }
+  return node as SelectorPipelineNodeForPolicy<TPolicy>;
+}
+
+function pipelineMatchListForPolicy<TPolicy extends SelectorListPolicy>(
+  policy: TPolicy,
+  list: SelectorChainMatchList | null,
+): SelectorPipelineMatches<SelectorPipelineNodeForPolicy<TPolicy>>['list'] {
+  if (!list) return null;
+  return {
+    ...list,
+    matchedNodes: list.matchedNodes.map((node) => nodeForPolicy(policy, node)),
+  };
 }
 
 /** The nodes this row lets a selector match against. */
 function pipelineCandidates(policy: SelectorListPolicy, nodes: SnapshotNode[]): SnapshotNode[] {
-  if (policy.occlusion !== 'exclude-and-refuse') return nodes;
-  return nodes.filter((candidate) => !isSnapshotNodeInteractionBlocked(candidate));
+  const addressableCandidates = policy.resolution.requireRect
+    ? nodes.filter(hasSnapshotRef)
+    : nodes;
+  if (policy.occlusion !== 'exclude-and-refuse') return addressableCandidates;
+  return addressableCandidates.filter((candidate) => !isSnapshotNodeInteractionBlocked(candidate));
 }
 
 /**

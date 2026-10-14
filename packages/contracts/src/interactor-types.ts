@@ -288,6 +288,9 @@ export type SnapshotRuntimeAcquiredResult = Readonly<{
 
 export type SnapshotRuntimeResult = SnapshotResult | SnapshotRuntimeAcquiredResult;
 
+/** The application an owner's launch reports it started, when the launch names one. */
+export type ApplicationLaunchReport = Readonly<{ launchedAppBundleId?: string }>;
+
 export type Interactor = {
   open(
     app: string,
@@ -299,7 +302,7 @@ export type Interactor = {
       terminateRunningApp?: boolean;
       url?: string;
     },
-  ): Promise<void>;
+  ): Promise<ApplicationLaunchReport | void>;
   openDevice(): Promise<void>;
   close(app: string): Promise<void>;
   tap(x: number, y: number): Promise<Record<string, unknown> | void>;

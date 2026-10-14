@@ -81,11 +81,46 @@ test('inferAndroidPackageAfterOpen keeps an already-known bundle id without read
   expect(getAndroidAppState).not.toHaveBeenCalled();
 });
 
-test('inferAndroidPackageAfterOpen leaves a non-deep-link target unchanged', async () => {
+test('inferAndroidPackageAfterOpen reads the resumed package for an intent alias open', async () => {
+  getAndroidAppState.mockResolvedValue({
+    package: 'com.android.settings',
+    activity: 'com.android.settings.Settings',
+  });
+
+  await expect(inferAndroidPackageAfterOpen(androidDevice, 'settings', undefined)).resolves.toBe(
+    'com.android.settings',
+  );
+});
+
+test('inferAndroidPackageAfterOpen never names the framework chooser as the owner', async () => {
+  getAndroidAppState.mockResolvedValue({
+    package: 'android',
+    activity: 'com.android.internal.app.ResolverActivity',
+  });
+
   await expect(
-    inferAndroidPackageAfterOpen(androidDevice, 'com.example.demo', undefined),
+    inferAndroidPackageAfterOpen(androidDevice, 'https://example.com/item', undefined),
   ).resolves.toBeUndefined();
-  expect(getAndroidAppState).not.toHaveBeenCalled();
+  expect(getAndroidAppState).toHaveBeenCalledWith(androidDevice);
+});
+
+test('inferAndroidPackageAfterOpen keeps the launched package under a permission prompt', async () => {
+  getAndroidAppState.mockResolvedValue({
+    package: 'com.google.android.permissioncontroller',
+    activity: 'com.android.permissioncontroller.permission.ui.GrantPermissionsActivity',
+  });
+
+  await expect(
+    inferAndroidPackageAfterOpen(androidDevice, 'myapp://login', undefined, 'com.example.app'),
+  ).resolves.toBe('com.example.app');
+});
+
+test('inferAndroidPackageAfterOpen never names a launched framework chooser as the owner', async () => {
+  getAndroidAppState.mockResolvedValue({ package: 'com.example.app' });
+
+  await expect(
+    inferAndroidPackageAfterOpen(androidDevice, 'settings', undefined, 'android'),
+  ).resolves.toBeUndefined();
 });
 
 test('inferAndroidPackageAfterOpen swallows a foreground-state read failure', async () => {

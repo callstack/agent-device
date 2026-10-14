@@ -15,7 +15,9 @@ export type IosTreeNode = {
   rect?: { x?: number; y?: number; width?: number; height?: number };
   enabled?: boolean;
   role?: string;
+  subrole?: string | null;
   selected?: boolean;
+  role_description?: string;
   hittable?: boolean;
   traits?: string[];
   pid?: number;
@@ -52,6 +54,9 @@ function mapIosNode(
     rect: readIosNodeRect(node),
     enabled: node.enabled,
     selected: node.selected,
+    password: node.subrole === 'AXSecureTextField' ? true : undefined,
+    heading: node.traits?.includes('Header') === true ? true : undefined,
+    roleDescription: node.role_description,
     hittable: node.hittable,
     depth: options.depth,
     parentIndex: options.parentIndex,

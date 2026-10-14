@@ -1,10 +1,11 @@
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type {
+  SnapshotAddressableNode,
   SnapshotKeyboardBandFact,
   SnapshotNode,
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
-import { findNodeByRef, normalizeRef } from '@agent-device/kernel/snapshot';
+import { findNodeByRef, hasSnapshotRef, normalizeRef } from '@agent-device/kernel/snapshot';
 import { resolveRectCenter } from '@agent-device/kernel/rect-center';
 import type {
   AgentDeviceRuntime,
@@ -68,8 +69,12 @@ function adoptPreresolvedRefTarget(
   const ref = normalizeRef(target.ref);
   if (!ref) throw new AppError('INVALID_ARGS', `Invalid ref: ${target.ref}`);
   const carriedRef = normalizeRef(preresolved.ref);
-  const nodeRef = preresolved.node.ref ? normalizeRef(preresolved.node.ref) : null;
-  if (carriedRef !== ref || nodeRef !== ref || !preresolved.nodes.includes(preresolved.node)) {
+  if (
+    carriedRef !== ref ||
+    !hasSnapshotRef(preresolved.node) ||
+    normalizeRef(preresolved.node.ref) !== ref ||
+    !preresolved.nodes.includes(preresolved.node)
+  ) {
     throw new AppError(
       'COMMAND_FAILED',
       'Internal find target provenance does not match the interaction ref',
@@ -276,7 +281,9 @@ function refMissRefusal(
   return discloseDispatch(refusal, 'no');
 }
 
-function isUsableResolvedNode(node: SnapshotNode | null | undefined): node is SnapshotNode {
+function isUsableResolvedNode(
+  node: SnapshotNode | null | undefined,
+): node is SnapshotAddressableNode {
   if (!node) return false;
-  return resolveRectCenter(node.rect) !== null;
+  return hasSnapshotRef(node) && resolveRectCenter(node.rect) !== null;
 }
