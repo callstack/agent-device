@@ -29,15 +29,25 @@ import {
  */
 export type DaemonProxyUpstreamFetch = (request: Request) => Promise<Response>;
 
+/** The client an `authenticate` call admitted. */
+export type DaemonProxyAuthenticatedClient = {
+  /** The tenant every request from this client acts as. */
+  tenantId: string;
+  /**
+   * The credential headers an upload ticket gives this client, so its direct upload passes
+   * `authenticate` again. Defaults to the client's own `authorization` and
+   * `x-agent-device-token` request headers, when it sent them.
+   */
+  uploadHeaders?: Record<string, string>;
+};
+
 /**
- * Authenticates one client request and names the tenant it acts as, or returns `null` to refuse
- * it. The request carries the client's headers and, for `/rpc`, its JSON body. Read credentials
- * with `request.headers.get` or `has`: an upload ticket carries the client headers read that way,
- * so the direct upload passes the same check.
+ * Authenticates one client request and names the client it admits, or returns `null` to refuse
+ * it. The request carries the client's headers and, for `/rpc`, its JSON body.
  */
 export type DaemonProxyAuthenticate = (
   request: Request,
-) => Promise<{ tenantId: string } | null> | { tenantId: string } | null;
+) => Promise<DaemonProxyAuthenticatedClient | null> | DaemonProxyAuthenticatedClient | null;
 
 export type DaemonProxyOptions = {
   /** Base URL of the upstream agent-device daemon HTTP server. */
@@ -85,24 +95,11 @@ type NormalizedProxyOptions = {
   upstreamFetch: DaemonProxyUpstreamFetch;
 };
 
-/**
- * The client a request was authenticated as; `tenantId` is set only by `authenticate`.
- * `credentialHeaders` are the client's own headers its upload ticket must carry to pass the same
- * check on the direct upload.
- */
-type ProxyCaller = { tenantId?: string; credentialHeaders: Record<string, string> };
+/** The client a request was authenticated as; `tenantId` is set only by `authenticate`. */
+type ProxyCaller = { tenantId?: string; uploadHeaders: Record<string, string> };
 
-/** Headers that frame the request they arrive on, so a ticket never repeats them. */
-const NON_CREDENTIAL_REQUEST_HEADERS = new Set([
-  'connection',
-  'content-length',
-  'content-type',
-  'host',
-  'transfer-encoding',
-]);
-
-/** Upstream daemon credential header names; a ticket the proxy returns never carries them. */
-const DAEMON_AUTH_HEADER_NAMES = Object.keys(buildDaemonHttpAuthHeaders('daemon'));
+/** The client request headers an upload ticket repeats when `authenticate` names none. */
+const DEFAULT_UPLOAD_CREDENTIAL_HEADERS = Object.keys(buildDaemonHttpAuthHeaders('client'));
 
 const DEFAULT_MAX_RPC_BODY_BYTES = 1024 * 1024;
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 5 * 60 * 1000;
@@ -214,18 +211,17 @@ async function authenticateCaller(
 ): Promise<ProxyCaller | null> {
   if (!options.authenticate) {
     return isAuthorized(request, options.clientToken ?? '', rpcBody)
-      ? { credentialHeaders: buildDaemonHttpAuthHeaders(options.clientToken) }
+      ? { uploadHeaders: buildDaemonHttpAuthHeaders(options.clientToken) }
       : null;
   }
-  const headers = new ReadRecordingHeaders(request.headers);
-  const authenticateRequest = new Request(request.url, {
-    method: request.method,
-    headers,
-    signal: request.signal,
-    ...(rpcBody !== undefined ? { body: rpcBody } : {}),
-  });
-  Object.defineProperty(authenticateRequest, 'headers', { value: headers });
-  const result = await options.authenticate(authenticateRequest);
+  const result = await options.authenticate(
+    new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      signal: request.signal,
+      ...(rpcBody !== undefined ? { body: rpcBody } : {}),
+    }),
+  );
   if (!result) return null;
   const tenantId = normalizeTenantId(
     typeof result.tenantId === 'string' ? result.tenantId : undefined,
@@ -235,32 +231,16 @@ async function authenticateCaller(
       hint: 'Return a tenantId of 1-128 letters, digits, ".", "_" or "-".',
     });
   }
-  return { tenantId, credentialHeaders: headers.readHeaders() };
+  return { tenantId, uploadHeaders: result.uploadHeaders ?? defaultUploadHeaders(request) };
 }
 
-/** Records which headers `authenticate` reads by name, so an upload ticket can carry them. */
-class ReadRecordingHeaders extends Headers {
-  readonly #readNames = new Set<string>();
-
-  override get(name: string): string | null {
-    this.#readNames.add(name.toLowerCase());
-    return super.get(name);
+function defaultUploadHeaders(request: Request): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const name of DEFAULT_UPLOAD_CREDENTIAL_HEADERS) {
+    const value = request.headers.get(name);
+    if (value !== null) headers[name] = value;
   }
-
-  override has(name: string): boolean {
-    this.#readNames.add(name.toLowerCase());
-    return super.has(name);
-  }
-
-  readHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {};
-    for (const name of this.#readNames) {
-      if (NON_CREDENTIAL_REQUEST_HEADERS.has(name)) continue;
-      const value = super.get(name);
-      if (value !== null) headers[name] = value;
-    }
-    return headers;
-  }
+  return headers;
 }
 
 /**
@@ -355,7 +335,7 @@ async function forwardProxyRequest(params: {
       request,
       upstreamResponse,
       headers,
-      ticketAuthHeaders: caller.credentialHeaders,
+      uploadHeaders: caller.uploadHeaders,
     });
   }
   return new Response(upstreamResponse.body, { status: upstreamResponse.status, headers });
@@ -394,12 +374,12 @@ async function rewrittenUploadPreflightResponse(params: {
   request: Request;
   upstreamResponse: Response;
   headers: Headers;
-  ticketAuthHeaders: Record<string, string>;
+  uploadHeaders: Record<string, string>;
 }): Promise<Response> {
-  const { request, upstreamResponse, headers, ticketAuthHeaders } = params;
+  const { request, upstreamResponse, headers, uploadHeaders } = params;
   const text = await upstreamResponse.text();
   headers.set('content-type', upstreamResponse.headers.get('content-type') ?? 'application/json');
-  return new Response(rewriteUploadPreflightResponse(text, request, ticketAuthHeaders), {
+  return new Response(rewriteUploadPreflightResponse(text, request, uploadHeaders), {
     status: upstreamResponse.status,
     headers,
   });
@@ -408,7 +388,7 @@ async function rewrittenUploadPreflightResponse(params: {
 function rewriteUploadPreflightResponse(
   body: string,
   request: Request,
-  ticketAuthHeaders: Record<string, string>,
+  uploadHeaders: Record<string, string>,
 ): string {
   let parsed: unknown;
   try {
@@ -419,29 +399,31 @@ function rewriteUploadPreflightResponse(
 
   if (!parsed || typeof parsed !== 'object') return body;
   const record = parsed as { upload?: { url?: unknown; headers?: unknown } };
-  if (!record.upload || typeof record.upload.url !== 'string') {
-    return body;
-  }
+  if (!record.upload || typeof record.upload !== 'object') return body;
 
-  const rewrittenUrl = rewriteUploadDirectUrl(record.upload.url, request);
-  if (!rewrittenUrl) return body;
-
-  const headers: Record<string, unknown> = {};
-  if (record.upload.headers && typeof record.upload.headers === 'object') {
-    for (const [name, value] of Object.entries(record.upload.headers)) {
-      if (!DAEMON_AUTH_HEADER_NAMES.includes(name.toLowerCase())) headers[name] = value;
-    }
-  }
-  Object.assign(headers, ticketAuthHeaders);
-
+  const rewrittenUrl =
+    typeof record.upload.url === 'string'
+      ? rewriteUploadDirectUrl(record.upload.url, request)
+      : null;
   return JSON.stringify({
     ...(parsed as Record<string, unknown>),
     upload: {
       ...record.upload,
-      url: rewrittenUrl,
-      headers,
+      ...(rewrittenUrl ? { url: rewrittenUrl } : {}),
+      headers: { ...upstreamTicketContentType(record.upload.headers), ...uploadHeaders },
     },
   });
+}
+
+/** The only upstream ticket header a client ticket repeats; daemon credentials never pass. */
+function upstreamTicketContentType(headers: unknown): Record<string, string> {
+  if (!headers || typeof headers !== 'object') return {};
+  for (const [name, value] of Object.entries(headers)) {
+    if (name.toLowerCase() === 'content-type' && typeof value === 'string') {
+      return { 'content-type': value };
+    }
+  }
+  return {};
 }
 
 function rewriteUploadDirectUrl(upstreamUrl: string, request: Request): string | null {

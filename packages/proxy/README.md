@@ -112,9 +112,22 @@ client named, and isolates its sessions from other tenants' sessions. `GET /heal
 authenticated and carries no tenant. A tenant id is 1-128 letters, numbers, dots, underscores or
 hyphens; any other id fails the request with a 500. On `/rpc` the proxy accepts only
 `agent_device.command` and the `agent_device.lease.*` methods (or the same names spelled
-`agent-device.command` and `agent-device.lease.*`), and refuses others with a 401. Upload tickets
-carry the client request headers that `authenticate` read by name, such as `authorization` or an API
-key header, so the upload is authenticated the same way. They never carry the daemon's token.
+`agent-device.command` and `agent-device.lease.*`), and refuses others with a 401.
+
+Clients upload files with a ticket that names the headers to send. The proxy builds that ticket
+from the daemon ticket's `content-type` and the client's own credential, so it never carries the
+daemon's token. By default the credential is the client's `authorization` and
+`x-agent-device-token` headers. If your clients use another header, such as a cookie or an API key
+header, return it as `uploadHeaders` so the upload passes `authenticate` too:
+
+```ts
+authenticate: async (request) => {
+  const apiKey = request.headers.get('x-api-key');
+  if (!apiKey) return null;
+  const account = await accounts.findByApiKey(apiKey);
+  return account ? { tenantId: account.id, uploadHeaders: { 'x-api-key': apiKey } } : null;
+},
+```
 
 ## Options
 

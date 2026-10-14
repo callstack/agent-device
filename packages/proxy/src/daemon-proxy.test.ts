@@ -1,6 +1,10 @@
 import { expect, test } from 'vitest';
 import { buildDaemonHttpAuthHeaders } from '@agent-device/contracts/daemon-http';
-import { createDaemonProxy, type DaemonProxyUpstreamFetch } from './daemon-proxy.ts';
+import {
+  createDaemonProxy,
+  type DaemonProxyAuthenticatedClient,
+  type DaemonProxyUpstreamFetch,
+} from './daemon-proxy.ts';
 
 const PROXY_ORIGIN = 'https://gateway.example.test';
 
@@ -353,7 +357,7 @@ test('authenticate tenant replaces the tenant header a client sends on artifact 
 
 const DAEMON_TOKEN = 'daemon-secret';
 
-/** Answers a preflight with the ticket the daemon issues: both daemon credentials plus extras. */
+/** Answers a preflight with a ticket carrying daemon credentials under several header names. */
 function daemonTicketUpstream() {
   return recordingUpstream((request) =>
     new URL(request.url).pathname.endsWith('/upload/preflight')
@@ -362,25 +366,35 @@ function daemonTicketUpstream() {
           uploadId: 'abc',
           upload: {
             url: 'http://127.0.0.1:4310/upload/direct/abc',
-            headers: { ...buildDaemonHttpAuthHeaders(DAEMON_TOKEN), 'x-extra': '1' },
+            headers: {
+              ...buildDaemonHttpAuthHeaders(DAEMON_TOKEN),
+              cookie: `daemon=${DAEMON_TOKEN}`,
+              'x-extra': '1',
+              'content-type': 'application/zip',
+            },
           },
         })
       : new Response(null, { status: 200 }),
   );
 }
 
+/** Admits `alice-key` from any of four credential headers, naming its own upload headers. */
 function proxyAuthenticatingByAnyCredential(upstreamFetch: DaemonProxyUpstreamFetch) {
   return createDaemonProxy({
     upstreamBaseUrl: 'http://daemon.internal:4310',
     upstreamToken: DAEMON_TOKEN,
     upstreamFetch,
-    authenticate: (request) => {
-      const key =
-        request.headers.get('x-api-key') ??
-        request.headers.get('cookie')?.replace(/^session=/, '') ??
+    authenticate: (request): DaemonProxyAuthenticatedClient | null => {
+      if (request.headers.get('x-api-key') === 'alice-key') {
+        return { tenantId: 'alice', uploadHeaders: { 'x-api-key': 'alice-key' } };
+      }
+      if (request.headers.get('cookie') === 'session=alice-key') {
+        return { tenantId: 'alice', uploadHeaders: { cookie: 'session=alice-key' } };
+      }
+      const token =
         request.headers.get('x-agent-device-token') ??
         request.headers.get('authorization')?.replace(/^Bearer /, '');
-      return key === 'alice-key' ? { tenantId: 'alice' } : null;
+      return token === 'alice-key' ? { tenantId: 'alice' } : null;
     },
   });
 }
@@ -388,7 +402,7 @@ function proxyAuthenticatingByAnyCredential(upstreamFetch: DaemonProxyUpstreamFe
 async function requestTicket(
   proxy: ReturnType<typeof createDaemonProxy>,
   headers: Record<string, string>,
-): Promise<{ text: string; ticketHeaders: Record<string, string> }> {
+): Promise<Record<string, string>> {
   const response = await proxy.handle(
     new Request(`${PROXY_ORIGIN}/agent-device/upload/preflight`, {
       method: 'POST',
@@ -397,45 +411,84 @@ async function requestTicket(
     }),
   );
   const text = await response.text();
-  return {
-    text,
-    ticketHeaders: (JSON.parse(text) as { upload: { headers: Record<string, string> } }).upload
-      .headers,
-  };
+  expect(text).not.toContain(DAEMON_TOKEN);
+  const ticketHeaders = (JSON.parse(text) as { upload: { headers: Record<string, string> } }).upload
+    .headers;
+  for (const value of Object.values(ticketHeaders)) expect(value).not.toContain(DAEMON_TOKEN);
+  return ticketHeaders;
+}
+
+function uploadChunk(proxy: ReturnType<typeof createDaemonProxy>, headers: Record<string, string>) {
+  return proxy.handle(
+    new Request(`${PROXY_ORIGIN}/agent-device/upload/direct/abc`, {
+      method: 'PUT',
+      headers,
+      body: 'bytes',
+      duplex: 'half',
+    } as RequestInit),
+  );
 }
 
 test.each([
   ['authorization', { authorization: 'Bearer alice-key' }],
   ['x-agent-device-token', { 'x-agent-device-token': 'alice-key' }],
-  ['cookie', { cookie: 'session=alice-key' }],
-  ['x-api-key', { 'x-api-key': 'alice-key' }],
 ])(
-  'with authenticate, a %s caller gets a ticket with only its own credential',
+  'with authenticate naming no upload headers, a %s caller gets a ticket with its own credential',
   async (_name, clientHeaders) => {
     const upstream = daemonTicketUpstream();
     const proxy = proxyAuthenticatingByAnyCredential(upstream.fetch);
 
-    const { text, ticketHeaders } = await requestTicket(proxy, clientHeaders);
+    const ticketHeaders = await requestTicket(proxy, clientHeaders);
 
-    expect(text).not.toContain(DAEMON_TOKEN);
-    expect(ticketHeaders).toEqual({ 'x-extra': '1', ...clientHeaders });
+    expect(ticketHeaders).toEqual({ 'content-type': 'application/zip', ...clientHeaders });
   },
 );
 
-test('with authenticate, the ticket credential passes authenticate on the direct upload', async () => {
+test.each([
+  ['cookie', { cookie: 'session=alice-key' }],
+  ['x-api-key', { 'x-api-key': 'alice-key' }],
+])(
+  'with authenticate naming %s upload headers, the ticket carries exactly those',
+  async (_name, uploadHeaders) => {
+    const upstream = daemonTicketUpstream();
+    const proxy = proxyAuthenticatingByAnyCredential(upstream.fetch);
+
+    const ticketHeaders = await requestTicket(proxy, {
+      ...uploadHeaders,
+      authorization: 'Bearer unrelated',
+    });
+
+    expect(ticketHeaders).toEqual({ 'content-type': 'application/zip', ...uploadHeaders });
+  },
+);
+
+test('with authenticate, a custom upload header passes authenticate on the direct upload', async () => {
   const upstream = daemonTicketUpstream();
   const proxy = proxyAuthenticatingByAnyCredential(upstream.fetch);
-  const { ticketHeaders } = await requestTicket(proxy, { 'x-api-key': 'alice-key' });
+  const ticketHeaders = await requestTicket(proxy, { 'x-api-key': 'alice-key' });
 
-  const upload = await proxy.handle(
-    new Request(`${PROXY_ORIGIN}/agent-device/upload/direct/abc`, {
-      method: 'PUT',
-      headers: ticketHeaders,
-      body: 'bytes',
-      duplex: 'half',
-    } as RequestInit),
-  );
+  const upload = await uploadChunk(proxy, ticketHeaders);
 
+  expect(upload.status).toBe(200);
+  expect(upstream.requests[1]?.headers.get('x-agent-device-tenant')).toBe('alice');
+});
+
+test('an authenticate that never reads headers still yields a working ticket', async () => {
+  const upstream = daemonTicketUpstream();
+  const proxy = createDaemonProxy({
+    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamToken: DAEMON_TOKEN,
+    upstreamFetch: upstream.fetch,
+    authenticate: () => ({ tenantId: 'alice' }),
+  });
+  const ticketHeaders = await requestTicket(proxy, { authorization: 'Bearer alice-key' });
+
+  const upload = await uploadChunk(proxy, ticketHeaders);
+
+  expect(ticketHeaders).toEqual({
+    'content-type': 'application/zip',
+    authorization: 'Bearer alice-key',
+  });
   expect(upload.status).toBe(200);
   expect(upstream.requests[1]?.headers.get('x-agent-device-tenant')).toBe('alice');
 });
@@ -444,15 +497,26 @@ test('with a client token, the ticket carries the client token, never the daemon
   const upstream = daemonTicketUpstream();
   const proxy = proxyWith(upstream.fetch);
 
-  const { text, ticketHeaders } = await requestTicket(proxy, {
-    authorization: 'Bearer client-secret',
-  });
+  const ticketHeaders = await requestTicket(proxy, { authorization: 'Bearer client-secret' });
 
-  expect(text).not.toContain(DAEMON_TOKEN);
   expect(ticketHeaders).toEqual({
-    'x-extra': '1',
+    'content-type': 'application/zip',
     ...buildDaemonHttpAuthHeaders('client-secret'),
   });
+});
+
+test('a ticket whose url the proxy cannot rewrite still drops the daemon credentials', async () => {
+  const upstream = recordingUpstream(() =>
+    Response.json({
+      ok: true,
+      upload: { url: 'not a url', headers: buildDaemonHttpAuthHeaders(DAEMON_TOKEN) },
+    }),
+  );
+  const proxy = proxyWith(upstream.fetch);
+
+  const ticketHeaders = await requestTicket(proxy, { authorization: 'Bearer client-secret' });
+
+  expect(ticketHeaders).toEqual(buildDaemonHttpAuthHeaders('client-secret'));
 });
 
 test('with authenticate, request diagnostics are served only for the caller tenant sessions', async () => {
