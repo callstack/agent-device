@@ -542,13 +542,6 @@ test('openAndroidApp returns the package am start reports it launched', async ()
   });
 });
 
-test('openAndroidApp has am force-stop a deep link handler when terminating a running app', async () => {
-  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
-    await openAndroidApp(device, 'myapp://item/42', { terminateRunningApp: true });
-    assert.deepEqual(calls.at(-1)?.slice(0, 5), ['shell', 'am', 'start', '-W', '-S']);
-  });
-});
-
 test('openAndroidApp stops the bound package before an app-bound deep link when terminating', async () => {
   await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
     await openAndroidApp(device, 'com.example.app', {

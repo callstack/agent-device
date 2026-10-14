@@ -51,7 +51,11 @@ function createLifecycle(
       ({
         open: async (app: string, options?: { terminateRunningApp?: boolean }) => {
           calls.push(`open:${app}${options?.terminateRunningApp ? ' (terminate running)' : ''}`);
-          return { launchedAppBundleId: params.launchedAppBundleId };
+          return {
+            launchedAppBundleId: app.includes('://')
+              ? 'com.example.follow-up'
+              : params.launchedAppBundleId,
+          };
         },
         openDevice: async () => {},
         close: async (app: string) => {

@@ -262,7 +262,6 @@ async function openAndroidDeepLink(
     'am',
     'start',
     '-W',
-    ...(options.terminateRunningApp ? ['-S'] : []),
     '-a',
     'android.intent.action.VIEW',
     '-d',
