@@ -1,13 +1,17 @@
 import path from 'node:path';
 
 // The daemon HTTP wire vocabulary shared by the daemon server, the remote
-// proxy, and every client that talks to them: the base path, the tenant and
-// network-access header names, the URL/auth/tenant header builders, the
+// proxy, and every client that talks to them: the base path, the tenant, lease
+// and network-access header names, the URL/auth/tenant/lease header builders, the
 // /health payload, and the temp artifact paths a remote client names on the
 // daemon host. Client and server must agree on all of it, so neither side
 // owns it (ADR 0006).
 export const DAEMON_HTTP_BASE_PATH = '/agent-device';
 export const DAEMON_HTTP_TENANT_HEADER = 'x-agent-device-tenant';
+// Names the lease a non-RPC request (upload, artifact download, request diagnostics) belongs to,
+// as RPC calls name it in their body. Neither the daemon nor the proxy reads it; it lets a gateway
+// in front of many daemons route those requests to the one holding the lease.
+export const DAEMON_HTTP_LEASE_HEADER = 'x-agent-device-lease-id';
 export const DAEMON_HTTP_NETWORK_ACCESS_HEADER = 'x-agent-device-network-access';
 export const DAEMON_HTTP_PUBLIC_NETWORK_ACCESS = 'public-only';
 
@@ -33,6 +37,12 @@ export function buildDaemonHttpTenantHeaders(tenantId: string | undefined): Reco
   const normalizedTenantId = tenantId?.trim();
   if (!normalizedTenantId) return {};
   return { [DAEMON_HTTP_TENANT_HEADER]: normalizedTenantId };
+}
+
+export function buildDaemonHttpLeaseHeaders(leaseId: string | undefined): Record<string, string> {
+  const normalizedLeaseId = leaseId?.trim();
+  if (!normalizedLeaseId) return {};
+  return { [DAEMON_HTTP_LEASE_HEADER]: normalizedLeaseId };
 }
 
 // See docs/adr/0006-daemon-rpc-protocol-version.md before changing this value.

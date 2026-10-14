@@ -630,3 +630,23 @@ test('bridge RN class values carry shared semantics while native class evidence 
     expanded: true,
   });
 });
+
+test('the AX bridge publishes native switch and text entry facts without inventing unknown states', () => {
+  const tree = decodeSnapshotBridgeTree(
+    {
+      [application]: 'Application',
+      [children]: [
+        { [automationType]: 40, XC_kAXXCAttributeValue: 0, [children]: [] },
+        { [automationType]: 50, [traits]: '0', [children]: [] },
+        { [automationType]: 49, [traits]: '256', [children]: [] },
+        { [automationType]: 40, [children]: [] },
+      ],
+    },
+    { truncated: false },
+    limits,
+  ).nodes;
+  assert.equal(tree[1]!.checked, false);
+  assert.deepEqual([tree[2]!.editable, tree[2]!.password], [true, true]);
+  assert.deepEqual([tree[3]!.enabled, tree[3]!.editable, tree[3]!.password], [false, true, false]);
+  assert.equal(tree[4]!.checked, undefined);
+});

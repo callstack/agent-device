@@ -370,6 +370,7 @@ test('open --relaunch allows Android package names ending with apk-like suffix',
   const dispatchCalls: Array<{ command: string; positionals: string[] }> = [];
 
   mockResolveTargetDevice.mockResolvedValue(makeAndroidEmulator());
+  mockResolveAndroidPackage.mockResolvedValue('com.example.apk');
   mockDispatch.mockImplementation(async (_device, command, positionals) => {
     dispatchCalls.push({ command, positionals });
     return {};

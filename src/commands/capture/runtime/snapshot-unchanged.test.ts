@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { interpretIosReactNativeValue } from '@agent-device/capture-kit/ios-react-native-value';
+import { interpretIosNode } from '@agent-device/capture-kit/ios-node-interpretation';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import fc from 'fast-check';
 import {
@@ -342,10 +342,10 @@ test.each([{ editable: true }, { password: true }])(
       checked: false,
     };
     const previous = snapshot('Preferences', {
-      nodes: attachRefs([interpretIosReactNativeValue(node)]),
+      nodes: attachRefs([interpretIosNode(node)]),
     });
     const current = snapshot('Preferences', {
-      nodes: attachRefs([interpretIosReactNativeValue({ ...node, ...change })]),
+      nodes: attachRefs([interpretIosNode({ ...node, ...change })]),
     });
     expect(previous.nodes[0]?.iosValueSemantics?.checked).toBe(true);
     expect(current.nodes[0]?.iosValueSemantics).toBeUndefined();

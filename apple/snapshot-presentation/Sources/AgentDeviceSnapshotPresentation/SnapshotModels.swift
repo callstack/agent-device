@@ -91,7 +91,7 @@ public struct RawAXNode: Equatable {
     return updated
   }
 
-  func reindexed(index: Int, depth: Int, parentIndex: Int?) -> RawAXNode {
+  public func reindexed(index: Int, depth: Int, parentIndex: Int?) -> RawAXNode {
     var updated = self
     updated.index = index
     updated.depth = depth

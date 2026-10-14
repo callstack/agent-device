@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { AppError } from '@agent-device/kernel/errors';
-import { buildDaemonHttpAuthHeaders } from '@agent-device/contracts/daemon-http';
+import {
+  buildDaemonHttpAuthHeaders,
+  buildDaemonHttpLeaseHeaders,
+} from '@agent-device/contracts/daemon-http';
 import { prepareUploadArtifact, type PreparedUploadArtifact } from './upload-client-artifact.ts';
 import { isRetryableUploadStreamError, streamFileToHttpRequest } from './upload-stream.ts';
 import type { UploadProgressSink } from './upload-progress.ts';
@@ -13,6 +16,8 @@ type UploadArtifactOptions = {
   baseUrl: string;
   token: string;
   platform?: string;
+  /** The lease this upload is for; every request to the daemon names it in a header. */
+  leaseId?: string;
   onProgress?: UploadProgressSink;
   /**
    * Ends the upload when the thing it is uploading for stops being worth finishing — today, a beat
@@ -57,6 +62,7 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
     const preflight = await requestUploadPreflight({
       normalizedBase,
       token: options.token,
+      leaseId: options.leaseId,
       artifact: prepared,
       uploadAttemptId,
       signal: options.signal,
@@ -69,6 +75,7 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
       const directUpload = await tryDirectUploadWithResume({
         normalizedBase,
         token: options.token,
+        leaseId: options.leaseId,
         artifact: prepared,
         preflight,
         uploadAttemptId,
@@ -85,6 +92,7 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
       return await uploadLegacyArtifact({
         normalizedBase,
         token: options.token,
+        leaseId: options.leaseId,
         artifact: prepared,
         onProgress: options.onProgress,
         signal: options.signal,
@@ -94,6 +102,7 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
     return await uploadLegacyArtifact({
       normalizedBase,
       token: options.token,
+      leaseId: options.leaseId,
       artifact: prepared,
       onProgress: options.onProgress,
       signal: options.signal,
@@ -106,6 +115,7 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
 async function tryDirectUploadWithResume(options: {
   normalizedBase: string;
   token: string;
+  leaseId?: string;
   artifact: PreparedUploadArtifact;
   preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>;
   uploadAttemptId: string;
@@ -115,10 +125,11 @@ async function tryDirectUploadWithResume(options: {
   const uploadOnce = async (
     preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
   ): Promise<string> => {
-    await uploadDirectArtifact(options.artifact, preflight, options.onProgress, options.signal);
+    await uploadDirectArtifact(options, preflight);
     return await finalizeDirectUpload({
       normalizedBase: options.normalizedBase,
       token: options.token,
+      leaseId: options.leaseId,
       uploadId: preflight.uploadId,
       signal: options.signal,
     });
@@ -146,6 +157,7 @@ async function retryDirectUpload(
   options: {
     normalizedBase: string;
     token: string;
+    leaseId?: string;
     artifact: PreparedUploadArtifact;
     uploadAttemptId: string;
     onProgress?: UploadProgressSink;
@@ -158,6 +170,7 @@ async function retryDirectUpload(
   const retryPreflight = await requestUploadPreflight({
     normalizedBase: options.normalizedBase,
     token: options.token,
+    leaseId: options.leaseId,
     artifact: options.artifact,
     uploadAttemptId: options.uploadAttemptId,
     signal: options.signal,
@@ -183,11 +196,12 @@ function shouldRetryDirectUpload(error: unknown): boolean {
 async function uploadLegacyArtifact(options: {
   normalizedBase: string;
   token: string;
+  leaseId?: string;
   artifact: PreparedUploadArtifact;
   onProgress?: UploadProgressSink;
   signal?: AbortSignal;
 }): Promise<string> {
-  const { normalizedBase, token, artifact } = options;
+  const { normalizedBase, token, leaseId, artifact } = options;
   const uploadUrl = new URL('upload', normalizedBase);
 
   const headers: Record<string, string> = {
@@ -198,7 +212,7 @@ async function uploadLegacyArtifact(options: {
     'x-artifact-hash-algorithm': ARTIFACT_HASH_ALGORITHM,
     'transfer-encoding': 'chunked',
   };
-  Object.assign(headers, buildDaemonHttpAuthHeaders(token));
+  Object.assign(headers, buildDaemonHttpAuthHeaders(token), buildDaemonHttpLeaseHeaders(leaseId));
 
   const response = await streamFileToHttpRequest({
     url: uploadUrl,
@@ -232,6 +246,7 @@ async function uploadLegacyArtifact(options: {
 async function requestUploadPreflight(options: {
   normalizedBase: string;
   token: string;
+  leaseId?: string;
   artifact: PreparedUploadArtifact;
   uploadAttemptId: string;
   signal?: AbortSignal;
@@ -240,7 +255,11 @@ async function requestUploadPreflight(options: {
   const headers: Record<string, string> = {
     'content-type': 'application/json',
   };
-  Object.assign(headers, buildDaemonHttpAuthHeaders(options.token));
+  Object.assign(
+    headers,
+    buildDaemonHttpAuthHeaders(options.token),
+    buildDaemonHttpLeaseHeaders(options.leaseId),
+  );
 
   const response = await fetch(preflightUrl, {
     method: 'POST',
@@ -317,15 +336,26 @@ function isStringRecord(value: unknown): value is Record<string, string> {
 }
 
 async function uploadDirectArtifact(
-  artifact: PreparedUploadArtifact,
+  options: {
+    normalizedBase: string;
+    leaseId?: string;
+    artifact: PreparedUploadArtifact;
+    onProgress?: UploadProgressSink;
+    signal?: AbortSignal;
+  },
   ticket: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
-  onProgress: UploadProgressSink | undefined,
-  signal: AbortSignal | undefined,
 ): Promise<void> {
+  const { artifact, onProgress, signal } = options;
+  const url = new URL(ticket.url);
   const response = await streamFileToHttpRequest({
-    url: new URL(ticket.url),
+    url,
     method: 'PUT',
-    headers: ticket.headers,
+    // A ticket on the daemon's own origin is routed like any daemon request, so it names the lease
+    // too; a ticket elsewhere (a signed storage URL) gets only the headers the daemon handed out.
+    headers:
+      url.origin === new URL(options.normalizedBase).origin
+        ? { ...ticket.headers, ...buildDaemonHttpLeaseHeaders(options.leaseId) }
+        : ticket.headers,
     payloadPath: artifact.payloadPath,
     timeoutMessage: 'Direct artifact upload timed out',
     timeoutHint: 'The direct upload ticket did not accept the artifact within the timeout.',
@@ -350,6 +380,7 @@ async function uploadDirectArtifact(
 async function finalizeDirectUpload(options: {
   normalizedBase: string;
   token: string;
+  leaseId?: string;
   uploadId: string;
   signal?: AbortSignal;
 }): Promise<string> {
@@ -357,7 +388,11 @@ async function finalizeDirectUpload(options: {
   const headers: Record<string, string> = {
     'content-type': 'application/json',
   };
-  Object.assign(headers, buildDaemonHttpAuthHeaders(options.token));
+  Object.assign(
+    headers,
+    buildDaemonHttpAuthHeaders(options.token),
+    buildDaemonHttpLeaseHeaders(options.leaseId),
+  );
 
   const response = await fetch(finalizeUrl, {
     method: 'POST',

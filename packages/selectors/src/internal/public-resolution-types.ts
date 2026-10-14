@@ -12,21 +12,21 @@ export type SelectorDiagnostics = {
  * The disclosure for an ambiguous selector that was resolved by the heuristic;
  * present only when the heuristic picked among N>1 matches (ADR 0012).
  */
-export type SelectorDisambiguationDisclosure = {
+export type SelectorDisambiguationDisclosure<TNode extends SnapshotNode = SnapshotNode> = {
   matchCount: number;
   tiebreak: DisambiguationTiebreak;
   /** Every losing matched node, document order, uncapped (response layer caps). */
-  alternatives: SnapshotNode[];
+  alternatives: TNode[];
 };
 
 /** String-only resolution result; the parser representation remains package-private. */
-export type SelectorResolution = {
-  node: SnapshotNode;
+export type SelectorResolution<TNode extends SnapshotNode = SnapshotNode> = {
+  node: TNode;
   selector: string;
   selectorIndex: number;
   matches: number;
   diagnostics: SelectorDiagnostics[];
-  disambiguation?: SelectorDisambiguationDisclosure;
+  disambiguation?: SelectorDisambiguationDisclosure<TNode>;
 };
 
 /**

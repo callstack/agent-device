@@ -1,6 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
-import type { SelectorResolution } from '@agent-device/selectors';
 import { readinessScheduleFor } from '@agent-device/selectors/selector-pipeline-policy';
 import {
   attemptSelectorResolution,
@@ -32,6 +31,7 @@ import {
   buildSelectorResolutionDisclosure,
   describeResolvedInteractionNode,
 } from './resolution-disclosure.ts';
+import type { ActionSelectorResolution } from './selector-action-resolution.ts';
 import {
   assertVisibleSelectorTarget,
   runInteractionPipelineStages,
@@ -138,7 +138,7 @@ async function resolveSelectorInteractionTarget(
 ): Promise<ResolvedInteractionTarget> {
   const selectorExpression = target.selector;
   let capture: InteractionSnapshot;
-  let resolved: SelectorResolution | null;
+  let resolved: ActionSelectorResolution | null;
   let readiness: SelectorReadinessWait | undefined;
   const readinessSchedule = readinessScheduleFor(params.pipeline.poll, params.readinessTimeoutMs);
   if (!readinessSchedule) {

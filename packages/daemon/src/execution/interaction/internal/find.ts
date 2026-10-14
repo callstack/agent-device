@@ -10,6 +10,7 @@ import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pip
 import { coveredInteractionDetails } from '@agent-device/selectors/interaction-error';
 import {
   centerOfRect,
+  type SnapshotAddressableNode,
   type SnapshotKeyboardBandFact,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
@@ -62,7 +63,7 @@ type FindContext = {
 
 type ResolvedMatch = {
   node: SnapshotState['nodes'][number];
-  resolvedNode: SnapshotState['nodes'][number];
+  resolvedNode: SnapshotAddressableNode;
   ref: string;
   nodes: SnapshotState['nodes'];
   /** The in-place iOS system surface the target capture described (#2438), if any. */
@@ -75,7 +76,7 @@ type ResolvedMatch = {
    * seam surfaces it: click/fill re-enter the interaction leaf, which owns
    * that refusal's shape and raises it against the same node.
    */
-  occludedNode?: SnapshotState['nodes'][number];
+  occludedNode?: SnapshotAddressableNode;
 };
 
 export async function handleFindCommands(params: FindRouteInput): Promise<DaemonResponse | null> {

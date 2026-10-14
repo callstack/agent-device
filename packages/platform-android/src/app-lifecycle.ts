@@ -7,6 +7,7 @@ import { isDeepLinkTarget } from '@agent-device/contracts/command';
 
 import { waitForAndroidBoot } from './emulator-lifecycle.ts';
 import { runAndroidShell } from './adb.ts';
+import type { AndroidAdbExecutorResult } from './adb-transport.ts';
 import {
   androidAdbResultError,
   createAndroidPortReverseManager,
@@ -157,6 +158,8 @@ export type OpenAndroidAppOptions = {
   activity?: string;
   appBundleId?: string;
   launchArgs?: string[];
+  /** Force-stops the app the target resolves to before starting it. */
+  terminateRunningApp?: boolean;
   url?: string;
 };
 
@@ -192,11 +195,20 @@ function androidLaunchArgs(options: OpenAndroidAppOptions): string[] {
   return options.launchArgs ?? [];
 }
 
+/** Opens the target and returns the package `am start -W` reports it launched, when reported. */
 export async function openAndroidApp(
   device: DeviceInfo,
   app: string,
   optionsOrActivity?: OpenAndroidAppOptions | string,
-): Promise<void> {
+): Promise<string | undefined> {
+  return launchedAndroidPackage(await startAndroidApp(device, app, optionsOrActivity));
+}
+
+async function startAndroidApp(
+  device: DeviceInfo,
+  app: string,
+  optionsOrActivity?: OpenAndroidAppOptions | string,
+): Promise<AndroidAdbExecutorResult> {
   const options = normalizeOpenAndroidAppOptions(optionsOrActivity);
   const activity = options.activity;
   if (activity !== undefined) requireAndroidActivityComponent(activity);
@@ -205,31 +217,40 @@ export async function openAndroidApp(
   }
   const deepLinkTarget = app.trim();
   if (isDeepLinkTarget(deepLinkTarget)) {
-    await openAndroidDeepLink(device, deepLinkTarget, options);
-    return;
+    return await openAndroidDeepLink(device, deepLinkTarget, options);
   }
   if (options.url !== undefined) {
-    await openAndroidAppBoundDeepLink(device, app, options);
-    return;
+    return await openAndroidAppBoundDeepLink(device, app, options);
   }
   const resolved = await resolveAndroidApp(device, app);
   const launchCategory = resolveAndroidLauncherCategory(device);
   if (resolved.type === 'intent') {
-    await openAndroidIntent(device, resolved.value, options);
-    return;
+    return await openAndroidIntent(device, resolved.value, options);
   }
+  if (options.terminateRunningApp) await stopAndroidPackage(device, resolved.value);
   if (activity) {
-    await openAndroidPackageActivity(device, resolved.value, activity, launchCategory, options);
-    return;
+    return await openAndroidPackageActivity(
+      device,
+      resolved.value,
+      activity,
+      launchCategory,
+      options,
+    );
   }
-  await openAndroidPackage(device, resolved.value, launchCategory, options);
+  return await openAndroidPackage(device, resolved.value, launchCategory, options);
+}
+
+/** `am start -W` names the activity this launch resumed on its `Activity: <package>/<class>` line. */
+function launchedAndroidPackage(result: AndroidAdbExecutorResult): string | undefined {
+  const line = result.stdout.split('\n').find((entry) => entry.trim().startsWith('Activity:'));
+  return line?.split(':')[1]?.trim().split('/')[0] || undefined;
 }
 
 async function openAndroidDeepLink(
   device: DeviceInfo,
   target: string,
   options: OpenAndroidAppOptions,
-): Promise<void> {
+): Promise<AndroidAdbExecutorResult> {
   if (options.activity) {
     throw new AppError(
       'INVALID_ARGS',
@@ -237,7 +258,7 @@ async function openAndroidDeepLink(
     );
   }
   await ensureAndroidLocalhostReverse(device, target);
-  await runAndroidShell(device, [
+  return await runAndroidShell(device, [
     'am',
     'start',
     '-W',
@@ -254,7 +275,7 @@ async function openAndroidAppBoundDeepLink(
   device: DeviceInfo,
   app: string,
   options: OpenAndroidAppOptions,
-): Promise<void> {
+): Promise<AndroidAdbExecutorResult> {
   if (options.activity) {
     throw new AppError(
       'INVALID_ARGS',
@@ -267,7 +288,8 @@ async function openAndroidAppBoundDeepLink(
   }
   await ensureAndroidLocalhostReverse(device, deepLinkUrl);
   const resolved = await requireAndroidPackageForOpen(device, app, 'app-bound open');
-  await runAndroidShell(device, [
+  if (options.terminateRunningApp) await stopAndroidPackage(device, resolved);
+  return await runAndroidShell(device, [
     'am',
     'start',
     '-W',
@@ -285,11 +307,19 @@ async function openAndroidIntent(
   device: DeviceInfo,
   intent: string,
   options: OpenAndroidAppOptions,
-): Promise<void> {
+): Promise<AndroidAdbExecutorResult> {
   if (options.activity) {
     throw new AppError('INVALID_ARGS', 'Activity override requires a package name, not an intent');
   }
-  await runAndroidShell(device, ['am', 'start', '-W', '-a', intent, ...androidLaunchArgs(options)]);
+  return await runAndroidShell(device, [
+    'am',
+    'start',
+    '-W',
+    ...(options.terminateRunningApp ? ['-S'] : []),
+    '-a',
+    intent,
+    ...androidLaunchArgs(options),
+  ]);
 }
 
 async function openAndroidPackageActivity(
@@ -298,10 +328,10 @@ async function openAndroidPackageActivity(
   activity: string,
   launchCategory: string,
   options: OpenAndroidAppOptions,
-): Promise<void> {
+): Promise<AndroidAdbExecutorResult> {
   const component = androidActivityComponent(packageName, activity);
   try {
-    await runAndroidShell(
+    return await runAndroidShell(
       device,
       buildAndroidActivityLaunchArgs(component, launchCategory, options),
     );
@@ -316,7 +346,7 @@ async function openAndroidPackage(
   packageName: string,
   launchCategory: string,
   options: OpenAndroidAppOptions,
-): Promise<void> {
+): Promise<AndroidAdbExecutorResult> {
   const primaryResult = await runAndroidShell(
     device,
     [
@@ -336,7 +366,7 @@ async function openAndroidPackage(
     { allowFailure: true },
   );
   if (primaryResult.exitCode === 0 && !isAmStartError(primaryResult.stdout, primaryResult.stderr)) {
-    return;
+    return primaryResult;
   }
   const component = await resolveAndroidLaunchComponent(device, packageName);
   if (!component) {
@@ -345,7 +375,10 @@ async function openAndroidPackage(
     }
     throw androidAdbResultError(`Failed to launch ${packageName}`, primaryResult);
   }
-  await runAndroidShell(device, buildAndroidActivityLaunchArgs(component, launchCategory, options));
+  return await runAndroidShell(
+    device,
+    buildAndroidActivityLaunchArgs(component, launchCategory, options),
+  );
 }
 
 function buildAndroidActivityLaunchArgs(
@@ -518,8 +551,12 @@ export async function closeAndroidApp(device: DeviceInfo, app: string): Promise<
   if (resolved.type === 'intent') {
     throw new AppError('INVALID_ARGS', 'Close requires a package name, not an intent');
   }
-  await runAndroidShell(device, ['am', 'force-stop', resolved.value]);
-  await waitForAndroidPackageStopped(device, resolved.value);
+  await stopAndroidPackage(device, resolved.value);
+}
+
+async function stopAndroidPackage(device: DeviceInfo, packageName: string): Promise<void> {
+  await runAndroidShell(device, ['am', 'force-stop', packageName]);
+  await waitForAndroidPackageStopped(device, packageName);
 }
 
 async function waitForAndroidPackageStopped(
