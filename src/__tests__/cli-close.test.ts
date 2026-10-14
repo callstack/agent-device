@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import fs from 'node:fs';
@@ -12,6 +12,14 @@ import {
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
 import type { DaemonResponse } from '../daemon-client/daemon-client.ts';
+
+const emitDiagnostic = vi.hoisted(() => vi.fn());
+
+vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
+  emitDiagnostic.mockImplementation(actual.emitDiagnostic);
+  return { ...actual, emitDiagnostic };
+});
 
 function runCliWithDaemonStartupFailure(argv: string[]): Promise<CapturedCliRun> {
   return runCliCapture(argv, async () => {
@@ -167,6 +175,15 @@ test('proxy close succeeds and forgets the lease when the release finds no lease
   assert.equal(result.stderr, '');
   assert.equal(JSON.parse(result.stdout).success, true);
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, undefined);
+  const releaseFailure = emitDiagnostic.mock.calls
+    .map(([event]) => event)
+    .find((event) => event.phase === 'proxy_lease_release_after_close_failed');
+  assert.deepEqual(releaseFailure?.data, {
+    session: 'adc-proxy',
+    leaseId: PROXY_LEASE_ID,
+    code: 'UNAUTHORIZED',
+    reason: 'LEASE_NOT_FOUND',
+  });
 });
 
 test('proxy close keeps a lease the daemon retained on close, as heartbeats reported it', async () => {

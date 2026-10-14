@@ -17,7 +17,8 @@ import {
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
 } from '../../remote/remote-connection-state.ts';
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   connectProviderNamesForError,
   connectionProviderCapabilities,
@@ -357,8 +358,18 @@ export async function releaseProxyLeaseAfterClose(
   if (connectionProviderCapabilities(state.leaseProvider).leaseKind !== 'proxy') return;
   try {
     await releaseRemoteConnectionLease(client, state, flags.daemonAuthToken);
-  } catch {
-    // The session is already closed and its lease already released or expiring.
+  } catch (error) {
+    const normalized = normalizeError(error);
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'proxy_lease_release_after_close_failed',
+      data: {
+        session: state.session,
+        leaseId: state.leaseId,
+        code: normalized.code,
+        reason: normalized.details?.reason,
+      },
+    });
   }
   writeRemoteConnectionState({
     stateDir,
