@@ -21,6 +21,8 @@ export type LeaseRegistryOptions = {
 export type AllocateLeaseRequest = {
   tenantId: string;
   runId: string;
+  /** A caller-chosen id for a new lease; without it the registry mints one. */
+  leaseId?: string;
   leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   deviceKey?: string;
@@ -334,9 +336,10 @@ export function createDeviceLease(
   request: NormalizedAllocateLeaseRequest,
   leaseTtlMs: number,
   now: number,
+  leaseId = crypto.randomBytes(16).toString('hex'),
 ): DeviceLease {
   return {
-    leaseId: crypto.randomBytes(16).toString('hex'),
+    leaseId,
     tenantId: request.tenantId,
     runId: request.runId,
     backend: request.backend,

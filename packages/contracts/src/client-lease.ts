@@ -29,6 +29,12 @@ export type LeaseOptions = AgentDeviceRequestOverrides &
 export type LeaseAllocateOptions = LeaseOptions & {
   tenant: string;
   runId: string;
+  /**
+   * The id for the new lease (16-128 hex characters), refused when the daemon already issued it;
+   * the client's configured `leaseId` is never sent here. Use the returned lease's `leaseId`: a daemon that predates this field mints its own,
+   * and a run that already holds a lease gets that lease back.
+   */
+  leaseId?: string;
   leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   provider?: string;

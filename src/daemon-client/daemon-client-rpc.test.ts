@@ -33,6 +33,31 @@ test('lease allocation transports an optional initial provider app', () => {
   });
 });
 
+test('lease allocation transports a caller-chosen lease id', () => {
+  const payload = buildHttpRpcPayload(
+    {
+      token: 'daemon-token',
+      session: 'default',
+      command: 'lease_allocate',
+      positionals: [],
+      meta: {
+        requestId: 'lease-req',
+        tenantId: 'proxy',
+        runId: 'proxy-client-1',
+        leaseId: 'abcdef0123456789abcdef0123456789',
+      },
+    },
+    { includeTokenParam: false },
+  );
+
+  assert.deepEqual(payload.params, {
+    session: 'default',
+    tenantId: 'proxy',
+    runId: 'proxy-client-1',
+    leaseId: 'abcdef0123456789abcdef0123456789',
+  });
+});
+
 test('lease allocation transports the provider configuration the session needs (#2494)', () => {
   const payload = buildHttpRpcPayload(
     {
