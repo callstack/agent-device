@@ -30,7 +30,7 @@ import {
 import {
   componentsByRenders,
   DEFAULT_FINDING_LIMIT,
-  findComponent,
+  findComponents,
   formatSeconds,
   formatCommit,
   formatComponentReport,
@@ -395,19 +395,19 @@ type SubcommandHandler = (
   emit: Emit,
 ) => Promise<void>;
 
-function requireComponent(
+function requireComponents(
   analysis: ReactProfileAnalysis,
   name: string | undefined,
-): ComponentProfile {
+): ComponentProfile[] {
   if (!name)
     throw new AppError('INVALID_ARGS', 'react-devtools profile report requires a component name.');
-  const component = findComponent(analysis, name);
-  if (!component) {
+  const components = findComponents(analysis, name);
+  if (components.length === 0) {
     throw new AppError('COMMAND_FAILED', `No renders of ${name} in the saved profile.`, {
       hint: 'Use a name from react-devtools profile slow or profile rerenders.',
     });
   }
-  return component;
+  return components;
 }
 
 function requireCommit(analysis: ReactProfileAnalysis, target: string | undefined): CommitProfile {
@@ -459,8 +459,11 @@ const SUBCOMMAND_HANDLERS: Record<ReactProfileSubcommand, SubcommandHandler> = {
   },
   report: async (args, options, emit) => {
     const { analysis } = readSavedProfile(options);
-    const component = requireComponent(analysis, args.target);
-    emit(formatComponentReport(analysis, component), component);
+    const components = requireComponents(analysis, args.target);
+    emit(formatComponentReport(analysis, components), {
+      components,
+      findings: analysis.findings.filter((finding) => finding.component === components[0]!.name),
+    });
   },
   timeline: async (args, options, emit) => {
     const { analysis } = readSavedProfile(options);

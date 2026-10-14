@@ -112,20 +112,14 @@ export function formatRerenders(analysis: ReactProfileAnalysis, limit: number): 
   ].join('\n');
 }
 
-export function findComponent(
-  analysis: ReactProfileAnalysis,
-  name: string,
-): ComponentProfile | undefined {
-  return (
-    analysis.components.find((c) => c.name === name) ??
-    analysis.components.find((c) => c.name.toLowerCase() === name.toLowerCase())
-  );
+/** Every component of that name, such as `Row [memo]` and `Row [function]`; case-insensitive when no exact match. */
+export function findComponents(analysis: ReactProfileAnalysis, name: string): ComponentProfile[] {
+  const exact = analysis.components.filter((c) => c.name === name);
+  if (exact.length > 0) return exact;
+  return analysis.components.filter((c) => c.name.toLowerCase() === name.toLowerCase());
 }
 
-export function formatComponentReport(
-  analysis: ReactProfileAnalysis,
-  component: ComponentProfile,
-): string {
+function componentDetail(analysis: ReactProfileAnalysis, component: ComponentProfile): string[] {
   const lines = [componentLine(component), `causes: ${causeSummary(component.causes)}`];
   const props = Object.entries(component.changedProps)
     .sort((a, b) => b[1] - a[1])
@@ -140,9 +134,6 @@ export function formatComponentReport(
   if (hooks) lines.push(`changed hooks (by index): ${hooks}`);
   const owners = keyCounts(component.owners, 3);
   if (owners) lines.push(`rendered by: ${owners}`);
-  const findings = analysis.findings.filter((finding) => finding.component === component.name);
-  for (const finding of findings)
-    lines.push(`finding ${finding.kind}: ${finding.evidence} -> ${finding.fix}`);
   if (component.costliestCommits.length > 0) {
     const commits = component.costliestCommits.map(({ index, selfMs }) => {
       const commit = analysis.commits[index];
@@ -150,6 +141,18 @@ export function formatComponentReport(
     });
     lines.push(`its costliest commits (self time of commit duration): ${commits.join(', ')}`);
   }
+  return lines;
+}
+
+/** Reports each component of one name, then the findings that name it. */
+export function formatComponentReport(
+  analysis: ReactProfileAnalysis,
+  components: ComponentProfile[],
+): string {
+  const lines = components.flatMap((component) => componentDetail(analysis, component));
+  const name = components[0]?.name;
+  for (const finding of analysis.findings.filter((f) => f.component === name))
+    lines.push(`finding ${finding.kind}: ${finding.evidence} -> ${finding.fix}`);
   return lines.join('\n');
 }
 

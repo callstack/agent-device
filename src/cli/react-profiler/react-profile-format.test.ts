@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import type { Finding, ReactProfileAnalysis } from './react-profile-analysis.ts';
 import type { ComponentProfile } from './react-profile-renders.ts';
 import {
-  findComponent,
+  findComponents,
   formatCommit,
+  formatComponentReport,
   formatProfileSummary,
   formatRerenders,
   formatSlowComponents,
@@ -130,8 +131,38 @@ test('the timeline lists commits with their trigger and mounts', () => {
 });
 
 test('component lookup falls back to a case-insensitive match', () => {
-  assert.equal(findComponent(analysis(), 'chart')?.name, 'Chart');
-  assert.equal(findComponent(analysis(), 'Missing'), undefined);
+  assert.deepEqual(
+    findComponents(analysis(), 'chart').map((c) => c.name),
+    ['Chart'],
+  );
+  assert.deepEqual(findComponents(analysis(), 'Missing'), []);
+});
+
+test('a report covers every component of the name, then its findings once', () => {
+  const base = analysis();
+  const row = base.components.find((c) => c.name === 'Row')!;
+  const memoRow = { ...row, kind: 'memo' as const, renders: 2, selfMs: 4, maxSelfMs: 2 };
+  const withVariants = {
+    ...base,
+    components: [...base.components, memoRow],
+    findings: [
+      {
+        kind: 'parent-cascade' as const,
+        component: 'Row',
+        costMs: 9,
+        evidence: 'often re-renders',
+        fix: 'memoize',
+      },
+    ],
+  };
+  const variants = findComponents(withVariants, 'Row');
+  assert.deepEqual(
+    variants.map((c) => c.kind),
+    ['function', 'memo'],
+  );
+  const text = formatComponentReport(withVariants, variants);
+  assert.match(text, /^Row \[function\][^\n]*\n[\s\S]*\nRow \[memo\] self 4\.0ms/);
+  assert.equal(text.match(/finding parent-cascade/g)?.length, 1);
 });
 
 test('a commit entry without recorded changes says its cause is unrecorded', () => {

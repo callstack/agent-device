@@ -183,7 +183,8 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       description:
         'Profile React Native renders through the Metro dev server and report slow renders, rerenders, and their causes',
     },
-    usageOverride: 'react-devtools profile start|stop|status|report|commit|slow|rerenders|timeline',
+    usageOverride:
+      'react-devtools profile start|stop|status|report <Component>|commit <N>|slow|rerenders|timeline',
     listUsageOverride: 'react-devtools',
     positionalArgs: ['args?'],
     allowsExtraPositionals: true,
