@@ -43,6 +43,16 @@ React profile 8.3s: 8 commits, 1303ms rendering, 8 over 16ms (worst #6 188ms)
 | `eager-mount` | Hundreds of instances of one component mount in a single commit. |
 | `slow-commit` | A commit took three frames or more, and other findings leave most of it unexplained. |
 
+To dig into a finding, use the saved profile:
+
+```bash
+agent-device react-devtools profile report ContactRow
+agent-device react-devtools profile commit 6
+agent-device react-devtools profile slow --limit 5
+agent-device react-devtools profile rerenders --limit 5
+agent-device react-devtools profile timeline --limit 20 --sort duration
+```
+
 Profiling works with development builds of React Native 0.74 and later, including Expo, and is verified on Android emulators and iOS simulators. It connects to the app through the Metro dev server, so the app, Metro config, and Babel config need no changes. If several apps use the same dev server, pass `--app <bundle-id>`. If one app runs on several devices connected to the same dev server, pass `--metro-device <name>` with a device name the error lists. If the dev server is not the session's Metro server or `localhost:8081`, pass `--metro-port` and `--metro-host`.
 
 Development builds render slower than release builds. Compare profiles of the same interaction before and after a change rather than reading the numbers as absolute.

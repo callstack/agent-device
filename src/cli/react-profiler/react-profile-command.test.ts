@@ -96,6 +96,20 @@ test('profile start, an interaction, and profile stop print a compact diagnosis 
     '1. memo-defeated Row: memo bypassed on 36/36 updates; new onPress (function) on those updates from List -> wrap those props in useCallback/useMemo in List',
   );
   assert.ok(fs.existsSync(path.join(stateDir, 'react-profiles', 'qa.json')));
+
+  const report = await run('report', 'Row');
+  assert.match(
+    report.text,
+    /^Row \[memo\] self 108ms avg 3\.0ms max 3\.0ms renders 36 12 inst\ncauses: props 36\nchanged props: onPress 36 \(function\)/,
+  );
+  assert.match(
+    (await run('timeline', '--sort', 'duration', '--limit', '1')).text,
+    /^Slowest commits \(1 of 3\):\n {2}#0 \+0\.0s 40ms 13 rendered <- List/,
+  );
+  assert.match(
+    (await run('commit', '#1')).text,
+    /^#1 \+0\.2s 40ms 13 rendered <- List\n {2}Row x12 self 36ms props/,
+  );
 });
 
 test('profile stop --json returns the findings and where the profile was saved', async () => {
@@ -182,6 +196,10 @@ test('runtime failures carry a typed reason and a hint', async () => {
   );
 });
 
+test('drill-down views need a saved profile', async () => {
+  await assert.rejects(harness().run('slow'), /No React profile saved for session qa/);
+});
+
 test('explicit dev-server flags override the session binding', async () => {
   const { run, requested } = harness();
   await run('status', '--metro-port', '8082');
@@ -209,15 +227,29 @@ test('a remote bridge profiles through the public dev-server URL without its bun
   assert.deepEqual(requested, ['https://metro.example.test/json/list']);
 });
 
+test('a corrupt saved profile asks for a new recording', async () => {
+  const { run, stateDir } = harness();
+  fs.mkdirSync(path.join(stateDir, 'react-profiles'), { recursive: true });
+  const file = path.join(stateDir, 'react-profiles', 'qa.json');
+  fs.writeFileSync(file, '{"analysis":');
+  await assert.rejects(run('slow'), /unsupported format/);
+  fs.writeFileSync(file, JSON.stringify({ analysis: { version: 1, components: {} } }));
+  await assert.rejects(run('slow'), /unsupported format/);
+});
+
 test('unknown profile commands and malformed options are invalid arguments', async () => {
   const { run } = harness();
   const cases: Array<[string[], RegExp]> = [
     [['export', 'out.json'], /Unknown react-devtools profile command: export/],
-    [['stop', '--limit', '0'], /Invalid --limit: 0/],
-    [['stop', '--limit', '10garbage'], /Invalid --limit: 10garbage/],
-    [['stop', '--limit', '1.5'], /Invalid --limit: 1\.5/],
+    [['slow', '--limit', '0'], /Invalid --limit: 0/],
+    [['slow', '--limit', '10garbage'], /Invalid --limit: 10garbage/],
+    [['slow', '--limit', '1.5'], /Invalid --limit: 1\.5/],
+    [['timeline', '--sort', 'name'], /Invalid --sort: name/],
     [['stop', 'extra'], /Unexpected argument for react-devtools profile stop: extra/],
     [['start', '--limit', '5'], /react-devtools profile start does not take --limit/],
+    [['report', 'Row', 'extra'], /Unexpected argument for react-devtools profile report: extra/],
+    [['report', 'Row', '--limit', '2'], /react-devtools profile report does not take --limit/],
+    [['slow', '--sort', 'duration'], /react-devtools profile slow does not take --sort/],
   ];
   for (const [args, message] of cases) {
     await assert.rejects(run(...args), (error: { code: string; message: string }) => {
@@ -226,4 +258,31 @@ test('unknown profile commands and malformed options are invalid arguments', asy
       return true;
     });
   }
+});
+
+test('profile commit --json honors --limit like the text view', async () => {
+  const { app, run, options } = harness();
+  await run('start');
+  recordRowRenders(app);
+  await run('stop');
+  options.flags = { json: true };
+  const { text } = await run('commit', '1', '--limit', '1');
+  const parsed = JSON.parse(text) as { data: { top: Array<{ name: string }>; rendered: number } };
+  assert.deepEqual(
+    parsed.data.top.map((entry) => entry.name),
+    ['Row'],
+  );
+  assert.equal(parsed.data.rendered, 13);
+});
+
+test('commit selectors must be whole indexes', async () => {
+  const { app, run } = harness();
+  await run('start');
+  recordRowRenders(app);
+  await run('stop');
+  await assert.rejects(
+    run('commit', '#1junk'),
+    (error: { code: string }) => error.code === 'INVALID_ARGS',
+  );
+  assert.match((await run('commit', '#1')).text, /^#1 /);
 });

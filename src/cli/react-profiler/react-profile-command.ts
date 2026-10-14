@@ -22,16 +22,35 @@ import {
 import { analyzeReactProfile, type ReactProfileAnalysis } from './react-profile-analysis.ts';
 import {
   selectPropKindRequests,
+  type CommitProfile,
+  type ComponentProfile,
   type PropKindsById,
   type RawReactProfile,
 } from './react-profile-renders.ts';
 import {
+  componentsByRenders,
   DEFAULT_FINDING_LIMIT,
-  formatProfileSummary,
+  findComponent,
   formatSeconds,
+  formatCommit,
+  formatComponentReport,
+  formatProfileSummary,
+  formatRerenders,
+  formatSlowComponents,
+  formatTimeline,
+  timelineCommits,
 } from './react-profile-format.ts';
 
-const REACT_PROFILE_SUBCOMMANDS = ['start', 'stop', 'status'] as const;
+const REACT_PROFILE_SUBCOMMANDS = [
+  'start',
+  'stop',
+  'status',
+  'slow',
+  'rerenders',
+  'report',
+  'timeline',
+  'commit',
+] as const;
 
 type ReactProfileSubcommand = (typeof REACT_PROFILE_SUBCOMMANDS)[number];
 
@@ -43,15 +62,17 @@ export type ReactProfileCommandOptions = {
 
 type ProfileArgs = {
   subcommand: ReactProfileSubcommand;
+  target?: string;
   limit?: number;
   app?: string;
   metroDevice?: string;
   metroHost?: string;
   metroPort?: string;
   bundleUrl?: string;
+  sort?: 'timeline' | 'duration';
 };
 
-/** Analysis plus the runtime it came from, as `profile stop` saves it for the session. */
+/** Analysis plus the runtime it came from, as `profile stop` saves it for the drill-down views. */
 type SavedReactProfile = {
   savedAt: string;
   appId?: string;
@@ -64,6 +85,7 @@ type StartResult = { ok: true; attach: string } | RuntimeFailure;
 type StopResult = ({ ok: true } & RawReactProfile) | RuntimeFailure;
 type StatusResult = { profiling: boolean; elapsedMs: number | null };
 
+const SUBCOMMANDS_WITH_TARGET = new Set<ReactProfileSubcommand>(['report', 'commit']);
 const POSITIVE_INTEGER = /^[1-9]\d*$/;
 
 function isReactProfileSubcommand(value: string | undefined): value is ReactProfileSubcommand {
@@ -77,6 +99,7 @@ const PROFILE_OPTIONS = {
   'metro-host': { type: 'string' },
   'metro-port': { type: 'string' },
   'bundle-url': { type: 'string' },
+  sort: { type: 'string' },
 } as const;
 
 type ProfileOption = keyof typeof PROFILE_OPTIONS;
@@ -94,6 +117,11 @@ const SUBCOMMAND_OPTIONS: Record<ReactProfileSubcommand, readonly ProfileOption[
   start: RUNTIME_OPTIONS,
   status: RUNTIME_OPTIONS,
   stop: [...RUNTIME_OPTIONS, 'limit'],
+  slow: ['limit'],
+  rerenders: ['limit'],
+  report: [],
+  timeline: ['limit', 'sort'],
+  commit: ['limit'],
 };
 
 function parseProfileOptions(args: string[]) {
@@ -123,24 +151,30 @@ function parseProfileArgs(args: string[]): ProfileArgs {
       `react-devtools profile ${subcommand} does not take --${unread}.`,
     );
   }
-  if (positionals.length > 0) {
+  const expected = SUBCOMMANDS_WITH_TARGET.has(subcommand) ? 1 : 0;
+  if (positionals.length > expected) {
     throw new AppError(
       'INVALID_ARGS',
-      `Unexpected argument for react-devtools profile ${subcommand}: ${positionals[0]}.`,
+      `Unexpected argument for react-devtools profile ${subcommand}: ${positionals[expected]}.`,
     );
   }
   if (values.limit !== undefined && !POSITIVE_INTEGER.test(values.limit)) {
     throw new AppError('INVALID_ARGS', `Invalid --limit: ${values.limit}. Use a positive integer.`);
   }
   const limit = values.limit === undefined ? undefined : Number(values.limit);
+  if (values.sort !== undefined && values.sort !== 'timeline' && values.sort !== 'duration') {
+    throw new AppError('INVALID_ARGS', `Invalid --sort: ${values.sort}. Use timeline or duration.`);
+  }
   return {
     subcommand,
+    target: positionals[0],
     limit,
     app: values.app,
     metroDevice: values['metro-device'],
     metroHost: values['metro-host'],
     metroPort: values['metro-port'],
     bundleUrl: values['bundle-url'],
+    sort: values.sort as ProfileArgs['sort'],
   };
 }
 
@@ -250,6 +284,39 @@ function writeSavedProfile(
   return filePath;
 }
 
+function isSavedProfile(value: SavedReactProfile | undefined): value is SavedReactProfile {
+  const analysis = value?.analysis;
+  return (
+    analysis?.version === 1 &&
+    Array.isArray(analysis.components) &&
+    Array.isArray(analysis.commits) &&
+    Array.isArray(analysis.findings)
+  );
+}
+
+function readSavedProfile(options: ReactProfileCommandOptions): SavedReactProfile {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(savedProfilePath(options), 'utf8');
+  } catch {
+    throw new AppError('COMMAND_FAILED', `No React profile saved for session ${options.session}.`, {
+      hint: 'Run react-devtools profile start, perform the interaction, then react-devtools profile stop.',
+    });
+  }
+  let saved: SavedReactProfile | undefined;
+  try {
+    saved = JSON.parse(raw) as SavedReactProfile;
+  } catch {
+    saved = undefined;
+  }
+  if (!isSavedProfile(saved)) {
+    throw new AppError('COMMAND_FAILED', 'The saved React profile has an unsupported format.', {
+      hint: 'Record a new profile with react-devtools profile start and stop.',
+    });
+  }
+  return saved;
+}
+
 const elapsed = (elapsedMs: number) => formatSeconds(Math.max(0, elapsedMs));
 
 async function startProfile(
@@ -328,6 +395,32 @@ type SubcommandHandler = (
   emit: Emit,
 ) => Promise<void>;
 
+function requireComponent(
+  analysis: ReactProfileAnalysis,
+  name: string | undefined,
+): ComponentProfile {
+  if (!name)
+    throw new AppError('INVALID_ARGS', 'react-devtools profile report requires a component name.');
+  const component = findComponent(analysis, name);
+  if (!component) {
+    throw new AppError('COMMAND_FAILED', `No renders of ${name} in the saved profile.`, {
+      hint: 'Use a name from react-devtools profile slow or profile rerenders.',
+    });
+  }
+  return component;
+}
+
+function requireCommit(analysis: ReactProfileAnalysis, target: string | undefined): CommitProfile {
+  const digits = (target ?? '').replace(/^#/, '');
+  const commit = /^\d+$/.test(digits) ? analysis.commits[Number(digits)] : undefined;
+  if (!commit) {
+    throw new AppError('INVALID_ARGS', `No commit ${target ?? '(none)'} in the saved profile.`, {
+      hint: `Use a commit index from 0 to ${Math.max(analysis.commits.length - 1, 0)}.`,
+    });
+  }
+  return commit;
+}
+
 const SUBCOMMAND_HANDLERS: Record<ReactProfileSubcommand, SubcommandHandler> = {
   start: async (args, options, emit) => {
     const started = await startProfile(args, options);
@@ -353,6 +446,36 @@ const SUBCOMMAND_HANDLERS: Record<ReactProfileSubcommand, SubcommandHandler> = {
       findings: analysis.findings.slice(0, args.limit ?? analysis.findings.length),
       savedTo: savedProfilePath(options),
     });
+  },
+  slow: async (args, options, emit) => {
+    const { analysis } = readSavedProfile(options);
+    const limit = args.limit ?? 10;
+    emit(formatSlowComponents(analysis, limit), analysis.components.slice(0, limit));
+  },
+  rerenders: async (args, options, emit) => {
+    const { analysis } = readSavedProfile(options);
+    const limit = args.limit ?? 10;
+    emit(formatRerenders(analysis, limit), componentsByRenders(analysis).slice(0, limit));
+  },
+  report: async (args, options, emit) => {
+    const { analysis } = readSavedProfile(options);
+    const component = requireComponent(analysis, args.target);
+    emit(formatComponentReport(analysis, component), component);
+  },
+  timeline: async (args, options, emit) => {
+    const { analysis } = readSavedProfile(options);
+    const limit = args.limit ?? 20;
+    const byDuration = args.sort === 'duration';
+    emit(
+      formatTimeline(analysis, limit, byDuration),
+      timelineCommits(analysis, byDuration).slice(0, limit),
+    );
+  },
+  commit: async (args, options, emit) => {
+    const { analysis } = readSavedProfile(options);
+    const commit = requireCommit(analysis, args.target);
+    const limit = args.limit ?? 10;
+    emit(formatCommit(commit, limit), { ...commit, top: commit.top.slice(0, limit) });
   },
 };
 
