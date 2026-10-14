@@ -70,6 +70,7 @@ const MAX_HTTP_RPC_BODY_BYTES = 1024 * 1024;
 export async function createDaemonHttpServer(options: {
   handleRequest: DaemonInvokeFn;
   leaseRegistry?: LeaseRegistry;
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
   token?: string;
   retainArtifacts?: boolean;
   env?: NodeJS.ProcessEnv;
@@ -126,6 +127,7 @@ export async function createDaemonHttpServer(options: {
         res,
         expectedToken: token,
         registry: options.leaseRegistry,
+        endSessionsForLease: options.endSessionsForLease,
       })
     ) {
       return;

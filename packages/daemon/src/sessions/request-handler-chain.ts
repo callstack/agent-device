@@ -39,6 +39,7 @@ type RequestHandlerChainParams = {
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
   providerAppCatalog?: ProviderAppCatalog;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
@@ -159,6 +160,7 @@ async function runLeaseHandler(
       providerCredentials: params.providerCredentials,
       leaseLifecycleProvider: params.leaseLifecycleProvider,
       cloudArtifactProvider: params.cloudArtifactProvider,
+      endSessionsForLease: params.endSessionsForLease,
     }),
   );
 }

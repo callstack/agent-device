@@ -53,6 +53,15 @@ an idle daemon alive; other leases, including human-control holds, do not. A
 retained lease the caller stops heartbeating expires after its `ttlMs`, and idle
 reap then shuts the daemon down within one more idle window.
 
+A session cannot outlive the lease it was opened under. When the lease is
+released (tenant `lease_release` or host `DELETE /admin/leases/<lease-id>`) or
+expires, the daemon tears the session down under its execution locks and clears
+its device claim, even when the device no longer answers. The daemon sweeps for
+expired leases every second, so expiry does not wait for a later request;
+in-flight work and human-control holds still keep a lease from expiring. Once
+daemon shutdown begins, no new lease-end teardown starts, and shutdown waits for
+any that already started before it tears sessions down itself.
+
 ## Consequences
 
 Device contention can fail before platform execution with an explicit

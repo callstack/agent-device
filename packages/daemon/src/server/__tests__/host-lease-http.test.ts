@@ -23,12 +23,14 @@ const BODY = {
 async function withServer(
   t: Parameters<typeof skipWhenLoopbackUnavailable>[0],
   run: (origin: string, registry: LeaseRegistry) => Promise<void>,
+  endSessionsForLease?: (leaseId: string) => Promise<void>,
 ): Promise<void> {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const registry = new LeaseRegistry();
   const server = await createDaemonHttpServer({
     token: 'daemon-token',
     leaseRegistry: registry,
+    endSessionsForLease,
     handleRequest: async () => ({ ok: true, data: {} }),
   });
   try {
@@ -99,20 +101,32 @@ test('the route takes only the daemon token and only macos-app leases', async (t
   });
 });
 
-test('DELETE revokes the lease so the next admission fails', async (t) => {
-  await withServer(t, async (origin, registry) => {
-    assert.equal((await put(origin, LEASE_ID, BODY)).status, 200);
-    const removed = await fetch(`${origin}${HOST_LEASE_HTTP_PREFIX}/${LEASE_ID}`, {
-      method: 'DELETE',
-      headers: { authorization: 'Bearer daemon-token' },
-    });
-    assert.equal(((await removed.json()) as { released: boolean }).released, true);
-    assert.throws(
-      () =>
-        registry.assertLeaseAdmission({ leaseId: LEASE_ID, tenantId: 'stim', runId: 'session-1' }),
-      { code: 'UNAUTHORIZED' },
-    );
-  });
+test('DELETE revokes the lease so the next admission fails and ends its session', async (t) => {
+  const ended: string[] = [];
+  await withServer(
+    t,
+    async (origin, registry) => {
+      assert.equal((await put(origin, LEASE_ID, BODY)).status, 200);
+      const removed = await fetch(`${origin}${HOST_LEASE_HTTP_PREFIX}/${LEASE_ID}`, {
+        method: 'DELETE',
+        headers: { authorization: 'Bearer daemon-token' },
+      });
+      assert.equal(((await removed.json()) as { released: boolean }).released, true);
+      assert.throws(
+        () =>
+          registry.assertLeaseAdmission({
+            leaseId: LEASE_ID,
+            tenantId: 'stim',
+            runId: 'session-1',
+          }),
+        { code: 'UNAUTHORIZED' },
+      );
+      assert.deepEqual(ended, [LEASE_ID]);
+    },
+    async (leaseId) => {
+      ended.push(leaseId);
+    },
+  );
 });
 
 test('/health names macos-app among the lease backends only on a macOS host', async (t) => {

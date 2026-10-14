@@ -134,6 +134,8 @@ export type RequestRouterDeps = {
   providerCredentials: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  /** Ends the sessions opened under a lease the tenant just released, and clears their claims. */
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
   providerAppCatalog?: ProviderAppCatalog;
   androidObservation?: AndroidObservationAdapter;
   /** Builds the per-request command surface the device-facing runtimes execute through. */
@@ -196,6 +198,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
+    endSessionsForLease,
     providerAppCatalog,
     androidObservation = unavailableAndroidObservation,
     createCommandSurface,
@@ -380,6 +383,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       providerRuntimeRequiredIds,
       providerCredentials,
       cloudArtifactProvider,
+      endSessionsForLease,
       providerAppCatalog,
       invoke: recordNestedRequests(handleRequest, dispatchLedger),
       invokeReplayAction: allowReplayActions

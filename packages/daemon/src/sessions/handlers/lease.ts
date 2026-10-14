@@ -44,6 +44,7 @@ type LeaseHandlerArgs = {
   providerCredentials?: DaemonProviderCredentials;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
   cloudArtifactProvider?: CloudArtifactProvider;
+  endSessionsForLease?: (leaseId: string) => Promise<void>;
 };
 
 export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<DaemonResponse | null> {
@@ -57,6 +58,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     providerCredentials,
     leaseLifecycleProvider,
     cloudArtifactProvider,
+    endSessionsForLease,
   } = args;
   const leaseScope = resolveLeaseScope(req);
   switch (req.command) {
@@ -158,6 +160,9 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
             leaseLifecycleContext(req),
           ),
       );
+      // Outside the device mutation: ending a session waits for its execution locks, and a
+      // command holding them may itself be waiting for that mutation.
+      if (lease && outcome.registryReleased) await endSessionsForLease?.(lease.leaseId);
       return {
         ok: true,
         data: {
