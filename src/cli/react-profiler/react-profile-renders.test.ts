@@ -44,7 +44,7 @@ test('unrecorded change descriptions leave render causes empty rather than blami
   });
 });
 
-test('prop kinds are requested for one mounted instance of each props-driven component', () => {
+test('prop kinds are requested for the most recent instances of each props-driven component', () => {
   const rows = repeat(3, (i) => 10 + i);
   const elements: Record<number, [string, number?, number?]> = { 1: ['List'], 2: ['Header'] };
   for (const id of rows) elements[id] = ['Row', MEMO, 1];
@@ -64,7 +64,11 @@ test('prop kinds are requested for one mounted instance of each props-driven com
     ],
     ['onPress'],
   );
-  assert.deepEqual(selectPropKindRequests(raw), { '12': ['onPress'] });
+  assert.deepEqual(selectPropKindRequests(raw), {
+    '10': ['onPress'],
+    '11': ['onPress'],
+    '12': ['onPress'],
+  });
   const { components } = summarizeRenders(raw, { '12': { onPress: 'function' } });
   assert.deepEqual(components.find((c) => c.name === 'Row')?.propKinds, { onPress: 'function' });
   assert.equal(components.find((c) => c.name === 'Header')?.causes.parent, 1);

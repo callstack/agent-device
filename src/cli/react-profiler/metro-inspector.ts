@@ -24,14 +24,11 @@ export function targetAppId(target: MetroInspectorTarget): string {
   return target.appId ?? target.description ?? target.title;
 }
 
-export async function listMetroInspectorTargets(
-  serverUrl: URL,
-  fetchImpl: typeof fetch = fetch,
-): Promise<MetroInspectorTarget[]> {
+export async function listMetroInspectorTargets(serverUrl: URL): Promise<MetroInspectorTarget[]> {
   const listUrl = new URL('json/list', withTrailingSlash(serverUrl));
   let response: Response;
   try {
-    response = await fetchImpl(listUrl, { signal: AbortSignal.timeout(TARGET_LIST_TIMEOUT_MS) });
+    response = await fetch(listUrl, { signal: AbortSignal.timeout(TARGET_LIST_TIMEOUT_MS) });
   } catch (error) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -81,27 +78,42 @@ function deviceKey(target: MetroInspectorTarget): string {
   );
 }
 
+export type RuntimeTargetFilter = {
+  /** Bundle id or package name, as the dev server reports it. */
+  appId?: string;
+  /** Device name or logical device id, as the dev server reports it. */
+  device?: string;
+};
+
 /**
- * Picks the React Native runtime to profile. Pages without the `reactNative` field are not app
+ * Picks the one React Native runtime to profile. Pages without the `reactNative` field are not app
  * runtimes, and worklet runtimes render no React tree. A device registers its main runtime before
- * any secondary one, so the lowest page number wins per device; with several devices running one
- * app, the most recently listed device wins. Distinct apps need `appId` to disambiguate.
+ * any secondary one, so the lowest page number wins per device. Several apps or several devices
+ * fail closed: the caller must narrow to exactly one runtime.
  */
 export function selectReactNativeTarget(
   targets: MetroInspectorTarget[],
-  appId?: string,
+  filter: RuntimeTargetFilter = {},
 ): MetroInspectorTarget {
   const runtimes = targets.filter(
     (target) =>
       target.reactNative !== undefined && !WORKLET_RUNTIME_PATTERN.test(target.description ?? ''),
   );
-  const candidates = appId ? runtimes.filter((target) => targetAppId(target) === appId) : runtimes;
+  const candidates = runtimes.filter(
+    (target) =>
+      (filter.appId === undefined || targetAppId(target) === filter.appId) &&
+      (filter.device === undefined ||
+        target.deviceName === filter.device ||
+        deviceKey(target) === filter.device),
+  );
   if (candidates.length === 0) {
-    const seen = runtimes.map(targetAppId);
+    const seen = runtimes.map(
+      (target) => `${targetAppId(target)} on ${target.deviceName ?? deviceKey(target)}`,
+    );
     throw new AppError(
       'COMMAND_FAILED',
-      appId
-        ? `No React Native runtime for ${appId} is connected to the dev server.`
+      filter.appId || filter.device
+        ? 'No matching React Native runtime is connected to the dev server.'
         : 'No React Native runtime is connected to the dev server.',
       {
         hint:
@@ -125,11 +137,29 @@ export function selectReactNativeTarget(
   for (const target of candidates) {
     const key = deviceKey(target);
     const current = devices.get(key);
-    devices.delete(key);
     devices.set(key, current && pageNumber(current) <= pageNumber(target) ? current : target);
   }
-  return [...devices.values()].at(-1)!;
+  if (devices.size > 1) {
+    const names = [...devices.values()].map((target) => target.deviceName ?? deviceKey(target));
+    throw new AppError(
+      'INVALID_ARGS',
+      'The app is connected to the dev server from several devices.',
+      {
+        hint: `Pass --metro-device with one of: ${names.join(', ')}.`,
+      },
+    );
+  }
+  return [...devices.values()][0]!;
 }
+
+/**
+ * Node's WebSocket (undici) accepts an init object with request headers; the DOM typing this
+ * repo compiles against only declares subprotocols.
+ */
+const WebSocketWithHeaders = WebSocket as unknown as new (
+  url: URL,
+  init: { headers: Record<string, string> },
+) => WebSocket;
 
 type PendingCall = { resolve: (value: unknown) => void; reject: (error: Error) => void };
 
@@ -155,7 +185,7 @@ export class InspectorSession {
     // Metro refuses debugger upgrades without a loopback Origin, and Expo's dev server terminates
     // any whose Origin host differs from its own 127.0.0.1:<port> base URL.
     const origin = `http://127.0.0.1:${url.port || (url.protocol === 'wss:' ? '443' : '80')}`;
-    const socket = new WebSocket(url, { headers: { origin } } as unknown as string[]);
+    const socket = new WebSocketWithHeaders(url, { headers: { origin } });
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         socket.close();

@@ -523,14 +523,15 @@ test('usageForCommand resolves react-devtools help topic', async () => {
   const help = await usageForCommand('react-devtools');
   if (help === null) throw new Error('Expected react-devtools help text');
   assert.match(help, /agent-device react-devtools profile start/);
-  assert.match(help, /agent-device react-devtools profile report <Component>/);
-  assert.match(help, /agent-device react-devtools profile commit <N>/);
-  assert.match(help, /agent-device react-devtools profile timeline --limit 20 --sort duration/);
+  assert.match(help, /agent-device react-devtools profile stop --limit 10/);
   assert.match(help, /React Native 0\.74 or newer, with no app, Metro, or Babel changes/);
   assert.match(help, /no status, start, or wait --connected step/);
   assert.match(help, /Add --app <bundle-id> when several apps share the dev server/);
   assert.match(help, /ranked findings, each naming a component, its evidence, and a fix/);
-  assert.match(help, /memo-defeated: a memoized component receives new props on every render/);
+  assert.match(
+    help,
+    /memo-defeated: a memoized component often re-renders because props change identity/,
+  );
   assert.match(help, /compare runs instead of reading absolute numbers/);
   assert.match(help, /logs clear --restart before the first logs mark/);
   assert.match(help, /agent-device react-devtools start/);
@@ -540,7 +541,6 @@ test('usageForCommand resolves react-devtools help topic', async () => {
   assert.match(help, /Run status first/);
   assert.match(help, /start is not a connection check/);
   assert.match(help, /run wait --connected before trusting any result/);
-  assert.match(help, /Do not repeatedly raise table limits/);
   assert.match(help, /agent-device logs mark "before catalog search"/);
   assert.match(help, /Do not write agent-devtools/);
   assert.match(help, /Every profiling and survey line must begin with agent-device react-devtools/);
@@ -549,7 +549,7 @@ test('usageForCommand resolves react-devtools help topic', async () => {
   assert.match(help, /use separate sessions\/devices/);
   assert.match(help, /local service tunnel/);
   assert.match(help, /Remote iOS apps attempt the legacy React DevTools websocket/);
-  assert.doesNotMatch(help, /profile export|profile diff|profile report @c/);
+  assert.doesNotMatch(help, /profile export|profile diff|profile report/);
 });
 
 test('usageForCommand resolves cdp help topic', async () => {
@@ -592,8 +592,14 @@ test('usageForCommand resolves react-native help topic', async () => {
   assert.match(help, /agent-device open "Agent Device Tester" --platform android/);
   assert.match(help, /Start React Native slow-flow plans with this ordered scaffold/);
   assert.match(help, /include the open command even when it also describes the current screen/);
-  assert.match(help, /agent-device react-devtools status/);
-  assert.match(help, /Profiling plans need both status and wait --connected before profile start/);
+  assert.match(
+    help,
+    /profile start and profile stop need no react-devtools status or wait --connected step/,
+  );
+  assert.match(
+    help,
+    /Component inspection \(get tree, find, get component\) needs react-devtools status, then wait --connected/,
+  );
   assert.match(help, /Do not substitute react-devtools start for status/);
   assert.match(help, /If snapshot reports a React Native warning\/error overlay/);
   assert.match(help, /agent-device react-native dismiss-overlay/);

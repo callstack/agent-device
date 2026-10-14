@@ -61,8 +61,10 @@ export function encodeOperations(options: {
   for (const id of options.baseDurations ?? []) ops.push(OP_UPDATE_TREE_BASE_DURATION, id, 1);
   ops.push(...(options.extra ?? []));
   const table: number[] = [];
-  for (const value of strings)
-    table.push(value.length, ...[...value].map((char) => char.codePointAt(0)!));
+  for (const value of strings) {
+    const codePoints = [...value].map((char) => char.codePointAt(0)!);
+    table.push(codePoints.length, ...codePoints);
+  }
   return [1, 1, table.length, ...table, ...ops];
 }
 

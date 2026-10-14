@@ -48,7 +48,10 @@ test('memo bypassed by props that change on every render names the props, their 
   );
 
   const request = selectPropKindRequests(raw);
-  assert.deepEqual(Object.values(request), [['onPress', 'style']]);
+  assert.deepEqual(
+    new Set(Object.values(request).map((keys) => keys.join())),
+    new Set(['onPress,style']),
+  );
   const [id] = Object.keys(request);
   const [finding] = analyzeReactProfile(raw, {
     [id!]: { onPress: 'function', style: 'object' },
@@ -57,7 +60,7 @@ test('memo bypassed by props that change on every render names the props, their 
   assert.equal(finding?.component, 'Row');
   assert.match(
     finding?.evidence ?? '',
-    /onPress \(function\), style \(object\) every render from List/,
+    /onPress \(function\), style \(object\) on those updates from List/,
   );
 });
 
@@ -96,7 +99,7 @@ test('renders forced only by a parent re-render point at the owner to memoize be
   assert.deepEqual(kinds(raw), ['parent-cascade ResultRow']);
   assert.match(
     analyzeReactProfile(raw).findings[0]!.evidence,
-    /whenever Search rendered across 15 instances/,
+    /when Search rendered across 15 instances/,
   );
 });
 
@@ -155,6 +158,89 @@ test('a state update set right after the previous commit is reported as an effec
     ]),
   );
   assert.ok(kinds(raw).includes('effect-chain Filtered'));
+});
+
+test('a follow-up commit counts once per component however many of its instances triggered it', () => {
+  const raw = rawProfile(
+    {
+      1: ['Screen'],
+      2: ['Filtered', FUNCTION, 1],
+      3: ['Filtered', FUNCTION, 1],
+      4: ['Filtered', FUNCTION, 1],
+    },
+    repeat(3, (i) => i).flatMap((i): Array<[number, number, number[], Render[]]> => [
+      [
+        i * 300,
+        10,
+        [1],
+        [
+          [1, 1, [0, null, [0], null]],
+          [2, 2],
+          [3, 2],
+          [4, 2],
+        ],
+      ],
+      [
+        i * 300 + 12,
+        10,
+        [2, 3, 4],
+        [
+          [2, 3, [0, null, [0], null]],
+          [3, 3, [0, null, [0], null]],
+          [4, 3, [0, null, [0], null]],
+        ],
+      ],
+    ]),
+  );
+  const chain = analyzeReactProfile(raw).findings.find(
+    (finding) => finding.kind === 'effect-chain',
+  );
+  assert.match(
+    chain?.evidence ?? '',
+    /^3 follow-up commits it triggered right after rendering, likely state set in an effect \(30ms\)$/,
+  );
+});
+
+test('without inspected value kinds a memo bypass names the changed props without claiming new identities', () => {
+  const rows = repeat(12, (i) => 10 + i);
+  const elements: Record<number, [string, number?, number?]> = { 1: ['List'] };
+  for (const id of rows) elements[id] = ['Row', MEMO, 1];
+  const raw = rawProfile(
+    elements,
+    repeat(3, (i) => [
+      i * 200,
+      30,
+      [1],
+      [[1, 1, [0, null, [0], null]], ...rows.map((id): Render => [id, 2, [0, [0], null, null]])],
+    ]),
+    ['onPress'],
+  );
+  const [finding] = analyzeReactProfile(raw).findings;
+  assert.equal(
+    finding?.evidence,
+    'memo bypassed on 36/36 updates; onPress changed from List (value kinds not inspected)',
+  );
+});
+
+test('every large mount group in a commit is its own eager-mount finding', () => {
+  const tiles = repeat(220, (i) => 10 + i);
+  const rows = repeat(210, (i) => 1000 + i);
+  const elements: Record<number, [string, number?, number?]> = { 1: ['Catalog'] };
+  for (const id of tiles) elements[id] = ['Tile', FUNCTION, 1];
+  for (const id of rows) elements[id] = ['Row', FUNCTION, 1];
+  const raw = rawProfile(elements, [
+    [
+      0,
+      400,
+      [1],
+      [
+        [1, 5, [0, null, [0], null]],
+        ...tiles.map((id): Render => [id, 1, 1]),
+        ...rows.map((id): Render => [id, 1, 1]),
+      ],
+    ],
+  ]);
+  assert.deepEqual(kinds(raw).sort(), ['eager-mount Row', 'eager-mount Tile']);
 });
 
 test('many commits from one updater in a short span are a render storm', () => {
