@@ -16,7 +16,6 @@ function importEdge(
     dynamic: false,
     typeOnly: false,
     symbols: [],
-    bindingResidue: false,
     fromZone: targetDagZone(file),
     toZone: targetDagZone(target),
     ...overrides,

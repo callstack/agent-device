@@ -36,6 +36,8 @@ normal app-driving startup follows the skill's routing card.
   in names, types, boundaries, and tests; reserve comments for public API docs, tool directives,
   and non-obvious constraints that cannot be encoded.
 - Key behavior on typed reasons and details, never error text; do not copy existing message sniffs.
+- A claim about a platform family in code, help, or docs holds for every backend in it (Appium as
+  well as ADB on Android), or names the backends it covers.
 - Keep metadata at response level when it applies to the whole snapshot. Append warnings through
   the shared response builder; never replace prior warnings.
 - Before preserving a compatibility shape, run `git tag --contains <commit>`. Unreleased API has no
@@ -47,11 +49,11 @@ Read the declaration rather than maintaining a prose copy:
 
 - commands and their surface, runtime-use, batch, and timeout traits:
   `packages/command-registry/src/registry.ts`
-- daemon route ownership and request-policy traits: `src/daemon/daemon-command-registry.ts`
+- daemon route ownership and request-policy traits: `packages/daemon/src/core/daemon-command-registry.ts`
 - interaction paths and guarantees: `packages/contracts/src/interaction-guarantees.ts`
 - canonical command names: `packages/command-registry/src/catalog.ts`
 - device runtime-use declarations and fact admission:
-  `packages/command-registry/src/registry.ts`, `src/daemon/runtime-admission.ts`, and
+  `packages/command-registry/src/registry.ts`, `packages/daemon/src/core/runtime-admission.ts`, and
   `src/platform-runtime-gateway.ts`
 - common command input fields, and which surface may write an input key (model, operator, retired):
   `src/commands/common-input-fields.ts` and `src/commands/input-audience.ts`
@@ -108,7 +110,7 @@ under `contracts/fixtures/`.
 ## Runtime and diagnostics seams
 
 Diagnostics use `@agent-device/host-kit/diagnostics`. Request diagnostics belong in the session request log;
-session artifact paths come from `src/daemon/session-artifact-paths.ts`. App/device logs remain in `app.log`;
+session artifact paths come from `packages/daemon/src/core/session-artifact-paths.ts`. App/device logs remain in `app.log`;
 Apple runner and xcodebuild output remains in `runner.log`.
 
 Normalize failures with `normalizeError` and preserve `hint`, `diagnosticId`, `logPath`, and typed

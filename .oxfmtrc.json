@@ -12,6 +12,8 @@
     "scripts/maestro-conformance/corpus/**",
     "fallow-baselines/**",
     // One entry per line, so each pinned runner request changes as one reviewable diff line.
-    "contracts/fixtures/runner-requests.json"
+    "contracts/fixtures/runner-requests.json",
+    // One captured node per line, so the real keyboard capture stays a compact reviewable table.
+    "packages/capture-kit/src/snapshot-chrome.fixtures.ts"
   ]
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import { readSnapshotOcclusionContextEvidence } from '@agent-device/contracts/capture';
-import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
+import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   androidSnapshotPublicationInput,
   resetAndroidSnapshotHelperInstallCache,

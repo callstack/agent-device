@@ -1,14 +1,17 @@
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { WebDriverWindowRect } from './webdriver-client.ts';
-import { parseWebDriverSourceFacts } from './webdriver-source.ts';
 
 export async function scrollFrameFromAndroidWebDriverSource(
   source: string,
 ): Promise<WebDriverWindowRect | undefined> {
+  const { parseWebDriverSourceFacts } = await import('./webdriver-source.ts');
   return scrollFrameFromNodes(parseWebDriverSourceFacts(source, 'android').nodes);
 }
 
-export function scrollFrameFromIosWebDriverSource(source: string): WebDriverWindowRect | undefined {
+export async function scrollFrameFromIosWebDriverSource(
+  source: string,
+): Promise<WebDriverWindowRect | undefined> {
+  const { parseWebDriverSourceFacts } = await import('./webdriver-source.ts');
   return scrollFrameFromNodes(parseWebDriverSourceFacts(source).nodes);
 }
 

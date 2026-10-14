@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { test } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
-import { mkdtempForTestSync } from './tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   spawnRegisteredDaemonFixture,
   waitForRegisteredDaemonFixture,

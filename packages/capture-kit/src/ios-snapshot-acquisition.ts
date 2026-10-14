@@ -10,7 +10,11 @@ import type {
 } from '@agent-device/contracts/ios-snapshot';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
-import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
+import type {
+  RawSnapshotNode,
+  Rect,
+  SnapshotKeyboardBandFact,
+} from '@agent-device/kernel/snapshot';
 
 /**
  * The facts a *provider* acquisition leaves unproven, keyed only by the producers whose residue
@@ -96,6 +100,7 @@ export function createIosSnapshotAcquisition(
     producer: IosProviderAcquisitionProducer;
     nodes: readonly RawSnapshotNode[];
     viewport: IosViewportEvidence;
+    keyboard?: SnapshotKeyboardBandFact;
     lineage: IosSnapshotLineage;
   }>,
 ): SnapshotRuntimeAcquiredResult {
@@ -107,6 +112,7 @@ export function createIosSnapshotAcquisition(
       intent: 'full',
       nodes: input.nodes,
       viewport: input.viewport,
+      ...(input.keyboard ? { keyboard: input.keyboard } : {}),
       lineage: input.lineage,
       residue: deriveIosSnapshotAcquisitionResidue(producer, input.viewport),
     },

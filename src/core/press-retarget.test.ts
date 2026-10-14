@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
-import { buildNodes } from '../__tests__/test-utils/snapshot-builders.ts';
+import { buildNodes } from '@agent-device/test-kit/snapshot-builders';
 import { computeTargetEvidence } from '@agent-device/selectors/target-evidence';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { readNodeLocalIdentity } from '@agent-device/ad-script';

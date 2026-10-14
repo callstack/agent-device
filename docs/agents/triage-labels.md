@@ -1,18 +1,13 @@
 # Issue Label Workflow
 
-The skills speak in terms of four canonical triage roles. This file maps those roles to the actual GitHub labels used in this repo.
+This file defines five triage roles, each a GitHub label of the same name.
 
-| Skill role | GitHub label | Meaning |
-| --- | --- | --- |
-| `needs-triage` | `needs-triage` | New or unreviewed issue; maintainer needs to evaluate it |
-| `needs-info` | `needs-info` | Waiting on reporter or external input |
-| `ready-for-agent` | `ready-for-agent` | Fully specified, AFK-ready for an agent to pick up |
-| `wontfix` | `wontfix` | Will not be actioned after an explicit maintainer decision |
+| Label | Apply when |
+| --- | --- |
+| `needs-triage` | Every new issue; remove once it is understood and valid |
+| `needs-info` | Reporter or external input is required |
+| `ready-for-agent` | Fully specified; an AFK agent can pick it up with no extra human context |
+| `ready-for-human` | Only the Chief of Staff agent applies it |
+| `wontfix` | Only after an explicit maintainer decision not to act |
 
-Default flow:
-
-1. New issues get `needs-triage`.
-2. Remove `needs-triage` once the issue is understood and valid.
-3. Add `needs-info` when reporter or external input is required.
-4. Add `ready-for-agent` when the issue is fully specified and can be picked up by an AFK agent with no extra human context.
-5. Add `wontfix` only after an explicit maintainer decision.
+No other agent adds or removes `ready-for-human` on an issue or PR, even when a skill's triage step names it.

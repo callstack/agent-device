@@ -1,6 +1,6 @@
-import { vi } from 'vitest';
 import { connectCommand } from '../../cli/commands/connection.ts';
 import type { AgentDeviceClient } from '../../agent-device-client.ts';
+import { beginStdoutCapture } from './stream-capture.ts';
 
 /** Runs `connect` the way the CLI does, writing its generated profile under `stateDir`. */
 export async function connectWithGeneratedProviderProfile(options: {
@@ -8,7 +8,7 @@ export async function connectWithGeneratedProviderProfile(options: {
   positionals: string[];
   flags: Partial<Parameters<typeof connectCommand>[0]['flags']>;
 }): Promise<void> {
-  const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  const stdoutCapture = beginStdoutCapture();
   try {
     await connectCommand({
       positionals: options.positionals,
@@ -22,6 +22,6 @@ export async function connectWithGeneratedProviderProfile(options: {
       client: {} as AgentDeviceClient,
     });
   } finally {
-    stdoutWrite.mockRestore();
+    stdoutCapture.restore();
   }
 }

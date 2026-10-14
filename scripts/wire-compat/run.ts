@@ -20,6 +20,7 @@
 
 import path from 'node:path';
 import { repoGit, requireUnshallowHistory } from '../lib/repo-git.ts';
+import { renamedSince } from '../__tests__/committed-source-tree.ts';
 import { digestDeclaration } from '../../test/wire-compat/declaration-digest.ts';
 import {
   digestWireSurface,
@@ -71,9 +72,46 @@ if (!baseline) {
   process.exit(0);
 }
 
+/**
+ * Rename pairs from the baseline tag to HEAD, as `<file> -> <file>`. The ledger's
+ * move detection identifies a moved declaration by a sole same-name re-declaration;
+ * a bulk `git mv` of two files that share a declaration name (the daemon's two
+ * `sendJson` helpers) outruns that heuristic, because both destinations are claimed
+ * by candidates. Git's rename detection knows the truth for the whole tree at once,
+ * so the baseline's keys are canonicalized into HEAD coordinates before comparison.
+ * Digests travel unchanged: a pure move is not a wire change.
+ */
+function tagToHeadRenames(tag: string): Map<string, string> {
+  // head -> base at [tag, HEAD]; flipped into the base -> head direction the ledger needs.
+  const flipped = new Map<string, string>();
+  for (const [headPath, basePath] of renamedSince(repoRoot, tag, 'HEAD'))
+    flipped.set(basePath, headPath);
+  return flipped;
+}
+
+function canonicalizeLedgerRef(ref: string, renames: ReadonlyMap<string, string>): string {
+  const hash = ref.lastIndexOf('#');
+  const renamed = renames.get(ref.slice(0, hash));
+  return renamed === undefined ? ref : `${renamed}#${ref.slice(hash + 1)}`;
+}
+
+const releasedRenames = tagToHeadRenames(baseline.tag);
+const released = parseWireLedger(baseline.raw, `${baseline.tag}:${WIRE_LEDGER_PATH}`);
 const result = compareWireLedgers({
   baselineTag: baseline.tag,
-  released: parseWireLedger(baseline.raw, `${baseline.tag}:${WIRE_LEDGER_PATH}`),
+  released: {
+    ...released,
+    declarations: Object.fromEntries(
+      Object.entries(released.declarations).map(([ref, digest]) => [
+        canonicalizeLedgerRef(ref, releasedRenames),
+        digest,
+      ]),
+    ),
+    compatibleChanges: released.compatibleChanges.map((change) => ({
+      ...change,
+      declaration: canonicalizeLedgerRef(change.declaration, releasedRenames),
+    })),
+  },
   current: readWireLedger(repoRoot),
   digests: digestWireSurface(repoRoot, WIRE_DECLARATIONS, digestDeclaration),
 });

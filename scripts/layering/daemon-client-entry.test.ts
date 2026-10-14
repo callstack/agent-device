@@ -20,7 +20,6 @@ function clientEdge(
     dynamic: kind === 'dynamic',
     typeOnly: kind === 'type',
     symbols: [],
-    bindingResidue: false,
     fromZone: targetDagZone(file),
     toZone: targetDagZone(target),
   };
@@ -50,18 +49,29 @@ test('a client import of a non-daemon module is not daemon-client entry surface'
 test('a planted runtime import of daemon internals by the client is red', () => {
   const violations = checkDaemonClientEntry([
     ...recordedWireEdges(),
-    clientEdge('src/daemon-client/daemon-client-metadata.ts', 'src/daemon/config.ts', 'value'),
+    clientEdge(
+      'src/daemon-client/daemon-client-metadata.ts',
+      'packages/daemon/src/core/config.ts',
+      'value',
+    ),
   ]);
   assert.equal(violations.length, 1);
   assert.equal(violations[0]!.rule, DAEMON_CLIENT_ENTRY_RULE);
   assert.match(violations[0]!.message, /value-imports daemon internals/);
-  assert.match(violations[0]!.message, /daemon-client-metadata\.ts -> src\/daemon\/config\.ts/);
+  assert.match(
+    violations[0]!.message,
+    /daemon-client-metadata\.ts -> packages\/daemon\/src\/core\/config\.ts/,
+  );
 });
 
 test('a planted dynamic import of daemon internals by the client is red', () => {
   const violations = checkDaemonClientEntry([
     ...recordedWireEdges(),
-    clientEdge('src/daemon-client/daemon-client-progress.ts', 'src/daemon/config.ts', 'dynamic'),
+    clientEdge(
+      'src/daemon-client/daemon-client-progress.ts',
+      'packages/daemon/src/core/config.ts',
+      'dynamic',
+    ),
   ]);
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /dynamic-imports daemon internals/);
@@ -70,7 +80,11 @@ test('a planted dynamic import of daemon internals by the client is red', () => 
 test('a runtime import is red even when the same pair is a recorded type edge', () => {
   const violations = checkDaemonClientEntry([
     ...recordedWireEdges(),
-    clientEdge('src/daemon-client/daemon-client-rpc.ts', 'src/daemon/daemon-request.ts', 'value'),
+    clientEdge(
+      'src/daemon-client/daemon-client-rpc.ts',
+      'packages/daemon/src/core/daemon-request.ts',
+      'value',
+    ),
   ]);
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /value-imports daemon internals/);
@@ -79,17 +93,23 @@ test('a runtime import is red even when the same pair is a recorded type edge', 
 test('an unrecorded type import of daemon internals is red', () => {
   const violations = checkDaemonClientEntry([
     ...recordedWireEdges(),
-    clientEdge('src/daemon-client/daemon-launch-spec.ts', 'src/daemon/daemon-request.ts'),
+    clientEdge(
+      'src/daemon-client/daemon-launch-spec.ts',
+      'packages/daemon/src/core/daemon-request.ts',
+    ),
   ]);
   assert.equal(violations.length, 1);
   assert.match(violations[0]!.message, /unclassified daemon-client import of daemon internals/);
-  assert.match(violations[0]!.message, /daemon-launch-spec\.ts -> src\/daemon\/daemon-request\.ts/);
+  assert.match(
+    violations[0]!.message,
+    /daemon-launch-spec\.ts -> packages\/daemon\/src\/core\/daemon-request\.ts/,
+  );
 });
 
 test('a type import of a daemon module other than the recorded type is red', () => {
   const recorded = DAEMON_CLIENT_ENTRY_EDGES.map((edge) =>
     edge.file === 'src/daemon-client/daemon-client.ts'
-      ? clientEdge(edge.file, 'src/daemon/session-state.ts', 'type')
+      ? clientEdge(edge.file, 'packages/daemon/src/core/session-state.ts', 'type')
       : clientEdge(edge.file, edge.target, 'type'),
   );
   const violations = checkDaemonClientEntry(recorded);

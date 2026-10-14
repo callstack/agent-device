@@ -32,8 +32,8 @@ import {
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
 } from '@agent-device/ad-script';
-import { loadReplayScriptSourceBundle } from './script-source-bundle.ts';
-import { discoverReplaySourcePaths } from './source-discovery.ts';
+import { loadReplayScriptSourceBundle } from '@agent-device/replay-port/script-source-bundle';
+import { discoverReplaySourcePaths } from '@agent-device/replay-port/source-discovery';
 
 const REPLAY_COMMAND_NAME = 'replay';
 const TEST_COMMAND_NAME = 'test';

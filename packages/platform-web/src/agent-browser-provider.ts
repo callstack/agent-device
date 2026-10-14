@@ -2,7 +2,11 @@ import { execFailureDetails } from '@agent-device/host-kit/command';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { hostPlatform, type OwnedProcessRecordStore } from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
-import { AppError, discloseDispatchAfterSteps } from '@agent-device/kernel/errors';
+import {
+  AppError,
+  type DispatchDisclosure,
+  discloseDispatchAfterSteps,
+} from '@agent-device/kernel/errors';
 
 import type { Rect } from '@agent-device/kernel/snapshot';
 import {
@@ -23,10 +27,11 @@ import {
   mapManagedAgentBrowserError,
   runManagedAgentBrowser,
 } from './agent-browser-tool.ts';
+import { cleanupManagedAgentBrowserOrphansForProviderStartup } from './agent-browser-lifecycle.ts';
 import {
-  cleanupManagedAgentBrowserOrphansForProviderStartup,
+  managedWebBrowserProcessRecordIsLive,
   recordManagedAgentBrowserProcesses,
-} from './agent-browser-lifecycle.ts';
+} from './agent-browser-process-record.ts';
 import { DEFAULT_SCROLL_AMOUNT } from '@agent-device/contracts/scroll-gesture';
 
 const AGENT_BROWSER = 'agent-browser';
@@ -41,12 +46,18 @@ type AgentBrowserProviderOptions = {
   ownedProcessRecords?: OwnedProcessRecordStore;
 };
 
+/** How one backend call is executed: cancellation, plus the work it reads from stdin (`batch`). */
+type AgentBrowserRunOptions = {
+  signal?: AbortSignal;
+  stdin?: string;
+};
+
 export function createAgentBrowserWebProvider(
   options: AgentBrowserProviderOptions = {},
 ): WebProvider {
   const session = options.session?.trim();
-  const runJson = async (args: string[], signal?: AbortSignal): Promise<unknown> =>
-    await runAgentBrowserJson(args, { session, options, signal });
+  const runJson = async (args: string[], run?: AgentBrowserRunOptions): Promise<unknown> =>
+    await runAgentBrowserJson(args, { session, options, ...run });
 
   return {
     async open(target) {
@@ -63,7 +74,7 @@ export function createAgentBrowserWebProvider(
     },
     async snapshot(snapshotOptions) {
       return await captureAgentBrowserSnapshot(
-        (args) => runJson(args, snapshotOptions?.signal),
+        (args, run) => runJson(args, { ...run, signal: snapshotOptions?.signal }),
         snapshotOptions,
       );
     },
@@ -74,7 +85,12 @@ export function createAgentBrowserWebProvider(
       await runJson(['set', 'viewport', String(width), String(height)]);
     },
     async click(x, y) {
-      await clickCoordinates(runJson, x, y);
+      const sends = createAgentBrowserSendLedger(runJson);
+      try {
+        await clickCoordinates(sends.send, x, y);
+      } catch (error) {
+        throw sends.discloseDispatch(error);
+      }
     },
     async hover(x, y) {
       await movePointer(runJson, x, y);
@@ -88,15 +104,20 @@ export function createAgentBrowserWebProvider(
     async fill(x, y, text) {
       // The shared web interactor is coordinate-first; bridge that to low-level
       // browser input until a future ref-targeted web path can call native fill.
-      await clickCoordinates(runJson, x, y);
-      await runJson(['press', selectAllShortcut()]);
-      if (text.length === 0) {
-        // The clear-field request (#2063): typing zero characters over the selection would
-        // leave the old value selected but intact, so the selection must be deleted instead.
-        await runJson(['press', 'Backspace']);
-        return;
+      const sends = createAgentBrowserSendLedger(runJson);
+      try {
+        await clickCoordinates(sends.send, x, y);
+        await sends.send(['press', selectAllShortcut()]);
+        if (text.length === 0) {
+          // The clear-field request (#2063): typing zero characters over the selection would
+          // leave the old value selected but intact, so the selection must be deleted instead.
+          await sends.send(['press', 'Backspace']);
+          return;
+        }
+        await sends.send(['keyboard', 'type', text]);
+      } catch (error) {
+        throw sends.discloseDispatch(error);
       }
-      await runJson(['keyboard', 'type', text]);
     },
     async fillRef(ref, text) {
       await runJson(['fill', browserRefSelector(ref), text]);
@@ -127,16 +148,39 @@ async function runPacedScroll(
   scrollOptions: { amount?: number; pixels?: number; durationMs?: number } | undefined,
 ): Promise<void> {
   const steps = buildPacedScrollSteps(resolveWebScrollDistance(scrollOptions));
-  let dispatchedSteps = 0;
+  const sends = createAgentBrowserSendLedger(runJson);
   try {
     for (const step of steps) {
-      await runJson(buildScrollArgs(direction, step.distance));
-      dispatchedSteps += 1;
+      await sends.send(buildScrollArgs(direction, step.distance));
       if (step.delayAfterMs > 0) await sleep(step.delayAfterMs);
     }
   } catch (error) {
-    throw discloseDispatchAfterSteps(error, dispatchedSteps);
+    throw sends.discloseDispatch(error);
   }
+}
+
+/** One backend send for a compound operation, counted by {@link createAgentBrowserSendLedger}. */
+type AgentBrowserSend = (args: string[]) => Promise<unknown>;
+
+/**
+ * Counts the backend sends of one compound web operation that returned, and discloses them on
+ * its failure through the shared rule: `no` survives only while nothing was sent, so a counted
+ * send makes the failure `unknown` with `details.dispatchedSteps`.
+ */
+function createAgentBrowserSendLedger(runJson: (args: string[]) => Promise<unknown>): {
+  send: AgentBrowserSend;
+  discloseDispatch(error: unknown): unknown;
+} {
+  let dispatchedSteps = 0;
+  return {
+    send: async (args) => {
+      await runJson(args);
+      dispatchedSteps += 1;
+    },
+    discloseDispatch(error: unknown): unknown {
+      return discloseDispatchAfterSteps(error, dispatchedSteps);
+    },
+  };
 }
 
 type ScrollStep = {
@@ -209,60 +253,169 @@ function buildScrollArgs(direction: string, distance: number | undefined): strin
   return ['scroll', direction, ...(distance === undefined ? [] : [String(distance)])];
 }
 
-async function clickCoordinates(
-  runJson: (args: string[]) => Promise<unknown>,
-  x: number,
-  y: number,
-): Promise<void> {
-  await movePointer(runJson, x, y);
-  await runJson(['mouse', 'down']);
-  await runJson(['mouse', 'up']);
+async function clickCoordinates(send: AgentBrowserSend, x: number, y: number): Promise<void> {
+  await movePointer(send, x, y);
+  await send(['mouse', 'down']);
+  await send(['mouse', 'up']);
 }
 
-async function movePointer(
-  runJson: (args: string[]) => Promise<unknown>,
-  x: number,
-  y: number,
-): Promise<void> {
-  await runJson(['mouse', 'move', String(Math.round(x)), String(Math.round(y))]);
+async function movePointer(send: AgentBrowserSend, x: number, y: number): Promise<void> {
+  await send(['mouse', 'move', String(Math.round(x)), String(Math.round(y))]);
 }
 
 async function captureAgentBrowserSnapshot(
-  runJson: (args: string[]) => Promise<unknown>,
+  runJson: (args: string[], run?: AgentBrowserRunOptions) => Promise<unknown>,
   options: WebSnapshotOptions | undefined,
 ): Promise<WebSnapshotResult> {
   const data = await runJson(buildSnapshotArgs(options));
   return await normalizeAgentBrowserSnapshot(
     data,
-    options?.includeRects ? async (ref) => await fetchRefRect(runJson, ref) : undefined,
+    options?.includeRects ? (refs) => fetchRefRects(runJson, refs) : undefined,
   );
 }
 
+/**
+ * The backend's own `--compact` is deliberately not requested: it removes an element with no ref
+ * TOGETHER WITH the text under it, so a status region that just announced something never reaches
+ * the projection at all. The empty structural lines it existed to hide are dropped by
+ * `parseSnapshotDraftNodes` instead, which can tell an empty container from the text inside it.
+ */
 function buildSnapshotArgs(options: WebSnapshotOptions | undefined): string[] {
   return [
     'snapshot',
     ...(options?.interactiveOnly ? ['--interactive'] : []),
-    ...(options?.raw ? [] : ['--compact']),
     ...(typeof options?.depth === 'number' ? ['--depth', String(options.depth)] : []),
     ...(options?.scope ? ['--selector', options.scope] : []),
   ];
 }
 
-async function fetchRefRect(
-  runJson: (args: string[]) => Promise<unknown>,
-  ref: string,
-): Promise<Rect | undefined> {
-  try {
-    return parseRect(await runJson(['get', 'box', browserRefSelector(ref)]));
-  } catch (error) {
-    if (isIgnorableBoxError(error)) return undefined;
-    throw error;
+/**
+ * Refs per backend `batch` call. The bound is the group that finishes inside the command timeout it
+ * runs under (`AGENT_BROWSER_TIMEOUT_MS`, 30 s) with room to spare: measured on a 408-ref page, 200
+ * refs measured in 0.28 s and all 408 in 0.33 s inside one process, because a command inside a batch
+ * is a DOM read of an already-loaded page rather than an interpreter boot. Raising the number is safe
+ * only while that ratio holds — the stdin payload itself (~23 bytes per ref) is not the constraint.
+ */
+const MAX_REFS_PER_RECT_BATCH = 200;
+
+/**
+ * The bounds of every ref of the capture, in `batch` round trips: the backend measures them inside
+ * one process, where the per-ref alternative pays one spawn per ref (measured on a 408-ref page: one
+ * capture cost 385 spawns and 90 s, and 4 spawns and 0.3 s batched).
+ *
+ * A ref the backend could not measure comes back as a failed entry and simply gets no rect — an
+ * element that is absent or has no box is an ordinary answer, and the entry's own `success` field is
+ * what distinguishes it, never the error wording. `--bail` is deliberately not requested: it stops
+ * at the first failed entry, which would silently drop the geometry of every ref after it.
+ */
+async function fetchRefRects(
+  runJson: (args: string[], run?: AgentBrowserRunOptions) => Promise<unknown>,
+  refs: readonly string[],
+): Promise<Map<string, Rect>> {
+  const rects = new Map<string, Rect>();
+  // A capture with no addressable node is an empty group list, so the loop below never runs and the
+  // backend is never called. That is the one place this seam declines to ask, and it is also what
+  // keeps such a capture from tripping the refusal: nothing failed, there was nothing to measure.
+  for (let start = 0; start < refs.length; start += MAX_REFS_PER_RECT_BATCH) {
+    const group = refs.slice(start, start + MAX_REFS_PER_RECT_BATCH);
+    const commands = group.map((ref) => ['get', 'box', browserRefSelector(ref)]);
+    const entries = parseBatchEntries(
+      await runJson(['batch'], { stdin: JSON.stringify(commands) }),
+      commands,
+      refs.length,
+    );
+    for (const [index, entry] of entries.entries()) {
+      const ref = group[index];
+      const rect = entry.success === true ? parseRect(entry.result) : undefined;
+      if (rect && ref !== undefined) rects.set(ref, rect);
+    }
   }
+  if (refs.length > 0 && rects.size === 0) {
+    // An element the backend CAN see measures as a box even when it is hidden or zero-sized, so a
+    // capture whose every ref failed answered to a ref namespace the snapshot does not publish —
+    // typically refs that went stale between the snapshot and this fetch. Surfacing no geometry at
+    // all would leave the caller with a tree of unresolvable targets; the pre-batch code surfaced
+    // the failure the same way, through the per-ref error.
+    throw new AppError(
+      'COMMAND_FAILED',
+      'agent-browser resolved none of the snapshot refs while measuring snapshot geometry',
+      {
+        cmd: AGENT_BROWSER,
+        args: ['batch'],
+        reason: 'snapshot-refs-unmeasurable',
+        requestedRefs: refs.length,
+        measuredRects: 0,
+        hint: AGENT_BROWSER_DOCTOR_HINT,
+      },
+    );
+  }
+  return rects;
 }
 
-function isIgnorableBoxError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return !/\bstale\b/i.test(message) && /\bbox\b|not visible|not found|no element/i.test(message);
+type AgentBrowserBatchEntry = {
+  command?: unknown;
+  success?: unknown;
+  result?: unknown;
+};
+
+/**
+ * The backend answers a batch with one entry per command, echoing each command back, and reports a
+ * whole-batch fault as a single object instead of an array. The echo is what pairs an entry to the
+ * ref it measured, so position is trusted only as the order of the echo, never as the pairing
+ * itself. Anything that breaks that pairing — an answer that is not a list of entries, a list that
+ * does not cover the commands sent, an entry with no verdict, an entry describing some other command
+ * — means the geometry cannot be matched back and is refused, naming which invariant broke.
+ *
+ * Each refusal is keyed by a stable `reason` identifier rather than by its own sentence, so a caller
+ * branches on the failure without reading prose. `captureRefs` is the capture's whole ref count
+ * instead of this group's, because the answer reads as a statement about the capture and one capture
+ * can be measured in several groups.
+ */
+function parseBatchEntries(
+  data: unknown,
+  commands: readonly (readonly string[])[],
+  captureRefs: number,
+): AgentBrowserBatchEntry[] {
+  const unusable = (reason: string): AppError =>
+    new AppError(
+      'COMMAND_FAILED',
+      `agent-browser returned an unusable batch result for snapshot geometry (${reason})`,
+      {
+        cmd: AGENT_BROWSER,
+        args: ['batch'],
+        reason,
+        requestedRefs: captureRefs,
+        groupRefs: commands.length,
+        hint: AGENT_BROWSER_DOCTOR_HINT,
+      },
+    );
+  if (!Array.isArray(data)) throw unusable('batch-result-not-a-list');
+  if (data.length !== commands.length) throw unusable('entry-count');
+  if (!data.every(isBatchEntry)) throw unusable('entry-shape');
+  const entries = data;
+  for (const [index, entry] of entries.entries()) {
+    if (!sameBatchCommand(entry.command, commands[index])) throw unusable('entry-command');
+  }
+  return entries;
+}
+
+/** The echo as the backend printed it, which for these commands is exactly the array that was sent. */
+function sameBatchCommand(
+  echoed: unknown,
+  command: readonly string[] | undefined,
+): echoed is readonly string[] {
+  return (
+    command !== undefined &&
+    Array.isArray(echoed) &&
+    echoed.length === command.length &&
+    echoed.every((token, index) => token === command[index])
+  );
+}
+
+function isBatchEntry(value: unknown): value is AgentBrowserBatchEntry {
+  // An object with no verdict is not an answer about a ref: treated as a failed entry it would
+  // silently drop that node's geometry, which reads as "this element has no box".
+  return isJsonObject(value) && typeof value.success === 'boolean';
 }
 
 async function runAgentBrowserJson(
@@ -270,10 +423,9 @@ async function runAgentBrowserJson(
   params: {
     session: string | undefined;
     options: AgentBrowserProviderOptions;
-    signal?: AbortSignal;
-  },
+  } & AgentBrowserRunOptions,
 ): Promise<unknown> {
-  const { session, options, signal } = params;
+  const { session, options, signal, stdin } = params;
   const cliArgs = [...args, '--json', ...(session ? ['--session', session] : [])];
   return await runAgentBrowserCommand(
     cliArgs,
@@ -282,7 +434,7 @@ async function runAgentBrowserJson(
       const parsed = parseAgentBrowserJson(result.stdout, result.stderr, cliArgs, result.exitCode);
       return unwrapAgentBrowserJson(parsed, result, cliArgs);
     },
-    signal,
+    { signal, stdin },
   );
 }
 
@@ -290,7 +442,7 @@ async function runAgentBrowserCommand(
   cliArgs: string[],
   options: AgentBrowserProviderOptions,
   interpret: (result: { stdout: string; stderr: string; exitCode: number }) => unknown,
-  signal?: AbortSignal,
+  run: AgentBrowserRunOptions,
 ): Promise<unknown> {
   let stdout = '';
   let stderr = '';
@@ -304,7 +456,8 @@ async function runAgentBrowserCommand(
       stateDir: options.stateDir,
       allowFailure: true,
       timeoutMs: AGENT_BROWSER_TIMEOUT_MS,
-      signal,
+      signal: run.signal,
+      stdin: run.stdin,
     });
     stdout = result.stdout;
     stderr = result.stderr;
@@ -355,7 +508,9 @@ async function finalizeAgentBrowserProcessRecord(params: {
     const otherOpenSessions = remainingSessions.filter((name) => name !== currentSession);
     if (canClearAgentBrowserRecord(params, otherOpenSessions.length)) {
       store.clear({ kind: 'daemon' });
-    } else {
+      return;
+    }
+    if (await shouldRefreshAgentBrowserProcessRecord(params, store)) {
       await recordManagedAgentBrowserProcesses(params.status, store);
     }
   } catch (error) {
@@ -365,6 +520,51 @@ async function finalizeAgentBrowserProcessRecord(params: {
       data: { error: error instanceof Error ? error.message : String(error) },
     });
   }
+}
+
+/**
+ * The agent-browser commands that can change the owned browser fleet.
+ *
+ * `open` may launch the agent-browser daemon and its Chrome, and `close` can end them. `record`
+ * joins them because in the pinned CLI, `record start` mints an `ffmpeg` child of the
+ * daemon — the WebM encoder outlives the CLI process, which returns while the recording runs, and
+ * `record stop` is a later command that pipes into it. That helper is outside Chrome's tree, so
+ * only a scan reached by a lifecycle boundary can add it to the record the startup reaper signals;
+ * a probe over already-recorded pids never learns of a process the fleet minted after the last
+ * scan. `record stop` re-scanning too is the cheap side of one set: the fleet can also shrink.
+ */
+const AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS: ReadonlySet<string> = new Set([
+  'open',
+  'close',
+  'record',
+]);
+
+/**
+ * Whether the process-table scan that rewrites the owned-process record has to run for one
+ * agent-browser call.
+ *
+ * Any failure may be the first command that finds the fleet died or restarted between calls, so
+ * it refreshes; so do the {@link AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS} members, which launch,
+ * end, and extend the fleet. A plain successful call
+ * acts on a fleet the record already describes, and re-deriving that fleet means a process-tool
+ * snapshot of every host process, which is the cost this seam exists to avoid.
+ * {@link managedWebBrowserProcessRecordIsLive} answers for the recorded pids from one same-pid
+ * probe instead. It is fail-closed: an empty, undecodable, or unanswered probe falls back to the
+ * scan, so a live fleet this daemon adopted from a predecessor becomes owned through the record
+ * again, and a fleet that died or restarted outside a lifecycle boundary is caught by the next
+ * command that can no longer name every process the record still claims is alive.
+ */
+async function shouldRefreshAgentBrowserProcessRecord(
+  params: Pick<
+    Parameters<typeof finalizeAgentBrowserProcessRecord>[0],
+    'cliArgs' | 'commandCompleted' | 'semanticSuccess'
+  >,
+  store: OwnedProcessRecordStore,
+): Promise<boolean> {
+  if (!params.commandCompleted || !params.semanticSuccess) return true;
+  const command = params.cliArgs[0];
+  if (command !== undefined && AGENT_BROWSER_FLEET_LIFECYCLE_COMMANDS.has(command)) return true;
+  return !(await managedWebBrowserProcessRecordIsLive(store));
 }
 
 function canClearAgentBrowserRecord(
@@ -417,6 +617,7 @@ function unwrapAgentBrowserJson(
       args: cliArgs,
       hint: readStringProperty(parsed, 'hint') ?? AGENT_BROWSER_DOCTOR_HINT,
       agentBrowserError: parsed.error,
+      ...agentBrowserCliRefusalDispatch(parsed),
     });
   }
   if (result.exitCode !== 0) {
@@ -475,6 +676,8 @@ function mapAgentBrowserRunError(error: unknown, args: string[]): AppError {
         cmd: AGENT_BROWSER,
         args,
         hint: webBackendHint(appError),
+        // The managed entry was never spawned, so nothing of this command reached the browser.
+        dispatched: 'no',
       },
       appError,
     );
@@ -511,6 +714,28 @@ function readEnvelopeErrorMessage(envelope: JsonObject): string {
 
 function toErrorCode(value: unknown): 'COMMAND_FAILED' | (string & {}) {
   return typeof value === 'string' && value.length > 0 ? value : 'COMMAND_FAILED';
+}
+
+/**
+ * The typed envelope `type`s that prove the agent-browser CLI refused an argv before the command
+ * could reach the browser daemon: the CLI answers them itself, with the daemon dead, and a
+ * semantic failure carries no `type` at all. The requested operation never ran, so `no` is safe.
+ * For a command that did reach the backend, whatever the browser did with it is not knowable from
+ * the reply, so the provider stays silent and the request router's fallback answers `unknown`.
+ * Mirrored by the `web-agent-browser.` rows in contracts/fixtures/dispatch-disclosure.json.
+ */
+const AGENT_BROWSER_PRE_DISPATCH_REFUSAL_TYPES: ReadonlySet<string> = new Set([
+  'unknown_command',
+  'missing_arguments',
+]);
+
+function agentBrowserCliRefusalDispatch(parsed: JsonObject): {
+  dispatched?: DispatchDisclosure;
+} {
+  const type = readStringProperty(parsed, 'type');
+  return type !== undefined && AGENT_BROWSER_PRE_DISPATCH_REFUSAL_TYPES.has(type)
+    ? { dispatched: 'no' }
+    : {};
 }
 
 function browserRefSelector(ref: string): string {

@@ -51,8 +51,10 @@ const SESSION_STOP_TIMEOUT_MS = 1_000;
 // connecting UiAutomation. Let an acknowledged quit complete that release before force-killing adb.
 const SESSION_GRACEFUL_EXIT_TIMEOUT_MS = 11_000;
 const SESSION_PROCESS_EXIT_TIMEOUT_MS = 2_000;
-// Persistent capture is an optimization before the required one-shot path. Keep its native and
-// transport budgets shorter so a wedged UiAutomation connection leaves time for a clean fallback.
+// Persistent capture is an optimization before the required one-shot path. Its native budget only
+// bounds the UiAutomation connect wait, so it stays short: a wedged connection must leave time for
+// a clean fallback. The traversal itself is unbounded device-side and gets its own share of the
+// helper-command budget (`resolveAndroidSnapshotHelperSessionBudgetMs`) rather than a fixed guess.
 const SESSION_CAPTURE_TIMEOUT_MS = 2_000;
 const SESSION_REQUEST_OVERHEAD_MS = 3_000;
 const FORWARD_TIMEOUT_MS = 5_000;
@@ -124,14 +126,14 @@ export async function acquireAndroidSnapshotHelperSession(
     return undefined;
   }
   const callerResolved = resolveAndroidSnapshotHelperCaptureOptions(options);
-  const resolved = resolvePersistentSessionCaptureOptions(callerResolved);
+  const resolved = resolveAndroidSnapshotHelperSessionCaptureOptions(callerResolved);
   const identity = createSessionIdentity(deviceKey, resolved, options);
   const session = await resolveAndroidSnapshotHelperSession({
     deviceKey,
     identity,
     options,
     resolved,
-    startBudgetMs: resolveAndroidSnapshotHelperStartBudgetMs(callerResolved.commandTimeoutMs),
+    startBudgetMs: resolveAndroidSnapshotHelperSessionBudgetMs(callerResolved.commandTimeoutMs),
   });
   return session ? { session, resolved, deviceKey } : undefined;
 }
@@ -389,26 +391,34 @@ function createSessionIdentity(
   return identity;
 }
 
-function resolvePersistentSessionCaptureOptions(
+/**
+ * The budgets a session command runs under. `timeoutMs` is the device-side UiAutomation connect
+ * wait and stays capture-sized; `commandTimeoutMs` is the transport deadline the socket request
+ * waits for, and it is the session's share of the helper-command budget. Deriving that deadline from
+ * the connect wait instead (connect wait plus a fixed overhead, 5 s) is what made a screen that
+ * merely captures slowly look wedged (tester-army/e2e#841): a React Native debug build repainting a
+ * list every second answers ~500 accessibility nodes in 3-12 s, every such capture fell off the
+ * session into force-stop, one-shot instrumentation and a restart, and a 3 s read cost 20-40 s.
+ */
+export function resolveAndroidSnapshotHelperSessionCaptureOptions(
   resolved: AndroidSnapshotHelperResolvedCaptureOptions,
 ): AndroidSnapshotHelperResolvedCaptureOptions {
-  const timeoutMs = Math.min(resolved.timeoutMs, SESSION_CAPTURE_TIMEOUT_MS);
   return {
     ...resolved,
-    timeoutMs,
-    commandTimeoutMs: Math.min(resolved.commandTimeoutMs, timeoutMs + SESSION_REQUEST_OVERHEAD_MS),
+    timeoutMs: Math.min(resolved.timeoutMs, SESSION_CAPTURE_TIMEOUT_MS),
+    commandTimeoutMs: resolveAndroidSnapshotHelperSessionBudgetMs(resolved.commandTimeoutMs),
   };
 }
 
 /**
- * What a start gets out of the helper-command budget it was built with: half of it, so a helper that
- * announces itself later than a session capture takes is not pushed off the persistent path by a
- * capture-sized guess, while the one-shot transport that answers a failed start keeps the other half.
- * Never less than one session command is worth, never more than the budget. Production builds that
- * budget from `ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS` (30 s today, so 15 s here) rather than
- * from the CLI's `--timeout`, whose deadline reaches this wait as an abort instead.
+ * What one session command (a start, a capture) gets out of the helper-command budget it was built
+ * with: half of it, so a helper that answers later than a capture-sized guess allows is not pushed
+ * off the persistent path, while the one-shot transport that answers a failed session command keeps
+ * the other half. Never less than one session command is worth, never more than the budget.
+ * Production builds that budget from `ANDROID_SNAPSHOT_HELPER_COMMAND_TIMEOUT_MS` (30 s today, so
+ * 15 s here) rather than from the CLI's `--timeout`, whose deadline reaches the wait as an abort.
  */
-export function resolveAndroidSnapshotHelperStartBudgetMs(commandTimeoutMs: number): number {
+export function resolveAndroidSnapshotHelperSessionBudgetMs(commandTimeoutMs: number): number {
   return Math.min(
     commandTimeoutMs,
     Math.max(

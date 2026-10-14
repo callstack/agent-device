@@ -252,6 +252,8 @@ unverified, because the pose it ended in is not the one that was asked for.
 The attempt count, the per-read timeout, cancellation, and the open/closed end-stop
 rule are unchanged: an unsettled fold costs the same four hinge streams it always did.
 
+A first hinge read that returns no sample leaves the pose unconfirmed, whatever the cause: devicectl 651.13.5 (Xcode 27.1 RC build 27A9275) has no `device motion` subcommand, and an unreachable device prints no sample either. The HID command has already been delivered by then, so `fold` refuses with `fold-pose-dispatched-unverified`: sent, not confirmed, distinct from a pose the hinge contradicted. The read's own failure rides along as `hingeReadFailure`, so the cause is read from its stderr rather than assumed. When panel power decides a single lit panel, the error carries it as `screen` evidence; panel power cannot separate `half-open` from `open`, so it is never promoted to a verified pose. A no-sample read after an earlier sample is not this case and keeps its own reason.
+
 ## Pose is derived from panel power, and official control does not exist
 
 Apple ships fold state as an **app-side, read-only** API: `UIHinge.status`
@@ -378,6 +380,15 @@ The device-lane test reads each export's transform-applied size back through AVF
 `test/integration/support/recording-inspect.swift` reports `renderWidth`/`renderHeight` from the same
 `resolvedRenderSize` the overlay tool uses — so a `rot90` panel is compared upright rather than on its
 sideways coding grid, and no second MP4 geometry parser is added to the shipped packages.
+
+A quarter-turn transform can leave the upright frame outside a zero-origin composition canvas.
+The Duo inner capture has a `2006x2852` natural size and transform `[0, 1, -1, 0, 0, 0]`, which
+places its upright `2852x2006` bounds at `x=-2852`. Applying that transform without translating the
+bounds into the render canvas clips the source content and trips the compositor's all-black check
+(#2774). The overlay now derives its render size and origin translation from the same transformed
+bounds. Native export regressions cover an identity transform and both translated and
+negative-origin quarter turns, asserting upright source content, unchanged geometry, and drawn
+touches.
 
 ## Verified on a booted Duo
 

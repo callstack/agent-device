@@ -1,0 +1,332 @@
+import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
+import { beforeEach, expect, test, vi } from 'vitest';
+import type { AudioProbeLiveHandle } from '@agent-device/contracts/audio-probe-runtime';
+import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
+import { audioProbeResourceStore } from '@agent-device/capture-kit/audio-probe-resource-store';
+import {
+  sessionCloseShutdownFixture,
+  type SessionState,
+} from './session-close-shutdown.fixtures.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { encodeHostAudioProbeDescriptor } from '@agent-device/capture-kit/audio-probe-descriptor-fixtures';
+import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
+import { platformResourceCleanupFixture } from '../../../../__tests__/support/platform-resource-cleanup-fixture.ts';
+
+const {
+  AppError,
+  handleSessionCommands,
+  LeaseRegistry,
+  localRuntimeOwner,
+  makeSession,
+  makeSessionStore,
+  mockDispatchCommand,
+  noopInvoke,
+  path,
+  resetSessionCloseShutdownMocks,
+  WEB_DESKTOP_DEVICE,
+} = sessionCloseShutdownFixture;
+
+beforeEach(resetSessionCloseShutdownMocks);
+
+test('close stops Android snapshot helper session before deleting session', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-snapshot-helper-session';
+  const device: SessionState['device'] = {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel_9_API_35',
+    kind: 'emulator',
+    booted: true,
+  };
+  sessionStore.publish(sessionName, {
+    ...makeSession(sessionName, device),
+    appBundleId: 'com.example.app',
+  });
+  const platformCleanup = platformResourceCleanupFixture();
+
+  const response = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    platformResourceCleanup: platformCleanup,
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(platformCleanup.stopSnapshotHelper).toHaveBeenCalledWith(device);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('close stops active host audio probe before deleting session', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'macos-active-audio-probe-session';
+  const statusPath = path.join(
+    mkdtempForTestSync('missing-audio-probe'),
+    'missing-audio-probe.json',
+  );
+  const startedAt = Date.now() - 2000;
+  const stoppedResult = {
+    audio: 'probe' as const,
+    state: 'stopped' as const,
+    active: false,
+    heard: false,
+    source: 'system-audio' as const,
+    backend: 'macos-screencapturekit',
+    durationMs: 10000,
+    elapsedMs: 2000,
+    bucketMs: 1000,
+    sampleCount: 2,
+    sourceCount: 1,
+    rmsDbfs: [] as number[],
+    peakDbfs: [] as number[],
+  };
+  const finish = vi.fn(async () => ({ status: 'completed' as const, result: stoppedResult }));
+  const handle: AudioProbeLiveHandle = {
+    inspect: () => ({
+      source: 'system-audio' as const,
+      backend: 'macos-screencapturekit',
+      sourceCount: 1,
+      notes: [],
+      statusPath,
+      startedAt,
+      durationMs: 10000,
+      bucketMs: 1000,
+    }),
+    status: async () => stoppedResult,
+    finish,
+    forceCleanup: async () => ({ status: 'cleaned' }) as const,
+    [Symbol.asyncDispose]: async () => {},
+  };
+  const envelope = createDurableResourceEnvelope({
+    resourceKind: 'audio-probe',
+    sessionId: sessionName,
+    device: { id: 'macos', family: 'apple', appleOs: 'macos', kind: 'device' },
+    owner: localRuntimeOwner('apple'),
+    fence: { token: sessionName + '-fence', generation: 1 },
+    lifecycle: 'open',
+    descriptor: encodeHostAudioProbeDescriptor({
+      backend: 'macos-screencapturekit',
+      source: 'system-audio',
+      sourceCount: 1,
+      notes: [],
+      statusPath,
+      startedAt,
+      durationMs: 10000,
+      bucketMs: 1000,
+      marker: { pid: 4242, startTime: 'boot+1', command: 'helper' },
+    }),
+  });
+  const session: SessionState = {
+    ...makeSession(sessionName, {
+      platform: 'apple',
+      appleOs: 'macos',
+      id: 'macos',
+      name: 'Mac',
+      kind: 'device',
+      booted: true,
+    }),
+    audioProbe: { handle, envelope },
+  };
+  sessionStore.publish(sessionName, session);
+  audioProbeResourceStore.write(
+    audioProbeResourceStore.resolvePath(sessionStore.resolveSessionDir(sessionName)),
+    envelope,
+  );
+
+  const response = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(finish).toHaveBeenCalledOnce();
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('close dispatches web session cleanup without a positional target', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'web-close-session';
+  sessionStore.publish(sessionName, makeSession(sessionName, WEB_DESKTOP_DEVICE));
+
+  const response = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockDispatchCommand).toHaveBeenCalledWith(
+    WEB_DESKTOP_DEVICE,
+    'close',
+    [],
+    undefined,
+    expect.objectContaining({ logPath: expect.stringContaining('daemon.log') }),
+  );
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('close preserves the session and lease when provider release fails so it can be retried', async () => {
+  const sessionStore = makeSessionStore();
+  const leaseRegistry = new LeaseRegistry();
+  const sessionName = 'provider-release-failure-session';
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+    deviceKey: 'ios:bs-device',
+    clientId: 'client-a',
+  });
+  sessionStore.publish(sessionName, {
+    ...makeSession(sessionName, WEB_DESKTOP_DEVICE),
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      leaseProvider: lease.leaseProvider,
+      deviceKey: lease.deviceKey,
+      clientId: lease.clientId,
+      expiresAt: lease.expiresAt,
+    },
+  });
+
+  let releaseAttempts = 0;
+  const request = {
+    createCommandSurface: fakeCreateCommandSurface,
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    leaseRegistry,
+    leaseLifecycleProvider: {
+      release: async () => {
+        releaseAttempts += 1;
+        if (releaseAttempts === 1) {
+          throw new AppError('COMMAND_FAILED', 'provider cleanup failed');
+        }
+        return { releasedBy: 'provider' };
+      },
+    },
+    invoke: noopInvoke,
+    platformServices: daemonPlatformServicesFixture(),
+  };
+
+  const failed = await handleSessionCommands(request);
+  expect(failed).toMatchObject({
+    ok: false,
+    error: {
+      code: 'COMMAND_FAILED',
+      retriable: true,
+      details: { session: sessionName },
+    },
+  });
+  expect(sessionStore.get(sessionName)?.lease?.leaseId).toBe(lease.leaseId);
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
+
+  const retried = await handleSessionCommands(request);
+  expect(retried).toMatchObject({
+    ok: true,
+    data: { provider: { releasedBy: 'provider' } },
+  });
+  expect(releaseAttempts).toBe(2);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
+});
+
+test('close cannot retire a replacement session while its provider release waits', async () => {
+  const sessionStore = makeSessionStore();
+  const leaseRegistry = new LeaseRegistry();
+  const address = 'cwd:provider-close:default';
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+    deviceKey: 'ios:bs-device',
+    clientId: 'client-a',
+  });
+  const ref = sessionStore.publish(address, {
+    ...makeSession('default', WEB_DESKTOP_DEVICE),
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      leaseProvider: lease.leaseProvider,
+      deviceKey: lease.deviceKey,
+      clientId: lease.clientId,
+      expiresAt: lease.expiresAt,
+    },
+  });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const providerRelease = vi.fn(async () => {
+    await held;
+    return { releasedBy: 'provider' };
+  });
+  const closing = handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: { token: 't', session: address, command: 'close', positionals: [], flags: {} },
+    sessionName: address,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    leaseRegistry,
+    leaseLifecycleProvider: { release: providerRelease },
+    invoke: noopInvoke,
+  });
+  try {
+    await vi.waitFor(() => expect(providerRelease).toHaveBeenCalledOnce());
+    sessionStore.retire(ref);
+    const successor = sessionStore.publish(address, makeSession('default', WEB_DESKTOP_DEVICE));
+    sessionStore.setRuntimeHints(address, { metroPort: 9090 });
+    release();
+    expect(await closing).toMatchObject({
+      ok: true,
+      data: { provider: { releasedBy: 'provider' } },
+    });
+    expect(sessionStore.requireCurrent(successor)).toBe(successor.session);
+    expect(sessionStore.getRuntimeHints(address)).toEqual({ metroPort: 9090 });
+    expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
+  } finally {
+    release();
+    await closing.catch(() => {});
+  }
+});

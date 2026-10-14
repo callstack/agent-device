@@ -3,9 +3,12 @@ context platform=ios target=mobile
 
 open com.apple.Preferences --relaunch
 click "role=searchField || label=Search || label=\"Search\""
-wait 1000
+wait 'editable=true focused=true'
+is focused 'editable=true'
 
 type "General"
-wait 1000
+wait 'editable=true value="General"'
+is focused 'editable=true value="General"'
+screenshot "./test/screenshots/replays/ios-search-results.png"
 
 find text "General" exists

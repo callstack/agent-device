@@ -64,7 +64,7 @@ redaction discipline, and sink (inventoried 2026-07-24):
    three request-lifecycle points plus `SessionStore.recordAction`, read only by the public
    `events` command. `action.recorded` is already a projection of `session.actions` pushes — the
    model this ADR generalizes. Crucially, not every append happens inside a request:
-   `finalizeRepairTeardown` (`src/daemon/session-store.ts`) records a synthesized `close` action
+   `finalizeRepairTeardown` (`packages/daemon/src/core/session-store.ts`) records a synthesized `close` action
    during idle reap or daemon shutdown, with — per its own comment — "no live request here."
 3. **Progress streaming** (`src/request/progress.ts`, `src/daemon/request-progress-protocol.ts`).
    A closed, typed `RequestProgressEvent` union emitted through a single-sink `AsyncLocalStorage`
@@ -85,7 +85,7 @@ usage at all — the codebase already avoids implicit pub/sub, which this design
 The channels overlap but share nothing: no common envelope, no shared kind vocabulary, and
 consumers couple to emit sites by string. The sharpest instance: agent-cost's `runnerRoundTrips`
 is `countDiagnosticEventsByPhase(['ios_runner_command_send', 'ios_runner_readiness_preflight'])`
-(`src/daemon/request-router.ts`) — a hand-picked name list a new runner phase can silently drift
+(`packages/daemon/src/server/request-router.ts`) — a hand-picked name list a new runner phase can silently drift
 from. That violates two established repo rules: *what enumerates N?* (nothing enumerates
 round-trip phases), and *categories come from recorded fields, never parsed names*.
 
@@ -325,7 +325,7 @@ gets built.
   inconsistency, and three write paths. Kept as the migration's first independently useful step
   instead.
 - **Merge `upload-progress` and `app-events` in:** rejected. Upload progress is a local
-  byte-counter callback that never crosses the request scope; `src/daemon/app-events.ts` is a deep-link
+  byte-counter callback that never crosses the request scope; `packages/daemon/src/execution/app-events.ts` is a deep-link
   builder for the `trigger-app-event` command, not an event channel.
 
 ## Validation required for implementation

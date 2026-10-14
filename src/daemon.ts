@@ -1,12 +1,12 @@
-import { startDaemonRuntime } from './daemon/server/daemon-runtime.ts';
 import { asAppError } from '@agent-device/kernel/errors';
+import { startDaemonRuntime } from '@agent-device/daemon/server/daemon-runtime';
 
+// The root's composition enters as a factory behind a function-scoped `await import`: the server
+// calls it before it acquires the registration, so startup order is unchanged, and the eager
+// closure of this entry stays exactly the operational server's (ADR 0019).
 void startDaemonRuntime({
-  // The composition root's surface stays behind `await import`, loaded on first request use.
-  createCommandSurface: async (config) =>
-    (await import('./command-runtime/runtime-command-surface.ts')).createCommandSurfaceAgentDevice(
-      config,
-    ),
+  composeDeps: async (input) =>
+    (await import('./daemon-composition.ts')).createDaemonRuntimeDeps(input),
 }).catch((error) => {
   const appErr = asAppError(error);
   process.stderr.write(`Daemon error: ${appErr.message}\n`);

@@ -1,7 +1,4 @@
-import type { AppleRunnerRequestOptions } from '@agent-device/contracts/apple-runner-request';
 import type { AppleSessionObservation } from '@agent-device/contracts/apple-session-observation';
-import type { ElementSelectorKey } from '@agent-device/contracts/interactor-types';
-import type { DeviceInfo } from '@agent-device/kernel/device';
 
 let observation: AppleSessionObservation | undefined;
 
@@ -26,14 +23,3 @@ export const appleSessionObservation: AppleSessionObservation = Object.freeze({
     return (await loadAppleSessionObservation()).resolveSoleForegroundApp(options);
   },
 });
-
-export async function queryAppleRuntimeSelector(
-  device: DeviceInfo,
-  selector: Readonly<{ key: ElementSelectorKey; value: string }>,
-  appBundleId: string | undefined,
-  options: AppleRunnerRequestOptions,
-): Promise<Record<string, unknown>> {
-  const { queryAppleRunnerSelector } =
-    await import('@agent-device/platform-apple/runner/operations');
-  return await queryAppleRunnerSelector(device, selector, appBundleId, options);
-}

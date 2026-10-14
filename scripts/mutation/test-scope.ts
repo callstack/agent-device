@@ -2,10 +2,10 @@
 //
 // Stryker replays the configured suite for every mutant, so the suite it is
 // pointed at decides whether the weekly sweep fits its 30-minute budget. Pointing
-// it at the whole unit suite (487 files) makes the initial dry run alone cost
+// it at the whole unit suite makes the initial dry run alone cost
 // minutes; hand-listing per-kernel test files would be a second source of truth
 // that silently rots. So the scope is derived the same way `pnpm check:affected`
-// derives affected tests: `vitest related` over the mutated files, i.e. Vitest's
+// derives affected tests: Vitest related-file discovery over the mutated files, i.e. Vitest's
 // own static module graph.
 //
 // Two files are removed from whatever Vitest returns:
@@ -27,7 +27,6 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { runCmdSync } from '@agent-device/host-kit/command';
 import { readWorkspacePackages } from '../layering/package-boundaries.ts';
 import { walkFiles } from '../lib/walk-files.ts';
 import { isKernelTestFile, normalizePath } from './modules.ts';
@@ -94,58 +93,45 @@ export function expandMutateFiles(globs: readonly string[], repoRoot: string): s
     .sort();
 }
 
-type VitestJsonReport = { testResults?: readonly { name: string }[] };
-
-/**
- * Test files Vitest considers related to `sourceFiles`, minus the groups this
- * lane cannot run. `vitest related` executes them once (seconds), which also
- * proves the scope is green before Stryker's dry run depends on it.
- */
-export function relatedTestFiles(
+/** Discover Vitest's related files without executing a preflight test suite. */
+export async function relatedTestFiles(
   sourceFiles: readonly string[],
   repoRoot: string,
   excluded: readonly string[] = threadHostileTestFiles(repoRoot),
-): string[] {
-  const reportFile = path.join(repoRoot, '.tmp/mutation/related-tests.json');
-  fs.mkdirSync(path.dirname(reportFile), { recursive: true });
-  fs.rmSync(reportFile, { force: true });
-  runCmdSync(
-    'pnpm',
-    [
-      'exec',
-      'vitest',
-      'related',
-      ...sourceFiles,
-      '--project',
-      'unit-core',
-      '--run',
-      '--reporter=json',
-      `--outputFile=${reportFile}`,
-    ],
-    { cwd: repoRoot, allowFailure: true },
-  );
-  if (!fs.existsSync(reportFile)) {
-    throw new Error(
-      `vitest related produced no report at ${reportFile} — cannot derive the mutation test scope.`,
-    );
+): Promise<string[]> {
+  const { createVitest } = await import('vitest/node');
+  const vitest = await createVitest('test', {
+    root: repoRoot,
+    config: path.join(repoRoot, 'vitest.config.ts'),
+    project: ['unit-core'],
+    related: sourceFiles.map((file) => path.resolve(repoRoot, file)),
+    watch: false,
+  });
+  try {
+    const specs = await vitest.getRelevantTestSpecifications();
+    const excludedSet = new Set(excluded);
+    return [
+      ...new Set(
+        specs
+          .map((spec) => normalizePath(path.relative(repoRoot, spec.moduleId)))
+          .filter((file) => isKernelTestFile(file) && !excludedSet.has(file)),
+      ),
+    ].sort();
+  } finally {
+    await vitest.close();
   }
-  const report = JSON.parse(fs.readFileSync(reportFile, 'utf8')) as VitestJsonReport;
-  const excludedSet = new Set(excluded);
-  return [
-    ...new Set(
-      (report.testResults ?? [])
-        .map((result) => normalizePath(path.relative(repoRoot, result.name)))
-        .filter((file) => isKernelTestFile(file) && !excludedSet.has(file)),
-    ),
-  ].sort();
 }
 
 /** Read the scope Stryker was handed, or `undefined` for "whole unit suite". */
 export function readTestScope(): string[] | undefined {
   const file = process.env[TEST_SCOPE_ENV];
-  if (!file || !fs.existsSync(file)) return undefined;
+  if (!file) return undefined;
+  if (!fs.existsSync(file)) throw new Error(`Mutation test scope is missing: ${file}`);
   const files = JSON.parse(fs.readFileSync(file, 'utf8')) as string[];
-  return files.length > 0 ? files : undefined;
+  if (!Array.isArray(files) || files.some((entry) => typeof entry !== 'string')) {
+    throw new Error(`Invalid mutation test scope: ${file}`);
+  }
+  return files;
 }
 
 export function writeTestScope(files: readonly string[], file: string): void {

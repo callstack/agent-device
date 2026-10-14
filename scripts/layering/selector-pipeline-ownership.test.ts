@@ -13,7 +13,10 @@ import {
  * `parseImports` the gate uses. That is the point of the shape: a bypass is
  * only refused in every import FORM if the check never looks at symbol names.
  */
-function violations(source: string, file = 'src/daemon/handlers/planted.ts'): string[] {
+function violations(
+  source: string,
+  file = 'packages/daemon/src/sessions/handlers/planted.ts',
+): string[] {
   const edges: ResolvedImportEdge[] = parseImports(source).map((edge) => ({
     ...edge,
     file,

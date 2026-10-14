@@ -99,6 +99,20 @@ test('MCP appstate schema accepts the runner-read iOS answer beside the session-
     ),
     [],
   );
+  assert.deepEqual(
+    validateAgainstSchema(
+      { platform: 'harmonyos', package: 'com.example.hmapp', activity: 'EntryAbility' },
+      COMMAND_OUTPUT_SCHEMAS.appstate,
+    ),
+    [],
+  );
+  assert.notDeepEqual(
+    validateAgainstSchema(
+      { platform: 'web', package: 'com.example.app', activity: '.MainActivity' },
+      COMMAND_OUTPUT_SCHEMAS.appstate,
+    ),
+    [],
+  );
 });
 
 test('MCP keyboard outputSchema validates a full result and refuses a dropped required action', () => {

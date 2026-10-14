@@ -1,5 +1,5 @@
 import type { DebugSymbolsResult } from '@agent-device/contracts/observability';
-import type { DaemonResponseData } from '../../src/daemon/daemon-request.ts';
+import type { DaemonResponseData } from '@agent-device/daemon/daemon-request';
 
 const requestBody = JSON.stringify({
   cartId: 'cart-economy-fixture',

@@ -1,0 +1,13 @@
+import type { SessionStore } from '../core/session-store.ts';
+import type { SessionState } from '../core/session-state.ts';
+
+export function isWebSession(session: SessionState): boolean {
+  return session.device.platform === 'web';
+}
+
+export function openWebSessionNames(sessionStore: SessionStore): string[] {
+  return sessionStore
+    .toArray()
+    .filter((session) => session.device.platform === 'web')
+    .map((session) => session.name);
+}

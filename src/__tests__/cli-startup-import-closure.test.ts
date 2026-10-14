@@ -121,7 +121,7 @@ test('the CLI startup import closure never evaluates the Maestro engine', () => 
 test('the replay command source closure keeps Maestro behind flow selection', () => {
   const replayEntry = path.join(srcRoot, 'commands/replay/index.ts');
   const replayClosure = eagerClosureOf(replayEntry);
-  const sourceBundle = path.join(srcRoot, 'commands/replay/script-source-bundle.ts');
+  const sourceBundle = path.join(srcRoot, '../packages/replay-port/src/script-source-bundle.ts');
   const offenders: string[] = [];
 
   expect(replayClosure).toContain(sourceBundle);

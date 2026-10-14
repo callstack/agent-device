@@ -3,9 +3,16 @@ package dev.agentdevice.conformance
 import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.databind.node.ObjectNode
+import java.lang.reflect.Proxy
+import kotlinx.coroutines.runBlocking
+import maestro.Driver
 import maestro.ElementFilter
 import maestro.Filters
+import maestro.Maestro
+import maestro.Point
 import maestro.TreeNode
+import maestro.UiElement.Companion.toUiElementOrNull
+import maestro.ViewHierarchy
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 private data class TreeSelector(
@@ -48,6 +55,7 @@ private data class TreeVector(
     val intermediateRelation: String? = null,
     val intermediate: List<String>? = null,
     val clickableFirstMatches: List<String>? = null,
+    val tapPoint: Point? = null,
 )
 
 private data class NodeSpec(
@@ -65,7 +73,7 @@ private data class NodeSpec(
 
 /** Emit vectors from the pinned Filters implementation, never hand-written answers. */
 fun emitTreeVectors(target: ArrayNode) {
-    for (vector in TREE_VECTORS) {
+    for (vector in treeVectors()) {
         val node = target.addObject()
         node.put("id", vector.id)
         node.put("operation", vector.operation)
@@ -80,11 +88,34 @@ fun emitTreeVectors(target: ArrayNode) {
         vector.clickableFirstMatches?.let { values ->
             node.putArray("clickableFirstMatches").also { values.forEach(it::add) }
         }
+        vector.tapPoint?.let { point ->
+            node.putObject("tapPoint").put("x", point.x).put("y", point.y)
+        }
     }
 }
 
-/** Small immutable hierarchies exercised through pinned Maestro v2.5.1 Filters. */
-private val TREE_VECTORS: List<TreeVector> = listOf(
+/** Small immutable hierarchies exercised through pinned Maestro v2.5.1. */
+private fun treeVectors(): List<TreeVector> = listOf(
+    treeVector(
+        "tap-parent-center-over-interactive-child",
+        "Maestro.tap on the matched parent dispatches its center inside a clickable child",
+        listOf(
+            node(
+                "card",
+                x = 20,
+                y = 100,
+                width = 200,
+                height = 120,
+                clickable = true,
+                children = listOf(
+                    node("child", x = 100, y = 140, width = 80, height = 60, clickable = true),
+                ),
+            ),
+        ),
+        TreeSelector(id = "card"),
+        id("card"),
+        emitTapPoint = true,
+    ),
     treeVector(
         "containsChild-direct-only",
         "intersect(id=card, containsChild(id=direct))",
@@ -389,6 +420,7 @@ private fun treeVector(
     intermediateRelation: String? = null,
     intermediate: List<String>? = null,
     emitClickableOrder: Boolean = false,
+    emitTapPoint: Boolean = false,
 ): TreeVector {
     val flattened = roots.flatMap { it.toTreeNode().aggregate() }
     val matches = filter(flattened).map { it.attributes.getValue("key") }
@@ -404,7 +436,37 @@ private fun treeVector(
         intermediateRelation,
         intermediate,
         if (emitClickableOrder) finalSelection else null,
+        if (emitTapPoint) captureTapPoint(flattened.first(), finalSelectionFilter(flattened).first()) else null,
     )
+}
+
+/** Execute pinned Maestro's element tap, stopping only at the native Driver.tap boundary. */
+private fun captureTapPoint(hierarchy: TreeNode, selected: TreeNode): Point {
+    var point: Point? = null
+    val tapped = object : RuntimeException() {}
+    val driver = Proxy.newProxyInstance(
+        Driver::class.java.classLoader,
+        arrayOf(Driver::class.java),
+    ) { _, method, args ->
+        when {
+            method.name.startsWith("waitForAppToSettle") -> hierarchy
+            method.name == "contentDescriptor" -> hierarchy
+            method.name == "capabilities" -> emptyList<maestro.Capability>()
+            method.name == "tap" -> {
+                point = args[0] as Point
+                throw tapped
+            }
+            else -> error("Unexpected tap characterization driver call: ${method.name}")
+        }
+    } as Driver
+    try {
+        runBlocking {
+            Maestro(driver).tap(selected.toUiElementOrNull()!!, ViewHierarchy(hierarchy))
+        }
+    } catch (failure: RuntimeException) {
+        if (failure !== tapped) throw failure
+    }
+    return checkNotNull(point) { "Maestro did not dispatch Driver.tap" }
 }
 
 private fun id(value: String): ElementFilter = Filters.idMatches(Regex(value))

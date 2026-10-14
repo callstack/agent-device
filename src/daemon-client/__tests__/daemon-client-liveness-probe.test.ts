@@ -22,7 +22,7 @@ import {
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
   type LoopbackServer,
-} from '../../__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 
 function daemonInfo(over: { port?: number; httpPort?: number }): {
   port?: number;

@@ -11,7 +11,7 @@ const repoRoot = path.resolve(import.meta.dirname, '../..');
 
 /**
  * The `snapshot-policy` declaration owns presentation, freshness, timeout and overlay policy;
- * `src/daemon/` owns the assembly that orders them (#1983, ADR 0004). The dependency runs one way
+ * `packages/daemon/src/` owns the assembly that orders them (#1983, ADR 0004). The dependency runs one way
  * only, so a policy stays testable without standing up a session.
  *
  * The real tree is clean, which is exactly why the positive control below exists: a filter that
@@ -50,14 +50,14 @@ test('the snapshot facet cannot import daemon assembly', () => {
 
 test('the boundary reports a facet module that reaches back into the daemon', () => {
   const sources = new Map([
-    ['src/daemon/types.ts', 'export type SessionState = { id: string };\n'],
+    ['packages/daemon/src/types.ts', 'export type SessionState = { id: string };\n'],
     [
       'packages/capture-kit/src/snapshot/snapshot-freshness/android.ts',
-      "import type { SessionState } from '../../../../../src/daemon/types.ts';\nexport type X = SessionState;\n",
+      "import type { SessionState } from '../../../../../packages/daemon/src/types.ts';\nexport type X = SessionState;\n",
     ],
   ]);
 
   assert.deepEqual(daemonImportsFromSnapshotFacet(sources), [
-    'packages/capture-kit/src/snapshot/snapshot-freshness/android.ts:1 -> src/daemon/types.ts',
+    'packages/capture-kit/src/snapshot/snapshot-freshness/android.ts:1 -> packages/daemon/src/types.ts',
   ]);
 });

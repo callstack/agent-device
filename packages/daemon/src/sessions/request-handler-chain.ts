@@ -1,0 +1,345 @@
+import type { DaemonPlatformServices } from '../core/platform-services.ts';
+import type { CommandFlags } from '@agent-device/contracts/command';
+import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
+import { AppError } from '@agent-device/kernel/errors';
+import type { DaemonCommandRoute } from '@agent-device/command-registry/daemon-command-descriptor';
+import { getDaemonCommandRoute } from '../core/daemon-command-registry.ts';
+import * as genericRequestHandlerModule from '../execution/request-generic-dispatch.ts';
+import type { DaemonCommandContext } from '../core/context.ts';
+import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
+import type { LeaseRegistry } from '../resources/lease-registry.ts';
+import type { SessionStore } from '../core/session-store.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type {
+  BindDeviceRuntime,
+  BindExactDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../core/request-runtime-binding.ts';
+import type { DeviceClaimReconciler } from '../resources/device/device-claims.ts';
+import type { AppLogAdmissionLedger } from '../resources/app-log-admission-ledger.ts';
+import { type AudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
+import { type PerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
+import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
+import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import type { RequestPlatformProviderScope } from '@agent-device/contracts/platform-providers';
+import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
+import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
+import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
+
+type RequestHandlerChainParams = {
+  req: DaemonRequest;
+  sessionName: string;
+  logPath: string;
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+  providerRuntimeIds?: readonly string[];
+  providerRuntimeRequiredIds?: readonly string[];
+  providerCredentials?: DaemonProviderCredentials;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
+  cloudArtifactProvider?: CloudArtifactProvider;
+  providerAppCatalog?: ProviderAppCatalog;
+  invoke: DaemonInvokeFn;
+  invokeReplayAction?: DaemonInvokeFn;
+  /**
+   * Per-request platform-provider injections resolved by the generic
+   * root-composed request-provider seam. Route handlers pick their own
+   * platform-specific field back out of this neutral scope instead of the chain
+   * carrying one named slot per platform (e.g. `androidAdbExecutor`).
+   */
+  providerScope: RequestPlatformProviderScope;
+  androidObservation?: AndroidObservationAdapter;
+  createCommandSurface: CreateDaemonCommandSurface;
+  platformResourceCleanup?: PlatformResourceCleanup;
+  bindDevice: BindDeviceRuntime;
+  platformServices: DaemonPlatformServices;
+  inspectFacts: InspectDeviceRuntimeFacts;
+  bindExactDevice: BindExactDeviceRuntime;
+  reconcileOrphanedDeviceClaim: DeviceClaimReconciler;
+  appLogAdmissionLedger?: AppLogAdmissionLedger;
+  audioProbeAdmissionLedger: AudioProbeAdmissionLedger;
+  perfCaptureAdmissionLedger: PerfCaptureAdmissionLedger;
+  screenRecordingAdmissionLedger: ScreenRecordingAdmissionLedger;
+  hostDiagnostics?: HostDiagnostics;
+  requestScope: PlatformRequestScope;
+  retainDeviceExecutionLock(deviceId: string): Promise<void>;
+  throwIfCanceled(): void;
+  contextFromFlags: (
+    flags: CommandFlags | undefined,
+    appBundleId?: string,
+    traceLogPath?: string,
+  ) => DaemonCommandContext;
+};
+
+const DAEMON_ROUTE_HANDLERS = {
+  humanControl: defineDaemonRoute({
+    load: () => import('./handlers/human-control.ts'),
+    run: runHumanControlHandler,
+  }),
+  lease: defineDaemonRoute({
+    load: () => import('./handlers/lease.ts'),
+    run: runLeaseHandler,
+  }),
+  session: defineDaemonRoute({
+    load: () => import('./handlers/session.ts'),
+    run: runSessionHandler,
+  }),
+  snapshot: defineDaemonRoute({
+    load: () => import('./handlers/snapshot.ts'),
+    run: runSnapshotHandler,
+  }),
+  reactNative: defineDaemonRoute({
+    load: () => import('../execution/handlers/react-native.ts'),
+    run: runReactNativeHandler,
+  }),
+  recordTrace: defineDaemonRoute({
+    load: () => import('./handlers/record-trace.ts'),
+    run: runRecordTraceHandler,
+  }),
+  find: defineDaemonRoute({
+    load: () => import('../execution/interaction/index.ts'),
+    run: runFindHandler,
+  }),
+  interaction: defineDaemonRoute({
+    load: () => import('../execution/interaction/index.ts'),
+    run: runInteractionHandler,
+  }),
+  generic: defineDaemonRoute({
+    load: async () => genericRequestHandlerModule,
+    run: async () => null,
+  }),
+} as const satisfies Record<
+  DaemonCommandRoute,
+  {
+    loadModule: () => Promise<unknown>;
+    run: (params: RequestHandlerChainParams) => Promise<DaemonResponse | null>;
+  }
+>;
+
+export type { DaemonCommandRoute };
+
+export async function runRequestHandlerChain(
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse | null> {
+  const route = getDaemonCommandRoute(params.req.command);
+  return await DAEMON_ROUTE_HANDLERS[route].run(params);
+}
+
+export async function loadGenericRequestHandlerModule(): Promise<
+  typeof import('../execution/request-generic-dispatch.ts')
+> {
+  return await DAEMON_ROUTE_HANDLERS.generic.loadModule();
+}
+
+async function runHumanControlHandler(
+  { handleHumanControlCommand }: typeof import('./handlers/human-control.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
+  return await handleHumanControlCommand({
+    req: params.req,
+    registry: params.leaseRegistry,
+  });
+}
+
+async function runLeaseHandler(
+  { handleLeaseCommands }: typeof import('./handlers/lease.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
+  return expectHandlerResponse(
+    params.req.command,
+    'lease',
+    await handleLeaseCommands({
+      req: params.req,
+      sessionName: params.sessionName,
+      sessionStore: params.sessionStore,
+      leaseRegistry: params.leaseRegistry,
+      providerRuntimeIds: params.providerRuntimeIds,
+      providerRuntimeRequiredIds: params.providerRuntimeRequiredIds,
+      providerCredentials: params.providerCredentials,
+      leaseLifecycleProvider: params.leaseLifecycleProvider,
+      cloudArtifactProvider: params.cloudArtifactProvider,
+    }),
+  );
+}
+
+async function runSessionHandler(
+  { handleSessionCommands }: typeof import('./handlers/session.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
+  return expectHandlerResponse(
+    params.req.command,
+    'session',
+    await handleSessionCommands({
+      req: params.req,
+      sessionName: params.sessionName,
+      logPath: params.logPath,
+      sessionStore: params.sessionStore,
+      createCommandSurface: params.createCommandSurface,
+      leaseRegistry: params.leaseRegistry,
+      leaseLifecycleProvider: params.leaseLifecycleProvider,
+      providerAppCatalog: params.providerAppCatalog,
+      invoke: params.invoke,
+      invokeReplayAction: params.invokeReplayAction,
+      androidAdbExecutor: params.providerScope.androidAdbExecutor,
+      bindDevice: params.bindDevice,
+      platformServices: params.platformServices,
+      inspectFacts: params.inspectFacts,
+      bindExactDevice: params.bindExactDevice,
+      reconcileOrphanedDeviceClaim: params.reconcileOrphanedDeviceClaim,
+      appLogAdmissionLedger: params.appLogAdmissionLedger,
+      audioProbeAdmissionLedger: params.audioProbeAdmissionLedger,
+      perfCaptureAdmissionLedger: params.perfCaptureAdmissionLedger,
+      screenRecordingAdmissionLedger: params.screenRecordingAdmissionLedger,
+      hostDiagnostics: params.hostDiagnostics,
+      requestScope: params.requestScope,
+      retainDeviceExecutionLock: params.retainDeviceExecutionLock,
+      throwIfCanceled: params.throwIfCanceled,
+      platformResourceCleanup: params.platformResourceCleanup,
+    }),
+  );
+}
+
+async function runSnapshotHandler(
+  { handleSnapshotCommands }: typeof import('./handlers/snapshot.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
+  return expectHandlerResponse(
+    params.req.command,
+    'snapshot',
+    await handleSnapshotCommands({
+      req: params.req,
+      sessionName: params.sessionName,
+      logPath: params.logPath,
+      sessionStore: params.sessionStore,
+      createCommandSurface: params.createCommandSurface,
+      inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
+      bindDevice: params.bindDevice,
+      platformResourceCleanup: params.platformResourceCleanup,
+    }),
+  );
+}
+
+async function runReactNativeHandler(
+  { handleReactNativeCommands }: typeof import('../execution/handlers/react-native.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
+  return expectHandlerResponse(
+    params.req.command,
+    'react-native',
+    await handleReactNativeCommands({
+      req: params.req,
+      createCommandSurface: params.createCommandSurface,
+      sessionName: params.sessionName,
+      logPath: params.logPath,
+      sessionStore: params.sessionStore,
+      contextFromFlags: params.contextFromFlags,
+      // R61: overlay dismissal admits and binds the owner's own `tapPoint`, so the chain now has
+      // to pass the request's bindings through. Before R61 this leg reached the device through the
+      // retired dispatcher and needed none, which is why the arm had no bindings to forward.
+      inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
+      bindDevice: params.bindDevice,
+    }),
+  );
+}
+
+async function runRecordTraceHandler(
+  { handleRecordTraceCommands }: typeof import('./handlers/record-trace.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
+  return expectHandlerResponse(
+    params.req.command,
+    'record-trace',
+    await handleRecordTraceCommands({
+      req: params.req,
+      sessionName: params.sessionName,
+      sessionStore: params.sessionStore,
+      logPath: params.logPath,
+      bindDevice: params.bindDevice,
+      platformServices: params.platformServices,
+      bindExactDevice: params.bindExactDevice,
+      admissionLedger: params.screenRecordingAdmissionLedger,
+      requestScope: params.requestScope,
+      retainDeviceExecutionLock: params.retainDeviceExecutionLock,
+      throwIfCanceled: params.throwIfCanceled,
+    }),
+  );
+}
+
+async function runFindHandler(
+  { handleFindCommands }: typeof import('../execution/interaction/index.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
+  return expectHandlerResponse(
+    params.req.command,
+    'find',
+    await handleFindCommands({
+      req: params.req,
+      sessionName: params.sessionName,
+      logPath: params.logPath,
+      sessionStore: params.sessionStore,
+      createCommandSurface: params.createCommandSurface,
+      invoke: params.invoke,
+      inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
+      bindDevice: params.bindDevice,
+    }),
+  );
+}
+
+async function runInteractionHandler(
+  { handleInteractionCommands }: typeof import('../execution/interaction/index.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
+  return expectHandlerResponse(
+    params.req.command,
+    'interaction',
+    await handleInteractionCommands({
+      req: params.req,
+      sessionName: params.sessionName,
+      logPath: params.logPath,
+      sessionStore: params.sessionStore,
+      createCommandSurface: params.createCommandSurface,
+      contextFromFlags: params.contextFromFlags,
+      inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
+      bindDevice: params.bindDevice,
+      androidObservation: params.androidObservation,
+    }),
+  );
+}
+
+function defineDaemonRoute<TModule>(definition: {
+  load: () => Promise<TModule>;
+  run: (module: TModule, params: RequestHandlerChainParams) => Promise<DaemonResponse | null>;
+}) {
+  const loadModule = lazyImport(definition.load);
+  return {
+    loadModule,
+    run: async (params: RequestHandlerChainParams) =>
+      await definition.run(await loadModule(), params),
+  };
+}
+
+function lazyImport<T>(load: () => Promise<T>): () => Promise<T> {
+  let modulePromise: Promise<T> | undefined;
+  return () => {
+    modulePromise ??= load();
+    return modulePromise;
+  };
+}
+
+function expectHandlerResponse(
+  command: string,
+  handlerFamily: string,
+  response: DaemonResponse | null,
+): DaemonResponse {
+  if (response) return response;
+  throw new AppError(
+    'UNKNOWN',
+    `Daemon handler routing mismatch: ${handlerFamily} handler matched command "${command}" but returned no response.`,
+    { hint: 'This is a daemon-internal routing bug in agent-device — please report it.' },
+  );
+}

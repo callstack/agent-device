@@ -250,6 +250,7 @@ async function captureAppleRunnerSnapshot(
         ),
       { backend: 'xctest' },
     ),
+    device,
   );
   assertSnapshotObservationResponse(options, result);
   assertReportedRunnerSnapshotNodes(device, options, result);

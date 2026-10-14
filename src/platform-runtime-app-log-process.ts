@@ -23,7 +23,7 @@ import {
   waitForProcessExit,
 } from '@agent-device/host-kit/process';
 
-import { requireManagedSessionArtifactPath } from './daemon/managed-session-artifact-path.ts';
+import { requireManagedSessionArtifactPath } from '@agent-device/daemon/managed-session-artifact-path';
 
 const APP_LOG_PID_FILENAME = 'app-log.pid';
 

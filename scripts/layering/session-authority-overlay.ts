@@ -1,28 +1,31 @@
-import { isProductionSourceFile } from './tracked-sources.ts';
+import { isDaemonHandlerFile } from './daemon-layers.ts';
+import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 import { sessionStateDeclarationFile } from './session-state.ts';
 
 // The SessionState/SessionStore authority overlay (#2278, ADR 0022): which production files
 // import the SessionState shape from the module that declares it and the SessionStore authority
-// from src/daemon/session-store.ts, at symbol level so that a file importing only helper
+// from packages/daemon/src/core/session-store.ts, at symbol level so that a file importing only helper
 // functions from session-store.ts is not an authority edge. R7 already owns the write side
 // (field ownership); this overlay owns the read side. The shape target is found by the
 // declaration, not a recorded path: a path constant would silently measure zero shape importers
 // the moment the declaration moves (#2346 moved it from types.ts to session-state.ts). The
-// ratchet applies to the handler-owned subset — the flat src/daemon/handlers/ surface the
-// #2132 migration targeted — and is a membership ratchet against the merge-base: the set may
-// only shrink, so a handler file gaining state-shape or store authority fails instead of
-// silently regrowing the hotspot.
+// ratchet applies to the handler-owned subset — the handler surface the #2132 migration targeted
+// — and is a membership ratchet against the merge-base: the set may only shrink, so a handler
+// file gaining state-shape or store authority fails instead of silently regrowing the hotspot.
+// Both trees are measured in head coordinates: mergeBaseRatchets canonicalizes every merge-base
+// path through renamedSince, so the reference set names the same layer folders as the working
+// tree and membership compares paths directly.
 
 export const SESSION_AUTHORITY_OVERLAY_RULE = 'R75 session-authority-overlay';
 
-const SESSION_STORE_AUTHORITY_TARGET = 'src/daemon/session-store.ts';
-const HANDLER_ROOT = 'src/daemon/handlers/';
+/** The SessionStore authority module; the merge-base measurement canonicalizes onto this path. */
+const SESSION_STORE_AUTHORITY_TARGET = `${DAEMON_SOURCE_ROOT}core/session-store.ts`;
 
 export type SessionAuthorityOverlay = Readonly<{
   /** Production files importing the SessionState symbol from its declaring module, sorted. */
   shapeFiles: readonly string[];
-  /** Production files importing the SessionStore symbol from src/daemon/session-store.ts, sorted. */
+  /** Production files importing the SessionStore symbol from packages/daemon/src/core/session-store.ts, sorted. */
   authorityFiles: readonly string[];
 }>;
 
@@ -49,18 +52,17 @@ export function measureSessionAuthorityOverlay(
   return { shapeFiles: [...shape].sort(), authorityFiles: [...authority].sort() };
 }
 
-/** The ratcheted subset: the flat handler surface, the one #2132's migration drove down. */
+/** The ratcheted subset: the handler surface, the one #2132's migration drove down. */
 export function handlerOwnedOverlay(overlay: SessionAuthorityOverlay): SessionAuthorityOverlay {
-  const inHandlers = (file: string) => file.startsWith(HANDLER_ROOT);
   return {
-    shapeFiles: overlay.shapeFiles.filter(inHandlers),
-    authorityFiles: overlay.authorityFiles.filter(inHandlers),
+    shapeFiles: overlay.shapeFiles.filter(isDaemonHandlerFile),
+    authorityFiles: overlay.authorityFiles.filter(isDaemonHandlerFile),
   };
 }
 
 /**
  * Catches: the handler-owned SessionState-shape / SessionStore-authority surface regrowing —
- *   a file under src/daemon/handlers/ importing either symbol that the merge-base does not
+ *   a file under the daemon handler folders importing either symbol that the merge-base does not
  *   already import it, which is exactly the deep-import the #2132 migration paid to delete.
  *   Both overlays are full-scope; the handler-owned subset is filtered here, at the single
  *   place the ratchet applies it, so the message can never name a file outside its scope.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { buildNodes } from '../__tests__/test-utils/snapshot-builders.ts';
+import { buildNodes } from '@agent-device/test-kit/snapshot-builders';
 import {
   findSelectorChainMatch,
   listSelectorChainMatches,

@@ -266,9 +266,12 @@ export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & 
    */
   systemSurface?: IosSystemSurfaceProvenance;
   /**
-   * The keyboard band the producer measured while capturing, when it can measure one (#2660). A
-   * producer that publishes nothing measured nothing, so the tap-path guard keeps deriving the band
-   * from `nodes`; see {@link SnapshotKeyboardBandFact}.
+   * Keyboard evidence acquired with this tree: measured `visible`, policy-derived `derived`,
+   * additive `visibility-only`, rejected `tree-rejected`, proven `absent`, or unknown `unmeasurable` facts. Measured and
+   * derived frames survive projection and take precedence over tree reconstruction. Visibility-only
+   * facts carry no band; rejected acquisition geometry stays rejected. Other failed measurements or
+   * an omitted fact may use tree geometry, but missing nodes never prove absence.
+   * See {@link SnapshotKeyboardBandFact}.
    */
   keyboard?: SnapshotKeyboardBandFact;
   /**

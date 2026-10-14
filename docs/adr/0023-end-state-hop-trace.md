@@ -20,7 +20,7 @@ that reading.
 - **Unit**: one distinct production `.ts` file entered on the call path, counted once even if
   re-entered (a lazy `import()` of an already-counted file is not a new hop). Type-only imports
   and files that only supply types are not hops.
-- **Range**: from the daemon's HTTP entry file (`src/daemon/server/http-server.ts`) through the
+- **Range**: from the daemon's HTTP entry file (`packages/daemon/src/server/http/http-server.ts`) through the
   file that issues the concrete platform call, inclusive of both endpoints. For `press`/Android
   that is the serial-scoped `adb shell input tap` invocation; for `snapshot`/iOS it is the
   `socket.write` to the in-simulator AX bridge (primary arm) or the `fetch()` to the XCTest
@@ -59,7 +59,7 @@ that reading.
 41 files: 11 pass-through, 5 translation, 5 policy, 19 orchestration, 1 terminal (adapter).
 
 The request spine also runs side-calls that are not hops — they execute on every request but are
-not the call that continues toward the platform boundary: `src/daemon/server/daemon-idle-reap.ts`
+not the call that continues toward the platform boundary: `packages/daemon/src/sessions/server/daemon-idle-reap.ts`
 (`cancel()` resets the liveness timer as a sibling of `dispatchRequest`),
 `packages/host-kit/src/internal/transport.ts` (`timingSafeStringEqual` compares the auth token
 before the continuation), and `packages/host-kit/src/internal/request-cancel.ts`
@@ -67,35 +67,35 @@ before the continuation), and `packages/host-kit/src/internal/request-cancel.ts`
 
 | # | File | Hand-off | Role | Delete-test |
 |---|------|----------|------|-------------|
-| 1 | `src/daemon/server/http-server.ts` | parses `/rpc`, resolves the token; calls injected `handleRequest` | pass-through | KEEP — HTTP entry boundary |
-| 2 | `src/daemon/server/daemon-runtime.ts` | `handleRequest`: in-flight count, cancels idle reap, `dispatchRequest` | orchestration | KEEP — request lifecycle orchestration |
-| 3 | `src/daemon/request-router.ts` | auth, flag guards, scope creation, locked execution, handler chain | orchestration | KEEP — request admission + dispatch core |
+| 1 | `packages/daemon/src/server/http/http-server.ts` | parses `/rpc`, resolves the token; calls injected `handleRequest` | pass-through | KEEP — HTTP entry boundary |
+| 2 | `packages/daemon/src/server/http/daemon-runtime.ts` | `handleRequest`: in-flight count, cancels idle reap, `dispatchRequest` | orchestration | KEEP — request lifecycle orchestration |
+| 3 | `packages/daemon/src/server/request-router.ts` | auth, flag guards, scope creation, locked execution, handler chain | orchestration | KEEP — request admission + dispatch core |
 | 4 | `packages/host-kit/src/internal/diagnostics.ts` | `withDiagnosticsScope` wraps the request task | pass-through | KEEP — per-request diagnostic attribution |
 | 5 | `src/request/device-inventory-context.ts` | `withDeviceInventoryContext` wraps the task | pass-through | KEEP — request-scoped device inventory context |
 | 6 | `src/core/dispatch-resolve.ts` | `withResolveTargetDeviceCacheScope` wraps the task | orchestration | KEEP — per-request target-resolution cache |
-| 7 | `src/daemon/request-execution-scope.ts` | `createRequestExecutionScope`; `runLocked`/`runAdmitted` | orchestration | KEEP — scoped execution + lock/claim admission |
+| 7 | `packages/daemon/src/server/request-execution-scope.ts` | `createRequestExecutionScope`; `runLocked`/`runAdmitted` | orchestration | KEEP — scoped execution + lock/claim admission |
 | 8 | `src/provider-device-runtime.ts` | `withProviderDeviceRuntimeScope` (`AsyncLocalStorage.run`) | pass-through | KEEP — provider-runtime scope boundary |
-| 9 | `src/daemon/request-handler-chain.ts` | `runRequestHandlerChain` routes to the interaction handler | orchestration | KEEP — command routing |
-| 10 | `src/daemon/interaction/index.ts` | route facade delegates to `handleInteractionCommands` | orchestration | KEEP — shared interaction route facade |
-| 11 | `src/daemon/interaction/internal/interaction.ts` | switches `press` to `dispatchTargetedTouchViaRuntime` | policy | KEEP — touch command routing |
-| 12 | `src/daemon/interaction/internal/interaction-touch-press.ts` | admits the touch, dispatches the runtime interaction | orchestration | KEEP — press admission + orchestration |
-| 13 | `src/daemon/interaction/internal/interaction-touch-prepare.ts` | `prepareTouchDispatch` → `resolveBoundTouchRuntime` | translation | KEEP — shared admission + bind seam |
-| 14 | `src/daemon/touch-runtime.ts` | resolves the plan, `bind(device, tapPointUse)` | orchestration | KEEP — tap runtime binding |
-| 15 | `src/daemon/runtime-admission.ts` | `admitRuntimeOperations`: `inspectFacts`, per-op admission | policy | KEEP — per-operation admission |
-| 16 | `src/daemon/request-runtime-binding.ts` | `bindDevice`: per-device-cached `gateway.bind` | orchestration | KEEP — device runtime binding |
+| 9 | `packages/daemon/src/sessions/request-handler-chain.ts` | `runRequestHandlerChain` routes to the interaction handler | orchestration | KEEP — command routing |
+| 10 | `packages/daemon/src/execution/interaction/index.ts` | route facade delegates to `handleInteractionCommands` | orchestration | KEEP — shared interaction route facade |
+| 11 | `packages/daemon/src/execution/interaction/internal/interaction.ts` | switches `press` to `dispatchTargetedTouchViaRuntime` | policy | KEEP — touch command routing |
+| 12 | `packages/daemon/src/execution/interaction/internal/interaction-touch-press.ts` | admits the touch, dispatches the runtime interaction | orchestration | KEEP — press admission + orchestration |
+| 13 | `packages/daemon/src/execution/interaction/internal/interaction-touch-prepare.ts` | `prepareTouchDispatch` → `resolveBoundTouchRuntime` | translation | KEEP — shared admission + bind seam |
+| 14 | `packages/daemon/src/core/touch-runtime.ts` | resolves the plan, `bind(device, tapPointUse)` | orchestration | KEEP — tap runtime binding |
+| 15 | `packages/daemon/src/core/runtime-admission.ts` | `admitRuntimeOperations`: `inspectFacts`, per-op admission | policy | KEEP — per-operation admission |
+| 16 | `packages/daemon/src/core/request-runtime-binding.ts` | `bindDevice`: per-device-cached `gateway.bind` | orchestration | KEEP — device runtime binding |
 | 17 | `src/platform-runtime-gateway.ts` | `loadLocal` → `loadHost` → `loadRuntime` | orchestration | KEEP — gateway boundary |
 | 18 | `src/platform-runtime.ts` | wires the android module, supplies `loadHost` | pass-through | KEEP — declared ADR §1/§2 registry boundary |
 | 19 | `src/platform-runtime-operation-host.ts` | `createPlatformRuntimeHost` assembles the host | orchestration | KEEP — host composition |
 | 20 | `packages/platform-android/src/index.ts` | `loadRuntime` pairs the plugin with the runtime module | pass-through | KEEP — declared ADR §2 `loadRuntime` boundary |
 | 21 | `packages/platform-android/src/runtime.ts` | `bind`: `inspectFacts` (fan-out site), builds the tap operation | orchestration | KEEP — android runtime owner |
 | 22 | `packages/contracts/src/local-interactor-operation-set.ts` | `bindLocalInteractorOperationSet` → `bindLocalTouchInteractor` | translation | KEEP — tap op mapped to the interactor |
-| 23 | `src/daemon/device-claim-admission.ts` | `admit`: owner claim rule; ordinary owner | policy | KEEP — device claim admission |
-| 24 | `src/daemon/interaction/internal/interaction-touch-runtime.ts` | `dispatchRuntimeInteraction` → `createInteractionRuntimeForRoute` | orchestration | KEEP — interaction runtime dispatch |
-| 25 | `src/daemon/interaction/internal/interaction-runtime.ts` | `createInteractionAgentDevice` with the executor backend | orchestration | KEEP — agent device construction |
+| 23 | `packages/daemon/src/resources/device/device-claim-admission.ts` | `admit`: owner claim rule; ordinary owner | policy | KEEP — device claim admission |
+| 24 | `packages/daemon/src/execution/interaction/internal/interaction-touch-runtime.ts` | `dispatchRuntimeInteraction` → `createInteractionRuntimeForRoute` | orchestration | KEEP — interaction runtime dispatch |
+| 25 | `packages/daemon/src/execution/interaction/internal/interaction-runtime.ts` | `createInteractionAgentDevice` with the executor backend | orchestration | KEEP — agent device construction |
 | 26 | `src/runtime.ts` | `createAgentDevice`: backend + `bindCommands` | orchestration | KEEP — agent device facade |
 | 27 | `src/commands/index.ts` | `bindCommands` → `bindInteractionCommands` | orchestration | KEEP — command catalog boundary |
 | 28 | `src/commands/interaction/runtime/index.ts` | `bindInteractionCommands`: `press` → `pressCommand` | orchestration | KEEP — nine-command binding surface |
-| 29 | `src/daemon/interaction/internal/interaction-touch-android-readiness.ts` | `runWithAndroidDialogReadinessCheck` wraps `run` | policy | KEEP — blocking-dialog readiness gate |
+| 29 | `packages/daemon/src/execution/interaction/internal/interaction-touch-android-readiness.ts` | `runWithAndroidDialogReadinessCheck` wraps `run` | policy | KEEP — blocking-dialog readiness gate |
 | 30 | `src/commands/interaction/runtime/interactions.ts` | `pressCommand` → `tapCommand`: resolve target, `backend.tap` | orchestration | KEEP — tap command execution |
 | 31 | `src/commands/interaction/runtime/resolution.ts` | `resolveInteractionTarget` applies guards, returns the point | translation | KEEP — tap target resolution |
 | 32 | `packages/contracts/src/interactor-operation-binding.ts` | `interactorFor` resolves the local interactor | translation | KEEP — shared interactor resolution seam |
@@ -125,11 +125,11 @@ only by its named composition module per ADR Decision §1).
 `tv-remote`, `viewport` (each `-runtime.ts`).
 
 **Response path (not hops).** 8 files execute only after the platform call:
-`src/daemon/interaction/internal/interaction-touch-response.ts`,
-`src/daemon/interaction/internal/interaction-common.ts`,
-`src/daemon/interaction-surface-signature.ts`, `src/daemon/request-finalization.ts`,
-`src/daemon/session-event-log.ts`, `src/daemon/session-snapshot.ts`,
-`src/daemon/recording-gestures.ts`, `src/daemon/deferred-interaction-outcome.ts`.
+`packages/daemon/src/execution/interaction/internal/interaction-touch-response.ts`,
+`packages/daemon/src/execution/interaction/internal/interaction-common.ts`,
+`packages/daemon/src/core/interaction-surface-signature.ts`, `packages/daemon/src/server/request-finalization.ts`,
+`packages/session-journal/src/session-event-log.ts`, `packages/daemon/src/execution/session-snapshot.ts`,
+`packages/daemon/src/core/recording-gestures.ts`, `packages/daemon/src/core/deferred-interaction-outcome.ts`.
 
 **Forks not followed**: `request-platform-provider-context.ts` (the call is guarded by the
 router's early return for a bare local daemon — zero runtimes + non-web),
@@ -149,31 +149,31 @@ captures join it).
 Shared prefix 30 files; primary arm 47 distinct (30 + 17); fallback arm 49 distinct
 (30 + 19); 66 distinct files across the union. The request spine's side-calls — the idle-reap
 reset, the auth comparison, the cancellation gate, and the Android freshness guard/clear
-(`src/daemon/session-snapshot-freshness.ts`, a guard read plus a post-capture clear that no-ops
+(`packages/daemon/src/core/session-snapshot-freshness.ts`, a guard read plus a post-capture clear that no-ops
 on iOS) — run on this prefix as siblings of the continuation and are not counted.
 
 ### Shared prefix (entry → fork)
 
 | # | File | Hand-off | Role | Delete-test |
 |---|------|----------|------|-------------|
-| 1 | `src/daemon/server/http-server.ts` | parses `/rpc`, resolves the token; calls injected `handleRequest` | pass-through | KEEP — HTTP entry boundary |
-| 2 | `src/daemon/server/daemon-runtime.ts` | `handleRequest`: in-flight count, cancels idle reap, `dispatchRequest` | orchestration | KEEP — request lifecycle orchestration |
-| 3 | `src/daemon/request-router.ts` | auth, flag guards, scope creation, locked execution, handler chain | orchestration | KEEP — request admission + dispatch core |
+| 1 | `packages/daemon/src/server/http/http-server.ts` | parses `/rpc`, resolves the token; calls injected `handleRequest` | pass-through | KEEP — HTTP entry boundary |
+| 2 | `packages/daemon/src/server/http/daemon-runtime.ts` | `handleRequest`: in-flight count, cancels idle reap, `dispatchRequest` | orchestration | KEEP — request lifecycle orchestration |
+| 3 | `packages/daemon/src/server/request-router.ts` | auth, flag guards, scope creation, locked execution, handler chain | orchestration | KEEP — request admission + dispatch core |
 | 4 | `packages/host-kit/src/internal/diagnostics.ts` | `withDiagnosticsScope` wraps the request task | pass-through | KEEP — per-request diagnostic attribution |
 | 5 | `src/request/device-inventory-context.ts` | `withDeviceInventoryContext` wraps the task | pass-through | KEEP — request-scoped device inventory context |
 | 6 | `src/core/dispatch-resolve.ts` | `withResolveTargetDeviceCacheScope` wraps the task | orchestration | KEEP — per-request target-resolution cache |
-| 7 | `src/daemon/request-execution-scope.ts` | `createRequestExecutionScope`; `runLocked`/`runAdmitted` | orchestration | KEEP — scoped execution + lock/claim admission |
+| 7 | `packages/daemon/src/server/request-execution-scope.ts` | `createRequestExecutionScope`; `runLocked`/`runAdmitted` | orchestration | KEEP — scoped execution + lock/claim admission |
 | 8 | `src/provider-device-runtime.ts` | `withProviderDeviceRuntimeScope` (`AsyncLocalStorage.run`) | pass-through | KEEP — provider-runtime scope boundary |
-| 9 | `src/daemon/request-handler-chain.ts` | `runRequestHandlerChain` routes `snapshot` to `runSnapshotHandler` | orchestration | KEEP — command routing |
-| 10 | `src/daemon/handlers/snapshot.ts` | `handleSnapshotCommands` routes the plain arm | policy | KEEP — snapshot command routing |
-| 11 | `src/daemon/snapshot-runtime.ts` | `dispatchSnapshotViaRuntime` → `params.execute` | pass-through | KEEP — snapshot execute seam (route tests pin it) |
-| 12 | `src/daemon/snapshot-command-runtime.ts` | resolves the bound capture; wires session/backend; runs the op | orchestration | KEEP — capture wiring + recording |
-| 13 | `src/daemon/deferred-interaction-outcome.ts` | `resolveDeferredInteractionOutcome` before a fresh capture | policy | KEEP — pending-outcome settlement (may short-circuit) |
-| 14 | `src/daemon/snapshot-capture.ts` | `resolveSnapshotScope` + the capture attempt | orchestration | KEEP — capture attempt + scope resolution |
-| 15 | `src/daemon/snapshot-session.ts` | `resolveSessionDevice` for the capture | translation | KEEP — snapshot session/device resolution |
-| 16 | `src/daemon/snapshot-runtime-binding.ts` | `resolveBoundSnapshotCaptureRuntime`: admit-then-bind | policy | KEEP — ADR 0019 §9 admit-then-bind seam |
-| 17 | `src/daemon/session-runtime-admission.ts` | `admitRuntimePlan` (fan-out site) / `requireRuntimeBinding` | policy | KEEP — runtime plan fact admission |
-| 18 | `src/daemon/request-runtime-binding.ts` | `bindDevice`: per-device-cached `gateway.bind` | orchestration | KEEP — device runtime binding |
+| 9 | `packages/daemon/src/sessions/request-handler-chain.ts` | `runRequestHandlerChain` routes `snapshot` to `runSnapshotHandler` | orchestration | KEEP — command routing |
+| 10 | `packages/daemon/src/sessions/handlers/snapshot.ts` | `handleSnapshotCommands` routes the plain arm | policy | KEEP — snapshot command routing |
+| 11 | `packages/daemon/src/sessions/snapshot-runtime.ts` | `dispatchSnapshotViaRuntime` → `params.execute` | pass-through | KEEP — snapshot execute seam (route tests pin it) |
+| 12 | `packages/daemon/src/sessions/snapshot-command-runtime.ts` | resolves the bound capture; wires session/backend; runs the op | orchestration | KEEP — capture wiring + recording |
+| 13 | `packages/daemon/src/core/deferred-interaction-outcome.ts` | `resolveDeferredInteractionOutcome` before a fresh capture | policy | KEEP — pending-outcome settlement (may short-circuit) |
+| 14 | `packages/daemon/src/core/snapshot-capture.ts` | `resolveSnapshotScope` + the capture attempt | orchestration | KEEP — capture attempt + scope resolution |
+| 15 | `packages/daemon/src/core/snapshot-session.ts` | `resolveSessionDevice` for the capture | translation | KEEP — snapshot session/device resolution |
+| 16 | `packages/daemon/src/core/snapshot-runtime-binding.ts` | `resolveBoundSnapshotCaptureRuntime`: admit-then-bind | policy | KEEP — ADR 0019 §9 admit-then-bind seam |
+| 17 | `packages/daemon/src/core/session-runtime-admission.ts` | `admitRuntimePlan` (fan-out site) / `requireRuntimeBinding` | policy | KEEP — runtime plan fact admission |
+| 18 | `packages/daemon/src/core/request-runtime-binding.ts` | `bindDevice`: per-device-cached `gateway.bind` | orchestration | KEEP — device runtime binding |
 | 19 | `src/platform-runtime-gateway.ts` | `loadLocal` → `loadHost` → `loadRuntime` | orchestration | KEEP — gateway boundary |
 | 20 | `src/platform-runtime.ts` | wires the apple module, supplies `loadHost` | pass-through | KEEP — declared ADR §1/§2 registry boundary |
 | 21 | `src/platform-runtime-operation-host.ts` | `createPlatformRuntimeHost` assembles the host | orchestration | KEEP — host composition |
@@ -242,10 +242,10 @@ Re-entry: arm B #4 enters `packages/platform-apple/src/index.ts` (shared #22) vi
 above, as side-calls of the admission step.
 
 **Response path (not hops).** 22 files execute only after the platform call:
-`src/daemon/ref-frame.ts`, `src/daemon/session-action-recorder.ts`,
-`src/daemon/snapshot-quality-latch.ts`, `src/daemon/request-finalization.ts`,
-`src/daemon/session-event-request.ts`, `src/daemon/session-snapshot.ts` (lineage),
-`src/daemon/sparse-fallback-screenshot.ts`, `src/core/snapshot-state.ts`,
+`packages/daemon/src/core/ref-frame.ts`, `packages/daemon/src/core/session-action-recorder.ts`,
+`packages/daemon/src/sessions/snapshot-quality-latch.ts`, `packages/daemon/src/server/request-finalization.ts`,
+`packages/session-journal/src/session-event-request.ts`, `packages/daemon/src/execution/session-snapshot.ts` (lineage),
+`packages/daemon/src/execution/sparse-fallback-screenshot.ts`, `src/core/snapshot-state.ts`,
 `packages/contracts/src/capture.ts`, `packages/platform-apple/src/runner/snapshot-presentation.ts`,
 `src/snapshot/ios-snapshot-runtime.ts`, the `packages/capture-kit/src/ios-snapshot-engine/`
 modules (engine, invariants, geometry, geometry-policy, projection, graph,

@@ -375,7 +375,8 @@ writing must be removed so the table cannot drift into fiction.
 to stop core/daemon from BRANCHING on platform." Four facets are live (`appLog`, `recording`,
 `perf`, provider gating); the branch count says the mechanism is right and unfinished. Worst
 offenders: `handlers/session-perf.ts` (12), `handlers/session-doctor-device.ts` (6),
-`handlers/session-replay-maestro-runtime.ts` (6), `handlers/session-state.ts` (5). Each is a
+`handlers/session-replay-maestro-runtime.ts` (6), `handlers/session-state.ts` (5; since deleted —
+its commands route straight to their handlers from the `session.ts` table). Each is a
 candidate facet, and each facet retired is a branch deleted in every command that shares it.
 
 ### 5c. Redundant edges: hub concentration, not debt

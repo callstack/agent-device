@@ -4,7 +4,11 @@ import {
   createDefaultProviderRuntimeComposition,
   createDaemonProviderRuntimeComposition,
 } from '../provider-device-runtimes.ts';
-import { pluginHome, selectPlugin, registrationSource } from '../plugins/plugin.fixtures.ts';
+import {
+  pluginHome,
+  selectPlugin,
+  registrationSource,
+} from '@agent-device/test-kit/plugin.fixtures';
 
 test('daemon composition registers installed provider runtimes and their lazy platform modules', async () => {
   const { home, env } = pluginHome();

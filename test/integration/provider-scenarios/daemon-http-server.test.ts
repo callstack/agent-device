@@ -10,21 +10,21 @@ import {
   cleanupUploadedArtifact,
   prepareUploadedArtifact,
   trackDownloadableArtifact,
-} from '../../../src/daemon/artifact-tracking.ts';
+} from '@agent-device/daemon/testing/artifact-tracking';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '@agent-device/contracts/daemon-http';
-import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import {
   emitRequestProgress,
   getRequestSignal,
   isRequestCanceled,
 } from '@agent-device/host-kit/request';
 
-import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/daemon-request.ts';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../../src/__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 import { restoreEnv } from './harness.ts';
 
 type RpcResponse = {

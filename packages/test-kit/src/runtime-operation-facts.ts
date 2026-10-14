@@ -1,0 +1,117 @@
+import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
+import { audioProbeRuntimeOperationFacts } from '@agent-device/contracts/audio-probe-runtime';
+import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
+import { elementTextRuntimeOperationFacts } from '@agent-device/contracts/element-text-runtime';
+import { gestureRuntimeOperationFacts } from '@agent-device/contracts/gesture-runtime';
+import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-runtime';
+import type {
+  RuntimeOperationUnavailability,
+  RuntimeOwnerRef,
+} from '@agent-device/contracts/platform-runtime';
+import {
+  createFullyUnavailablePlatformRuntimeFacts,
+  createUnavailablePlatformRuntimeFacts,
+} from '@agent-device/contracts/platform-runtime-unavailable';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { screenshotRuntimeOperationFacts } from '@agent-device/contracts/screenshot-runtime';
+import { scrollRuntimeOperationFacts } from '@agent-device/contracts/scroll-runtime';
+import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-runtime';
+import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
+import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
+import { perfRuntimeOperationFacts } from '@agent-device/contracts/perf-runtime';
+
+const unavailable: RuntimeOperationUnavailability = Object.freeze({
+  available: false,
+  reason: 'owner-capability-missing',
+});
+
+/** Default facts for tests that are unrelated to application deployment. */
+const unavailableDeploymentOperationFacts = Object.freeze({
+  deployApp: unavailable,
+  materializeAppSource: unavailable,
+  deployMaterializedApp: unavailable,
+  sendPushNotification: unavailable,
+});
+
+/** Default fact for tests that are unrelated to explicit device shutdown. */
+const unavailableShutdownOperationFacts = Object.freeze({
+  shutdownTarget: unavailable,
+});
+
+export const unavailableDeploymentSnapshotAndShutdownOperationFacts = Object.freeze({
+  ...unavailableDeploymentOperationFacts,
+  ...snapshotRuntimeOperationFacts({
+    capture: unavailable,
+    customActions: unavailable,
+    withoutActiveApp: unavailable,
+  }),
+  ...unavailableShutdownOperationFacts,
+  ...screenshotRuntimeOperationFacts({ capture: unavailable }),
+  findText: unavailable,
+  querySelector: unavailable,
+  setViewport: unavailable,
+  focusPoint: unavailable,
+  typeText: unavailable,
+  ...touchRuntimeOperationFacts({
+    unsupported: unavailable,
+    tap: unavailable,
+    longPress: unavailable,
+    fill: unavailable,
+  }),
+  ...gestureRuntimeOperationFacts({ unsupported: unavailable }),
+  ...scrollRuntimeOperationFacts({ scroll: unavailable }),
+  ...elementTextRuntimeOperationFacts({ readTextAtPoint: unavailable }),
+  back: unavailable,
+  setOrientation: unavailable,
+  tvRemote: unavailable,
+  ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
+  ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
+  ...systemButtonRuntimeOperationFacts({ unsupported: unavailable }),
+  setFoldPose: unavailable,
+  triggerAppEvent: unavailable,
+  setSetting: unavailable,
+  readSetting: unavailable,
+  readAlert: unavailable,
+  awaitAlert: unavailable,
+  acceptAlert: unavailable,
+  dismissAlert: unavailable,
+  ...audioProbeRuntimeOperationFacts({ capture: unavailable, query: unavailable }),
+  ...perfRuntimeOperationFacts({
+    frames: unavailable,
+    memorySample: unavailable,
+    memorySnapshot: unavailable,
+    nativeCapture: unavailable,
+    profileReport: unavailable,
+  }),
+});
+
+/** Default facts for tests that are unrelated to application lifecycle commands. */
+export const unavailableApplicationLifecycleOperationFacts = applicationLifecycleOperationFacts({
+  resolveOpenTarget: unavailable,
+  prepareApplicationOpen: unavailable,
+  openApplication: unavailable,
+  applyRuntimeHints: unavailable,
+  clearRuntimeHints: unavailable,
+  closeApplication: unavailable,
+  finalizeApplicationClose: unavailable,
+  prepareAppleRunner: unavailable,
+  configureProviderPortReverse: unavailable,
+});
+
+/**
+ * Complete fail-closed facts for tests that exercise only a small runtime surface.
+ *
+ * Production owners must classify each required family explicitly. Tests instead start from this
+ * single complete record and override only the cells whose behavior they are proving.
+ */
+export function createUnavailableRuntimeFactsForTest(
+  device: DeviceInfo,
+  owner: RuntimeOwnerRef,
+  fact: RuntimeOperationUnavailability = unavailable,
+) {
+  return createUnavailablePlatformRuntimeFacts(
+    device,
+    owner,
+    createFullyUnavailablePlatformRuntimeFacts(fact),
+  );
+}

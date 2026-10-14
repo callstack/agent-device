@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { pluginHome } from '../../plugins/plugin.fixtures.ts';
+import { pluginHome } from '@agent-device/test-kit/plugin.fixtures';
 import { resolveConfigBackedFlagDefaults } from './cli-config.ts';
 
 test('AGENT_DEVICE_HOME relocates user defaults; project and explicit config cannot select plugins', () => {

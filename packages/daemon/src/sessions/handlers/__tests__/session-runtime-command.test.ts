@@ -1,0 +1,410 @@
+import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
+import { expect, test } from 'vitest';
+
+import path from 'node:path';
+import type { DaemonRequest } from '../../../core/daemon-request.ts';
+import {
+  makeSession,
+  makeSessionStore,
+  mockClearRuntimeHints,
+  noopInvoke,
+} from '../../../__tests__/support/handlers/session-test-harness.ts';
+import {
+  handleSessionCommands,
+  mockBindDeviceRuntime,
+  mockInspectDeviceRuntimeFacts,
+} from '../../../__tests__/support/handlers/session-command-harness.ts';
+import { lifecycleRuntimeFacts } from '../../../__tests__/support/application-lifecycle-runtime-harness.ts';
+import {
+  gestureBindDevice,
+  gestureInspectFacts,
+  gestureRuntimeSpies,
+} from '../../../__tests__/support/test-device-runtime-gateway.ts';
+import { refFrameState } from '../../../core/ref-frame.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+
+test('runtime set/show/clear manages session-scoped runtime hints before open', async () => {
+  const sessionStore = makeSessionStore();
+  const baseRequest = {
+    token: 't',
+    session: 'remote-runtime',
+  } satisfies Pick<DaemonRequest, 'token' | 'session'>;
+
+  const setResponse = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      ...baseRequest,
+      command: 'runtime',
+      positionals: ['set'],
+      flags: {
+        platform: 'android',
+        metroHost: '10.0.0.10',
+        metroPort: 8081,
+        launchUrl: 'myapp://dev-client',
+      },
+    },
+    sessionName: 'remote-runtime',
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  expect(setResponse?.ok).toBe(true);
+
+  const showResponse = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      ...baseRequest,
+      command: 'runtime',
+      positionals: ['show'],
+      flags: {},
+    },
+    sessionName: 'remote-runtime',
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  expect(showResponse?.ok).toBe(true);
+  if (showResponse && showResponse.ok) {
+    expect(showResponse.data?.configured).toBe(true);
+    expect(showResponse.data?.runtime).toEqual({
+      platform: 'android',
+      metroHost: '10.0.0.10',
+      metroPort: 8081,
+      bundleUrl: undefined,
+      launchUrl: 'myapp://dev-client',
+    });
+  }
+
+  const clearResponse = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      ...baseRequest,
+      command: 'runtime',
+      positionals: ['clear'],
+      flags: {},
+    },
+    sessionName: 'remote-runtime',
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  expect(clearResponse?.ok).toBe(true);
+  expect(sessionStore.getRuntimeHints('remote-runtime')).toBe(undefined);
+});
+
+test('runtime clear removes applied transport hints for the active app', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'runtime-clear-active';
+  sessionStore.setRuntimeHints(sessionName, {
+    platform: 'android',
+    metroHost: '10.0.0.10',
+    metroPort: 8081,
+  });
+  sessionStore.publish(sessionName, {
+    ...makeSession(sessionName, {
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Pixel',
+      kind: 'emulator',
+      booted: true,
+    }),
+    appBundleId: 'com.example.demo',
+  });
+
+  const response = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'runtime',
+      positionals: ['clear'],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledTimes(1);
+  expect(mockBindDeviceRuntime).toHaveBeenCalledTimes(1);
+  expect(mockClearRuntimeHints).toHaveBeenCalledWith(
+    expect.objectContaining({
+      device: expect.objectContaining({ id: 'emulator-5554' }),
+      appId: 'com.example.demo',
+    }),
+  );
+  expect(sessionStore.getRuntimeHints(sessionName)).toBe(undefined);
+});
+
+test('runtime clear expires the ref frame at the admitted hint mutation boundary', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'runtime-clear-ref-frame-seam';
+  const session = {
+    ...makeSession(sessionName, {
+      platform: 'android' as const,
+      id: 'emulator-5554',
+      name: 'Pixel',
+      kind: 'emulator' as const,
+      booted: true,
+    }),
+    appBundleId: 'com.example.demo',
+  };
+  sessionStore.publish(sessionName, session);
+  sessionStore.setRuntimeHints(sessionName, {
+    platform: 'android',
+    metroHost: '10.0.2.2',
+  });
+  mockClearRuntimeHints.mockImplementationOnce(async () => {
+    // Planted route witness: deleting the handler's pre-mutation expiry leaves this frame active.
+    expect(refFrameState(session)).toBe('expired');
+  });
+
+  const response = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'runtime',
+      positionals: ['clear'],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockClearRuntimeHints).toHaveBeenCalledOnce();
+  expect(refFrameState(session)).toBe('expired');
+});
+
+test('runtime clear rejects a false runtime-hints fact before its one implementation bind', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'runtime-clear-false-fact';
+  const device = {
+    platform: 'android' as const,
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator' as const,
+    booted: true,
+  };
+  sessionStore.setRuntimeHints(sessionName, {
+    platform: 'android',
+    metroHost: '10.0.0.10',
+    metroPort: 8081,
+  });
+  sessionStore.publish(sessionName, {
+    ...makeSession(sessionName, device),
+    appBundleId: 'com.example.demo',
+  });
+  mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (candidate) => {
+    const facts = lifecycleRuntimeFacts(candidate);
+    return {
+      ...facts,
+      operations: {
+        ...facts.operations,
+        clearRuntimeHints: {
+          available: false as const,
+          reason: 'unsupported-provider-mode' as const,
+          hint: 'Runtime hints are unavailable for this exact provider-owned cell.',
+        },
+      },
+    };
+  });
+
+  const response = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'runtime',
+      positionals: ['clear'],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: {
+      code: 'UNSUPPORTED_OPERATION',
+      message: 'runtime clear is not supported on this device',
+    },
+  });
+  expect(mockInspectDeviceRuntimeFacts).toHaveBeenCalledTimes(1);
+  expect(mockBindDeviceRuntime).not.toHaveBeenCalled();
+  expect(mockClearRuntimeHints).not.toHaveBeenCalled();
+  expect(sessionStore.getRuntimeHints(sessionName)).toEqual({
+    platform: 'android',
+    metroHost: '10.0.0.10',
+    metroPort: 8081,
+  });
+});
+
+test('runtime gesture-viewport admits and binds the exact viewport operation once', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'runtime-gesture-viewport';
+  const logPath = path.join(
+    mkdtempForTestSync('runtime-gesture-viewport'),
+    'runtime-gesture-viewport.log',
+  );
+  sessionStore.publish(
+    sessionName,
+    makeSession(sessionName, {
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Pixel',
+      kind: 'emulator',
+      booted: true,
+    }),
+  );
+  gestureRuntimeSpies.gestureViewport.mockClear();
+
+  const response = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'runtime',
+      positionals: ['gesture-viewport'],
+      flags: {},
+      meta: { requestId: 'viewport-request' },
+    },
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke: noopInvoke,
+    inspectFacts: gestureInspectFacts,
+    bindDevice: gestureBindDevice,
+  });
+
+  expect(response).toEqual({
+    ok: true,
+    data: { viewport: { x: 0, y: 0, width: 390, height: 844 } },
+  });
+  expect(gestureRuntimeSpies.gestureViewport).toHaveBeenCalledOnce();
+  expect(gestureRuntimeSpies.gestureViewport).toHaveBeenCalledWith(
+    expect.objectContaining({
+      execution: expect.objectContaining({
+        requestId: 'viewport-request',
+        logPath,
+      }),
+    }),
+  );
+});
+
+for (const phase of ['admission', 'effect'] as const) {
+  test(`runtime clear does not clear a successor's hints after retirement during ${phase}`, async () => {
+    const sessionStore = makeSessionStore();
+    const address = `cwd:runtime-clear-${phase}:default`;
+    const device = {
+      platform: 'android' as const,
+      id: `runtime-clear-${phase}`,
+      name: 'Pixel',
+      kind: 'emulator' as const,
+      booted: true,
+    };
+    const ref = sessionStore.publish(address, {
+      ...makeSession('default', device),
+      appBundleId: 'com.example.old',
+    });
+    sessionStore.setRuntimeHints(address, { platform: 'android', metroHost: 'old' });
+    const successorHints = { platform: 'android' as const, metroHost: 'successor' };
+    const replace = () => {
+      sessionStore.retire(ref);
+      sessionStore.publish(address, {
+        ...makeSession('default', device),
+        appBundleId: 'com.example.new',
+      });
+      sessionStore.setRuntimeHints(address, successorHints);
+    };
+    if (phase === 'admission') {
+      mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (target) => {
+        replace();
+        return lifecycleRuntimeFacts(target);
+      });
+    } else {
+      mockClearRuntimeHints.mockImplementationOnce(async () => {
+        replace();
+      });
+    }
+    await expect(
+      handleSessionCommands({
+        createCommandSurface: fakeCreateCommandSurface,
+        platformServices: daemonPlatformServicesFixture(),
+        req: {
+          token: 't',
+          session: 'default',
+          command: 'runtime',
+          positionals: ['clear'],
+          flags: {},
+        },
+        sessionName: address,
+        logPath: '/dev/null',
+        sessionStore,
+        invoke: noopInvoke,
+      }),
+    ).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'session_lifetime_ended' },
+    });
+    expect(sessionStore.getRuntimeHints(address)).toBe(successorHints);
+    expect(refFrameState(sessionStore.get(address)!)).toBe('active');
+    expect(mockClearRuntimeHints).toHaveBeenCalledTimes(phase === 'admission' ? 0 : 1);
+  });
+}
+
+test('runtime clear expires and uses the latest matching record after admission', async () => {
+  const sessionStore = makeSessionStore();
+  const device = {
+    platform: 'android' as const,
+    id: 'runtime-clear-rebuild',
+    name: 'Pixel',
+    kind: 'emulator' as const,
+    booted: true,
+  };
+  const ref = sessionStore.publish('clear-rebuild', {
+    ...makeSession('clear-rebuild', device),
+    appBundleId: 'old.app',
+  });
+  sessionStore.setRuntimeHints(ref.address, { platform: 'android', metroHost: 'old' });
+  mockInspectDeviceRuntimeFacts.mockImplementationOnce(async (target) => {
+    sessionStore.update(ref, { appBundleId: 'rebuilt.app' });
+    return lifecycleRuntimeFacts(target);
+  });
+  const response = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: {
+      token: 't',
+      session: ref.address,
+      command: 'runtime',
+      positionals: ['clear'],
+      flags: {},
+    },
+    sessionName: ref.address,
+    logPath: '/dev/null',
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  expect(response).toMatchObject({ ok: true, data: { cleared: true } });
+  expect(mockClearRuntimeHints).toHaveBeenCalledWith(
+    expect.objectContaining({ appId: 'rebuilt.app' }),
+  );
+  expect(refFrameState(sessionStore.requireCurrent(ref))).toBe('expired');
+  expect(refFrameState(ref.session)).toBe('active');
+});

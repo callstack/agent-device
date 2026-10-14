@@ -16,13 +16,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { parseScriptArgs } from '../lib/cli-args.ts';
-import { readChangedLinesDiff } from '../lib/repo-git.ts';
-import {
-  computeChangedCoverage,
-  parseLcov,
-  parseUnifiedDiff,
-  type ChangedCoverageResult,
-} from './model.ts';
+import { parseUnifiedDiff, readChangedLinesDiff } from '../lib/repo-git.ts';
+import { computeChangedCoverage, parseLcov, type ChangedCoverageResult } from './model.ts';
 
 const USAGE = 'Usage: pnpm check:coverage-changed [--base <ref>]\n';
 const LCOV_PATH = 'coverage/lcov.info';
@@ -95,11 +90,11 @@ export function run(argv: readonly string[], cwd?: string): number {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   try {
-    process.exit(run(process.argv.slice(2)));
+    process.exitCode = run(process.argv.slice(2));
   } catch (error: unknown) {
     process.stderr.write(
       `check:coverage-changed: ${error instanceof Error ? error.message : String(error)}\n`,
     );
-    process.exit(1);
+    process.exitCode = 1;
   }
 }

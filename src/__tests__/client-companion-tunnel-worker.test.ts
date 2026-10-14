@@ -26,8 +26,8 @@ import {
   writeSuccessfulRegistration,
   type CloseFrame,
 } from './client-companion-tunnel-worker.fixtures.ts';
-import { closeLoopbackServer, listenOnLoopback } from './test-utils/loopback.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit/loopback';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 type Deferred<T> = {
   promise: Promise<T>;

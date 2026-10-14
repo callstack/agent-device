@@ -2,7 +2,7 @@ import net from 'node:net';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import { loadNodeHttpRequester, consumeTextLines } from '@agent-device/host-kit/transport';
-import type { DaemonRequest } from '../daemon/daemon-request.ts';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 
 // The post-timeout liveness probe (#3177): the question a daemon reset may no longer assume. The

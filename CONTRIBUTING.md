@@ -232,15 +232,43 @@ Useful direct entry points:
 - `pnpm perf --platform ios` or `pnpm perf --platform android` — device performance harness
 - `pnpm check:fallow --base origin/main` — changed-code quality gate
 - `pnpm check:coverage-crap --base origin/main` — CRAP from measured coverage for the functions a
-  change touches (run `pnpm test:coverage` first; `--all` scans every function). Both report scores
-  at or above 30. `check:fallow` leaves CRAP off because it has no coverage.
+  change touches; it fails when one scores 30 or more, so run `pnpm test:coverage` first. `--all`
+  reports every function and never fails: that is `main`'s backlog. Both list the per-function CRAP
+  ceilings from `.fallowrc.json` they honoured. `check:fallow` leaves CRAP off without coverage.
 - `pnpm fallow:all` — full-tree audit, including grandfathered baseline findings
-- `pnpm fallow:baseline` — intentionally regenerate both reviewed Fallow baselines
+- `pnpm fallow:baseline` — intentionally regenerate the reviewed Fallow health baseline
 
 See [`docs/agents/testing.md`](docs/agents/testing.md) for gate ownership, shared test utilities,
 mutation/fuzz lanes, contention policy, and test-speed rules. For real devices, follow
 [`docs/agents/device-verification.md`](docs/agents/device-verification.md); a fixture-backed test does
 not prove that a native path was active.
+
+### Reading a coverage-CRAP failure
+
+`check:coverage-crap --base <ref>` scores the functions whose lines your diff adds, so it also
+fails when it cannot score them. It prints `no trustworthy verdict` and names the files when
+`coverage/coverage-istanbul.json` is missing, malformed, or records fewer files than the same run's
+`coverage/lcov.info` enumerated; when a file you touched was dropped as corrupt or never recorded;
+or when a touched function postdates the map and would be scored from complexity alone. Every one of
+those is a stale coverage run, not a debt you owe: re-run `pnpm test:coverage` on the commit and
+re-check. What does count as debt is editing a function that already scores 30 or more — the score
+does not have to be new. Adding lines is what charges a function; deleting is not, and removing a
+whole function takes its score with it. The two still interact: a charged function is scored as it
+stands after your deletions, and dropping lines that used to be covered can raise that number. A
+deletion-only edit is therefore never charged, and neither is a mixed one so long as no added line
+lands inside that function — the deletion stays out of the PR and whatever the score rose to waits
+in the `--all` backlog. Moving a file without editing its lines touches none of its functions.
+Unlike the changed-line gate, this one has no `coverage-waiver` label: the only way past a score is
+to test or simplify the function, or to raise the ceiling for that one function in
+`.fallowrc.json`'s `health.thresholdOverrides`.
+
+Two things are listed rather than blocked, so a green run does not mean they were checked. A touched
+function in a file coverage never instrumented — one `coverage.exclude` drops, or one a stale local
+`coverage/` never enumerated — is reported as not measured and stays non-blocking: no re-run would
+score it, and blocking on it would refuse every tooling PR. And an estimate is only ever compared
+against 30: a touched function the map predates is named as no-verdict, or listed as unmeasured, only
+when its estimated score reaches that bar, so a below-bar guess about new code is reported by neither.
+A coverage run you re-ran is what turns either one into a measured score.
 
 ## Test app and Maestro compatibility
 

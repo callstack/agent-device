@@ -9,15 +9,13 @@ import {
 } from '@agent-device/host-kit/process';
 
 import type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
+import { MANAGED_WEB_BROWSER_PROCESS_PURPOSE } from './agent-browser-process-record.ts';
 import type { AgentBrowserProcessSummary } from './agent-browser-process-record.ts';
 export {
   agentBrowserChromeLaunchMarker,
   appendAgentDeviceChromeArgs,
   inspectManagedAgentBrowserProcesses,
-  matchAgentBrowserChromeProcess,
-  recordManagedAgentBrowserProcesses,
   summarizeAgentBrowserProcesses,
-  summarizeManagedAgentBrowserProcesses,
 } from './agent-browser-process-record.ts';
 export type { AgentBrowserProcessSummary } from './agent-browser-process-record.ts';
 
@@ -74,7 +72,7 @@ export async function cleanupManagedAgentBrowserOrphans(
   if (!store) return emptyCleanupResult();
   const reaped = await reapOwnedProcessRecordsAtStartup(store, {
     openWebSessionNames,
-    purposes: ['managed-web-browser'],
+    purposes: [MANAGED_WEB_BROWSER_PROCESS_PURPOSE],
     termTimeoutMs: WEB_BROWSER_REAP_TERM_TIMEOUT_MS,
     killTimeoutMs: WEB_BROWSER_REAP_KILL_TIMEOUT_MS,
   });

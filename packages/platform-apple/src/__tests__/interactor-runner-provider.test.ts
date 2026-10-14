@@ -293,7 +293,7 @@ test('a message-less runner capture leaves its disclosures to the verdict', asyn
 });
 
 test('macOS app snapshots preserve runner nodes outside the iOS presentation engine', async () => {
-  const nodes = [{ index: 0, type: 'Application', label: 'System Settings' }];
+  const nodes = [{ index: 0, type: 'Other', value: 'checkbox, unchecked' }];
   const interactor = createAppleInteractor(
     MACOS_DEVICE,
     {},

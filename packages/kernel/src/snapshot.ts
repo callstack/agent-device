@@ -246,6 +246,34 @@ export type SnapshotPresentationFlagInput = SnapshotOptionFlagFields<
   (typeof SNAPSHOT_PRESENTATION_OPTION_KEYS)[number]
 >;
 
+/**
+ * The bounded, non-actionable description of the element that occludes a covered node. It carries
+ * only what the occlusion scan observed — presented role, an optional clipped accessible name, and
+ * the cover's rect — and deliberately no ref: the cover may be a container the snapshot never
+ * issues refs for, and naming it is diagnosis, not an invitation to target it.
+ */
+export type SnapshotCoveringNode = {
+  /** The cover's presented role, from the same table the text presenter reads (`formatRole`). */
+  kind: string;
+  /** The cover's accessible name, trimmed and clipped to {@link SNAPSHOT_COVERING_LABEL_MAX_LENGTH}. */
+  label?: string;
+  /** The cover's positive rect as the scan measured it. */
+  rect?: Rect;
+};
+
+/** Upper bound for a covering-node label carried in diagnostics; longer names are clipped. */
+export const SNAPSHOT_COVERING_LABEL_MAX_LENGTH = 80;
+
+/** Evidence from an exact English React Native iOS value signature, not proof of its renderer. */
+export type IosValueSemantics = {
+  source: 'react-native-ios-value-heuristic';
+  encoding: 'en';
+  role?: string;
+  checked?: boolean | 'mixed';
+  expanded?: boolean;
+  busy?: true;
+};
+
 export type RawSnapshotNode = {
   index: number;
   type?: string;
@@ -253,6 +281,8 @@ export type RawSnapshotNode = {
   subrole?: string;
   label?: string;
   value?: string;
+  /** Derived RN evidence; value and native type/role remain verbatim. Explicit facts take precedence. */
+  iosValueSemantics?: IosValueSemantics;
   /**
    * Android content description when it is not already the `label`. An Android node is
    * labelled by its text and falls back to the content description only when it has none,
@@ -291,12 +321,30 @@ export type RawSnapshotNode = {
   parentIndex?: number;
   pid?: number;
   bundleId?: string;
+  /**
+   * Android status/navigation bar subtree membership, retained when ancestors are omitted.
+   * Shade headers, dialogs, and other SystemUI overlays are not bars. Absent means the
+   * producer did not establish bar membership.
+   */
+  systemBar?: 'status' | 'navigation';
   appName?: string;
   windowTitle?: string;
   surface?: string;
+  /** Evaluated keyboard ownership; omission means unevaluated. Survives ancestor removal. */
+  keyboardOwned?: boolean;
   hiddenContentAbove?: boolean;
   hiddenContentBelow?: boolean;
   interactionBlocked?: 'covered';
+  /**
+   * Bounded description of the element the geometric occlusion scan found drawing on top of this
+   * node, published together with `interactionBlocked: 'covered'` so a refusal can name the culprit
+   * instead of only the fact of coverage. Absent when the covered decision came from a
+   * backend-policy annotation that reports a boolean, and when the cover the scan found is an
+   * anonymous container no reader could recognize; both refusals keep the generic recovery rather
+   * than guessing a culprit. This is a description, not an authorization: it carries no ref and is
+   * never an actionable target.
+   */
+  coveredBy?: SnapshotCoveringNode;
   presentationHints?: string[];
   /**
    * Backend-minted ref for this node, when the capture backend already assigns a
@@ -323,33 +371,19 @@ export type HiddenContentHint = {
 };
 
 /**
- * What a capture's producer can say about the software keyboard on screen, measured while the tree
- * was captured rather than rebuilt from it afterwards.
- *
- * A keyboard is its own system surface, so it never reaches the tree as a covering sibling of app
- * content, and a consumer that wants to refuse a tap behind it has to learn where it is from
- * somewhere (#2589). A producer that can measure the band directly — the Apple runner, from its
- * `app.keyboards` query, and the Android helper, from the input method window in the window list it
- * captures — publishes one fact per capture and says nothing else about it. A consumer therefore gets three
- * answers and no fourth: a band in the same space as every node rect, a proven absence, or a
- * producer that could not look.
- *
- * A producer that publishes nothing has declared nothing, so absence from a result means the same
- * thing as `unmeasurable` — which is why the field stays optional on every carrier, including the
- * three client-side paths that rebuild a state from a bare backend result (#2199). Those consumers
- * then derive the band from the tree they hold: the rule that stays for the producers that publish
- * no fact (#2660).
+ * Keyboard evidence observed during acquisition, in the capture's node coordinate space.
+ * `visible` is a measured frame; `derived` is a frame established by the shared docked-tree
+ * policy before projection; `visibility-only` is a boolean probe with no geometry;
+ * `tree-rejected` records rejected geometry evaluated against a usable viewport, with optional
+ * probe visibility; `unmeasurable` is unknown. `absent` requires an explicit absence observation.
+ * Missing keyboard nodes or an omitted fact never prove absence.
  */
 export type SnapshotKeyboardBandFact =
-  /** The band the keyboard occupies, in the same orientation space as this capture's node rects. */
   | { kind: 'visible'; frame: Rect }
-  /** The producer looked for the keyboard and found none. */
+  | { kind: 'derived'; derivation: 'docked-tree'; frame: Rect }
+  | { kind: 'visibility-only'; visible: boolean }
+  | { kind: 'tree-rejected'; derivation: 'docked-tree'; visible?: boolean }
   | { kind: 'absent' }
-  /**
-   * The producer cannot measure the band on this path, with a stable reason code. Typed rather than
-   * inferred from absence so a log says which path failed to measure without the consumer having to
-   * guess which producer it was talking to.
-   */
   | { kind: 'unmeasurable'; reason: string };
 
 /**
@@ -386,15 +420,33 @@ export type SnapshotViewportSizeBrand = {
 };
 
 export type SnapshotNode = RawSnapshotNode & {
-  ref: string;
+  /**
+   * The ref an agent addresses this node by, or absent when nothing can address it.
+   *
+   * A backend that mints its own refs (web/agent-browser) owns that namespace and can only act on
+   * the refs it minted, so {@link attachRefs} mints nothing into it — a node the backend left
+   * unaddressed stays ref-less in the tree, which is how on-screen-but-not-actionable content
+   * (static text, a status region) reaches a reader without ever being offered as a tap target.
+   * Backends that mint no refs (Apple, Android, Linux) keep dense `e${index}` numbering, so every
+   * node of their trees carries a ref, as before.
+   *
+   * Every consumer that offers a node as an address must read this as an absence rather than print
+   * one: a ref-less node is selectable by text and by `find`/`wait`/`get`, and refused as a target.
+   *
+   * A ref-less node also carries no `rect`. Producers that mint refs measure geometry for the refs
+   * they issued (see `RawSnapshotNode.ref`), and producers that mint none get dense numbering, so
+   * every node a geometry-requiring path can reach — promotion, the touch point, the covered and
+   * keyboard refusals — has a ref. That is why those paths print `node.ref` without a guard.
+   */
+  ref?: string;
   /**
    * Normalized role, from the same table the text presenter reads (`formatRole` below). `type`
    * stays the raw platform class; `kind` is the presenter's own answer, published so a `--json`
    * consumer gets the presented role without re-deriving it from `type` (#2656). `attachRefs` is
-   * the one production construction path and always sets it; optional here (rather than required
-   * like `ref`) only so the many hand-built `SnapshotNode` fixtures across the daemon/selector test
-   * suites that predate #2656 and never route through `attachRefs` do not all need updating for a
-   * field their assertions never read.
+   * the one production construction path and always sets it; optional here only so the many
+   * hand-built `SnapshotNode` fixtures across the daemon/selector test suites that predate #2656 and
+   * never route through `attachRefs` do not all need updating for a field their assertions never
+   * read. An absent `ref` is a real answer about the node; an absent `kind` is a fixture shortcut.
    */
   kind?: string;
   /**
@@ -683,10 +735,9 @@ export type SnapshotState = {
    */
   iosSystemSurfaceBundleId?: string;
   /**
-   * iOS and Android: the keyboard band this capture's producer measured, when it measured one. The
-   * tap-path keyboard guard prefers this over the band it would otherwise derive from `nodes`,
-   * because a producer that can query the keyboard directly answers in the tree's own space and
-   * needs no geometry to be plausible (#2660). Absent means the guard measures the tree as before.
+   * iOS and Android: keyboard observations made during acquisition. Measured and derived frames
+   * take precedence over reconstruction from the presented tree. Visibility-only and unknown facts
+   * carry no band; missing nodes or an omitted fact never establish absence.
    */
   keyboard?: SnapshotKeyboardBandFact;
   /**
@@ -758,18 +809,88 @@ export type ScreenshotOverlayRef = {
 };
 
 /**
- * Assign a display ref to every node. A node that already carries a backend-minted
- * `ref` keeps it (see `RawSnapshotNode.ref`) — the web/agent-browser backend resolves
- * actions against its own refs, so re-minting a dense positional ref here would make
- * the snapshot show one ref while actions act on a different element. Backends that do
- * not mint refs get dense `e${index}` numbering, matching the historical behavior.
+ * How a capture's nodes get the ref an agent addresses them by.
+ *
+ * - `dense` — the capture's producer mints no refs, so this layer numbers the tree `e1…eN` and
+ *   every node becomes addressable by its position.
+ * - `backend-issued` — the producer resolves actions against refs of its own (`e${n}` minted by
+ *   the backend, in tree order and not dense), so a ref this layer invented would name nothing.
+ *   A node the producer did not issue a ref for stays ref-less: present to a reader, absent from
+ *   the addressable namespace.
  */
-export function attachRefs(nodes: RawSnapshotNode[]): SnapshotNode[] {
+export type SnapshotRefMinting = 'dense' | 'backend-issued';
+
+/**
+ * Assign a display ref to every node, in the mode the capture's producer needs (see
+ * `SnapshotRefMinting`).
+ *
+ * A node that already carries a backend-minted `ref` keeps it (see `RawSnapshotNode.ref`) — the
+ * web/agent-browser backend resolves actions against its own refs, so re-minting a dense positional
+ * ref here would make the snapshot show one ref while actions act on a different element.
+ *
+ * Under `dense` every node ends up addressable, as it always has. Under `backend-issued` only the
+ * nodes the producer issued a ref for do: the rest stay ref-less, readable and searchable by their
+ * text and tree position, and never an address — which is what `hasSnapshotRef` and
+ * `snapshotRefBodies` report, and what a caller publishing an address must check.
+ */
+export function attachRefs(
+  nodes: RawSnapshotNode[],
+  minting: SnapshotRefMinting = 'dense',
+): SnapshotNode[] {
   return nodes.map((node, idx) => ({
     ...node,
-    ref: node.ref ?? `e${idx + 1}`,
+    ...(node.ref === undefined && minting !== 'dense' ? {} : { ref: node.ref ?? `e${idx + 1}` }),
     kind: formatRole(node.type ?? 'Element'),
   }));
+}
+
+/**
+ * Whether a node can be addressed by ref, narrowing the ref for callers that publish it as an
+ * address (an overlay label, a settle tail entry, a ref pin). A ref-less node is readable and
+ * searchable, never addressable.
+ */
+export function hasSnapshotRef(node: SnapshotNode): node is SnapshotNode & { ref: string } {
+  return node.ref !== undefined;
+}
+
+/**
+ * The refs a set of ref-carrying records can be re-addressed by; a record with no ref contributes no
+ * evidence. Typed over the field rather than over `SnapshotNode` so every site holding an optional
+ * ref (a node, a competitor rect, a published match) answers the same question here instead of
+ * restating the filter.
+ */
+export function snapshotRefBodies(refCarriers: readonly { ref?: string }[]): string[] {
+  return refCarriers.flatMap((carrier) => (carrier.ref === undefined ? [] : [carrier.ref]));
+}
+
+/**
+ * The one producer that resolves actions against refs of its own, and so owns the ref namespace of
+ * every tree it publishes. A producer that mints nothing belongs nowhere in this list: it keeps
+ * dense positional numbering. Adding a second producer that mints its own refs means adding it here.
+ */
+const REF_NAMESPACE_OWNERS: readonly SnapshotProvenance['producer'][] = ['agent-browser'];
+
+/**
+ * The ref-minting mode of a capture, from the pair that produced it. This is the one place that
+ * knows which producers own their ref namespace, so the projection that publishes a tree and the
+ * projection that later re-attaches refs to it cannot disagree.
+ *
+ * It reads the producer and not the platform channel, per the rule the provenance table states:
+ * several producers can feed one channel with different guarantees, and a second web adapter
+ * (webdriver-backed, or anything else that lands on this channel) mints no refs of its own — it
+ * needs dense numbering, which a channel-keyed check would silently take away from it. The
+ * parameter is the whole pair or nothing, so a caller cannot present a channel and leave this to
+ * guess who acquired the tree.
+ */
+export function snapshotRefMinting(
+  provenance: SnapshotCaptureProvenance | undefined,
+): SnapshotRefMinting {
+  // agent-browser resolves click/fill/hover against refs it minted itself, in tree order and not
+  // densely (#2283). A ref minted beside it would either name a different element or nothing.
+  const producer = provenance?.producer;
+  return producer !== undefined && REF_NAMESPACE_OWNERS.includes(producer)
+    ? 'backend-issued'
+    : 'dense';
 }
 
 /**

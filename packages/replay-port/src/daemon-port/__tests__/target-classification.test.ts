@@ -44,7 +44,7 @@ test('classifyReplayTarget: real-capture fixture verifies by @ref when the tree 
     requireRect: true,
     allowDisambiguation: true,
   });
-  assertVerified(result, { winnerRef: winner.ref, matchCount: 1 });
+  assertVerified(result, { winnerRef: winner.ref!, matchCount: 1 });
 });
 
 test('classifyReplayTarget: real-capture fixture — a relabeled node is identity-mismatch (path 3)', async () => {
@@ -547,7 +547,7 @@ test('#1269 e2e: a demoted shared-id row rebinds by role+label after the shared-
     requireRect: true,
     allowDisambiguation: true,
   });
-  assertVerified(result, { winnerRef: expected.ref, matchCount: 1 });
+  assertVerified(result, { winnerRef: expected.ref!, matchCount: 1 });
 
   // Contrast — the reorder is genuinely hostile to the id path: the shared id
   // matches all four rows (no unique bind → resolution refuses), while the
@@ -627,7 +627,7 @@ test('#1280 e2e: a retargeted press on a row container rebinds its labeled desce
     requireRect: true,
     allowDisambiguation: true,
   });
-  assertVerified(result, { winnerRef: expected.ref, matchCount: 1 });
+  assertVerified(result, { winnerRef: expected.ref!, matchCount: 1 });
 
   // Contrast: recording the CONTAINER itself (no retarget) leaves a
   // role-only identity — every row's wrapper shares it — that a fail-closed

@@ -1,3 +1,4 @@
+import { androidFieldValue, isFillableType, normalizeType } from '@agent-device/contracts/snapshot';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { parseBounds } from '@agent-device/kernel/bounds';
 import { AppError } from '@agent-device/kernel/errors';
@@ -122,6 +123,16 @@ function isSourceContainer(xmlNode: XmlNode, platform: WebDriverSourcePlatform):
   return platform === 'ios' && (name === 'hierarchy' || name === 'appiumaut');
 }
 
+/**
+ * The type a source node publishes. UiAutomator2 usually names its tags by class, but a source may
+ * emit a generic tag around a `class` attribute; the class is the Android type either way.
+ * XCUITest names its element type by tag.
+ */
+function publishedType(xmlNode: XmlNode, platform: WebDriverSourcePlatform): string {
+  if (platform !== 'android') return xmlNode.name;
+  return nonEmptyWebDriverAttribute(xmlNode.attributes.class) ?? xmlNode.name;
+}
+
 function appendSourceNode(
   nodes: RawSnapshotNode[],
   xmlNode: XmlNode,
@@ -132,20 +143,13 @@ function appendSourceNode(
 ): number {
   const index = nodes.length;
   const rect = rectFromWebDriverAttributes(xmlNode.attributes);
+  const type = publishedType(xmlNode, platform);
   nodes.push(
-    sourceNodeFromAttributes(
-      index,
-      xmlNode.name,
-      xmlNode.attributes,
-      parentIndex,
-      depth,
-      rect,
-      platform,
-    ),
+    sourceNodeFromAttributes(index, type, xmlNode.attributes, parentIndex, depth, rect, platform),
   );
   if (parentIndex === undefined) {
     sourceRoots.push({
-      type: xmlNode.name,
+      type,
       ...(rect ? { rect } : {}),
       rectStatus: rectStatus(xmlNode.attributes, rect),
     });
@@ -168,8 +172,11 @@ function sourceNodeFromAttributes(
     type,
     role: roleFromWebDriverType(type, attrs),
     ...labelFacts(attrs, platform),
-    value: field === undefined ? nonEmptyWebDriverAttribute(attrs.value) : field.value,
+    ...(platform === 'android'
+      ? androidValueFacts(type, attrs)
+      : { value: nonEmptyWebDriverAttribute(attrs.value) }),
     identifier: firstWebDriverAttribute(attrs, ['resource-id', 'id', 'accessibility-id', 'name']),
+    ...(platform === 'android' && attrs.package ? { bundleId: attrs.package } : {}),
     rect,
     ...sourceStateFacts(attrs, rect, platform),
     ...(field === undefined ? {} : field.facts),
@@ -177,20 +184,6 @@ function sourceNodeFromAttributes(
     depth,
     parentIndex,
   };
-}
-
-/**
- * The Android text entry classes, the same rule `isFillableType` in
- * `@agent-device/contracts/snapshot-text` applies to the class name's last segment; that module is
- * not a package subpath, so the rule is restated here.
- */
-const ANDROID_TEXT_FIELD_CLASS = /edittext|autocompletetextview/;
-
-/** The class name's last segment, lowercased, as `normalizeType` reads a type. */
-function classNameSegment(className: string): string {
-  return className
-    .slice(Math.max(className.lastIndexOf('.'), className.lastIndexOf('/')) + 1)
-    .toLowerCase();
 }
 
 /**
@@ -217,8 +210,7 @@ function labelFacts(
 }
 
 type TextFieldFacts = Readonly<{
-  value: string | undefined;
-  facts: Pick<RawSnapshotNode, 'editable' | 'password' | 'placeholder' | 'hintShowing'>;
+  facts: Pick<RawSnapshotNode, 'editable' | 'password'>;
 }>;
 
 /**
@@ -235,31 +227,55 @@ function textFieldFacts(
   return platform === 'android' ? androidTextFieldFacts(type, attrs) : undefined;
 }
 
-/**
- * A field showing its hint reports the hint as its text, so that text is the placeholder and the
- * label, not a value. The page source offers no other signal, so a typed value equal to the hint
- * reads as the hint showing; the native helper's `hint-showing` fact has no counterpart here. A
- * disabled field is not editable, whatever its class.
- */
 function androidTextFieldFacts(
   type: string,
   attrs: Record<string, string>,
 ): TextFieldFacts | undefined {
   const password = parseWebDriverBoolean(attrs.password);
-  if (!ANDROID_TEXT_FIELD_CLASS.test(classNameSegment(attrs.class ?? type)) && password !== true) {
+  if (!(normalizeType(type) && isFillableType(type, 'android')) && password !== true) {
     return undefined;
   }
-  const placeholder = nonEmptyWebDriverAttribute(attrs.hint);
-  const text = nonEmptyWebDriverAttribute(attrs.text);
-  const hintShowing = placeholder !== undefined && text === placeholder;
   return {
-    value: hintShowing ? undefined : text,
     facts: {
       editable: parseWebDriverBoolean(attrs.enabled, true) === true,
       ...optionalFact('password', password),
-      ...(placeholder === undefined ? {} : { placeholder, hintShowing }),
     },
   };
+}
+
+function androidValueFacts(
+  type: string,
+  attrs: Record<string, string>,
+): Pick<RawSnapshotNode, 'value' | 'placeholder' | 'hintShowing'> {
+  const hintShowing = parseWebDriverBoolean(
+    attrs['showing-hint'] ?? attrs['hint-showing'] ?? attrs.hintShowing,
+  );
+  return {
+    value: androidFieldValue({
+      type,
+      text: attrs.text,
+      editable:
+        parseWebDriverBoolean(attrs.editable) === true || hasAndroidInputType(attrs['input-type']),
+      password: parseWebDriverBoolean(attrs.password),
+      hintShowing,
+    }),
+    ...optionalFact('placeholder', nonEmptyWebDriverAttribute(attrs.hint)),
+    ...optionalFact('hintShowing', hintShowing),
+  };
+}
+
+function hasAndroidInputType(value: string | undefined): boolean {
+  const inputType = numberFromWebDriverAttribute(value);
+  if (
+    inputType === undefined ||
+    !Number.isInteger(inputType) ||
+    inputType < 0 ||
+    inputType > 0x7fffffff
+  ) {
+    return false;
+  }
+  const inputClass = inputType & 0xf;
+  return inputClass >= 1 && inputClass <= 4;
 }
 
 function optionalFact<Key extends keyof RawSnapshotNode>(
@@ -284,8 +300,7 @@ function checkedFact(
   platform: WebDriverSourcePlatform,
 ): Pick<RawSnapshotNode, 'checked'> {
   if (platform !== 'android') return {};
-  const checkable =
-    parseWebDriverBoolean(attrs.checkable) ?? ANDROID_CHECKABLE_CLASS.test(attrs.class ?? type);
+  const checkable = parseWebDriverBoolean(attrs.checkable) ?? ANDROID_CHECKABLE_CLASS.test(type);
   const checked = parseWebDriverBoolean(attrs.checked);
   return checkable && checked !== undefined ? { checked } : {};
 }

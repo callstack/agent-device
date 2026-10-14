@@ -35,7 +35,7 @@ extension RunnerTests {
       stallBudget: 3,
       ceiling: 10,
       now: clock.read,
-      observe: { String(expected.prefix(landed * 2)) },
+      observe: { .text(String(expected.prefix(landed * 2))) },
       waitForNextObservation: {
         landed += 1
         clock.advance(2)
@@ -61,7 +61,7 @@ extension RunnerTests {
       stallBudget: 3,
       ceiling: 10,
       now: clock.read,
-      observe: { "ha" },
+      observe: { .text("ha") },
       waitForNextObservation: {
         polls += 1
         clock.advance(1)
@@ -82,7 +82,7 @@ extension RunnerTests {
       stallBudget: 3,
       ceiling: 10,
       now: clock.read,
-      observe: { "ha" },
+      observe: { .text("ha") },
       waitForNextObservation: { clock.advance(1) }
     )
     XCTAssertEqual(outcome, .notObserved)
@@ -102,7 +102,7 @@ extension RunnerTests {
       stallBudget: 3,
       ceiling: 10,
       now: clock.read,
-      observe: { observations[min(index, observations.count - 1)] },
+      observe: { .text(observations[min(index, observations.count - 1)]) },
       waitForNextObservation: {
         index += 1
         clock.advance(1)
@@ -127,7 +127,7 @@ extension RunnerTests {
       stallBudget: 3,
       ceiling: 10,
       now: clock.read,
-      observe: { String(expected.prefix(landed)) },
+      observe: { .text(String(expected.prefix(landed))) },
       waitForNextObservation: {
         landed += 1
         clock.advance(2)
