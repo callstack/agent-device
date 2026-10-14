@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { WEB_DESKTOP_DEVICE } from '../../../src/__tests__/test-utils/device-fixtures.ts';
+import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { createAgentBrowserWebProvider, type WebProvider } from '@agent-device/platform-web';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
-import { mkdtempForTestSync } from '../../../src/__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   installFakeManagedAgentBrowser,
   withNodeRuntime,
-} from '../../../src/__tests__/test-utils/web-managed-agent-browser.ts';
+} from '@agent-device/test-kit/web-managed-agent-browser';
 import { createProviderScenarioHarness } from './harness.ts';
 
 test('web provider is scoped through the request router and dispatch path', async () => {
@@ -25,6 +25,9 @@ test('web provider is scoped through the request router and dispatch path', asyn
         nodes: [
           {
             index: 0,
+            // Refs the way agent-browser issues them: a web capture publishes its producer's refs
+            // and mints no replacement for a node it left unaddressed.
+            ref: 'e1',
             type: 'section',
             role: 'main',
             label: 'main',
@@ -33,6 +36,7 @@ test('web provider is scoped through the request router and dispatch path', asyn
           },
           {
             index: 1,
+            ref: 'e2',
             type: 'button',
             role: 'button',
             label: 'Launch',

@@ -206,17 +206,14 @@ function toUpstreamWebSocketUrl(localBaseUrl: string, requestPath: string): stri
   return upstream.toString();
 }
 
+/**
+ * The only code shape `WebSocket.close` may be handed: 1000, or the 3000-4999 range RFC 6455 keeps
+ * for this program's own use (3000-3999 for libraries and applications, 4000-4999 private). Any
+ * other code, including the 1001-1015 range and a missing one, leaves as 3001 so the close lands
+ * instead of being refused by the client.
+ */
 function normalizeCloseCode(code: number | undefined): number {
-  if (typeof code !== 'number' || !Number.isInteger(code)) return 1011;
-  if (code === 1000) return code;
-  if (code >= 3000 && code <= 4999) return code;
-  if (code >= 1001 && code <= 1015 && code !== 1004 && code !== 1005 && code !== 1006) {
-    return code;
-  }
-  return 1011;
-}
-
-function normalizeOutgoingCloseCode(code: number): number {
+  if (typeof code !== 'number' || !Number.isInteger(code)) return 3001;
   if (code === 1000) return code;
   if (code >= 3000 && code <= 4999) return code;
   return 3001;
@@ -272,9 +269,10 @@ async function waitForSocketShutdown(socket: WebSocket): Promise<void> {
   });
 }
 
-function closeSocketQuietly(socket: WebSocket, code: number, reason: string): void {
+/** Closes one socket with the only code a client may send, ignoring shutdown races. */
+function closeSocketQuietly(socket: WebSocket, code: number | undefined, reason: string): void {
   try {
-    socket.close(normalizeOutgoingCloseCode(code), reason);
+    socket.close(normalizeCloseCode(code), reason);
   } catch {
     // ignore shutdown races
   }
@@ -396,11 +394,7 @@ function handleBridgeWebSocketClose(
   const upstreamSocket = upstreamSockets.get(message.streamId);
   if (!upstreamSocket) return;
   upstreamSockets.delete(message.streamId);
-  closeSocketQuietly(
-    upstreamSocket,
-    normalizeCloseCode(message.code),
-    message.reason ?? 'bridge requested close',
-  );
+  closeSocketQuietly(upstreamSocket, message.code, message.reason ?? 'bridge requested close');
 }
 
 async function handleBridgeMessage(

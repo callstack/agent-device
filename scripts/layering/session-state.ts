@@ -1,6 +1,7 @@
 /** SessionState field ownership for assignments, named patches and record copies. */
 
 import { parseSync } from 'oxc-parser';
+import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
 import { memberName, memberPath, propertyName, visitAst } from './layering-ast.ts';
 import path from 'node:path';
 
@@ -21,17 +22,20 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   // transitions replace it whole. The row stays because the type cannot judge a whole frame
   // moved unchanged: assigning `undefined` (a reset to the pristine frame) and assigning a
   // frame read off another session.
-  refFrame: ['src/daemon/ref-frame.ts'],
+  refFrame: ['packages/daemon/src/core/ref-frame.ts'],
   // Scoped-snapshot lineage is cleared at two distinct events: crossing a device side-effect
   // seam (ref-frame.ts) and replacing the stored observation (session-snapshot.ts).
-  snapshotScopeSource: ['src/daemon/ref-frame.ts', 'src/daemon/session-snapshot.ts'],
-  snapshot: ['src/daemon/session-snapshot.ts'],
-  snapshotGeneration: ['src/daemon/session-snapshot.ts'],
-  lastComparisonSafeSnapshot: ['src/daemon/session-snapshot.ts'],
-  androidSnapshotFreshness: ['src/daemon/session-snapshot-freshness.ts'],
+  snapshotScopeSource: [
+    'packages/daemon/src/core/ref-frame.ts',
+    'packages/daemon/src/execution/session-snapshot.ts',
+  ],
+  snapshot: ['packages/daemon/src/execution/session-snapshot.ts'],
+  snapshotGeneration: ['packages/daemon/src/execution/session-snapshot.ts'],
+  lastComparisonSafeSnapshot: ['packages/daemon/src/execution/session-snapshot.ts'],
+  androidSnapshotFreshness: ['packages/daemon/src/core/session-snapshot-freshness.ts'],
   // One-shot deferred-warning latch (#1587 follow-up): the transition function is the only
   // writer, so the latch's window semantics live in a single module.
-  recoveredSnapshotWarningLatch: ['src/daemon/snapshot-quality-latch.ts'],
+  recoveredSnapshotWarningLatch: ['packages/daemon/src/sessions/snapshot-quality-latch.ts'],
 
   // #1478 P4a script publication. The tagged aggregate replaced the eight co-resident
   // `saveScript*`/`scriptRecordingState`/`repair*` fields; its ONLY writers are the two
@@ -41,50 +45,55 @@ export const SESSION_STATE_FIELD_OWNERS: Readonly<Record<string, readonly string
   // recording without moving the lifecycle that authorized it (#1533). Recording is now derived
   // (`isRecordingPublication`), so there is no second field to keep in step.
   scriptPublication: [
-    'src/daemon/session-replay-transaction.ts',
-    'src/daemon/session-script-publication-capability.ts',
-    'src/daemon/session-script-writer.ts',
+    'packages/daemon/src/core/session-replay-transaction.ts',
+    'packages/daemon/src/core/session-script-publication-capability.ts',
+    'packages/daemon/src/core/session-script-writer.ts',
   ],
   // #1478 P4b: moved from `session-replay-resume.ts` into the `ReplayCoordinator`
   // (`session-replay-coordinator.ts`) — the one locked gateway a native replay request uses to
   // reach both this watermark and the P4a `scriptPublication` transitions above.
-  pendingRecordAndHeal: ['src/daemon/session-replay-coordinator.ts'],
+  pendingRecordAndHeal: ['packages/daemon/src/sessions/session-replay-coordinator.ts'],
 
-  trace: ['src/daemon/handlers/trace-runtime.ts'],
-  postGestureStabilization: ['src/daemon/deferred-interaction-outcome.ts'],
+  trace: ['packages/daemon/src/sessions/handlers/trace-runtime.ts'],
+  // #3471 and #1542 share one field: what the session still owes after its last mutation. The two
+  // variants are mutually exclusive, and every transition between them is owned by
+  // `deferred-interaction-outcome.ts`, so neither mechanism can overwrite the other's claim.
+  deferredSurface: ['packages/daemon/src/core/deferred-interaction-outcome.ts'],
 
   // App identity follows open, deployment and observation through named patches.
   appName: [
-    'src/daemon/handlers/session-app-deployment.ts',
-    'src/daemon/session-lifecycle/internal/session-open-state.ts',
-    'src/daemon/snapshot-command-runtime.ts',
+    'packages/daemon/src/sessions/handlers/session-app-deployment.ts',
+    'packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts',
+    'packages/daemon/src/sessions/snapshot-command-runtime.ts',
   ],
   appBundleId: [
-    'src/daemon/handlers/session-app-deployment.ts',
-    'src/daemon/handlers/session-selector-dispatch.ts',
-    'src/daemon/session-lifecycle/internal/session-open-state.ts',
+    'packages/daemon/src/execution/handlers/session-selector-dispatch.ts',
+    'packages/daemon/src/sessions/handlers/session-app-deployment.ts',
+    'packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts',
   ],
-  appLog: ['src/daemon/app-log-session-resource.ts'],
-  appLogFailure: ['src/daemon/app-log-session-resource.ts'],
-  audioProbe: ['src/daemon/session-capture-binding.ts'],
-  perfCapture: ['src/daemon/session-capture-binding.ts'],
-  screenRecording: ['src/daemon/session-capture-binding.ts'],
-  lastPerfProfile: ['src/daemon/session-observability/internal/session-perf-runtime.ts'],
-  device: ['src/daemon/session-lifecycle/internal/session-open-state.ts'],
-  surface: ['src/daemon/session-lifecycle/internal/session-open-state.ts'],
+  appLog: ['packages/daemon/src/resources/app-log-session-resource.ts'],
+  appLogFailure: ['packages/daemon/src/resources/app-log-session-resource.ts'],
+  audioProbe: ['packages/daemon/src/core/session-capture-binding.ts'],
+  perfCapture: ['packages/daemon/src/core/session-capture-binding.ts'],
+  screenRecording: ['packages/daemon/src/core/session-capture-binding.ts'],
+  lastPerfProfile: [
+    'packages/daemon/src/sessions/session-observability/internal/session-perf-runtime.ts',
+  ],
+  device: ['packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts'],
+  surface: ['packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts'],
   // Open execution owns the paired lease/claim transition after the handler has admitted one
   // lifecycle binding. Keeping the records together prevents request-policy routing from gaining
   // a second durable owner as the execution seam stays package-bound.
   lease: [
-    'src/daemon/lease-lifecycle.ts',
-    'src/daemon/session-lifecycle/internal/session-open-state.ts',
+    'packages/daemon/src/sessions/lease-lifecycle.ts',
+    'packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts',
   ],
-  deviceClaim: ['src/daemon/session-lifecycle/internal/session-open-state.ts'],
+  deviceClaim: ['packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts'],
 
   // #1398 (ADR 0017 session-scoped echo protection amendment): the ephemeral
   // literal->placeholder registry is populated and consulted only at the
   // recorder's single choke point.
-  recordedFillLiterals: ['src/daemon/session-action-recorder.ts'],
+  recordedFillLiterals: ['packages/daemon/src/core/session-action-recorder.ts'],
 };
 
 /**
@@ -153,7 +162,7 @@ export function sessionStateDeclarationFile(
   sources: ReadonlyMap<string, string>,
 ): string | undefined {
   for (const [file, source] of sources) {
-    if (file.startsWith('src/daemon/') && SESSION_STATE_DECLARATION.test(source)) return file;
+    if (file.startsWith(DAEMON_SOURCE_ROOT) && SESSION_STATE_DECLARATION.test(source)) return file;
   }
   return undefined;
 }
@@ -404,11 +413,15 @@ function patchObjects(value: unknown): AstNode[] | undefined {
   return result?.type === 'ObjectExpression' ? [result] : undefined;
 }
 
-const SESSION_STATE_SCAN_ROOTS = ['src/daemon/', 'packages/capture-kit/src/capture-admission/'];
+const SESSION_STATE_SCAN_ROOTS = [
+  DAEMON_SOURCE_ROOT,
+  'packages/capture-kit/src/capture-admission/',
+];
 const SESSION_DRAFT_CONSTRUCTORS: Readonly<Record<string, string>> = {
-  'src/daemon/session-lifecycle/internal/session-open-state.ts': 'publishOpenSession',
-  'src/daemon/snapshot-session.ts': 'createSnapshotSession',
-  'src/daemon/handlers/record-runtime.ts': 'createRecordOnlySession',
+  'packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts':
+    'publishOpenSession',
+  'packages/daemon/src/core/snapshot-session.ts': 'createSnapshotSession',
+  'packages/daemon/src/sessions/handlers/record-runtime.ts': 'createRecordOnlySession',
 };
 
 /** Assignments, named update keys and whole-record copies at the session ownership seam. */

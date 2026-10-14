@@ -14,19 +14,21 @@ const workspaceAliases = workspaceSourceAliases(
 );
 
 const scope = readTestScope();
+if (scope === undefined)
+  throw new Error('Mutation test scope must be supplied by scripts/mutation/run.ts');
 
 export default defineConfig({
   resolve: {
     alias: workspaceAliases,
   },
   test: {
-    include: scope ?? ['src/**/*.test.ts', 'packages/*/src/**/*.test.ts'],
+    include: scope,
     exclude: [
       ...MUTATION_EXCLUDED_TESTS,
       ...threadHostileTestFiles(repoRoot),
       '**/node_modules/**',
     ],
-    setupFiles: [...SETUP_FILES],
+    setupFiles: [...SETUP_FILES, path.join(repoRoot, 'scripts/mutation/seed-setup.ts')],
     ...TEST_ISOLATION,
   },
 });

@@ -6,11 +6,12 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { startDaemonRuntime } from '../daemon/server/daemon-runtime.ts';
+import { startDaemonRuntimeFixture } from './daemon-composition/daemon-runtime-fixture.ts';
+import type { DaemonRuntimeController } from '@agent-device/daemon/server/daemon-runtime';
 import {
   cleanupDownloadableArtifact,
   trackDownloadableArtifact,
-} from '../daemon/artifact-tracking.ts';
+} from '@agent-device/daemon/testing/artifact-tracking';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
   createOwnedProcessRecordStore,
@@ -22,9 +23,12 @@ import {
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
 
-import { closeLoopbackServer, listenOnLoopback, waitForHttpOk } from './test-utils/loopback.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
-import { testCreateCommandSurface } from '../daemon/__tests__/command-surface-fixture.ts';
+import {
+  closeLoopbackServer,
+  listenOnLoopback,
+  waitForHttpOk,
+} from '@agent-device/test-kit/loopback';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 type DaemonInfoFile = {
   httpPort?: number;
@@ -87,8 +91,7 @@ test('daemon runtime starts HTTP transport in-process and shuts down cleanly', a
   let exitCode: number | undefined;
 
   try {
-    const runtime = await startDaemonRuntime({
-      createCommandSurface: testCreateCommandSurface,
+    const runtime = await startDaemonRuntimeFixture({
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -147,8 +150,7 @@ test('daemon runtime publishes dual transport metadata', async () => {
   let exitCode: number | undefined;
 
   try {
-    const runtime = await startDaemonRuntime({
-      createCommandSurface: testCreateCommandSurface,
+    const runtime = await startDaemonRuntimeFixture({
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -195,11 +197,10 @@ test('daemon rejects unowned cloud artifacts over RPC', async () => {
     );
   });
   const providerPort = await listenOnLoopback(providerServer);
-  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> = null;
+  let runtime: DaemonRuntimeController | null = null;
 
   try {
-    runtime = await startDaemonRuntime({
-      createCommandSurface: testCreateCommandSurface,
+    runtime = await startDaemonRuntimeFixture({
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -329,8 +330,7 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
       }),
     );
 
-    const runtime = await startDaemonRuntime({
-      createCommandSurface: testCreateCommandSurface,
+    const runtime = await startDaemonRuntimeFixture({
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -399,7 +399,7 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
     command: readProcessCommand(orphanPid) ?? '',
   };
   assert.ok(orphanMarker.startTime.length > 0 && orphanMarker.command.length > 0);
-  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> = null;
+  let runtime: DaemonRuntimeController | null = null;
 
   try {
     const foreignSessionDir = path.join(resolveDaemonPaths(foreignStateDir).sessionsDir, 'shared');
@@ -455,8 +455,7 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
       }),
     );
 
-    runtime = await startDaemonRuntime({
-      createCommandSurface: testCreateCommandSurface,
+    runtime = await startDaemonRuntimeFixture({
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: daemonStateDir,

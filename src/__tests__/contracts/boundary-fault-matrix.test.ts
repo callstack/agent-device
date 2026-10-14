@@ -7,7 +7,7 @@ import {
   BOUNDARY_FAULTS,
   BOUNDARY_FAULT_MATRIX,
   type BoundaryCoverage,
-} from '../test-utils/boundary-fault-matrix.ts';
+} from '@agent-device/test-kit/boundary-fault-matrix';
 
 test('boundary fault matrix is complete across both declared axes', () => {
   assert.deepEqual(Object.keys(BOUNDARY_FAULT_MATRIX).sort(), [...BOUNDARY_FAULTS].sort());

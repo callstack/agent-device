@@ -9,7 +9,7 @@ import { bootFailureHint, classifyBootFailure } from '@agent-device/provision-ki
 import {
   IOS_BOOT_TIMEOUT_MS,
   IOS_SIMCTL_LIST_TIMEOUT_MS,
-  IOS_SIMULATOR_FOCUS_TIMEOUT_MS,
+  IOS_SIMULATOR_SHOW_TIMEOUT_MS,
 } from './config.ts';
 import { buildSimctlArgsForDevice, readSimctlDeviceState } from './simctl.ts';
 import { runAppleToolCommand, runXcrun } from './tool-provider.ts';
@@ -51,10 +51,10 @@ export function requireSimulatorDevice(device: DeviceInfo, command: string): voi
 }
 
 export async function openIosSimulatorApp(options: SimulatorCommandOptions = {}): Promise<void> {
-  await runAppleToolCommand('open', ['-a', 'Simulator'], {
+  await runAppleToolCommand('open', ['-g', '-a', 'Simulator'], {
     allowFailure: true,
     signal: options.signal,
-    timeoutMs: IOS_SIMULATOR_FOCUS_TIMEOUT_MS,
+    timeoutMs: IOS_SIMULATOR_SHOW_TIMEOUT_MS,
   });
 }
 

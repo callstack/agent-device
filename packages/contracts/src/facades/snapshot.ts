@@ -23,6 +23,7 @@ export {
   type SnapshotVisibilityProbe,
 } from '../snapshot-visibility.ts';
 export {
+  androidFieldValue,
   extractNodeText,
   isFillableType,
   isMeaningfulLabel,

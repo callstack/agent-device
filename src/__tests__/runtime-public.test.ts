@@ -13,7 +13,7 @@ import type {
   FileInputRef,
   FileOutputRef,
 } from '@agent-device/contracts/artifact-adapter';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createMemorySessionStore } from '../command-runtime/runtime-factory.ts';
 
 const backend = {

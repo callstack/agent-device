@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { attachRefs, formatRole, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { normalizeType } from '@agent-device/contracts/snapshot';
-import { roleSpellingsOfNode } from './node.ts';
+import { isNodeEditable, roleSpellingsOfNode } from './node.ts';
 
 function bareNode(type: string): SnapshotNode {
   return { index: 0, ref: 'e1', type, kind: formatRole(type) };
@@ -152,4 +152,26 @@ test('the window IS normalizeType: drift in the owner moves the window and the r
       assert.deepEqual(spellings, [kind], `spurious window entry for ${type}`);
     }
   }
+});
+
+test('isNodeEditable lets a published editable fact decide over the type', () => {
+  const customView: SnapshotNode = { ...bareNode('com.example.RichEditor'), editable: true };
+  const readOnlyField: SnapshotNode = { ...bareNode('android.widget.EditText'), editable: false };
+  assert.equal(isNodeEditable(customView, 'android'), true);
+  assert.equal(isNodeEditable(readOnlyField, 'android'), false);
+});
+
+test('isNodeEditable keeps the disabled refusal whatever the fact says', () => {
+  const disabledField: SnapshotNode = {
+    ...bareNode('android.widget.EditText'),
+    editable: true,
+    enabled: false,
+  };
+  assert.equal(isNodeEditable(disabledField, 'android'), false);
+  assert.equal(isNodeEditable({ ...disabledField, editable: undefined }, 'android'), false);
+});
+
+test('isNodeEditable infers from the type when the fact is absent', () => {
+  assert.equal(isNodeEditable(bareNode('android.widget.EditText'), 'android'), true);
+  assert.equal(isNodeEditable(bareNode('com.example.RichEditor'), 'android'), false);
 });

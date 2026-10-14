@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { executeMaestroFlow, inspectMaestroFlow } from '@agent-device/maestro';
+import {
+  executeMaestroFlow,
+  inspectMaestroFlow,
+  type MaestroSelector,
+} from '@agent-device/maestro';
 import type { MaestroDaemonOperationInvoke } from '../daemon-runtime-port-support.ts';
 import type { MaestroDaemonOperationRequest } from '../daemon-runtime-public-operation.ts';
 import { PNG } from '@agent-device/capture-kit/png';
@@ -19,7 +23,7 @@ import {
   noMaestroIncludeSources,
 } from './daemon-runtime-port-fixtures.ts';
 import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
-import { formatRole } from '@agent-device/kernel/snapshot';
+import { formatRole, type Point, type Rect } from '@agent-device/kernel/snapshot';
 
 test('registers Maestro inputText as sensitive before nested platform work', async () => {
   const root = mkdtempForTestSync('agent-device-maestro-input-diagnostics-');
@@ -792,3 +796,83 @@ test('timed-out waitForAnimationToEnd retains the pending hierarchy settle', asy
     'click',
   ]);
 });
+
+type UpstreamParentTapVector = {
+  id: string;
+  selector: MaestroSelector;
+  nodes: Array<{
+    key: string;
+    parentKey?: string;
+    identifier: string;
+    clickable?: boolean;
+    rect: Rect | null;
+  }>;
+  tapPoint?: Point;
+};
+
+test.each(['atomic-selector', 'coordinate'] as const)(
+  'Maestro %s tap preserves pinned upstream parent center over an interactive child',
+  async (dispatch) => {
+    const fixture = JSON.parse(
+      fs.readFileSync(
+        new URL(
+          '../../../../../scripts/maestro-conformance/fixtures/layer2-semantics.json',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    ) as { treeVectors: UpstreamParentTapVector[] };
+    const vector = fixture.treeVectors.find(
+      ({ id }) => id === 'tap-parent-center-over-interactive-child',
+    );
+    expect(vector?.tapPoint).toBeDefined();
+    if (!vector?.tapPoint) throw new Error('Missing generated Maestro parent tap vector');
+    const indexByKey = new Map(vector.nodes.map((node, index) => [node.key, index]));
+    const snapshot = makeSnapshot(
+      vector.nodes.map((node, index) => ({
+        index,
+        parentIndex: node.parentKey === undefined ? undefined : indexByKey.get(node.parentKey),
+        identifier: node.identifier,
+        type: node.clickable ? 'Button' : 'Other',
+        rect: node.rect ?? undefined,
+        hittable: true,
+      })),
+    );
+    const requests: MaestroDaemonOperationRequest[] = [];
+    const port = createDaemonMaestroRuntimePort({
+      ...makeRuntimeEnvelope({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+      invoke: async (request) => {
+        requests.push(request);
+        return { ok: true, data: request.command === 'snapshot' ? snapshot : {} };
+      },
+      dependencies: makeDependencies(),
+      platform: 'ios',
+    });
+
+    await port.execute({
+      command: {
+        kind: 'tapOn',
+        source: { line: 2 },
+        target: {
+          space: 'target',
+          selector: { ...vector.selector, ...(dispatch === 'coordinate' ? { index: 0 } : {}) },
+        },
+      },
+      generation: 0,
+      env: {},
+      invalidateObservation() {},
+    });
+
+    expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'click']);
+    const click = requests[1];
+    if (dispatch === 'atomic-selector') {
+      expect(click?.positionals).toEqual(['id="card"']);
+      expect(click?.flags?.maestro).toMatchObject({
+        allowNonHittableCoordinateFallback: true,
+        expectedTapPoint: vector.tapPoint,
+      });
+    } else {
+      expect(click?.positionals).toEqual([String(vector.tapPoint.x), String(vector.tapPoint.y)]);
+    }
+  },
+);

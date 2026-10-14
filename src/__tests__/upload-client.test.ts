@@ -8,7 +8,7 @@ import { once } from 'node:events';
 import { uploadArtifact } from '../remote/upload-client.ts';
 import type { UploadProgressEvent } from '../remote/upload-progress.ts';
 import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/command';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const TEST_TOKEN = 'agent-device-upload-test-token';
 const tempDirs: string[] = [];

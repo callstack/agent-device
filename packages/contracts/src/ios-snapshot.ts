@@ -1,4 +1,9 @@
-import type { RawSnapshotNode, Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type {
+  RawSnapshotNode,
+  Rect,
+  SnapshotNode,
+  SnapshotKeyboardBandFact,
+} from '@agent-device/kernel/snapshot';
 
 export type IosSnapshotProducer =
   | 'apple-runner'
@@ -154,6 +159,7 @@ type IosSnapshotAcquisitionForIntent<Intent extends IosAcquisitionIntent> = Read
   nodes: readonly RawSnapshotNode[];
   truncated?: boolean;
   viewport: IosViewportEvidence;
+  keyboard?: SnapshotKeyboardBandFact;
   lineage: IosSnapshotLineage;
   residue: readonly IosAcquisitionResidue[];
 }>;

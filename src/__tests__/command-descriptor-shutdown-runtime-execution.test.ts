@@ -4,11 +4,14 @@ import { shutdownTargetUse } from '@agent-device/contracts/platform-runtime-oper
 import { commandDescriptors } from '@agent-device/command-registry/registry';
 
 const sessionShutdownSource = readFileSync(
-  new URL('../daemon/handlers/session-shutdown.ts', import.meta.url),
+  new URL('../../packages/daemon/src/sessions/handlers/session-shutdown.ts', import.meta.url),
   'utf8',
 );
 const sessionCloseSource = readFileSync(
-  new URL('../daemon/session-lifecycle/internal/session-close.ts', import.meta.url),
+  new URL(
+    '../../packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
+    import.meta.url,
+  ),
   'utf8',
 );
 const appleLifecycleSource = readFileSync(

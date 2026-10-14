@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { runCli } from '../../../cli.ts';
-import { pluginHome, selectPlugin } from '../../../plugins/plugin.fixtures.ts';
+import { pluginHome, selectPlugin } from '@agent-device/test-kit/plugin.fixtures';
 import { parseRawArgs, usageForCommand } from '../../parser/args.ts';
+import { beginStdoutCapture } from '../../../__tests__/test-utils/stream-capture.ts';
 
 vi.mock('../../../provider-device-runtimes.ts', () => {
   throw new Error('provider runtimes must remain unloaded');
@@ -29,24 +30,25 @@ test('plugins list and remove route through the CLI and emits JSON without daemo
   const sendToDaemon = vi.fn(async () => {
     throw new Error('unexpected daemon access');
   });
+  const stdoutCapture = beginStdoutCapture();
   let stdout = '';
-  vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
-    stdout += String(chunk);
-    return true;
-  });
-  await runCli(['plugins', 'list', '--json'], {
-    sendToDaemon,
-  });
-  const result = JSON.parse(stdout);
-  assert.equal(result.success, true);
-  assert.deepEqual(result.data.plugins, [
-    { name: 'example', version: '1.2.3', provider: 'example', compatible: true },
-  ]);
-  assert.equal(sendToDaemon.mock.calls.length, 0);
-  stdout = '';
-  await runCli(['plugins', 'remove', 'example', '--json'], { sendToDaemon });
-  assert.deepEqual(JSON.parse(stdout).data.plugins, []);
-  assert.ok(!fs.existsSync(marker));
+  try {
+    await runCli(['plugins', 'list', '--json'], {
+      sendToDaemon,
+    });
+    stdout = stdoutCapture.read();
+    const result = JSON.parse(stdout);
+    assert.equal(result.success, true);
+    assert.deepEqual(result.data.plugins, [
+      { name: 'example', version: '1.2.3', provider: 'example', compatible: true },
+    ]);
+    assert.equal(sendToDaemon.mock.calls.length, 0);
+    await runCli(['plugins', 'remove', 'example', '--json'], { sendToDaemon });
+    assert.deepEqual(JSON.parse(stdoutCapture.read().slice(stdout.length)).data.plugins, []);
+    assert.ok(!fs.existsSync(marker));
+  } finally {
+    stdoutCapture.restore();
+  }
 });
 
 test('plugin schema exposes operator help and preserves scoped npm package specs', async () => {

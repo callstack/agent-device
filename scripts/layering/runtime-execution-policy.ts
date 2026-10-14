@@ -11,6 +11,7 @@
 //   token is a type, so an `as` cast or narrowing to it type-checks from any module.
 
 import { parseSync } from 'oxc-parser';
+import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
 import { memberName, propertyName, visitAst } from './layering-ast.ts';
 import type { LayeringViolation } from './model.ts';
 
@@ -19,7 +20,7 @@ type AstNode = Record<string, unknown>;
 export const RUNTIME_EXECUTION_INTEGRITY_RULE = 'R66 runtime-execution-integrity';
 
 const COMMAND_DESCRIPTOR_MODULE = 'packages/command-registry/src/registry.ts';
-const RUNTIME_ADMISSION_MODULE = 'src/daemon/runtime-admission.ts';
+const RUNTIME_ADMISSION_MODULE = 'packages/daemon/src/core/runtime-admission.ts';
 const RUNTIME_PROOF_TYPES = new Set(['AdmittedRuntimePlan', 'BoundDeviceRuntime']);
 
 /** Facts are the only admission authority, and daemon code must consume narrowed runtime proofs. */
@@ -40,7 +41,7 @@ export function runtimeExecutionIntegrityViolations(
           at(file, source, node, 'runtime facts are the only device-command admission authority'),
         );
       }
-      if (!file.startsWith('src/daemon/')) return;
+      if (!file.startsWith(DAEMON_SOURCE_ROOT)) return;
       if (isManufacturedRuntimeProof(node)) {
         violations.push(
           at(file, source, node, 'daemon code may not manufacture a narrowed runtime proof'),

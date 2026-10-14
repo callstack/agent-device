@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { test } from 'vitest';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/daemon-request.ts';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../../src/__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 
 const CANCELLATION_ROWS = {
   mutation: { command: 'press', positionals: ['enter'] },

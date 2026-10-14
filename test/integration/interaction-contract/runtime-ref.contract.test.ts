@@ -9,6 +9,7 @@ import { scenarioName, scenarioNames } from './coverage-manifest.ts';
 import { RUNTIME_REF_COVERAGE } from './runtime-ref.coverage.ts';
 import {
   closedDrawerSnapshot,
+  continueButtonAtRect,
   continueButtonSnapshot,
   coveredButtonSnapshot,
   fullyTiledParentSnapshot,
@@ -16,8 +17,9 @@ import {
   nonHittableCellSnapshot,
   RUNNER_CONTINUE_NODES,
   settledWelcomeSnapshot,
+  viewportOnlySnapshot,
 } from './fixtures.ts';
-import { createContractDevice } from './runtime-harness.ts';
+import { createContractClock, createContractDevice } from './runtime-harness.ts';
 import { runnerSnapshotEntry, runnerTapEntry, withIosContractDaemon } from './daemon-harness.ts';
 
 // ADR 0011 Layer 3, runtime-ref path: session snapshot ref lookup, guarded
@@ -124,6 +126,68 @@ test(scenario('nonHittable'), async () => {
   assert.equal(result.kind, 'ref');
   assert.equal(result.targetHittable, false);
   assert.match(result.hint ?? '', /hittable: false/);
+});
+
+// #3471 targetStability on the ref path. An `@ref` resolution spends no capture (ADR 0014 binds it
+// to its authorized frame), so the gate supplies the fresh observation and lets the frame model's own
+// reconciliation adopt coordinates for the same local identity — which is why a ref can be re-observed
+// at all without ever being retargeted by positional coincidence.
+test(scenarioNames(RUNTIME_REF_COVERAGE, 'targetStability')[0]!, async () => {
+  const taps: Point[] = [];
+  let captures = 0;
+  const positions = [continueButtonAtRect(300, 20), continueButtonAtRect(360, 20)];
+  const device = createContractDevice(continueButtonAtRect(240, 20), {
+    captureSnapshot: async () => ({ snapshot: positions[captures++] ?? positions[1]! }),
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+    clock: createContractClock(),
+    sessionState: {
+      movingTargetBaseline: { finishedAt: 0, tree: { nodes: viewportOnlySnapshot().nodes } },
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e1'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      // One message for both refusal shapes: the confirmation that failed, not motion.
+      assert.match(
+        error.message,
+        /Ref @e1 had no confirmed resting position when the transition window ran out/,
+      );
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_still_moving');
+      assert.equal(details?.dispatched, 'no');
+      assert.equal(details?.ref, '@e1');
+      assert.deepEqual(details?.rect, { x: 240, y: 20, width: 100, height: 40 });
+      assert.deepEqual(details?.movedToRect, { x: 360, y: 20, width: 100, height: 40 });
+      // An @ref cannot survive the recovery wait, so the hint sends it to a selector.
+      assert.match(String(details?.hint), /snapshot -i/);
+      return true;
+    },
+  );
+  assert.deepEqual(taps, []);
+});
+
+test(scenarioNames(RUNTIME_REF_COVERAGE, 'targetStability')[1]!, async () => {
+  const taps: Point[] = [];
+  const resting = continueButtonAtRect(10, 20);
+  const device = createContractDevice(continueButtonAtRect(240, 20), {
+    captureSnapshot: async () => ({ snapshot: resting }),
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+    clock: createContractClock(),
+    sessionState: {
+      movingTargetBaseline: { finishedAt: 0, tree: { nodes: viewportOnlySnapshot().nodes } },
+    },
+  });
+
+  const result = await device.interactions.click(ref('@e1'), { session: 'default' });
+
+  assert.equal(result.kind, 'ref');
+  assert.deepEqual(taps, [{ x: 60, y: 40 }]);
 });
 
 test(scenario('verifyEvidence'), async () => {

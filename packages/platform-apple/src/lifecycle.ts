@@ -61,37 +61,53 @@ type AppleLifecycleParams = Readonly<{
 export function bindAppleApplicationLifecycle(
   params: AppleLifecycleParams,
 ): ApplicationLifecycleRuntimeOperations {
-  const binding = bindLocalApplicationLifecycleInteractor({
-    device: params.device,
-    signal: params.signal,
-    resolveInteractor: params.host.localInteractors.resolve,
-  });
+  const bindInteractor = (device: DeviceInfo) =>
+    bindLocalApplicationLifecycleInteractor({
+      device,
+      signal: params.signal,
+      resolveInteractor: params.host.localInteractors.resolve,
+    });
+  let device = params.device;
+  let binding = bindInteractor(device);
+  const adoptReadiedDevice = (readied: DeviceInfo) => {
+    device = readied;
+    binding = bindInteractor(readied);
+  };
   return Object.freeze({
     resolveOpenTarget: async (input) =>
-      await params.host.appleApplications.resolveOpenTarget(params.device, input),
+      await params.host.appleApplications.resolveOpenTarget(device, input),
     prepareApplicationOpen: async (input) => {
-      await ensureAppleReady(params.host, params.device, params.signal, {
+      const readied = await ensureAppleReady(params.host, device, params.signal, {
         deadlineAtMs: input.execution.startupDeadlineAtMs,
         onColdBootStart: input.prewarmRunnerOnColdBoot
           ? () => {
               void params.host.appleApplications
-                .prewarmRunnerCache(params.device, input.execution, params.signal)
+                .prewarmRunnerCache(device, input.execution, params.signal)
                 .catch(() => {});
             }
           : undefined,
       });
+      adoptReadiedDevice(readied);
     },
     openApplication: async (input) =>
       await openAppleApplication(params.host, binding, input, params.observation),
     applyRuntimeHints: async (input) =>
-      await params.host.appleApplications.applyRuntimeHints(params.device, input),
+      await params.host.appleApplications.applyRuntimeHints(device, input),
     clearRuntimeHints: async (input) =>
-      await params.host.appleApplications.clearRuntimeHints(params.device, input),
-    closeApplication: async (input) => await closeAppleApplication(params.host, binding, input),
+      await params.host.appleApplications.clearRuntimeHints(device, input),
+    closeApplication: async (input) => {
+      if (input.ensureReady) {
+        adoptReadiedDevice(await ensureAppleReady(params.host, device, params.signal));
+      }
+      await closeAppleApplication(params.host, binding, input);
+    },
     finalizeApplicationClose: async (input) =>
-      await finalizeAppleApplicationClose(params.host, params.device, params.signal, input),
-    prepareAppleRunner: async (input) =>
-      await prepareAppleRunner(params.host, params.device, params.signal, input),
+      await finalizeAppleApplicationClose(params.host, device, params.signal, input),
+    prepareAppleRunner: async (input) => {
+      const result = await prepareAppleRunner(params.host, device, params.signal, input);
+      adoptReadiedDevice(result.readied);
+      return result.prepared;
+    },
     configureProviderPortReverse: unavailable,
   });
 }
@@ -400,9 +416,6 @@ async function closeAppleApplication(
   binding: BoundAppleInteractor,
   input: CloseApplicationInput,
 ): Promise<void> {
-  if (input.ensureReady) {
-    await ensureAppleReady(host, binding.device, binding.signal);
-  }
   if (isApplePlatform(binding.device.platform) && !isIosSimulator(binding.device)) {
     await host.appleApplications.stopRunnerSession(binding.device.id);
   }
@@ -441,13 +454,18 @@ async function prepareAppleRunner(
   device: DeviceInfo,
   signal: AbortSignal,
   input: PrepareAppleRunnerInput,
-): Promise<PrepareAppleRunnerResult> {
+): Promise<Readonly<{ readied: DeviceInfo; prepared: PrepareAppleRunnerResult }>> {
   // One budget covers the boot and the runner: a cold Simulator's boot spends part of it, and
   // the runner preparation gets what is left rather than the full budget again.
   const deadlineAtMs = Date.now() + input.timeoutMs;
-  await ensureAppleReady(host, device, signal, { deadlineAtMs });
+  const readied = await ensureAppleReady(host, device, signal, { deadlineAtMs });
   const timeoutMs = Math.max(1, deadlineAtMs - Date.now());
-  return await host.appleApplications.prepareRunner(device, { ...input, timeoutMs }, signal);
+  const prepared = await host.appleApplications.prepareRunner(
+    readied,
+    { ...input, timeoutMs },
+    signal,
+  );
+  return { readied, prepared };
 }
 
 type RunnerPrewarm = Readonly<{

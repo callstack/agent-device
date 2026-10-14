@@ -10,6 +10,7 @@
 //   are plain mutable properties on the shared session record, so an outside write type-checks.
 
 import { parseSync } from 'oxc-parser';
+import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
 import { propertyName, visitAst } from './layering-ast.ts';
 import type { LayeringViolation } from './model.ts';
 
@@ -22,17 +23,29 @@ export const SESSION_RESOURCE_OWNERSHIP_RULE = 'R68 session-resource-ownership';
  * `@agent-device/capture-kit`, so the scan covers that directory alongside the daemon: the rule
  * guards the field, not the folder it happens to live in.
  */
-const SCANNED_ROOTS = ['src/daemon/', 'packages/capture-kit/src/capture-admission/'] as const;
+const SCANNED_ROOTS = [DAEMON_SOURCE_ROOT, 'packages/capture-kit/src/capture-admission/'] as const;
 
 const RESOURCE_OWNERS: Readonly<Record<string, ReadonlySet<string>>> = {
-  appLog: new Set(['src/daemon/app-log-session-resource.ts', 'src/daemon/session-state.ts']),
-  appLogFailure: new Set(['src/daemon/app-log-session-resource.ts', 'src/daemon/session-state.ts']),
-  audioProbe: new Set(['src/daemon/session-capture-binding.ts', 'src/daemon/session-state.ts']),
-  screenRecording: new Set([
-    'src/daemon/session-capture-binding.ts',
-    'src/daemon/session-state.ts',
+  appLog: new Set([
+    'packages/daemon/src/resources/app-log-session-resource.ts',
+    'packages/daemon/src/core/session-state.ts',
   ]),
-  perfCapture: new Set(['src/daemon/session-capture-binding.ts', 'src/daemon/session-state.ts']),
+  appLogFailure: new Set([
+    'packages/daemon/src/resources/app-log-session-resource.ts',
+    'packages/daemon/src/core/session-state.ts',
+  ]),
+  audioProbe: new Set([
+    'packages/daemon/src/core/session-capture-binding.ts',
+    'packages/daemon/src/core/session-state.ts',
+  ]),
+  screenRecording: new Set([
+    'packages/daemon/src/core/session-capture-binding.ts',
+    'packages/daemon/src/core/session-state.ts',
+  ]),
+  perfCapture: new Set([
+    'packages/daemon/src/core/session-capture-binding.ts',
+    'packages/daemon/src/core/session-state.ts',
+  ]),
 };
 
 /** Durable session-resource records have one whole-record construction owner per domain. */

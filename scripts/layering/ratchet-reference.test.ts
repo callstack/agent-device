@@ -17,10 +17,13 @@ const SESSION_TYPES = [
 
 function tree(extra: Record<string, string> = {}) {
   return new Map<string, string>([
-    ['src/daemon/session-state.ts', SESSION_TYPES],
-    ['src/daemon/session-snapshot.ts', 'session.snapshot = "a"; nextSession.snapshot = "b";'],
-    ['src/daemon/ref-frame.ts', 'session.snapshot = undefined;'],
-    ['src/daemon/handlers/trace-runtime.ts', 'session.trace ??= "t";'],
+    ['packages/daemon/src/core/session-state.ts', SESSION_TYPES],
+    [
+      'packages/daemon/src/execution/session-snapshot.ts',
+      'session.snapshot = "a"; nextSession.snapshot = "b";',
+    ],
+    ['packages/daemon/src/core/ref-frame.ts', 'session.snapshot = undefined;'],
+    ['packages/daemon/src/sessions/handlers/trace-runtime.ts', 'session.trace ??= "t";'],
     ['src/client/client.ts', "import type { Loop } from '../commands/loop.ts';"],
     ['src/commands/loop.ts', "import type { Client } from '../client/client.ts';"],
     ...Object.entries(extra),
@@ -37,7 +40,7 @@ test('sessionStateWritePressure counts written fields and (field, writer) claims
     ownerFileClaims: 3,
   });
   assert.deepEqual(
-    sessionStateWritePressure(tree({ 'src/daemon/other.ts': 'session[key] = 1;' })),
+    sessionStateWritePressure(tree({ 'packages/daemon/src/other.ts': 'session[key] = 1;' })),
     {
       writerOwnedFields: 2,
       ownerFileClaims: 3,
@@ -58,16 +61,16 @@ test('measureRatchets reports all ratchets from one tree', () => {
     sessionAuthority: { shapeFiles: [], authorityFiles: [] },
   });
   const withAuthority = tree({
-    'src/daemon/handlers/fixture.ts':
-      "import type { SessionState } from '../session-state.ts';\n" +
-      "import { SessionStore } from '../session-store.ts';",
-    'src/daemon/session-store.ts': 'export class SessionStore {}',
+    'packages/daemon/src/sessions/handlers/fixture.ts':
+      "import type { SessionState } from '../../core/session-state.ts';\n" +
+      "import { SessionStore } from '../../core/session-store.ts';",
+    'packages/daemon/src/core/session-store.ts': 'export class SessionStore {}',
   });
   assert.deepEqual(
     measureRatchets(withAuthority, resolveImportEdges(withAuthority)).sessionAuthority,
     {
-      shapeFiles: ['src/daemon/handlers/fixture.ts'],
-      authorityFiles: ['src/daemon/handlers/fixture.ts'],
+      shapeFiles: ['packages/daemon/src/sessions/handlers/fixture.ts'],
+      authorityFiles: ['packages/daemon/src/sessions/handlers/fixture.ts'],
     },
   );
 });

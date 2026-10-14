@@ -38,16 +38,16 @@ vi.mock('@agent-device/host-kit/command', async () => {
 import { AppError } from '@agent-device/kernel/errors';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { sendRequest } from '../daemon-client-transport.ts';
-import type { DaemonRequest } from '../../daemon/daemon-request.ts';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import type { DaemonInfo } from '../daemon-client-metadata.ts';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
   type LoopbackServer,
-} from '../../__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 
 import {
   spawnRegisteredDaemonFixture,

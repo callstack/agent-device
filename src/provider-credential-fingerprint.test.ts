@@ -3,7 +3,7 @@ import {
   providerCredentialFingerprint,
   readDaemonProviderCredentials,
 } from './provider-credential-fingerprint.ts';
-import { pluginHome, selectPluginManifest } from './plugins/plugin.fixtures.ts';
+import { pluginHome, selectPluginManifest } from '@agent-device/test-kit/plugin.fixtures';
 
 const BROWSERSTACK_ENV = { BROWSERSTACK_USERNAME: 'user', BROWSERSTACK_ACCESS_KEY: 'key-1' };
 

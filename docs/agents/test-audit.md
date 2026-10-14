@@ -50,7 +50,7 @@ Plant the production edit representing the claimed bug: the pre-edit body must s
 
 ## Dispatching subagents
 
-Run parallel read-only lanes with exclusive edit ownership: subsystem lanes (per platform package, `src/daemon`, core packages, `scripts/**`), one cross-cutting junk-pattern sweep, one never-run inventory (Vitest includes, `node --test` globs, gate ids). Mandate in every prompt: READ-ONLY; read the production owner and name the bug; verify skip guards and runner/gate ownership; paste the retention list; false positives cost more than misses.
+Run parallel read-only lanes with exclusive edit ownership: subsystem lanes (per platform package, `packages/daemon`, core packages, `scripts/**`), one cross-cutting junk-pattern sweep, one never-run inventory (Vitest includes, `node --test` globs, gate ids). Mandate in every prompt: READ-ONLY; read the production owner and name the bug; verify skip guards and runner/gate ownership; paste the retention list; false positives cost more than misses.
 
 ## Landing
 

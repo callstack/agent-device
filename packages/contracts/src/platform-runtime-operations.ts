@@ -144,24 +144,32 @@ export const perfRuntimePlanUses = Object.freeze([
   perfProfileReportUse,
 ] as const);
 export const tapPointUse = defineUse({ required: ['tapPoint'] });
+// `querySelector` is the CONDITIONAL off-screen rescue read (#1542): the acting rows refuse an
+// off-screen target from the required capture, and an owner that can answer with a live,
+// tree-independent read gets one chance to overturn a false refusal. Both sides are complete:
+// an owner without it refuses on the capture's verdict unchanged (ADR 0019 §9 parity), which is
+// exactly the pre-rescue behavior every non-Apple owner always had.
 export const capturedTapUse = defineUse({
   required: ['captureSnapshot', 'tapPoint'],
   preferred: ['tapRef'],
-  conditional: ['tapElementSelector'],
+  conditional: ['tapElementSelector', 'querySelector'],
 });
 export const longPressPointUse = defineUse({ required: ['longPressPoint'] });
 export const capturedLongPressUse = defineUse({
   required: ['captureSnapshot', 'longPressPoint'],
+  conditional: ['querySelector'],
 });
 export const hoverPointUse = defineUse({ required: ['hoverPoint'] });
 export const capturedHoverUse = defineUse({
   required: ['captureSnapshot', 'hoverPoint'],
   preferred: ['hoverRef'],
+  conditional: ['querySelector'],
 });
 export const fillPointUse = defineUse({ required: ['fillPoint'] });
 export const capturedFillUse = defineUse({
   required: ['captureSnapshot', 'fillPoint'],
   preferred: ['fillRef'],
+  conditional: ['querySelector'],
 });
 
 export const clickRuntimeUses = Object.freeze([tapPointUse, capturedTapUse] as const);
@@ -223,23 +231,29 @@ export function resolveTouchRuntimePlan(
  * handler binds once — for the whole `swipe --count N` series as much as for one `gesture pinch`.
  *
  * Every tier binds snapshot capture with its action because capture is the fallback when the owner
- * has no direct viewport read. `gestureViewport` remains preferred.
+ * has no direct viewport read. `gestureViewport` remains preferred. `querySelector` is the
+ * CONDITIONAL off-screen rescue read the gesture rows' endpoints resolve against (same parity
+ * argument as `capturedTapUse`): an owner without it refuses on the capture's verdict unchanged.
  */
 const gesturePlanUse = defineUse({
   required: ['performGesturePlan', 'captureSnapshot'],
   preferred: ['gestureViewport'],
+  conditional: ['querySelector'],
 });
 const gestureDirectionalFlingUse = defineUse({
   required: ['performDirectionalFlingPlan', 'captureSnapshot'],
   preferred: ['gestureViewport'],
+  conditional: ['querySelector'],
 });
 const gestureMultiTouchUse = defineUse({
   required: ['performMultiTouchGesturePlan', 'captureSnapshot'],
   preferred: ['gestureViewport'],
+  conditional: ['querySelector'],
 });
 const gestureTargetAuthoredDragUse = defineUse({
   required: ['performTargetAuthoredDrag', 'captureSnapshot'],
   preferred: ['gestureViewport'],
+  conditional: ['querySelector'],
 });
 
 /**

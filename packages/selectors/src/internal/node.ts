@@ -8,8 +8,13 @@ export function isNodeVisible(node: SnapshotNode): boolean {
   return node.rect.width > 0 && node.rect.height > 0;
 }
 
+/**
+ * False for a disabled node. Otherwise the node's published `editable` fact decides, and the
+ * platform type decides only when the snapshot carries no such fact.
+ */
 export function isNodeEditable(node: SnapshotNode, platform: Platform | PublicPlatform): boolean {
-  return isFillableType(node.type ?? '', platform) && node.enabled !== false;
+  if (node.enabled === false) return false;
+  return node.editable ?? isFillableType(node.type ?? '', platform);
 }
 
 /**

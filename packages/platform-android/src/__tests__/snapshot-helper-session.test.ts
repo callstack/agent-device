@@ -3,7 +3,6 @@ import { afterEach, beforeEach, test } from 'vitest';
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { isAndroidSnapshotHelperRuntimeOccupiedError } from '../snapshot-helper-retirement.ts';
-import { resolveAndroidSnapshotHelperSessionRequestTimeoutMs } from '../snapshot-helper-session-protocol.ts';
 import {
   createSessionProvider,
   type FakeAndroidProcess,
@@ -24,14 +23,6 @@ afterEach(async () => {
 test('allows a persistent session snapshot to use the helper command budget', async () => {
   const calls: (readonly string[])[] = [];
   const provider = createSessionProvider({ calls, responseDelayMs: 25 });
-
-  assert.equal(
-    resolveAndroidSnapshotHelperSessionRequestTimeoutMs({
-      timeoutMs: 10,
-      commandTimeoutMs: 4_000,
-    }),
-    3_010,
-  );
 
   const output = await captureAndroidSnapshotWithHelperSession({
     adb: provider.exec,

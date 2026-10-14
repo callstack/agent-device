@@ -26,7 +26,7 @@ export const SNAPSHOT_ASSEMBLY_PRESENTATION_RULE = 'R74 snapshot-assembly-presen
  */
 export const SNAPSHOT_ASSEMBLY_FILES: readonly string[] = [
   'packages/capture-kit/src/snapshot-state.ts',
-  'src/daemon/snapshot-capture.ts',
+  'packages/daemon/src/core/snapshot-capture.ts',
 ];
 
 /** Producer adapters: they report acquisition facts and nothing else. */

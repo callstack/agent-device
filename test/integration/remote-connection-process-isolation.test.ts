@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync } from '../../src/__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { readRemoteConnectionState } from '../../src/remote/remote-connection-state.ts';
 import { runSourceCliJsonSync } from './cli-json.ts';
 

@@ -1,9 +1,175 @@
 {
-  "description": "Golden table for keyboard occlusion on interaction tap points (#2589), consumed by packages/contracts/src/tap-keyboard-occlusion.ts. A visible software keyboard is its own system surface: it is never a covering sibling of app content, so the same-window occlusion classifier cannot see it, and it leaves the app window rect intact, so the viewport rule passes a covered tab bar. The band runs from the topmost keyboard node down to the bottom of the viewport, across the keyboard's own columns; the tap point is the point the interaction dispatches: the rect center the platform aims at for a ref handed over by name, or the touch point a parent with interactive descendants resolves instead. `nodes` are captured snapshot nodes as they appear in the projection the interaction resolved against — note that regular and interactive projections prune the keyboard's own container, leaving Key nodes beside app chrome. Three rules decide whether reported geometry may be measured at all. Docking: the band is derived only where the keyboard's own reported geometry reaches the viewport's bottom edge within 80 units — measured on iPhone 17 Pro (26.2) the reported key plane stops 58 pt short of an 874 pt portrait viewport and lands exactly on a 402 pt landscape one, and on iPad Pro 11-inch (M4) 3 pt short of a 1210 pt viewport — so an iPad floating keyboard, an app-drawn keypad, or an IME that stops above its own navigation bar stays unmeasured and fails open. The budget is counted in the same units as the rects it guards, which is what a measured Android IME asks for rather than what a dp table would give: with three-button navigation on Pixel 7 (Android 16, 1080x2400 at 420 dpi), Gboard's reported region runs to the physical display bottom at 2400 while the 126 px navigation bar occupies 2274..2400 inside it, so no Android keyboard measured so far needs slack for the bar. Width: geometry that comes back taller than it is wide did not arrive in the app's orientation space, i.e. it came from a capture that normalized no space — the producers that can name the app's interface orientation either turn it back (the runner's tree tiers) or refuse the capture (the Simulator AX bridge) — and is refused measurement for the same reason. Tiling: the keys themselves must form one unbroken run of columns, because a split iPad keyboard docks both clusters at the bottom edge while its surface container still spans the whole screen, and the app content between the clusters is visible and tappable. Reported seams are zero on every measured tree — iPhone 17 Pro's reported row adjoins across 395 pt, iPad Pro 11-inch's across 743.5 pt, and Gboard's across 1070 px — so the allowance covers rounding rather than layout, and a gapped band is refused measurement like the two above. That rule is deliberately blunt in both directions, and the last two cases name the trade: a sparse layout such as the iOS emoji panel reports corner keys over a wide container, does not tile, and reads `undetermined` — the guard abstains there rather than inventing which gaps are app content; and a projection that reports the container with no keys at all has nothing left to check, so the band is the container's own claim. Every captured iOS and Android keyboard measured so far reports its keys, so the second shape is the harness's, not a captured one. `target` names either a resolved node index or a bare coordinate point; both paths read one decision and choose their own consequence. A case that reaches a band declares its whole shape — the frame the refusal and the disclosure both quote, and the control rects that excuse a bare coordinate, which is where plane exclusion shows up.",
+  "description": "Golden table for keyboard occlusion on interaction tap points (#2589), consumed by packages/contracts/src/tap-keyboard-occlusion.ts. A visible software keyboard is its own system surface: it is never a covering sibling of app content, so the same-window occlusion classifier cannot see it, and it leaves the app window rect intact, so the viewport rule passes a covered tab bar. The band runs from the topmost keyboard node down to the bottom of the viewport, across the keyboard's own columns; the tap point is the point the interaction dispatches: the rect center the platform aims at for a ref handed over by name, or the touch point a parent with interactive descendants resolves instead. `nodes` are captured snapshot nodes as they appear in the projection the interaction resolved against \u2014 note that regular and interactive projections prune the keyboard's own container, leaving Key nodes beside app chrome. Three rules decide whether reported geometry may be measured at all. Docking: the band is derived only where the keyboard's own reported geometry reaches the viewport's bottom edge within 80 units \u2014 measured on iPhone 17 Pro (26.2) the reported key plane stops 58 pt short of an 874 pt portrait viewport and lands exactly on a 402 pt landscape one, and on iPad Pro 11-inch (M4) 3 pt short of a 1210 pt viewport \u2014 so an iPad floating keyboard, an app-drawn keypad, or an IME that stops above its own navigation bar stays unmeasured and fails open. The budget is counted in the same units as the rects it guards, which is what a measured Android IME asks for rather than what a dp table would give: with three-button navigation on Pixel 7 (Android 16, 1080x2400 at 420 dpi), Gboard's reported region runs to the physical display bottom at 2400 while the 126 px navigation bar occupies 2274..2400 inside it, so no Android keyboard measured so far needs slack for the bar. Width: geometry that comes back taller than it is wide did not arrive in the app's orientation space, i.e. it came from a capture that normalized no space \u2014 the producers that can name the app's interface orientation either turn it back (the runner's tree tiers) or refuse the capture (the Simulator AX bridge) \u2014 and is refused measurement for the same reason. Tiling: the keys themselves must form one unbroken run of columns, because a split iPad keyboard docks both clusters at the bottom edge while its surface container still spans the whole screen, and the app content between the clusters is visible and tappable. Reported seams are zero on every measured tree \u2014 iPhone 17 Pro's reported row adjoins across 395 pt, iPad Pro 11-inch's across 743.5 pt, and Gboard's across 1070 px \u2014 so the allowance covers rounding rather than layout, and a gapped band is refused measurement like the two above. That rule is deliberately blunt in both directions, and the last two cases name the trade: a sparse layout such as the iOS emoji panel reports corner keys over a wide container, does not tile, and reads `undetermined` \u2014 the guard abstains there rather than inventing which gaps are app content; and a projection that reports the container with no keys at all has nothing left to check, so the band is the container's own claim. Every captured iOS and Android keyboard measured so far reports its keys, so the second shape is the harness's, not a captured one. `target` names either a resolved node index or a bare coordinate point; both paths read one decision and choose their own consequence. A case that reaches a band declares its whole shape \u2014 the frame the refusal and the disclosure both quote, and the control rects that excuse a bare coordinate, which is where plane exclusion shows up. Provider facts distinguish measured visible frames, derived docked-tree bands, visibility-only probes, explicit absence, and unknown. Missing keyboard nodes are undetermined, never absence. A carried derived band was established before projection and stays usable after projection removes keyboard nodes; it obeys the same docking/orientation/tiling rules at acquisition. A measured floating frame needs no bottom extension.",
   "constants": {
     "occlusionReason": "tap_keyboard_occludes_target"
   },
   "cases": [
+    {
+      "name": "Gboard docked tree + visibility-only:true -> occluded",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 2400
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 2400
+          }
+        },
+        {
+          "index": 1,
+          "type": "android.widget.Button",
+          "label": "Submit",
+          "bundleId": "com.example.app",
+          "parentIndex": 0,
+          "rect": {
+            "x": 440,
+            "y": 1800,
+            "width": 200,
+            "height": 120
+          }
+        },
+        {
+          "index": 2,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 1517,
+            "width": 1080,
+            "height": 883
+          }
+        },
+        {
+          "index": 8,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 1517,
+          "width": 1080,
+          "height": 883
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        ]
+      },
+      "keyboard": {
+        "kind": "visibility-only",
+        "visible": true
+      }
+    },
+    {
+      "name": "Gboard docked tree + visibility-only:false -> occluded",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 2400
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 2400
+          }
+        },
+        {
+          "index": 1,
+          "type": "android.widget.Button",
+          "label": "Submit",
+          "bundleId": "com.example.app",
+          "parentIndex": 0,
+          "rect": {
+            "x": 440,
+            "y": 1800,
+            "width": 200,
+            "height": 120
+          }
+        },
+        {
+          "index": 2,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 1517,
+            "width": 1080,
+            "height": 883
+          }
+        },
+        {
+          "index": 8,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 1517,
+          "width": 1080,
+          "height": 883
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        ]
+      },
+      "keyboard": {
+        "kind": "visibility-only",
+        "visible": false
+      }
+    },
     {
       "name": "iPhone tab-bar item whose center is under the key plane is refused",
       "viewport": {
@@ -1687,7 +1853,7 @@
         "index": 1
       },
       "expected": {
-        "kind": "no-keyboard"
+        "kind": "undetermined"
       }
     },
     {
@@ -3989,6 +4155,842 @@
             "y": 583,
             "width": 402,
             "height": 233
+          }
+        ]
+      }
+    },
+    {
+      "name": "a carried docked-tree band survives projection that removes all keyboard nodes",
+      "viewport": null,
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Button",
+          "label": "Form",
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 0
+      },
+      "keyboard": {
+        "kind": "derived",
+        "derivation": "docked-tree",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        }
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": []
+      }
+    },
+    {
+      "name": "a positive visibility probe without geometry cannot decide occlusion",
+      "viewport": null,
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Button",
+          "label": "Form",
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        },
+        {
+          "index": 1,
+          "type": "Keyboard",
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 291
+          }
+        }
+      ],
+      "target": {
+        "index": 0
+      },
+      "keyboard": {
+        "kind": "visibility-only",
+        "visible": true
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a negative visibility probe establishes absence",
+      "viewport": null,
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Button",
+          "label": "Form",
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 0
+      },
+      "keyboard": {
+        "kind": "visibility-only",
+        "visible": false
+      },
+      "expected": {
+        "kind": "no-keyboard"
+      },
+      "observationVisibility": false
+    },
+    {
+      "name": "an unknown provider observation with no keyboard nodes never establishes absence",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Button",
+          "label": "Form",
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 0
+      },
+      "keyboard": {
+        "kind": "unmeasurable",
+        "reason": "keyboard-visibility-probe-failed"
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a directly measured floating keyboard frame can refuse the target in its rectangle",
+      "viewport": null,
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Button",
+          "label": "Form",
+          "rect": {
+            "x": 162,
+            "y": 795,
+            "width": 74,
+            "height": 54
+          }
+        }
+      ],
+      "target": {
+        "index": 0
+      },
+      "keyboard": {
+        "kind": "visible",
+        "frame": {
+          "x": 100,
+          "y": 800,
+          "width": 220,
+          "height": 65
+        }
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 100,
+          "y": 800,
+          "width": 220,
+          "height": 65
+        },
+        "controlRects": []
+      }
+    },
+    {
+      "name": "a scoped witnessed keyboard button retains only control coordinate exemptions",
+      "viewport": null,
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Button",
+          "label": "Done",
+          "keyboardOwned": true,
+          "rect": {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        }
+      ],
+      "target": {
+        "point": {
+          "x": 250,
+          "y": 620
+        }
+      },
+      "keyboard": {
+        "kind": "derived",
+        "derivation": "docked-tree",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        }
+      },
+      "expected": {
+        "kind": "clear",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": [
+          {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        ]
+      }
+    },
+    {
+      "name": "a scoped witnessed keyboard other retains only control coordinate exemptions",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Other",
+          "label": "Container",
+          "keyboardOwned": true,
+          "rect": {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        }
+      ],
+      "target": {
+        "point": {
+          "x": 250,
+          "y": 620
+        }
+      },
+      "keyboard": {
+        "kind": "derived",
+        "derivation": "docked-tree",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        }
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 583,
+          "width": 402,
+          "height": 291
+        },
+        "controlRects": []
+      }
+    },
+    {
+      "name": "an offscreen keyboard plane cannot produce a nonpositive band",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Application",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 390,
+            "height": 844
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Continue",
+          "parentIndex": 0,
+          "rect": {
+            "x": 24,
+            "y": 700,
+            "width": 160,
+            "height": 48
+          }
+        },
+        {
+          "index": 2,
+          "type": "Keyboard",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 844,
+            "width": 390,
+            "height": 233
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a tree band rejected at acquisition stays unknown after projection removes its gaps",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 402,
+        "height": 874
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Keyboard",
+          "rect": {
+            "x": 0,
+            "y": 583,
+            "width": 402,
+            "height": 291
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "rect": {
+            "x": 200,
+            "y": 800,
+            "width": 100,
+            "height": 40
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "keyboard": {
+        "kind": "tree-rejected",
+        "derivation": "docked-tree"
+      },
+      "expected": {
+        "kind": "undetermined"
+      }
+    },
+    {
+      "name": "a docked provider tree outweighs a disagreeing negative visibility probe",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Keyboard",
+          "rect": {
+            "x": 0,
+            "y": 580,
+            "width": 390,
+            "height": 264
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Save draft",
+          "rect": {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 580,
+          "width": 390,
+          "height": 264
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 580,
+            "width": 390,
+            "height": 264
+          }
+        ]
+      },
+      "observationVisibility": false,
+      "keyboard": {
+        "kind": "derived",
+        "derivation": "docked-tree",
+        "frame": {
+          "x": 0,
+          "y": 580,
+          "width": 390,
+          "height": 264
+        }
+      }
+    },
+    {
+      "name": "app content under _UIRemoteKeyboardPlaceholderView inside a Keyboard is refused",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Keyboard",
+          "rect": {
+            "x": 0,
+            "y": 580,
+            "width": 390,
+            "height": 264
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Save draft",
+          "rect": {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          },
+          "parentIndex": 2
+        },
+        {
+          "index": 2,
+          "type": "Other",
+          "role": "_UIRemoteKeyboardPlaceholderView",
+          "parentIndex": 0
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 580,
+          "width": 390,
+          "height": 264
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 580,
+            "width": 390,
+            "height": 264
+          }
+        ]
+      }
+    },
+    {
+      "name": "app content under TUISystemInputAssistantView inside a Keyboard is refused",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Keyboard",
+          "rect": {
+            "x": 0,
+            "y": 580,
+            "width": 390,
+            "height": 264
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Save draft",
+          "rect": {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          },
+          "parentIndex": 2
+        },
+        {
+          "index": 2,
+          "type": "Other",
+          "role": "TUISystemInputAssistantView",
+          "parentIndex": 0
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 580,
+          "width": 390,
+          "height": 264
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 580,
+            "width": 390,
+            "height": 264
+          }
+        ]
+      }
+    },
+    {
+      "name": "app content under TUISystemInputAssistantPageView inside a Keyboard is refused",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 390,
+        "height": 844
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Keyboard",
+          "rect": {
+            "x": 0,
+            "y": 580,
+            "width": 390,
+            "height": 264
+          }
+        },
+        {
+          "index": 1,
+          "type": "Button",
+          "label": "Save draft",
+          "rect": {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          },
+          "parentIndex": 2
+        },
+        {
+          "index": 2,
+          "type": "Other",
+          "role": "TUISystemInputAssistantPageView",
+          "parentIndex": 0
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 580,
+          "width": 390,
+          "height": 264
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 580,
+            "width": 390,
+            "height": 264
+          }
+        ]
+      }
+    },
+    {
+      "name": "an unknown producer reason cannot reject docked tree geometry",
+      "viewport": {
+        "x": 0,
+        "y": 0,
+        "width": 1080,
+        "height": 2400
+      },
+      "nodes": [
+        {
+          "index": 0,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.example.app",
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1080,
+            "height": 2400
+          }
+        },
+        {
+          "index": 1,
+          "type": "android.widget.Button",
+          "label": "Submit",
+          "bundleId": "com.example.app",
+          "parentIndex": 0,
+          "rect": {
+            "x": 440,
+            "y": 1800,
+            "width": 200,
+            "height": 120
+          }
+        },
+        {
+          "index": 2,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 0,
+          "rect": {
+            "x": 0,
+            "y": 1517,
+            "width": 1080,
+            "height": 883
+          }
+        },
+        {
+          "index": 8,
+          "type": "android.widget.FrameLayout",
+          "bundleId": "com.google.android.inputmethod.latin",
+          "parentIndex": 2,
+          "rect": {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 1517,
+          "width": 1080,
+          "height": 883
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 2274,
+            "width": 1080,
+            "height": 126
+          }
+        ]
+      },
+      "keyboard": {
+        "kind": "unmeasurable",
+        "reason": "keyboard-tree-geometry-unusable"
+      }
+    },
+    {
+      "name": "acquired keyboard ownership false overrides projected Keyboard ancestry",
+      "viewport": null,
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Keyboard",
+          "rect": {
+            "x": 0,
+            "y": 580,
+            "width": 390,
+            "height": 264
+          }
+        },
+        {
+          "index": 1,
+          "parentIndex": 0,
+          "type": "Button",
+          "label": "Save draft",
+          "keyboardOwned": false,
+          "rect": {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        },
+        {
+          "index": 2,
+          "parentIndex": 0,
+          "type": "Key",
+          "rect": {
+            "x": 0,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "keyboard": {
+        "kind": "derived",
+        "derivation": "docked-tree",
+        "frame": {
+          "x": 0,
+          "y": 580,
+          "width": 390,
+          "height": 264
+        }
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 580,
+          "width": 390,
+          "height": 264
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        ]
+      }
+    },
+    {
+      "name": "acquired keyboard ownership true overrides projected Keyboard ancestry",
+      "viewport": null,
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Keyboard",
+          "rect": {
+            "x": 0,
+            "y": 580,
+            "width": 390,
+            "height": 264
+          }
+        },
+        {
+          "index": 1,
+          "parentIndex": 0,
+          "type": "Button",
+          "label": "Done",
+          "keyboardOwned": true,
+          "rect": {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        },
+        {
+          "index": 2,
+          "parentIndex": 0,
+          "type": "Key",
+          "rect": {
+            "x": 0,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "keyboard": {
+        "kind": "derived",
+        "derivation": "docked-tree",
+        "frame": {
+          "x": 0,
+          "y": 580,
+          "width": 390,
+          "height": 264
+        }
+      },
+      "expected": {
+        "kind": "clear",
+        "frame": {
+          "x": 0,
+          "y": 580,
+          "width": 390,
+          "height": 264
+        },
+        "controlRects": [
+          {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          },
+          {
+            "x": 0,
+            "y": 600,
+            "width": 100,
+            "height": 40
           }
         ]
       }

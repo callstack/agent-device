@@ -1,0 +1,228 @@
+import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
+import { leaseScopeToReleaseRequest } from '@agent-device/contracts/lease-scope';
+import { clearDeviceClaim } from '../resources/device/device-claims.ts';
+import type { LeaseRegistry } from '../resources/lease-registry.ts';
+import type {
+  DeviceLease,
+  LeaseLifecycleProvider,
+  ProviderAppCatalog,
+} from '@agent-device/contracts/device';
+import { buildSessionLeaseFromRequest, type SessionLease } from '../core/lease-context.ts';
+import { assertRequestLeaseAdmission } from './request-admission.ts';
+import { errorMessage } from '@agent-device/kernel/errors';
+import type { SessionStore } from '../core/session-store.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
+import type { SessionRef, SessionState } from '../core/session-state.ts';
+import { providerSessionIdFromData } from '../resources/provider-session-ownership.ts';
+import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
+
+export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>;
+
+export type SessionTeardown = (ref: SessionRef) => Promise<void>;
+
+export async function releaseExpiredProviderLease(
+  recoverExpiredLease: ExpiredProviderLeaseRecovery | undefined,
+  lease: DeviceLease,
+): Promise<boolean> {
+  if (!lease.leaseProvider || !recoverExpiredLease) return false;
+
+  try {
+    await recoverExpiredLease(lease);
+    emitDiagnostic({
+      level: 'info',
+      phase: 'provider_lease_expired_released',
+      data: {
+        leaseId: lease.leaseId,
+        provider: lease.leaseProvider,
+      },
+    });
+    return true;
+  } catch (error) {
+    emitDiagnostic({
+      level: 'error',
+      phase: 'provider_lease_expiry_release_failed',
+      data: {
+        leaseId: lease.leaseId,
+        provider: lease.leaseProvider,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+    return false;
+  }
+}
+
+export async function cleanupExpiredLeasedSession(params: {
+  sessionName: string;
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+  teardownSession: SessionTeardown;
+}): Promise<boolean> {
+  const ref = params.sessionStore.lookup(params.sessionName);
+  const lease = ref?.session.lease;
+  if (!ref || !lease) return false;
+  if (!params.leaseRegistry.consumeExpiredLease(lease.leaseId)) return false;
+  await endLeasedSession(ref, params.sessionStore, params.teardownSession, 'LEASE_EXPIRED');
+  return true;
+}
+
+/**
+ * Ends every session opened under a lease that is gone (released or expired), each inside
+ * `withSessionLocks` (the session's execution lock pair) so a command still running on it finishes
+ * first. The device claim is cleared even when teardown fails: the lease that paid for the device
+ * has ended, so nobody may keep it.
+ */
+export async function endLeaseSessions(params: {
+  leaseId: string;
+  reason: 'LEASE_RELEASED' | 'LEASE_EXPIRED';
+  sessionStore: SessionStore;
+  withSessionLocks: (ref: SessionRef, task: () => Promise<void>) => Promise<void>;
+  teardownSession: SessionTeardown;
+}): Promise<void> {
+  const { leaseId, sessionStore } = params;
+  const refs = sessionStore.listRefs().filter((ref) => ref.session.lease?.leaseId === leaseId);
+  await Promise.all(
+    refs.map(
+      async (ref) =>
+        await params.withSessionLocks(ref, async () => {
+          if (sessionStore.resolveCurrent(ref)?.lease?.leaseId !== leaseId) return;
+          await endLeasedSession(
+            sessionStore.refresh(ref),
+            sessionStore,
+            params.teardownSession,
+            params.reason,
+          );
+        }),
+    ),
+  );
+}
+
+async function endLeasedSession(
+  ref: SessionRef,
+  sessionStore: SessionStore,
+  teardownSession: SessionTeardown,
+  reason: 'LEASE_RELEASED' | 'LEASE_EXPIRED',
+): Promise<void> {
+  const session = ref.session;
+  const leaseId = session.lease?.leaseId;
+  emitDiagnostic({
+    level: 'info',
+    phase: 'leased_session_ended',
+    data: { reason, leaseId, session: session.name, deviceKey: session.lease?.deviceKey },
+  });
+  await teardownSession(ref).catch((error) => {
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'leased_session_end_cleanup_failed',
+      data: { reason, leaseId, session: session.name, error: errorMessage(error) },
+    });
+  });
+  await clearDeviceClaim(session.deviceClaim).catch((error) => {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'leased_session_end_device_claim_clear_failed',
+      data: {
+        session: session.name,
+        deviceKey: session.deviceClaim?.deviceKey,
+        error: errorMessage(error),
+      },
+    });
+  });
+  sessionStore.retire(ref);
+}
+
+export function admitRequestLeaseForLockedScope(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+  providerAppCatalog?: ProviderAppCatalog;
+  daemonPolicy?: DaemonPolicy;
+}): DaemonRequest {
+  const { sessionName, sessionStore, leaseRegistry } = params;
+  const ref = sessionStore.lookup(sessionName);
+  const existingSession = ref?.session;
+  const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession, {
+    providerAppCatalog: params.providerAppCatalog,
+    daemonPolicy: params.daemonPolicy,
+  });
+  if (!activeLease) return params.req;
+
+  const nextReq = {
+    ...params.req,
+    internal: {
+      ...params.req.internal,
+      admittedLease: activeLease,
+    },
+  };
+  if (ref && existingSession?.lease) {
+    sessionStore.update(ref, (current) => ({
+      lease: {
+        ...current.lease!,
+        leaseBackend: activeLease.backend,
+        expiresAt: activeLease.expiresAt,
+      },
+    }));
+  }
+  return nextReq;
+}
+
+export function resolveSessionLeaseForRequest(params: {
+  req: Pick<DaemonRequest, 'flags' | 'meta' | 'internal'>;
+  existingLease?: SessionLease;
+}): SessionLease | undefined {
+  return (
+    buildSessionLeaseFromRequest(params.req, params.req.internal?.admittedLease) ??
+    params.existingLease
+  );
+}
+
+/** Releases the lease a closing session holds, unless its owner allocated it with `retainOnClose`. */
+export async function releaseSessionLease(params: {
+  session: SessionState;
+  leaseRegistry: LeaseRegistry;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
+}): Promise<Record<string, unknown> | undefined> {
+  const lease = params.session.lease;
+  if (!lease) return undefined;
+  const releaseRequest = leaseScopeToReleaseRequest({
+    leaseId: lease.leaseId,
+    tenantId: lease.tenantId,
+    runId: lease.runId,
+    leaseBackend: lease.leaseBackend,
+    leaseProvider: lease.leaseProvider,
+    deviceKey: lease.deviceKey,
+    clientId: lease.clientId,
+  });
+  const activeLease = params.leaseRegistry.getLease(releaseRequest);
+  if (activeLease?.retainOnClose) {
+    emitDiagnostic({
+      level: 'info',
+      phase: 'session_lease_released',
+      data: {
+        session: params.session.name,
+        leaseId: lease.leaseId,
+        released: false,
+        retained: true,
+      },
+    });
+    return undefined;
+  }
+  const providerData = activeLease
+    ? await params.leaseLifecycleProvider?.release?.(activeLease)
+    : undefined;
+  const providerSessionId = providerSessionIdFromData(providerData);
+  if (activeLease && providerSessionId) {
+    params.leaseRegistry.recordProviderSession(activeLease, providerSessionId);
+  }
+  const result = params.leaseRegistry.releaseLease(releaseRequest);
+  emitDiagnostic({
+    level: 'info',
+    phase: 'session_lease_released',
+    data: {
+      session: params.session.name,
+      leaseId: lease.leaseId,
+      released: result.released,
+    },
+  });
+  return providerData;
+}

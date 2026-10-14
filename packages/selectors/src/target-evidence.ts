@@ -20,7 +20,7 @@
  * identically by definition" (decision 3, "Record-time write").
  */
 
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { snapshotRefBodies, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { resolveRectCenter } from '@agent-device/kernel/rect-center';
 import { findNearestScrollableContainer } from '@agent-device/capture-kit/ios-snapshot-tree';
 import type {
@@ -286,14 +286,16 @@ function runRecordTimeSelfCheck(params: {
   domain: DisambiguationDomain;
 }): TargetVerification {
   const { node, domain } = params;
+  // A node the capture's producer issued no ref for has no ref identity to compare: it can be
+  // found again by tree position but never re-addressed, so the self-check has nothing to verify.
   const winnerRef = node.ref;
-  const identitySetRefs = domain.identitySet.map((n) => n.ref);
+  if (!winnerRef) return 'unverifiable';
   const classification = classifyTargetBindingMatch({
     winnerRef,
-    matchedRefs: identitySetRefs,
-    identitySetRefs,
-    siblingMatchRefs: domain.siblingMatches.map((n) => n.ref),
-    regionMemberRefs: domain.regionMembers?.map((n) => n.ref),
+    matchedRefs: snapshotRefBodies(domain.identitySet),
+    identitySetRefs: snapshotRefBodies(domain.identitySet),
+    siblingMatchRefs: snapshotRefBodies(domain.siblingMatches),
+    regionMemberRefs: domain.regionMembers ? snapshotRefBodies(domain.regionMembers) : undefined,
     viewportCandidateRef: domain.orderedRegion[domain.viewportOrder]?.ref,
   });
   return classification.outcome;

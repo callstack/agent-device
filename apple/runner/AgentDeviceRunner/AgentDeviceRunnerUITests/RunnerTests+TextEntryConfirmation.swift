@@ -24,10 +24,20 @@ extension RunnerTests {
   struct TextEntryObservation: Equatable {
     let value: String
     let identity: TextEntryElementIdentity
+    let isFocused: Bool
 
     /// Same value on the same element; a frame change alone on an identified field is not a change.
     func isSettled(with other: TextEntryObservation) -> Bool {
       value == other.value && identity.isSameElement(as: other.identity)
+    }
+
+    /// An element without an identifier that kept focus but moved: a bottom search bar rises above
+    /// the keyboard and widens once the first characters arrive, so its frame before typing never
+    /// matches the read-back.
+    func isMovedWhileFocused(since baseline: TextEntryObservation) -> Bool {
+      identity.identifier == nil && baseline.identity.identifier == nil
+        && identity.elementType == baseline.identity.elementType
+        && isFocused && baseline.isFocused
     }
   }
 
@@ -86,12 +96,15 @@ extension RunnerTests {
       TextEntryResult(verified: verified, repaired: false, expectedText: requested, observedText: observed?.value)
     }
     guard let observed else { return result(nil) }
-    if let baseline, !baseline.identity.isSameElement(as: observed.identity) {
-      return result(false)
-    }
     let request = observed.identity.elementType == elementTypeNamesByRawValue[XCUIElement.ElementType.textView.rawValue]
       ? requested : textEntryRequestWithoutSubmitKeys(requested)
-    if observed.value == requested || observed.value == request { return result(true) }
+    let exact = observed.value == requested || observed.value == request
+    if let baseline, !baseline.identity.isSameElement(as: observed.identity) {
+      // Focus does not tell a moved field from an unidentified field that replaced it, so only an
+      // exact read-back passes.
+      return result(exact && observed.isMovedWhileFocused(since: baseline))
+    }
+    if exact { return result(true) }
     // Any non-matching single-line submit result remains unverified, even a partial value.
     if request != requested { return result(nil) }
     guard !request.isEmpty, let baseline else { return result(false) }
@@ -125,7 +138,8 @@ extension RunnerTests {
         identifier: snapshot.identifier.isEmpty ? nil : snapshot.identifier,
         elementType: elementTypeName(snapshot.elementType),
         frame: snapshot.frame
-      )
+      ),
+      isFocused: snapshotHasFocus(snapshot)
     )
   }
 

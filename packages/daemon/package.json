@@ -1,0 +1,511 @@
+{
+  "name": "@agent-device/daemon",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The agent-device daemon server: request routing, sessions, leases, device claims, snapshot and interaction handling. Internal workspace package bundled into the published agent-device artifact (#3352 daemon extraction).",
+  "dependencies": {
+    "@agent-device/ad-replay": "workspace:*",
+    "@agent-device/ad-script": "workspace:*",
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/command-registry": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/daemon-contracts": "workspace:*",
+    "@agent-device/device-selection": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*",
+    "@agent-device/maestro": "workspace:*",
+    "@agent-device/platform-android": "workspace:*",
+    "@agent-device/platform-apple": "workspace:*",
+    "@agent-device/platform-web": "workspace:*",
+    "@agent-device/replay-port": "workspace:*",
+    "@agent-device/replay-test": "workspace:*",
+    "@agent-device/selectors": "workspace:*",
+    "@agent-device/session-journal": "workspace:*",
+    "@agent-device/test-kit": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-check": "^4.9.0",
+    "oxc-parser": "^0.146.0",
+    "vitest": "5.0.4",
+    "yaml": "^2.9.0"
+  },
+  "exports": {
+    "./app-log-files": {
+      "types": "./src/resources/app-log-files.ts",
+      "default": "./src/resources/app-log-files.ts"
+    },
+    "./daemon-command-registry": {
+      "types": "./src/core/daemon-command-registry.ts",
+      "default": "./src/core/daemon-command-registry.ts"
+    },
+    "./daemon-request": {
+      "types": "./src/core/daemon-request.ts",
+      "default": "./src/core/daemon-request.ts"
+    },
+    "./daemon-stop": {
+      "types": "./src/server/daemon-stop.ts",
+      "default": "./src/server/daemon-stop.ts"
+    },
+    "./device/claim-recovery-gateway": {
+      "types": "./src/resources/device/claim-recovery-gateway.ts",
+      "default": "./src/resources/device/claim-recovery-gateway.ts"
+    },
+    "./device/device-claim-inspection": {
+      "types": "./src/resources/device/device-claim-inspection.ts",
+      "default": "./src/resources/device/device-claim-inspection.ts"
+    },
+    "./device/device-claim-owner-recovery": {
+      "types": "./src/server/device/device-claim-owner-recovery.ts",
+      "default": "./src/server/device/device-claim-owner-recovery.ts"
+    },
+    "./device/device-claims": {
+      "types": "./src/resources/device/device-claims.ts",
+      "default": "./src/resources/device/device-claims.ts"
+    },
+    "./managed-session-artifact-path": {
+      "types": "./src/core/managed-session-artifact-path.ts",
+      "default": "./src/core/managed-session-artifact-path.ts"
+    },
+    "./platform-owner-lifecycle": {
+      "types": "./src/core/platform-owner-lifecycle.ts",
+      "default": "./src/core/platform-owner-lifecycle.ts"
+    },
+    "./platform-request-scope": {
+      "types": "./src/server/platform-request-scope.ts",
+      "default": "./src/server/platform-request-scope.ts"
+    },
+    "./platform-resource-cleanup": {
+      "types": "./src/core/platform-resource-cleanup.ts",
+      "default": "./src/core/platform-resource-cleanup.ts"
+    },
+    "./platform-services": {
+      "types": "./src/core/platform-services.ts",
+      "default": "./src/core/platform-services.ts"
+    },
+    "./route-owner-files": {
+      "types": "./src/sessions/route-owner-files.ts",
+      "default": "./src/sessions/route-owner-files.ts"
+    },
+    "./server/daemon-runtime": {
+      "types": "./src/server/http/daemon-runtime.ts",
+      "default": "./src/server/http/daemon-runtime.ts"
+    },
+    "./session-artifact-paths": {
+      "types": "./src/core/session-artifact-paths.ts",
+      "default": "./src/core/session-artifact-paths.ts"
+    },
+    "./testing/__tests__/android-observation-fixture": {
+      "types": "./src/__tests__/support/android-observation-fixture.ts",
+      "default": "./src/__tests__/support/android-observation-fixture.ts"
+    },
+    "./testing/__tests__/application-lifecycle-runtime-fixture": {
+      "types": "./src/__tests__/support/application-lifecycle-runtime-fixture.ts",
+      "default": "./src/__tests__/support/application-lifecycle-runtime-fixture.ts"
+    },
+    "./testing/__tests__/application-lifecycle-runtime-harness": {
+      "types": "./src/__tests__/support/application-lifecycle-runtime-harness.ts",
+      "default": "./src/__tests__/support/application-lifecycle-runtime-harness.ts"
+    },
+    "./testing/__tests__/capture-disclosure-target-activation-fact": {
+      "types": "./src/core/__tests__/capture-disclosure-target-activation-fact.ts",
+      "default": "./src/core/__tests__/capture-disclosure-target-activation-fact.ts"
+    },
+    "./testing/__tests__/device-selection-stub": {
+      "types": "./src/__tests__/support/device-selection-stub.ts",
+      "default": "./src/__tests__/support/device-selection-stub.ts"
+    },
+    "./testing/__tests__/human-control-fixtures": {
+      "types": "./src/__tests__/support/human-control-fixtures.ts",
+      "default": "./src/__tests__/support/human-control-fixtures.ts"
+    },
+    "./testing/__tests__/interaction-get-runtime-fixture": {
+      "types": "./src/execution/__tests__/interaction-get-runtime-fixture.ts",
+      "default": "./src/execution/__tests__/interaction-get-runtime-fixture.ts"
+    },
+    "./testing/__tests__/ios-comparison-key-fixture": {
+      "types": "./src/core/__tests__/ios-comparison-key-fixture.ts",
+      "default": "./src/core/__tests__/ios-comparison-key-fixture.ts"
+    },
+    "./testing/__tests__/legacy-snapshot-capture-fixture": {
+      "types": "./src/__tests__/support/legacy-snapshot-capture-fixture.ts",
+      "default": "./src/__tests__/support/legacy-snapshot-capture-fixture.ts"
+    },
+    "./testing/__tests__/platform-services-fixture": {
+      "types": "./src/__tests__/support/platform-services-fixture.ts",
+      "default": "./src/__tests__/support/platform-services-fixture.ts"
+    },
+    "./testing/__tests__/replay-runtime/replay-command-fixture": {
+      "types": "./src/sessions/__tests__/replay-runtime/replay-command-fixture.ts",
+      "default": "./src/sessions/__tests__/replay-runtime/replay-command-fixture.ts"
+    },
+    "./testing/__tests__/request-router-dispatch-mocks": {
+      "types": "./src/__tests__/support/request-router-dispatch-mocks.ts",
+      "default": "./src/__tests__/support/request-router-dispatch-mocks.ts"
+    },
+    "./testing/__tests__/request-router-open-harness": {
+      "types": "./src/server/__tests__/request-router-open-harness.ts",
+      "default": "./src/server/__tests__/request-router-open-harness.ts"
+    },
+    "./testing/__tests__/runtime-binding-conformance": {
+      "types": "./src/__tests__/support/runtime-binding-conformance.ts",
+      "default": "./src/__tests__/support/runtime-binding-conformance.ts"
+    },
+    "./testing/__tests__/screenshot-runtime-fixture": {
+      "types": "./src/__tests__/support/screenshot-runtime-fixture.ts",
+      "default": "./src/__tests__/support/screenshot-runtime-fixture.ts"
+    },
+    "./testing/__tests__/selector-capture-fixture": {
+      "types": "./src/__tests__/support/selector-capture-fixture.ts",
+      "default": "./src/__tests__/support/selector-capture-fixture.ts"
+    },
+    "./testing/__tests__/session-teardown.fixtures": {
+      "types": "./src/__tests__/support/session-teardown.fixtures.ts",
+      "default": "./src/__tests__/support/session-teardown.fixtures.ts"
+    },
+    "./testing/__tests__/snapshot-runtime-fixture": {
+      "types": "./src/__tests__/support/snapshot-runtime-fixture.ts",
+      "default": "./src/__tests__/support/snapshot-runtime-fixture.ts"
+    },
+    "./testing/__tests__/support/command-surface-fake": {
+      "types": "./src/__tests__/support/command-surface-fake.ts",
+      "default": "./src/__tests__/support/command-surface-fake.ts"
+    },
+    "./testing/__tests__/support/device-claim-store": {
+      "types": "./src/__tests__/support/device-claim-store.ts",
+      "default": "./src/__tests__/support/device-claim-store.ts"
+    },
+    "./testing/__tests__/support/provider-device-admission-fixture": {
+      "types": "./src/__tests__/support/provider-device-admission-fixture.ts",
+      "default": "./src/__tests__/support/provider-device-admission-fixture.ts"
+    },
+    "./testing/__tests__/support/screen-recording-live-handle": {
+      "types": "./src/__tests__/support/screen-recording-live-handle.ts",
+      "default": "./src/__tests__/support/screen-recording-live-handle.ts"
+    },
+    "./testing/__tests__/support/session-factories": {
+      "types": "./src/__tests__/support/session-factories.ts",
+      "default": "./src/__tests__/support/session-factories.ts"
+    },
+    "./testing/__tests__/support/store-factory": {
+      "types": "./src/__tests__/support/store-factory.ts",
+      "default": "./src/__tests__/support/store-factory.ts"
+    },
+    "./testing/__tests__/support/unavailable-device-runtime-gateway": {
+      "types": "./src/__tests__/support/unavailable-device-runtime-gateway.ts",
+      "default": "./src/__tests__/support/unavailable-device-runtime-gateway.ts"
+    },
+    "./testing/__tests__/test-device-runtime-gateway": {
+      "types": "./src/__tests__/support/test-device-runtime-gateway.ts",
+      "default": "./src/__tests__/support/test-device-runtime-gateway.ts"
+    },
+    "./testing/android-system-dialog": {
+      "types": "./src/execution/android-system-dialog.ts",
+      "default": "./src/execution/android-system-dialog.ts"
+    },
+    "./testing/app-events": {
+      "types": "./src/execution/app-events.ts",
+      "default": "./src/execution/app-events.ts"
+    },
+    "./testing/app-log-resource-store": {
+      "types": "./src/resources/app-log-resource-store.ts",
+      "default": "./src/resources/app-log-resource-store.ts"
+    },
+    "./testing/application-lifecycle-recovery": {
+      "types": "./src/server/application-lifecycle-recovery.ts",
+      "default": "./src/server/application-lifecycle-recovery.ts"
+    },
+    "./testing/artifact-tracking": {
+      "types": "./src/resources/artifact-tracking.ts",
+      "default": "./src/resources/artifact-tracking.ts"
+    },
+    "./testing/capture-disclosure": {
+      "types": "./src/core/capture-disclosure.ts",
+      "default": "./src/core/capture-disclosure.ts"
+    },
+    "./testing/context": {
+      "types": "./src/core/context.ts",
+      "default": "./src/core/context.ts"
+    },
+    "./testing/deferred-interaction-outcome": {
+      "types": "./src/core/deferred-interaction-outcome.ts",
+      "default": "./src/core/deferred-interaction-outcome.ts"
+    },
+    "./testing/device/device-claim-conflict": {
+      "types": "./src/resources/device/device-claim-conflict.ts",
+      "default": "./src/resources/device/device-claim-conflict.ts"
+    },
+    "./testing/device/device-claim-paths": {
+      "types": "./src/resources/device/device-claim-paths.ts",
+      "default": "./src/resources/device/device-claim-paths.ts"
+    },
+    "./testing/device/device-ready": {
+      "types": "./src/core/device/device-ready.ts",
+      "default": "./src/core/device/device-ready.ts"
+    },
+    "./testing/generic-leaf-execution": {
+      "types": "./src/core/generic-leaf-execution.ts",
+      "default": "./src/core/generic-leaf-execution.ts"
+    },
+    "./testing/gesture-runtime": {
+      "types": "./src/core/gesture-runtime.ts",
+      "default": "./src/core/gesture-runtime.ts"
+    },
+    "./testing/handlers/__tests__/*": {
+      "types": "./src/__tests__/support/handlers/*.ts",
+      "default": "./src/__tests__/support/handlers/*.ts"
+    },
+    "./testing/handlers/lease": {
+      "types": "./src/sessions/handlers/lease.ts",
+      "default": "./src/sessions/handlers/lease.ts"
+    },
+    "./testing/handlers/session-app-deployment": {
+      "types": "./src/sessions/handlers/session-app-deployment.ts",
+      "default": "./src/sessions/handlers/session-app-deployment.ts"
+    },
+    "./testing/handlers/session-appstate": {
+      "types": "./src/sessions/handlers/session-appstate.ts",
+      "default": "./src/sessions/handlers/session-appstate.ts"
+    },
+    "./testing/handlers/session-doctor": {
+      "types": "./src/sessions/handlers/session-doctor.ts",
+      "default": "./src/sessions/handlers/session-doctor.ts"
+    },
+    "./testing/handlers/session-doctor-app": {
+      "types": "./src/sessions/handlers/session-doctor-app.ts",
+      "default": "./src/sessions/handlers/session-doctor-app.ts"
+    },
+    "./testing/handlers/session-doctor-metro": {
+      "types": "./src/sessions/handlers/session-doctor-metro.ts",
+      "default": "./src/sessions/handlers/session-doctor-metro.ts"
+    },
+    "./testing/handlers/session-replay-command": {
+      "types": "./src/sessions/handlers/session-replay-command.ts",
+      "default": "./src/sessions/handlers/session-replay-command.ts"
+    },
+    "./testing/handlers/snapshot": {
+      "types": "./src/sessions/handlers/snapshot.ts",
+      "default": "./src/sessions/handlers/snapshot.ts"
+    },
+    "./testing/interaction/index": {
+      "types": "./src/execution/interaction/index.ts",
+      "default": "./src/execution/interaction/index.ts"
+    },
+    "./testing/interaction/internal/__tests__/*": {
+      "types": "./src/execution/interaction/internal/__tests__/*.ts",
+      "default": "./src/execution/interaction/internal/__tests__/*.ts"
+    },
+    "./testing/interaction/internal/interaction-android-escape": {
+      "types": "./src/execution/interaction/internal/interaction-android-escape.ts",
+      "default": "./src/execution/interaction/internal/interaction-android-escape.ts"
+    },
+    "./testing/interaction/internal/interaction-ios-tap-outcome": {
+      "types": "./src/execution/interaction/internal/interaction-ios-tap-outcome.ts",
+      "default": "./src/execution/interaction/internal/interaction-ios-tap-outcome.ts"
+    },
+    "./testing/interaction/internal/interaction-touch-android-readiness": {
+      "types": "./src/execution/interaction/internal/interaction-touch-android-readiness.ts",
+      "default": "./src/execution/interaction/internal/interaction-touch-android-readiness.ts"
+    },
+    "./testing/interaction/internal/interaction-touch-response": {
+      "types": "./src/execution/interaction/internal/interaction-touch-response.ts",
+      "default": "./src/execution/interaction/internal/interaction-touch-response.ts"
+    },
+    "./testing/interaction/internal/types": {
+      "types": "./src/core/interaction/internal/types.ts",
+      "default": "./src/core/interaction/internal/types.ts"
+    },
+    "./testing/interactor-resolution": {
+      "types": "./src/core/interactor-resolution.ts",
+      "default": "./src/core/interactor-resolution.ts"
+    },
+    "./testing/ios-app-session-hint": {
+      "types": "./src/core/ios-app-session-hint.ts",
+      "default": "./src/core/ios-app-session-hint.ts"
+    },
+    "./testing/lease-lifecycle": {
+      "types": "./src/sessions/lease-lifecycle.ts",
+      "default": "./src/sessions/lease-lifecycle.ts"
+    },
+    "./testing/lease-registry": {
+      "types": "./src/resources/lease-registry.ts",
+      "default": "./src/resources/lease-registry.ts"
+    },
+    "./testing/provider-device-admission": {
+      "types": "./src/core/provider-device-admission.ts",
+      "default": "./src/core/provider-device-admission.ts"
+    },
+    "./testing/provider-lease-expiry": {
+      "types": "./src/server/provider-lease-expiry.ts",
+      "default": "./src/server/provider-lease-expiry.ts"
+    },
+    "./testing/ref-frame": {
+      "types": "./src/core/ref-frame.ts",
+      "default": "./src/core/ref-frame.ts"
+    },
+    "./testing/request-binding": {
+      "types": "./src/server/request-binding.ts",
+      "default": "./src/server/request-binding.ts"
+    },
+    "./testing/request-dispatch-disclosure": {
+      "types": "./src/execution/request-dispatch-disclosure.ts",
+      "default": "./src/execution/request-dispatch-disclosure.ts"
+    },
+    "./testing/request-dispatch-ledger": {
+      "types": "./src/core/request-dispatch-ledger.ts",
+      "default": "./src/core/request-dispatch-ledger.ts"
+    },
+    "./testing/request-execution-scope": {
+      "types": "./src/server/request-execution-scope.ts",
+      "default": "./src/server/request-execution-scope.ts"
+    },
+    "./testing/request-finalization": {
+      "types": "./src/server/request-finalization.ts",
+      "default": "./src/server/request-finalization.ts"
+    },
+    "./testing/request-generic-dispatch": {
+      "types": "./src/execution/request-generic-dispatch.ts",
+      "default": "./src/execution/request-generic-dispatch.ts"
+    },
+    "./testing/request-handler-chain": {
+      "types": "./src/sessions/request-handler-chain.ts",
+      "default": "./src/sessions/request-handler-chain.ts"
+    },
+    "./testing/request-platform-provider-context": {
+      "types": "./src/server/request-platform-provider-context.ts",
+      "default": "./src/server/request-platform-provider-context.ts"
+    },
+    "./testing/request-router": {
+      "types": "./src/server/request-router.ts",
+      "default": "./src/server/request-router.ts"
+    },
+    "./testing/request-runtime-binding": {
+      "types": "./src/core/request-runtime-binding.ts",
+      "default": "./src/core/request-runtime-binding.ts"
+    },
+    "./testing/response-views": {
+      "types": "./src/server/response-views.ts",
+      "default": "./src/server/response-views.ts"
+    },
+    "./testing/screenshot-runtime": {
+      "types": "./src/execution/screenshot-runtime.ts",
+      "default": "./src/execution/screenshot-runtime.ts"
+    },
+    "./testing/scroll-until": {
+      "types": "./src/execution/scroll-until.ts",
+      "default": "./src/execution/scroll-until.ts"
+    },
+    "./testing/selector-capture-binding": {
+      "types": "./src/execution/selector-capture-binding.ts",
+      "default": "./src/execution/selector-capture-binding.ts"
+    },
+    "./testing/selector-match-errors": {
+      "types": "./src/execution/selector-match-errors.ts",
+      "default": "./src/execution/selector-match-errors.ts"
+    },
+    "./testing/selector-runtime": {
+      "types": "./src/execution/selector-runtime.ts",
+      "default": "./src/execution/selector-runtime.ts"
+    },
+    "./testing/selector-runtime-backend": {
+      "types": "./src/execution/selector-runtime-backend.ts",
+      "default": "./src/execution/selector-runtime-backend.ts"
+    },
+    "./testing/server/http-server": {
+      "types": "./src/server/http/http-server.ts",
+      "default": "./src/server/http/http-server.ts"
+    },
+    "./testing/server/server-lifecycle": {
+      "types": "./src/server/http/server-lifecycle.ts",
+      "default": "./src/server/http/server-lifecycle.ts"
+    },
+    "./testing/server/server-shutdown": {
+      "types": "./src/server/http/server-shutdown.ts",
+      "default": "./src/server/http/server-shutdown.ts"
+    },
+    "./testing/server/transport": {
+      "types": "./src/server/http/transport.ts",
+      "default": "./src/server/http/transport.ts"
+    },
+    "./testing/session-action-recorder": {
+      "types": "./src/core/session-action-recorder.ts",
+      "default": "./src/core/session-action-recorder.ts"
+    },
+    "./testing/session-capture-binding": {
+      "types": "./src/core/session-capture-binding.ts",
+      "default": "./src/core/session-capture-binding.ts"
+    },
+    "./testing/session-lifecycle/index": {
+      "types": "./src/sessions/session-lifecycle/index.ts",
+      "default": "./src/sessions/session-lifecycle/index.ts"
+    },
+    "./testing/session-lifecycle/internal/__tests__/*": {
+      "types": "./src/sessions/session-lifecycle/internal/__tests__/*.ts",
+      "default": "./src/sessions/session-lifecycle/internal/__tests__/*.ts"
+    },
+    "./testing/session-observability/__tests__/*": {
+      "types": "./src/sessions/session-observability/__tests__/*.ts",
+      "default": "./src/sessions/session-observability/__tests__/*.ts"
+    },
+    "./testing/session-recovery-hints": {
+      "types": "./src/core/session-recovery-hints.ts",
+      "default": "./src/core/session-recovery-hints.ts"
+    },
+    "./testing/session-runtime": {
+      "types": "./src/sessions/session-runtime.ts",
+      "default": "./src/sessions/session-runtime.ts"
+    },
+    "./testing/session-script-writer": {
+      "types": "./src/core/session-script-writer.ts",
+      "default": "./src/core/session-script-writer.ts"
+    },
+    "./testing/session-snapshot": {
+      "types": "./src/execution/session-snapshot.ts",
+      "default": "./src/execution/session-snapshot.ts"
+    },
+    "./testing/session-state": {
+      "types": "./src/core/session-state.ts",
+      "default": "./src/core/session-state.ts"
+    },
+    "./testing/session-store": {
+      "types": "./src/core/session-store.ts",
+      "default": "./src/core/session-store.ts"
+    },
+    "./testing/session-teardown-budget": {
+      "types": "./src/sessions/session-teardown-budget.ts",
+      "default": "./src/sessions/session-teardown-budget.ts"
+    },
+    "./testing/snapshot-capture": {
+      "types": "./src/core/snapshot-capture.ts",
+      "default": "./src/core/snapshot-capture.ts"
+    },
+    "./testing/snapshot-diff-runtime": {
+      "types": "./src/sessions/snapshot-diff-runtime.ts",
+      "default": "./src/sessions/snapshot-diff-runtime.ts"
+    },
+    "./testing/snapshot-interactor-capture": {
+      "types": "./src/core/snapshot-interactor-capture.ts",
+      "default": "./src/core/snapshot-interactor-capture.ts"
+    },
+    "./testing/snapshot-quality-latch": {
+      "types": "./src/sessions/snapshot-quality-latch.ts",
+      "default": "./src/sessions/snapshot-quality-latch.ts"
+    },
+    "./testing/snapshot-runtime": {
+      "types": "./src/sessions/snapshot-runtime.ts",
+      "default": "./src/sessions/snapshot-runtime.ts"
+    },
+    "./testing/snapshot-session": {
+      "types": "./src/core/snapshot-session.ts",
+      "default": "./src/core/snapshot-session.ts"
+    },
+    "./testing/wait-runtime": {
+      "types": "./src/execution/wait-runtime.ts",
+      "default": "./src/execution/wait-runtime.ts"
+    },
+    "./testing/web-session-names": {
+      "types": "./src/sessions/web-session-names.ts",
+      "default": "./src/sessions/web-session-names.ts"
+    }
+  }
+}

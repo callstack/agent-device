@@ -1,12 +1,19 @@
-// Regression coverage for the two dependency patches under `patches/`, which keep merged v8
-// coverage records honest: `@vitest/coverage-v8` must carry a module's wrapper length across the
-// merge instead of letting read order decide it, and `ast-v8-to-istanbul` must not publish a
-// branch counter no execution could produce. Both defects made whole files unscored (#3425).
+// Regression coverage for the dependency patch under `patches/`, which keeps merged v8 coverage
+// records honest: `ast-v8-to-istanbul` must not publish a branch counter no execution could
+// produce. The defect made whole files unscored (#3425).
 //
-// The async branch cases run on records captured from a real inspector session and pinned in
-// `patches.fixture.json`, because V8 serves a repeatedly-evaluated script from its compile cache
-// as function-level coverage, which would make a live-capture assertion flaky. Each pinned record
+// The cases run on records captured from a real inspector session and pinned in
+// `patches.fixture.json`, because V8 serves a repeatedly-evaluated script from its compile cache as
+// function-level coverage, which would make a live-capture assertion flaky. Each pinned record
 // carries the hand-instrumented entered/taken counts that established its expected counters.
+//
+// #3448's other patch, on `@vitest/coverage-v8`, is gone: Vitest 5 keeps a module's script wrapper
+// offset through the merge of the workers' coverage files instead of letting read order or a pending
+// dynamic import decide it (vitest-dev/vitest#10506, #10643), so no patched module is left to
+// unit-test. Its symptom was a whole file scored from offsets shifted off its source by the wrapper,
+// and a shifted record carries only plausible counts, so nothing here can see it: the guard for that
+// class is upstream's merge, and `check:coverage-crap` still blocks a touched file missing from the
+// map or holding a count no execution can produce.
 
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -14,11 +21,6 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { parseAstAsync } from 'vitest/node';
 import { test } from 'node:test';
-import {
-  UNKNOWN_WRAPPER_LENGTH,
-  unmappableCoverageRecord,
-  WrapperLengths,
-} from '@vitest/coverage-v8/dist/wrapper-lengths.js';
 import { sanitizeIstanbulCoverage, type IstanbulCoverageMap } from './model.ts';
 
 const PROVIDER_ENTRY = import.meta.resolve('@vitest/coverage-v8');
@@ -27,7 +29,7 @@ const PROVIDER_ENTRY = import.meta.resolve('@vitest/coverage-v8');
 const providerRequire = createRequire(PROVIDER_ENTRY);
 
 /**
- * Loads one such dependency, so the test uses exactly the copy the patched provider loads.
+ * Loads one such dependency, so the test uses exactly the copy the provider loads.
  * Named exports stay named, and a CommonJS package keeps its `default`.
  */
 async function loadProviderDependency<T>(name: string): Promise<T> {
@@ -87,111 +89,6 @@ function ifCounters(record: IstanbulRecord, line: number): number[] {
   assert.ok(id, `the converter recorded no if branch on line ${line}`);
   return record.b[id].map(Number);
 }
-
-// ---- Defect A: the wrapper length must survive the merge -------------------
-
-// Six workers recorded `runner-cache-retention.ts` on the run that left it unscored: five had
-// finished evaluating it and measured its wrapper, the sixth's dynamic import was still in
-// flight and measured nothing. The provider merged the module with whichever of the two the last
-// file it read happened to carry, so the same suite scored or unscored the file at random.
-const MEASURED_WRAPPER = 209;
-const MODULE_URL = '/virtual/module.ts';
-
-test('one unmeasured wrapper cannot replace the length the other workers measured', () => {
-  for (const unmeasuredFirst of [false, true]) {
-    const lengths = new WrapperLengths();
-    const readOrder = unmeasuredFirst
-      ? [UNKNOWN_WRAPPER_LENGTH, ...Array.from({ length: 5 }, () => MEASURED_WRAPPER)]
-      : [...Array.from({ length: 5 }, () => MEASURED_WRAPPER), UNKNOWN_WRAPPER_LENGTH];
-    for (const startOffset of readOrder) lengths.add(MODULE_URL, startOffset);
-    assert.equal(
-      lengths.resolve(MODULE_URL),
-      MEASURED_WRAPPER,
-      `read order must not decide the wrapper length (unmeasured read ${unmeasuredFirst ? 'first' : 'last'})`,
-    );
-  }
-});
-
-test('a wrapper two workers measured differently is unresolved, never guessed', () => {
-  for (const readOrder of [
-    [MEASURED_WRAPPER, 0],
-    [0, MEASURED_WRAPPER],
-  ]) {
-    const lengths = new WrapperLengths();
-    for (const startOffset of readOrder) lengths.add(MODULE_URL, startOffset);
-    assert.equal(lengths.resolve(MODULE_URL), UNKNOWN_WRAPPER_LENGTH);
-  }
-});
-
-test('a module whose wrapper nobody measured is invalid rather than zero-length', () => {
-  const lengths = new WrapperLengths();
-  lengths.add(MODULE_URL, UNKNOWN_WRAPPER_LENGTH);
-  assert.equal(lengths.resolve(MODULE_URL), UNKNOWN_WRAPPER_LENGTH);
-  // A module no worker reported at all is a different case: nothing was ever claimed about it.
-  assert.equal(lengths.resolve('/virtual/other.ts'), 0);
-});
-
-test('a provider that measures no wrappers at all keeps unwrapped scripts at zero', () => {
-  // Browser mode evaluates modules in the page without the SSR wrapper, so its scripts carry no
-  // measurement. Reading that as "unmeasured" would invalidate every browser-mode file.
-  const lengths = new WrapperLengths();
-  lengths.add(MODULE_URL, undefined);
-  assert.equal(lengths.resolve(MODULE_URL), 0);
-});
-
-test('wrapper measurements do not leak into the next report window', () => {
-  const lengths = new WrapperLengths();
-  lengths.add(MODULE_URL, MEASURED_WRAPPER);
-  assert.equal(lengths.resolve(MODULE_URL), MEASURED_WRAPPER);
-  lengths.clear();
-  // Each project/environment group converts the files it just read with the measurements its own
-  // workers made; a length from another group is not evidence for this one's scripts.
-  assert.equal(lengths.resolve(MODULE_URL), 0);
-});
-
-test('an unmeasurable module yields a record the CRAP sanitizer drops', async () => {
-  const record = unmappableCoverageRecord(`file://${MODULE_URL}`, undefined)[
-    MODULE_URL
-  ] as IstanbulRecord;
-  assert.equal(record.s[0], null);
-
-  // The marker has to survive merging with a measured record for the same file: a counter that
-  // added away would hand consumers a plausible record for offsets nobody measured. Merging
-  // re-keys the statements, so the assertion is on the set of counters rather than an index.
-  type CoverageMap = {
-    merge: (data: unknown) => void;
-    toJSON: () => IstanbulCoverageMap;
-  };
-  const { createCoverageMap } = providerRequire('istanbul-lib-coverage') as {
-    createCoverageMap: () => CoverageMap;
-  };
-  for (const measuredFirst of [false, true]) {
-    const map = createCoverageMap();
-    const measured = {
-      ...record,
-      s: { 0: 7 },
-      statementMap: { 0: { start: { line: 3, column: 0 }, end: { line: 3, column: 9 } } },
-    };
-    const marker = { ...record, statementMap: { 0: record.statementMap[0] } };
-    if (measuredFirst) {
-      map.merge({ [MODULE_URL]: measured });
-      map.merge({ [MODULE_URL]: marker });
-    } else {
-      map.merge({ [MODULE_URL]: marker });
-      map.merge({ [MODULE_URL]: measured });
-    }
-    const merged = map.toJSON()[MODULE_URL] as IstanbulRecord;
-    assert.ok(
-      Object.values(merged.s).includes(null),
-      `a measured record must not repair an unmeasurable file (measured merged ${measuredFirst ? 'first' : 'last'})`,
-    );
-    const { map: kept, dropped } = sanitizeIstanbulCoverage(map.toJSON() as IstanbulCoverageMap);
-    assert.deepEqual(kept, {});
-    assert.deepEqual(dropped, [MODULE_URL]);
-  }
-});
-
-// ---- Defect B: async branch counts ---------------------------------------
 
 // `async-fallback-operand` is the reported shape: `params.release ?? await probe(...)` feeding an
 // `if` with no `else`. Six callers short-circuit the `??` and take the branch, two await and do

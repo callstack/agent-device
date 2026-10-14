@@ -23,7 +23,6 @@ export type WebSnapshotOptions = {
   interactiveOnly?: boolean;
   depth?: number;
   scope?: string;
-  raw?: boolean;
   includeRects?: boolean;
   surface?: SessionSurface;
   signal?: AbortSignal;

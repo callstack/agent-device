@@ -20,7 +20,6 @@ function importEdge(file: string, target: string): ResolvedImportEdge {
     dynamic: false,
     typeOnly: true,
     symbols: [],
-    bindingResidue: false,
     fromZone: targetDagZone(file),
     toZone: targetDagZone(target),
   };
@@ -28,7 +27,7 @@ function importEdge(file: string, target: string): ResolvedImportEdge {
 
 function baselineDaemonTypesEdges(): ResolvedImportEdge[] {
   return DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.map((file) =>
-    importEdge(file, 'src/daemon/daemon-request.ts'),
+    importEdge(file, 'packages/daemon/src/core/daemon-request.ts'),
   );
 }
 
@@ -40,7 +39,7 @@ function baselineEdges(): ResolvedImportEdge[] {
 /** Where a member of `zone` lives, so a zone count can be turned back into file paths. */
 const ZONE_DIRECTORY: Readonly<Record<string, string>> = {
   '(root)': 'src/',
-  'daemon-server': 'src/daemon/',
+  'daemon-server': 'packages/daemon/src/',
   'ad-replay': 'packages/ad-replay/src/',
   'provider-webdriver': 'packages/provider-webdriver/src/',
 };
@@ -111,9 +110,9 @@ test('external daemon request/session-state importer membership changes require 
     new Map([
       [
         'src/client/new-importer.ts',
-        "import type { SessionState } from '../daemon/session-state.ts';",
+        "import type { SessionState } from '../../packages/daemon/src/core/session-state.ts';",
       ],
-      ['src/daemon/session-state.ts', 'export type SessionState = { name: string };'],
+      ['packages/daemon/src/core/session-state.ts', 'export type SessionState = { name: string };'],
     ]),
   );
 
@@ -216,7 +215,10 @@ test('replay-test may still import its own files inside the package', () => {
 test('internal trees reject deep imports globally, including from daemon', () => {
   const edges = resolveImportEdges(
     new Map([
-      ['src/daemon/adapter.ts', "import type { Plan } from '@agent-device/maestro/internal/plan';"],
+      [
+        'packages/daemon/src/adapter.ts',
+        "import type { Plan } from '@agent-device/maestro/internal/plan';",
+      ],
       ['packages/maestro/src/internal/plan.ts', 'export type Plan = { steps: number };'],
     ]),
   );
@@ -235,18 +237,21 @@ test('replay-port rejects daemon source imports and engine back edges', () => {
     new Map([
       [
         'packages/replay-port/src/daemon-port/test-command.ts',
-        "import { handleSessionCloseCommands } from '../../../../src/daemon/session-lifecycle/index.ts';",
+        "import { handleSessionCloseCommands } from '../../../../packages/daemon/src/sessions/session-lifecycle/index.ts';",
       ],
       [
         'packages/replay-port/src/daemon-port/native-command.ts',
-        "import { SessionStore } from '../../../../src/daemon/session-store.ts';",
+        "import { SessionStore } from '../../../../packages/daemon/src/core/session-store.ts';",
       ],
       [
         'packages/ad-replay/src/internal/step-loop.ts',
         "import { runReplayCommand } from '../../../replay-port/src/daemon-port/native-command.ts';",
       ],
-      ['src/daemon/session-lifecycle/index.ts', 'export function handleSessionCloseCommands() {}'],
-      ['src/daemon/session-store.ts', 'export class SessionStore {}'],
+      [
+        'packages/daemon/src/sessions/session-lifecycle/index.ts',
+        'export function handleSessionCloseCommands() {}',
+      ],
+      ['packages/daemon/src/core/session-store.ts', 'export class SessionStore {}'],
     ]),
   );
 
@@ -260,11 +265,12 @@ test('replay-port rejects daemon source imports and engine back edges', () => {
     [
       {
         file: 'packages/replay-port/src/daemon-port/test-command.ts',
-        message: 'replay-port must not import src/daemon/session-lifecycle/index.ts',
+        message:
+          'replay-port must not import packages/daemon/src/sessions/session-lifecycle/index.ts',
       },
       {
         file: 'packages/replay-port/src/daemon-port/native-command.ts',
-        message: 'replay-port must not import src/daemon/session-store.ts',
+        message: 'replay-port must not import packages/daemon/src/core/session-store.ts',
       },
       {
         file: 'packages/ad-replay/src/internal/step-loop.ts',
@@ -278,19 +284,19 @@ test('session lifecycle rejects handler deep imports in both directions', () => 
   const edges = resolveImportEdges(
     new Map([
       [
-        'src/daemon/handlers/session.ts',
+        'packages/daemon/src/sessions/handlers/session.ts',
         "import { handleSessionInventoryCommands } from '../session-lifecycle/internal/inventory.ts';\nexport function handleSessionCommands() {}",
       ],
       [
-        'src/daemon/session-lifecycle/internal/inventory.ts',
+        'packages/daemon/src/sessions/session-lifecycle/internal/inventory.ts',
         "import { handleSessionCommands } from '../../handlers/session.ts';\nexport function handleSessionInventoryCommands() {}",
       ],
       [
-        'src/daemon/session-lifecycle/internal/session-close.ts',
+        'packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
         "import { handleSessionCommands } from '../../handlers/session.ts';",
       ],
       [
-        'src/daemon/session-lifecycle/index.ts',
+        'packages/daemon/src/sessions/session-lifecycle/index.ts',
         'export function handleSessionInventoryCommands() {}',
       ],
     ]),
@@ -309,22 +315,60 @@ test('session lifecycle rejects handler deep imports in both directions', () => 
     })),
     [
       {
-        file: 'src/daemon/handlers/session.ts',
+        file: 'packages/daemon/src/sessions/handlers/session.ts',
         line: 1,
         message:
-          "src/daemon/handlers/session.ts must not import daemon-session-lifecycle's internal tree (src/daemon/session-lifecycle/internal/inventory.ts)",
+          "packages/daemon/src/sessions/handlers/session.ts must not import daemon-session-lifecycle's internal tree (packages/daemon/src/sessions/session-lifecycle/internal/inventory.ts)",
       },
       {
-        file: 'src/daemon/session-lifecycle/internal/inventory.ts',
+        file: 'packages/daemon/src/sessions/session-lifecycle/internal/inventory.ts',
         line: 1,
-        message: 'daemon-session-lifecycle must not import src/daemon/handlers/session.ts',
+        message:
+          'daemon-session-lifecycle must not import packages/daemon/src/sessions/handlers/session.ts',
       },
       {
-        file: 'src/daemon/session-lifecycle/internal/session-close.ts',
+        file: 'packages/daemon/src/sessions/session-lifecycle/internal/session-close.ts',
         line: 1,
-        message: 'daemon-session-lifecycle must not import src/daemon/handlers/session.ts',
+        message:
+          'daemon-session-lifecycle must not import packages/daemon/src/sessions/handlers/session.ts',
       },
     ],
+  );
+});
+
+test('the handler shape rule catches a handlers folder under an unlisted layer', () => {
+  // sessions/handlers/ and execution/handlers/ are what the fold produced; the rule must hold
+  // for a handler folder planted under ANY layer, so a new one cannot slip past the policies.
+  const edges = resolveImportEdges(
+    new Map([
+      [
+        'packages/daemon/src/sessions/session-lifecycle/internal/session-open.ts',
+        "import { handlePlantedCommands } from '../../../resources/handlers/planted.ts';",
+      ],
+      [
+        'packages/daemon/src/resources/handlers/planted.ts',
+        'export function handlePlantedCommands() {}',
+      ],
+      [
+        'packages/daemon/src/sessions/session-lifecycle/internal/reads-support.ts',
+        "import { sharedThing } from '../../../resources/support-thing.ts';",
+      ],
+      ['packages/daemon/src/resources/support-thing.ts', 'export function sharedThing() {}'],
+    ]),
+  );
+  const violations = checkDaemonModularityRatchets(
+    [...baselineEdges(), ...edges],
+    REFERENCE,
+    REFERENCE,
+  );
+  const handlerEdges = violations.filter(({ message }) =>
+    message.includes('packages/daemon/src/resources/handlers/planted.ts'),
+  );
+  assert.equal(handlerEdges.length, 1);
+  // The same import from a non-handlers folder under the same layer stays allowed.
+  assert.ok(
+    !violations.some(({ message }) => message.includes('resources/support-thing.ts')),
+    'a non-handler resource folder must not become a forbidden target',
   );
 });
 
@@ -332,31 +376,31 @@ test('interaction rejects handler crossings and deep imports around its facade',
   const edges = resolveImportEdges(
     new Map([
       [
-        'src/daemon/handlers/react-native.ts',
+        'packages/daemon/src/execution/handlers/react-native.ts',
         "import { refSnapshotFlagGuardResponse } from '../interaction/internal/interaction-flags.ts';\nexport function handleReactNativeCommands() {}",
       ],
       [
-        'src/daemon/interaction/internal/interaction-runtime.ts',
+        'packages/daemon/src/execution/interaction/internal/interaction-runtime.ts',
         "import { handleReactNativeCommands } from '../../handlers/react-native.ts';\nexport function createInteractionRuntime() {}",
       ],
       [
-        'src/daemon/generic-settle.ts',
+        'packages/daemon/src/execution/generic-settle.ts',
         "import { createInteractionRuntime } from './interaction/internal/interaction-runtime.ts';",
       ],
       [
-        'src/daemon/selector-runtime.ts',
+        'packages/daemon/src/execution/selector-runtime.ts',
         "import { refSnapshotFlagGuardResponse } from './interaction/internal/interaction-flags.ts';",
       ],
       [
-        'src/daemon/selector-runtime-backend.ts',
+        'packages/daemon/src/execution/selector-runtime-backend.ts',
         "import { readTextForNode } from './interaction/internal/interaction-ref-policy.ts';",
       ],
       [
-        'src/daemon/interaction/internal/interaction-flags.ts',
+        'packages/daemon/src/execution/interaction/internal/interaction-flags.ts',
         'export function refSnapshotFlagGuardResponse() {}',
       ],
       [
-        'src/daemon/interaction/internal/interaction-ref-policy.ts',
+        'packages/daemon/src/execution/interaction/internal/interaction-ref-policy.ts',
         'export function readTextForNode() {}',
       ],
     ]),
@@ -371,14 +415,14 @@ test('interaction rejects handler crossings and deep imports around its facade',
   assert.ok(
     violations.some(({ message }) =>
       message.includes(
-        "src/daemon/handlers/react-native.ts must not import daemon-interaction's internal tree",
+        "packages/daemon/src/execution/handlers/react-native.ts must not import daemon-interaction's internal tree",
       ),
     ),
   );
   assert.ok(
     violations.some(({ message }) =>
       message.includes(
-        "src/daemon/interaction/internal/interaction-runtime.ts must not import src/daemon/handlers/react-native.ts from daemon-interaction's internal tree",
+        "packages/daemon/src/execution/interaction/internal/interaction-runtime.ts must not import packages/daemon/src/execution/handlers/react-native.ts from daemon-interaction's internal tree",
       ),
     ),
   );
@@ -394,15 +438,15 @@ test('session observability rejects handler deep imports in both directions', ()
   const edges = resolveImportEdges(
     new Map([
       [
-        'src/daemon/handlers/session.ts',
+        'packages/daemon/src/sessions/handlers/session.ts',
         "import { handleSessionObservabilityCommands } from '../session-observability/internal/session-observability.ts';\nexport function handleSessionCommands() {}",
       ],
       [
-        'src/daemon/session-observability/internal/session-observability.ts',
+        'packages/daemon/src/sessions/session-observability/internal/session-observability.ts',
         "import { handleSessionCommands } from '../../handlers/session.ts';\nexport function handleSessionObservabilityCommands() {}",
       ],
       [
-        'src/daemon/session-observability/index.ts',
+        'packages/daemon/src/sessions/session-observability/index.ts',
         'export function handleSessionObservabilityCommands() {}',
       ],
     ]),
@@ -421,15 +465,16 @@ test('session observability rejects handler deep imports in both directions', ()
     })),
     [
       {
-        file: 'src/daemon/handlers/session.ts',
+        file: 'packages/daemon/src/sessions/handlers/session.ts',
         line: 1,
         message:
-          "src/daemon/handlers/session.ts must not import daemon-session-observability's internal tree (src/daemon/session-observability/internal/session-observability.ts)",
+          "packages/daemon/src/sessions/handlers/session.ts must not import daemon-session-observability's internal tree (packages/daemon/src/sessions/session-observability/internal/session-observability.ts)",
       },
       {
-        file: 'src/daemon/session-observability/internal/session-observability.ts',
+        file: 'packages/daemon/src/sessions/session-observability/internal/session-observability.ts',
         line: 1,
-        message: 'daemon-session-observability must not import src/daemon/handlers/session.ts',
+        message:
+          'daemon-session-observability must not import packages/daemon/src/sessions/handlers/session.ts',
       },
     ],
   );
@@ -437,9 +482,9 @@ test('session observability rejects handler deep imports in both directions', ()
 
 test('snapshot execution cannot return to handler-owned support paths', () => {
   const restored = [
-    'src/daemon/handlers/snapshot-capture.ts',
-    'src/daemon/handlers/snapshot-interactor-capture.ts',
-    'src/daemon/handlers/snapshot-session.ts',
+    'packages/daemon/src/handlers/snapshot-capture.ts',
+    'packages/daemon/src/handlers/snapshot-interactor-capture.ts',
+    'packages/daemon/src/handlers/snapshot-session.ts',
   ];
 
   assert.deepEqual(
@@ -451,64 +496,67 @@ test('snapshot execution cannot return to handler-owned support paths', () => {
         'Reuse the daemon-owned snapshot execution module instead of restoring shared mechanics beneath a route adapter.',
     })),
   );
-  assert.deepEqual(checkRetiredSnapshotExecutionPaths(['src/daemon/handlers/snapshot.ts']), []);
+  assert.deepEqual(
+    checkRetiredSnapshotExecutionPaths(['packages/daemon/src/sessions/handlers/snapshot.ts']),
+    [],
+  );
 });
 
 test('session lifecycle rejects restored neutral helper paths', () => {
   const violations = checkRetiredSessionLifecyclePaths([
-    'src/daemon/session-device-resolution.ts',
-    'src/daemon/handlers/session-device-utils.ts',
-    'src/daemon/handlers/session-runtime-admission.ts',
-    'src/daemon/handlers/session-close-script.ts',
-    'src/daemon/handlers/session-close.ts',
+    'packages/daemon/src/resources/session-device-resolution.ts',
+    'packages/daemon/src/handlers/session-device-utils.ts',
+    'packages/daemon/src/handlers/session-runtime-admission.ts',
+    'packages/daemon/src/handlers/session-close-script.ts',
+    'packages/daemon/src/handlers/session-close.ts',
   ]);
 
   assert.deepEqual(
     violations.map(({ message }) => message),
     [
-      'retired session lifecycle path was restored: src/daemon/handlers/session-device-utils.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
-      'retired session lifecycle path was restored: src/daemon/handlers/session-runtime-admission.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
-      'retired session lifecycle path was restored: src/daemon/handlers/session-close-script.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
-      'retired session lifecycle path was restored: src/daemon/handlers/session-close.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      'retired session lifecycle path was restored: packages/daemon/src/handlers/session-device-utils.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      'retired session lifecycle path was restored: packages/daemon/src/handlers/session-runtime-admission.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      'retired session lifecycle path was restored: packages/daemon/src/handlers/session-close-script.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+      'retired session lifecycle path was restored: packages/daemon/src/handlers/session-close.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
     ],
   );
 });
 
 test('interaction rejects restored handler implementation paths', () => {
   const violations = checkRetiredInteractionPaths([
-    'src/daemon/interaction/internal/interaction.ts',
-    'src/daemon/handlers/interaction-touch.ts',
+    'packages/daemon/src/execution/interaction/internal/interaction.ts',
+    'packages/daemon/src/handlers/interaction-touch.ts',
   ]);
 
   assert.deepEqual(violations, [
     {
       rule: 'R10 daemon-modularity',
-      file: 'src/daemon/handlers/interaction-touch.ts',
+      file: 'packages/daemon/src/handlers/interaction-touch.ts',
       line: 1,
       message:
-        'retired interaction handler path was restored: src/daemon/handlers/interaction-touch.ts. Keep route implementations behind src/daemon/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
+        'retired interaction handler path was restored: packages/daemon/src/handlers/interaction-touch.ts. Keep route implementations behind packages/daemon/src/execution/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
     },
   ]);
 });
 
 test('interaction rejects renamed handler implementation paths', () => {
   const violations = checkRetiredInteractionPaths([
-    'src/daemon/handlers/interaction-touch-v2.ts',
-    'src/daemon/handlers/find-next.ts',
+    'packages/daemon/src/handlers/interaction-touch-v2.ts',
+    'packages/daemon/src/handlers/find-next.ts',
   ]);
 
   assert.deepEqual(
     violations.map(({ file, message }) => ({ file, message })),
     [
       {
-        file: 'src/daemon/handlers/interaction-touch-v2.ts',
+        file: 'packages/daemon/src/handlers/interaction-touch-v2.ts',
         message:
-          'retired interaction handler path was restored: src/daemon/handlers/interaction-touch-v2.ts. Keep route implementations behind src/daemon/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
+          'retired interaction handler path was restored: packages/daemon/src/handlers/interaction-touch-v2.ts. Keep route implementations behind packages/daemon/src/execution/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
       },
       {
-        file: 'src/daemon/handlers/find-next.ts',
+        file: 'packages/daemon/src/handlers/find-next.ts',
         message:
-          'retired interaction handler path was restored: src/daemon/handlers/find-next.ts. Keep route implementations behind src/daemon/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
+          'retired interaction handler path was restored: packages/daemon/src/handlers/find-next.ts. Keep route implementations behind packages/daemon/src/execution/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
       },
     ],
   );
@@ -516,8 +564,8 @@ test('interaction rejects renamed handler implementation paths', () => {
 
 test('session lifecycle rejects any restored open or close handler path', () => {
   const violations = checkRetiredSessionLifecyclePaths([
-    'src/daemon/handlers/session-open-regressed.ts',
-    'src/daemon/handlers/session-close-regressed.ts',
+    'packages/daemon/src/handlers/session-open-regressed.ts',
+    'packages/daemon/src/handlers/session-close-regressed.ts',
   ]);
 
   assert.deepEqual(
@@ -530,17 +578,17 @@ test('session lifecycle rejects any restored open or close handler path', () => 
     [
       {
         rule: 'R10 daemon-modularity',
-        file: 'src/daemon/handlers/session-open-regressed.ts',
+        file: 'packages/daemon/src/handlers/session-open-regressed.ts',
         line: 1,
         message:
-          'retired session lifecycle path was restored: src/daemon/handlers/session-open-regressed.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+          'retired session lifecycle path was restored: packages/daemon/src/handlers/session-open-regressed.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
       },
       {
         rule: 'R10 daemon-modularity',
-        file: 'src/daemon/handlers/session-close-regressed.ts',
+        file: 'packages/daemon/src/handlers/session-close-regressed.ts',
         line: 1,
         message:
-          'retired session lifecycle path was restored: src/daemon/handlers/session-close-regressed.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
+          'retired session lifecycle path was restored: packages/daemon/src/handlers/session-close-regressed.ts. Keep the neutral seam at its daemon owner instead of rebuilding a handler grab-bag.',
       },
     ],
   );
@@ -548,14 +596,14 @@ test('session lifecycle rejects any restored open or close handler path', () => 
 
 test('session observability rejects restored handler paths', () => {
   const restoredPaths = [
-    'src/daemon/handlers/session-observability.ts',
-    'src/daemon/handlers/session-perf-runtime.ts',
-    'src/daemon/handlers/session-network.ts',
-    'src/daemon/handlers/session-audio.ts',
-    'src/daemon/handlers/session-network-regressed.ts',
-    'src/daemon/handlers/session-perf.ts',
-    'src/daemon/handlers/session-logs.ts',
-    'src/daemon/handlers/session-events.ts',
+    'packages/daemon/src/handlers/session-observability.ts',
+    'packages/daemon/src/handlers/session-perf-runtime.ts',
+    'packages/daemon/src/handlers/session-network.ts',
+    'packages/daemon/src/handlers/session-audio.ts',
+    'packages/daemon/src/handlers/session-network-regressed.ts',
+    'packages/daemon/src/handlers/session-perf.ts',
+    'packages/daemon/src/handlers/session-logs.ts',
+    'packages/daemon/src/handlers/session-events.ts',
   ] as const;
   const violations = checkRetiredSessionObservabilityPaths(restoredPaths);
 
@@ -596,7 +644,7 @@ test('R9 holds each zone to the merge-base and keeps engine files outside the co
 // The merge-base carries membership, so the message names exactly the files that joined.
 test('R10 zone overflow names the member that joined the cycle', () => {
   // Sorts after the provider-webdriver probes: a first-member pick could not name it by luck.
-  const joined = 'src/daemon/snapshot-interactor-capture.ts';
+  const joined = 'packages/daemon/src/core/snapshot-interactor-capture.ts';
   const members = [...typeCycleMembers({ 'provider-webdriver': 5 }), joined].sort();
 
   const violations = checkDaemonModularityRatchets(

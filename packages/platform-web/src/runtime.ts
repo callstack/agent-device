@@ -362,9 +362,11 @@ function webRuntimeFacts(
         customActions: snapshotCustomActionsUnavailable,
         withoutActiveApp: browserDevice,
       }),
-      // No native text reading: every text wait on this owner polls the canonical tree.
+      // No native text reading: every text wait on this owner polls the canonical tree. No live
+      // selector read either: the off-screen guard refuses on the capture's verdict unchanged.
       ...selectorObservationRuntimeOperationFacts({
         findText: openTargetKindUnavailable,
+        querySelector: openTargetKindUnavailable,
       }),
       ...screenshotRuntimeOperationFacts({ capture: browserDevice }),
       ...focusRuntimeOperationFacts({ focus: browserDevice }),

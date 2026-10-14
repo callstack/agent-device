@@ -7,7 +7,7 @@ import { makeRunnerLease } from './runner-session-fixtures.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
 
 // The package-local half of the filesystem boundary-fault matrix
-// (src/__tests__/test-utils/filesystem-boundary-faults.ts): the root harness
+// (packages/test-kit/src/filesystem-boundary-faults.ts): the root harness
 // cannot be imported across the package boundary, and `writeRunnerLease` is
 // the one atomic publisher that moved here. The contract under test is the
 // same: a fault at the write or rename step surfaces its errno and leaves no

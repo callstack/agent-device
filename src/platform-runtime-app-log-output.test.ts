@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test } from 'vitest';
 import { openAppLogOutput, readAppLogOutputTail } from './platform-runtime-app-log-output.ts';
-import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const roots: string[] = [];
 

@@ -45,12 +45,13 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
     label: 'Error retriability + hints',
     mutate: ['packages/kernel/src/errors.ts'],
     owns: ['packages/kernel/src/errors.ts'],
+    shards: 5,
   },
   {
     id: 'daemon-ref-frame',
     label: 'Ref-frame admission matrix (ADR 0014)',
-    mutate: ['src/daemon/ref-frame.ts'],
-    owns: ['src/daemon/ref-frame.ts'],
+    mutate: ['packages/daemon/src/core/ref-frame.ts'],
+    owns: ['packages/daemon/src/core/ref-frame.ts'],
   },
   {
     id: 'interaction-settle',
@@ -76,13 +77,12 @@ export const KERNEL_MODULES: readonly KernelModule[] = [
     mutate: [
       'packages/selectors/src/**/*.ts',
       '!packages/selectors/src/**/*.test.ts',
+      '!packages/selectors/src/**/*.fixtures.ts',
       '!packages/selectors/src/internal/__tests__/**',
     ],
     // Selector tests live under the owned package source, so the prefix covers them.
     owns: ['packages/selectors/src/'],
-    // ~1,280 mutants at the observed ~3s/mutant on a 2-core runner is ~64
-    // minutes in one job — past the acceptance budget and its own timeout.
-    shards: 4,
+    shards: 8,
   },
   {
     id: 'target-annotation-serde',

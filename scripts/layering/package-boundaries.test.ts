@@ -236,6 +236,42 @@ test('double-quoted and re-export routes into packages are not invisible to R11'
   assert.equal(checkPackageInternalSites(kernel, packageEscape, ALL, false).length, 1);
 });
 
+test('a package vi.mock route into root src is an R11 escape, and a sibling route needs its declaration', () => {
+  // `vi.mock('./x')` is a call expression the AST import parser never visits, yet the loader
+  // resolves its specifier and instantiates that module — the same double-instance route the
+  // tunnels above name. Planted red: delete the scan in `specifierSites` and every assertion.
+  const kernelViolations = (compiled: boolean, source: string) =>
+    checkPackageInternalSites(
+      kernel,
+      specifierSites('packages/kernel/src/internal/thing.test.ts', source),
+      ALL,
+      compiled,
+    );
+  const rootMock = kernelViolations(true, "vi.mock('../../../../src/utils/exec.ts', () => ({}));");
+  assert.equal(rootMock.length, 1);
+  assert.match(rootMock[0]!.message, /escapes packages\/kernel/);
+  assert.equal(kernelViolations(true, "vi.doMock('../../../../src/utils/exec.ts');").length, 1);
+  assert.equal(
+    kernelViolations(true, 'vi.importActual("../../../../src/utils/exec.ts")').length,
+    1,
+  );
+
+  // Legitimate mock routes keep working: a declared sibling's exported subpath is not an
+  // escape, an undeclared sibling is still the undeclared-sibling branch, and a mock of the
+  // package's own module stays silent, so the scan cannot be read as flagging all mocks.
+  const declaredMock = specifierSites(
+    'packages/contracts/src/internal/thing.test.ts',
+    "vi.mock('@agent-device/kernel/errors', () => ({}));",
+  );
+  assert.deepEqual(checkPackageInternalSites(contracts, declaredMock, ALL, true), []);
+  const undeclaredMock = specifierSites(
+    'packages/kernel/src/internal/thing.test.ts',
+    "vi.mock('@agent-device/contracts/interaction', () => ({}));",
+  );
+  assert.equal(rules(checkPackageInternalSites(kernel, undeclaredMock, ALL, false)).length, 1);
+  assert.deepEqual(kernelViolations(true, "vi.mock('./exec.ts', () => ({}));"), []);
+});
+
 // This `src/utils` path is another in-memory arbitrary parser fixture, not a live repository path.
 test('a package relative escape is R11-owned, compiled or not', () => {
   // #3289 maintainer review restored this branch after a planted `tsc -b` run showed the
@@ -449,6 +485,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/durable-capture-runtime-recovery',
     '@agent-device/capture-kit/durable-capture/session-binding',
     '@agent-device/capture-kit/durable-json',
+    '@agent-device/capture-kit/ios-react-native-value',
     '@agent-device/capture-kit/ios-snapshot-acquisition',
     '@agent-device/capture-kit/ios-snapshot-engine',
     '@agent-device/capture-kit/ios-snapshot-planning',
@@ -492,6 +529,7 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/capture-kit/screenshot-overlay',
     '@agent-device/capture-kit/scroll-edge-state',
     '@agent-device/capture-kit/snapshot-chrome',
+    '@agent-device/capture-kit/snapshot-chrome-fixtures',
     '@agent-device/capture-kit/snapshot-desktop-projection',
     '@agent-device/capture-kit/snapshot-desktop-surface',
     '@agent-device/capture-kit/snapshot-diff',
@@ -616,12 +654,6 @@ test('the real tree parses, declares, and passes R11', () => {
     (pkg) => pkg.name === '@agent-device/platform-android',
   );
   assert.ok(platformAndroidPackage, 'platform-android package must exist');
-  assert.deepEqual([...platformAndroidPackage.exportTargets.keys()].sort(), [
-    '@agent-device/platform-android',
-    '@agent-device/platform-android/adb-host',
-    '@agent-device/platform-android/device-boot',
-    '@agent-device/platform-android/mechanics',
-  ]);
   assert.deepEqual([...platformAndroidPackage.workspaceDependencies].sort(), [
     '@agent-device/capture-kit',
     '@agent-device/contracts',

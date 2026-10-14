@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { mkdtempForTestSync } from '../../src/__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { buildPackageXcuitest } from '../build-package-xcuitest.mjs';
 
 type Build = { root: string; platform: string; derivedPath: string };

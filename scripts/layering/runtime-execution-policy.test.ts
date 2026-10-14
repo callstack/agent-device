@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { runtimeExecutionIntegrityViolations } from './runtime-execution-policy.ts';
 
 const REGISTRY = 'packages/command-registry/src/registry.ts';
-const ADMISSION = 'src/daemon/runtime-admission.ts';
+const ADMISSION = 'packages/daemon/src/core/runtime-admission.ts';
 
 function sources(entries: readonly (readonly [string, string])[]): ReadonlyMap<string, string> {
   return new Map(entries);
@@ -36,7 +36,7 @@ test('the permanent runtime policy accepts facts-only admission and typed operat
         `),
       ],
       [
-        'src/daemon/handler.ts',
+        'packages/daemon/src/handler.ts',
         `async function run(runtime) { return runtime.operations.focusPoint(input); }`,
       ],
     ]),
@@ -56,7 +56,7 @@ test('a descriptor capability bucket and legacy admission call are rejected glob
         `requireFactsInspection(request.inspectFacts); requireDeviceBinding(request.bindDevice);`,
       ),
     ],
-    ['src/daemon/planted.ts', `requireCommandSupported('focus', device);`],
+    ['packages/daemon/src/planted.ts', `requireCommandSupported('focus', device);`],
   ]);
   assert.deepEqual(found, [
     'command descriptors may not restore capability-bucket admission',
@@ -74,7 +74,7 @@ test('daemon code cannot cast, assert, or bracket its way around runtime narrowi
       ),
     ],
     [
-      'src/daemon/planted.ts',
+      'packages/daemon/src/planted.ts',
       `
         const forged = value as BoundDeviceRuntime<typeof use>;
         runtime.operations.focusPoint!;
@@ -103,7 +103,7 @@ test('dynamic operation iteration used by admission remains legal', () => {
           `requireFactsInspection(request.inspectFacts); requireDeviceBinding(request.bindDevice);`,
         ),
       ],
-      ['src/daemon/planted.ts', `const fact = facts.operations[operation];`],
+      ['packages/daemon/src/planted.ts', `const fact = facts.operations[operation];`],
     ]),
     [],
   );

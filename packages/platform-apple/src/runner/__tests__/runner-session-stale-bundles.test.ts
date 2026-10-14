@@ -179,6 +179,17 @@ test('runner session keeps boot and stale bundle cleanup available when needed',
   );
 });
 
+test('runner session skips the boot wait for a device already readied by the open', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-readied-sim', booted: true };
+
+  await ensureRunnerSession(device, {});
+
+  assert.equal(
+    mockRunXcrun.mock.calls.some((call) => call[0]?.includes('bootstatus')),
+    false,
+  );
+});
+
 test('runner session stale bundle cleanup is best-effort when simctl stalls', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-session-clean-timeout-sim' };
 

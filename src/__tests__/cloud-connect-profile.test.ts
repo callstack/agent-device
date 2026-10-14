@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
+import { beginStdoutCapture } from './test-utils/stream-capture.ts';
 import { runCliCapture } from './cli-capture.ts';
 import {
   hashRemoteConfigFile,
@@ -19,7 +20,7 @@ import {
   verifyAwsDeviceFarmConnection,
   verifyBrowserStackConnection,
 } from '@agent-device/provider-webdriver/connection-verification';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
 vi.mock('../cli/auth-session.ts', async (importOriginal) => ({
@@ -913,11 +914,11 @@ async function connectWithGeneratedCloudProfile(stateDir: string): Promise<void>
 }
 
 async function captureConnectStdout(task: () => Promise<void>): Promise<void> {
-  const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  const stdoutCapture = beginStdoutCapture();
   try {
     await task();
   } finally {
-    stdoutWrite.mockRestore();
+    stdoutCapture.restore();
   }
 }
 

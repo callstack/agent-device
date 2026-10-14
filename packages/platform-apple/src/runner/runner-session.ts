@@ -154,6 +154,10 @@ export async function ensureRunnerSession(
 /** How long the device-readiness probe may take, bounded by the startup budget it runs inside. */
 const RUNNER_DEVICE_READINESS_BUDGET_MS = 10_000;
 
+const BUILD_XCTESTRUN_TIMING = 'build_xctestrun';
+/** Timings measured inside another phase: reported per key, never added to the startup total. */
+const NESTED_STARTUP_TIMINGS: ReadonlySet<string> = new Set([BUILD_XCTESTRUN_TIMING]);
+
 async function startRunnerSessionWithLease(
   device: DeviceInfo,
   options: RunnerSessionOptions,
@@ -259,7 +263,7 @@ async function startRunnerSessionWithLease(
           budget: createRunnerPhaseBudget(resolveRunnerBuildTimeoutMs(options, budget), signal),
         }),
     );
-    startupTimings.build_xctestrun = xctestrunArtifact.buildMs;
+    startupTimings[BUILD_XCTESTRUN_TIMING] = xctestrunArtifact.buildMs;
     endpoint = await measureRunnerStartupStep(startupTimings, 'allocate_port', async () => ({
       port: await getFreePort(),
       token: mintRunnerToken(),
@@ -908,7 +912,10 @@ async function measureRunnerStartupStep<T>(
 function emitRunnerStartupTimings(session: RunnerSession, command: string): void {
   if (session.startupTimingsReported || !session.startupTimings) return;
   session.startupTimingsReported = true;
-  const totalMs = Object.values(session.startupTimings).reduce((sum, value) => sum + value, 0);
+  const totalMs = Object.entries(session.startupTimings).reduce(
+    (sum, [phase, ms]) => (NESTED_STARTUP_TIMINGS.has(phase) ? sum : sum + ms),
+    0,
+  );
   emitDiagnostic({
     level: 'info',
     phase: 'ios_runner_session_startup_timings',

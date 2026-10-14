@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test, vi } from 'vitest';
-import { mkdtempForTest } from '../../src/__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
 import {
   assertInstalledSnapshotBridge,
   measureCleanInstalledPackage,

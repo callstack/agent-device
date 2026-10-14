@@ -283,6 +283,30 @@ extension RunnerTests {
     XCTAssertEqual(editableTextValue(for: nextScreenField, treatingPlaceholderAsEmpty: true), "")
   }
 
+  // An unidentified field that moves once the first character arrives, the way an iOS 26 bottom
+  // search bar rises above the keyboard: the read-back finds it, still focused, at another frame
+  // than the pre-entry read, holding exactly the requested text.
+  @MainActor
+  func testFillVerifiesAnUnidentifiedFieldThatMovesWhileTyping() throws {
+    let textField = try launchRemovableInputFixture(
+      "--agent-device-text-entry-moves-on-input",
+      "--agent-device-text-entry-unnamed-input"
+    )
+    let frameBefore = textField.frame
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-moves-on-input", text: "hello", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(response.data?.message, "typed")
+    XCTAssertNotEqual(textField.frame, frameBefore)
+    XCTAssertEqual(editableTextValue(for: textField, treatingPlaceholderAsEmpty: true), "hello")
+  }
+
   // Pins a known limit, not desired behavior: neither input has an identifier, and the successor
   // takes the code field's index in the query that bound it, so the remaining posts resolve to it
   // and land in the successor. Refusing point and focus re-resolution would not help, because the
@@ -381,6 +405,44 @@ extension RunnerTests {
       Thread.sleep(forTimeInterval: 0.25)
     }
     XCTAssertEqual(observed, text)
+  }
+
+  // A React Native `secureTextEntry` field is a `.textField` whose value reads back as bullets, so
+  // the typed text can never match it. The fill must report typed and unverified instead of a
+  // mismatch, and must not run the repair, whose clear taps the field's right edge where a
+  // show/hide toggle commonly sits (tester-army/e2e#872).
+  @MainActor
+  func testFillIntoMaskedTextFieldIsUnverifiedRatherThanAMismatch() throws {
+    app.launchArguments = [
+      "--agent-device-text-entry-regression",
+      "--agent-device-text-entry-masked-value",
+    ]
+    app.launch()
+    addTeardownBlock { [self] in
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.waitForExistence(timeout: appExistenceTimeout))
+    let textField = app.textFields["agent-device-hardware-keyboard-input"]
+    XCTAssertTrue(textField.waitForExistence(timeout: appExistenceTimeout))
+    let togglePresses = app.staticTexts["agent-device-masked-toggle-presses"]
+    XCTAssertTrue(togglePresses.waitForExistence(timeout: appExistenceTimeout))
+    XCTAssertEqual(togglePresses.label, "presses=0")
+    try tapHardwareKeyboardInput(commandId: "tap-masked-input")
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let fillResponse = executeTypeCommand(
+      activeApp: app,
+      command: try runnerCommandFixture(
+        #"{"command":"type","commandId":"fill-masked-input","text":"not-a-secret-123","textEntryMode":"replace"}"#
+      )
+    )
+
+    XCTAssertTrue(fillResponse.ok, String(describing: fillResponse.error))
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertEqual(fillResponse.data?.message, "typed")
+    XCTAssertEqual(textField.value as? String, String(repeating: "\u{2022}", count: 8))
+    XCTAssertEqual(togglePresses.label, "presses=0")
   }
 
   private struct UnavailableTextEntrySynthesizer: TextEntrySynthesizing {

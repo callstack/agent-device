@@ -109,7 +109,7 @@ export const HUB_ENTRY_FILES: readonly string[] = [
   'src/daemon.ts',
   'src/platform-runtime.ts',
   'src/core/interactors/register-builtins.ts',
-  'src/daemon/session-teardown.ts',
+  'packages/daemon/src/sessions/session-teardown.ts',
 ];
 
 /** A platform façade evaluates exactly this many modules: itself. */
@@ -151,6 +151,10 @@ export function entryCategoryOf(entryFile: string): EntryCategory {
 const PLATFORM_MECHANICS_ENTRY_PREFIXES = [
   'packages/platform-apple/src/runner/',
   'packages/platform-android/src/mechanics.ts',
+  // The shared Android test fixtures ARE the mechanics exercised on archived device trees
+  // (#3517); like the mechanics facet, their closure is the implementation they export.
+  'packages/platform-android/src/snapshot-capture.fixtures.ts',
+  'packages/platform-android/src/ui-hierarchy.fixtures.ts',
 ] as const;
 
 const APPLE_DOMAIN_MECHANICS_ENTRY_FILES: ReadonlySet<string> = new Set([

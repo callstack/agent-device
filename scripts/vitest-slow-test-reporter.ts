@@ -1,4 +1,4 @@
-import type { Reporter, TestCase, TestModule } from 'vitest/node';
+import type { Reporter, TestCase } from 'vitest/node';
 
 /**
  * Slow-test ratchet (see docs/agents/testing.md "Speed rules").
@@ -90,7 +90,7 @@ export default function slowTestGateReporter(): Reporter {
       if (result.state !== 'passed' && result.state !== 'failed') return;
       const offender = classifySlowTest({
         root,
-        moduleId: (testCase.module as TestModule).moduleId,
+        moduleId: testCase.module.moduleId,
         name: testCase.name,
         fullName: testCase.fullName,
         durationMs: testCase.diagnostic()?.duration ?? 0,

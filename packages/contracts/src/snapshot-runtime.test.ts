@@ -114,7 +114,8 @@ test('provider snapshot binding presents acquired facts through the supplied hos
 // signal is fixed at bind time, but `wait` binds once and polls many times, so
 // each poll must be able to cancel its own capture without cancelling the
 // binding. These are the contract-level halves of that claim; the poll-deadline
-// behaviour itself is proven end to end in `src/daemon/__tests__/wait-runtime.test.ts`.
+// behaviour itself is proven end to end in
+// `src/__tests__/daemon-composition/wait-runtime.test.ts`.
 // ---------------------------------------------------------------------------
 
 test('a capture with no per-capture signal receives the binding signal itself, not a wrapper', () => {

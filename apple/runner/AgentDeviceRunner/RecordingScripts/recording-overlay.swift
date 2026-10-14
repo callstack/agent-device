@@ -85,7 +85,8 @@ func run() throws {
     throw RecordingScriptError.exportFailed("Failed to create composition video track.")
   }
 
-  let renderSize = resolvedRenderSize(for: sourceVideoTrack)
+  let sourceBounds = resolvedRenderBounds(for: sourceVideoTrack)
+  let renderSize = sourceBounds.size
   let videoComposition = AVMutableVideoComposition()
   videoComposition.renderSize = renderSize
   videoComposition.frameDuration = resolvedFrameDuration(
@@ -96,7 +97,10 @@ func run() throws {
   let instruction = AVMutableVideoCompositionInstruction()
   instruction.timeRange = fullRange
   let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compositionVideoTrack)
-  layerInstruction.setTransform(sourceVideoTrack.preferredTransform, at: .zero)
+  let renderTransform = sourceVideoTrack.preferredTransform.concatenating(
+    CGAffineTransform(translationX: -sourceBounds.minX, y: -sourceBounds.minY)
+  )
+  layerInstruction.setTransform(renderTransform, at: .zero)
   instruction.layerInstructions = [layerInstruction]
   videoComposition.instructions = [instruction]
 
@@ -237,8 +241,11 @@ func exportPresetName(compatibleWith asset: AVAsset) throws -> String {
 }
 
 func resolvedRenderSize(for track: AVAssetTrack) -> CGSize {
-  let transformed = track.naturalSize.applying(track.preferredTransform)
-  return CGSize(width: abs(transformed.width), height: abs(transformed.height))
+  resolvedRenderBounds(for: track).size
+}
+
+func resolvedRenderBounds(for track: AVAssetTrack) -> CGRect {
+  CGRect(origin: .zero, size: track.naturalSize).applying(track.preferredTransform)
 }
 
 /// Guards the compositor's own contract before the caller adopts its output: the burn-in must keep
