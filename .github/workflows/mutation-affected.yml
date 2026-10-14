@@ -8,9 +8,12 @@ name: Mutation Harness Canary
 # Cost control: the kernel report that pays is the weekly sweep, so this lane
 # spends mutants on one thing only — proving the harness still runs end to end
 # when the harness itself changes. `select` therefore returns an empty matrix
-# unless the diff touches the lane's own sources. Selecting on derived kernel
-# ownership instead would run the full sweep on 24 of the last 40
-# merged PRs.
+# unless the diff touches the lane's own sources (LANE_SOURCES). Selecting on
+# derived kernel ownership instead would run the full sweep on 24 of the last 40
+# merged PRs. A diff confined to LANE_DEPENDENCIES runs the self-test only; most
+# such diffs are unrelated workspace edits. Dispatch on the branch to spend the
+# canary (pass -f base=<parent> for a stacked branch):
+#   gh workflow run mutation-affected.yml --ref <branch>
 #
 # On a harness diff the matrix is the canary (`LANE_CANARY`, selected by
 # observed end-to-end runtime within the job budget — lane sources own no kernel,
@@ -22,8 +25,7 @@ name: Mutation Harness Canary
 on:
   pull_request:
     paths:
-      # Exactly `LANE_TOOLING` in scripts/mutation/run.ts — the
-      # only diffs that can produce a non-empty matrix, asserted both ways by
+      # Exactly `LANE_TOOLING` in scripts/mutation/run.ts, asserted both ways by
       # scripts/mutation/workflow.test.ts. A kernel or test path here would only
       # start a job that selects nothing.
       - 'scripts/mutation/**'
@@ -36,6 +38,11 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'packages/*/package.json'
+  workflow_dispatch:
+    inputs:
+      base:
+        description: Branch the diff is measured against
+        default: main
 
 permissions:
   contents: read
@@ -43,6 +50,10 @@ permissions:
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  MUTATION_BASE: origin/${{ github.event.pull_request.base.ref || inputs.base }}
+  MUTATION_SCOPE: ${{ github.event_name == 'workflow_dispatch' && '--with-dependencies' || '' }}
 
 jobs:
   select:
@@ -72,7 +83,8 @@ jobs:
           args: |
             --list-affected
             --base
-            origin/${{ github.event.pull_request.base.ref }}
+            ${{ env.MUTATION_BASE }}
+            ${{ env.MUTATION_SCOPE }}
 
       # The self-test and the derivation run before any mutant, so a failure here
       # would leave the lane with no envelope at all (#1430).
@@ -170,9 +182,9 @@ jobs:
             expected=$(echo '${{ needs.select.outputs.modules }}' | jq length)
             pnpm gate mutation-check --report-dir .tmp/mutation/shards --affected \
               --expect-shards "$expected" \
-              --base "origin/${{ github.event.pull_request.base.ref }}"
+              --base "$MUTATION_BASE" $MUTATION_SCOPE
           else
-            pnpm gate mutation-affected --base "origin/${{ github.event.pull_request.base.ref }}"
+            pnpm gate mutation-affected --base "$MUTATION_BASE" $MUTATION_SCOPE
           fi
 
       - name: Record a failed lane envelope

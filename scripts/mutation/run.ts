@@ -78,7 +78,10 @@ const USAGE = `Usage: pnpm mutation:run [options]
   --summary <file>  Also write the markdown report to <file>
   --no-run          Alias for --report with the default report path
   --list-affected   Print the PR lane's shard matrix as JSON and exit (empty
-                    unless the diff touches the lane's own tooling)
+                    unless the diff touches the lane's own sources)
+  --with-dependencies
+                    Also select the canary for a diff touching only the lane's
+                    dependency manifests
   --fail-envelope <reason>
                     Write a failed lane envelope for a step that ran before (or
                     instead of) the sweep, e.g. a self-test failure
@@ -114,6 +117,7 @@ type Args = {
   reportDir: string | undefined;
   summary: string | undefined;
   listAffected: boolean;
+  withDependencies: boolean;
   failEnvelope: string | undefined;
   shard: Shard | undefined;
   expectShards: number | undefined;
@@ -159,6 +163,7 @@ function parseMutationArgs(argv: readonly string[]): Args {
     summary: { type: 'string' },
     'no-run': { type: 'boolean', default: false },
     'list-affected': { type: 'boolean', default: false },
+    'with-dependencies': { type: 'boolean', default: false },
     'fail-envelope': { type: 'string' },
     shard: { type: 'string' },
     'expect-shards': { type: 'string' },
@@ -175,6 +180,7 @@ function parseMutationArgs(argv: readonly string[]): Args {
     reportDir: values['report-dir'],
     summary: values.summary,
     listAffected: Boolean(values['list-affected']),
+    withDependencies: Boolean(values['with-dependencies']),
     failEnvelope: values['fail-envelope'],
     shard: parseShard(values.shard),
     expectShards: values['expect-shards'] ? Number(values['expect-shards']) : undefined,
@@ -605,7 +611,7 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
   // Same selection the PR matrix uses, so the reporting job can never score
   // mutants the `select` job decided not to spend.
   if (args.affected) {
-    state.modules = [...new Set(affectedMatrix(args.base).map((entry) => entry.module))];
+    state.modules = [...new Set(affectedMatrix(args).map((entry) => entry.module))];
   }
   if (state.modules.length === 0) {
     process.stdout.write('mutation: no decision-kernel modules affected — nothing to mutate.\n');
@@ -645,14 +651,8 @@ async function sweep(args: Args, state: LaneState): Promise<number> {
   return 0;
 }
 
-/**
- * Sources of the lane itself: a change here must prove itself on real mutants.
- * These are also the only paths that can produce a non-empty matrix, so
- * `mutation-affected.yml` triggers on exactly them — asserted by
- * `workflow.test.ts`, since a filter that missed one would let a harness change
- * merge unproven, and any wider filter only buys a no-op job.
- */
-export const LANE_TOOLING = [
+/** Code and config the lane executes: a change here proves itself on real mutants on every PR. */
+const LANE_SOURCES = [
   'scripts/mutation/',
   'scripts/lib/',
   'stryker.config.json',
@@ -660,10 +660,22 @@ export const LANE_TOOLING = [
   'vitest.config.ts',
   '.github/workflows/mutation-weekly.yml',
   '.github/workflows/mutation-affected.yml',
-  'package.json',
-  'pnpm-lock.yaml',
-  'packages/*/package.json',
 ];
+
+/**
+ * Manifests the lane resolves through. Unrelated PRs touch these routinely (a
+ * workspace export, a root script), so a diff confined to them spends mutants
+ * only under `--with-dependencies`, which the workflow's manual dispatch passes.
+ */
+const LANE_DEPENDENCIES = ['package.json', 'pnpm-lock.yaml', 'packages/*/package.json'];
+
+/**
+ * `mutation-affected.yml` triggers on exactly these, asserted by
+ * `workflow.test.ts`: sources spend the canary, and a dependency-only diff runs
+ * the harness self-test. A filter that missed one would let that change merge
+ * unproven.
+ */
+export const LANE_TOOLING = [...LANE_SOURCES, ...LANE_DEPENDENCIES];
 
 /**
  * The PR lane's matrix: empty unless the diff touches the harness, otherwise the
@@ -675,23 +687,24 @@ export const LANE_TOOLING = [
  */
 export function affectedMatrixFor(
   changed: readonly string[],
-  root: string = repoRoot,
+  { withDependencies = false }: { withDependencies?: boolean } = {},
 ): ShardSpec[] {
+  const lanePaths = withDependencies ? LANE_TOOLING : LANE_SOURCES;
   const touchesLane = changed.some((file) =>
-    LANE_TOOLING.some((pattern) =>
+    lanePaths.some((pattern) =>
       path.matchesGlob(normalizePath(file), pattern.endsWith('/') ? `${pattern}**` : pattern),
     ),
   );
   if (!touchesLane) return [];
-  const modules = new Set(derivedAffectedModules(changed, root));
+  const modules = new Set(derivedAffectedModules(changed, repoRoot));
   // Lane sources own no kernel, so a tooling-only diff derives nothing: without
   // the canary the lane would select zero mutants and prove nothing.
   modules.add(LANE_CANARY);
   return shardMatrix(ALL_MODULE_IDS.filter((id) => modules.has(id)));
 }
 
-function affectedMatrix(base: string): ShardSpec[] {
-  return affectedMatrixFor(changedFiles(base));
+function affectedMatrix({ base, withDependencies }: Args): ShardSpec[] {
+  return affectedMatrixFor(changedFiles(base), { withDependencies });
 }
 
 /**
@@ -726,7 +739,7 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
     // Selection only — no lane run, so no envelope. The shard jobs that consume
     // this matrix each write their own.
     const args = parseMutationArgs(argv);
-    process.stdout.write(`${JSON.stringify(affectedMatrix(args.base))}\n`);
+    process.stdout.write(`${JSON.stringify(affectedMatrix(args))}\n`);
     return 0;
   }
   const state: LaneState = {

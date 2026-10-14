@@ -2,6 +2,7 @@ name: macOS
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths-ignore:
       - 'docs/**'
       - 'website/**'
@@ -49,6 +50,7 @@ jobs:
   # goes.
   smoke-macos:
     name: Smoke Tests
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: macos-26
     timeout-minutes: 80
     env:

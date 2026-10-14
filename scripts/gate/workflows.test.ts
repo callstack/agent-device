@@ -291,3 +291,37 @@ on:
   });
   assert.equal(lanes.find((lane) => lane.workflow === 'planted.yml')?.unsupported.length, 1);
 });
+
+// Drafts are where agents iterate; a smoke lane that runs on them spends device
+// runners on heads nobody is reviewing, and one that misses `ready_for_review`
+// never runs on a draft marked ready until its next push.
+test('device smoke lanes skip drafts and start when a draft is marked ready', () => {
+  const directory = path.join(repoRoot, '.github/workflows');
+  type Workflow = {
+    name: string;
+    on: { pull_request?: { types?: string[] } };
+    jobs: Record<string, { name?: string; if?: string }>;
+  };
+  const smokeLanes = fs
+    .readdirSync(directory)
+    .map((file) => parse(fs.readFileSync(path.join(directory, file), 'utf8')) as Workflow)
+    .flatMap((workflow) =>
+      Object.values(workflow.jobs)
+        .filter((job) => job.name === 'Smoke Tests' && workflow.on.pull_request)
+        .map((job) => ({ workflow, job })),
+    );
+  assert.deepEqual(smokeLanes.map(({ workflow }) => workflow.name).sort(), [
+    'Android',
+    'Linux',
+    'iOS',
+    'macOS',
+  ]);
+  for (const { workflow, job } of smokeLanes) {
+    assert.deepEqual(
+      workflow.on.pull_request?.types,
+      ['opened', 'synchronize', 'reopened', 'ready_for_review'],
+      workflow.name,
+    );
+    assert.equal(job.if, '${{ !github.event.pull_request.draft }}', workflow.name);
+  }
+});
