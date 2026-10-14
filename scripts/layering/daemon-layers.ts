@@ -55,6 +55,19 @@ export function daemonLayerOf(file: string): DaemonLayer | null {
 }
 
 /**
+ * The single handler-folder rule: any file under `<layer>/handlers/` at any depth, whichever
+ * layer the folder sits under. The old flat `handlers/` tree split into sessions/handlers/ and
+ * execution/handlers/, and R75's authority ratchet and the façade policies guard the handler
+ * surface, not one recorded pair of paths — deriving membership from the folder shape here means
+ * a handler folder planted under a different layer joins every handler rule with no edit.
+ */
+export function isDaemonHandlerFile(file: string): boolean {
+  if (!file.startsWith(DAEMON_SOURCE_ROOT)) return false;
+  const [layer, second] = file.slice(DAEMON_SOURCE_ROOT.length).split('/');
+  return isDaemonLayer(layer) && second === 'handlers';
+}
+
+/**
  * The registered R81 check. `trackedDaemonProductionFiles` is the daemon half of the context's
  * production scan. Every one of them must sit under a declared layer folder, and no static edge
  * may read up the order.

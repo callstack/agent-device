@@ -336,6 +336,42 @@ test('session lifecycle rejects handler deep imports in both directions', () => 
   );
 });
 
+test('the handler shape rule catches a handlers folder under an unlisted layer', () => {
+  // sessions/handlers/ and execution/handlers/ are what the fold produced; the rule must hold
+  // for a handler folder planted under ANY layer, so a new one cannot slip past the policies.
+  const edges = resolveImportEdges(
+    new Map([
+      [
+        'packages/daemon/src/sessions/session-lifecycle/internal/session-open.ts',
+        "import { handlePlantedCommands } from '../../../resources/handlers/planted.ts';",
+      ],
+      [
+        'packages/daemon/src/resources/handlers/planted.ts',
+        'export function handlePlantedCommands() {}',
+      ],
+      [
+        'packages/daemon/src/sessions/session-lifecycle/internal/reads-support.ts',
+        "import { sharedThing } from '../../../resources/support-thing.ts';",
+      ],
+      ['packages/daemon/src/resources/support-thing.ts', 'export function sharedThing() {}'],
+    ]),
+  );
+  const violations = checkDaemonModularityRatchets(
+    [...baselineEdges(), ...edges],
+    REFERENCE,
+    REFERENCE,
+  );
+  const handlerEdges = violations.filter(({ message }) =>
+    message.includes('packages/daemon/src/resources/handlers/planted.ts'),
+  );
+  assert.equal(handlerEdges.length, 1);
+  // The same import from a non-handlers folder under the same layer stays allowed.
+  assert.ok(
+    !violations.some(({ message }) => message.includes('resources/support-thing.ts')),
+    'a non-handler resource folder must not become a forbidden target',
+  );
+});
+
 test('interaction rejects handler crossings and deep imports around its facade', () => {
   const edges = resolveImportEdges(
     new Map([

@@ -1,4 +1,8 @@
+import { isDaemonHandlerFile } from './daemon-layers.ts';
 import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
+
+/** The handler surface as a shape rule: any `<layer>/handlers/` folder, owning layer agnostic. */
+const DAEMON_HANDLER_TARGET_SHAPES = [isDaemonHandlerFile] as const;
 
 type FacadeDeclaration = Readonly<{
   root: string;
@@ -10,6 +14,13 @@ export type LogicalModulePolicy = Readonly<{
   roots: readonly string[];
   forbiddenTargetRoots: readonly string[];
   internalForbiddenTargetRoots?: readonly string[];
+  /**
+   * Shape-based forbidden targets, paired with (never replacing) the path-root arrays: e.g.
+   * `isDaemonHandlerFile` guards the handler surface wherever a `<layer>/handlers/` folder lives,
+   * so a handler folder under a layer nobody listed is still off-limits.
+   */
+  forbiddenTargetShapes?: readonly ((file: string) => boolean)[];
+  internalForbiddenTargetShapes?: readonly ((file: string) => boolean)[];
   facade?: FacadeDeclaration;
 }>;
 
@@ -143,29 +154,21 @@ export const LOGICAL_MODULE_POLICIES = [
   {
     name: 'daemon-session-lifecycle',
     roots: ['packages/daemon/src/sessions/session-lifecycle/'],
-    forbiddenTargetRoots: [
-      'packages/daemon/src/sessions/handlers/',
-      'packages/daemon/src/execution/handlers/',
-    ],
+    forbiddenTargetRoots: [],
+    forbiddenTargetShapes: DAEMON_HANDLER_TARGET_SHAPES,
     facade: DAEMON_SESSION_LIFECYCLE_FACADE,
   },
   {
     name: 'daemon-interaction',
     roots: ['packages/daemon/src/execution/interaction/'],
     forbiddenTargetRoots: [],
-    internalForbiddenTargetRoots: [
-      'packages/daemon/src/sessions/handlers/',
-      'packages/daemon/src/execution/handlers/',
-    ],
+    internalForbiddenTargetShapes: DAEMON_HANDLER_TARGET_SHAPES,
     facade: DAEMON_INTERACTION_FACADE,
   },
   {
     name: 'daemon-session-observability',
     roots: ['packages/daemon/src/sessions/session-observability/'],
-    forbiddenTargetRoots: [
-      'packages/daemon/src/sessions/handlers/',
-      'packages/daemon/src/execution/handlers/',
-    ],
+    forbiddenTargetShapes: DAEMON_HANDLER_TARGET_SHAPES,
     facade: DAEMON_SESSION_OBSERVABILITY_FACADE,
   },
 ] as const satisfies readonly LogicalModulePolicy[];

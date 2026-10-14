@@ -1,3 +1,4 @@
+import { isDaemonHandlerFile } from './daemon-layers.ts';
 import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 import { sessionStateDeclarationFile } from './session-state.ts';
@@ -17,12 +18,6 @@ import { sessionStateDeclarationFile } from './session-state.ts';
 // tree and membership compares paths directly.
 
 export const SESSION_AUTHORITY_OVERLAY_RULE = 'R75 session-authority-overlay';
-
-/** The handler folders: the layer folders the pre-fold handlers/ tree split into. */
-const HANDLER_ROOTS = [
-  `${DAEMON_SOURCE_ROOT}sessions/handlers/`,
-  `${DAEMON_SOURCE_ROOT}execution/handlers/`,
-];
 
 /** The SessionStore authority module; the merge-base measurement canonicalizes onto this path. */
 const SESSION_STORE_AUTHORITY_TARGET = `${DAEMON_SOURCE_ROOT}core/session-store.ts`;
@@ -59,10 +54,9 @@ export function measureSessionAuthorityOverlay(
 
 /** The ratcheted subset: the handler surface, the one #2132's migration drove down. */
 export function handlerOwnedOverlay(overlay: SessionAuthorityOverlay): SessionAuthorityOverlay {
-  const inHandlers = (file: string) => HANDLER_ROOTS.some((root) => file.startsWith(root));
   return {
-    shapeFiles: overlay.shapeFiles.filter(inHandlers),
-    authorityFiles: overlay.authorityFiles.filter(inHandlers),
+    shapeFiles: overlay.shapeFiles.filter(isDaemonHandlerFile),
+    authorityFiles: overlay.authorityFiles.filter(isDaemonHandlerFile),
   };
 }
 

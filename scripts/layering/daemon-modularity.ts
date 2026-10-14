@@ -257,8 +257,10 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
     if (
       sourceModule &&
       isInsideInternalTree(edge.file, sourceModule.roots) &&
-      sourceModule.internalForbiddenTargetRoots?.some((root) =>
-        matchesDeclaredRoot(edge.target, root),
+      forbiddenTargetMatches(
+        sourceModule.internalForbiddenTargetRoots,
+        sourceModule.internalForbiddenTargetShapes,
+        edge.target,
       )
     ) {
       violations.push({
@@ -288,7 +290,13 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
     if (!sourceModule) continue;
     // A module's own files are never a forbidden target.
     if (sourceModule.roots.some((root) => matchesDeclaredRoot(edge.target, root))) continue;
-    if (!sourceModule.forbiddenTargetRoots.some((root) => matchesDeclaredRoot(edge.target, root)))
+    if (
+      !forbiddenTargetMatches(
+        sourceModule.forbiddenTargetRoots,
+        sourceModule.forbiddenTargetShapes,
+        edge.target,
+      )
+    )
       continue;
     violations.push({
       rule: 'R10 daemon-modularity',
@@ -303,6 +311,17 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
 function moduleForFile(file: string): LogicalModulePolicy | undefined {
   return LOGICAL_MODULE_POLICIES.find((module) =>
     module.roots.some((root) => matchesDeclaredRoot(file, root)),
+  );
+}
+
+function forbiddenTargetMatches(
+  roots: readonly string[] | undefined,
+  shapes: readonly ((file: string) => boolean)[] | undefined,
+  target: string,
+): boolean {
+  return (
+    (roots?.some((root) => matchesDeclaredRoot(target, root)) ?? false) ||
+    (shapes?.some((matches) => matches(target)) ?? false)
   );
 }
 

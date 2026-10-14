@@ -72,11 +72,14 @@ test('the overlay follows the SessionState declaration to a moved path, not a re
   });
 });
 
-test('the handler-owned subset is the two live handler folders only', () => {
+test('the handler-owned subset is every <layer>/handlers/ folder, not a recorded pair', () => {
   const overlay: SessionAuthorityOverlay = {
     shapeFiles: [
       'packages/daemon/src/sessions/handlers/fixture.ts',
       'packages/daemon/src/execution/handlers/snapshot-handler.ts',
+      // A handler folder under a layer the split never produced still joins the ratcheted
+      // subset: membership comes from the folder shape, so no rule edit can miss it.
+      'packages/daemon/src/core/handlers/newcomer.ts',
       'packages/daemon/src/handlers/legacy.ts',
       'packages/daemon/src/non-handler.ts',
       'packages/daemon/src/execution/interaction/internal/interaction.ts',
@@ -84,6 +87,7 @@ test('the handler-owned subset is the two live handler folders only', () => {
     authorityFiles: [
       'packages/daemon/src/sessions/handlers/fixture.ts',
       'packages/daemon/src/execution/handlers/snapshot-handler.ts',
+      'packages/daemon/src/core/handlers/newcomer.ts',
       'packages/daemon/src/server/request-router.ts',
     ],
   };
@@ -91,10 +95,12 @@ test('the handler-owned subset is the two live handler folders only', () => {
     shapeFiles: [
       'packages/daemon/src/sessions/handlers/fixture.ts',
       'packages/daemon/src/execution/handlers/snapshot-handler.ts',
+      'packages/daemon/src/core/handlers/newcomer.ts',
     ],
     authorityFiles: [
       'packages/daemon/src/sessions/handlers/fixture.ts',
       'packages/daemon/src/execution/handlers/snapshot-handler.ts',
+      'packages/daemon/src/core/handlers/newcomer.ts',
     ],
   });
 });
