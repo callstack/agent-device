@@ -47,6 +47,8 @@ agent-device disconnect
 
 `connect proxy` stores the proxy profile and client identity. `open` leases the device for you, and the lease expires after five minutes without commands. A lease allocated directly over the RPC without `ttlMs` gets the daemon's one-minute inactivity default instead. Either window starts when allocation completes, not when it was requested. `close` releases the active session and its device lease, unless the lease was allocated with `retainOnClose`; only `leases.release`, expiry, or daemon shutdown ends that one. `disconnect` clears local connection state.
 
+`open` names each new lease with an id it makes (32 lowercase hex characters) and sends it with the allocation, so a host in front of the daemon knows the lease id before the daemon allocates. A direct `agent_device.lease.allocate` RPC can pass `leaseId` (16 to 128 hex characters) the same way; an id this daemon has already given a lease, active or ended, is refused with `INVALID_ARGS` and reason `LEASE_ID_IN_USE`, and without one the daemon makes the id. Use the id the reply carries: a run that already holds a lease gets that lease back, and an older daemon ignores the requested id.
+
 Several agents can share one proxy when each follows the same `connect proxy`, `open`, commands, `close`, and `disconnect` flow. A busy device error means another agent holds the device until it closes its session or its lease expires.
 
 Do not put the proxy endpoint, token, tenant, or provider fields in `./agent-device.json`: repository
