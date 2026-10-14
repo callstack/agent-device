@@ -10,7 +10,7 @@ import type { ClaimRecoveryGatewayFactory } from '../../daemon/device/claim-reco
  * one ask replaces just that member — a readiness spy overrides `ensureLocalDeviceReady` rather
  * than mocking a platform module behind the port.
  */
-export function daemonPlatformServicesFixture(
+export function composedPlatformServicesFixture(
   overrides: Partial<DaemonPlatformServices> = {},
 ): DaemonPlatformServices {
   return Object.freeze({ ...createDaemonPlatformServices(), ...overrides });
@@ -21,6 +21,6 @@ export function daemonPlatformServicesFixture(
  * route a stale claim see the real composed gateway, and a test that cares about composition
  * passes its own factory.
  */
-export function daemonClaimRecoveryGatewayFixture(): ClaimRecoveryGatewayFactory {
+export function composedClaimRecoveryGatewayFixture(): ClaimRecoveryGatewayFactory {
   return createClaimRecoveryGateway;
 }

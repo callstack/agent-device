@@ -18,7 +18,7 @@ vi.mock('../../../platform-runtime-runtime-hints.ts', () => {
   return { clearRuntimeHintValues: runtimeHintsModule.clearRuntimeHintValues };
 });
 
-import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import {
   handleSessionCommands as handleHarnessSessionCommands,
   mockBindDeviceRuntime,
@@ -26,7 +26,7 @@ import {
 } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
 import { lifecycleRuntimeFacts } from '../../../daemon/__tests__/application-lifecycle-runtime-harness.ts';
 import {
-  applicationLifecycleRuntimeFixture,
+  composedLifecycleRuntimeFixture,
   dispatchApplicationLifecycleEffect,
 } from '../application-lifecycle-runtime-fixture.ts';
 
@@ -35,7 +35,7 @@ import {
 const handleSessionCommands = (params: Parameters<typeof handleHarnessSessionCommands>[0]) =>
   handleHarnessSessionCommands({
     ...params,
-    lifecycleOperationsLoader: applicationLifecycleRuntimeFixture,
+    lifecycleOperationsLoader: composedLifecycleRuntimeFixture,
   });
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
@@ -74,7 +74,7 @@ async function close(params: {
 }) {
   return await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: closeRequest(params.sessionName, params.positionals ?? [], params.internal),
     sessionName: params.sessionName,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),

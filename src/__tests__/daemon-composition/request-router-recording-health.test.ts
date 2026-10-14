@@ -5,7 +5,7 @@ import { test, expect, vi, beforeEach } from 'vitest';
 import path from 'node:path';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
 import {
   createRequestHandler,
   gestureDeviceRuntimeGateway,
@@ -20,7 +20,7 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 // The observation spy hangs off the port the router composes with (ADR 0019 section 11), not off
 // the platform module behind it.
 const mockObserveRunnerSession = vi.fn();
-const platformServices = daemonPlatformServicesFixture({
+const platformServices = composedPlatformServicesFixture({
   appleSessionObservation: {
     observeRunnerSession: mockObserveRunnerSession,
     resolveSoleForegroundApp: async () => undefined,

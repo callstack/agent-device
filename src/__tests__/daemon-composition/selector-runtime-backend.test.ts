@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type {
@@ -55,7 +55,7 @@ test('wait text passes its poll deadline signal to the Apple runner fast path', 
   );
   const runtime = await createSelectorRuntimeForDevice({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     ref: sessionStore.lookup(sessionName),
     req: {
       token: 't',
@@ -118,7 +118,7 @@ test('daemon wait stable pins private-ax on emitted snapshot runner requests', a
   }));
   const runtime = await createSelectorRuntimeForDevice({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     ref: sessionStore.lookup(sessionName),
     req: {
       token: 't',

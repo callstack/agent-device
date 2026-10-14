@@ -22,7 +22,7 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../daemon/request-runtime-binding.ts';
-import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 import { handleInteractionCommands } from '../../../daemon/interaction/index.ts';
 import type { SessionStore } from '../../../daemon/session-store.ts';
@@ -146,7 +146,7 @@ async function runCommand(
     sessionName,
     sessionStore,
     contextFromFlags,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     inspectFacts,
     bindDevice: bindings.bindDevice,
   });

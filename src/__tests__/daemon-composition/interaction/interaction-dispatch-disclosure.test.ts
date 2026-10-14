@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
@@ -195,7 +195,7 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
   sessionStore.publish(session.name, session);
   const response = await routeInteraction({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,
@@ -229,7 +229,7 @@ async function gestureDragRefusedBeforeDispatch(): Promise<unknown> {
   sessionStore.publish(session.name, session);
   const response = await routeInteraction({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,
@@ -288,7 +288,7 @@ async function refRefusedAfterAndroidRecovery(command: 'press' | 'gesture'): Pro
   };
   const response = await routeInteraction({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,

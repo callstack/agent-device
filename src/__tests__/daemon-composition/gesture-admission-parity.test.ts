@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 import type {
   GestureCommandInput,
@@ -71,7 +71,7 @@ async function admit(input: GestureCommandInput, target: DeviceInfo) {
   });
   try {
     return await resolveBoundGestureRuntime({
-      platformServices: daemonPlatformServicesFixture(),
+      platformServices: composedPlatformServicesFixture(),
       device: target,
       input,
       inspectFacts: bindings.inspectFacts,

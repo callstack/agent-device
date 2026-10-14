@@ -54,14 +54,14 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   return { ...actual, readProcessStartTime: vi.fn(() => 'test-process-start') };
 });
 
-import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
 import {
   handleSessionCommands as handleHarnessSessionCommands,
   mockBindDeviceRuntime,
 } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
 import {
-  applicationLifecycleRuntimeFixture,
+  composedLifecycleRuntimeFixture,
   dispatchApplicationLifecycleEffect,
 } from '../application-lifecycle-runtime-fixture.ts';
 import { pendingSurfaceStabilization } from '../../../daemon/deferred-interaction-outcome.ts';
@@ -71,7 +71,7 @@ import { pendingSurfaceStabilization } from '../../../daemon/deferred-interactio
 const handleSessionCommands = (params: Parameters<typeof handleHarnessSessionCommands>[0]) =>
   handleHarnessSessionCommands({
     ...params,
-    lifecycleOperationsLoader: applicationLifecycleRuntimeFixture,
+    lifecycleOperationsLoader: composedLifecycleRuntimeFixture,
   });
 import {
   makeAppleSimulator,
@@ -119,7 +119,7 @@ async function openReportingObservation(
 
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,

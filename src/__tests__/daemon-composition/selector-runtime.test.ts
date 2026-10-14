@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 import {
   localRuntimeOwner,
@@ -85,7 +85,7 @@ test.each(['rebuild', 'retire'] as const)(
     };
     const running = dispatchGetViaRuntime({
       createCommandSurface: testCreateCommandSurface,
-      platformServices: daemonPlatformServicesFixture(),
+      platformServices: composedPlatformServicesFixture(),
       req: {
         token: 't',
         session: 'default',

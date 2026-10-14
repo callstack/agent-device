@@ -6,8 +6,8 @@ import { spawn } from 'node:child_process';
 import { fakeCreateCommandSurface } from '../../daemon/__tests__/support/command-surface-fake.ts';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import {
-  daemonClaimRecoveryGatewayFixture,
-  daemonPlatformServicesFixture,
+  composedClaimRecoveryGatewayFixture,
+  composedPlatformServicesFixture,
 } from './platform-services-fixture.ts';
 import { getResolveTargetDeviceMock } from '../../daemon/__tests__/request-router-dispatch-mocks.ts';
 import { LeaseRegistry } from '../../daemon/lease-registry.ts';
@@ -103,8 +103,8 @@ function createOpenHandler(sessionStore: ReturnType<typeof makeSessionStore>) {
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
-    platformServices: daemonPlatformServicesFixture(),
-    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    platformServices: composedPlatformServicesFixture(),
+    claimRecoveryGateway: composedClaimRecoveryGatewayFixture(),
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',

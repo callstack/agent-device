@@ -1,11 +1,11 @@
 import { beforeEach, expect, test } from 'vitest';
-import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import {
   sessionCloseShutdownFixture,
   type SessionState,
 } from '../../../daemon/session-lifecycle/internal/__tests__/session-close-shutdown.fixtures.ts';
 import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
-import { applicationLifecycleRuntimeFixture } from '../application-lifecycle-runtime-fixture.ts';
+import { composedLifecycleRuntimeFixture } from '../application-lifecycle-runtime-fixture.ts';
 
 const {
   AppError,
@@ -27,7 +27,7 @@ const {
 const handleSessionCommands = (params: Parameters<typeof handleHarnessSessionCommands>[0]) =>
   handleHarnessSessionCommands({
     ...params,
-    lifecycleOperationsLoader: applicationLifecycleRuntimeFixture,
+    lifecycleOperationsLoader: composedLifecycleRuntimeFixture,
   });
 
 // These two cases pin the REAL Apple close sequencing around a platform close: the runner stop
@@ -59,7 +59,7 @@ test('targeted close preserves the platform-close AppError and still runs later 
   await expect(
     handleSessionCommands({
       createCommandSurface: fakeCreateCommandSurface,
-      platformServices: daemonPlatformServicesFixture(),
+      platformServices: composedPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -118,7 +118,7 @@ test('targeted close skips platform dispatch and preserves the error when the re
   await expect(
     handleSessionCommands({
       createCommandSurface: fakeCreateCommandSurface,
-      platformServices: daemonPlatformServicesFixture(),
+      platformServices: composedPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,

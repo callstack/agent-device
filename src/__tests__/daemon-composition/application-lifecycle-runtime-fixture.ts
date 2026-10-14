@@ -39,7 +39,7 @@ export const discoverReadyAndroidEmulators = vi.fn(async (readyDevice: DeviceInf
   },
 ]);
 
-export async function applicationLifecycleRuntimeFixture(
+export async function composedLifecycleRuntimeFixture(
   device: DeviceInfo,
   signal: AbortSignal = new AbortController().signal,
   shutdownTarget: (device: DeviceInfo) => Promise<TargetShutdownResult> = async () => ({

@@ -1,8 +1,8 @@
 import { beforeEach, expect, test } from 'vitest';
-import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
-import { applicationLifecycleRuntimeFixture } from '../application-lifecycle-runtime-fixture.ts';
+import { composedLifecycleRuntimeFixture } from '../application-lifecycle-runtime-fixture.ts';
 import { sessionCloseShutdownFixture } from '../../../daemon/session-lifecycle/internal/__tests__/session-close-shutdown.fixtures.ts';
 
 const {
@@ -23,7 +23,7 @@ const {
 const handleSessionCommands = (params: Parameters<typeof handleHarnessSessionCommands>[0]) =>
   handleHarnessSessionCommands({
     ...params,
-    lifecycleOperationsLoader: applicationLifecycleRuntimeFixture,
+    lifecycleOperationsLoader: composedLifecycleRuntimeFixture,
   });
 
 // The second half of this test proves that after the unarmed-authoring rejection, a plain close
@@ -51,7 +51,7 @@ test('close --save-script on a never-armed session is rejected before teardown, 
   await expect(
     handleSessionCommands({
       createCommandSurface: fakeCreateCommandSurface,
-      platformServices: daemonPlatformServicesFixture(),
+      platformServices: composedPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -87,7 +87,7 @@ test('close --save-script on a never-armed session is rejected before teardown, 
   // teardown genuinely does run: the recorder is signaled and the session deleted.
   const plainClose = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,

@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -148,7 +148,7 @@ test.each([false, true])('selector-touch observation after retirement=%s', async
       sessionRef: ref,
       sessionStore,
       contextFromFlags,
-      platformServices: daemonPlatformServicesFixture(),
+      platformServices: composedPlatformServicesFixture(),
       captureSnapshotForSession: vi.fn(),
     },
     result,
@@ -225,7 +225,7 @@ test.each([
             sessionRef: ref,
             sessionStore,
             contextFromFlags,
-            platformServices: daemonPlatformServicesFixture(),
+            platformServices: composedPlatformServicesFixture(),
             captureSnapshotForSession: async () => {
               startProbe();
               await released;
@@ -665,7 +665,7 @@ test('an already retired coordinate touch skips its frame probe without a warnin
           sessionRef: ref,
           sessionStore,
           contextFromFlags,
-          platformServices: daemonPlatformServicesFixture(),
+          platformServices: composedPlatformServicesFixture(),
           captureSnapshotForSession: capture,
         },
         result: { kind: 'point', point: { x: 1, y: 2 } },

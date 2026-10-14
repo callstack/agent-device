@@ -11,10 +11,10 @@ import {
   assertInvalidArgsMessage,
 } from '../../../daemon/handlers/__tests__/session-test-harness.ts';
 import { handleSessionCommands as handleHarnessSessionCommands } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
-import { applicationLifecycleRuntimeFixture } from '../application-lifecycle-runtime-fixture.ts';
+import { composedLifecycleRuntimeFixture } from '../application-lifecycle-runtime-fixture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
-import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 
 // These open cases pin what the REAL composed open-target and surface rules answer through the
 // daemon open flow: the Safari and deep-link fallbacks, iOS and Android target resolution, the
@@ -26,7 +26,7 @@ import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 const handleSessionCommands = (params: Parameters<typeof handleHarnessSessionCommands>[0]) =>
   handleHarnessSessionCommands({
     ...params,
-    lifecycleOperationsLoader: applicationLifecycleRuntimeFixture,
+    lifecycleOperationsLoader: composedLifecycleRuntimeFixture,
   });
 
 test('open web URL on iOS device session without active app falls back to Safari', async () => {
@@ -51,7 +51,7 @@ test('open web URL on iOS device session without active app falls back to Safari
 
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -103,7 +103,7 @@ test('open web URL on iOS simulator session without active app falls back to Saf
 
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -150,7 +150,7 @@ test('open app and URL on existing iOS device session keeps app context', async 
 
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -199,7 +199,7 @@ test('open app on existing macOS session resolves and stores bundle id', async (
 
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -233,7 +233,7 @@ test('open rejects --surface on non-macOS devices', async () => {
 
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'ios-surface',
@@ -286,7 +286,7 @@ test('open on existing macOS frontmost-app session preserves surface without --s
   try {
     const response = await handleSessionCommands({
       createCommandSurface: fakeCreateCommandSurface,
-      platformServices: daemonPlatformServicesFixture(),
+      platformServices: composedPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -339,7 +339,7 @@ test('open app on existing Android session resolves and stores package id', asyn
 
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -385,7 +385,7 @@ test('open intent target on existing Android session clears stale package contex
 
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,

@@ -1,8 +1,8 @@
 import { beforeEach, expect, test } from 'vitest';
-import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
-import { applicationLifecycleRuntimeFixture } from '../application-lifecycle-runtime-fixture.ts';
+import { composedLifecycleRuntimeFixture } from '../application-lifecycle-runtime-fixture.ts';
 import { sessionCloseShutdownFixture } from '../../../daemon/session-lifecycle/internal/__tests__/session-close-shutdown.fixtures.ts';
 
 const {
@@ -20,7 +20,7 @@ const {
 const handleSessionCommands = (params: Parameters<typeof handleHarnessSessionCommands>[0]) =>
   handleHarnessSessionCommands({
     ...params,
-    lifecycleOperationsLoader: applicationLifecycleRuntimeFixture,
+    lifecycleOperationsLoader: composedLifecycleRuntimeFixture,
   });
 
 // The shutdown-gating rule lives in the real Apple/Android close finalization: a physical device
@@ -44,7 +44,7 @@ test('close --shutdown is ignored for non-simulator iOS devices', async () => {
 
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
@@ -84,7 +84,7 @@ test('close --shutdown is ignored for Android devices', async () => {
 
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,

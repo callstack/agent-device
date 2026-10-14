@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
@@ -49,7 +49,7 @@ import {
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { BindDeviceRuntime } from '../../../daemon/request-runtime-binding.ts';
 import {
-  applicationLifecycleRuntimeFixture,
+  composedLifecycleRuntimeFixture,
   dispatchApplicationLifecycleEffect,
 } from '../application-lifecycle-runtime-fixture.ts';
 import { SessionStore } from '../../../daemon/session-store.ts';
@@ -78,7 +78,7 @@ async function realLifecycleBinding(
     device,
     owner: localRuntimeOwner(device.platform),
     facts: await inspectLifecycleRuntimeFacts(device),
-    operations: await applicationLifecycleRuntimeFixture(device),
+    operations: await composedLifecycleRuntimeFixture(device),
     [Symbol.asyncDispose]: async () => {},
   };
 }
@@ -125,7 +125,7 @@ test('cancellation after local device setup retains the device claim for recover
   try {
     const response = await handleProductionOpenCommand({
       createCommandSurface: fakeCreateCommandSurface,
-      platformServices: daemonPlatformServicesFixture(),
+      platformServices: composedPlatformServicesFixture(),
       req: {
         command: 'open',
         token: 'test',

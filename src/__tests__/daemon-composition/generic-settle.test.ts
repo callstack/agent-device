@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
@@ -214,7 +214,7 @@ async function dispatchGeneric(params: {
   };
   return await dispatchGenericCommand({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req,
     ref: params.sessionStore.lookup(params.sessionName)!,
     sessionName: params.sessionName,
@@ -654,7 +654,7 @@ test('an ended generic lifetime is refused before dispatch or settle constructio
   await expect(
     dispatchGenericCommand({
       createCommandSurface: testCreateCommandSurface,
-      platformServices: daemonPlatformServicesFixture(),
+      platformServices: composedPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,

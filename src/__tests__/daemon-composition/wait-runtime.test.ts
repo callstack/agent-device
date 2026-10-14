@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from './platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import { WAIT_REASONS, type ReadinessPhase } from '@agent-device/contracts/wait';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
@@ -164,7 +164,7 @@ test.each(['rebuild', 'retire'] as const)(
       const ref = sessionStore.publish(address, makeSession('default', { device: harness.device }));
       const running = handleSnapshotCommands({
         createCommandSurface: testCreateCommandSurface,
-        platformServices: daemonPlatformServicesFixture(),
+        platformServices: composedPlatformServicesFixture(),
         req: waitRequest(['100']),
         sessionName: address,
         logPath: '/tmp/daemon.log',
@@ -220,7 +220,7 @@ async function runWait(
   sessionStore.publish(session.name, session);
   const response = await handleSnapshotCommands({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: waitRequest(positionals, flags),
     sessionName: session.name,
     logPath: '/tmp/daemon.log',
@@ -255,7 +255,7 @@ test('an observing wait binds through the shared selector entry', async () => {
   const harness = waitRuntimeHarness({ findText: available });
 
   const bound = await resolveBoundSelectorCapture({
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     command: 'wait',
     session: undefined,
     device: harness.device,
@@ -476,7 +476,7 @@ test('a read after a natively satisfied text wait captures instead of reusing th
 
   const read = await dispatchGetViaRuntime({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       command: 'get',
       positionals: ['text', 'label="cold.start"'],

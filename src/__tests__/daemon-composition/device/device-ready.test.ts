@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
@@ -40,7 +40,7 @@ const mockWaitForAndroidBoot = vi.mocked(waitForAndroidBoot);
 // composition lane on the root-composed services fixture, with the platform leaves mocked above.
 // The daemon-lane port fixture answers readiness with a canned spy; this suite separately
 // pins the readiness cache contract, including its TTL behavior.
-const platformServices = daemonPlatformServicesFixture();
+const platformServices = composedPlatformServicesFixture();
 
 beforeEach(() => {
   vi.useFakeTimers();

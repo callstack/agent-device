@@ -10,7 +10,7 @@ import {
 import { handleSessionCommands } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { fakeCreateCommandSurface } from '../../../daemon/__tests__/support/command-surface-fake.ts';
-import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 
 // These relaunch cases pin the REAL open-target validation rules (the URL-target refusal and the
 // Android installed-package classification with its exact message) reached through the daemon's
@@ -21,7 +21,7 @@ test('open --relaunch rejects URL targets', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -47,7 +47,7 @@ test('open --relaunch rejects Android app binary paths', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -71,7 +71,7 @@ test('open --relaunch rejects bare Android app binary filenames', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -106,7 +106,7 @@ test('open --relaunch rejects Android app binary paths for active sessions', asy
 
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',
@@ -130,7 +130,7 @@ test('open --relaunch rejects Android app binary paths before resolving a new de
   const sessionStore = makeSessionStore();
   const response = await handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
+    platformServices: composedPlatformServicesFixture(),
     req: {
       token: 't',
       session: 'default',

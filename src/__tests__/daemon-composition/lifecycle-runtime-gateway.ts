@@ -2,7 +2,7 @@ import {
   createLifecycleDeviceRuntimeGateway,
   createLifecycleDeviceRuntimeGatewaySpies,
 } from '../../daemon/__tests__/test-device-runtime-gateway.ts';
-import { applicationLifecycleRuntimeFixture } from './application-lifecycle-runtime-fixture.ts';
+import { composedLifecycleRuntimeFixture } from './application-lifecycle-runtime-fixture.ts';
 
 /**
  * The lifecycle gateway over the REAL composed platform runtime (root gateway + apple/android
@@ -10,8 +10,8 @@ import { applicationLifecycleRuntimeFixture } from './application-lifecycle-runt
  * daemon suites bind the canned port fixture instead.
  */
 export const realLifecycleDeviceRuntimeGateway = createLifecycleDeviceRuntimeGateway(
-  applicationLifecycleRuntimeFixture,
+  composedLifecycleRuntimeFixture,
 );
 
 export const createRealLifecycleDeviceRuntimeGatewaySpies = () =>
-  createLifecycleDeviceRuntimeGatewaySpies(applicationLifecycleRuntimeFixture);
+  createLifecycleDeviceRuntimeGatewaySpies(composedLifecycleRuntimeFixture);
