@@ -6,34 +6,13 @@ import {
   checkRetiredSessionLifecyclePaths,
   checkRetiredSessionObservabilityPaths,
   checkRetiredSnapshotExecutionPaths,
-  DAEMON_MODULARITY_BASELINE,
 } from './daemon-modularity.ts';
-import { resolveImportEdges, targetDagZone, type ResolvedImportEdge } from './model.ts';
+import { resolveImportEdges, type ResolvedImportEdge } from './model.ts';
 import type { LayeringRatchets } from './ratchet-reference.ts';
 
-function importEdge(file: string, target: string): ResolvedImportEdge {
-  return {
-    file,
-    target,
-    spec: target,
-    line: 1,
-    dynamic: false,
-    typeOnly: true,
-    symbols: [],
-    fromZone: targetDagZone(file),
-    toZone: targetDagZone(target),
-  };
-}
-
-function baselineDaemonTypesEdges(): ResolvedImportEdge[] {
-  return DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.map((file) =>
-    importEdge(file, 'packages/daemon/src/core/daemon-request.ts'),
-  );
-}
-
-/** Every baseline edge is present and nothing else is forbidden: the quiet state of the ratchets. */
+/** The quiet state of the ratchets: no forbidden edge present. */
 function baselineEdges(): ResolvedImportEdge[] {
-  return baselineDaemonTypesEdges();
+  return [];
 }
 
 /** Where a member of `zone` lives, so a zone count can be turned back into file paths. */
@@ -105,39 +84,23 @@ test('R10 banks an R7 shrink with no edit anywhere', () => {
   );
 });
 
-test('external daemon request/session-state importer membership changes require the baseline to change', () => {
+test('a production import of the daemon request/session-state modules outside the daemon is red', () => {
   const edges = resolveImportEdges(
     new Map([
       [
-        'src/client/new-importer.ts',
+        'src/remote/daemon-artifacts.ts',
         "import type { SessionState } from '../../packages/daemon/src/core/session-state.ts';",
       ],
       ['packages/daemon/src/core/session-state.ts', 'export type SessionState = { name: string };'],
     ]),
   );
 
-  const violations = checkDaemonModularityRatchets(
-    [...baselineEdges(), ...edges],
-    REFERENCE,
-    REFERENCE,
-  );
+  const violations = checkDaemonModularityRatchets(edges, REFERENCE, REFERENCE);
   assert.equal(violations.length, 1);
-  // The recorded list owns its own size (#2342 relocated five client files into it), so the
-  // message assertion reads it rather than pinning a literal that the baseline would outgrow.
   assert.match(
     violations[0]!.message,
-    new RegExp(
-      `may only shrink from the recorded ${DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters.length}`,
-    ),
+    /src\/remote\/daemon-artifacts\.ts imports a daemon request/,
   );
-
-  const removed = checkDaemonModularityRatchets(
-    baselineDaemonTypesEdges().slice(1),
-    REFERENCE,
-    REFERENCE,
-  );
-  assert.equal(removed.length, 1);
-  assert.match(removed[0]!.message, /delete it from externalDaemonTypesImporters/);
 });
 
 test('logical modules reject forbidden imports', () => {
@@ -692,3 +655,29 @@ test('R9 banks a shrink with no edit anywhere', () => {
     [],
   );
 });
+
+for (const [kind, source] of [
+  [
+    'type-only',
+    "import type { DaemonRequest } from '../../packages/daemon/src/core/daemon-request.ts';",
+  ],
+  ['value', "import { handle } from '../../packages/daemon/src/server/daemon-stop.ts';"],
+  [
+    'dynamic',
+    "export const load = () => import('../../packages/daemon/src/server/daemon-stop.ts');",
+  ],
+] as const) {
+  test(`the daemon client importing the daemon package is red (${kind})`, () => {
+    const edges = resolveImportEdges(
+      new Map([
+        ['src/daemon-client/daemon-client.ts', source],
+        ['packages/daemon/src/core/daemon-request.ts', 'export type DaemonRequest = object;'],
+        ['packages/daemon/src/server/daemon-stop.ts', 'export const handle = 1;'],
+      ]),
+    );
+
+    const violations = checkDaemonModularityRatchets(edges, REFERENCE, REFERENCE);
+    assert.equal(violations.length, 1);
+    assert.match(violations[0]!.message, /daemon-client must not import packages\/daemon\/src/);
+  });
+}

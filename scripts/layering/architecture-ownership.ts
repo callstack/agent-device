@@ -113,6 +113,11 @@ export const SNAPSHOT_EXECUTION_RETIRED_HANDLER_PATHS = [
 
 export const LOGICAL_MODULE_POLICIES = [
   {
+    name: 'daemon-client',
+    roots: ['src/daemon-client/'],
+    forbiddenTargetRoots: [DAEMON_SOURCE_ROOT],
+  },
+  {
     name: 'ad-replay',
     roots: ['packages/ad-replay/src/'],
     forbiddenTargetRoots: [

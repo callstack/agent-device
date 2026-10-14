@@ -133,7 +133,6 @@ import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechani
 import { checkDaemonPlatformBoundary } from './daemon-platform-boundary.ts';
 import { checkDaemonPlatformRuntimeInventory } from './daemon-platform-runtime-inventory.ts';
 import { checkDaemonProcessReach } from './daemon-process-reach.ts';
-import { checkDaemonClientEntry } from './daemon-client-entry.ts';
 import { checkDaemonLayers, DAEMON_ROOT } from './daemon-layers.ts';
 import { checkSessionAuthorityOverlay, handlerOwnedOverlay } from './session-authority-overlay.ts';
 import {
@@ -519,7 +518,6 @@ export const LAYERING_RULE_IDS = [
   'snapshot-assembly-presentation-neutrality',
   'daemon-platform-runtime-inventory',
   'daemon-process-reach',
-  'daemon-client-entry',
   'session-authority-overlay',
   'daemon-layers',
 ] as const;
@@ -584,7 +582,6 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
   'daemon-platform-runtime-inventory': (context) =>
     checkDaemonPlatformRuntimeInventory(context.edges),
   'daemon-process-reach': (context) => checkDaemonProcessReach(context.sourceFiles, context.edges),
-  'daemon-client-entry': (context) => checkDaemonClientEntry(context.edges),
   'session-authority-overlay': (context) =>
     checkSessionAuthorityOverlay(
       context.ratchets.sessionAuthority,

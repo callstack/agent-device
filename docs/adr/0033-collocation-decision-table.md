@@ -133,8 +133,8 @@ the whole `daemon-contracts` zone has moved into `packages/daemon-contracts` —
 package derive the zone, so every moved file's `ROOT_MODULE_ZONES` row is gone.
 The daemon ⇄ client shared files that remain here (`provider-credential-fingerprint.ts`) trace
 to #2559, which relocated the shared contracts **to the process root** so the client stops
-importing `packages/daemon/src/` at all; R78 keeps any client→daemon
-edge at zero runtime and a five-line recorded type-only residue, and #3288's `daemon-contracts`
+importing `packages/daemon/src/` at all; the `daemon-client` logical-module policy bans every edge from `src/daemon-client/` into
+`packages/daemon/src/`, and #3288's `daemon-contracts`
 zone was the declaration of that shared-below-both ownership — the extraction makes it
 physical, with R11 and the package's dependency edges holding the same boundary. Rows on
 path-keyed evidence alone (the `platform-runtime-*` seams) say "retain for this batch": a guard's
