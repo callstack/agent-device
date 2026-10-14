@@ -1,0 +1,261 @@
+import { AppError } from '@agent-device/kernel/errors';
+
+const TARGET_LIST_TIMEOUT_MS = 3_000;
+const CONNECT_TIMEOUT_MS = 5_000;
+const EVALUATE_TIMEOUT_MS = 30_000;
+
+/** One debuggable JavaScript runtime the dev server's inspector proxy lists at `/json/list`. */
+export type MetroInspectorTarget = {
+  id: string;
+  title: string;
+  description?: string;
+  appId?: string;
+  deviceName?: string;
+  webSocketDebuggerUrl: string;
+  /** Present on React Native runtimes; absent on auxiliary targets such as legacy Hermes pages. */
+  reactNative?: { logicalDeviceId?: string };
+};
+
+/**
+ * App id the dev server reports for a target. Newer inspector proxies set `appId`; older ones only
+ * put the bundle id or package name in `description`.
+ */
+export function targetAppId(target: MetroInspectorTarget): string {
+  return target.appId ?? target.description ?? target.title;
+}
+
+export async function listMetroInspectorTargets(
+  serverUrl: URL,
+  fetchImpl: typeof fetch = fetch,
+): Promise<MetroInspectorTarget[]> {
+  const listUrl = new URL('json/list', withTrailingSlash(serverUrl));
+  let response: Response;
+  try {
+    response = await fetchImpl(listUrl, { signal: AbortSignal.timeout(TARGET_LIST_TIMEOUT_MS) });
+  } catch (error) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Could not reach the React Native dev server at ${serverUrl.origin}.`,
+      {
+        hint: 'Start Metro (or Expo/Re.Pack) for the app, or pass --metro-port/--metro-host when it does not run on localhost:8081.',
+      },
+      error,
+    );
+  }
+  if (!response.ok) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `The dev server at ${serverUrl.origin} answered ${response.status} for /json/list.`,
+    );
+  }
+  const body: unknown = await response.json().catch(() => undefined);
+  if (!Array.isArray(body)) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `The server at ${serverUrl.origin} is not a React Native dev server: /json/list returned no target list.`,
+      { hint: "Pass --metro-port/--metro-host for the app's Metro, Expo, or Re.Pack dev server." },
+    );
+  }
+  return body.filter(isInspectorTarget);
+}
+
+function isInspectorTarget(value: unknown): value is MetroInspectorTarget {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.id === 'string' && typeof record.webSocketDebuggerUrl === 'string';
+}
+
+/** Secondary JavaScript runtimes, such as Reanimated's UI runtime, that render no React tree. */
+const WORKLET_RUNTIME_PATTERN = /reanimated|worklet/i;
+
+function pageNumber(target: MetroInspectorTarget): number {
+  const suffix = Number.parseInt(target.id.slice(target.id.lastIndexOf('-') + 1), 10);
+  return Number.isInteger(suffix) ? suffix : Number.MAX_SAFE_INTEGER;
+}
+
+function deviceKey(target: MetroInspectorTarget): string {
+  return (
+    target.reactNative?.logicalDeviceId ??
+    target.deviceName ??
+    target.id.slice(0, target.id.lastIndexOf('-'))
+  );
+}
+
+/**
+ * Picks the React Native runtime to profile. Pages without the `reactNative` field are not app
+ * runtimes, and worklet runtimes render no React tree. A device registers its main runtime before
+ * any secondary one, so the lowest page number wins per device; with several devices running one
+ * app, the most recently listed device wins. Distinct apps need `appId` to disambiguate.
+ */
+export function selectReactNativeTarget(
+  targets: MetroInspectorTarget[],
+  appId?: string,
+): MetroInspectorTarget {
+  const runtimes = targets.filter(
+    (target) =>
+      target.reactNative !== undefined && !WORKLET_RUNTIME_PATTERN.test(target.description ?? ''),
+  );
+  const candidates = appId ? runtimes.filter((target) => targetAppId(target) === appId) : runtimes;
+  if (candidates.length === 0) {
+    const seen = runtimes.map(targetAppId);
+    throw new AppError(
+      'COMMAND_FAILED',
+      appId
+        ? `No React Native runtime for ${appId} is connected to the dev server.`
+        : 'No React Native runtime is connected to the dev server.',
+      {
+        hint:
+          seen.length > 0
+            ? `Connected runtimes: ${[...new Set(seen)].join(', ')}.`
+            : 'Open the app from a development build so it loads its bundle from this dev server.',
+      },
+    );
+  }
+  const apps = new Set(candidates.map(targetAppId));
+  if (apps.size > 1) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'Several React Native apps are connected to the dev server.',
+      {
+        hint: `Pass --app with one of: ${[...apps].join(', ')}.`,
+      },
+    );
+  }
+  const devices = new Map<string, MetroInspectorTarget>();
+  for (const target of candidates) {
+    const key = deviceKey(target);
+    const current = devices.get(key);
+    devices.delete(key);
+    devices.set(key, current && pageNumber(current) <= pageNumber(target) ? current : target);
+  }
+  return [...devices.values()].at(-1)!;
+}
+
+type PendingCall = { resolve: (value: unknown) => void; reject: (error: Error) => void };
+
+/** Minimal Chrome DevTools Protocol client over the dev server's inspector proxy. */
+export class InspectorSession {
+  #nextId = 1;
+  #pending = new Map<number, PendingCall>();
+  readonly #socket: WebSocket;
+
+  private constructor(socket: WebSocket) {
+    this.#socket = socket;
+    socket.addEventListener('message', (event) => this.#onMessage(String(event.data)));
+    socket.addEventListener('close', () => {
+      for (const { reject } of this.#pending.values()) {
+        reject(new AppError('COMMAND_FAILED', 'The app runtime closed the debugger connection.'));
+      }
+      this.#pending.clear();
+    });
+  }
+
+  static async connect(webSocketDebuggerUrl: string): Promise<InspectorSession> {
+    const url = new URL(webSocketDebuggerUrl);
+    // Metro refuses debugger upgrades without a loopback Origin, and Expo's dev server terminates
+    // any whose Origin host differs from its own 127.0.0.1:<port> base URL.
+    const origin = `http://127.0.0.1:${url.port || (url.protocol === 'wss:' ? '443' : '80')}`;
+    const socket = new WebSocket(url, { headers: { origin } } as unknown as string[]);
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        socket.close();
+        reject(new AppError('COMMAND_FAILED', 'Timed out connecting to the app runtime debugger.'));
+      }, CONNECT_TIMEOUT_MS);
+      socket.addEventListener(
+        'open',
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+      socket.addEventListener(
+        'error',
+        () => {
+          clearTimeout(timer);
+          reject(
+            new AppError(
+              'COMMAND_FAILED',
+              'The dev server refused the debugger connection to the app runtime.',
+            ),
+          );
+        },
+        { once: true },
+      );
+    });
+    return new InspectorSession(socket);
+  }
+
+  async evaluate(expression: string): Promise<unknown> {
+    const result = (await this.#send('Runtime.evaluate', { expression, returnByValue: true })) as {
+      result?: { value?: unknown };
+      exceptionDetails?: { text?: string; exception?: { description?: string } };
+    };
+    if (result.exceptionDetails) {
+      const { text, exception } = result.exceptionDetails;
+      throw new AppError(
+        'COMMAND_FAILED',
+        'The profiler runtime threw inside the app.',
+        undefined,
+        exception?.description ?? text ?? 'unknown exception',
+      );
+    }
+    return result.result?.value;
+  }
+
+  close(): void {
+    this.#socket.close();
+  }
+
+  #send(method: string, params: Record<string, unknown>): Promise<unknown> {
+    const id = this.#nextId++;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.#pending.delete(id);
+        reject(new AppError('COMMAND_FAILED', `The app runtime did not answer ${method} in time.`));
+      }, EVALUATE_TIMEOUT_MS);
+      this.#pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+      this.#socket.send(JSON.stringify({ id, method, params }));
+    });
+  }
+
+  #onMessage(raw: string): void {
+    let message: { id?: number; result?: unknown; error?: { message?: string } };
+    try {
+      message = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (typeof message.id !== 'number') return;
+    const pending = this.#pending.get(message.id);
+    if (!pending) return;
+    this.#pending.delete(message.id);
+    if (message.error) {
+      pending.reject(
+        new AppError(
+          'COMMAND_FAILED',
+          `Debugger protocol error: ${message.error.message ?? 'unknown'}`,
+        ),
+      );
+    } else {
+      pending.resolve(message.result);
+    }
+  }
+}
+
+function withTrailingSlash(url: URL): URL {
+  const copy = new URL(url);
+  if (!copy.pathname.endsWith('/')) copy.pathname = `${copy.pathname}/`;
+  copy.search = '';
+  copy.hash = '';
+  return copy;
+}

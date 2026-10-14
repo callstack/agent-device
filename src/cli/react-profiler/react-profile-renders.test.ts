@@ -1,0 +1,71 @@
+import { test } from 'vitest';
+import assert from 'node:assert/strict';
+import {
+  chronological,
+  selectPropKindRequests,
+  splitDisplayName,
+  summarizeRenders,
+} from './react-profile-renders.ts';
+import { MEMO, rawProfile, repeat, type Render } from './react-profile-renders.fixtures.ts';
+
+test('splitDisplayName separates DevTools wrapper names from the component', () => {
+  assert.deepEqual(splitDisplayName('Memo(ForwardRef(Row))'), {
+    name: 'Row',
+    wrappers: ['Memo', 'ForwardRef'],
+  });
+  assert.deepEqual(splitDisplayName('Row'), { name: 'Row', wrappers: [] });
+});
+
+test('commits from several roots are read as one timeline', () => {
+  const raw = rawProfile({ 1: ['A'], 2: ['B'] }, [
+    [300, 20, [1], [[1, 1]]],
+    [100, 30, [2], [[2, 1]]],
+  ]);
+  const { commits } = summarizeRenders(chronological(raw));
+  assert.deepEqual(
+    commits.map((commit) => [commit.atMs, commit.updaters[0]]),
+    [
+      [0, 'B'],
+      [200, 'A'],
+    ],
+  );
+});
+
+test('unrecorded change descriptions leave render causes empty rather than blaming the parent', () => {
+  const raw = rawProfile({ 1: ['A'] }, [[0, 1, [], [[1, 1]]]]);
+  raw.commits[0]!.changes = null;
+  assert.deepEqual(summarizeRenders(raw).components[0]?.causes, {
+    mount: 0,
+    props: 0,
+    state: 0,
+    hooks: 0,
+    context: 0,
+    parent: 0,
+  });
+});
+
+test('prop kinds are requested for one mounted instance of each props-driven component', () => {
+  const rows = repeat(3, (i) => 10 + i);
+  const elements: Record<number, [string, number?, number?]> = { 1: ['List'], 2: ['Header'] };
+  for (const id of rows) elements[id] = ['Row', MEMO, 1];
+  const raw = rawProfile(
+    elements,
+    [
+      [
+        0,
+        10,
+        [1],
+        [
+          [1, 1, [0, null, [0], null]],
+          [2, 1, 'parent'],
+          ...rows.map((id): Render => [id, 1, [0, [0], null, null]]),
+        ],
+      ],
+    ],
+    ['onPress'],
+  );
+  assert.deepEqual(selectPropKindRequests(raw), { '12': ['onPress'] });
+  const { components } = summarizeRenders(raw, { '12': { onPress: 'function' } });
+  assert.deepEqual(components.find((c) => c.name === 'Row')?.propKinds, { onPress: 'function' });
+  assert.equal(components.find((c) => c.name === 'Header')?.causes.parent, 1);
+});

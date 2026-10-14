@@ -824,6 +824,26 @@ agent-device perf trace stop --kind perfetto --out app.perfetto-trace
 
 For the measurement workflow, data sources, and output examples, see [Performance snapshots](/docs/debugging-profiling#performance-snapshots).
 
+## React Native render profiling
+
+```bash
+agent-device react-devtools profile start
+agent-device react-devtools profile stop
+agent-device react-devtools profile stop --limit 10
+agent-device react-devtools profile report <Component>
+agent-device react-devtools profile commit <N>
+agent-device react-devtools profile slow --limit 5
+agent-device react-devtools profile rerenders --limit 5
+agent-device react-devtools profile timeline --limit 20 --sort duration
+agent-device react-devtools profile status
+```
+
+- `profile start` begins recording React renders in the app; `profile stop` ends it and prints the commit count, render time, frames over budget, and up to five findings (`--limit` changes that). It also saves the profile for the session, so `report`, `commit`, `slow`, `rerenders`, and `timeline` read it without the app.
+- Profiling connects through the app's Metro dev server and needs no app or Metro setup. It works with development builds of React Native 0.74 and later.
+- `--app <bundle-id>` picks the app when several share the dev server. `--metro-port` and `--metro-host` pick the dev server when it is neither the session's Metro server nor `localhost:8081`.
+- With `--json`, `profile stop` returns the findings and the path of the saved profile.
+- See [Debugging & Profiling](/docs/debugging-profiling#react-native-render-profiling) for the findings and the workflow.
+
 ## React Native component internals
 
 ```bash
@@ -832,17 +852,11 @@ agent-device react-devtools wait --connected
 agent-device react-devtools get tree --depth 3
 agent-device react-devtools get component @c5
 agent-device react-devtools find Button
-agent-device react-devtools profile start
-agent-device react-devtools profile stop
-agent-device react-devtools profile slow --limit 5
-agent-device react-devtools profile rerenders --limit 5
-agent-device react-devtools profile timeline --limit 20
-agent-device react-devtools profile report @c5
 ```
 
-- `react-devtools` runs the pinned `agent-react-devtools@0.5.0` package through npm and passes arguments through unchanged. The first run may download it; later runs can reuse the npm cache.
+- Every `react-devtools` command except `profile` runs the pinned `agent-react-devtools@0.5.0` package through npm and passes arguments through unchanged. The first run may download it; later runs can reuse the npm cache.
 - React Native 0.87+ needs a one-time app setup before `react-devtools wait --connected` can succeed; see [Debugging & Profiling](/docs/debugging-profiling#react-native-component-internals).
-- Use it for component hierarchy, props, state, hooks, render causes, slow components, and re-render counts. For the profiling workflow, see [Debugging & Profiling](/docs/debugging-profiling#react-native-component-internals) and `agent-device help react-devtools`.
+- Use it for the component hierarchy, props, state, and hooks. See `agent-device help react-devtools` for the workflow.
 - `agent-device` global flags work before or after `react-devtools`. Put `--` before downstream flags only when they share an `agent-device` global flag name.
 - Development builds connect to the DevTools daemon on port 8097. If an Android emulator or device cannot reach the host, run `adb reverse tcp:8097 tcp:8097`. Android `open` of a local Metro URL with a port sets up host reachability; for app/package launches, run `adb reverse tcp:8081 tcp:8081` if the app cannot reach Metro.
 - Remote bridge sessions (Android and iOS) work through the same command; the CLI keeps a tunnel to the remote DevTools daemon alive until `react-devtools stop` or `disconnect`. See [Remote bridge sessions](/docs/debugging-profiling#remote-bridge-sessions) for the iOS relaunch order and supported React Native versions.
