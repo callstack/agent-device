@@ -21,6 +21,15 @@ export type Lease = {
   expiresAt?: number;
 };
 
+/**
+ * What a session `close` did with the daemon lease the session held. `released`: the lease is no
+ * longer active. `retained`: a `retainOnClose` lease stays active. `none`: the session held no
+ * daemon lease. A daemon older than this field omits it.
+ */
+export type SessionCloseLeaseOutcome =
+  | { outcome: 'released' | 'retained'; leaseId: string }
+  | { outcome: 'none' };
+
 export type LeaseOptions = AgentDeviceRequestOverrides &
   AgentDeviceSelectionOptions & {
     ttlMs?: number;

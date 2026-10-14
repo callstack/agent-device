@@ -53,6 +53,13 @@ an idle daemon alive; other leases, including human-control holds, do not. A
 retained lease the caller stops heartbeating expires after its `ttlMs`, and idle
 reap then shuts the daemon down within one more idle window.
 
+The daemon ends a session's lease on `close`, and the close reply owns the outcome. Its `lease`
+field is `released` or `retained` with the `leaseId`, or `none` when the session held no daemon
+lease. A close that fails after the release or retention carries the same field in its error
+details, and a `batch` close step carries it in that step's result. A client never sends a release
+after `close`. A client that stores the lease id forgets it on `released`, and a gateway that
+relays the close reply reads the lease end from it.
+
 ## Consequences
 
 Device contention can fail before platform execution with an explicit

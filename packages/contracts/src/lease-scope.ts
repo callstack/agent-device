@@ -2,6 +2,7 @@ import type { LeaseBackend } from '@agent-device/kernel/contracts';
 import { stripUndefined } from '@agent-device/kernel/record';
 import type { CloudProviderProfileFields } from './remote-config-fields.ts';
 import type { CommandFlags } from './command-flags.ts';
+import type { SessionCloseLeaseOutcome } from './client-lease.ts';
 
 const PROXY_LEASE_PROVIDER = 'proxy';
 
@@ -338,6 +339,17 @@ export function isInactiveLeaseError(error: unknown): boolean {
       (error as Readonly<{ details?: Readonly<{ reason?: unknown }> }>).details?.reason,
     )
   );
+}
+
+/** Reads the `lease` field of a session close reply; anything else is no outcome. */
+export function readSessionCloseLeaseOutcome(value: unknown): SessionCloseLeaseOutcome | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const { outcome, leaseId } = value as Readonly<{ outcome?: unknown; leaseId?: unknown }>;
+  if (outcome === 'none') return { outcome };
+  if ((outcome === 'released' || outcome === 'retained') && typeof leaseId === 'string') {
+    return { outcome, leaseId };
+  }
+  return undefined;
 }
 
 function leaseScopeToScopedRequest(scope: LeaseScope): LeaseScopedRequestScope {

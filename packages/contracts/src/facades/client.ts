@@ -74,6 +74,7 @@ export type {
   LeaseAllocateOptions,
   LeaseOptions,
   LeaseScopedOptions,
+  SessionCloseLeaseOutcome,
 } from '../client-lease.ts';
 export type {
   AudioOptions,

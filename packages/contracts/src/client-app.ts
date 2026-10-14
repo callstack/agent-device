@@ -3,6 +3,7 @@
 import type { AppsFilter } from './app-inventory.ts';
 import type { LaunchConfirmation } from './application-lifecycle-runtime.ts';
 import type { JsonObject } from './json.ts';
+import type { SessionCloseLeaseOutcome } from './client-lease.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
 import type { DaemonInstallSource, SessionRuntimeHints } from '@agent-device/kernel/contracts';
@@ -152,6 +153,7 @@ export type AppCloseResult = {
    * — so a client that requested publication learns where the file landed.
    */
   savedScript?: string;
+  lease?: SessionCloseLeaseOutcome;
   identifiers: AgentDeviceIdentifiers;
 };
 
