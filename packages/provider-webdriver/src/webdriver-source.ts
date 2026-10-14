@@ -1,4 +1,4 @@
-import { androidFieldValue, isFillableType, normalizeType } from '@agent-device/contracts/snapshot';
+import { androidFieldValue } from '@agent-device/contracts/snapshot';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { parseBounds } from '@agent-device/kernel/bounds';
 import { AppError } from '@agent-device/kernel/errors';
@@ -166,7 +166,6 @@ function sourceNodeFromAttributes(
   rect: RawSnapshotNode['rect'],
   platform: WebDriverSourcePlatform,
 ): RawSnapshotNode {
-  const field = textFieldFacts(type, attrs, platform);
   return {
     index,
     type,
@@ -179,8 +178,13 @@ function sourceNodeFromAttributes(
     ...(platform === 'android' && attrs.package ? { bundleId: attrs.package } : {}),
     rect,
     ...sourceStateFacts(attrs, rect, platform),
-    ...(field === undefined ? {} : field.facts),
-    ...checkedFact(type, attrs, platform),
+    ...nativeStateFacts(type, attrs, platform),
+    ...optionalFact('heading', parseWebDriverBoolean(attrs.heading)),
+    ...optionalFact(
+      'roleDescription',
+      firstWebDriverAttribute(attrs, ['roleDescription', 'role-description']) ??
+        (platform === 'android' ? androidRoleDescription(attrs.extras) : undefined),
+    ),
     depth,
     parentIndex,
   };
@@ -206,40 +210,6 @@ function labelFacts(
     ...(description !== undefined && description !== label
       ? { contentDescription: description }
       : {}),
-  };
-}
-
-type TextFieldFacts = Readonly<{
-  facts: Pick<RawSnapshotNode, 'editable' | 'password'>;
-}>;
-
-/**
- * The field facts a text entry control carries. UiAutomator2 reports a field's content as `text`
- * (the same attribute a label carries on every other node), its hint as `hint`, and whether it
- * masks input as `password`. XCUITest reports content as `value`, which every node already
- * carries, and the native iOS runner reports no field facts, so none are derived there.
- */
-function textFieldFacts(
-  type: string,
-  attrs: Record<string, string>,
-  platform: WebDriverSourcePlatform,
-): TextFieldFacts | undefined {
-  return platform === 'android' ? androidTextFieldFacts(type, attrs) : undefined;
-}
-
-function androidTextFieldFacts(
-  type: string,
-  attrs: Record<string, string>,
-): TextFieldFacts | undefined {
-  const password = parseWebDriverBoolean(attrs.password);
-  if (!(normalizeType(type) && isFillableType(type, 'android')) && password !== true) {
-    return undefined;
-  }
-  return {
-    facts: {
-      editable: parseWebDriverBoolean(attrs.enabled, true) === true,
-      ...optionalFact('password', password),
-    },
   };
 }
 
@@ -288,21 +258,27 @@ function optionalFact<Key extends keyof RawSnapshotNode>(
 /** Android classes that are checkable when the page source names no `checkable` attribute. */
 const ANDROID_CHECKABLE_CLASS = /(CheckBox|RadioButton|Switch|ToggleButton|CheckedTextView)$/;
 
-/**
- * The checked state of a checkable Android control. UiAutomator2 reports `checkable` and
- * `checked` on every node, `false` on the many that cannot be checked, so only a checkable node
- * carries the fact. XCUITest reports a switch's state as its `value`, which stays a value, as the
- * native iOS runner reports it.
- */
-function checkedFact(
+function nativeStateFacts(
   type: string,
   attrs: Record<string, string>,
   platform: WebDriverSourcePlatform,
-): Pick<RawSnapshotNode, 'checked'> {
-  if (platform !== 'android') return {};
-  const checkable = parseWebDriverBoolean(attrs.checkable) ?? ANDROID_CHECKABLE_CLASS.test(type);
+): Pick<RawSnapshotNode, 'checked' | 'password' | 'editable'> {
+  const raw = {
+    ...optionalFact('password', parseWebDriverBoolean(attrs.password)),
+    ...optionalFact('editable', parseWebDriverBoolean(attrs.editable)),
+  };
   const checked = parseWebDriverBoolean(attrs.checked);
-  return checkable && checked !== undefined ? { checked } : {};
+  if (platform === 'ios') {
+    return { ...raw, ...optionalFact('checked', checked) };
+  }
+  const checkable = parseWebDriverBoolean(attrs.checkable) ?? ANDROID_CHECKABLE_CLASS.test(type);
+  return { ...raw, ...(checkable && checked !== undefined ? { checked } : {}) };
+}
+
+function androidRoleDescription(extras: string | undefined): string | undefined {
+  const prefix = 'AccessibilityNodeInfo.roleDescription=';
+  const entry = extras?.split(';').find((value) => value.startsWith(prefix));
+  return nonEmptyWebDriverAttribute(entry?.slice(prefix.length));
 }
 
 function sourceStateFacts(

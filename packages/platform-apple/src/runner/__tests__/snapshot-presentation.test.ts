@@ -1,4 +1,4 @@
-import { IOS_SIMULATOR } from '../../__tests__/device-fixtures.ts';
+import { IOS_SIMULATOR, MACOS_DEVICE } from '../../__tests__/device-fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -426,3 +426,33 @@ test('runner presented and quality nodes share RN interpretation without replaci
   }
   assert.equal('checked' in node, false);
 });
+
+for (const device of [IOS_SIMULATOR, MACOS_DEVICE]) {
+  test(`runner ${device.appleOs} reads native states on presented and quality payloads`, () => {
+    const nodes = [
+      { index: 0, type: 'Switch', value: '0' },
+      { index: 1, type: 'SecureTextField' },
+      { index: 2, type: 'TextField', enabled: false },
+      { index: 3, type: 'Switch', value: '1', checked: false },
+      { index: 4, type: 'Other', value: 'checkbox, unchecked' },
+    ];
+    const result = readAppleSnapshotResult(
+      { nodes, qualityPayload: { nodes, truncated: false } },
+      device,
+    );
+    for (const interpreted of [result.nodes!, result.qualityPayload!.nodes]) {
+      assert.equal(interpreted[0]!.checked, false);
+      assert.deepEqual([interpreted[1]!.editable, interpreted[1]!.password], [true, true]);
+      assert.deepEqual(
+        [interpreted[2]!.enabled, interpreted[2]!.editable, interpreted[2]!.password],
+        [false, true, false],
+      );
+      assert.equal(interpreted[3]!.checked, false);
+      assert.equal(
+        interpreted[4]!.iosValueSemantics?.role,
+        device.appleOs === 'ios' ? 'checkbox' : undefined,
+      );
+    }
+    assert.equal('checked' in nodes[0]!, false);
+  });
+}

@@ -1,6 +1,7 @@
 import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
 import type {
   Point,
+  SnapshotAddressableNode,
   SnapshotKeyboardBandFact,
   SnapshotNode,
   SnapshotState,
@@ -11,7 +12,7 @@ import {
   runNodePipelineStages,
   type SelectorPipelineHooks,
 } from '@agent-device/selectors/selector-pipeline';
-import type { SelectorPipelinePolicy } from '@agent-device/selectors/selector-pipeline-policy';
+import type { ActingPipelinePolicy } from '@agent-device/selectors/selector-pipeline-policy';
 import { createSnapshotVisibility } from '@agent-device/contracts/snapshot';
 import { coveredInteractionDetails } from '@agent-device/selectors/interaction-error';
 import {
@@ -37,7 +38,7 @@ import type { InteractionAction } from './interaction-resolution-request.ts';
  */
 export function buildCoveredInteractionError(params: {
   label: string;
-  node: SnapshotNode;
+  node: SnapshotAddressableNode;
   action: InteractionAction;
   selector?: string;
 }): AppError {
@@ -63,7 +64,7 @@ export function buildCoveredInteractionError(params: {
  * ref, reading the rect center the platform aims at — says so in its resolver's return type.
  */
 export async function runInteractionPipelineStages<TPoint extends Point | null>(params: {
-  policy: SelectorPipelinePolicy;
+  policy: ActingPipelinePolicy;
   nodes: SnapshotState['nodes'];
   /** The keyboard band `nodes`' capture measured, when it measured one (#2660). */
   keyboard?: SnapshotKeyboardBandFact;
@@ -71,8 +72,8 @@ export async function runInteractionPipelineStages<TPoint extends Point | null>(
   action: InteractionAction;
   label: string;
   hooks: SelectorPipelineHooks;
-  resolveTapPoint: (node: SnapshotNode) => TPoint;
-}): Promise<{ node: SnapshotNode; tapPoint: TPoint }> {
+  resolveTapPoint: (node: SnapshotAddressableNode) => TPoint;
+}): Promise<{ node: SnapshotAddressableNode; tapPoint: TPoint }> {
   const target = await runNodePipelineStages(
     params.policy,
     params.nodes,
@@ -103,7 +104,7 @@ export async function runInteractionPipelineStages<TPoint extends Point | null>(
  * owner, and only for rows whose off-screen stage refuses — the row's decision
  * is made there, so this builds the message and never re-decides.
  */
-type OffscreenStageParams = { action: InteractionAction; pipeline: SelectorPipelinePolicy };
+type OffscreenStageParams = { action: InteractionAction; pipeline: ActingPipelinePolicy };
 
 // Selector parity for the @ref off-screen guard: without it, a selector
 // resolving to a closed drawer/carousel item "succeeds" by tapping coordinates

@@ -1,0 +1,201 @@
+{
+  "cases": [
+    {
+      "name": "switch on",
+      "input": {
+        "type": "Switch",
+        "value": "1"
+      },
+      "expected": {
+        "checked": true
+      }
+    },
+    {
+      "name": "switch off",
+      "input": {
+        "type": "Switch",
+        "value": "0"
+      },
+      "expected": {
+        "checked": false
+      }
+    },
+    {
+      "name": "checkbox false",
+      "input": {
+        "type": "CheckBox",
+        "value": "false"
+      },
+      "expected": {
+        "checked": false
+      }
+    },
+    {
+      "name": "radio true",
+      "input": {
+        "type": "RadioButton",
+        "value": "true"
+      },
+      "expected": {
+        "checked": true
+      }
+    },
+    {
+      "name": "toggle off",
+      "input": {
+        "type": "Toggle",
+        "value": "0"
+      },
+      "expected": {
+        "checked": false
+      }
+    },
+    {
+      "name": "switch no value",
+      "input": {
+        "type": "Switch"
+      },
+      "expected": {}
+    },
+    {
+      "name": "mixed remains unknown",
+      "input": {
+        "type": "CheckBox",
+        "value": "mixed"
+      },
+      "expected": {}
+    },
+    {
+      "name": "RN encoding remains raw",
+      "input": {
+        "type": "Switch",
+        "value": "checked, disabled"
+      },
+      "expected": {}
+    },
+    {
+      "name": "unrelated numeric value",
+      "input": {
+        "type": "Slider",
+        "value": "1"
+      },
+      "expected": {}
+    },
+    {
+      "name": "unknown type",
+      "input": {
+        "value": "0"
+      },
+      "expected": {}
+    },
+    {
+      "name": "TextField",
+      "input": {
+        "type": "TextField"
+      },
+      "expected": {
+        "editable": true,
+        "password": false
+      }
+    },
+    {
+      "name": "SearchField",
+      "input": {
+        "type": "SearchField"
+      },
+      "expected": {
+        "editable": true,
+        "password": false
+      }
+    },
+    {
+      "name": "TextView",
+      "input": {
+        "type": "TextView"
+      },
+      "expected": {
+        "editable": true,
+        "password": false
+      }
+    },
+    {
+      "name": "SecureTextField",
+      "input": {
+        "type": "SecureTextField"
+      },
+      "expected": {
+        "editable": true,
+        "password": true
+      }
+    },
+    {
+      "name": "disabled native field capability",
+      "input": {
+        "type": "TextField",
+        "enabled": false
+      },
+      "expected": {
+        "editable": true,
+        "password": false
+      }
+    },
+    {
+      "name": "XCUI prefix",
+      "input": {
+        "type": "XCUIElementTypeSecureTextField"
+      },
+      "expected": {
+        "editable": true,
+        "password": true
+      }
+    },
+    {
+      "name": "explicit unchecked wins",
+      "input": {
+        "type": "Switch",
+        "value": "1",
+        "checked": false
+      },
+      "expected": {
+        "checked": false
+      }
+    },
+    {
+      "name": "explicit read only wins",
+      "input": {
+        "type": "TextField",
+        "editable": false,
+        "password": true
+      },
+      "expected": {
+        "editable": false,
+        "password": true
+      }
+    },
+    {
+      "name": "explicit non secure wins",
+      "input": {
+        "type": "SecureTextField",
+        "password": false
+      },
+      "expected": {
+        "editable": true,
+        "password": false
+      }
+    },
+    {
+      "name": "custom raw facts",
+      "input": {
+        "type": "Other",
+        "editable": false,
+        "password": false,
+        "checked": true
+      },
+      "expected": {
+        "editable": false,
+        "password": false,
+        "checked": true
+      }
+    }
+  ]
+}

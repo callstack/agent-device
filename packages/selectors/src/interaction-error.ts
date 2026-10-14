@@ -1,4 +1,8 @@
-import type { Rect, SnapshotCoveringNode, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type {
+  Rect,
+  SnapshotAddressableNode,
+  SnapshotCoveringNode,
+} from '@agent-device/kernel/snapshot';
 
 /**
  * Machine-readable `error.details.reason` values shared by interaction producers and adapters.
@@ -44,7 +48,7 @@ export const INTERACTION_ERROR_REASONS = {
 } as const;
 
 /** The part of a covered node a refusal reports. */
-type CoveredNodeFacts = Pick<SnapshotNode, 'ref' | 'interactionBlocked' | 'coveredBy'>;
+type CoveredNodeFacts = Pick<SnapshotAddressableNode, 'ref' | 'interactionBlocked' | 'coveredBy'>;
 
 /**
  * The whole `error.details` shape of a covered refusal, shared by every producer (the interaction

@@ -1,6 +1,33 @@
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import type { IosValueSemantics, RawSnapshotNode } from '@agent-device/kernel/snapshot';
 
+/** Acquires native iOS type/value facts and RN value semantics without overriding producer facts. */
+export function interpretIosNode(
+  node: RawSnapshotNode,
+  options: Readonly<{ reactNativeValue?: boolean }> = {},
+): RawSnapshotNode {
+  const type = node.type?.replace(/^XCUIElementType/, '');
+  const field = ['TextField', 'SecureTextField', 'SearchField', 'TextView'].includes(type ?? '');
+  const checkable = ['Switch', 'CheckBox', 'RadioButton', 'Toggle'].includes(type ?? '');
+  const facts: Pick<RawSnapshotNode, 'checked' | 'password' | 'editable'> = {};
+  if (checkable && node.checked === undefined) {
+    const checked = nativeCheckedValue(node.value);
+    if (checked !== undefined) facts.checked = checked;
+  }
+  if (field) {
+    if (node.password === undefined) facts.password = type === 'SecureTextField';
+    if (node.editable === undefined) facts.editable = true;
+  }
+  const interpreted = Object.keys(facts).length === 0 ? node : { ...node, ...facts };
+  return options.reactNativeValue === false ? interpreted : interpretReactNativeValue(interpreted);
+}
+
+function nativeCheckedValue(value: string | undefined): boolean | undefined {
+  if (value === '1' || value === 'true') return true;
+  if (value === '0' || value === 'false') return false;
+  return undefined;
+}
+
 const RN_VIEW_CLASSES = new Set(['RCTView', 'RCTViewComponentView']);
 const ENGLISH_ROLES: Readonly<Record<string, string>> = {
   alert: 'alert',
@@ -32,7 +59,7 @@ const ENGLISH_STATES: Readonly<Record<string, StateComponent>> = {
 };
 
 /** Interprets RN's value grammar without removing value evidence or overriding native facts. */
-export function interpretIosReactNativeValue(node: RawSnapshotNode): RawSnapshotNode {
+function interpretReactNativeValue(node: RawSnapshotNode): RawSnapshotNode {
   if (node.iosValueSemantics || typeof node.value !== 'string') return node;
   if (!isInterpretationCandidate(node)) return node;
   const semantics = parseEnglishValue(node.value, node.role);

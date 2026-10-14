@@ -99,6 +99,8 @@ extension RunnerTests {
     XCUIElement.ElementType.activityIndicator.rawValue: "ActivityIndicator",
     XCUIElement.ElementType.progressIndicator.rawValue: "ProgressIndicator",
     XCUIElement.ElementType.checkBox.rawValue: "CheckBox",
+    XCUIElement.ElementType.radioButton.rawValue: "RadioButton",
+    XCUIElement.ElementType.toggle.rawValue: "Toggle",
     XCUIElement.ElementType.menuItem.rawValue: "MenuItem",
     XCUIElement.ElementType.webView.rawValue: "WebView",
     XCUIElement.ElementType.other.rawValue: "Other",
@@ -497,23 +499,7 @@ extension RunnerTests {
     nodes[0] = interactiveRootNode(rect: rootRect)
     for candidate in candidates {
       nodes.append(
-        RawAXNode(
-          index: nodes.count,
-          type: candidate.type,
-          label: candidate.label,
-          identifier: candidate.identifier,
-          value: candidate.value,
-          placeholder: candidate.placeholder,
-          rect: candidate.rect,
-          enabled: candidate.enabled,
-          focused: candidate.focused,
-          selected: candidate.selected,
-          hittable: candidate.hittable,
-          depth: 1,
-          parentIndex: 0,
-          hiddenContentAbove: nil,
-          hiddenContentBelow: nil
-        )
+        candidate.reindexed(index: nodes.count, depth: 1, parentIndex: 0)
       )
     }
     return (

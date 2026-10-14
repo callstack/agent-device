@@ -26,17 +26,12 @@
 // instanceof), and, for `scripts/` files which sit outside the type graph by design, the
 // root-side unknown-package and exports-map checks that compiled files get from TS2307.
 // On top, `TEST_ONLY_FIXTURE_SUBPATHS` mirrors R13's Android fixture gate for the non-platform
-// packages: a production file importing one of those fixture subpaths is an R11 violation, and
-// `CLIENT_ONLY_SUBPATHS` keeps the caller-side replay source collector out of daemon code.
+// packages: a production file importing one of those fixture subpaths is an R11 violation.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseImports, resolveWorkspaceSpecifier } from './model.ts';
-import {
-  DAEMON_SOURCE_ROOT,
-  listTrackedPackageManifests,
-  listTrackedProductionSources,
-} from './tracked-sources.ts';
+import { listTrackedPackageManifests, listTrackedProductionSources } from './tracked-sources.ts';
 
 export type PackageBoundaryViolation = {
   rule: string;
@@ -264,30 +259,6 @@ function importsTestOnlyFixtureFromProduction(file: string, specifier: string): 
 }
 
 /**
- * Caller-side replay source acquisition: the client reads script files from the caller's
- * filesystem and ships their contents in the request. Daemon production code receives that
- * bundle and must never read caller paths itself, so it may not import these subpaths.
- */
-export const CLIENT_ONLY_SUBPATHS: ReadonlySet<string> = new Set([
-  '@agent-device/replay-port/script-source-bundle',
-  '@agent-device/replay-port/source-discovery',
-]);
-
-// The daemon process also runs its root entry and composition root, outside the daemon package.
-const DAEMON_PROCESS_ROOT_FILES: ReadonlySet<string> = new Set([
-  'src/daemon.ts',
-  'src/daemon-composition.ts',
-]);
-
-function importsClientOnlyFromDaemon(file: string, specifier: string): boolean {
-  return (
-    CLIENT_ONLY_SUBPATHS.has(specifier) &&
-    (file.startsWith(DAEMON_SOURCE_ROOT) || DAEMON_PROCESS_ROOT_FILES.has(file)) &&
-    !isTestConsumerFile(file)
-  );
-}
-
-/**
  * Rules for files INSIDE a package. An undeclared sibling import is R11's alone: pnpm links
  * every workspace package under the root `node_modules`, so the import resolves, compiles, and
  * runs in this repo even when the manifest never declares it — and a published bundle
@@ -343,16 +314,6 @@ export function checkPackageInternalSites(
         message:
           `'${site.specifier}' is a test-only fixture subpath — production code may not ` +
           `import it; use the package's production subpath instead.`,
-      });
-    }
-    if (importsClientOnlyFromDaemon(site.file, site.specifier)) {
-      violations.push({
-        rule: 'R11 package-boundaries',
-        file: site.file,
-        line: site.line,
-        message:
-          `'${site.specifier}' reads caller-side replay sources — daemon code receives the ` +
-          `client's source bundle and may not read caller paths; take it from the request.`,
       });
     }
     const target = packageByName(allPackages, name);
@@ -439,16 +400,6 @@ export function checkRootSites(
         message:
           `'${site.specifier}' is a test-only fixture subpath — production code may not ` +
           `import it; use the package's production subpath instead.`,
-      });
-    }
-    if (importsClientOnlyFromDaemon(site.file, site.specifier)) {
-      violations.push({
-        rule: 'R11 package-boundaries',
-        file: site.file,
-        line: site.line,
-        message:
-          `'${site.specifier}' reads caller-side replay sources — daemon code receives the ` +
-          `client's source bundle and may not read caller paths; take it from the request.`,
       });
     }
     const target = packageByName(packages, name);

@@ -1,6 +1,7 @@
 import type {
   Point,
   Rect,
+  SnapshotAddressableNode,
   SnapshotKeyboardBandFact,
   SnapshotNode,
   SnapshotState,
@@ -33,7 +34,7 @@ import type { InteractionAction } from './interaction-resolution-request.ts';
  */
 export function assertTapTargetClearOfVisibleKeyboard(params: {
   nodes: SnapshotState['nodes'];
-  node: SnapshotNode;
+  node: SnapshotAddressableNode;
   action: InteractionAction;
   /** How the caller named the target, e.g. `Ref @e40` or `Selector text=Form`. */
   label: string;
@@ -106,8 +107,7 @@ function keyboardOcclusionWarning(point: Point, surface: KeyboardSurface): strin
 function buildKeyboardOcclusionError(params: {
   label: string;
   action: InteractionAction;
-  /** The ref the target was named by; omitted with the detail when nothing addresses the node. */
-  ref: string | undefined;
+  ref: string;
   targetRect: NonNullable<SnapshotNode['rect']>;
   surface: KeyboardSurface;
 }): AppError {
@@ -117,7 +117,7 @@ function buildKeyboardOcclusionError(params: {
       `${params.label} is behind the visible keyboard and cannot ${interactionVerb(params.action)} safely`,
       {
         ...TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS,
-        ...(params.ref === undefined ? {} : { ref: `@${params.ref}` }),
+        ref: `@${params.ref}`,
         rect: params.targetRect,
         keyboardFrame: params.surface.frame,
       },

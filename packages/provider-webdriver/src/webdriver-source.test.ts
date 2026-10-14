@@ -52,7 +52,7 @@ test("Android WebDriver facts name a node by its text, carry a content descripti
       field!.hintShowing,
       field!.editable,
     ],
-    ['Ada Lovelace', 'Ada Lovelace', 'Name field', 'Your name', undefined, true],
+    ['Ada Lovelace', 'Ada Lovelace', 'Name field', 'Your name', undefined, undefined],
   );
   assert.deepEqual(
     [label!.label, label!.value, 'editable' in label!],
@@ -60,7 +60,7 @@ test("Android WebDriver facts name a node by its text, carry a content descripti
   );
 });
 
-test('Android WebDriver facts read a hinted field as empty, a masked field as a password, and a disabled field as not editable', () => {
+test('Android WebDriver facts read a hinted field as empty, a masked field as a password, and editability as unavailable when unreported', () => {
   const [hinted, secure, disabled, lookalike] = parseWebDriverSourceFacts(
     '<hierarchy>' +
       '<android.widget.EditText text="Your name" hint="Your name" hint-showing="true" bounds="[0,40][100,80]" />' +
@@ -76,8 +76,8 @@ test('Android WebDriver facts read a hinted field as empty, a masked field as a 
     [hinted!.value, hinted!.label, hinted!.placeholder, hinted!.hintShowing],
     ['', 'Your name', 'Your name', true],
   );
-  assert.deepEqual([secure!.password, secure!.editable], [true, true]);
-  assert.deepEqual([disabled!.value, disabled!.editable], ['locked', false]);
+  assert.deepEqual([secure!.password, secure!.editable], [true, undefined]);
+  assert.deepEqual([disabled!.value, disabled!.editable], ['locked', undefined]);
   // Only the class name's last segment decides, as `isFillableType` reads it.
   assert.deepEqual(
     [lookalike!.label, lookalike!.value, 'editable' in lookalike!],
@@ -104,9 +104,7 @@ test('Android WebDriver facts carry the checked state of checkable controls only
   );
 });
 
-// The native iOS runner reports no checked, editable, or password facts, so the WebDriver
-// projection stays at that parity: a switch keeps its state as its value.
-test('iOS WebDriver facts keep a switch value as a value and add no field facts', () => {
+test('iOS WebDriver source preserves native values for acquisition interpretation', () => {
   const [toggle, field, secure] = parseWebDriverSourceFacts(
     '<AppiumAUT>' +
       '<XCUIElementTypeSwitch name="Wi-Fi" value="1" x="0" y="0" width="50" height="30" />' +
@@ -115,10 +113,10 @@ test('iOS WebDriver facts keep a switch value as a value and add no field facts'
       '</AppiumAUT>',
   ).nodes;
 
-  assert.deepEqual([toggle!.value, 'checked' in toggle!], ['1', false]);
+  assert.deepEqual([toggle!.value, toggle!.checked], ['1', undefined]);
   assert.deepEqual(
-    [field!.value, 'editable' in field!, 'password' in secure!],
-    ['ada@example.com', false, false],
+    [field!.value, field!.editable, secure!.password],
+    ['ada@example.com', undefined, undefined],
   );
 });
 
@@ -254,7 +252,7 @@ const ANDROID_CLASS_IDENTITY_CASES = [
     widget: 'EditText',
     className: 'android.widget.EditText',
     kind: 'text-field',
-    editable: true,
+    editable: undefined,
     scrollContainer: false,
   },
   {
@@ -435,4 +433,53 @@ test('Android source preserves native package provenance on anonymous IME window
     ['com.google.android.inputmethod.latin', 'com.google.android.inputmethod.latin'],
   );
   assert.equal(nodes[0]?.identifier, undefined);
+});
+
+test('WebDriver preserves explicit native states on custom controls and field overrides', () => {
+  for (const platform of ['ios', 'android'] as const) {
+    const [custom, field, unknown] = parseWebDriverSourceFacts(
+      '<hierarchy>' +
+        '<Other checked="false" checkable="true" password="false" editable="false" heading="false" roleDescription="Custom role" />' +
+        `<${platform === 'ios' ? 'XCUIElementTypeSecureTextField' : 'android.widget.EditText'} editable="false" password="false" enabled="true" />` +
+        '<Other checked="invalid" password="invalid" editable="invalid" heading="invalid" />' +
+        '</hierarchy>',
+      platform,
+    ).nodes;
+    assert.deepEqual(
+      [
+        custom!.checked,
+        custom!.password,
+        custom!.editable,
+        custom!.heading,
+        custom!.roleDescription,
+      ],
+      [false, false, false, false, 'Custom role'],
+    );
+    assert.deepEqual([field!.editable, field!.password], [false, false]);
+    assert.deepEqual(
+      [unknown!.checked, unknown!.password, unknown!.editable, unknown!.heading],
+      [undefined, undefined, undefined, undefined],
+    );
+  }
+});
+
+test('Android Appium role descriptions read the exact native extras key and preserve explicit attributes', () => {
+  const [native, explicit, empty, unrelated] = parseWebDriverSourceFacts(
+    '<hierarchy>' +
+      '<node class="android.view.View" extras="other=1;AccessibilityNodeInfo.roleDescription=Tab List;another=2" />' +
+      '<node class="android.view.View" role-description="Link" extras="AccessibilityNodeInfo.roleDescription=Tab" />' +
+      '<node class="android.view.View" extras="AccessibilityNodeInfo.roleDescription=;" />' +
+      '<node class="android.view.View" extras="other=AccessibilityNodeInfo.roleDescription=Tab" />' +
+      '</hierarchy>',
+    'android',
+  ).nodes;
+  assert.deepEqual(
+    [
+      native!.roleDescription,
+      explicit!.roleDescription,
+      empty!.roleDescription,
+      unrelated!.roleDescription,
+    ],
+    ['Tab List', 'Link', undefined, undefined],
+  );
 });

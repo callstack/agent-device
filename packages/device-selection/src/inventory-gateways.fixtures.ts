@@ -24,7 +24,7 @@ export type TestDeviceInventoryOptions = Readonly<{
   findInstalledApp?: InstalledAppProbe;
 }>;
 
-const testRequestScope: PlatformRequestScope = Object.freeze({
+export const testRequestScope: PlatformRequestScope = Object.freeze({
   signal: new AbortController().signal,
   diagnostics: Object.freeze({ emit: () => {} }),
   progress: Object.freeze({ report: () => {} }),
