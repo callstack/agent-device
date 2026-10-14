@@ -85,44 +85,78 @@ export type RuntimeTargetFilter = {
   device?: string;
 };
 
+function isAppRuntime(target: MetroInspectorTarget): boolean {
+  return (
+    target.reactNative !== undefined && !WORKLET_RUNTIME_PATTERN.test(target.description ?? '')
+  );
+}
+
+function matchesFilter(target: MetroInspectorTarget, filter: RuntimeTargetFilter): boolean {
+  const app = filter.appId === undefined || targetAppId(target) === filter.appId;
+  const device =
+    filter.device === undefined ||
+    target.deviceName === filter.device ||
+    deviceKey(target) === filter.device;
+  return app && device;
+}
+
+function noMatchingRuntime(
+  runtimes: MetroInspectorTarget[],
+  filter: RuntimeTargetFilter,
+): AppError {
+  const seen = runtimes.map(
+    (target) => `${targetAppId(target)} on ${target.deviceName ?? deviceKey(target)}`,
+  );
+  return new AppError(
+    'COMMAND_FAILED',
+    filter.appId || filter.device
+      ? 'No matching React Native runtime is connected to the dev server.'
+      : 'No React Native runtime is connected to the dev server.',
+    {
+      hint:
+        seen.length > 0
+          ? `Connected runtimes: ${[...new Set(seen)].join(', ')}.`
+          : 'Open the app from a development build so it loads its bundle from this dev server.',
+    },
+  );
+}
+
+/** The main runtime of each device: a device registers it before any secondary runtime. */
+function mainRuntimePerDevice(candidates: MetroInspectorTarget[]): MetroInspectorTarget[] {
+  const devices = new Map<string, MetroInspectorTarget>();
+  for (const target of candidates) {
+    const key = deviceKey(target);
+    const current = devices.get(key);
+    devices.set(key, current && pageNumber(current) <= pageNumber(target) ? current : target);
+  }
+  return [...devices.values()];
+}
+
+/** A value `--metro-device` matches uniquely: the device name, or its key when names collide. */
+function deviceSelectors(devices: MetroInspectorTarget[]): string[] {
+  const nameCounts = new Map<string, number>();
+  for (const { deviceName } of devices) {
+    if (deviceName) nameCounts.set(deviceName, (nameCounts.get(deviceName) ?? 0) + 1);
+  }
+  return devices.map((target) =>
+    target.deviceName && nameCounts.get(target.deviceName) === 1
+      ? target.deviceName
+      : deviceKey(target),
+  );
+}
+
 /**
  * Picks the one React Native runtime to profile. Pages without the `reactNative` field are not app
- * runtimes, and worklet runtimes render no React tree. A device registers its main runtime before
- * any secondary one, so the lowest page number wins per device. Several apps or several devices
- * fail closed: the caller must narrow to exactly one runtime.
+ * runtimes, and worklet runtimes render no React tree. Several apps or several devices fail
+ * closed: the caller must narrow to exactly one runtime.
  */
 export function selectReactNativeTarget(
   targets: MetroInspectorTarget[],
   filter: RuntimeTargetFilter = {},
 ): MetroInspectorTarget {
-  const runtimes = targets.filter(
-    (target) =>
-      target.reactNative !== undefined && !WORKLET_RUNTIME_PATTERN.test(target.description ?? ''),
-  );
-  const candidates = runtimes.filter(
-    (target) =>
-      (filter.appId === undefined || targetAppId(target) === filter.appId) &&
-      (filter.device === undefined ||
-        target.deviceName === filter.device ||
-        deviceKey(target) === filter.device),
-  );
-  if (candidates.length === 0) {
-    const seen = runtimes.map(
-      (target) => `${targetAppId(target)} on ${target.deviceName ?? deviceKey(target)}`,
-    );
-    throw new AppError(
-      'COMMAND_FAILED',
-      filter.appId || filter.device
-        ? 'No matching React Native runtime is connected to the dev server.'
-        : 'No React Native runtime is connected to the dev server.',
-      {
-        hint:
-          seen.length > 0
-            ? `Connected runtimes: ${[...new Set(seen)].join(', ')}.`
-            : 'Open the app from a development build so it loads its bundle from this dev server.',
-      },
-    );
-  }
+  const runtimes = targets.filter(isAppRuntime);
+  const candidates = runtimes.filter((target) => matchesFilter(target, filter));
+  if (candidates.length === 0) throw noMatchingRuntime(runtimes, filter);
   const apps = new Set(candidates.map(targetAppId));
   if (apps.size > 1) {
     throw new AppError(
@@ -133,23 +167,17 @@ export function selectReactNativeTarget(
       },
     );
   }
-  const devices = new Map<string, MetroInspectorTarget>();
-  for (const target of candidates) {
-    const key = deviceKey(target);
-    const current = devices.get(key);
-    devices.set(key, current && pageNumber(current) <= pageNumber(target) ? current : target);
-  }
-  if (devices.size > 1) {
-    const names = [...devices.values()].map((target) => target.deviceName ?? deviceKey(target));
+  const devices = mainRuntimePerDevice(candidates);
+  if (devices.length > 1) {
     throw new AppError(
       'INVALID_ARGS',
       'The app is connected to the dev server from several devices.',
       {
-        hint: `Pass --metro-device with one of: ${names.join(', ')}.`,
+        hint: `Pass --metro-device with one of: ${deviceSelectors(devices).join(', ')}.`,
       },
     );
   }
-  return [...devices.values()][0]!;
+  return devices[0]!;
 }
 
 /**

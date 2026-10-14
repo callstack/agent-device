@@ -133,11 +133,17 @@ test('one app on two devices fails closed until --metro-device picks one', async
     ...TARGET,
     id: 'tablet-1',
     deviceName: 'Tablet',
+    webSocketDebuggerUrl: 'ws://127.0.0.1:8081/inspector/debug?device=tablet&page=1',
     reactNative: { logicalDeviceId: 'tablet' },
   };
   const { run } = harness(new FakeAppRuntime(), [{ ...TARGET, deviceName: 'Pixel' }, second]);
   await assert.rejects(run('start'), (error: { code: string }) => error.code === 'INVALID_ARGS');
+  assert.equal(vi.mocked(InspectorSession.connect).mock.calls.length, 0);
   assert.match((await run('start', '--metro-device', 'Tablet')).text, /^Profiling React renders/);
+  assert.deepEqual(
+    vi.mocked(InspectorSession.connect).mock.calls.map(([url]) => url),
+    [second.webSocketDebuggerUrl],
+  );
 });
 
 test('a failed prop inspection becomes a note instead of failing the stop', async () => {
@@ -211,6 +217,7 @@ test('unknown profile commands and malformed options are invalid arguments', asy
     [['stop', '--limit', '10garbage'], /Invalid --limit: 10garbage/],
     [['stop', '--limit', '1.5'], /Invalid --limit: 1\.5/],
     [['stop', 'extra'], /Unexpected argument for react-devtools profile stop: extra/],
+    [['start', '--limit', '5'], /react-devtools profile start does not take --limit/],
   ];
   for (const [args, message] of cases) {
     await assert.rejects(run(...args), (error: { code: string; message: string }) => {

@@ -62,6 +62,25 @@ test('one app on several devices fails closed until --metro-device names one', (
   assert.equal(selectReactNativeTarget(targets, { device: 'ipad' }).id, 'ipad-1');
 });
 
+test('devices that share a name are listed by a key --metro-device can select', () => {
+  const targets = [
+    target('sim-a-1', { appId: 'com.app', deviceName: 'iPhone 17' }),
+    target('sim-b-1', { appId: 'com.app', deviceName: 'iPhone 17' }),
+    target('pixel-1', { appId: 'com.app', deviceName: 'Pixel 9' }),
+  ];
+  const hint = (filter?: { device: string }) => {
+    try {
+      selectReactNativeTarget(targets, filter);
+    } catch (error) {
+      return (error as { details: { hint: string } }).details.hint;
+    }
+    return undefined;
+  };
+  assert.equal(hint(), 'Pass --metro-device with one of: sim-a, sim-b, Pixel 9.');
+  assert.equal(hint({ device: 'iPhone 17' }), 'Pass --metro-device with one of: sim-a, sim-b.');
+  assert.equal(selectReactNativeTarget(targets, { device: 'sim-b' }).id, 'sim-b-1');
+});
+
 test('distinct apps need --app; older dev servers report the app id as the description', () => {
   const targets = [
     target('a-1', { appId: 'com.one' }),

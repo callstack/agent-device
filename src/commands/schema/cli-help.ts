@@ -295,7 +295,7 @@ Focus and visual truth:
     summary: 'React Native performance profiling',
     body: `agent-device help react-devtools
 
-Use this for React Native performance profiling: slow renders, rerenders and their causes, and commits that drop frames.
+Use this for React Native performance profiling: slow renders, rerenders and their causes, and commits that take longer than a 16 ms frame.
 
 Commands:
   agent-device react-devtools profile start
@@ -308,7 +308,7 @@ Commands:
 Profiling loop:
   1. Run profile start immediately before the interaction; keep the window narrow.
   2. Drive the interaction with normal agent-device commands. When correlating with logs, run logs clear --restart before the first logs mark.
-  3. Run profile stop. It prints the commit count, render time, frames over budget, and ranked findings, each naming a component, its evidence, and a fix.
+  3. Run profile stop. It prints the commit count, render time, commits over the 16 ms frame budget, and ranked findings, each naming a component, its evidence, and a fix.
   4. After a fix, repeat the same start, interaction, and stop, and compare the findings.
 
 Findings:

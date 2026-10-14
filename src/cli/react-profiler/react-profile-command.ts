@@ -79,6 +79,23 @@ const PROFILE_OPTIONS = {
   'bundle-url': { type: 'string' },
 } as const;
 
+type ProfileOption = keyof typeof PROFILE_OPTIONS;
+
+const RUNTIME_OPTIONS: readonly ProfileOption[] = [
+  'app',
+  'metro-device',
+  'metro-host',
+  'metro-port',
+  'bundle-url',
+];
+
+/** The options each subcommand reads; any other option is refused rather than ignored. */
+const SUBCOMMAND_OPTIONS: Record<ReactProfileSubcommand, readonly ProfileOption[]> = {
+  start: RUNTIME_OPTIONS,
+  status: RUNTIME_OPTIONS,
+  stop: [...RUNTIME_OPTIONS, 'limit'],
+};
+
 function parseProfileOptions(args: string[]) {
   try {
     return parseArgs({ args, allowPositionals: true, strict: true, options: PROFILE_OPTIONS });
@@ -97,6 +114,15 @@ function parseProfileArgs(args: string[]): ProfileArgs {
     );
   }
   const { values, positionals } = parseProfileOptions(rest);
+  const unread = (Object.keys(values) as ProfileOption[]).find(
+    (option) => !SUBCOMMAND_OPTIONS[subcommand].includes(option),
+  );
+  if (unread) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `react-devtools profile ${subcommand} does not take --${unread}.`,
+    );
+  }
   if (positionals.length > 0) {
     throw new AppError(
       'INVALID_ARGS',
