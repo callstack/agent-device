@@ -31,10 +31,10 @@ import {
 } from '@agent-device/replay-port/script-source';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import type {
-  ReplayCommand,
+  ReplayBackendCommand,
   ReplayDispatchRequest,
   ReplaySessionStore,
-} from '@agent-device/replay-port/command-types';
+} from '@agent-device/contracts/replay-backend';
 import {
   errorResponse,
   type DaemonResponse,
@@ -46,7 +46,7 @@ type TypedMaestroReplayState = {
 };
 
 type TypedMaestroReplayPreparation = Readonly<{
-  command: ReplayCommand;
+  command: ReplayBackendCommand;
   bundle: ReplayScriptSourceBundle;
 }>;
 
@@ -73,7 +73,9 @@ type MaestroReplayBinding = Pick<
   'device' | 'platform' | 'target' | 'runtimeHints'
 >;
 
-export async function runTypedMaestroReplay(command: ReplayCommand): Promise<DaemonResponse> {
+export async function runTypedMaestroReplay(
+  command: ReplayBackendCommand,
+): Promise<DaemonResponse> {
   const { request: req } = command;
   const bundle = req.flags?.replayScriptSource;
   if (!bundle) return errorResponse('INVALID_ARGS', REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE);
@@ -311,7 +313,7 @@ function buildTypedMaestroEnv(req: DaemonWireRequest): Record<string, string> {
 }
 
 function createMaestroReplayPort(params: {
-  command: ReplayCommand;
+  command: ReplayBackendCommand;
   device: DeviceInfo | undefined;
   platform: Extract<MaestroPlatform, 'android' | 'ios'>;
   runtimeHints: SessionRuntimeHints | undefined;

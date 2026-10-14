@@ -10,7 +10,8 @@ import type {
   ReplayTestManifest,
   ReplayTestSource,
 } from '@agent-device/replay-test';
-import { getReplayBackend, type ReplayBackend } from './replay-backend-registry.ts';
+import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
+import { getReplayBackend } from './replay-backend-registry.ts';
 
 /**
  * The daemon adapter's source-inspection capability (#1478 P3b).

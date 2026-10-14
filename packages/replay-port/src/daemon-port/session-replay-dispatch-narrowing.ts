@@ -1,4 +1,4 @@
-import type { ReplayDispatchRequest } from '@agent-device/replay-port/command-types';
+import type { ReplayDispatchRequest } from '@agent-device/contracts/replay-backend';
 import type {
   AdReplayDispatchGuard,
   AdReplayDispatchOutcome,

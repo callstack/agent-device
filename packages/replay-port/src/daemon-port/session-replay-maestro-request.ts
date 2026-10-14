@@ -2,9 +2,11 @@ import type {
   MaestroDaemonDispatchOptions,
   MaestroDaemonOperationRequest,
 } from '@agent-device/maestro/daemon-runtime-port';
-import type { ReplayDispatchOptions } from '@agent-device/contracts/replay';
 import { stripUndefined } from '@agent-device/kernel/record';
-import type { ReplayDispatchRequest } from '@agent-device/replay-port/command-types';
+import type {
+  ReplayBackendDispatchOptions,
+  ReplayDispatchRequest,
+} from '@agent-device/contracts/replay-backend';
 
 /**
  * The daemon half of the Maestro runtime port. The port projects a flow step onto one public
@@ -36,7 +38,7 @@ export function maestroOperationDispatchRequest(
  */
 function maestroDispatchOptions(
   dispatch: MaestroDaemonDispatchOptions | undefined,
-): Pick<ReplayDispatchOptions, keyof MaestroDaemonDispatchOptions> {
+): ReplayBackendDispatchOptions {
   return stripUndefined({
     closeAppOnly: dispatch?.closeAppOnly,
     killApp: dispatch?.killApp,

@@ -1,10 +1,7 @@
 import fs from 'node:fs';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type {
-  ReplayCoordinator,
-  ReplaySessionStore,
-  ReplaySessionView,
-} from '@agent-device/replay-port/command-types';
+import type { ReplayCoordinator, ReplaySessionView } from '@agent-device/replay-port/command-types';
+import type { ReplaySessionStore } from '@agent-device/contracts/replay-backend';
 import { expandSessionPath } from '@agent-device/host-kit/session-paths';
 import { healedScriptSiblingPath } from '@agent-device/replay-port/session-replay-heal';
 import {

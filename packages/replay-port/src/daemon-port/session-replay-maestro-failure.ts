@@ -1,42 +1,17 @@
 import { collectMaestroFailureSuggestions, type MaestroFailedAction } from '@agent-device/maestro';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import type { SnapshotDiagnosticsSummary } from '@agent-device/contracts/capture';
-import { type ReplayDivergence } from '@agent-device/contracts/divergence';
-import {
-  REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
-  createReplayDivergenceSanitizer,
-  type ReplayVarScrubEntry,
-} from '@agent-device/ad-replay/divergence';
 import { formatScriptArg } from '@agent-device/ad-script';
-import { getRequestSignal } from '@agent-device/host-kit/request';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type {
+  ReplayBackendActionFailure,
   ReplaySessionObservation,
-  ReplaySessionState,
   ReplaySessionStore,
-} from '@agent-device/replay-port/command-types';
-import type { ReplayReportAction } from '@agent-device/replay-port/session-replay-report-action';
-import { rankAndDedupeReplaySuggestions } from '@agent-device/replay-port/session-replay-suggestion-ranking';
-import {
-  buildReplayDivergenceSuggestionForNode,
-  buildDivergenceScreen,
-  captureDivergenceObservation,
-  toReplayRepairHintCapture,
-  type DivergenceFieldSanitizer,
-} from './session-replay-divergence.ts';
-import { boundReplayDivergenceForSession } from './session-replay-divergence-publication.ts';
-import { computeReplayRepairHint } from '@agent-device/replay-port/repair-hint';
-import {
-  buildReplayDivergenceFailureResponseFromDescriptor,
-  hoistReplayFailureCauseDiagnosticMeta,
-} from '@agent-device/replay-port/session-replay-runtime-failure-response';
+} from '@agent-device/contracts/replay-backend';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
+import { buildReplayBackendActionFailureResponse } from './replay-backend-failure.ts';
 
-export type MaestroFailureReportAction = Pick<
-  ReplayReportAction,
-  'command' | 'positionals' | 'flags'
->;
+export type MaestroFailureReportAction = ReplayBackendActionFailure['captureAction'];
 
 export type MaestroFailureReportProjection = {
   readonly command: { readonly kind: string };
@@ -75,116 +50,30 @@ export async function buildTypedMaestroFailureResponse(params: {
   readonly logPath: string;
   readonly snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 }): Promise<DaemonResponse> {
-  const { failure, replayPath, req, sessionStore, observationStore, logPath } = params;
-  const requestSignal = getRequestSignal(req.meta?.requestId);
+  const { failure, req } = params;
   const report = buildTypedMaestroFailureReportProjection(failure, req);
-  const cause = hoistReplayFailureCauseDiagnosticMeta(params.error);
-  const scrubVars: ReplayVarScrubEntry[] = [...failure.redactions];
-  const sanitize = createReplayDivergenceSanitizer(scrubVars);
-  const safeCause = {
-    ...cause,
-    message: sanitize(cause.message),
-    ...(cause.hint ? { hint: sanitize(cause.hint) } : {}),
-  };
-  const session = observationStore.get();
-  const observation = session
-    ? await captureDivergenceObservation({
-        session,
-        observationStore,
-        logPath,
-        action: report.action,
-      })
-    : {
-        state: 'unavailable' as const,
-        reason: 'no-session',
-        hint: 'The session closed before a post-failure screen could be captured.',
-      };
-  const suggestions =
-    session && observation.state === 'available' && !failure.isControl
-      ? collectTypedMaestroSuggestions({
-          failure,
-          action: report.action,
-          session,
-          nodes: observation.nodes,
-          sanitize,
-        })
-      : [];
-  const actionLabel = [failure.action, formatMaestroActionValue(failure.value)]
-    .filter(Boolean)
-    .join(' ');
-  const divergence: ReplayDivergence = {
-    version: 1,
-    kind: 'action-failure',
-    step: {
-      index: failure.stepIndex,
-      source: {
-        path: sanitize(failure.source.path ?? replayPath),
-        line: failure.source.line,
-      },
-    },
-    action: sanitize(actionLabel),
-    cause: {
-      code: safeCause.code,
-      message: safeCause.message,
-      ...(safeCause.hint ? { hint: safeCause.hint } : {}),
-    },
-    screen: buildDivergenceScreen(observation, sanitize),
-    suggestions: suggestions.slice(0, REPLAY_DIVERGENCE_SUGGESTION_LIMIT),
-    suggestionCount: suggestions.length,
-    resume: failure.resume,
-    repairHint: computeReplayRepairHint({
-      kind: 'action-failure',
-      targetEvidence: undefined,
-      capture: toReplayRepairHintCapture(observation),
-    }),
-  };
-  const bounded = boundReplayDivergenceForSession({
-    sessionStore,
-    observationStore,
-    divergence,
-    responseLevel: req.meta?.responseLevel,
-    evidence: observation.state === 'available' ? observation.evidence : undefined,
-    ...(requestSignal ? { signal: requestSignal } : {}),
-  });
-  return buildReplayDivergenceFailureResponseFromDescriptor({
-    error: safeCause,
-    actionLabel,
+  return await buildReplayBackendActionFailureResponse({
+    error: params.error,
+    req,
+    sessionStore: params.sessionStore,
+    observationStore: params.observationStore,
+    logPath: params.logPath,
+    replayPath: params.replayPath,
+    stepIndex: failure.stepIndex,
+    source: failure.source,
     action: failure.action,
-    positionals: [...report.action.positionals],
-    step: failure.stepIndex,
-    replayPath,
-    artifactPaths: [...failure.artifactPaths],
-    snapshotDiagnostics: params.snapshotDiagnostics,
-    divergence: bounded,
-    scrubVars,
+    actionLabel: [failure.action, formatMaestroActionValue(failure.value)]
+      .filter(Boolean)
+      .join(' '),
+    captureAction: report.action,
+    isControl: failure.isControl,
+    redactions: failure.redactions,
+    resume: failure.resume,
+    artifactPaths: failure.artifactPaths,
     warnings: failure.warnings,
+    snapshotDiagnostics: params.snapshotDiagnostics,
+    suggestNodes: (snapshot) => collectMaestroFailureSuggestions(failure, snapshot),
   });
-}
-
-function collectTypedMaestroSuggestions(params: {
-  failure: MaestroFailedAction;
-  action: MaestroFailureReportAction;
-  session: ReplaySessionState;
-  nodes: SnapshotNode[];
-  sanitize: DivergenceFieldSanitizer;
-}) {
-  const snapshot = { createdAt: Date.now(), nodes: params.nodes };
-  return rankAndDedupeReplaySuggestions(
-    collectMaestroFailureSuggestions(params.failure, snapshot).map(({ node, basis }) => ({
-      node,
-      nodeIndex: node.index,
-      basis,
-    })),
-  ).map(({ node, basis }) =>
-    buildReplayDivergenceSuggestionForNode({
-      node,
-      nodes: params.nodes,
-      session: params.session,
-      action: params.action,
-      basis,
-      sanitize: params.sanitize,
-    }),
-  );
 }
 
 function formatMaestroActionValue(value: string | undefined): string {

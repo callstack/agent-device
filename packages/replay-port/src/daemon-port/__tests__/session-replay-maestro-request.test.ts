@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import type { ReplayDispatchRequest } from '@agent-device/replay-port/command-types';
+import type { ReplayDispatchRequest } from '@agent-device/contracts/replay-backend';
 import { maestroOperationDispatchRequest } from '../session-replay-maestro-request.ts';
 
 const replay: ReplayDispatchRequest = {

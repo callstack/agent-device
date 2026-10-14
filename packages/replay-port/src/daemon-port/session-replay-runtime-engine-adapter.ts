@@ -3,11 +3,13 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type {
   ReplayCoordinator,
   ReplayDaemonDependencies,
+} from '@agent-device/replay-port/command-types';
+import type {
   ReplayDispatchRequest,
   ReplayInvoke,
   ReplaySessionObservation,
   ReplaySessionStore,
-} from '@agent-device/replay-port/command-types';
+} from '@agent-device/contracts/replay-backend';
 import { readReplaySelectorDisplayValue } from '@agent-device/selectors';
 import {
   type DaemonResponse,

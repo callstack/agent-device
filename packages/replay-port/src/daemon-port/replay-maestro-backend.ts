@@ -5,7 +5,7 @@ import {
   MAESTRO_SELECTOR_PROJECTION,
 } from '@agent-device/maestro';
 import { projectSelectorExpression } from '@agent-device/selectors';
-import type { ReplayBackend } from './replay-backend-registry.ts';
+import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import { runTypedMaestroReplay } from './session-replay-maestro-runtime.ts';
 
 /**
@@ -21,7 +21,7 @@ import { runTypedMaestroReplay } from './session-replay-maestro-runtime.ts';
  * ordinary public commands (ADR 0015), so the engine's own request folding stays in
  * `session-replay-maestro-request.ts` against the daemon's `ReplayDispatchOptions` contract.
  */
-export const maestroBackend: ReplayBackend = {
+export const maestroBackend: ReplayBackend<'maestro'> = {
   id: 'maestro',
   collectSourceFiles(params) {
     return collectMaestroFlowSources(params);

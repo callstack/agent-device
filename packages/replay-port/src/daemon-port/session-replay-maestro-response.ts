@@ -3,11 +3,14 @@ import type { MaestroExecutionOutcome } from '@agent-device/maestro';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture';
 import { buildTypedMaestroFailureResponse } from './session-replay-maestro-failure.ts';
-import type { ReplayCommand, ReplaySessionStore } from '@agent-device/replay-port/command-types';
+import type {
+  ReplayBackendCommand,
+  ReplaySessionStore,
+} from '@agent-device/contracts/replay-backend';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
 
 type TypedMaestroSuccessResponseParams = Readonly<{
-  command: ReplayCommand;
+  command: ReplayBackendCommand;
   outcome: Extract<MaestroExecutionOutcome, { ok: true }>;
   startedAt: number;
   snapshotStart: number;
@@ -38,7 +41,7 @@ export function buildTypedMaestroSuccessResponse(
 }
 
 type TypedMaestroErrorResponseParams = Readonly<{
-  command: ReplayCommand;
+  command: ReplayBackendCommand;
   /** The entry flow's caller-resolved display path (the replay script source bundle's entry). */
   replayPath: string;
   state: {

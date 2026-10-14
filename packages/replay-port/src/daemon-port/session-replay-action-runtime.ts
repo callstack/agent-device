@@ -1,9 +1,6 @@
 import type { SessionAction, SessionScope } from '@agent-device/contracts/session';
-import type {
-  ReplayDaemonDependencies,
-  ReplayDispatchRequest,
-  ReplayInvoke,
-} from '@agent-device/replay-port/command-types';
+import type { ReplayDaemonDependencies } from '@agent-device/replay-port/command-types';
+import type { ReplayDispatchRequest, ReplayInvoke } from '@agent-device/contracts/replay-backend';
 import { mergeParentFlags } from '@agent-device/command-registry/batch';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import {

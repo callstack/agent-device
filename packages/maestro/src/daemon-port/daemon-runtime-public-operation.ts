@@ -4,7 +4,7 @@ import type {
   MaestroDispatchSelector,
   MaestroSinglePointerGestureInput,
 } from '@agent-device/maestro';
-import type { GestureExecutionProfile } from '@agent-device/contracts/gesture-plan-types';
+import type { ReplayBackendDispatchOptions } from '@agent-device/contracts/replay-backend';
 import type { Point, Rect } from '@agent-device/kernel/snapshot';
 
 export type MaestroClickOptions = Pick<
@@ -51,20 +51,7 @@ export type MaestroPublicOperation =
  * each option into its own request-private vocabulary before dispatch. Nothing here names live
  * session state, which is what lets the port live outside the daemon.
  */
-export type MaestroDaemonDispatchOptions = Readonly<{
-  /** Terminate the targeted app without ending the owning daemon session. */
-  closeAppOnly?: true;
-  /** With `closeAppOnly`: Maestro `killApp` process death (`am kill` on Android) instead of `stop`. */
-  killApp?: true;
-  /** A hierarchy capture used as operational evidence only; it issues no client ref authority. */
-  observationOnly?: true;
-  /** Provider-owned viewport already resolved for a nested gesture command. */
-  gestureViewport?: Rect;
-  /** Execution profile for timed coordinate swipes projected to `gesture pan`. */
-  gestureExecutionProfile?: GestureExecutionProfile;
-  /** Maestro `setPermissions` app targeting; the settings handler prefers it over the session app. */
-  settingsAppBundleId?: string;
-}>;
+export type MaestroDaemonDispatchOptions = ReplayBackendDispatchOptions;
 
 /**
  * One public daemon command the port asks the daemon to run on the replay's behalf. The daemon

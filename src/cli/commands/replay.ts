@@ -3,7 +3,7 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
 import { resolveUserPath } from '@agent-device/host-kit/file';
-import type { ReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
+import type { ReplayBackend } from '@agent-device/contracts/replay-backend';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
