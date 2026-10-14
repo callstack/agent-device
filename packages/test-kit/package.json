@@ -57,6 +57,10 @@
       "types": "./src/loopback.ts",
       "default": "./src/loopback.ts"
     },
+    "./plugin.fixtures": {
+      "types": "./src/plugin.fixtures.ts",
+      "default": "./src/plugin.fixtures.ts"
+    },
     "./property-arbitraries": {
       "types": "./src/property-arbitraries.ts",
       "default": "./src/property-arbitraries.ts"

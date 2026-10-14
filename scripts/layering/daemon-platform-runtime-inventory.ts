@@ -1,5 +1,5 @@
 import { genDFS } from '@statelyai/graph';
-import { isProductionSourceFile } from './tracked-sources.ts';
+import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts';
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
 import { ALL_EDGES, importGraphFromResolvedEdges } from '../depgraph/import-graph.ts';
 
@@ -33,7 +33,7 @@ export function computePlatformMechanicsHubs(
   const hubs = new Set<string>();
   const graph = importGraphFromResolvedEdges(edges, ALL_EDGES, roots);
   for (const { id: importer } of genDFS(graph, { from: roots, direction: 'incoming' })) {
-    if (!importer.startsWith('src/daemon/')) hubs.add(importer);
+    if (!importer.startsWith(DAEMON_SOURCE_ROOT)) hubs.add(importer);
   }
   return hubs;
 }
@@ -60,7 +60,7 @@ export function checkDaemonPlatformRuntimeInventory(
   const violations: LayeringViolation[] = [];
   const reported = new Set<string>();
   for (const edge of edges) {
-    if (!edge.file.startsWith('src/daemon/')) continue;
+    if (!edge.file.startsWith(DAEMON_SOURCE_ROOT)) continue;
     if (!isProductionSourceFile(edge.file)) continue;
     if (!hubs.has(edge.target)) continue;
     const key = `${edge.file} -> ${edge.target}`;

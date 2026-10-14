@@ -1,3 +1,5 @@
+import { isHandheldAppleDevice, type DeviceInfo } from '@agent-device/kernel/device';
+import { interpretIosReactNativeValue } from '@agent-device/capture-kit/ios-react-native-value';
 import type {
   IosRunnerQualityPayloadFacts,
   IosSnapshotInput,
@@ -54,6 +56,7 @@ export type AppleRunnerSnapshotResult = Readonly<{
 
 export function readAppleSnapshotResult(
   result: Record<string, unknown>,
+  device: Pick<DeviceInfo, 'platform' | 'appleOs' | 'target'>,
 ): AppleRunnerSnapshotResult {
   const systemSurface = readSystemSurfaceProvenance(result.systemSurface);
   const keyboard = readSnapshotKeyboardBandFact(result.keyboard);
@@ -65,11 +68,17 @@ export function readAppleSnapshotResult(
       data: detail,
     }),
   );
+  const nodes = Array.isArray(result.nodes) ? (result.nodes as RawSnapshotNode[]) : undefined;
+  const qualityPayload = readQualityPayload(result.qualityPayload, systemSurface);
+  const interpretValues = isHandheldAppleDevice(device);
   return {
-    nodes: Array.isArray(result.nodes) ? (result.nodes as RawSnapshotNode[]) : undefined,
+    nodes: interpretValues ? nodes?.map(interpretIosReactNativeValue) : nodes,
     truncated: typeof result.truncated === 'boolean' ? result.truncated : undefined,
     quality: readSnapshotQualityVerdict(result.snapshotQuality),
-    qualityPayload: readQualityPayload(result.qualityPayload, systemSurface),
+    qualityPayload:
+      interpretValues && qualityPayload
+        ? { ...qualityPayload, nodes: qualityPayload.nodes.map(interpretIosReactNativeValue) }
+        : qualityPayload,
     runnerFatal: result.runnerFatal === true,
     ...(keyboard ? { keyboard } : {}),
     ...(systemSurface ? { systemSurface } : {}),

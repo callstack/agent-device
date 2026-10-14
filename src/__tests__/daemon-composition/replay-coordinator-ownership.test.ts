@@ -24,11 +24,11 @@ import { parseSync } from 'oxc-parser';
  */
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
-const COORDINATOR_MODULE = 'src/daemon/session-replay-coordinator.ts';
-const TRANSACTION_MODULE = 'src/daemon/session-replay-transaction.ts';
-const SESSION_STORE_MODULE = 'src/daemon/session-store.ts';
+const COORDINATOR_MODULE = 'packages/daemon/src/sessions/session-replay-coordinator.ts';
+const TRANSACTION_MODULE = 'packages/daemon/src/core/session-replay-transaction.ts';
+const SESSION_STORE_MODULE = 'packages/daemon/src/core/session-store.ts';
 
-const RUNTIME_FILE = 'src/daemon/handlers/session-replay-command.ts';
+const RUNTIME_FILE = 'packages/daemon/src/sessions/handlers/session-replay-command.ts';
 
 /** The divergence-report chain: never a second `ReplayCoordinator`, never a bare `SessionStore`. */
 const DIVERGENCE_CHAIN_FILES = [
@@ -50,7 +50,7 @@ type ImportSite = {
   declarationTypeOnly: boolean;
 };
 
-const PRODUCTION_ROOTS = ['src', 'packages/replay-port/src'] as const;
+const PRODUCTION_ROOTS = ['src', 'packages/daemon/src', 'packages/replay-port/src'] as const;
 
 function listProductionSourceFiles(): string[] {
   const out: string[] = [];
@@ -367,7 +367,7 @@ test('createReplayCoordinator has exactly one production call site', () => {
 });
 
 test('coordinator ownership scanning catches re-exports and unresolved dynamic imports', () => {
-  const probe = 'src/daemon/replay/internal/probe.ts';
+  const probe = 'packages/daemon/src/sessions/replay/internal/probe.ts';
   const source = `
     export { createReplayCoordinator } from '../../session-replay-coordinator.ts';
     export * from '../../session-replay-coordinator.ts';
@@ -395,9 +395,10 @@ test('coordinator ownership scanning catches aliases, namespaces, and dynamic im
     void import('../../session-replay-coordinator.ts');
   `;
   assert.deepEqual(
-    coordinatorConstructionSites('src/daemon/replay/internal/probe.ts', source).map(
-      ({ kind }) => kind,
-    ),
+    coordinatorConstructionSites(
+      'packages/daemon/src/sessions/replay/internal/probe.ts',
+      source,
+    ).map(({ kind }) => kind),
     ['call', 'call', 'dynamic-import'],
   );
 });
@@ -464,11 +465,11 @@ test('the divergence-report chain rejects unresolved dynamic imports', () => {
 
 test('SessionStore ownership scanning catches dynamic imports and re-exports', () => {
   const sites = collectImportSites(
-    'src/daemon/replay/internal/probe.ts',
+    'packages/daemon/src/sessions/replay/internal/probe.ts',
     [
-      "void import('../../session-store.ts');",
-      "export { SessionStore } from '../../session-store.ts';",
-      "export * from '../../session-store.ts';",
+      "void import('../../../core/session-store.ts');",
+      "export { SessionStore } from '../../../core/session-store.ts';",
+      "export * from '../../../core/session-store.ts';",
     ].join('\n'),
   );
   assert.equal(sites.filter((site) => importsAnyBinding(site, SESSION_STORE_MODULE)).length, 3);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/daemon-request.ts';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import {
   closeLoopbackServer,
   listenOnLoopback,

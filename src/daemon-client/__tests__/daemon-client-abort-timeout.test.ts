@@ -16,8 +16,12 @@ import { DAEMON_HTTP_INSTANCE_MISMATCH_HEADER } from '@agent-device/contracts/da
 import { test, vi } from 'vitest';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon/daemon-request.ts';
-import { createSocketServer, listenNetServer } from '../../daemon/server/transport.ts';
+import type {
+  DaemonInvokeFn,
+  DaemonRequest,
+  DaemonResponse,
+} from '@agent-device/daemon/daemon-request';
+import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
 import { sendRequest } from '../daemon-client-transport.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {

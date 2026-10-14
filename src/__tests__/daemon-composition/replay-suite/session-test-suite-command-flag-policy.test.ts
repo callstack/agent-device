@@ -8,11 +8,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
-import { SessionStore } from '../../../daemon/session-store.ts';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import {
   createReplaySession,
   replayDaemonDependencies,
-} from '../../../daemon/handlers/session-replay-command.ts';
+} from '@agent-device/daemon/testing/handlers/session-replay-command';
 import { runReplayTestCommand } from '@agent-device/replay-port/test-command';
 import {
   replayInvokeOverDispatch,
@@ -22,7 +22,7 @@ import type { ReplayTestCommand } from '@agent-device/replay-port/command-types'
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '@agent-device/replay-port/session-replay-test-policy';
 import { replayCommandFamily } from '../../../commands/replay/index.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon/daemon-request.ts';
+import type { DaemonInvokeFn, DaemonRequest } from '@agent-device/daemon/daemon-request';
 
 // --- ADR 0012 decision 4 / migration step 5: `--from` is replay-only ---
 

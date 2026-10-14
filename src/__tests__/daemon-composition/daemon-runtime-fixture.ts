@@ -3,7 +3,7 @@ import {
   startDaemonRuntime,
   type ComposeDaemonRuntimeDeps,
   type DaemonRuntimeController,
-} from '../../daemon/server/daemon-runtime.ts';
+} from '@agent-device/daemon/server/daemon-runtime';
 
 type WritableOutput = { write: (chunk: string) => unknown };
 

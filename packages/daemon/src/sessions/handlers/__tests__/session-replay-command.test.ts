@@ -1,0 +1,57 @@
+import path from 'node:path';
+import { expect, test } from 'vitest';
+import { LeaseRegistry } from '../../../resources/lease-registry.ts';
+import {
+  unavailableBindDevice,
+  unavailableBindExactDevice,
+} from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
+import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
+import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import type { SessionCommandParams } from '../session-command-input.ts';
+import { handleReplayTestCommand } from '../session-replay-command.ts';
+import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
+import { makeSessionStore } from '../../../__tests__/support/handlers/session-test-harness.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+
+test('replay test handler threads the complete video owner into the application command', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-handler-video-');
+  const params: SessionCommandParams = {
+    createCommandSurface: fakeCreateCommandSurface,
+    req: {
+      token: 'token',
+      session: 'default',
+      command: 'test',
+      positionals: [path.join(root, 'suite.ad')],
+      flags: { recordVideo: true },
+      meta: { cwd: root, requestId: 'replay-handler-video' },
+    },
+    sessionName: 'default',
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore: makeSessionStore(),
+    platformServices: daemonPlatformServicesFixture(),
+    leaseRegistry: new LeaseRegistry(),
+    invoke: async () => ({ ok: true, data: {} }),
+    bindDevice: unavailableBindDevice,
+    bindExactDevice: unavailableBindExactDevice,
+    screenRecordingAdmissionLedger: createScreenRecordingAdmissionLedger(),
+    requestScope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+    retainDeviceExecutionLock: async () => {},
+    throwIfCanceled: () => {},
+    reconcileOrphanedDeviceClaim: async () => ({
+      status: 'retained' as const,
+      reason: 'handler-test' as const,
+    }),
+    platformResourceCleanup: platformResourceCleanupFixture(),
+  };
+
+  const response = await handleReplayTestCommand(params);
+
+  if (!response || response.ok) throw new Error('Expected a missing-source error response');
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).not.toContain('Screen-recording runtime is not configured');
+});

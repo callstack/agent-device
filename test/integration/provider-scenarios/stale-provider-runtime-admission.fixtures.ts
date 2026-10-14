@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../../../src/daemon/__tests__/platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from '../../../src/__tests__/daemon-composition/platform-services-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { vi } from 'vitest';
@@ -10,10 +10,10 @@ import type {
   PlatformRuntimeProviderModule,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { handleAppDeploymentCommand } from '../../../src/daemon/handlers/session-app-deployment.ts';
-import { createRequestRuntimeBindings } from '../../../src/daemon/request-runtime-binding.ts';
-import { createRequestDispatchLedger } from '../../../src/daemon/request-dispatch-ledger.ts';
-import { makeSessionStore } from '../../../src/daemon/__tests__/support/store-factory.ts';
+import { handleAppDeploymentCommand } from '@agent-device/daemon/testing/handlers/session-app-deployment';
+import { createRequestRuntimeBindings } from '@agent-device/daemon/testing/request-runtime-binding';
+import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createComposedPlatformRuntimeGateway } from '../../../src/platform-runtime-gateway.ts';
 
@@ -82,7 +82,7 @@ export async function inspectProviderDeploymentAdmission(params: {
       device: params.device,
     });
     const response = await handleAppDeploymentCommand({
-      platformServices: daemonPlatformServicesFixture(),
+      platformServices: composedPlatformServicesFixture(),
       req: {
         token: 'test',
         session: 'default',

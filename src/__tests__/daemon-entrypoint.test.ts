@@ -7,11 +7,11 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { startDaemonRuntimeFixture } from './daemon-composition/daemon-runtime-fixture.ts';
-import type { DaemonRuntimeController } from '../daemon/server/daemon-runtime.ts';
+import type { DaemonRuntimeController } from '@agent-device/daemon/server/daemon-runtime';
 import {
   cleanupDownloadableArtifact,
   trackDownloadableArtifact,
-} from '../daemon/artifact-tracking.ts';
+} from '@agent-device/daemon/testing/artifact-tracking';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
   createOwnedProcessRecordStore,

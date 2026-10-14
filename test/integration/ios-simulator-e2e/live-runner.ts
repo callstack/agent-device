@@ -10,6 +10,7 @@ import { assertPngFile } from '../provider-scenarios/assertions.ts';
 import {
   assertFilesDiffer,
   assertJsonContains,
+  assertWaitSelector,
   assertWaitText,
   capturePng,
   requireNodeRect,
@@ -344,6 +345,7 @@ async function assertFormInput(context: LiveContext): Promise<void> {
     String(emailRect.x + emailRect.width / 2),
     String(emailRect.y + emailRect.height / 2),
   ]);
+  await assertWaitSelector(context, 'role="keyboard" visible=true', { debug: true });
   const typedSuffix = await runStep(context, 'append email suffix from coordinate focus', [
     'type',
     '.test',

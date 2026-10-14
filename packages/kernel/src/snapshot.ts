@@ -264,6 +264,16 @@ export type SnapshotCoveringNode = {
 /** Upper bound for a covering-node label carried in diagnostics; longer names are clipped. */
 export const SNAPSHOT_COVERING_LABEL_MAX_LENGTH = 80;
 
+/** Evidence from an exact English React Native iOS value signature, not proof of its renderer. */
+export type IosValueSemantics = {
+  source: 'react-native-ios-value-heuristic';
+  encoding: 'en';
+  role?: string;
+  checked?: boolean | 'mixed';
+  expanded?: boolean;
+  busy?: true;
+};
+
 export type RawSnapshotNode = {
   index: number;
   type?: string;
@@ -271,6 +281,8 @@ export type RawSnapshotNode = {
   subrole?: string;
   label?: string;
   value?: string;
+  /** Derived RN evidence; value and native type/role remain verbatim. Explicit facts take precedence. */
+  iosValueSemantics?: IosValueSemantics;
   /**
    * Android content description when it is not already the `label`. An Android node is
    * labelled by its text and falls back to the content description only when it has none,
@@ -309,9 +321,17 @@ export type RawSnapshotNode = {
   parentIndex?: number;
   pid?: number;
   bundleId?: string;
+  /**
+   * Android status/navigation bar subtree membership, retained when ancestors are omitted.
+   * Shade headers, dialogs, and other SystemUI overlays are not bars. Absent means the
+   * producer did not establish bar membership.
+   */
+  systemBar?: 'status' | 'navigation';
   appName?: string;
   windowTitle?: string;
   surface?: string;
+  /** Evaluated keyboard ownership; omission means unevaluated. Survives ancestor removal. */
+  keyboardOwned?: boolean;
   hiddenContentAbove?: boolean;
   hiddenContentBelow?: boolean;
   interactionBlocked?: 'covered';
@@ -351,33 +371,19 @@ export type HiddenContentHint = {
 };
 
 /**
- * What a capture's producer can say about the software keyboard on screen, measured while the tree
- * was captured rather than rebuilt from it afterwards.
- *
- * A keyboard is its own system surface, so it never reaches the tree as a covering sibling of app
- * content, and a consumer that wants to refuse a tap behind it has to learn where it is from
- * somewhere (#2589). A producer that can measure the band directly — the Apple runner, from its
- * `app.keyboards` query, and the Android helper, from the input method window in the window list it
- * captures — publishes one fact per capture and says nothing else about it. A consumer therefore gets three
- * answers and no fourth: a band in the same space as every node rect, a proven absence, or a
- * producer that could not look.
- *
- * A producer that publishes nothing has declared nothing, so absence from a result means the same
- * thing as `unmeasurable` — which is why the field stays optional on every carrier, including the
- * three client-side paths that rebuild a state from a bare backend result (#2199). Those consumers
- * then derive the band from the tree they hold: the rule that stays for the producers that publish
- * no fact (#2660).
+ * Keyboard evidence observed during acquisition, in the capture's node coordinate space.
+ * `visible` is a measured frame; `derived` is a frame established by the shared docked-tree
+ * policy before projection; `visibility-only` is a boolean probe with no geometry;
+ * `tree-rejected` records rejected geometry evaluated against a usable viewport, with optional
+ * probe visibility; `unmeasurable` is unknown. `absent` requires an explicit absence observation.
+ * Missing keyboard nodes or an omitted fact never prove absence.
  */
 export type SnapshotKeyboardBandFact =
-  /** The band the keyboard occupies, in the same orientation space as this capture's node rects. */
   | { kind: 'visible'; frame: Rect }
-  /** The producer looked for the keyboard and found none. */
+  | { kind: 'derived'; derivation: 'docked-tree'; frame: Rect }
+  | { kind: 'visibility-only'; visible: boolean }
+  | { kind: 'tree-rejected'; derivation: 'docked-tree'; visible?: boolean }
   | { kind: 'absent' }
-  /**
-   * The producer cannot measure the band on this path, with a stable reason code. Typed rather than
-   * inferred from absence so a log says which path failed to measure without the consumer having to
-   * guess which producer it was talking to.
-   */
   | { kind: 'unmeasurable'; reason: string };
 
 /**
@@ -729,10 +735,9 @@ export type SnapshotState = {
    */
   iosSystemSurfaceBundleId?: string;
   /**
-   * iOS and Android: the keyboard band this capture's producer measured, when it measured one. The
-   * tap-path keyboard guard prefers this over the band it would otherwise derive from `nodes`,
-   * because a producer that can query the keyboard directly answers in the tree's own space and
-   * needs no geometry to be plausible (#2660). Absent means the guard measures the tree as before.
+   * iOS and Android: keyboard observations made during acquisition. Measured and derived frames
+   * take precedence over reconstruction from the presented tree. Visibility-only and unknown facts
+   * carry no band; missing nodes or an omitted fact never establish absence.
    */
   keyboard?: SnapshotKeyboardBandFact;
   /**

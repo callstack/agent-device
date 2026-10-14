@@ -11,8 +11,8 @@ import {
   makeIosSession,
   makeMacOsSession,
   makeSession,
-} from '../../daemon/__tests__/support/session-factories.ts';
-import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '../test-utils/device-inventory-gateways.ts';
+} from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { withTestDeviceInventoryProvider as withTargetDeviceResolutionScope } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createLocalAppleToolProvider, runXcrun } from '@agent-device/platform-apple/tool-provider';
 import { buildSimctlArgsForDevice } from '@agent-device/platform-apple/simctl';
 import type { AndroidAdbExecutor } from '@agent-device/platform-android/mechanics';
@@ -30,8 +30,8 @@ import type {
   RequestPlatformProviderScope,
   PlatformProviderRequestContext,
 } from '@agent-device/contracts/platform-providers';
-import { resolvePlatformProviderRequestContext } from '../../daemon/request-platform-provider-context.ts';
-import type { DaemonRequest } from '../../daemon/daemon-request.ts';
+import { resolvePlatformProviderRequestContext } from '@agent-device/daemon/testing/request-platform-provider-context';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 
 const OTHER_IOS_SIMULATOR: DeviceInfo = {
   platform: 'apple',

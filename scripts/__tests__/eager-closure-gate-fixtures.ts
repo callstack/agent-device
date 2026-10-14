@@ -36,11 +36,14 @@ export function mkGitFixtureRepo(prefix: string): string {
   fs.mkdirSync(path.join(repo, 'scripts'));
   fs.writeFileSync(path.join(repo, 'scripts/standalone.ts'), 'export const outside = 1;\n');
   execFileSync('git', ['init', '-q'], { cwd: repo });
+  // Pin identity and signing into the repo config rather than the run's `-c` flags or the
+  // runner's global config: callers commit more than the base (e.g. the pad commit in
+  // eager-closure-budgets.test.ts), and a CI runner without a global identity fails those
+  // later commits with "Author identity unknown".
+  execFileSync('git', ['config', 'user.name', 'Gate'], { cwd: repo });
+  execFileSync('git', ['config', 'user.email', 'gate@example.test'], { cwd: repo });
+  execFileSync('git', ['config', 'commit.gpgsign', 'false'], { cwd: repo });
   execFileSync('git', ['add', '.'], { cwd: repo });
-  execFileSync(
-    'git',
-    ['-c', 'user.name=Gate', '-c', 'user.email=gate@example.test', 'commit', '-qm', 'base'],
-    { cwd: repo },
-  );
+  execFileSync('git', ['commit', '-qm', 'base'], { cwd: repo });
   return repo;
 }

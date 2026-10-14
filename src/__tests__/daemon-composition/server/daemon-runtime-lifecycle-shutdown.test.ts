@@ -48,14 +48,15 @@ vi.mock('../../../provider-device-runtimes.ts', () => ({
 }));
 
 const shutdownProbe = vi.hoisted(() => ({
-  store: undefined as import('../../../daemon/session-store.ts').SessionStore | undefined,
+  store: undefined as import('@agent-device/daemon/testing/session-store').SessionStore | undefined,
   drain: undefined as (() => Promise<void>) | undefined,
   finalize: vi.fn(async () => {}),
-  dispatch: undefined as import('../../../daemon/daemon-request.ts').DaemonInvokeFn | undefined,
+  dispatch: undefined as import('@agent-device/daemon/daemon-request').DaemonInvokeFn | undefined,
   closeTimeout: undefined as number | undefined,
 }));
-vi.mock('../../../daemon/session-store.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../daemon/session-store.ts')>();
+vi.mock('@agent-device/daemon/testing/session-store', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/session-store')>();
   return {
     ...actual,
     SessionStore: class extends actual.SessionStore {
@@ -66,8 +67,9 @@ vi.mock('../../../daemon/session-store.ts', async (importOriginal) => {
     },
   };
 });
-vi.mock('../../../daemon/server/server-shutdown.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../daemon/server/server-shutdown.ts')>();
+vi.mock('@agent-device/daemon/testing/server/server-shutdown', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/server/server-shutdown')>();
   return {
     ...actual,
     closeDaemonServers: async (...args: Parameters<typeof actual.closeDaemonServers>) => {
@@ -76,8 +78,9 @@ vi.mock('../../../daemon/server/server-shutdown.ts', async (importOriginal) => {
     },
   };
 });
-vi.mock('../../../daemon/request-router.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../daemon/request-router.ts')>();
+vi.mock('@agent-device/daemon/testing/request-router', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/request-router')>();
   return {
     ...actual,
     createRequestHandler: (...args: Parameters<typeof actual.createRequestHandler>) => {
@@ -87,17 +90,20 @@ vi.mock('../../../daemon/request-router.ts', async (importOriginal) => {
     },
   };
 });
-vi.mock('../../../daemon/application-lifecycle-recovery.ts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../daemon/application-lifecycle-recovery.ts')>()),
+vi.mock('@agent-device/daemon/testing/application-lifecycle-recovery', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('@agent-device/daemon/testing/application-lifecycle-recovery')
+  >()),
   finalizeDaemonSessionApplicationLifecycle: shutdownProbe.finalize,
 }));
 const leaseProbe = vi.hoisted(() => ({
-  registries: [] as import('../../../daemon/lease-registry.ts').LeaseRegistry[],
+  registries: [] as import('@agent-device/daemon/testing/lease-registry').LeaseRegistry[],
   released: [] as import('@agent-device/contracts/device').DeviceLease[],
 }));
 
-vi.mock('../../../daemon/lease-registry.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../daemon/lease-registry.ts')>();
+vi.mock('@agent-device/daemon/testing/lease-registry', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/lease-registry')>();
   class RecordedLeaseRegistry extends actual.LeaseRegistry {
     constructor(...args: ConstructorParameters<typeof actual.LeaseRegistry>) {
       super(...args);
@@ -107,8 +113,9 @@ vi.mock('../../../daemon/lease-registry.ts', async (importOriginal) => {
   return { ...actual, LeaseRegistry: RecordedLeaseRegistry };
 });
 
-vi.mock('../../../daemon/provider-lease-expiry.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../daemon/provider-lease-expiry.ts')>();
+vi.mock('@agent-device/daemon/testing/provider-lease-expiry', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/provider-lease-expiry')>();
   return {
     ...actual,
     createExpiredProviderLeaseReleaser: (
@@ -126,19 +133,19 @@ vi.mock('../../../daemon/provider-lease-expiry.ts', async (importOriginal) => {
   };
 });
 
-import { acquireDeviceClaim } from '../../../daemon/device/device-claims.ts';
-import { resolveDeviceClaimPath } from '../../../daemon/device/device-claim-paths.ts';
+import { acquireDeviceClaim } from '@agent-device/daemon/device/device-claims';
+import { resolveDeviceClaimPath } from '@agent-device/daemon/testing/device/device-claim-paths';
 import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
-} from '../../../daemon/__tests__/support/device-claim-store.ts';
+} from '@agent-device/daemon/testing/__tests__/support/device-claim-store';
 import { sendRequest } from '../../../daemon-client/daemon-client-transport.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { teardownDaemonSessionForShutdown } from '../../../daemon/server/daemon-runtime.ts';
+import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/server/daemon-runtime';
 import { startDaemonRuntimeFixture } from '../daemon-runtime-fixture.ts';
-import { makeIosSession } from '../../../daemon/__tests__/support/session-factories.ts';
-import { makeSessionStore } from '../../../daemon/__tests__/support/store-factory.ts';
+import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 
 afterEach(() => {
   lifecycleEvents.length = 0;

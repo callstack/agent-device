@@ -6,7 +6,11 @@ import {
 } from '@agent-device/contracts/daemon-http';
 import { AppError } from '@agent-device/kernel/errors';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
-import type { DaemonArtifact, DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
+import type {
+  DaemonArtifact,
+  DaemonRequest,
+  DaemonResponse,
+} from '@agent-device/daemon/daemon-request';
 import {
   appendRecordingExtensionWhenMissing,
   recordingExtensionForPlatform,

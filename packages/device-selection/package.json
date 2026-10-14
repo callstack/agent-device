@@ -11,6 +11,10 @@
     "@agent-device/kernel": "workspace:*"
   },
   "exports": {
+    "./composed-inventory-gateways": {
+      "types": "./src/composed-inventory-gateways.ts",
+      "default": "./src/composed-inventory-gateways.ts"
+    },
     "./dispatch-resolve": {
       "types": "./src/dispatch-resolve.ts",
       "default": "./src/dispatch-resolve.ts"
@@ -26,6 +30,10 @@
     "./open-target": {
       "types": "./src/open-target.ts",
       "default": "./src/open-target.ts"
+    },
+    "./inventory-gateways-fixtures": {
+      "types": "./src/inventory-gateways.fixtures.ts",
+      "default": "./src/inventory-gateways.fixtures.ts"
     }
   }
 }

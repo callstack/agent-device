@@ -39,6 +39,7 @@ export {
   localIdentitiesEqual,
   matchesAncestryPrefix,
   matchesLocalIdentity,
+  nodeRectByIdentity,
   readNodeLocalIdentity,
   readNodeStructuralDenotation,
   siblingOrdinal,

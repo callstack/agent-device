@@ -9,7 +9,7 @@ import type { AgentDeviceClient } from '../../../src/client/client-types.ts';
 import {
   createRequestHandler,
   type RequestRouterDeps,
-} from '../../../src/daemon/request-router.ts';
+} from '@agent-device/daemon/testing/request-router';
 import {
   createPlatformRuntimeGateway,
   createRequestPlatformProviders,
@@ -21,18 +21,18 @@ import { createDaemonPlatformServices } from '../../../src/platform-runtime-daem
 import { platformResourceCleanup } from '../../../src/platform-runtime-resource-cleanup.ts';
 import { readDaemonProviderCredentials } from '../../../src/provider-credential-fingerprint.ts';
 import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform-runtime-screen-recording-apple-transport.ts';
-import { trackDownloadableArtifact } from '../../../src/daemon/artifact-tracking.ts';
-import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
-import { SessionStore } from '../../../src/daemon/session-store.ts';
+import { trackDownloadableArtifact } from '@agent-device/daemon/testing/artifact-tracking';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import type {
   DaemonInvokeFn,
   DaemonRequest,
   DaemonResponse,
-} from '../../../src/daemon/daemon-request.ts';
-import type { SessionState } from '../../../src/daemon/session-state.ts';
+} from '@agent-device/daemon/daemon-request';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
-import { withClientReplayScriptSources } from '../../../src/__tests__/test-utils/replay-script-source.ts';
+import { withClientReplayScriptSources } from '@agent-device/replay-port/replay-script-source-fixtures';
 import type {
   DeviceInventoryProvider,
   ProviderDeviceRuntime,
@@ -41,18 +41,18 @@ import type {
 import {
   createTestDeviceInventoryGateways,
   createTestDeviceInventoryGatewaysFromProvider,
-} from '../../../src/__tests__/test-utils/device-inventory-gateways.ts';
+} from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createHostDiagnostics } from '../../../src/platform-runtime-host-diagnostics.ts';
 import type { PlatformRuntimeProviderRegistration } from '../../../src/platform-runtime-gateway.ts';
 import { createProviderPlatformRuntimeRegistrations } from '../../../src/provider-device-runtimes.ts';
 import { isActiveProviderDevice } from '../../../src/provider-device-runtime.ts';
-import { installProviderDeviceAdmission } from '../../../src/daemon/provider-device-admission.ts';
-import { installInteractorResolution } from '../../../src/daemon/interactor-resolution.ts';
+import { installProviderDeviceAdmission } from '@agent-device/daemon/testing/provider-device-admission';
+import { installInteractorResolution } from '@agent-device/daemon/testing/interactor-resolution';
 import { getInteractor } from '../../../src/core/interactors.ts';
-import { unavailableDeviceRuntimeGateway } from '../../../src/daemon/__tests__/test-device-runtime-gateway.ts';
+import { unavailableDeviceRuntimeGateway } from '@agent-device/daemon/testing/__tests__/support/unavailable-device-runtime-gateway';
 
-import { openWebSessionNames } from '../../../src/daemon/web-session-names.ts';
-import { testCreateCommandSurface } from '../../../src/daemon/__tests__/command-surface-fixture.ts';
+import { openWebSessionNames } from '@agent-device/daemon/testing/web-session-names';
+import { testCreateCommandSurface } from '../../../src/__tests__/daemon-composition/command-surface-fixture.ts';
 
 // Match daemon composition (src/daemon-composition.ts): the daemon decides on provider
 // ownership through its own admission seam, which root composition installs.

@@ -32,7 +32,7 @@ import { inspectProcessLock } from '@agent-device/host-kit/file';
 import { AppError } from '@agent-device/kernel/errors';
 import { sleep } from '@agent-device/host-kit/retry';
 import { stopDaemonProcess } from '@agent-device/daemon-contracts/daemon-process';
-import { stopDaemon } from '../daemon/daemon-stop.ts';
+import { stopDaemon } from '@agent-device/daemon/daemon-stop';
 
 const fields = {
   socketPort: 4210,

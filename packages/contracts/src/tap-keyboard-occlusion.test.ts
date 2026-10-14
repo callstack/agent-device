@@ -8,6 +8,7 @@ import type {
   SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
 import {
+  acquireProviderKeyboard,
   resolveKeyboardTapOcclusion,
   TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS,
   TAP_KEYBOARD_OCCLUDES_TARGET_REASON,
@@ -18,6 +19,7 @@ type FixtureNode = {
   index: number;
   type?: string;
   role?: string;
+  keyboardOwned?: boolean;
   label?: string;
   identifier?: string;
   bundleId?: string;
@@ -30,6 +32,8 @@ type FixtureCase = {
   viewport: Rect | null;
   nodes: FixtureNode[];
   target: { index: number } | { point: { x: number; y: number } };
+  keyboard?: SnapshotKeyboardBandFact;
+  observationVisibility?: boolean;
   expected: { kind: string; frame?: Rect; controlRects?: readonly Rect[] };
 };
 
@@ -69,11 +73,23 @@ test('keyboard tap occlusion agrees with every golden parity table case', () => 
       'point' in fixture.target
         ? fixture.target.point
         : resolveCenter(byIndex.get(fixture.target.index));
+    if (fixture.observationVisibility !== undefined) {
+      assert.deepEqual(
+        acquireProviderKeyboard({
+          nodes,
+          viewport: fixture.viewport,
+          visibility: fixture.observationVisibility,
+        }).keyboard,
+        fixture.keyboard,
+        `${fixture.name}: acquisition observation`,
+      );
+    }
     const occlusion = resolveKeyboardTapOcclusion({
       nodes,
       viewport: fixture.viewport,
       point,
       node,
+      keyboard: fixture.keyboard,
     });
     assert.equal(occlusion.kind, fixture.expected.kind, fixture.name);
     const surface =
@@ -125,7 +141,7 @@ function tableCase(name: string): FixtureCase {
 
 function resolveWithFact(
   fixture: FixtureCase,
-  keyboard: SnapshotKeyboardBandFact,
+  keyboard: SnapshotKeyboardBandFact | undefined,
 ): ReturnType<typeof resolveKeyboardTapOcclusion> {
   const nodes = fixture.nodes as RawSnapshotNode[];
   const byIndex = new Map(nodes.map((node) => [node.index, node]));
@@ -167,7 +183,7 @@ test('a measured band is the band, even in a tree that reports no keyboard at al
   // The tree rule's answer here is `no-keyboard`. A refusal off a tree with no key nodes can only
   // have come from the fact, which is the assertion that the rule was not consulted at all.
   const fixture = tableCase('no keyboard in the tree means nothing to refuse');
-  assert.equal(fixture.expected.kind, 'no-keyboard');
+  assert.equal(fixture.expected.kind, 'undetermined');
   const band: SnapshotKeyboardBandFact = {
     kind: 'visible',
     frame: { x: 0, y: 583, width: 402, height: 291 },
@@ -221,6 +237,19 @@ test('an unmeasurable fact leaves every golden-table decision exactly as the tre
       kind: 'unmeasurable',
       reason: 'keyboard-frame-query-timeout',
     });
-    assert.equal(withFact.kind, fixture.expected.kind, `${fixture.name}: kind`);
+    const treeOnly = resolveWithFact(fixture, undefined);
+    assert.deepEqual(withFact, treeOnly, fixture.name);
   }
+});
+
+test('keyboard anchors without an acquisition viewport name the missing geometry and preserve tap derivation', () => {
+  const fixture = tableCase('Gboard docked tree + visibility-only:true -> occluded');
+  const { keyboard: fact } = acquireProviderKeyboard({ nodes: fixture.nodes, viewport: null });
+  assert.deepEqual(fact, { kind: 'unmeasurable', reason: 'keyboard-viewport-unavailable' });
+  assert.equal(resolveWithFact(fixture, fact).kind, 'occluded');
+  const noKeyboard = tableCase('no keyboard in the tree means nothing to refuse');
+  assert.deepEqual(acquireProviderKeyboard({ nodes: noKeyboard.nodes, viewport: null }).keyboard, {
+    kind: 'unmeasurable',
+    reason: 'keyboard-not-observed',
+  });
 });

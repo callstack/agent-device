@@ -1,5 +1,5 @@
 import { asAppError } from '@agent-device/kernel/errors';
-import { startDaemonRuntime } from './daemon/server/daemon-runtime.ts';
+import { startDaemonRuntime } from '@agent-device/daemon/server/daemon-runtime';
 
 // The root's composition enters as a factory behind a function-scoped `await import`: the server
 // calls it before it acquires the registration, so startup order is unchanged, and the eager

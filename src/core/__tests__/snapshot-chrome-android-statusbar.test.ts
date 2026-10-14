@@ -15,7 +15,7 @@ import {
   ANDROID_QS_SHADE_CAPTURE_RAW_NODES,
   walkInteractiveOnlyAndroidFixture,
   walkNonRawAndroidFixture,
-} from '../../__tests__/test-utils/android-ui-hierarchy-fixtures.ts';
+} from '@agent-device/platform-android/ui-hierarchy-fixtures';
 import { isAndroidSystemChromeWindowResourceId } from '@agent-device/contracts/android-system-chrome';
 
 /**

@@ -233,8 +233,8 @@ Useful direct entry points:
 - `pnpm check:fallow --base origin/main` — changed-code quality gate
 - `pnpm check:coverage-crap --base origin/main` — CRAP from measured coverage for the functions a
   change touches; it fails when one scores 30 or more, so run `pnpm test:coverage` first. `--all`
-  reports every function and never fails: that is `main`'s backlog. Both list the file-wide
-  `fallow-crap.json` exemptions they honoured. `check:fallow` leaves CRAP off without coverage.
+  reports every function and never fails: that is `main`'s backlog. Both list the per-function CRAP
+  ceilings from `.fallowrc.json` they honoured. `check:fallow` leaves CRAP off without coverage.
 - `pnpm fallow:all` — full-tree audit, including grandfathered baseline findings
 - `pnpm fallow:baseline` — intentionally regenerate the reviewed Fallow health baseline
 
@@ -259,7 +259,8 @@ deletion-only edit is therefore never charged, and neither is a mixed one so lon
 lands inside that function — the deletion stays out of the PR and whatever the score rose to waits
 in the `--all` backlog. Moving a file without editing its lines touches none of its functions.
 Unlike the changed-line gate, this one has no `coverage-waiver` label: the only way past a score is
-to test or simplify the function, or to exempt the file in `fallow-crap.json`.
+to test or simplify the function, or to raise the ceiling for that one function in
+`.fallowrc.json`'s `health.thresholdOverrides`.
 
 Two things are listed rather than blocked, so a green run does not mean they were checked. A touched
 function in a file coverage never instrumented — one `coverage.exclude` drops, or one a stale local

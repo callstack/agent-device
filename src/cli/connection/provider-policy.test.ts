@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { connectionProviderCapabilities, isConnectProviderName } from './provider-policy.ts';
-import { pluginHome, selectPlugin } from '../../plugins/plugin.fixtures.ts';
+import { pluginHome, selectPlugin } from '@agent-device/test-kit/plugin.fixtures';
 import { installedPlugins } from '../../plugins/store.ts';
 
 test('provider policy projects provider identity into semantic capabilities', () => {

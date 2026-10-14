@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../../daemon/__tests__/platform-services-fixture.ts';
+import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 import type {
   GestureCommandInput,
@@ -10,9 +10,9 @@ import {
 } from '@agent-device/contracts/gesture-normalization';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
-import { createRequestRuntimeBindings } from '../../daemon/request-runtime-binding.ts';
-import { createRequestDispatchLedger } from '../../daemon/request-dispatch-ledger.ts';
-import { resolveBoundGestureRuntime } from '../../daemon/gesture-runtime.ts';
+import { createRequestRuntimeBindings } from '@agent-device/daemon/testing/request-runtime-binding';
+import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
+import { resolveBoundGestureRuntime } from '@agent-device/daemon/testing/gesture-runtime';
 
 /**
  * The parity artifact for R42/R44 (ADR 0019 §6).
@@ -71,7 +71,7 @@ async function admit(input: GestureCommandInput, target: DeviceInfo) {
   });
   try {
     return await resolveBoundGestureRuntime({
-      platformServices: daemonPlatformServicesFixture(),
+      platformServices: composedPlatformServicesFixture(),
       device: target,
       input,
       inspectFacts: bindings.inspectFacts,

@@ -84,7 +84,7 @@ function analyzeMobileSnapshotVisibility(nodes: SnapshotNode[]): {
 
 /**
  * #1542: the pure geometry boundary the off-screen refusal double-check's
- * direct probe (`src/daemon/offscreen-target-probe.ts`) reduces its decision
+ * direct probe (`packages/daemon/src/execution/offscreen-target-probe.ts`) reduces its decision
  * to, once it has a fresh, tree-independent read of one element. A probe
  * confirms the element genuinely on-screen only when BOTH hold: XCTest's own
  * live hit-test says `hittable`, AND the tap point sits inside the root

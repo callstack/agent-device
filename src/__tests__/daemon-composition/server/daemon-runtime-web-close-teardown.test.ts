@@ -10,9 +10,9 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { installFakeManagedAgentBrowser } from '@agent-device/test-kit/web-managed-agent-browser';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { runCmd } from '@agent-device/host-kit/command';
-import { SessionStore } from '../../../daemon/session-store.ts';
-import { makeWebSession } from '../../../daemon/__tests__/session-teardown.fixtures.ts';
-import { teardownDaemonSessionForShutdown } from '../../../daemon/server/daemon-runtime.ts';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import { makeWebSession } from '@agent-device/daemon/testing/__tests__/session-teardown.fixtures';
+import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/server/daemon-runtime';
 
 const mockRunCmd = vi.mocked(runCmd);
 
@@ -126,4 +126,39 @@ test('daemon shutdown reports a web close failure on stderr instead of losing it
   // Best-effort: the failure is surfaced, but it never blocks the session from being torn down.
   expect(stderrChunks.join('')).toMatch(/web_browser/);
   expect(sessionStore.get(session.name)).toBeUndefined();
+});
+
+// The platform filter lives in the composed adapter, not in the neutral teardown: the daemon
+// asks the port for every session, and only a web device reaches the agent-browser process.
+test('daemon session teardown never dispatches a web close for a non-web session', async () => {
+  const root = mkdtempForTestSync('agent-device-non-web-teardown-');
+  // With the fake installed, a close the adapter should never ask for reaches the
+  // agent-browser process seam (mockRunCmd) and fails below instead of passing silently.
+  await installFakeManagedAgentBrowser(root);
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  sessionStore.publish('android-non-web-teardown-session', {
+    name: 'android-non-web-teardown-session',
+    device: {
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Pixel',
+      kind: 'emulator',
+      booted: true,
+    },
+    createdAt: Date.now(),
+    actions: [],
+  });
+  const stderrChunks: string[] = [];
+
+  await teardownDaemonSessionForShutdown({
+    ref: sessionStore.lookup('android-non-web-teardown-session')!,
+    sessionStore,
+    stderr: { write: (chunk) => stderrChunks.push(chunk) },
+    platformCleanup: platformResourceCleanup,
+  });
+
+  // The snapshot-helper leg is a real-mechanics no-op for a device with no registered helper
+  // session; a mistaken web close would surface on the process seam and on stderr below.
+  expect(mockRunCmd).not.toHaveBeenCalled();
+  expect(stderrChunks.join('')).toBe('');
 });

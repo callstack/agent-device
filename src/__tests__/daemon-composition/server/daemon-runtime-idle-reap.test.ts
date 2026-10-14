@@ -3,10 +3,11 @@ import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
 
 const leaseProbe = vi.hoisted(() => ({
-  registries: [] as import('../../../daemon/lease-registry.ts').LeaseRegistry[],
+  registries: [] as import('@agent-device/daemon/testing/lease-registry').LeaseRegistry[],
 }));
-vi.mock('../../../daemon/lease-registry.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../daemon/lease-registry.ts')>();
+vi.mock('@agent-device/daemon/testing/lease-registry', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/daemon/testing/lease-registry')>();
   class RecordedLeaseRegistry extends actual.LeaseRegistry {
     constructor(...args: ConstructorParameters<typeof actual.LeaseRegistry>) {
       super(...args);

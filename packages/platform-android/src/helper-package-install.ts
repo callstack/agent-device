@@ -66,13 +66,18 @@ async function ensureAndroidHelperPackageInstalled(options: {
   } = options;
   const cacheKey = `${deviceKey}\0${packageName}\0${versionCode}\0${sha256}`;
   if (cache.has(cacheKey)) {
-    return {
-      packageName,
-      versionCode,
-      installedSha256: sha256,
-      installed: false,
-      reason: 'current',
-    };
+    // The cache skips the checksums, never the presence check: an emulator that is wiped or
+    // restored from a snapshot keeps its serial but may no longer have the helper.
+    const installedVersionCode = await readInstalledAndroidPackageVersionCode(adb, packageName);
+    if (installedVersionCode !== undefined && installedVersionCode >= versionCode) {
+      return {
+        packageName,
+        versionCode,
+        installedSha256: sha256,
+        installed: false,
+        reason: 'current',
+      };
+    }
   }
   await verifyAndroidHelperApkChecksum(apkPath, sha256, helperLabel);
   const state = await inspectInstalledAndroidHelper({

@@ -90,11 +90,10 @@ export function parseRect(value: unknown): Rect | undefined {
  * distinguished from one that measured and reported.
  *
  * A payload that cannot be placed is restated as `unmeasurable` naming where it failed, never dropped
- * and never trusted: silence would tell the tap guard the producer never looked. The reasons resolve
- * in a fixed order, least to most trusted: a value that is not an object is `malformed-fact`; an
- * unrecognized `kind` is `unrecognized-kind`; an `unmeasurable` that never named its failure is
- * `unreported-reason`; a `visible` whose frame is not a positive finite rect is
- * `invalid-visible-frame`.
+ * and never trusted: silence would tell the tap guard the producer never looked. Validation reasons
+ * identify the rejected shape: `malformed-fact`, `unrecognized-kind`, `unreported-reason`,
+ * `invalid-visibility-probe`, `unrecognized-derivation`, `invalid-visible-frame`, or
+ * `invalid-derived-frame`. They describe validation failures rather than levels of trust.
  */
 export function readSnapshotKeyboardBandFact(value: unknown): SnapshotKeyboardBandFact | undefined {
   if (value === undefined) return undefined;
@@ -105,22 +104,53 @@ export function readSnapshotKeyboardBandFact(value: unknown): SnapshotKeyboardBa
       ? { kind: 'unmeasurable', reason: value.reason }
       : { kind: 'unmeasurable', reason: 'unreported-reason' };
   }
-  if (value.kind === 'visible') {
-    const frame = parseRect(value.frame);
-    // Same rule as `isPositiveFiniteRect` in kernel/rect, inlined: this module is a leaf that
-    // many facades evaluate, and a rect import here would land in every one of their closures.
-    // The viewport re-read (#3182) is the other side of that seam and lives in kernel/rect as
-    // `readSnapshotViewportSize`, because a viewport IS a rect; readers take the rect module there.
-    const plottable =
-      frame !== undefined &&
-      [frame.x, frame.y, frame.width, frame.height].every(Number.isFinite) &&
-      frame.width > 0 &&
-      frame.height > 0;
-    return plottable
-      ? { kind: 'visible', frame }
-      : { kind: 'unmeasurable', reason: 'invalid-visible-frame' };
+  if (value.kind === 'tree-rejected') return readKeyboardTreeRejection(value);
+  if (value.kind === 'visibility-only') {
+    return typeof value.visible === 'boolean'
+      ? { kind: 'visibility-only', visible: value.visible }
+      : { kind: 'unmeasurable', reason: 'invalid-visibility-probe' };
+  }
+  if (value.kind === 'derived' && value.derivation !== 'docked-tree') {
+    return { kind: 'unmeasurable', reason: 'unrecognized-derivation' };
+  }
+  if (value.kind === 'visible' || value.kind === 'derived') {
+    return readKeyboardFrameFact(value.frame, value.kind);
   }
   return { kind: 'unmeasurable', reason: 'unrecognized-kind' };
+}
+
+function readKeyboardTreeRejection(value: Record<string, unknown>): SnapshotKeyboardBandFact {
+  if (value.derivation !== 'docked-tree') {
+    return { kind: 'unmeasurable', reason: 'unrecognized-derivation' };
+  }
+  if (value.visible !== undefined && typeof value.visible !== 'boolean') {
+    return { kind: 'unmeasurable', reason: 'invalid-visibility-probe' };
+  }
+  return {
+    kind: 'tree-rejected',
+    derivation: 'docked-tree',
+    ...(typeof value.visible === 'boolean' ? { visible: value.visible } : {}),
+  };
+}
+
+function readKeyboardFrameFact(
+  value: unknown,
+  kind: 'visible' | 'derived',
+): SnapshotKeyboardBandFact {
+  const frame = parseRect(value);
+  // Same rule as `isPositiveFiniteRect` in kernel/rect, inlined: this module is a leaf that
+  // many facades evaluate, and a rect import here would land in every one of their closures.
+  // The viewport re-read (#3182) is the other side of that seam and lives in kernel/rect as
+  // `readSnapshotViewportSize`, because a viewport IS a rect; readers take the rect module there.
+  const plottable =
+    frame !== undefined &&
+    [frame.x, frame.y, frame.width, frame.height].every(Number.isFinite) &&
+    frame.width > 0 &&
+    frame.height > 0;
+  if (!plottable) return { kind: 'unmeasurable', reason: `invalid-${kind}-frame` };
+  return kind === 'derived'
+    ? { kind: 'derived', derivation: 'docked-tree', frame }
+    : { kind: 'visible', frame };
 }
 
 export function parsePoint(value: unknown): Point | undefined {

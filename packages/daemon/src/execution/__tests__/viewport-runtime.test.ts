@@ -1,0 +1,208 @@
+import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
+import { expect, test, vi } from 'vitest';
+import {
+  type DeviceBinding,
+  type DeviceRuntimeGateway,
+  type RuntimeFacts,
+  type RuntimeOperationFact,
+  localRuntimeOwner,
+  narrowDeviceBinding,
+} from '@agent-device/contracts/platform-runtime';
+import {
+  type PlatformRuntimeOperations,
+  viewportRuntimeUse,
+} from '@agent-device/contracts/platform-runtime-operations';
+import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-runtime';
+import { deviceShape } from '@agent-device/kernel/device';
+import { makeSession } from '../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { activateCompleteRefFrame, refFrameState } from '../../core/ref-frame.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../../core/request-runtime-binding.ts';
+import type { GenericPlatformExecutionParams } from '../../core/generic-leaf-execution.ts';
+import { resolveBoundViewportRuntime } from '../viewport-runtime.ts';
+import { expectRefusesUnavailableExactOwnerFact } from '../../__tests__/support/runtime-binding-conformance.ts';
+import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
+import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
+
+const webDevice = {
+  id: 'web',
+  name: 'Web',
+  platform: 'web',
+  kind: 'device',
+  booted: true,
+} as const;
+const appleDevice = {
+  id: 'ios-simulator',
+  name: 'iPhone',
+  platform: 'apple',
+  appleOs: 'ios',
+  kind: 'simulator',
+  target: 'mobile',
+  booted: true,
+} as const;
+const available = Object.freeze({ available: true } as const);
+const unavailable = Object.freeze({
+  available: false,
+  reason: 'owner-capability-missing' as const,
+  hint: 'viewport is not supported by the exact runtime owner',
+});
+
+/** Viewport's bound execution ignores the dispatcher's params; it closes over its own input. */
+function viewportExecutionParams(): GenericPlatformExecutionParams {
+  const session = makeSession('viewport-runtime', { device: webDevice });
+  return {
+    session,
+    sessionName: session.name,
+    logPath: '/tmp/daemon.log',
+    command: 'viewport',
+    request: {
+      command: 'viewport',
+      positionals: ['1280', '900'],
+      token: 't',
+      session: session.name,
+    },
+    positionals: ['1280', '900'],
+    out: undefined,
+    dispatchContext: {},
+  };
+}
+
+function runtimeHarness(
+  fact: RuntimeOperationFact = available,
+  device: typeof webDevice | typeof appleDevice = webDevice,
+) {
+  const setViewport = vi.fn(async () => undefined);
+  const facts: RuntimeFacts<PlatformRuntimeOperations> = {
+    device: { ...deviceShape(device), providerMode: 'local' },
+    operations: {
+      setViewport: fact,
+    } as RuntimeFacts<PlatformRuntimeOperations>['operations'],
+  };
+  const binding = {
+    device,
+    owner: localRuntimeOwner(device.platform),
+    facts,
+    operations: { setViewport },
+    [Symbol.asyncDispose]: async () => {},
+  } satisfies DeviceBinding<PlatformRuntimeOperations>;
+  const inspectFacts: InspectDeviceRuntimeFacts = vi.fn(async () => facts);
+  const bindDevice = vi.fn(async (_device, use) =>
+    narrowDeviceBinding(binding, use),
+  ) as unknown as BindDeviceRuntime;
+  const bind = vi.fn(async () => binding);
+  const gateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
+    inspectFacts,
+    bind,
+    shutdown: async () => {},
+  };
+  return { setViewport, inspectFacts, bindDevice, bind, gateway };
+}
+
+test('resolves one admitted binding and exposes one normalized viewport operation', async () => {
+  const harness = runtimeHarness(
+    viewportRuntimeOperationFacts({ setViewport: available }).setViewport,
+  );
+
+  const resolved = await resolveBoundViewportRuntime({
+    platformServices: daemonPlatformServicesFixture(),
+    device: webDevice,
+    positionals: ['1280', '900'],
+    inspectFacts: harness.inspectFacts,
+    bindDevice: harness.bindDevice,
+  });
+
+  expect(resolved.ok).toBe(true);
+  if (!resolved.ok) return;
+  expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
+  expect(harness.inspectFacts).toHaveBeenCalledWith(webDevice);
+  expect(harness.bindDevice).toHaveBeenCalledTimes(1);
+  expect(harness.bindDevice).toHaveBeenCalledWith(webDevice, viewportRuntimeUse);
+  expect(await resolved.execute(viewportExecutionParams())).toEqual({
+    width: 1280,
+    height: 900,
+    message: 'Viewport set: 1280x900',
+  });
+  expect(harness.setViewport).toHaveBeenCalledTimes(1);
+  expect(harness.setViewport).toHaveBeenCalledWith({ width: 1280, height: 900 });
+});
+
+test('rejects invalid dimensions before inspection or binding', async () => {
+  const harness = runtimeHarness();
+
+  await expect(
+    resolveBoundViewportRuntime({
+      platformServices: daemonPlatformServicesFixture(),
+      device: webDevice,
+      positionals: ['0', '900'],
+      inspectFacts: harness.inspectFacts,
+      bindDevice: harness.bindDevice,
+    }),
+  ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+  expect(harness.inspectFacts).not.toHaveBeenCalled();
+  expect(harness.bindDevice).not.toHaveBeenCalled();
+});
+
+test('rejects an unavailable exact-owner fact before binding', async () => {
+  await expectRefusesUnavailableExactOwnerFact({
+    command: 'viewport',
+    device: webDevice,
+    unavailable,
+  });
+});
+
+test('preserves the Apple viewport recovery hint through admission', async () => {
+  await expectRefusesUnavailableExactOwnerFact({
+    command: 'viewport',
+    device: appleDevice,
+    unavailable: {
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: 'viewport resizes web targets only (--platform web). Apple screen geometry is fixed by the selected simulator or device type — open a different simulator to test another screen size.',
+    },
+  });
+});
+
+test('request router joins viewport admission to execution, recording, and ref invalidation', async () => {
+  const harness = runtimeHarness();
+  const sessionStore = makeSessionStore('agent-device-viewport-generic-');
+  const session = makeSession('viewport-runtime', { device: webDevice });
+  activateCompleteRefFrame(session);
+  sessionStore.publish(session.name, session);
+  const handler = createRequestHandler({
+    createCommandSurface: fakeCreateCommandSurface,
+    logPath: '/tmp/daemon.log',
+    token: 't',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    deviceInventoryGateways: createTestDeviceInventoryGateways(),
+    deviceRuntimeGateway: harness.gateway,
+    trackDownloadableArtifact: () => 'artifact',
+  });
+
+  const response = await handler({
+    command: 'viewport',
+    positionals: ['1280', '900'],
+    token: 't',
+    session: session.name,
+    flags: {},
+    meta: { requestId: 'viewport-router-join' },
+  });
+
+  expect(response).toMatchObject({
+    ok: true,
+    data: { width: 1280, height: 900, message: 'Viewport set: 1280x900' },
+  });
+  expect(refFrameState(session)).toBe('expired');
+  expect(session.actions.at(-1)).toMatchObject({
+    command: 'viewport',
+    positionals: ['1280', '900'],
+  });
+  expect(harness.inspectFacts).toHaveBeenCalledTimes(1);
+  expect(harness.bind).toHaveBeenCalledTimes(1);
+  expect(harness.setViewport).toHaveBeenCalledTimes(1);
+});

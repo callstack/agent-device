@@ -4,7 +4,10 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { bindAdmittedLocalInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { parseTriggerAppEventArgs, resolveAppEventUrl } from '../../daemon/app-events.ts';
+import {
+  parseTriggerAppEventArgs,
+  resolveAppEventUrl,
+} from '@agent-device/daemon/testing/app-events';
 import { getInteractor } from '../../core/interactors.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { ANDROID_EMULATOR, IOS_DEVICE, MACOS_DEVICE } from '@agent-device/test-kit/device-fixtures';

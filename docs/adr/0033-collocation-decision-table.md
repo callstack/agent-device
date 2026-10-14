@@ -79,7 +79,7 @@ already owns the operations behind the vocabulary.
 | `src/diagnostics.ts` | keep | The diagnostics seam every zone imports (AGENTS.md mandates it); highest fan-in in the repo is what a substrate looks like, not misplacement. |
 | `src/internal/request-cancel.ts` | keep | Request-cancellation mechanics AGENTS.md routes to `host-kit/request`; internal beside its facade is already the collocation. |
 | `src/request.ts` | keep | Cross-layer request contracts AGENTS.md names as a host-kit seam; consumers span every zone. |
-| `src/session-paths.ts` | keep | Session-artifact path grammar the daemon, cli, and platforms all resolve; AGENTS.md keeps the path *policy* in `src/daemon/session-artifact-paths.ts`, which consumes this. |
+| `src/session-paths.ts` | keep | Session-artifact path grammar the daemon, cli, and platforms all resolve; AGENTS.md keeps the path *policy* in `packages/daemon/src/core/session-artifact-paths.ts`, which consumes this. |
 
 ### kernel
 
@@ -133,7 +133,7 @@ the whole `daemon-contracts` zone has moved into `packages/daemon-contracts` —
 package derive the zone, so every moved file's `ROOT_MODULE_ZONES` row is gone.
 The daemon ⇄ client shared files that remain here (`provider-credential-fingerprint.ts`) trace
 to #2559, which relocated the shared contracts **to the process root** so the client stops
-importing `src/daemon/` at all; R78 keeps any client→daemon
+importing `packages/daemon/src/` at all; R78 keeps any client→daemon
 edge at zero runtime and a five-line recorded type-only residue, and #3288's `daemon-contracts`
 zone was the declaration of that shared-below-both ownership — the extraction makes it
 physical, with R11 and the package's dependency edges holding the same boundary. Rows on
@@ -152,7 +152,7 @@ optimal.
 | `src/platform-runtime-resource-cleanup.ts` | retain for this batch | Same path-keyed R13/ADR 0022 seam. |
 | `src/provider-credential-fingerprint.ts` | keep (type extracted) | Daemon ⇄ client shared contract from the same #2559 decision as `daemon-policy-file.ts`; #3288 declares its zone beside the provider composition that reads the credentials it fingerprints. PR 6 of the daemon extraction moved only the `DaemonProviderCredentials` declaration to `packages/daemon-contracts` (`./provider-credentials`), the same shared-below-both landing as the policy file; the fingerprinting implementation stays here because it reads the installed-plugin manifest. |
 | `src/provider-limrun-runtime.ts` | keep | Proposed → provider-limrun, but there is no seam: the class's constructor self-builds the root dependency factory (`src/sdk/limrun-runtime-dependencies.ts`), which is the ADR 0019 composition seam — it loads the root's adb-host binder, core Android interactor, and platform-runtime app-state helpers that the package must not import. Moving the class means moving that composition, which is design, not a move. |
-| `src/request-progress-protocol.ts` | moved → `packages/daemon-contracts/src/request-progress-protocol.ts` | Daemon ⇄ client shared contract from the same #2559 decision — the client reads it statically (`daemon-client-progress.ts`) and the server through `src/daemon/server/`, so only #2559's shared-placement boundary and the wire-compat ledgers pin it; declared `daemon-contracts` by #3288 and now physically placed by the extraction. Contracts was considered and R18 keeps contracts free of envelope validation mechanics. The wire-ledger keys moved with the file. |
+| `src/request-progress-protocol.ts` | moved → `packages/daemon-contracts/src/request-progress-protocol.ts` | Daemon ⇄ client shared contract from the same #2559 decision — the client reads it statically (`daemon-client-progress.ts`) and the server through `packages/daemon/src/server/`, so only #2559's shared-placement boundary and the wire-compat ledgers pin it; declared `daemon-contracts` by #3288 and now physically placed by the extraction. Contracts was considered and R18 keeps contracts free of envelope validation mechanics. The wire-ledger keys moved with the file. |
 | `src/runtime-command-surface.ts` | moved → `src/command-runtime/runtime-command-surface.ts` ([#3299](https://github.com/callstack/agent-device/pull/3299)) | Physical move landed with `runtime-factory.ts` as one assembly group: the command-surface binding sits beside the factory it composes, under the folder that derives its `command-runtime` zone, so `topFolder` replaces the per-file `ROOT_MODULE_ZONES` row. |
 | `src/runtime-factory.ts` | moved → `src/command-runtime/runtime-factory.ts` ([#3299](https://github.com/callstack/agent-device/pull/3299)) | Physical move landed: the runtime assembly now lives under the folder that derives its `command-runtime` zone, with the same row deletion through folder-derived ownership. |
 
@@ -187,6 +187,23 @@ files have no seam (published facade, public-type collision, root dependency fac
   `session-repair-tombstone`, and `daemon-diagnostics-scope` from `src/daemon-contracts/`, first
   moved there by [#3297](https://github.com/callstack/agent-device/pull/3297)) are now
   `packages/daemon-contracts/src/` behind narrow per-file subpath exports.
+
+## The daemon package's export surface
+
+`@agent-device/daemon` publishes a façade, not importer reach: one named subpath per
+production/script consumer — a subpath that only tests import is not production surface.
+Everything else a root test reaches lives under the `./testing/` namespace: named
+`./testing/<module>` entries for production modules tests drive, named `./testing/<fixture>`
+entries, and, per fixture folder, a `./testing/<dir>/*` pattern whose target template
+reconstructs the source path. Never a wildcard that also exposes production modules. R11
+refuses any `./testing/` import from a non-test file, so root production code cannot import
+a module the package publishes for tests (a package test double reached through the
+boundary is production code depending on a fake), and root production imports are limited
+to the named production surface. The exports keys stay exact except the per-folder fixture
+patterns; `resolveWorkspaceSpecifier` (layering model) owns Node's exports semantics — the
+layering edges, the depgraph, mutation ownership, and R11's named-surface check call it, and
+the Stryker alias table orders its Vite first-match list to resolve in exactly its order —
+so every lane gives a specifier the module id Node's exports resolution gives it.
 
 ## Refuted alternatives
 

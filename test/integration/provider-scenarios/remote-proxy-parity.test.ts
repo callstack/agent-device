@@ -5,10 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
-import { LeaseRegistry } from '../../../src/daemon/lease-registry.ts';
-import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
-import { resolveSessionRequestLogPath } from '../../../src/daemon/session-artifact-paths.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../src/daemon/daemon-request.ts';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
+import { resolveSessionRequestLogPath } from '@agent-device/daemon/session-artifact-paths';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import {

@@ -5,8 +5,8 @@ import {
   deviceClaimRequiresStaleInspection,
   inspectDeviceClaims,
   type InspectedDeviceClaim,
-} from '../../daemon/device/device-claim-inspection.ts';
-import type { DeviceClaimStaleReleaseOutcome } from '../../daemon/device/device-claims.ts';
+} from '@agent-device/daemon/device/device-claim-inspection';
+import type { DeviceClaimStaleReleaseOutcome } from '@agent-device/daemon/device/device-claims';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { writeCommandOutput } from './shared.ts';
 import type { CliFlags } from '@agent-device/contracts/command';

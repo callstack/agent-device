@@ -24,7 +24,7 @@ is accepted.
 
 Completed 2026-08-27 through #2070–#2072. Every descriptor now declares `none`, `host`,
 `inventory`, or `device-runtime`; capability buckets and the legacy execution shape are gone.
-Production `src/daemon/**` has zero dependencies on concrete platform implementations, enforced by
+Production `packages/daemon/src/**` has zero dependencies on concrete platform implementations, enforced by
 R65. The per-command cutover table was retired after completion as required by section 6; R66 now
 enforces the permanent facts-only admission and runtime-proof invariants without naming historical
 routes or handler functions.
@@ -830,7 +830,7 @@ helper stops follow the owning platform module's lifecycle policy, and close-tim
 neutral owner services.
 
 R65 is the daemon-side end-state enforcement: its planted-red AST tests reject every dependency edge — static,
-dynamic, re-export, and type-only — from production `src/daemon/**` modules (test files excluded,
+dynamic, re-export, and type-only — from production `packages/daemon/src/**` modules (test files excluded,
 matching the layering scanner's scope) to `src/platforms/**` and concrete
 `@agent-device/platform-*` packages. R13 governs concrete package imports across the whole tree,
 while `retired-platforms-zone` prevents the old root seam from being recreated; platform freedom is
@@ -841,13 +841,13 @@ therefore structurally enforced rather than periodically measured.
 Some request-path work asks the host machine something without ever taking a device runtime:
 concrete local readiness, boot-time and runner-session observation, and open-target
 classification. Those asks now cross the daemon boundary as one required dependency,
-`DaemonPlatformServices` (`src/daemon/platform-services.ts`), assembled by the daemon runtime's
+`DaemonPlatformServices` (`packages/daemon/src/core/platform-services.ts`), assembled by the daemon runtime's
 root-composition module in `src/daemon-composition.ts` — which reaches the concrete adapters
 through `src/platform-runtime-daemon-services.ts` behind a function-scoped `await import` — and
 threaded composition → `startDaemonRuntime` deps → `RequestRouterDeps` → the request execution
 scope → the handlers and consumers. Stale-claim reconciliation gets the same treatment
 for the one act it may not perform itself: the composition supplies the `ClaimRecoveryGatewayFactory`
-the daemon declares in `src/daemon/device/claim-recovery-gateway.ts`, built from
+the daemon declares in `packages/daemon/src/resources/device/claim-recovery-gateway.ts`, built from
 `src/platform-runtime-claim-recovery.ts` (likewise deferred), and the daemon keeps the transaction —
 what to rebuild from (the dead owner's recorded state dir), in what order, and when to dispose it.
 
@@ -937,7 +937,7 @@ baseline and are open for revision or rejection.
 
 **Daemon top-level footprint.** `git ls-tree --name-only origin/main src/daemon/ | grep -E
 '\.ts$' | grep -vE '\.test\.ts$' | wc -l` measured 199 production files at `e624ef9d3f`. Proposed
-target: ≤ 60. `src/daemon/**` is a permanent zone under R65; the target is about what remains
+target: ≤ 60. `packages/daemon/src/**` is a permanent zone under R65; the target is about what remains
 there, not about retiring the directory.
 
 **Entry-to-platform hop count.** Corrected 2026-09-03, re-measured for #2278 at `27a97ee619`:

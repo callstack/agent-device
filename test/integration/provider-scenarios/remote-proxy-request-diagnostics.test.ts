@@ -15,13 +15,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { localizeRemoteDaemonError } from '../../../src/remote/remote-request-diagnostics.ts';
-import { resolveSessionRequestLogPath } from '../../../src/daemon/session-artifact-paths.ts';
+import { resolveSessionRequestLogPath } from '@agent-device/daemon/session-artifact-paths';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import type { DaemonError } from '@agent-device/kernel/errors';
-import type { DaemonResponse } from '../../../src/daemon/daemon-request.ts';
+import type { DaemonResponse } from '@agent-device/daemon/daemon-request';
 import {
   closeLoopbackServer,
   listenOnLoopback,

@@ -3,9 +3,9 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
-import { SessionStore } from '../../../daemon/session-store.ts';
-import { makeRecordingSession } from '../../../daemon/__tests__/session-teardown.fixtures.ts';
-import { teardownDaemonSessionForShutdown } from '../../../daemon/server/daemon-runtime.ts';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import { makeRecordingSession } from '@agent-device/daemon/testing/__tests__/session-teardown.fixtures';
+import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/server/daemon-runtime';
 
 afterEach(() => {
   vi.useRealTimers();

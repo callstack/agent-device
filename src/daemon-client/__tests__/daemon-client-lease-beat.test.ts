@@ -10,7 +10,7 @@ import {
   runProtectedLeaseWork,
 } from '../daemon-client-lease-beat.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
-import type { DaemonRequest } from '../../daemon/daemon-request.ts';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 
 function lostLeaseError(reason: string): AppError {
   return new AppError('UNAUTHORIZED', 'Lease is not active', { reason });

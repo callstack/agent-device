@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { assertRpcOk } from '../provider-scenarios/assertions.ts';
+import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from '../provider-scenarios/test-timeouts.ts';
 import type { ProviderScenarioTranscript } from '../provider-scenarios/transcript.ts';
 import { RUNNER_CONTINUE_NODES } from './fixtures.ts';
 import {
@@ -60,23 +61,27 @@ const NOISY_DEFAULT_TAP_RESULT = {
   jitterPx: 0,
 };
 
-test('interaction response shape: press @ref uses the canonical ref envelope', async () => {
-  await withIosContractDaemon(
-    [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry(NOISY_DEFAULT_TAP_RESULT)],
-    async (daemon, transcript) => {
-      assertRpcOk(await daemon.callCommand('snapshot', [], { snapshotInteractiveOnly: true }));
+test(
+  'interaction response shape: press @ref uses the canonical ref envelope',
+  async () => {
+    await withIosContractDaemon(
+      [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry(NOISY_DEFAULT_TAP_RESULT)],
+      async (daemon, transcript) => {
+        assertRpcOk(await daemon.callCommand('snapshot', [], { snapshotInteractiveOnly: true }));
 
-      const data = assertRpcOk(await daemon.callCommand('press', ['@e2']));
-      assertRunnerRequest(transcript, 'ios.runner.tap', tapRequest(200, 322));
+        const data = assertRpcOk(await daemon.callCommand('press', ['@e2']));
+        assertRunnerRequest(transcript, 'ios.runner.tap', tapRequest(200, 322));
 
-      assertCanonicalRef(data, {
-        message: 'Tapped @e2 (200, 322)',
-        x: 200,
-        y: 322,
-      });
-    },
-  );
-});
+        assertCanonicalRef(data, {
+          message: 'Tapped @e2 (200, 322)',
+          x: 200,
+          y: 322,
+        });
+      },
+    );
+  },
+  PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS,
+);
 
 test('interaction response shape: fill @ref uses the canonical ref envelope', async () => {
   await withIosContractDaemon(

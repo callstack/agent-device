@@ -13,7 +13,7 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
 import { pressAndroid, snapshotAndroid } from '@agent-device/platform-android/mechanics';
 import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { createAndroidInteractor } from '../../../core/interactors/android.ts';
-import { makeAndroidSnapshotCapture } from '../../test-utils/android-snapshot-capture.ts';
+import { makeAndroidSnapshotCapture } from '@agent-device/platform-android/snapshot-capture-fixtures';
 
 // R59 moved the alert legs onto the Android interactor, which is where the occlusion reading
 // they depend on lives: the legs capture through the same presentation pass `snapshot` publishes,

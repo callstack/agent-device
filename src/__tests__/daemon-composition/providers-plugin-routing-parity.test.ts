@@ -25,15 +25,15 @@ import {
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '@agent-device/test-kit/device-fixtures';
-import { makeSession } from '../../daemon/__tests__/support/session-factories.ts';
+import { makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { getPlugin, tryGetPlugin } from '../../core/platform-plugin-registry.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import {
   createRequestPlatformProviders,
   type PlatformProviderResolvers,
 } from '../../platform-runtime.ts';
-import { resolvePlatformProviderRequestContext } from '../../daemon/request-platform-provider-context.ts';
-import type { DaemonRequest } from '../../daemon/daemon-request.ts';
+import { resolvePlatformProviderRequestContext } from '@agent-device/daemon/testing/request-platform-provider-context';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 
 // Phase 3 step b.3 (issue #974) parity gate for the request-scope provider
 // facet. The per-platform GATE that each descriptor in the root-owned provider composition

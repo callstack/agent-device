@@ -5,7 +5,14 @@ import type {
   SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
 import { containsPoint, isPositiveFiniteRect } from '@agent-device/kernel/rect';
-import { IOS_KEYBOARD_SURFACE_ROLES, isAndroidInputMethodNode } from './android-input-ownership.ts';
+import {
+  IOS_KEYBOARD_SURFACE_ROLES,
+  IOS_KEYBOARD_SETTLE_CHROME_ROLES,
+  IOS_KEYBOARD_SUBTREE_CHROME_ROLES,
+  IOS_KEYBOARD_CHROME_MARKER_ROLES,
+  isAndroidInputMethodNode,
+  hasIosKeyboardRole,
+} from './android-input-ownership.ts';
 import { normalizeType } from './snapshot-text.ts';
 
 /**
@@ -79,10 +86,10 @@ export type KeyboardSurface = {
 };
 
 export type KeyboardTapOcclusion =
-  /** No keyboard in the tree: nothing to refuse. */
+  /** An explicit observation established absence. */
   | { kind: 'no-keyboard' }
   /**
-   * Keyboard nodes exist but the band cannot be measured — no resolvable viewport, no usable keyboard
+   * Keyboard visibility or its band cannot be established — no resolvable viewport, no usable keyboard
    * rect, or geometry that is not docked to the bottom edge the band would need. Fails open like every
    * other missing platform fact; the distinction from `no-keyboard` exists so a caller can disclose
    * that it could not check rather than claiming the target was clear.
@@ -114,20 +121,34 @@ function isKeyboardSurfaceNode(node: RawSnapshotNode): boolean {
   return isKeyboardAnchorNode(node) || IOS_KEYBOARD_SURFACE_ROLES.has(node.role ?? '');
 }
 
-/**
- * Whether this node belongs to the keyboard rather than to the app: a key, the key plane, an IME
- * node, or anything inside one of them. Ownership walks ancestors only, so a flattened projection
- * that lifts keys beside app chrome cannot promote app content into the keyboard.
- */
+/** Keyboard hosts that own descendants, until an app-fillable marker interrupts the ancestry. */
+function isKeyboardSubtreeHost(node: RawSnapshotNode): boolean {
+  return isKeyboardAnchorNode(node) || hasIosKeyboardRole(node, IOS_KEYBOARD_SUBTREE_CHROME_ROLES);
+}
+
+/** Per-node ownership and system-only ancestry never cross an app-fillable assistant marker. */
 function isKeyboardOwnedNode(
   node: RawSnapshotNode,
-  parents: ReadonlyMap<number, number | undefined>,
-  surfaceIndices: ReadonlySet<number>,
+  byIndex: ReadonlyMap<number, RawSnapshotNode>,
 ): boolean {
-  return (
-    surfaceIndices.has(node.index) ||
-    collectAncestorSurfaceIndices(parents, surfaceIndices, node.index).length > 0
-  );
+  if (
+    isKeyboardSurfaceNode(node) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_SETTLE_CHROME_ROLES) ||
+    hasIosKeyboardRole(node, IOS_KEYBOARD_CHROME_MARKER_ROLES) ||
+    isKeyboardSubtreeHost(node)
+  )
+    return true;
+  const visited = new Set<number>();
+  let parentIndex = node.parentIndex;
+  while (typeof parentIndex === 'number' && !visited.has(parentIndex)) {
+    visited.add(parentIndex);
+    const parent = byIndex.get(parentIndex);
+    if (!parent) return false;
+    if (hasIosKeyboardRole(parent, IOS_KEYBOARD_CHROME_MARKER_ROLES)) return false;
+    if (isKeyboardSubtreeHost(parent)) return true;
+    parentIndex = parent.parentIndex;
+  }
+  return false;
 }
 
 /** The band needs an edge to run to, which an absent or zero-area viewport does not report. */
@@ -279,7 +300,12 @@ function keysFormOneColumnRun(params: {
 
 /** The keyboard's own controls as the tree reports them, without deciding where its band is. */
 function collectKeyboardControlRects(nodes: readonly RawSnapshotNode[]): Rect[] {
-  const surfaceNodes = nodes.filter(isKeyboardSurfaceNode);
+  const surfaceNodes = nodes.filter(
+    (node) =>
+      isKeyboardSurfaceNode(node) ||
+      (node.keyboardOwned === true &&
+        [node.type, node.role].some((value) => normalizeType(value ?? '') === 'button')),
+  );
   const planeIndices = collectKeyboardPlaneIndices(nodes, surfaceNodes);
   return usableRects(surfaceNodes.filter((node) => !planeIndices.has(node.index)));
 }
@@ -287,10 +313,10 @@ function collectKeyboardControlRects(nodes: readonly RawSnapshotNode[]): Rect[] 
 /** The band the keyboard reports, or null when the tree holds no keyboard or the band cannot be
  * measured. Fails open on an unusable frame, mirroring `clipScrollViewportAboveKeyboard`: a keyboard
  * the platform cannot measure is not evidence that a surface is blocked. */
-function resolveVisibleKeyboardSurface(
+function deriveDockedKeyboardFrame(
   nodes: readonly RawSnapshotNode[],
   viewport: Rect | null,
-): KeyboardSurface | null {
+): Rect | null {
   const anchorNodes = nodes.filter(isKeyboardAnchorNode);
   const anchorRects = usableRects(anchorNodes);
   if (anchorRects.length === 0) return null;
@@ -303,29 +329,77 @@ function resolveVisibleKeyboardSurface(
     reportedBottom: Math.max(...reportedRects.map((rect) => rect.y + rect.height)),
     viewport,
   });
-  if (!frame) return null;
+  if (!frame || !isPositiveFiniteRect(frame)) return null;
   const planeIndices = collectKeyboardPlaneIndices(nodes, surfaceNodes);
   if (!keysFormOneColumnRun({ anchorNodes, anchorRects, planeIndices })) return null;
+  return frame;
+}
+
+type ProviderKeyboardInput = {
+  nodes: readonly RawSnapshotNode[];
+  viewport: Rect | null;
+  visibility?: boolean | 'unsupported' | 'failed';
+};
+
+/** Preserves keyboard geometry and evaluated node ownership before snapshot projection. */
+export function acquireProviderKeyboard(params: ProviderKeyboardInput): {
+  nodes: RawSnapshotNode[];
+  keyboard: SnapshotKeyboardBandFact;
+} {
+  const byIndex = new Map(params.nodes.map((node) => [node.index, node] as const));
   return {
-    frame,
-    controlRects: usableRects(surfaceNodes.filter((node) => !planeIndices.has(node.index))),
+    nodes: params.nodes.map((node) => ({
+      ...node,
+      keyboardOwned: isKeyboardOwnedNode(node, byIndex),
+    })),
+    keyboard: observeProviderKeyboard(params),
+  };
+}
+
+function observeProviderKeyboard(params: ProviderKeyboardInput): SnapshotKeyboardBandFact {
+  const frame = deriveDockedKeyboardFrame(params.nodes, params.viewport);
+  if (frame) return { kind: 'derived', derivation: 'docked-tree', frame };
+  if (isMeasurableViewport(params.viewport) && params.nodes.some(isKeyboardAnchorNode)) {
+    return {
+      kind: 'tree-rejected',
+      derivation: 'docked-tree',
+      ...(typeof params.visibility === 'boolean' ? { visible: params.visibility } : {}),
+    };
+  }
+  if (typeof params.visibility === 'boolean') {
+    return { kind: 'visibility-only', visible: params.visibility };
+  }
+  return {
+    kind: 'unmeasurable',
+    reason: params.nodes.some(isKeyboardAnchorNode)
+      ? 'keyboard-viewport-unavailable'
+      : params.visibility === 'failed'
+        ? 'keyboard-visibility-probe-failed'
+        : params.visibility === 'unsupported'
+          ? 'keyboard-visibility-probe-unsupported'
+          : 'keyboard-not-observed',
   };
 }
 
 /**
  * Whether this tap point belongs to the visible keyboard rather than to app content behind it.
  *
- * The point is the rect center an interaction would activate — the same point
- * `isTapPointInsideViewport` guards — so an element only partly under the keyboard whose center is
+ * The point is the dispatched tap point the interaction resolved — the same point
+ * `isTapPointInsideViewport` guards — so an element only partly under the keyboard whose tap point is
  * still above the key plane keeps tapping. Callers choose the consequence: an acting element path
  * refuses, while a coordinate path that never captured this tree discloses instead of refusing.
  *
- * A producer that measured the band publishes it in `keyboard`, and its frame IS the band: no rule
- * about docking, column runs, or which way the tree was turned is consulted, because the producer
- * that measured does not need them to answer (#2660). The keyboard's own controls still come from the
+ * A measured or acquisition-derived frame in `keyboard` survives projection. Measured frames need no
+ * docking, column-run, or orientation inference; derived bands already passed those rules during
+ * acquisition. Keyboard ownership on surviving nodes retains its acquisition witness after projection.
+ * The keyboard's own controls still come from the
  * tree — which node the keyboard rather than the app is responsible for is a different question from
- * where the band is, and only the tree can answer it. Without a fact, or with one that measured
- * nothing, every rule below applies exactly as it did.
+ * where the band is, and only the tree can answer it. Visibility-only observations are additive and never prevent
+ * tree derivation. Only
+ * `tree-rejected` records a failed full-tree evaluation with a usable viewport and prevents
+ * reconstruction after projection. Other failed direct measurements may still use the tree;
+ * missing nodes remain
+ * undetermined.
  */
 export function resolveKeyboardTapOcclusion(params: {
   nodes: readonly RawSnapshotNode[];
@@ -333,29 +407,35 @@ export function resolveKeyboardTapOcclusion(params: {
   point: Point;
   /** The resolved element, when the caller named one; absent for a bare coordinate. */
   node?: RawSnapshotNode | null;
-  /** The band this capture's producer measured, when it measured one (#2660). */
+  /** This capture's measured, acquisition-derived, visibility-only, or unknown keyboard evidence. */
   keyboard?: SnapshotKeyboardBandFact;
 }): KeyboardTapOcclusion {
-  // A producer that looked for the keyboard and found none settles the question the tree rule would
-  // otherwise be guessing about, stale key nodes in the captured tree included.
   if (params.keyboard?.kind === 'absent') return { kind: 'no-keyboard' };
-  const surface =
-    params.keyboard?.kind === 'visible'
-      ? { frame: params.keyboard.frame, controlRects: collectKeyboardControlRects(params.nodes) }
-      : resolveVisibleKeyboardSurface(params.nodes, params.viewport);
-  if (!surface) {
-    return params.nodes.some(isKeyboardAnchorNode)
-      ? { kind: 'undetermined' }
-      : { kind: 'no-keyboard' };
+  if (params.keyboard?.kind === 'tree-rejected') {
+    return { kind: params.keyboard.visible === false ? 'no-keyboard' : 'undetermined' };
   }
+  const frame =
+    params.keyboard?.kind === 'visible' || params.keyboard?.kind === 'derived'
+      ? params.keyboard.frame
+      : deriveDockedKeyboardFrame(params.nodes, params.viewport);
+  if (!frame) {
+    return {
+      kind:
+        params.keyboard?.kind === 'visibility-only' && !params.keyboard.visible
+          ? 'no-keyboard'
+          : 'undetermined',
+    };
+  }
+  const surface = { frame, controlRects: collectKeyboardControlRects(params.nodes) };
   if (!params.node) return classifyKeyboardPoint(params.point, surface);
   // A resolved element is excused only by belonging to the keyboard, never by sitting under a key:
   // the caller named the element, and behind the keyboard a tap does not reach it.
-  const parents = new Map(params.nodes.map((node) => [node.index, node.parentIndex] as const));
-  const surfaceIndices = new Set(
-    params.nodes.filter(isKeyboardSurfaceNode).map((node) => node.index),
-  );
-  if (isKeyboardOwnedNode(params.node, parents, surfaceIndices)) return { kind: 'clear', surface };
+  const keyboardOwned =
+    params.node.keyboardOwned ??
+    isKeyboardOwnedNode(params.node, new Map(params.nodes.map((node) => [node.index, node])));
+  if (keyboardOwned) {
+    return { kind: 'clear', surface };
+  }
   return containsPoint(surface.frame, params.point.x, params.point.y)
     ? { kind: 'occluded', surface }
     : { kind: 'clear', surface };

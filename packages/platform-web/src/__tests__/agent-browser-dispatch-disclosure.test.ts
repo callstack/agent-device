@@ -1,7 +1,7 @@
 // contracts/fixtures/dispatch-disclosure.json, web-agent-browser rows: each drives the real
 // provider entry point over a scripted agent-browser CLI and asserts the `details.dispatched`
 // (and `details.dispatchedSteps`) the failure leaves behind. The envelopes are what the managed
-// backend answers, including its typed CLI-refusal `type`; where the pinned 0.27.1 CLI cannot
+// backend answers, including its typed CLI-refusal `type`; where the pinned CLI cannot
 // produce one for a current provider argv, that row's driver says so.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -49,7 +49,7 @@ async function withScriptedBackend(
 
 /**
  * Agent-browser answers a command with argv it cannot run, before it contacts the browser daemon.
- * This is the verbatim 0.27.1 answer for the argv the driver below sends.
+ * This is the verbatim answer of the pinned CLI (0.39.0) for the argv the driver below sends.
  */
 function refuseMissingArguments(): ExecResult {
   return agentBrowserJsonResult({
@@ -61,7 +61,7 @@ function refuseMissingArguments(): ExecResult {
 
 /**
  * Agent-browser answers a command it does not implement before it reaches the browser daemon. No
- * argv the current provider sends is unknown to 0.27.1, so this row covers the version skew where a
+ * argv the current provider sends is unknown to the pinned CLI, so this row covers the version skew where a
  * newer provider meets an older managed backend; the envelope is what such a CLI answers.
  */
 function refuseUnknownCommand(): ExecResult {
@@ -162,7 +162,7 @@ const DRIVERS: Record<string, { drive: () => Promise<unknown>; dispatchedSteps?:
     drive: () =>
       withScriptedBackend(refuseMissingArguments, async (provider) => {
         // `keyboard type` with nothing to type: the argv the provider really sends for an empty
-        // typeText, which 0.27.1 refuses by type before it reaches the browser.
+        // typeText, which the pinned CLI refuses by type before it reaches the browser.
         await provider.typeText('');
       }),
   },

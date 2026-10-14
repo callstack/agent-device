@@ -1,0 +1,171 @@
+{
+  "cases": [
+    {
+      "name": "native showing hint",
+      "input": {
+        "type": "android.widget.EditText",
+        "text": "Your name",
+        "hintShowing": true
+      },
+      "value": ""
+    },
+    {
+      "name": "typed hint-equal text",
+      "input": {
+        "type": "android.widget.EditText",
+        "text": "Your name",
+        "hintShowing": false
+      },
+      "value": "Your name"
+    },
+    {
+      "name": "unknown hint state preserves equal text",
+      "input": {
+        "type": "android.widget.EditText",
+        "text": "Your name"
+      },
+      "value": "Your name"
+    },
+    {
+      "name": "static text has no echoed value",
+      "input": {
+        "type": "android.widget.TextView",
+        "text": "Name"
+      },
+      "value": null
+    },
+    {
+      "name": "read-only selectable text",
+      "input": {
+        "type": "android.widget.TextView",
+        "text": "Read-only text",
+        "editable": false
+      },
+      "value": null
+    },
+    {
+      "name": "custom editable field",
+      "input": {
+        "type": "com.example.CustomInput",
+        "text": "Ada",
+        "editable": true
+      },
+      "value": "Ada"
+    },
+    {
+      "name": "custom empty hinted field",
+      "input": {
+        "type": "com.example.CustomInput",
+        "text": "Prompt",
+        "editable": true,
+        "hintShowing": true
+      },
+      "value": ""
+    },
+    {
+      "name": "disabled input keeps content",
+      "input": {
+        "type": "android.widget.EditText",
+        "text": "locked",
+        "editable": false
+      },
+      "value": "locked"
+    },
+    {
+      "name": "empty reported input",
+      "input": {
+        "type": "android.widget.EditText",
+        "text": ""
+      },
+      "value": ""
+    },
+    {
+      "name": "missing input text",
+      "input": {
+        "type": "android.widget.EditText"
+      },
+      "value": null
+    },
+    {
+      "name": "password field keeps masked content",
+      "input": {
+        "type": "com.example.SecureInput",
+        "text": "••••",
+        "password": true
+      },
+      "value": "••••"
+    },
+    {
+      "name": "autocomplete field",
+      "input": {
+        "type": "android.widget.AutoCompleteTextView",
+        "text": "Warsaw"
+      },
+      "value": "Warsaw"
+    },
+    {
+      "name": "package-name lookalike is not a field",
+      "input": {
+        "type": "com.edittext.sample.CustomButton",
+        "text": "Go"
+      },
+      "value": null
+    },
+    {
+      "name": "missing type is not field evidence",
+      "input": {
+        "text": "Static label"
+      },
+      "value": null
+    },
+    {
+      "name": "empty type is not field evidence",
+      "input": {
+        "type": "",
+        "text": "Static label"
+      },
+      "value": null
+    },
+    {
+      "name": "blank type is not field evidence",
+      "input": {
+        "type": "  ",
+        "text": "Static label"
+      },
+      "value": null
+    },
+    {
+      "name": "empty class segment is not field evidence",
+      "input": {
+        "type": "com.example.",
+        "text": "Static label"
+      },
+      "value": null
+    },
+    {
+      "name": "missing type with editable evidence",
+      "input": {
+        "text": "Ada",
+        "editable": true
+      },
+      "value": "Ada"
+    },
+    {
+      "name": "missing type with password evidence",
+      "input": {
+        "text": "••••",
+        "password": true
+      },
+      "value": "••••"
+    },
+    {
+      "name": "hint state does not turn a label into a field",
+      "input": {
+        "type": "android.widget.TextView",
+        "text": "Prompt",
+        "hintShowing": true
+      },
+      "value": null
+    }
+  ]
+}

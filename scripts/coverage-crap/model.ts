@@ -345,47 +345,78 @@ export function decideCrapVerdict(input: {
   };
 }
 
-/** A file-wide `maxCrap` override of `fallow-crap.json`, read from the resolved config. */
-export type CrapExemption = Readonly<{ files: readonly string[]; maxCrap: number; reason: string }>;
+/** A configured CRAP ceiling and the function this run applied it to. */
+export type CrapOverride = Readonly<{
+  file: string;
+  name: string;
+  maxCrap: number;
+  reason: string;
+  /** The function scored at or above its ceiling, so the exemption no longer covers it. */
+  exceeded: boolean;
+}>;
+
+/** A CRAP ceiling no longer doing anything: the function no longer needs it or no longer exists. */
+export type CrapStaleOverride = Readonly<{
+  file: string | null;
+  name: string | null;
+  reason: string;
+}>;
 
 /**
- * Resolved-config stdout as the file-wide CRAP exemptions: the overrides that raise `maxCrap` for
- * named files, so every function inside them is exempt — not only the out-of-process ones that
- * motivated the override. Which files those are is something the report states or admits it cannot
- * state, so failure is admitted too rather than thrown: a fallow that exits 0 and prints nothing
- * parseable must not turn the advisory `--all` run red.
+ * The `health.thresholdOverrides` ceilings this run applied, read from the same health report as
+ * the findings. fallow echoes each override with the function it matched: `active`, or
+ * `insufficient` when the function scored above the ceiling, while `stale` and `no_match` mean the
+ * ceiling is no longer needed or matches nothing and can go. The `no_match` row appears only in a
+ * full run, so naming deleted overrides is a `--all` report signal; the report never reads the
+ * config a second time.
  */
-export function readCrapExemptions(stdout: string): CrapExemptions {
-  try {
-    const report = parseFallowJsonReport(stdout);
-    const overrides =
-      isRecord(report) && isRecord(report.health) ? report.health.thresholdOverrides : undefined;
-    if (!Array.isArray(overrides)) return { available: true, exemptions: [] };
-    return {
-      available: true,
-      exemptions: overrides
-        .filter((override): override is Record<string, unknown> => isRecord(override))
-        .filter((override) => typeof override.maxCrap === 'number' && override.maxCrap > 30)
-        .map((override) => ({
-          files: Array.isArray(override.files)
-            ? override.files.filter((file): file is string => typeof file === 'string')
-            : [],
-          maxCrap: override.maxCrap as number,
-          reason: typeof override.reason === 'string' ? override.reason : '',
-        })),
-    };
-  } catch (error: unknown) {
-    return {
-      available: false,
-      detail: error instanceof Error ? error.message.split('\n')[0]! : String(error),
-    };
-  }
+export type CrapOverrides = Readonly<{
+  matched: readonly CrapOverride[];
+  stale: readonly CrapStaleOverride[];
+}>;
+
+/** One echoed override, or null when it is not a CRAP ceiling applied to a named function. */
+function readMatchedOverride(entry: Record<string, unknown>): CrapOverride | null {
+  if (entry.dimension !== 'crap') return null;
+  if (entry.status !== 'active' && entry.status !== 'insufficient') return null;
+  if (typeof entry.path !== 'string' || typeof entry.function !== 'string') return null;
+  // This entry's own ceiling: effective_thresholds is the merged result, which an overlapping
+  // entry could have set.
+  const configured = isRecord(entry.configured_thresholds) ? entry.configured_thresholds : {};
+  if (typeof configured.max_crap !== 'number') return null;
+  return {
+    file: entry.path,
+    name: entry.function,
+    maxCrap: configured.max_crap,
+    reason: typeof entry.reason === 'string' ? entry.reason : '',
+    exceeded: entry.status === 'insufficient',
+  };
 }
 
-/** The exemptions, or how they failed to load — "none" and "unknown" are different claims. */
-export type CrapExemptions =
-  | Readonly<{ available: true; exemptions: readonly CrapExemption[] }>
-  | Readonly<{ available: false; detail: string }>;
+function readStaleOverride(entry: Record<string, unknown>): CrapStaleOverride {
+  return {
+    file: typeof entry.path === 'string' ? entry.path : null,
+    name: typeof entry.function === 'string' ? entry.function : null,
+    reason: typeof entry.reason === 'string' ? entry.reason : '',
+  };
+}
+
+export function readCrapOverrides(report: unknown): CrapOverrides {
+  const entries =
+    isRecord(report) && Array.isArray(report.threshold_overrides)
+      ? report.threshold_overrides.filter((entry): entry is Record<string, unknown> =>
+          isRecord(entry),
+        )
+      : [];
+  const crap = entries.filter((entry) => entry.dimension === 'crap');
+  const stale = crap
+    .filter((entry) => entry.status === 'stale' || entry.status === 'no_match')
+    .map(readStaleOverride);
+  const matched = crap
+    .map(readMatchedOverride)
+    .filter((override): override is CrapOverride => override !== null);
+  return { matched, stale };
+}
 
 export function renderCrapReport(input: {
   findings: readonly CrapFinding[];
@@ -393,7 +424,7 @@ export function renderCrapReport(input: {
   threshold: number;
   scope: CrapScope;
   verdict: CrapVerdict;
-  exemptions?: CrapExemptions;
+  overrides: CrapOverrides;
 }): string {
   const { findings, dropped, threshold, scope, verdict } = input;
   // A PR fails for two different reasons and the reader must not confuse them: debt a touched
@@ -409,7 +440,7 @@ export function renderCrapReport(input: {
     ...renderFindingSection(findings),
     ...renderUnscopedSection(verdict.unscoped),
     ...renderDroppedSection(dropped),
-    ...renderExemptionSection(input.exemptions),
+    ...renderOverrideSection(input.overrides),
   ].join('\n')}\n`;
 }
 
@@ -469,19 +500,29 @@ function renderDroppedSection(dropped: readonly string[]): readonly string[] {
   ]);
 }
 
-function renderExemptionSection(exemptions: CrapExemptions | undefined): readonly string[] {
-  if (!exemptions) return [];
-  if (!exemptions.available) {
-    return section([
-      `File-wide CRAP exemptions could not be read from the config (${exemptions.detail}), so this report cannot say which files are exempt.`,
-    ]);
-  }
+/**
+ * The per-function CRAP exemptions the config declared and what this run did with them: the
+ * ceiling each one carries, and any override whose ceiling no longer does anything — the debt
+ * that file-wide `maxCrap: 1e12` exemptions let accumulate unseen.
+ */
+function renderOverrideSection(overrides: CrapOverrides): readonly string[] {
+  if (overrides.matched.length === 0 && overrides.stale.length === 0) return [];
   return section([
-    `File-wide CRAP exemptions in \`fallow-crap.json\` (${exemptions.exemptions.length}). Each exempts every function in its files, including helpers Node could test:`,
-    ...exemptions.exemptions.map(
-      (exemption) =>
-        `- ${exemption.files.map((file) => `\`${file}\``).join(', ')} — \`maxCrap: ${exemption.maxCrap.toExponential(0)}\`${exemption.reason ? `: ${exemption.reason}` : ''}`,
+    `CRAP exemptions from \`.fallowrc.json\` (${overrides.matched.length} applied). Each raises the ceiling for one function only, so growth above it still blocks:`,
+    ...overrides.matched.map(
+      (override) =>
+        `- \`${override.file}\` \`${override.name}\` — ceiling ${override.maxCrap}${override.exceeded ? ' **(exceeded: scored above the ceiling)**' : ''}${override.reason ? `: ${override.reason}` : ''}`,
     ),
+    ...(overrides.stale.length > 0
+      ? [
+          `No longer needed by any function and can be deleted: ${overrides.stale
+            .map(
+              (stale) =>
+                `${stale.file === null ? 'an override' : `\`${stale.file}\`${stale.name === null ? '' : ` \`${stale.name}\``}`}${stale.reason === '' ? '' : ` (“${stale.reason}”)`}`,
+            )
+            .join(', ')}`,
+        ]
+      : []),
   ]);
 }
 

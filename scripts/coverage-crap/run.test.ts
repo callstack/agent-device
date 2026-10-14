@@ -150,19 +150,26 @@ beforeEach(() => {
   git('config', 'user.name', 'Test');
   git('config', 'diff.renames', 'false');
   git('checkout', '-q', '-b', HEADS[0]!);
-  // Same shape as the repository's own config: CRAP only, plus one file-wide exemption to prove
-  // the report reads its scope from the config rather than restating a list.
+  // Same shape as the repository's own config: one per-function CRAP exemption, plus a stale one
+  // whose function no longer exists, to prove the report states the scope fallow actually applied.
   write(
-    'fallow-crap.json',
+    '.fallowrc.json',
     `${JSON.stringify(
       {
-        rules: { 'complexity-cyclomatic': 'off', 'complexity-cognitive': 'off' },
         health: {
+          maxCrap: 0,
           thresholdOverrides: [
             {
               files: ['src/exempt.ts'],
-              maxCrap: 1e12,
+              functions: ['score'],
+              maxCrap: 90,
               reason: 'Runs on a worker thread the coverage map never sees.',
+            },
+            {
+              files: ['src/gone.ts'],
+              functions: ['oldWorkerEntry'],
+              maxCrap: 90,
+              reason: 'This worker moved out.',
             },
           ],
         },
@@ -480,7 +487,7 @@ test('--all reports the whole-repo backlog and stays green', () => {
   assert.match(out, /\| `src\/debt\.ts:1` score \| 42\.0 \| 6 \| 0% \|/);
 });
 
-test('the report lists the file-wide exemptions with the scope they actually have', () => {
+test('the report lists the per-function exemptions fallow applied, and the stale ones', () => {
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
   write('src/exempt.ts', DEBT);
   write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
@@ -489,11 +496,19 @@ test('the report lists the file-wide exemptions with the scope they actually hav
   const { code, out } = check(['--all']);
 
   assert.equal(code, 0);
-  // The exemption holds for every function in the file, which is what the reader needs to know.
+  // The override names one function under a ceiling growth can breach — the file-wide 1e12 it
+  // replaces admitted neither — and the override whose function is gone is named for deletion.
   assert.match(
     out,
-    /File-wide CRAP exemptions in `fallow-crap\.json` \(1\).*exempts every function in its files, including helpers Node could test/s,
+    /CRAP exemptions from `\.fallowrc\.json` \(1 applied\).*one function only, so growth above it still blocks/s,
   );
-  assert.match(out, /- `src\/exempt\.ts` — `maxCrap: 1e\+12`: Runs on a worker thread/);
+  assert.match(
+    out,
+    /- `src\/exempt\.ts` `score` — ceiling 90: Runs on a worker thread the coverage map never sees\./,
+  );
+  assert.match(
+    out,
+    /No longer needed by any function and can be deleted: an override \(“This worker moved out\.”\)/,
+  );
   assert.doesNotMatch(out, /\| `src\/exempt\.ts:1`/);
 });

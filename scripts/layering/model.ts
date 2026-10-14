@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
 import { PLATFORMS } from '@agent-device/kernel/device';
 import { createGraph, genDFS, getStronglyConnectedComponents, getSubgraph } from '@statelyai/graph';
 import { parseSync } from 'oxc-parser';
@@ -306,8 +307,8 @@ export function topFolder(file: string): string {
 
 export function targetDagZone(file: string): string {
   // #2342 relocated the daemon client to its own `src/daemon-client/` folder, so the
-  // client zone now falls out of the folder itself; `src/daemon/` is server-only.
-  if (file.startsWith('src/daemon/')) return 'daemon-server';
+  // client zone now falls out of the folder itself; `packages/daemon/src/` is server-only.
+  if (file.startsWith(DAEMON_SOURCE_ROOT)) return 'daemon-server';
   return declaredRootModuleZone(file) ?? topFolder(file);
 }
 
@@ -330,6 +331,39 @@ export function unclassifiedZones(files: readonly string[]): string[] {
 // a sibling file — unresolved and invisible to the value-cycle and reverse-reachability graphs).
 const PACKAGE_SRC_PREFIX = /^packages\/[^/]+\/src\//;
 
+/**
+ * Resolve a workspace specifier against an exports-derived targets map, mirroring
+ * Node's exports semantics: exact keys first, then `*` pattern entries with the
+ * longest matching prefix winning and the matched suffix filling the target's
+ * `*`. The map keeps a pattern entry as its literal key
+ * (`@agent-device/daemon/testing/handlers/__tests__/*`), so a plain `get` misses
+ * every concrete import of it — which is how the layering edges, the depgraph,
+ * mutation ownership, and R11's named-surface check each started resolving
+ * pattern-exported specifiers to nothing (#3546 review). This is the single
+ * semantics every in-repo consumer applies: `resolveTargetFile`, `namedByExports`,
+ * and — by ordering its Vite first-match list to this rule — `workspaceSourceAliases`.
+ */
+export function resolveWorkspaceSpecifier(
+  specifier: string,
+  targets: ReadonlyMap<string, string>,
+): string | undefined {
+  const exact = targets.get(specifier);
+  if (exact !== undefined) return exact;
+  let best: { prefix: string; target: string } | undefined;
+  for (const [key, target] of targets) {
+    if (!key.endsWith('*') || !target.includes('*')) continue;
+    const prefix = key.slice(0, -1);
+    if (!specifier.startsWith(prefix)) continue;
+    if (best && best.prefix.length >= prefix.length) continue;
+    best = { prefix, target };
+  }
+  if (!best) return undefined;
+  const star = best.target.indexOf('*');
+  return (
+    best.target.slice(0, star) + specifier.slice(best.prefix.length) + best.target.slice(star + 1)
+  );
+}
+
 function resolveTargetFile(
   fromFile: string,
   spec: string,
@@ -339,11 +373,12 @@ function resolveTargetFile(
   if (spec.startsWith('@agent-device/')) {
     // Workspace specifier (#1490 W0). Real runs pass the exports-derived map
     // (workspaceSpecifierTargets), which is authoritative — it handles '.'
-    // facade exports and any source layout. The positional fallback exists
-    // only for map-less fixtures (the P0-pinned depgraph contract) and cannot
-    // resolve a bare facade specifier by construction.
+    // facade exports, `*` pattern entries, and any source layout. The
+    // positional fallback exists only for map-less fixtures (the P0-pinned
+    // depgraph contract) and cannot resolve a bare facade specifier by
+    // construction.
     if (workspaceExportTargets) {
-      const target = workspaceExportTargets.get(spec);
+      const target = resolveWorkspaceSpecifier(spec, workspaceExportTargets);
       return target !== undefined && sourceFiles.has(target) ? target : null;
     }
     const [name, ...subParts] = spec.slice('@agent-device/'.length).split('/');

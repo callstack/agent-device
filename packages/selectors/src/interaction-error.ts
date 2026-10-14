@@ -1,6 +1,13 @@
 import type { Rect, SnapshotCoveringNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 
-/** Machine-readable `error.details.reason` values shared by interaction producers and adapters. */
+/**
+ * Machine-readable `error.details.reason` values shared by interaction producers and adapters.
+ *
+ * Every value is a literal, and this module imports nothing: these codes are the vocabulary the
+ * Maestro, replay, and host adapters read, and the eager-closure gate (`scripts/__tests__/
+ * eager-closure-budgets.test.ts`) holds this leaf at the size it has — a shared constant imported
+ * from a heavier package makes every façade that reads a reason evaluate that package.
+ */
 export const INTERACTION_ERROR_REASONS = {
   selectorNotFound: 'selector_not_found',
   predicateFailed: 'predicate_failed',
@@ -22,6 +29,18 @@ export const INTERACTION_ERROR_REASONS = {
   captureSparse: 'capture_sparse',
   /** The target resolved, but another visible element covers it. */
   targetCovered: 'target_covered',
+  /**
+   * A press or click refused because it could not confirm a resting position for its target: the
+   * target's rect was still changing when the transition window after the session's last mutating
+   * action ran out, or a re-observation could not measure the position at all. `details.selector` or
+   * `details.ref` names the target, `details.rect` is where the command resolved it, and
+   * `details.movedToRect` where the last re-observation found it — present only when that look
+   * measured one. Branch on this reason, not the message: the recovery is to wait for the surface
+   * and retry, never to retry the same point immediately. The owner is
+   * `src/commands/interaction/runtime/moving-target-gate.ts`, which raises the reason beside the
+   * hint that names that recovery.
+   */
+  targetStillMoving: 'target_still_moving',
 } as const;
 
 /** The part of a covered node a refusal reports. */

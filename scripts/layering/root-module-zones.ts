@@ -28,7 +28,7 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
   // The platform composition the daemon, CLI and SDK import eagerly. It shares the zone with its
   // private `src/platform-runtime/` submodule, and with the daemon runtime's dependency
   // construction, which names these same runtime families and keeps the same value-free direction
-  // toward `src/daemon/` (PR 6 of #3276's daemon extraction).
+  // toward `packages/daemon/src/` (PR 6 of #3276's daemon extraction).
   'platform-runtime': [
     'src/daemon-composition.ts',
     'src/platform-runtime-android-mechanics.ts',

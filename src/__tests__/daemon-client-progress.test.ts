@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import type { Socket } from 'node:net';
 import { test } from 'vitest';
-import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { readDaemonSocketProgressResponse } from '../daemon-client/daemon-client-progress.ts';
 import { beginStderrCapture } from './test-utils/stream-capture.ts';
 import { AppError } from '@agent-device/kernel/errors';

@@ -1,4 +1,6 @@
 import { expect, test } from 'vitest';
+import { interpretIosReactNativeValue } from '@agent-device/capture-kit/ios-react-native-value';
+import { attachRefs } from '@agent-device/kernel/snapshot';
 import fc from 'fast-check';
 import {
   buildUnchangedSnapshotMetadata,
@@ -63,6 +65,8 @@ test('unchanged metadata detects visible label changes', () => {
 
 test.each<Partial<SnapshotNode>>([
   { index: 1 },
+  { editable: true },
+  { password: true },
   { depth: 1 },
   { parentIndex: 1 },
   { type: 'TextField' },
@@ -79,9 +83,13 @@ test.each<Partial<SnapshotNode>>([
   { placeholder: 'Key echo' },
   { hittable: false },
   { bundleId: 'com.example.app' },
+  { systemBar: 'status' },
+  { systemBar: 'navigation' },
   { appName: 'Example' },
   { windowTitle: 'Compose' },
   { surface: 'app' },
+  { keyboardOwned: true },
+  { keyboardOwned: false },
   { hiddenContentAbove: true },
   { hiddenContentBelow: true },
   { interactionBlocked: 'covered' },
@@ -90,11 +98,12 @@ test.each<Partial<SnapshotNode>>([
   const current = snapshot('Create', { nodes: [{ ...previous.nodes[0]!, ...change }] });
 
   expect(buildUnchangedSnapshotMetadata({ previous, current, options: {} })).toBeUndefined();
+  expect(
+    buildUnchangedSnapshotMetadata({ previous: current, current: previous, options: {} }),
+  ).toBeUndefined();
 });
 
 test.each<Partial<SnapshotNode>>([
-  { editable: true },
-  { password: true },
   { hintShowing: true },
   { selectionStart: 2 },
   { selectionEnd: 3 },
@@ -319,3 +328,28 @@ test('force-full and raw snapshots do not emit unchanged metadata', () => {
     buildUnchangedSnapshotMetadata({ previous, current, options: { raw: true } }),
   ).toBeUndefined();
 });
+
+test.each([{ editable: true }, { password: true }])(
+  'unchanged metadata detects RN interpretation eligibility changes: %j',
+  (change) => {
+    const node = {
+      index: 0,
+      depth: 0,
+      type: 'Other',
+      role: 'RCTViewComponentView',
+      label: 'Preferences',
+      value: 'checkbox, checked',
+      checked: false,
+    };
+    const previous = snapshot('Preferences', {
+      nodes: attachRefs([interpretIosReactNativeValue(node)]),
+    });
+    const current = snapshot('Preferences', {
+      nodes: attachRefs([interpretIosReactNativeValue({ ...node, ...change })]),
+    });
+    expect(previous.nodes[0]?.iosValueSemantics?.checked).toBe(true);
+    expect(current.nodes[0]?.iosValueSemantics).toBeUndefined();
+    expect(current.nodes[0]?.checked).toBe(previous.nodes[0]?.checked);
+    expect(buildUnchangedSnapshotMetadata({ previous, current, options: {} })).toBeUndefined();
+  },
+);

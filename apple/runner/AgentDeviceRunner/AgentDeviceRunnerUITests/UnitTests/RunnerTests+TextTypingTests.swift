@@ -283,6 +283,30 @@ extension RunnerTests {
     XCTAssertEqual(editableTextValue(for: nextScreenField, treatingPlaceholderAsEmpty: true), "")
   }
 
+  // An unidentified field that moves once the first character arrives, the way an iOS 26 bottom
+  // search bar rises above the keyboard: the read-back finds it, still focused, at another frame
+  // than the pre-entry read, holding exactly the requested text.
+  @MainActor
+  func testFillVerifiesAnUnidentifiedFieldThatMovesWhileTyping() throws {
+    let textField = try launchRemovableInputFixture(
+      "--agent-device-text-entry-moves-on-input",
+      "--agent-device-text-entry-unnamed-input"
+    )
+    let frameBefore = textField.frame
+
+    let failureCountBefore = currentXCTestFailureCount()
+    let response = executeTypeCommand(
+      activeApp: app,
+      command: try fillCommandFixture(commandId: "fill-moves-on-input", text: "hello", at: textField)
+    )
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertTrue(response.ok, String(describing: response.error))
+    XCTAssertEqual(response.data?.message, "typed")
+    XCTAssertNotEqual(textField.frame, frameBefore)
+    XCTAssertEqual(editableTextValue(for: textField, treatingPlaceholderAsEmpty: true), "hello")
+  }
+
   // Pins a known limit, not desired behavior: neither input has an identifier, and the successor
   // takes the code field's index in the query that bound it, so the remaining posts resolve to it
   // and land in the successor. Refusing point and focus re-resolution would not help, because the

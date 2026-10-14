@@ -46,7 +46,7 @@ test('platform package source additionally selects provider-integration', () => 
 });
 
 test('unit test files delegate affected-test discovery to Vitest', () => {
-  const result = ids(['src/daemon/selectors.test.ts']);
+  const result = ids(['packages/daemon/src/selectors.test.ts']);
   assert.ok(result.includes('vitest-related'));
   assert.ok(!result.includes('unit'));
   assert.ok(!result.includes('provider-integration'));

@@ -18,8 +18,8 @@ vi.mock('@agent-device/platform-web', async (importOriginal) => {
 });
 
 import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { SessionStore } from '../daemon/session-store.ts';
-import { openWebSessionNames } from '../daemon/web-session-names.ts';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import { openWebSessionNames } from '@agent-device/daemon/testing/web-session-names';
 import { cleanupWebBrowserOrphansForDaemonStartup } from '../daemon-composition.ts';
 
 const mockCleanupManagedAgentBrowserOrphans = vi.mocked(cleanupManagedAgentBrowserOrphansMock);

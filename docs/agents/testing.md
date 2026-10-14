@@ -68,12 +68,11 @@ Read the entry file before running a lane. Do not copy its environment matrix he
 ## Shared test utilities
 
 Before creating fixtures, look in `@agent-device/test-kit/` (generic) and
-`src/daemon/__tests__/support/` (daemon-shaped). Import named builders
-from the module that defines them; avoid importing
-unrelated helpers through a barrel. Shared `DeviceInfo`, session, snapshot, store, runtime-fact,
-and mocked-binary values belong in a sibling fixture module, not in repeated test literals.
-`PROPERTY_RUNS` and the touch-point/rect arbitraries live in
-`@agent-device/selectors/snapshot-geometry-fixtures`, not `src/__tests__/test-utils/`;
+`packages/daemon/src/__tests__/support/` (daemon-shaped). Import named builders from their
+defining module, never through a barrel. Shared `DeviceInfo`, session, snapshot, store,
+runtime-fact, and mocked-binary values belong in a sibling fixture module, not in repeated
+test literals. `PROPERTY_RUNS` and the touch-point/rect arbitraries live in
+`@agent-device/selectors/snapshot-geometry-fixtures`;
 `makeSnapshotState` lives in `@agent-device/capture-kit/snapshot-state-fixtures`.
 
 Use `mkdtempForTest` or `mkdtempForTestSync`. Global setup redirects `TMPDIR` for the run and
@@ -134,7 +133,7 @@ Run `pnpm depgraph affected` before touching a high-fan-in module:
 
 ```sh
 pnpm depgraph affected packages/host-kit/src/command.ts
-pnpm depgraph affected src/daemon/ref-frame.ts --json --limit 25
+pnpm depgraph affected packages/daemon/src/core/ref-frame.ts --json --limit 25
 ```
 
 Use its dependent, command, and guarantee-cell report to scope inspection. `pnpm check:affected --run`

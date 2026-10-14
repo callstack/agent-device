@@ -6,7 +6,7 @@
 // loop has no reflectable upstream constant to cross-check in layer 2).
 //
 // These invariants read the `replay-timing.ndjson` written by the test runtime
-// (src/daemon/handlers/session-test-runtime.ts) and assert engine-side facts —
+// (packages/replay-test/src/internal/session-test-runtime.ts) and assert engine-side facts —
 // e.g. a tap's stability loop must latch rather than run out of settle budget.
 //
 // The evaluator is pure and unit-tested against synthetic traces; the device run

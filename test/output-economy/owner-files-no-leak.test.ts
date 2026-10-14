@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { COMMAND_OWNER_FILES } from '@agent-device/command-registry/owner-files';
-import { getDaemonRouteOwnerFiles } from '../../src/daemon/route-owner-files.ts';
+import { getDaemonRouteOwnerFiles } from '@agent-device/daemon/route-owner-files';
 
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 const distPath = path.join(repoRoot, 'dist/src');

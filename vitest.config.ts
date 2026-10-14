@@ -109,6 +109,7 @@ export default defineConfig({
             // The subprocess watchdog self-check: spawns a real node subprocess per case,
             // and one hangs on purpose (#1414).
             'scripts/fuzz/harness.test.ts',
+            'scripts/replays/android-manual.test.ts',
             // The validation fuzz generators' expectation gates (#1781 B2): in-process, no
             // subprocess or worker, so they ride the fast lane unlike their serialized siblings.
             'scripts/fuzz/validation-arbitraries.test.ts',

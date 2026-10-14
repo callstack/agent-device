@@ -5,7 +5,7 @@ import { afterEach, test, vi } from 'vitest';
 import { createInstanceClient as createAndroidInstanceClient } from '@limrun/api/instance-client';
 import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios-client';
 import { LimrunRuntime } from '../sdk/limrun.ts';
-import { createExpiredProviderLeaseReleaser } from '../daemon/provider-lease-expiry.ts';
+import { createExpiredProviderLeaseReleaser } from '@agent-device/daemon/testing/provider-lease-expiry';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';

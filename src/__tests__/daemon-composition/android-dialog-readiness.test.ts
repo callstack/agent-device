@@ -32,13 +32,13 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-import { makeAndroidSession } from '../../daemon/__tests__/support/session-factories.ts';
+import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { withFakeAdb, type FakeAdbScript } from '../test-utils/fake-adb.ts';
 import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { ensureAndroidBlockingSystemDialogReady as ensureOwnedAndroidBlockingSystemDialogReady } from '../../daemon/android-system-dialog.ts';
+import { ensureAndroidBlockingSystemDialogReady as ensureOwnedAndroidBlockingSystemDialogReady } from '@agent-device/daemon/testing/android-system-dialog';
 import { androidObservation } from '../../platform-runtime.ts';
 
 const ensureAndroidBlockingSystemDialogReady = (

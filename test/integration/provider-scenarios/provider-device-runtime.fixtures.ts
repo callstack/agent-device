@@ -45,7 +45,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime-operations';
 import { bindAdmittedProviderInteractorOperations } from '@agent-device/contracts/interactor-operation-catalog';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
-import type { DaemonRequest } from '../../../src/daemon/daemon-request.ts';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { deviceShape, hasAppleActionButton, type DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { createProviderScenarioHarness } from './harness.ts';

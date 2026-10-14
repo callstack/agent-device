@@ -176,7 +176,7 @@ export const BOUNDARY_FAULT_MATRIX = {
     'artifact-producing': {
       kind: 'covered',
       evidence: [
-        'src/daemon/__tests__/filesystem-boundary-faults.test.ts',
+        'packages/daemon/src/resources/__tests__/filesystem-boundary-faults.test.ts',
         'packages/platform-apple/src/runner/__tests__/runner-lease-filesystem-boundary-faults.test.ts',
       ],
       invariants: ['atomic-publication', 'publication-residue-free'],
@@ -184,7 +184,7 @@ export const BOUNDARY_FAULT_MATRIX = {
     'session-lifecycle': {
       kind: 'covered',
       evidence: [
-        'src/daemon/__tests__/filesystem-boundary-faults.test.ts',
+        'packages/daemon/src/resources/__tests__/filesystem-boundary-faults.test.ts',
         'packages/platform-apple/src/runner/__tests__/runner-lease-filesystem-boundary-faults.test.ts',
       ],
       invariants: ['atomic-publication', 'publication-residue-free', 'claim-or-lease-state'],
@@ -193,7 +193,9 @@ export const BOUNDARY_FAULT_MATRIX = {
   'optional-optimization-failure': {
     mutation: {
       kind: 'covered',
-      evidence: ['src/daemon/interaction/internal/__tests__/interaction-touch-direct-ios.test.ts'],
+      evidence: [
+        'src/__tests__/daemon-composition/interaction/interaction-touch-direct-ios.test.ts',
+      ],
       invariants: ['best-effort-degradation'],
     },
     read: {

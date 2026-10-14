@@ -5,15 +5,15 @@
  * lifecycle binding, where the platform host performs the activation. Physical-device
  * defaults stay off: the activation seam fires only for an explicit opt-in.
  */
-import { createTestDeviceInventoryGateways } from '../test-utils/device-inventory-gateways.ts';
+import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 
 import path from 'node:path';
-import { getResolveTargetDeviceMock } from '../../daemon/__tests__/request-router-dispatch-mocks.ts';
-import { testCreateCommandSurface } from '../../daemon/__tests__/command-surface-fixture.ts';
+import { getResolveTargetDeviceMock } from '@agent-device/daemon/testing/__tests__/request-router-dispatch-mocks';
+import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
-vi.mock('../../daemon/device/device-ready.ts', () => ({
+vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
@@ -37,13 +37,11 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
 });
 
 import { ANDROID_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { makeSessionStore } from '../../daemon/__tests__/support/store-factory.ts';
-import { replayScriptSourceBundleFor } from '../test-utils/replay-script-source.ts';
-import { LeaseRegistry } from '../../daemon/lease-registry.ts';
-import {
-  createRequestHandler,
-  lifecycleDeviceRuntimeGateway,
-} from '../../daemon/__tests__/test-device-runtime-gateway.ts';
+import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
+import { realLifecycleDeviceRuntimeGateway } from './lifecycle-runtime-gateway.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mockActivateAndroidTestIme = vi.mocked(activateAndroidTestIme);
@@ -70,7 +68,7 @@ async function runAndroidFlowReplay(session: string, flags: Record<string, unkno
     token: 'test-token',
     sessionStore: makeSessionStore('agent-device-replay-test-ime-'),
     leaseRegistry: new LeaseRegistry(),
-    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    deviceRuntimeGateway: realLifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
   });
