@@ -3,8 +3,10 @@ import {
   type InventoryPlatformModule,
   createPlatformModuleRegistry,
 } from '@agent-device/contracts/platform-module';
-import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import { testInventoryHost } from '@agent-device/device-selection/inventory-gateways-fixtures';
+import {
+  testInventoryHost,
+  testRequestScope,
+} from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dispatch-resolve';
 import { withDeviceInventoryContext } from '@agent-device/device-selection/device-inventory-context';
 import { PLATFORMS, type DeviceInfo } from '@agent-device/kernel/device';
@@ -15,12 +17,6 @@ const simctl = vi.hoisted(() => ({
   listapps: [] as Array<{ deviceId: string; apps: Record<string, unknown> }>,
   calls: [] as string[],
 }));
-
-const scope: PlatformRequestScope = Object.freeze({
-  signal: new AbortController().signal,
-  diagnostics: Object.freeze({ emit: () => {} }),
-  progress: Object.freeze({ report: () => {} }),
-});
 
 function simulator(id: string): DeviceInfo {
   return {
@@ -79,7 +75,7 @@ describe('production device inventory composition', () => {
         devicectl: { run: async () => ({ stdout: '', stderr: '', exitCode: 1 }) },
       }),
       () =>
-        withDeviceInventoryContext({ ...gateways, requestScope: scope }, () =>
+        withDeviceInventoryContext({ ...gateways, requestScope: testRequestScope }, () =>
           resolveTargetDeviceSelection(
             { platform: 'ios' },
             {
