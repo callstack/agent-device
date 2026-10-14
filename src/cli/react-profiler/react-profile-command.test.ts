@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,6 +8,7 @@ import {
   runReactProfileCommand,
   type ReactProfileCommandOptions,
 } from './react-profile-command.ts';
+import { InspectorSession } from './metro-inspector.ts';
 import { FakeAppRuntime, MEMO_TYPE, encodeOperations } from './react-profiler-runtime.fixtures.ts';
 
 const TARGET = {
@@ -18,23 +19,32 @@ const TARGET = {
   reactNative: { logicalDeviceId: 'device' },
 };
 
-function harness(app = new FakeAppRuntime()) {
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+/** Serves TARGET from `/json/list` and evaluates debugger calls in `app`'s realm. */
+function harness(app = new FakeAppRuntime(), targets: unknown[] = [TARGET]) {
   const stateDir = mkdtempForTestSync('react-profile-');
   const output: string[] = [];
   const requested: string[] = [];
-  const options: ReactProfileCommandOptions = {
-    stateDir,
-    session: 'qa',
-    write: (text) => output.push(text),
-    fetchImpl: (async (url: URL) => {
-      requested.push(String(url));
-      return new Response(JSON.stringify([TARGET]), { status: 200 });
-    }) as typeof fetch,
-    connect: async () => ({
-      evaluate: async (expression: string) => vm.runInContext(expression, app.context),
-      close: () => {},
-    }),
-  };
+  const options: ReactProfileCommandOptions = { stateDir, session: 'qa' };
+  vi.stubGlobal('fetch', async (url: URL) => {
+    requested.push(String(url));
+    return new Response(JSON.stringify(targets), { status: 200 });
+  });
+  vi.spyOn(InspectorSession, 'connect').mockImplementation(
+    async () =>
+      ({
+        evaluate: async (expression: string) => vm.runInContext(expression, app.context),
+        close: () => {},
+      }) as unknown as InspectorSession,
+  );
+  vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
+    output.push(String(chunk));
+    return true;
+  });
   const run = async (...args: string[]) => {
     output.length = 0;
     const code = await runReactProfileCommand(args, options);
@@ -83,23 +93,9 @@ test('profile start, an interaction, and profile stop print a compact diagnosis 
   assert.equal(stopped.code, 0);
   assert.equal(
     stopped.text.split('\n')[1],
-    '1. memo-defeated Row: memo bypassed on 36/36 updates; new onPress (function) every render from List -> wrap those props in useCallback/useMemo in List',
+    '1. memo-defeated Row: memo bypassed on 36/36 updates; new onPress (function) on those updates from List -> wrap those props in useCallback/useMemo in List',
   );
   assert.ok(fs.existsSync(path.join(stateDir, 'react-profiles', 'qa.json')));
-
-  const report = await run('report', 'Row');
-  assert.match(
-    report.text,
-    /^Row \[memo\] self 108ms avg 3\.0ms max 3\.0ms renders 36 12 inst\ncauses: props 36\nchanged props: onPress 36 \(function\)/,
-  );
-  assert.match(
-    (await run('timeline', '--sort', 'duration', '--limit', '1')).text,
-    /^Slowest commits \(1 of 3\):\n {2}#0 \+0\.0s 40ms 13 rendered <- List/,
-  );
-  assert.match(
-    (await run('commit', '#1')).text,
-    /^#1 \+0\.2s 40ms 13 rendered <- List\n {2}Row x12 self 36ms props/,
-  );
 });
 
 test('profile stop --json returns the findings and where the profile was saved', async () => {
@@ -120,14 +116,47 @@ test('profile stop --json returns the findings and where the profile was saved',
   assert.equal(parsed.data.savedTo, path.join(stateDir, 'react-profiles', 'qa.json'));
 });
 
-test('profile start twice keeps the running recording', async () => {
-  const { run } = harness();
+test('profile start twice keeps the running recording and what it captured', async () => {
+  const { app, run } = harness();
   await run('start');
+  recordRowRenders(app);
   assert.match(
     (await run('start')).text,
     /^Already profiling com\.example\.app for \d+\.\ds; run react-devtools profile stop/,
   );
   assert.match((await run('status')).text, /^Profiling com\.example\.app for \d+\.\ds\.$/m);
+  assert.match((await run('stop')).text, /^React profile \d+\.\ds: 3 commits/);
+});
+
+test('one app on two devices fails closed until --metro-device picks one', async () => {
+  const second = {
+    ...TARGET,
+    id: 'tablet-1',
+    deviceName: 'Tablet',
+    reactNative: { logicalDeviceId: 'tablet' },
+  };
+  const { run } = harness(new FakeAppRuntime(), [{ ...TARGET, deviceName: 'Pixel' }, second]);
+  await assert.rejects(run('start'), (error: { code: string }) => error.code === 'INVALID_ARGS');
+  assert.match((await run('start', '--metro-device', 'Tablet')).text, /^Profiling React renders/);
+});
+
+test('a failed prop inspection becomes a note instead of failing the stop', async () => {
+  const { app, run } = harness();
+  await run('start');
+  recordRowRenders(app);
+  vi.spyOn(InspectorSession, 'connect').mockImplementation(
+    async () =>
+      ({
+        evaluate: async (expression: string) => {
+          if (expression.includes('.describeProps(')) throw new Error('inspector gone');
+          return vm.runInContext(expression, app.context);
+        },
+        close: () => {},
+      }) as unknown as InspectorSession,
+  );
+  const { text } = await run('stop');
+  assert.match(text, /onPress changed from List \(value kinds not inspected\)/);
+  assert.match(text, /\nNote: Changed prop values could not be inspected: inspector gone\n/);
 });
 
 test('runtime failures carry a typed reason and a hint', async () => {
@@ -145,10 +174,6 @@ test('runtime failures carry a typed reason and a hint', async () => {
     harness().run('stop'),
     (error: { details: { reason: string } }) => error.details.reason === 'not-profiling',
   );
-});
-
-test('drill-down views need a saved profile', async () => {
-  await assert.rejects(harness().run('slow'), /No React profile saved for session qa/);
 });
 
 test('explicit dev-server flags override the session binding', async () => {
@@ -178,16 +203,20 @@ test('a remote bridge profiles through the public dev-server URL without its bun
   assert.deepEqual(requested, ['https://metro.example.test/json/list']);
 });
 
-test('a corrupt saved profile asks for a new recording', async () => {
-  const { run, stateDir } = harness();
-  fs.mkdirSync(path.join(stateDir, 'react-profiles'), { recursive: true });
-  fs.writeFileSync(path.join(stateDir, 'react-profiles', 'qa.json'), '{"analysis":');
-  await assert.rejects(run('slow'), /unsupported format/);
-});
-
-test('unknown profile commands and bad options are invalid arguments', async () => {
+test('unknown profile commands and malformed options are invalid arguments', async () => {
   const { run } = harness();
-  await assert.rejects(run('export', 'out.json'), /Unknown react-devtools profile command: export/);
-  await assert.rejects(run('slow', '--limit', '0'), /Invalid --limit: 0/);
-  await assert.rejects(run('timeline', '--sort', 'name'), /Invalid --sort: name/);
+  const cases: Array<[string[], RegExp]> = [
+    [['export', 'out.json'], /Unknown react-devtools profile command: export/],
+    [['stop', '--limit', '0'], /Invalid --limit: 0/],
+    [['stop', '--limit', '10garbage'], /Invalid --limit: 10garbage/],
+    [['stop', '--limit', '1.5'], /Invalid --limit: 1\.5/],
+    [['stop', 'extra'], /Unexpected argument for react-devtools profile stop: extra/],
+  ];
+  for (const [args, message] of cases) {
+    await assert.rejects(run(...args), (error: { code: string; message: string }) => {
+      assert.equal(error.code, 'INVALID_ARGS', args.join(' '));
+      assert.match(error.message, message);
+      return true;
+    });
+  }
 });

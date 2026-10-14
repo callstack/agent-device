@@ -1,4 +1,4 @@
-import { test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage } from 'node:http';
@@ -40,12 +40,26 @@ test('auxiliary pages without React Native metadata are never profiled', () => {
   );
 });
 
-test('the most recently listed device wins when one app runs on several devices', () => {
-  const selected = selectReactNativeTarget([
-    target('ipad-1', { appId: 'com.app' }),
-    target('pixel-1', { appId: 'com.app' }),
-  ]);
-  assert.equal(selected.id, 'pixel-1');
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+test('one app on several devices fails closed until --metro-device names one', () => {
+  const targets = [
+    target('ipad-1', { appId: 'com.app', deviceName: 'iPad Air' }),
+    target('pixel-1', { appId: 'com.app', deviceName: 'Pixel 9' }),
+    target('pixel-2', { appId: 'com.app', deviceName: 'Pixel 9' }),
+  ];
+  assert.throws(
+    () => selectReactNativeTarget(targets),
+    (error: { code: string; details: { hint: string } }) => {
+      assert.equal(error.code, 'INVALID_ARGS');
+      assert.equal(error.details.hint, 'Pass --metro-device with one of: iPad Air, Pixel 9.');
+      return true;
+    },
+  );
+  assert.equal(selectReactNativeTarget(targets, { device: 'Pixel 9' }).id, 'pixel-1');
+  assert.equal(selectReactNativeTarget(targets, { device: 'ipad' }).id, 'ipad-1');
 });
 
 test('distinct apps need --app; older dev servers report the app id as the description', () => {
@@ -55,32 +69,33 @@ test('distinct apps need --app; older dev servers report the app id as the descr
   ];
   assert.throws(
     () => selectReactNativeTarget(targets),
-    (error: { details: { hint: string } }) => {
+    (error: { code: string; details: { hint: string } }) => {
+      assert.equal(error.code, 'INVALID_ARGS');
       assert.equal(error.details.hint, 'Pass --app with one of: com.one, com.two.');
       return true;
     },
   );
-  assert.equal(selectReactNativeTarget(targets, 'com.two').id, 'b-1');
+  assert.equal(selectReactNativeTarget(targets, { appId: 'com.two' }).id, 'b-1');
   assert.throws(
-    () => selectReactNativeTarget(targets, 'com.three'),
-    /No React Native runtime for com\.three/,
+    () => selectReactNativeTarget(targets, { appId: 'com.three' }),
+    /No matching React Native runtime/,
   );
 });
 
 test('an unreachable dev server names the address it tried', async () => {
-  const failingFetch = (async () => {
+  vi.stubGlobal('fetch', async () => {
     throw new TypeError('fetch failed');
-  }) as typeof fetch;
+  });
   await assert.rejects(
-    listMetroInspectorTargets(new URL('http://localhost:8081'), failingFetch),
+    listMetroInspectorTargets(new URL('http://localhost:8081')),
     /Could not reach the React Native dev server at http:\/\/localhost:8081/,
   );
 });
 
 test('a server that is not a dev server is named instead of yielding no targets', async () => {
-  const htmlFetch = (async () => new Response('<html></html>', { status: 200 })) as typeof fetch;
+  vi.stubGlobal('fetch', async () => new Response('<html></html>', { status: 200 }));
   await assert.rejects(
-    listMetroInspectorTargets(new URL('http://localhost:8081'), htmlFetch),
+    listMetroInspectorTargets(new URL('http://localhost:8081')),
     /is not a React Native dev server/,
   );
 });

@@ -25,7 +25,7 @@ agent-device fill 'id="catalog-search"' "tart" --delay-ms 80
 agent-device react-devtools profile stop
 ```
 
-`profile stop` prints a short diagnosis: how many commits React made, how long they took, how many went over the 16 ms frame budget, and the problems it found, worst first. Each finding names a component, shows the evidence, and suggests a fix:
+`profile stop` prints a short diagnosis: how many commits React made, how long they took, how many went over the 16 ms frame budget (when any did), and the problems it found, worst first. Each finding names a component, shows the evidence, and suggests a fix:
 
 ```text
 React profile 8.3s: 8 commits, 1303ms rendering, 8 over 16ms (worst #6 188ms)
@@ -35,25 +35,15 @@ React profile 8.3s: 8 commits, 1303ms rendering, 8 over 16ms (worst #6 188ms)
 | Finding | Meaning |
 | --- | --- |
 | `slow-render` | The component's own render is expensive. |
-| `memo-defeated` | A memoized component receives new props on every render. |
-| `parent-cascade` | The component re-renders with unchanged props whenever its owner renders. |
-| `context-cascade` | Context consumers re-render on unrelated context changes. |
-| `effect-chain` | An effect sets state right after a render, so every change commits twice. |
+| `memo-defeated` | A memoized component often re-renders because props change identity. |
+| `parent-cascade` | The component often re-renders with unchanged props, state, and context when its owner renders. |
+| `context-cascade` | Most of the component's renders come from context changes. |
+| `effect-chain` | The component triggers a follow-up commit right after rendering, likely state set in an effect. |
 | `render-storm` | One component commits many times per second. |
 | `eager-mount` | Hundreds of instances of one component mount in a single commit. |
-| `slow-commit` | A commit took over three frames and no other finding explains it. |
+| `slow-commit` | A commit took three frames or more, and other findings leave most of it unexplained. |
 
-To dig into a finding, use the saved profile:
-
-```bash
-agent-device react-devtools profile report ContactRow
-agent-device react-devtools profile commit 6
-agent-device react-devtools profile slow --limit 5
-agent-device react-devtools profile rerenders --limit 5
-agent-device react-devtools profile timeline --limit 20 --sort duration
-```
-
-Profiling works with development builds of React Native 0.74 and later, including Expo. It connects to the app through the Metro dev server, so the app, Metro config, and Babel config need no changes. If several apps use the same dev server, pass `--app <bundle-id>`. If the dev server is not the session's Metro server or `localhost:8081`, pass `--metro-port` and `--metro-host`.
+Profiling works with development builds of React Native 0.74 and later, including Expo, and is verified on Android emulators and iOS simulators. It connects to the app through the Metro dev server, so the app, Metro config, and Babel config need no changes. If several apps use the same dev server, pass `--app <bundle-id>`. If one app runs on several devices connected to the same dev server, pass `--metro-device <name>` with a device name the error lists. If the dev server is not the session's Metro server or `localhost:8081`, pass `--metro-port` and `--metro-host`.
 
 Development builds render slower than release builds. Compare profiles of the same interaction before and after a change rather than reading the numbers as absolute.
 

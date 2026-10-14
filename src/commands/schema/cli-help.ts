@@ -286,24 +286,19 @@ Use this for React Native render performance and internals that the accessibilit
 Render profiling (built in):
   agent-device react-devtools profile start
   agent-device react-devtools profile stop
-  agent-device react-devtools profile report <Component>
-  agent-device react-devtools profile commit <N>
-  agent-device react-devtools profile slow --limit 5
-  agent-device react-devtools profile rerenders --limit 5
-  agent-device react-devtools profile timeline --limit 20 --sort duration
+  agent-device react-devtools profile stop --limit 10
   agent-device react-devtools profile status
-  Profiling attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes and no status, start, or wait --connected step.
-  Add --app <bundle-id> when several apps share the dev server, and --metro-port/--metro-host when the dev server is neither the session's nor localhost:8081.
+  Profiling attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes and no status, start, or wait --connected step. It is verified on Android emulators and iOS simulators; remote bridge sessions, which reach the dev server through the remote config's public Metro URL, are not verified yet.
+  Add --app <bundle-id> when several apps share the dev server, --metro-device <name> when one app runs on several devices connected to it, and --metro-port/--metro-host when the dev server is neither the session's nor localhost:8081.
 
 Profiling loop:
   1. Run profile start immediately before the interaction; keep the window narrow.
   2. Drive the interaction with normal agent-device commands. When correlating with logs, run logs clear --restart before the first logs mark.
   3. Run profile stop. It prints the commit count, render time, frames over budget, and ranked findings, each naming a component, its evidence, and a fix.
-  4. Drill into one finding with profile report <Component> or profile commit <N> before reaching for the slow and rerenders tables.
-  5. After a fix, repeat the same start, interaction, and stop, and compare the findings.
+  4. After a fix, repeat the same start, interaction, and stop, and compare the findings.
 
 Findings:
-  slow-render: the component's own render is expensive. memo-defeated: a memoized component receives new props on every render. parent-cascade: renders with unchanged props whenever the owner renders. context-cascade: consumers re-render on unrelated context changes. effect-chain: an effect sets state right after a render, committing twice. render-storm: one component commits many times per second. eager-mount: hundreds of instances mount in one commit. slow-commit: a commit over three frames that no other finding explains.
+  slow-render: the component's own render is expensive. memo-defeated: a memoized component often re-renders because props change identity. parent-cascade: the component often re-renders with unchanged props, state, and context when its owner renders. context-cascade: most of the component's renders come from context changes. effect-chain: the component triggers a follow-up commit right after rendering, likely state set in an effect. render-storm: one component commits many times per second. eager-mount: hundreds of instances mount in one commit. slow-commit: a commit of three frames or more that other findings leave mostly unexplained.
   Timings come from development builds and run slower than release builds; compare runs instead of reading absolute numbers.
 
 Component inspection (pinned agent-react-devtools):
@@ -329,7 +324,6 @@ Component inspection rules:
 Rules:
   Every React DevTools command is an agent-device subcommand: agent-device react-devtools ...
   Do not write agent-devtools, agent-react-devtools, or bare react-devtools commands in final command plans. Every profiling and survey line must begin with agent-device react-devtools.
-  Do not repeatedly raise table limits such as --limit 50 or --limit 200; drill into one component with profile report instead.
   For network evidence, use agent-device network dump --include headers; headers is not a positional argument.
 
 Example:
@@ -339,7 +333,6 @@ Example:
   agent-device fill 'id="catalog-search"' "tart" --delay-ms 80
   agent-device logs mark "after catalog search"
   agent-device react-devtools profile stop
-  agent-device react-devtools profile report CatalogScreen
   agent-device network dump --include headers
 
 Device busy and ownership:
@@ -473,11 +466,9 @@ Slow-flow investigation:
   Start React Native slow-flow plans with this ordered scaffold:
     agent-device open "Agent Device Tester" --platform android
     agent-device snapshot -i
-    agent-device react-devtools status
-    agent-device react-devtools wait --connected
   If the task says to open the app, include the open command even when it also describes the current screen.
-  Use help react-devtools for the narrow React profile window. Profiling plans need both status and wait --connected before profile start.
-  Check status before wait/profile. Do not substitute react-devtools start for status; start launches the helper, while status reports connection state.
+  Use help react-devtools for the narrow React profile window. profile start and profile stop need no react-devtools status or wait --connected step.
+  Component inspection (get tree, find, get component) needs react-devtools status, then wait --connected. Do not substitute react-devtools start for status; start launches the helper, while status reports connection state.
   Use help debugging for logs clear --restart, logs mark, network dump --include headers, perf frames, perf memory, native profiles, traces, and runtime failure evidence.
   For 15-20s async work, use wait with the exact expected text or selector instead of repeated snapshots.
   Report React render offenders separately from network/backend waits and device frame/CPU/memory findings.`,

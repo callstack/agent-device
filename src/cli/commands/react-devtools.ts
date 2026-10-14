@@ -1,4 +1,5 @@
 import { runCmdStreaming } from '@agent-device/host-kit/command';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   ensureReactDevtoolsCompanion,
   stopReactDevtoolsCompanion,
@@ -199,7 +200,9 @@ export async function runReactDevtoolsCommand(
     const { runReactProfileCommand } = await import('../react-profiler/react-profile-command.ts');
     return await runReactProfileCommand(args.slice(1), {
       flags: options.flags,
-      stateDir: options.stateDir ?? process.cwd(),
+      stateDir:
+        options.stateDir ??
+        resolveDaemonPaths((options.env ?? process.env).AGENT_DEVICE_STATE_DIR).baseDir,
       session: options.session ?? options.flags?.session ?? 'default',
     });
   }

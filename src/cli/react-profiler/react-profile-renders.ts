@@ -121,8 +121,8 @@ export type ComponentProfile = {
   owners: Record<string, number>;
   /** Value kind of changed props on a mounted instance at stop: function, object, array, ... */
   propKinds: Record<string, string>;
-  /** Commits where this component rendered, slowest first, capped. */
-  slowestCommits: number[];
+  /** Commits where this component spent the most self time, costliest first, capped. */
+  costliestCommits: Array<{ index: number; selfMs: number }>;
 };
 
 export type CommitComponent = {
@@ -152,11 +152,13 @@ export type PropKindsById = Record<string, Record<string, string>>;
 
 const COMMIT_TOP_LIMIT = 15;
 const COMPONENT_COMMIT_LIMIT = 5;
+const RECENT_INSTANCE_LIMIT = 3;
 const PROP_KIND_CANDIDATES = 8;
 
 type ComponentAccumulator = ComponentProfile & {
   ids: Set<number>;
-  lastId: number;
+  /** Most recently rendered instances, newest last, so at least one is likely still mounted. */
+  recentIds: number[];
   commitCosts: Map<number, number>;
 };
 
@@ -249,9 +251,9 @@ function createAccumulator(render: ParsedRender): ComponentAccumulator {
     changedHooks: {},
     owners: {},
     propKinds: {},
-    slowestCommits: [],
+    costliestCommits: [],
     ids: new Set(),
-    lastId: render.id,
+    recentIds: [],
     commitCosts: new Map(),
   };
 }
@@ -264,7 +266,9 @@ function recordRender(
   commitIndex: number,
 ): void {
   entry.ids.add(render.id);
-  entry.lastId = render.id;
+  entry.recentIds = [...entry.recentIds.filter((id) => id !== render.id), render.id].slice(
+    -RECENT_INSTANCE_LIMIT,
+  );
   entry.renders += 1;
   entry.selfMs += render.selfMs;
   entry.maxSelfMs = Math.max(entry.maxSelfMs, render.selfMs);
@@ -294,18 +298,18 @@ function accumulateComponents(profile: RawReactProfile): Map<string, ComponentAc
   });
   for (const entry of components.values()) {
     entry.instances = entry.ids.size;
-    entry.slowestCommits = [...entry.commitCosts.entries()]
+    entry.costliestCommits = [...entry.commitCosts.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, COMPONENT_COMMIT_LIMIT)
-      .map(([index]) => index);
+      .map(([index, selfMs]) => ({ index, selfMs }));
   }
   return components;
 }
 
 /**
  * Picks the components whose changed props are worth classifying by value kind: those that
- * re-rendered mostly because props changed. The host asks the app to inspect one mounted
- * instance of each before analysis.
+ * re-rendered mostly because props changed. The host asks the app to inspect their most recent
+ * instances, any of which may still be mounted, before analysis.
  */
 export function selectPropKindRequests(profile: RawReactProfile): PropKindRequest {
   const candidates = [...accumulateComponents(chronological(profile)).values()]
@@ -313,7 +317,9 @@ export function selectPropKindRequests(profile: RawReactProfile): PropKindReques
     .sort((a, b) => b.selfMs - a.selfMs)
     .slice(0, PROP_KIND_CANDIDATES);
   const request: PropKindRequest = {};
-  for (const entry of candidates) request[String(entry.lastId)] = Object.keys(entry.changedProps);
+  for (const entry of candidates) {
+    for (const id of entry.recentIds) request[String(id)] = Object.keys(entry.changedProps);
+  }
   return request;
 }
 
@@ -369,7 +375,7 @@ export function summarizeRenders(
     for (const id of entry.ids) Object.assign(entry.propKinds, propKindsById[String(id)] ?? {});
   }
   const components: ComponentProfile[] = [...accumulators.values()]
-    .map(({ ids: _ids, lastId: _lastId, commitCosts: _commitCosts, ...entry }) => entry)
+    .map(({ ids: _ids, recentIds: _recentIds, commitCosts: _commitCosts, ...entry }) => entry)
     .sort((a, b) => b.selfMs - a.selfMs);
   return { components, commits: summarizeCommits(profile) };
 }

@@ -41,6 +41,8 @@ export type ReactProfileAnalysis = {
   slowCommitCount: number;
   worstCommit: { index: number; durationMs: number } | null;
   naming: RawReactProfile['naming'];
+  /** Gaps in the evidence behind the findings, such as uninspected prop values. */
+  notes: string[];
   components: ComponentProfile[];
   commits: CommitProfile[];
   findings: Finding[];
@@ -107,16 +109,25 @@ function memoDefeatedFinding(entry: ComponentProfile): Finding | null {
   const candidates = frequent.length > 0 ? frequent : topKeys(entry.changedProps, 1).slice(0, 3);
   const unstable = candidates.filter((key) => !VALUE_KINDS.has(entry.propKinds[key] ?? ''));
   if (unstable.length === 0) return null;
-  const keys = unstable.map((key) =>
-    entry.propKinds[key] ? `${key} (${entry.propKinds[key]})` : key,
-  );
   const owner = topOwner(entry);
+  const from = owner ? ` from ${owner}` : '';
+  const inOwner = owner ? ` in ${owner}` : '';
+  const identities = unstable.filter((key) => entry.propKinds[key] !== undefined);
+  if (identities.length === 0) {
+    return {
+      kind: 'memo-defeated',
+      component: entry.name,
+      costMs: costShare(entry, entry.causes.props),
+      evidence: `memo bypassed on ${entry.causes.props}/${updates} updates; ${unstable.join(', ')} changed${from} (value kinds not inspected)`,
+      fix: `check whether those props are recreated on each render${inOwner}; stabilize them with useCallback/useMemo`,
+    };
+  }
   return {
     kind: 'memo-defeated',
     component: entry.name,
     costMs: costShare(entry, entry.causes.props),
-    evidence: `memo bypassed on ${entry.causes.props}/${updates} updates; new ${keys.join(', ')} every render${owner ? ` from ${owner}` : ''}`,
-    fix: `wrap those props in useCallback/useMemo${owner ? ` in ${owner}` : ''}`,
+    evidence: `memo bypassed on ${entry.causes.props}/${updates} updates; new ${identities.map((key) => `${key} (${entry.propKinds[key]})`).join(', ')} on those updates${from}`,
+    fix: `wrap those props in useCallback/useMemo${inOwner}`,
   };
 }
 
@@ -128,7 +139,7 @@ function contextCascadeFinding(entry: ComponentProfile, triggers: string[]): Fin
     component: entry.name,
     costMs: costShare(entry, entry.causes.context),
     evidence: `${entry.causes.context} context-driven renders${instancesNote(entry)}${triggers.length ? ` after updates in ${triggers.join(', ')}` : ''}`,
-    fix: 'memoize the provider value or split the context',
+    fix: 'split the context so consumers subscribe only to what they read, or memoize the provider value',
   };
 }
 
@@ -140,7 +151,7 @@ function parentCascadeFinding(entry: ComponentProfile): Finding | null {
     kind: 'parent-cascade',
     component: entry.name,
     costMs: costShare(entry, entry.causes.parent),
-    evidence: `${entry.causes.parent}/${updates} re-renders with unchanged props, state, and context${owner ? ` whenever ${owner} rendered` : ''}${instancesNote(entry)}`,
+    evidence: `${entry.causes.parent}/${updates} re-renders with unchanged props, state, and context${owner ? ` when ${owner} rendered` : ''}${instancesNote(entry)}`,
     fix: `wrap ${entry.name} in React.memo or move state below ${owner ?? 'its parent'}`,
   };
 }
@@ -159,23 +170,25 @@ function eagerMountFindings(profile: RawReactProfile, commits: CommitProfile[]):
       if (!isFrameworkPrimitive(render.name))
         mounts.set(render.name, (mounts.get(render.name) ?? 0) + 1);
     }
-    const [name, count] = [...mounts.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
-    if (!name || !count || count < EAGER_MOUNT_INSTANCES || findings.has(name)) return;
     const durationMs = commits[index]!.durationMs;
-    findings.set(name, {
-      kind: 'eager-mount',
-      component: name,
-      costMs: durationMs,
-      evidence: `${count} instances mounted at once in commit #${index} (${total} components, ${ms(durationMs)})`,
-      fix: 'virtualize the list (FlatList/FlashList)',
-    });
+    for (const [name, count] of mounts) {
+      if (count < EAGER_MOUNT_INSTANCES || findings.has(name)) continue;
+      findings.set(name, {
+        kind: 'eager-mount',
+        component: name,
+        costMs: durationMs,
+        evidence: `${count} instances mounted at once in commit #${index} (${total} components, ${ms(durationMs)})`,
+        fix: 'virtualize the list (FlatList/FlashList)',
+      });
+    }
   });
   return [...findings.values()];
 }
 
 /**
  * A follow-up commit that starts within a frame of the previous one, triggered by a component that
- * rendered in it but did not trigger it, came from that component's own effect.
+ * rendered in it but did not trigger it, most likely came from that component's own effect. The
+ * profile records no effect provenance, so the finding is worded as a likely cause.
  */
 const CHAINED_COMMIT_GAP_MS = FRAME_BUDGET_MS;
 
@@ -188,10 +201,13 @@ function effectChainFindings(profile: RawReactProfile): Finding[] {
     if (gap > CHAINED_COMMIT_GAP_MS) continue;
     const renderedBefore = new Set(previous.fibers.filter((_, offset) => offset % 3 === 0));
     const triggeredBefore = new Set(previous.updaters);
-    for (const updater of new Set(commit.updaters)) {
+    const chainedNames = new Set<string>();
+    for (const updater of commit.updaters) {
       if (!renderedBefore.has(updater) || triggeredBefore.has(updater)) continue;
       const name = componentName(profile, updater);
-      if (isFrameworkPrimitive(name)) continue;
+      if (!isFrameworkPrimitive(name)) chainedNames.add(name);
+    }
+    for (const name of chainedNames) {
       const chain = chains.get(name) ?? { count: 0, costMs: 0 };
       chain.count += 1;
       chain.costMs += commit.duration;
@@ -204,8 +220,8 @@ function effectChainFindings(profile: RawReactProfile): Finding[] {
       kind: 'effect-chain' as const,
       component: name,
       costMs: chain.costMs,
-      evidence: `${plural(chain.count, 'extra commit')} right after it rendered (${ms(chain.costMs)})`,
-      fix: 'compute the value during render (useMemo) instead of effect + setState',
+      evidence: `${plural(chain.count, 'follow-up commit')} it triggered right after rendering, likely state set in an effect (${ms(chain.costMs)})`,
+      fix: 'if an effect copies derived state, compute it during render (useMemo) instead',
     }));
 }
 
@@ -328,6 +344,7 @@ function contextTriggers(profile: RawReactProfile, name: string): string[] {
 export function analyzeReactProfile(
   recorded: RawReactProfile,
   propKindsById: PropKindsById = {},
+  notes: string[] = [],
 ): ReactProfileAnalysis {
   const profile = chronological(recorded);
   const { components, commits } = summarizeRenders(profile, propKindsById);
@@ -372,6 +389,7 @@ export function analyzeReactProfile(
     slowCommitCount: slowCommits.length,
     worstCommit: worst ? { index: worst.index, durationMs: worst.durationMs } : null,
     naming: profile.naming,
+    notes,
     components,
     commits,
     findings: significant,
