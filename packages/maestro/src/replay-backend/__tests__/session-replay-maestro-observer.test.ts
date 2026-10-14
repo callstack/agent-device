@@ -41,7 +41,8 @@ test('forwards command labels to progress and replay trace projection', () => {
     command: 'tapOn',
     value: 'save action',
   });
-  expect(appendTraceEvent).toHaveBeenCalledWith(
+  expect(appendTraceEvent).toHaveBeenNthCalledWith(
+    1,
     tracePath,
     expect.objectContaining({
       type: 'replay_action_start',

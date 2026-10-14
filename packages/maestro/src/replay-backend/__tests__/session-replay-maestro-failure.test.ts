@@ -5,6 +5,7 @@ import type {
   ReplaySessionStore,
 } from '@agent-device/contracts/replay-backend';
 import {
+  collectMaestroFailureSuggestions,
   executeMaestroFlow,
   inspectMaestroFlow,
   type MaestroFailedAction,
@@ -96,8 +97,15 @@ test('the failure response hands the host the step, its warnings, and its sugges
     },
   );
 
+  const [handed] = buildActionFailureResponse.mock.calls[0] ?? [];
+  const node = { index: 0, type: 'Button', label: 'save', identifier: 'save', hittable: true };
+  expect(handed?.suggestNodes({ createdAt: 0, nodes: [node] })).toEqual(
+    collectMaestroFailureSuggestions(failure, { createdAt: 0, nodes: [node] }),
+  );
+  expect(handed?.suggestNodes({ createdAt: 0, nodes: [node] })).not.toEqual([]);
   expect(buildActionFailureResponse).toHaveBeenCalledWith(
     expect.objectContaining({
+      source: failure.source,
       stepIndex: failure.stepIndex,
       action: 'tapOn',
       actionLabel: 'tapOn "save"',

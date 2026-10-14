@@ -237,7 +237,12 @@ export type ReplayBackendHost = Readonly<{
   /** Reads one file out of the request's script source bundle; throws when it was not sent. */
   readScriptSourceFile(bundle: ReplayScriptSourceBundle, resolvedPath: string): string;
   scriptSourceRequiredMessage: string;
-  /** Selects the device a run binds when no session or explicit platform already names one. */
+  /**
+   * Selects the device a run binds when no session or explicit platform already names one. It
+   * applies the Maestro device-binding rule (the flow's app target steers selection on iOS only),
+   * the same rule `packages/daemon/src/server/replay-device-selection.ts` applies when it
+   * pre-binds a device for the request.
+   */
   resolveTargetDevice(
     flags: CommandFlags,
     binding: ReplayBackendDeviceBinding,
