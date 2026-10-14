@@ -3,7 +3,7 @@ import {
   resolveIosViewportEvidenceFromRoots,
 } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
-import { acquireProviderKeyboard } from '@agent-device/capture-kit/provider-keyboard-acquisition';
+import { acquireProviderKeyboard } from '@agent-device/contracts/tap-keyboard-occlusion';
 import { parseWebDriverSourceFacts } from './webdriver-source.ts';
 
 const APPIUM_PRODUCER = 'appium-source' as const;

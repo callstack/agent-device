@@ -338,7 +338,7 @@ class WebDriverInteractor implements Interactor {
     }
     const { parseWebDriverAndroidSnapshotNodes } = await import('./webdriver-android-source.ts');
     const { acquireProviderKeyboard } =
-      await import('@agent-device/capture-kit/provider-keyboard-acquisition');
+      await import('@agent-device/contracts/tap-keyboard-occlusion');
     const nodes = parseWebDriverAndroidSnapshotNodes(source);
     const viewportAfter =
       viewportBefore === undefined ? undefined : await this.readAndroidSnapshotViewport(signal);

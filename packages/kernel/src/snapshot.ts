@@ -318,8 +318,8 @@ export type RawSnapshotNode = {
   appName?: string;
   windowTitle?: string;
   surface?: string;
-  /** Keyboard ownership witnessed at acquisition; survives projections that remove its ancestors. */
-  keyboardOwned?: true;
+  /** Evaluated keyboard ownership; omission means unevaluated. Survives ancestor removal. */
+  keyboardOwned?: boolean;
   hiddenContentAbove?: boolean;
   hiddenContentBelow?: boolean;
   interactionBlocked?: 'covered';

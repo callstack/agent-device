@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { createIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import {
-  annotateKeyboardOwnership,
-  observeProviderKeyboard,
+  acquireProviderKeyboard,
   resolveKeyboardTapOcclusion,
 } from '@agent-device/contracts/tap-keyboard-occlusion';
 import { presentIosSnapshotAcquisition } from '../ios-snapshot-runtime.ts';
@@ -119,13 +118,11 @@ test('a scoped keyboard control retains its acquired ownership after reindexing'
       rect: { x: 200, y: 600, width: 100, height: 40 },
     },
   ];
-  const keyboard = observeProviderKeyboard({ nodes, viewport: SCREEN });
   const acquired = createIosSnapshotAcquisition({
     producer: 'appium-source',
-    nodes: annotateKeyboardOwnership(nodes),
+    ...acquireProviderKeyboard({ nodes, viewport: SCREEN }),
     viewport: { kind: 'reported', rect: SCREEN },
     lineage: {},
-    keyboard,
   });
   for (const raw of [false, true]) {
     const result = presentIosSnapshotAcquisition(acquired, { scope: 'Done', raw });
@@ -173,15 +170,14 @@ test('depth filtering and state normalization never promote app content into key
   ];
   const acquired = createIosSnapshotAcquisition({
     producer: 'appium-source',
-    nodes,
+    ...acquireProviderKeyboard({ nodes, viewport: SCREEN }),
     viewport: { kind: 'reported', rect: SCREEN },
     lineage: {},
-    keyboard: observeProviderKeyboard({ nodes, viewport: SCREEN }),
   });
   const result = presentIosSnapshotAcquisition(acquired, { raw: true, depth: 1 });
   const state = buildSnapshotState(result, { snapshotRaw: true });
   const node = state.nodes.find((n) => n.label === 'Form')!;
-  assert.equal(node.keyboardOwned, undefined);
+  assert.equal(node.keyboardOwned, false);
   assert.equal(
     resolveKeyboardTapOcclusion({
       nodes: state.nodes,
@@ -224,10 +220,9 @@ test('depth projection cannot promote a rejected split keyboard into a trusted b
   for (const visibility of [undefined, true] as const) {
     const acquired = createIosSnapshotAcquisition({
       producer: 'appium-source',
-      nodes,
+      ...acquireProviderKeyboard({ nodes, viewport, visibility }),
       viewport: { kind: 'reported', rect: viewport },
       lineage: {},
-      keyboard: observeProviderKeyboard({ nodes, viewport, visibility }),
     });
     const projected = presentIosSnapshotAcquisition(acquired, { raw: true, depth: 1 });
     const state = buildSnapshotState(projected, { snapshotRaw: true });

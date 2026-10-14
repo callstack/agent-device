@@ -306,10 +306,10 @@ derived frames to refuse an app target whose dispatched tap point is behind the 
 Run `snapshot -i` again after ending editing before retrying a refused target.
 
 Android Appium nodes carry the reported native package in `bundleId`.
-Provider snapshot nodes may include `keyboardOwned: true`. This means capture witnessed keyboard
-ownership, so the keyboard's own controls remain tappable when projection removes their ancestors.
-An omitted field does not prove app ownership. App-filled assistant hosts do not pass keyboard
-ownership to their descendants.
+Provider snapshot nodes include `keyboardOwned`: `true` identifies a keyboard-owned node; `false`
+means capture evaluated the node and found no keyboard ownership. Both decisions survive filtering
+and scoping. An omitted field means ownership was not evaluated. App-filled assistant hosts do not
+pass keyboard ownership to their descendants.
 
 The Android keyboard band is the input method window's bounds, the box around the area it takes
 touches in. On Android 13 (API 33) and later the helper also checks that this area is one rectangle.

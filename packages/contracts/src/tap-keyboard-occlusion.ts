@@ -313,10 +313,10 @@ function collectKeyboardControlRects(nodes: readonly RawSnapshotNode[]): Rect[] 
 /** The band the keyboard reports, or null when the tree holds no keyboard or the band cannot be
  * measured. Fails open on an unusable frame, mirroring `clipScrollViewportAboveKeyboard`: a keyboard
  * the platform cannot measure is not evidence that a surface is blocked. */
-function resolveVisibleKeyboardSurface(
+function deriveDockedKeyboardFrame(
   nodes: readonly RawSnapshotNode[],
   viewport: Rect | null,
-): KeyboardSurface | null {
+): Rect | null {
   const anchorNodes = nodes.filter(isKeyboardAnchorNode);
   const anchorRects = usableRects(anchorNodes);
   if (anchorRects.length === 0) return null;
@@ -332,28 +332,33 @@ function resolveVisibleKeyboardSurface(
   if (!frame || !isPositiveFiniteRect(frame)) return null;
   const planeIndices = collectKeyboardPlaneIndices(nodes, surfaceNodes);
   if (!keysFormOneColumnRun({ anchorNodes, anchorRects, planeIndices })) return null;
-  return {
-    frame,
-    controlRects: collectKeyboardControlRects(nodes),
-  };
+  return frame;
 }
 
-/** Preserves witnessed tree ownership on nodes before projection can remove their ancestors. */
-export function annotateKeyboardOwnership(nodes: readonly RawSnapshotNode[]): RawSnapshotNode[] {
-  const byIndex = new Map(nodes.map((node) => [node.index, node] as const));
-  return nodes.map((node) =>
-    isKeyboardOwnedNode(node, byIndex) ? { ...node, keyboardOwned: true } : node,
-  );
-}
-
-/** Observes provider keyboard evidence before depth, scope, or interactive projection. */
-export function observeProviderKeyboard(params: {
+type ProviderKeyboardInput = {
   nodes: readonly RawSnapshotNode[];
   viewport: Rect | null;
   visibility?: boolean | 'unsupported' | 'failed';
-}): SnapshotKeyboardBandFact {
-  const surface = resolveVisibleKeyboardSurface(params.nodes, params.viewport);
-  if (surface) return { kind: 'derived', derivation: 'docked-tree', frame: surface.frame };
+};
+
+/** Preserves keyboard geometry and evaluated node ownership before snapshot projection. */
+export function acquireProviderKeyboard(params: ProviderKeyboardInput): {
+  nodes: RawSnapshotNode[];
+  keyboard: SnapshotKeyboardBandFact;
+} {
+  const byIndex = new Map(params.nodes.map((node) => [node.index, node] as const));
+  return {
+    nodes: params.nodes.map((node) => ({
+      ...node,
+      keyboardOwned: isKeyboardOwnedNode(node, byIndex),
+    })),
+    keyboard: observeProviderKeyboard(params),
+  };
+}
+
+function observeProviderKeyboard(params: ProviderKeyboardInput): SnapshotKeyboardBandFact {
+  const frame = deriveDockedKeyboardFrame(params.nodes, params.viewport);
+  if (frame) return { kind: 'derived', derivation: 'docked-tree', frame };
   if (isMeasurableViewport(params.viewport) && params.nodes.some(isKeyboardAnchorNode)) {
     return {
       kind: 'tree-rejected',
@@ -409,11 +414,11 @@ export function resolveKeyboardTapOcclusion(params: {
   if (params.keyboard?.kind === 'tree-rejected') {
     return { kind: params.keyboard.visible === false ? 'no-keyboard' : 'undetermined' };
   }
-  const surface =
+  const frame =
     params.keyboard?.kind === 'visible' || params.keyboard?.kind === 'derived'
-      ? { frame: params.keyboard.frame, controlRects: collectKeyboardControlRects(params.nodes) }
-      : resolveVisibleKeyboardSurface(params.nodes, params.viewport);
-  if (!surface) {
+      ? params.keyboard.frame
+      : deriveDockedKeyboardFrame(params.nodes, params.viewport);
+  if (!frame) {
     return {
       kind:
         params.keyboard?.kind === 'visibility-only' && !params.keyboard.visible
@@ -421,11 +426,14 @@ export function resolveKeyboardTapOcclusion(params: {
           : 'undetermined',
     };
   }
+  const surface = { frame, controlRects: collectKeyboardControlRects(params.nodes) };
   if (!params.node) return classifyKeyboardPoint(params.point, surface);
   // A resolved element is excused only by belonging to the keyboard, never by sitting under a key:
   // the caller named the element, and behind the keyboard a tap does not reach it.
-  const byIndex = new Map(params.nodes.map((node) => [node.index, node] as const));
-  if (isKeyboardOwnedNode(params.node, byIndex) || params.node.keyboardOwned === true) {
+  const keyboardOwned =
+    params.node.keyboardOwned ??
+    isKeyboardOwnedNode(params.node, new Map(params.nodes.map((node) => [node.index, node])));
+  if (keyboardOwned) {
     return { kind: 'clear', surface };
   }
   return containsPoint(surface.frame, params.point.x, params.point.y)

@@ -4848,6 +4848,152 @@
         "kind": "unmeasurable",
         "reason": "keyboard-tree-geometry-unusable"
       }
+    },
+    {
+      "name": "acquired keyboard ownership false overrides projected Keyboard ancestry",
+      "viewport": null,
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Keyboard",
+          "rect": {
+            "x": 0,
+            "y": 580,
+            "width": 390,
+            "height": 264
+          }
+        },
+        {
+          "index": 1,
+          "parentIndex": 0,
+          "type": "Button",
+          "label": "Save draft",
+          "keyboardOwned": false,
+          "rect": {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        },
+        {
+          "index": 2,
+          "parentIndex": 0,
+          "type": "Key",
+          "rect": {
+            "x": 0,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "keyboard": {
+        "kind": "derived",
+        "derivation": "docked-tree",
+        "frame": {
+          "x": 0,
+          "y": 580,
+          "width": 390,
+          "height": 264
+        }
+      },
+      "expected": {
+        "kind": "occluded",
+        "frame": {
+          "x": 0,
+          "y": 580,
+          "width": 390,
+          "height": 264
+        },
+        "controlRects": [
+          {
+            "x": 0,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        ]
+      }
+    },
+    {
+      "name": "acquired keyboard ownership true overrides projected Keyboard ancestry",
+      "viewport": null,
+      "nodes": [
+        {
+          "index": 0,
+          "type": "Keyboard",
+          "rect": {
+            "x": 0,
+            "y": 580,
+            "width": 390,
+            "height": 264
+          }
+        },
+        {
+          "index": 1,
+          "parentIndex": 0,
+          "type": "Button",
+          "label": "Done",
+          "keyboardOwned": true,
+          "rect": {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        },
+        {
+          "index": 2,
+          "parentIndex": 0,
+          "type": "Key",
+          "rect": {
+            "x": 0,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        }
+      ],
+      "target": {
+        "index": 1
+      },
+      "keyboard": {
+        "kind": "derived",
+        "derivation": "docked-tree",
+        "frame": {
+          "x": 0,
+          "y": 580,
+          "width": 390,
+          "height": 264
+        }
+      },
+      "expected": {
+        "kind": "clear",
+        "frame": {
+          "x": 0,
+          "y": 580,
+          "width": 390,
+          "height": 264
+        },
+        "controlRects": [
+          {
+            "x": 200,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          },
+          {
+            "x": 0,
+            "y": 600,
+            "width": 100,
+            "height": 40
+          }
+        ]
+      }
     }
   ]
 }

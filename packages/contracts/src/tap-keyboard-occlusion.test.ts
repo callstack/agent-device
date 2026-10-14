@@ -8,7 +8,7 @@ import type {
   SnapshotKeyboardBandFact,
 } from '@agent-device/kernel/snapshot';
 import {
-  observeProviderKeyboard,
+  acquireProviderKeyboard,
   resolveKeyboardTapOcclusion,
   TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS,
   TAP_KEYBOARD_OCCLUDES_TARGET_REASON,
@@ -19,7 +19,7 @@ type FixtureNode = {
   index: number;
   type?: string;
   role?: string;
-  keyboardOwned?: true;
+  keyboardOwned?: boolean;
   label?: string;
   identifier?: string;
   bundleId?: string;
@@ -75,11 +75,11 @@ test('keyboard tap occlusion agrees with every golden parity table case', () => 
         : resolveCenter(byIndex.get(fixture.target.index));
     if (fixture.observationVisibility !== undefined) {
       assert.deepEqual(
-        observeProviderKeyboard({
+        acquireProviderKeyboard({
           nodes,
           viewport: fixture.viewport,
           visibility: fixture.observationVisibility,
-        }),
+        }).keyboard,
         fixture.keyboard,
         `${fixture.name}: acquisition observation`,
       );
@@ -244,11 +244,11 @@ test('an unmeasurable fact leaves every golden-table decision exactly as the tre
 
 test('keyboard anchors without an acquisition viewport name the missing geometry and preserve tap derivation', () => {
   const fixture = tableCase('Gboard docked tree + visibility-only:true -> occluded');
-  const fact = observeProviderKeyboard({ nodes: fixture.nodes, viewport: null });
+  const { keyboard: fact } = acquireProviderKeyboard({ nodes: fixture.nodes, viewport: null });
   assert.deepEqual(fact, { kind: 'unmeasurable', reason: 'keyboard-viewport-unavailable' });
   assert.equal(resolveWithFact(fixture, fact).kind, 'occluded');
   const noKeyboard = tableCase('no keyboard in the tree means nothing to refuse');
-  assert.deepEqual(observeProviderKeyboard({ nodes: noKeyboard.nodes, viewport: null }), {
+  assert.deepEqual(acquireProviderKeyboard({ nodes: noKeyboard.nodes, viewport: null }).keyboard, {
     kind: 'unmeasurable',
     reason: 'keyboard-not-observed',
   });

@@ -4,7 +4,7 @@ import {
 } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
 import type { LimrunIosSession } from './ios.ts';
-import { acquireProviderKeyboard } from '@agent-device/capture-kit/provider-keyboard-acquisition';
+import { acquireProviderKeyboard } from '@agent-device/contracts/tap-keyboard-occlusion';
 import { flattenIosTree, type IosTreeNode } from './snapshot.ts';
 
 export async function captureLimrunIosSnapshot(

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { resolveKeyboardTapOcclusion } from '@agent-device/contracts/tap-keyboard-occlusion';
+import { presentIosSnapshotAcquisition } from '@agent-device/capture-kit/ios-snapshot-runtime';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { acquireWebDriverIosSnapshot } from './webdriver-ios-snapshot.ts';
 
 const SOURCE = `<AppiumAUT>
@@ -104,18 +106,27 @@ test.each([
   '_UIRemoteKeyboardPlaceholderView',
   'TUISystemInputAssistantView',
   'TUISystemInputAssistantPageView',
-])('app controls under %s do not inherit keyboard ownership', (role) => {
+])('app controls under %s remain unowned through projection and state assembly', (role) => {
   const source = SOURCE.replace(
     '</XCUIElementTypeApplication>',
     `<XCUIElementTypeKeyboard x="0" y="580" width="390" height="264"><XCUIElementTypeOther class="${role}"><XCUIElementTypeButton name="Save draft" x="200" y="600" width="100" height="40" /></XCUIElementTypeOther><XCUIElementTypeOther class="UIKeyboardLayoutStar"><XCUIElementTypeButton name="Done" x="0" y="600" width="100" height="40" /></XCUIElementTypeOther></XCUIElementTypeKeyboard></XCUIElementTypeApplication>`,
   );
-  const acquired = acquireWebDriverIosSnapshot(source).acquisition;
+  const result = acquireWebDriverIosSnapshot(source);
+  const acquired = result.acquisition;
   const appControl = acquired.nodes.find((node) => node.label === 'Save draft')!;
-  for (const nodes of [acquired.nodes, [appControl]]) {
+  const projected = [{}, { interactiveOnly: true }, { raw: true }, { scope: 'Save draft' }].map(
+    (options) =>
+      buildSnapshotState(presentIosSnapshotAcquisition(result, options), {
+        snapshotRaw: options.raw,
+        snapshotInteractiveOnly: options.interactiveOnly,
+      }).nodes,
+  );
+  for (const nodes of [acquired.nodes, [appControl], ...projected]) {
+    const node = nodes.find((candidate) => candidate.label === 'Save draft')!;
     assert.equal(
       resolveKeyboardTapOcclusion({
         nodes,
-        node: appControl,
+        node,
         viewport: null,
         point: { x: 250, y: 620 },
         keyboard: acquired.keyboard,
@@ -123,7 +134,7 @@ test.each([
       'occluded',
     );
   }
-  assert.equal(appControl.keyboardOwned, undefined);
+  assert.equal(appControl.keyboardOwned, false);
   assert.equal(acquired.nodes.find((node) => node.role === role)?.keyboardOwned, true);
   assert.equal(acquired.nodes.find((node) => node.label === 'Done')?.keyboardOwned, true);
 });

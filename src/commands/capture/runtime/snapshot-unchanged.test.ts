@@ -85,6 +85,7 @@ test.each<Partial<SnapshotNode>>([
   { windowTitle: 'Compose' },
   { surface: 'app' },
   { keyboardOwned: true },
+  { keyboardOwned: false },
   { hiddenContentAbove: true },
   { hiddenContentBelow: true },
   { interactionBlocked: 'covered' },
