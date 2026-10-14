@@ -121,6 +121,42 @@ test('a retried allocation renews its own lease for the window that lease carrie
   assert.equal(retried?.expiresAt, 91_000);
 });
 
+test('an allocation naming an issued lease id gets exactly that lease or LEASE_ID_IN_USE, never another lease of its run', () => {
+  const registry = new LeaseRegistry();
+  const owner = { tenantId: 'tenant-a', runId: 'run-1', clientId: 'client-1' } as const;
+  const first = registry.allocateLease({
+    ...owner,
+    leaseId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    deviceKey: 'ios:mobile:sim-1',
+  });
+  const second = registry.allocateLease({
+    ...owner,
+    leaseId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    deviceKey: 'ios:mobile:sim-2',
+  });
+
+  assert.notEqual(first.leaseId, second.leaseId);
+  assert.throws(
+    () =>
+      registry.allocateLease({ ...owner, leaseId: first.leaseId, deviceKey: second.deviceKey }),
+    isLeaseIdInUse,
+  );
+});
+
+test('a retried allocation of a host-pinned lease never outlives the host window', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now });
+  const leaseId = 'cccccccccccccccccccccccccccccccc';
+  const owner = { tenantId: 'tenant-a', runId: 'run-1' } as const;
+  registry.putHostLease(leaseId, { ...owner, ttlMs: 10_000 });
+
+  now = 5_000;
+  const retried = registry.allocateLease({ ...owner, leaseId, ttlMs: 600_000 });
+
+  assert.equal(retried.leaseId, leaseId);
+  assert.equal(retried.expiresAt, 15_000);
+});
+
 test('an expired provider lease keeps its id and provider session from a caller-chosen reuse', () => {
   let now = 1_000;
   const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 10_000 });

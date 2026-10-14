@@ -82,14 +82,14 @@ export class LeaseRegistry {
     const { chosenLeaseId, normalized, leaseTtlMs } = this.prepareAllocation(request);
     const requestedLease = this.refreshRequestedLease(chosenLeaseId, normalized, leaseTtlMs);
     if (requestedLease) return requestedLease;
-    this.assertHumanControlAdmission(normalized);
-    const existingLease = this.refreshExistingRunBinding(normalized, leaseTtlMs);
-    if (existingLease) return existingLease;
     if (chosenLeaseId && this.issuedLeaseIds.has(chosenLeaseId)) {
       throw new AppError('INVALID_ARGS', 'Lease id already names a lease this daemon issued.', {
         reason: 'LEASE_ID_IN_USE',
       });
     }
+    this.assertHumanControlAdmission(normalized);
+    const existingLease = this.refreshExistingRunBinding(normalized, leaseTtlMs);
+    if (existingLease) return existingLease;
     this.assertDeviceAvailable(normalized);
     this.enforceCapacity(normalized.backend);
     const lease = createDeviceLease(normalized, leaseTtlMs, this.now(), chosenLeaseId);
@@ -217,11 +217,7 @@ export class LeaseRegistry {
     assertLeaseScopeMatch(lease, request);
     const requestedTtlMs =
       request.ttlMs === undefined ? leaseOwnTtlMs(lease) : this.resolveLeaseTtlMs(request.ttlMs);
-    const hostTtlMs = this.hostTtlMsByLeaseId.get(leaseId);
-    return this.refreshLease(
-      lease,
-      hostTtlMs === undefined ? requestedTtlMs : Math.min(requestedTtlMs, hostTtlMs),
-    );
+    return this.refreshLease(lease, requestedTtlMs);
   }
 
   /**
@@ -621,11 +617,13 @@ export class LeaseRegistry {
     });
   }
 
+  /** Every renewal route ends here, so a host-pinned lease never outlives the host's window. */
   private refreshLease(lease: DeviceLease, ttlMs: number, now = this.now()): DeviceLease {
+    const hostTtlMs = this.hostTtlMsByLeaseId.get(lease.leaseId);
     const updated: DeviceLease = {
       ...lease,
       heartbeatAt: now,
-      expiresAt: now + ttlMs,
+      expiresAt: now + (hostTtlMs === undefined ? ttlMs : Math.min(ttlMs, hostTtlMs)),
     };
     this.leases.set(updated.leaseId, updated);
     this.bindLease(updated);
