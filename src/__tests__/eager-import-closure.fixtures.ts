@@ -208,7 +208,9 @@ const workingTreeReader: SourceTreeReader = {
  */
 function resolveRelative(from: string, specifier: string, tree: SourceTreeReader): string | null {
   const candidate = path.resolve(path.dirname(from), specifier);
-  if (tree.isFile(candidate)) return candidate;
+  // A JSON import (`with { type: 'json' }`) is data with no edges, and the committed tree reader
+  // only reads walked TypeScript sources, so it is not an edge.
+  if (tree.isFile(candidate)) return candidate.endsWith('.ts') ? candidate : null;
   for (const suffix of ['.ts', '/index.ts']) {
     if (tree.exists(`${candidate}${suffix}`)) return `${candidate}${suffix}`;
   }

@@ -473,6 +473,24 @@ test('the committed-tree reader walks what was committed, not the working direct
   expect(eagerClosureGraphOf(entry).size, 'working tree: one edge').toBe(2);
 });
 
+test('a JSON data import is not an edge, so the committed-tree walk does not read it', () => {
+  // The committed reader holds only walked TypeScript sources; following a `with { type: 'json' }`
+  // import into it threw at the merge-base once a façade closure first reached a JSON fixture.
+  const repo = mkGitFixtureRepo('eager-closure-json-import-');
+  const entry = path.join(repo, 'packages/demo/src/entry.ts');
+  fs.writeFileSync(path.join(repo, 'packages/demo/src/capture.raw.json'), '{"nodes":[]}\n');
+  fs.writeFileSync(
+    entry,
+    "import capture from './capture.raw.json' with { type: 'json' };\nexport const a = capture;\n",
+  );
+  execFileSync('git', ['add', '-A'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'json import'], { cwd: repo });
+
+  const committed = createCommittedSourceTree(repo, 'HEAD');
+  expect([...eagerClosureGraphOf(entry, committed).keys()]).toEqual([entry]);
+  expect([...eagerClosureGraphOf(entry).keys()]).toEqual([entry]);
+});
+
 test('a renamed entry is followed to its path at the base, not treated as first-introduced', () => {
   const repo = mkGitFixtureRepo('eager-closure-renamed-entry-');
   execFileSync('git', ['mv', 'packages/demo/src/entry.ts', 'packages/demo/src/moved.ts'], {
