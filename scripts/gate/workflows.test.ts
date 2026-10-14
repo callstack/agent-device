@@ -294,7 +294,8 @@ on:
 
 // Drafts are where agents iterate; a smoke lane that runs on them spends device
 // runners on heads nobody is reviewing, and one that misses `ready_for_review`
-// never runs on a draft marked ready until its next push.
+// never runs on a draft marked ready until its next push. `converted_to_draft`
+// starts a skipped run whose concurrency group cancels the one in flight.
 test('device smoke lanes skip drafts and start when a draft is marked ready', () => {
   const directory = path.join(repoRoot, '.github/workflows');
   type Workflow = {
@@ -319,7 +320,7 @@ test('device smoke lanes skip drafts and start when a draft is marked ready', ()
   for (const { workflow, job } of smokeLanes) {
     assert.deepEqual(
       workflow.on.pull_request?.types,
-      ['opened', 'synchronize', 'reopened', 'ready_for_review'],
+      ['opened', 'synchronize', 'reopened', 'ready_for_review', 'converted_to_draft'],
       workflow.name,
     );
     assert.equal(job.if, '${{ !github.event.pull_request.draft }}', workflow.name);
