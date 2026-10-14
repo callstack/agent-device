@@ -529,6 +529,15 @@ test('openAndroidApp has am force-stop the resolved intent handler when terminat
   });
 });
 
+test('openAndroidApp stops a resolved package before launching it when terminating a running app', async () => {
+  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
+    await openAndroidApp(device, 'com.example.app', { terminateRunningApp: true });
+    assert.deepEqual(calls[0], ['shell', 'am', 'force-stop', 'com.example.app']);
+    assert.deepEqual(calls.at(-1)?.slice(0, 4), ['shell', 'am', 'start', '-W']);
+    assert.equal(calls.filter((call) => call[2] === 'start').length, 1);
+  });
+});
+
 test('openAndroidApp appends launchArgs to am start when launching by package', async () => {
   await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
     await openAndroidApp(device, 'com.example.app', {

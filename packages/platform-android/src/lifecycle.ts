@@ -101,7 +101,8 @@ async function openAndroidApplication(
   input: OpenApplicationInput,
 ): Promise<OpenApplicationOutcome> {
   const timing: MutableOpenTiming = {};
-  const relaunchOwner = input.relaunch && input.target ? input.appBundleId : undefined;
+  const relaunching = input.relaunch && Boolean(input.target);
+  const relaunchOwner = relaunching ? input.appBundleId : undefined;
   if (relaunchOwner) {
     const closeStartedAtMs = Date.now();
     await invokeApplicationClose({
@@ -132,7 +133,7 @@ async function openAndroidApplication(
     positionals: input.positionals,
     appBundleId: input.appBundleId,
     execution: input.execution,
-    terminateRunningApp: input.relaunch && input.target !== undefined && !relaunchOwner,
+    terminateRunningApp: relaunching && !relaunchOwner,
   });
   timing.openDispatchDurationMs = elapsed(openStartedAtMs);
   if (input.enableTestIme) {

@@ -99,7 +99,7 @@ test('inferAndroidPackageAfterOpen never names the framework chooser as the owne
   });
 
   await expect(
-    inferAndroidPackageAfterOpen(androidDevice, 'settings', undefined),
+    inferAndroidPackageAfterOpen(androidDevice, 'https://example.com/item', undefined),
   ).resolves.toBeUndefined();
 });
 

@@ -157,7 +157,7 @@ export type OpenAndroidAppOptions = {
   activity?: string;
   appBundleId?: string;
   launchArgs?: string[];
-  /** Force-stops the app the launch resolves to before starting it (`am start -S`). */
+  /** Force-stops the app the target resolves to before starting it. */
   terminateRunningApp?: boolean;
   url?: string;
 };
@@ -220,6 +220,7 @@ export async function openAndroidApp(
     await openAndroidIntent(device, resolved.value, options);
     return;
   }
+  if (options.terminateRunningApp) await stopAndroidPackage(device, resolved.value);
   if (activity) {
     await openAndroidPackageActivity(device, resolved.value, activity, launchCategory, options);
     return;
@@ -528,8 +529,12 @@ export async function closeAndroidApp(device: DeviceInfo, app: string): Promise<
   if (resolved.type === 'intent') {
     throw new AppError('INVALID_ARGS', 'Close requires a package name, not an intent');
   }
-  await runAndroidShell(device, ['am', 'force-stop', resolved.value]);
-  await waitForAndroidPackageStopped(device, resolved.value);
+  await stopAndroidPackage(device, resolved.value);
+}
+
+async function stopAndroidPackage(device: DeviceInfo, packageName: string): Promise<void> {
+  await runAndroidShell(device, ['am', 'force-stop', packageName]);
+  await waitForAndroidPackageStopped(device, packageName);
 }
 
 async function waitForAndroidPackageStopped(
