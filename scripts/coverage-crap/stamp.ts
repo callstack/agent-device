@@ -21,6 +21,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseSync } from 'oxc-parser';
 import { runCmdSync } from '@agent-device/host-kit/command';
 
 /** Inside `reportsDirectory`, naming the run that wrote the reports beside it. */
@@ -152,6 +153,60 @@ export function finishCoverageRun(
   fs.mkdirSync(reportsDirectory, { recursive: true });
   fs.writeFileSync(stampPath, `${JSON.stringify(stamp)}\n`);
   return { written: stamp };
+}
+
+// A leading-dot path segment, marked so a glob wildcard can match it: the provider matches these
+// patterns with picomatch `{ dot: true }`, while `path.matchesGlob` will not let `*` reach a
+// dot-prefixed segment. The marker is not a character a path or a pattern can carry, and it adds no
+// separator. It belongs to pattern matching alone — the working-tree hash lists paths, it does not
+// match them.
+const HIDDEN_SEGMENT = '\u0000';
+
+function withHiddenVisible(text: string): string {
+  return text
+    .split('/')
+    .map((segment) => (segment.startsWith('.') ? `${HIDDEN_SEGMENT}${segment}` : segment))
+    .join('/');
+}
+
+/**
+ * Whether the resolved config instruments `relativePath`. Vitest matches these patterns against the
+ * path relative to the root, so `src/**` never reaches `packages/x/src/**`.
+ */
+export function isInstrumentedPath(relativePath: string, config: CoverageConfig): boolean {
+  const candidate = withHiddenVisible(relativePath.split('\\').join('/'));
+  return (
+    config.include.some((pattern) => path.matchesGlob(candidate, withHiddenVisible(pattern))) &&
+    !config.exclude.some((pattern) => path.matchesGlob(candidate, withHiddenVisible(pattern)))
+  );
+}
+
+// A whole-file ignore comment drops a source from every Istanbul map, so its missing record is not a gap
+// and no verdict may send the reader to re-run for it. The keyword set and its position are the
+// provider's own: ast-v8-to-istanbul reads `istanbul`, `c8`, `v8`, and `node:coverage` as one keyword,
+// anchored to the start of a comment after stripping the comment's own delimiters. The `start`/`stop` and
+// `next` forms discard a region's counters and leave the file recorded, so the functions inside come back
+// as estimates, which the verdict lists rather than blocks on.
+const IGNORE_FILE_HINT = /^\s*(?:istanbul|[cv]8|node:coverage)\s+ignore\s+file(?=\W|$)/;
+
+/**
+ * Whether a source declares itself outside coverage, read from the parser's comment tokens rather than
+ * from the text: a pragma-shaped string literal is not a pragma, and treating one as one would exempt the
+ * file from the very check that names an unmeasured file. `oxc-parser` is what the repository's own
+ * source policies already use, and its comment tokens survive a parse error.
+ *
+ * A token's `value` still carries the `*` a `/**` opener introduced, which the provider has already
+ * stripped by the time it matches, so one leading `*` comes off here too — without that, the JSDoc
+ * spelling would exempt a file from the provider's counts while this read still demanded a record for it.
+ *
+ * Only worth calling for a path `isInstrumentedPath` accepted: a file the config excludes cannot appear
+ * in the map whatever its comments say, and this parses JavaScript, so asking it about a document or a
+ * binary would spend a parse to learn nothing.
+ */
+export function declaresWholeFileIgnore(filePath: string, source: string): boolean {
+  return parseSync(filePath, source).comments.some((comment) =>
+    IGNORE_FILE_HINT.test(comment.value.replace(/^\*/, '')),
+  );
 }
 
 /** A selection that cannot attest a whole-tree map; only `full` can, so it is excluded by name. */

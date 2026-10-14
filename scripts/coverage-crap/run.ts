@@ -1,14 +1,16 @@
 // Entry point for the coverage-based CRAP verdict: `pnpm check:coverage-crap [--base <ref> | --all]`.
 //
 // Reuses the Istanbul map `pnpm test:coverage` already wrote (never runs coverage a second time),
-// drops records with impossible counts, and asks fallow to score the functions the diff against
-// <base> touches, or every function with --all.
+// refuses it unless the stamp beside it proves this checkout wrote it, drops records with impossible
+// counts, and asks fallow to score the functions the diff against <base> touches, or every function
+// with --all.
 //
 // `--base` (a PR) blocks: it exits 1 when a touched function scores at or above the threshold, and
-// also when the reports cannot be trusted to answer — a missing or malformed map, a map with fewer
-// files than the same run enumerated, or a touched file the map dropped or never recorded. `--all`
-// (the `main` report) stays report-only, because `main` carries debt on purpose: it exits 0 once it
-// has a report to show. Attribution is rename-aware — `readChangedLinesDiff` pairs a pure move at
+// also when the reports cannot be trusted to answer — no stamp, a stamp from another commit or another
+// working tree, a map recorded in another root, or a touched file the run was told to instrument and
+// did not record. `--all` (the `main` report) stays report-only, because `main` carries debt on
+// purpose: it exits 0 once it has a report to show, so it asks none of the per-file questions a stamp
+// and a diff would answer. Attribution is rename-aware — `readChangedLinesDiff` pairs a pure move at
 // 90%, so relocating a file owes nothing for the functions that moved with it.
 
 import fs from 'node:fs';
@@ -16,7 +18,6 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { parseScriptArgs } from '../lib/cli-args.ts';
-import { parseLcov } from '../coverage-changed/model.ts';
 import { parseUnifiedDiff, readChangedLinesDiff } from '../lib/repo-git.ts';
 import { repoRelativePath } from '../lib/repo-path.ts';
 import {
@@ -36,14 +37,19 @@ import {
   type IstanbulCoverageMap,
   type TouchedFile,
 } from './model.ts';
-import { describeStampMismatch, verifyCoverageStamp } from './stamp.ts';
+import {
+  declaresWholeFileIgnore,
+  describeStampMismatch,
+  isInstrumentedPath,
+  verifyCoverageStamp,
+  type CoverageConfig,
+} from './stamp.ts';
 
 const USAGE = 'Usage: pnpm check:coverage-crap [--base <ref> | --all]\n';
-// One spelling for the reports directory, which the writer side takes from the Vitest config: the three
-// reports all live inside it, so moving the lane's output is a one-line change here.
+// One spelling for the reports directory, which the writer side takes from the Vitest config: the reports
+// all live inside it, so moving the lane's output is a one-line change here.
 const COVERAGE_DIR = 'coverage';
-const COVERAGE_PATH = path.join(COVERAGE_DIR, 'coverage-istanbul.json');
-const LCOV_PATH = path.join(COVERAGE_DIR, 'lcov.info');
+const MAP_FILE = 'coverage-istanbul.json';
 const SANITIZED_PATH = path.join(COVERAGE_DIR, 'fallow-crap-coverage.json');
 const FALLOW_CONFIG = '.fallowrc.json';
 const CRAP_THRESHOLD = 30;
@@ -79,94 +85,122 @@ function refuse(reason: string): number {
   return 1;
 }
 
-/** The diff this verdict is scoped to, as fallow receives it on stdin. */
-function readScopedDiff(
-  root: string,
-  base: string,
-): { diff: string; touched: readonly TouchedFile[] } {
-  const diff = readChangedLinesDiff(root, base);
-  return { diff, touched: readTouchedFiles(parseUnifiedDiff(diff)) };
-}
-
-/**
- * The files the coverage run enumerated, per lcov, or null when it wrote no record of that. A run
- * that lists no files cannot be that record either, and reaching the verdict as an empty set would
- * satisfy every completeness check at once.
- */
-function readEnumeratedPaths(root: string): Set<string> | null {
-  const lcovPath = path.resolve(root, LCOV_PATH);
-  if (!fs.existsSync(lcovPath)) return null;
-  const enumerated = new Set(parseLcov(fs.readFileSync(lcovPath, 'utf8'), root).keys());
-  return enumerated.size > 0 ? enumerated : null;
-}
-
 /** What one coverage run and one diff say, as far as they can be read at all. */
 type CrapInputs = Readonly<{
   /** Every file the run recorded counters for, including records dropped as corrupt below. */
   mapPaths: ReadonlySet<string>;
-  /** Every file the run listed in lcov, or null when it wrote nothing usable. */
-  enumeratedPaths: ReadonlySet<string> | null;
   /** The base...HEAD diff fallow scores against, on stdin; empty in `all` scope. */
   diff: string;
   touched: readonly TouchedFile[];
   /** Records the sanitizer refused, as repo-relative paths. */
   dropped: readonly string[];
+  /** The include/exclude the verified stamp declares; null when no stamp was required of this run. */
+  coverage: CoverageConfig | null;
+  /** Touched files whose source declares itself outside coverage, which no run can record. */
+  ignoredFiles: ReadonlySet<string>;
 }>;
 
+/** A touched file's bytes, or undefined when the working tree no longer holds it. */
+function readSource(absolutePath: string): string | undefined {
+  try {
+    return fs.readFileSync(absolutePath, 'utf8');
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    return undefined;
+  }
+}
+
 /**
- * Reads the two reports of one coverage run plus this change's diff, or names the reason there is
- * nothing to decide from. A verdict computed from an unreadable map would read as "no findings",
- * which is indistinguishable from a clean branch, so those cases stop here.
+ * The touched files this checkout can still answer for, and which of them declare themselves outside
+ * coverage. A diff can name a file the working tree no longer holds, and no run can record a file that is
+ * gone, so the verdict is asked none of its questions.
+ */
+function readTouchedSources(
+  root: string,
+  touched: readonly TouchedFile[],
+  coverage: CoverageConfig,
+): Readonly<{ held: readonly TouchedFile[]; ignored: ReadonlySet<string> }> {
+  const held: TouchedFile[] = [];
+  const ignored = new Set<string>();
+  for (const file of touched) {
+    const source = readSource(path.resolve(root, file.path));
+    if (source === undefined) continue;
+    held.push(file);
+    // Only a file the map owes a record for can be excused from owing one, and that is the only question a
+    // pragma answers. Everything else the diff touches — a document, a fixture, a binary — is out of scope
+    // by declaration, so parsing it would spend a JavaScript parse to learn nothing.
+    if (isInstrumentedPath(file.path, coverage) && declaresWholeFileIgnore(file.path, source)) {
+      ignored.add(file.path);
+    }
+  }
+  return { held, ignored };
+}
+
+/**
+ * Reads the coverage reports plus this change's diff, or names the reason there is nothing to decide
+ * from. A verdict computed from an unreadable or unattributable map would read as "no findings", which
+ * is indistinguishable from a clean branch, so those cases stop here.
  */
 function gatherCrapInputs(
   root: string,
   base: string,
   scope: CrapScope,
 ): CrapInputs | { refusal: string } {
-  const coveragePath = path.resolve(root, COVERAGE_PATH);
-  if (!fs.existsSync(coveragePath)) {
-    return {
-      refusal: `no Istanbul coverage map at ${coveragePath}. Run \`pnpm test:coverage\` first.`,
-    };
+  const coverageDir = path.resolve(root, COVERAGE_DIR);
+  const mapPath = path.join(coverageDir, MAP_FILE);
+  if (!fs.existsSync(mapPath)) {
+    return { refusal: `no Istanbul coverage map at ${mapPath}. Run \`pnpm test:coverage\` first.` };
   }
   let map: IstanbulCoverageMap;
   try {
-    map = parseIstanbulCoverageMap(fs.readFileSync(coveragePath, 'utf8'));
+    map = parseIstanbulCoverageMap(fs.readFileSync(mapPath, 'utf8'));
   } catch (error: unknown) {
-    return { refusal: `${coveragePath}: ${describe(error)}` };
+    return { refusal: `${mapPath}: ${describe(error)}` };
   }
-
-  // The stamp is the record of the pass that wrote the map above, so it is read right after it and only
-  // for the scope that attributes findings to a diff. The map's own absence stays the first refusal: with
-  // no reports at all, "run pnpm test:coverage" is the fix for both, and naming the missing file is the
-  // closer half of that.
-  if (scope === 'touched') {
-    const verified = verifyCoverageStamp(path.resolve(root, COVERAGE_DIR), root);
-    if ('mismatch' in verified) return { refusal: describeStampMismatch(verified.mismatch) };
+  const mapPaths = coverageMapPaths(map, root);
+  // Vitest writes the map's keys absolute, so a report from another root relativizes outside this one
+  // and can join none of its files. That must not read as "no file was measured", and the stamp cannot
+  // catch it: two checkouts of one commit carry the same HEAD and the same bytes.
+  const outside = [...mapPaths].find((file) => file.startsWith('../'));
+  if (outside !== undefined) {
+    return {
+      refusal:
+        `${mapPath} records files outside this checkout, for example ${outside}. ` +
+        'It was written by a run in another root; run `pnpm test:coverage` here.',
+    };
   }
 
   let diff = '';
   let touched: readonly TouchedFile[] = [];
+  let ignoredFiles: ReadonlySet<string> = new Set();
+  // In `all` scope nothing is attributed to a diff, so there is no per-file question for a stamp or an
+  // include list to answer, and `coverage` stays null rather than lending its scope to verdicts it
+  // never made.
+  let coverage: CoverageConfig | null = null;
   if (scope === 'touched') {
     try {
-      ({ diff, touched } = readScopedDiff(root, base));
+      diff = readChangedLinesDiff(root, base);
     } catch (error: unknown) {
       return { refusal: `the diff against ${base} failed: ${describe(error)}` };
     }
+    const verified = verifyCoverageStamp(coverageDir, root);
+    if ('mismatch' in verified) return { refusal: describeStampMismatch(verified.mismatch) };
+    coverage = verified.stamp;
+    const sources = readTouchedSources(root, readTouchedFiles(parseUnifiedDiff(diff)), coverage);
+    touched = sources.held;
+    ignoredFiles = sources.ignored;
   }
 
   const { map: sanitized, dropped } = sanitizeIstanbulCoverage(map);
   fs.writeFileSync(path.resolve(root, SANITIZED_PATH), JSON.stringify(sanitized));
 
-  // lcov is the same coverage run's own list of the files it enumerated, which is what makes a
-  // touched file absent from the map detectable. Whether a missing one is worth reporting is the
-  // verdict's call, not this reader's.
   return {
-    mapPaths: coverageMapPaths(map, root),
-    enumeratedPaths: readEnumeratedPaths(root),
+    mapPaths,
     diff,
     touched,
     dropped: dropped.map((file) => repoRelativePath(file, root)),
+    coverage,
+    ignoredFiles,
   };
 }
 
@@ -221,10 +255,10 @@ function reportCrapVerdict(root: string, scope: CrapScope, inputs: CrapInputs): 
     estimated: readEstimatedFindings(report, CRAP_THRESHOLD),
     touched: inputs.touched,
     dropped: new Set(inputs.dropped),
-    // Pre-sanitizer on purpose: a record the sanitizer dropped is reported as corrupt, and a file
-    // the run measured is not also missing from the map.
+    // Pre-sanitizer on purpose: a record the sanitizer dropped is corrupt, not missing from the map.
     mapPaths: inputs.mapPaths,
-    enumeratedPaths: inputs.enumeratedPaths,
+    coverage: inputs.coverage,
+    ignoredFiles: inputs.ignoredFiles,
   });
   const rendered = renderCrapReport({
     findings,

@@ -23,7 +23,7 @@ pnpm gate --help
 
 `check:affected --run` reports coverage obligations without instrumenting; when related tests are
 selected, it runs one capped `vitest related` command. Run local coverage, then
-`check:coverage-crap` gates the touched functions (CONTRIBUTING.md).
+`check:coverage-crap` gates touched functions on that run's stamp (CONTRIBUTING.md).
 
 Two selection traps recur:
 

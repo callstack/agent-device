@@ -17,6 +17,7 @@ import {
   type CrapVerdict,
   type EstimatedFinding,
 } from './model.ts';
+import type { CoverageConfig } from './stamp.ts';
 
 const valid = { s: { 0: 3, 1: 0 }, f: { 0: 1 }, b: { 0: [2, 0] } };
 
@@ -84,7 +85,7 @@ test('a report without a findings array is an error, not an empty verdict', () =
 const clean = (scope: CrapScope, findings: readonly CrapFinding[] = []): CrapVerdict => ({
   blocking: false,
   problems: [],
-  unscoped: [],
+  uninstrumented: [],
   offenders: scope === 'touched' ? findings : [],
 });
 
@@ -103,11 +104,11 @@ const render = (input: Partial<Parameters<typeof renderCrapReport>[0]> = {}) =>
 /** A verdict that blocks or lists problems, for the renderer cases that build one by hand. */
 const verdictWith = (
   problems: readonly CrapProblem[],
-  unscoped: readonly EstimatedFinding[] = [],
+  uninstrumented: readonly EstimatedFinding[] = [],
 ) => ({
   blocking: true,
   problems,
-  unscoped,
+  uninstrumented,
   offenders: [],
 });
 
@@ -116,7 +117,7 @@ test('the report names touched functions and unscored files', () => {
   const report = render({
     findings,
     dropped: ['src/odd.ts'],
-    verdict: { blocking: true, problems: [], unscoped: [], offenders: findings },
+    verdict: { blocking: true, problems: [], uninstrumented: [], offenders: findings },
   });
   assert.match(report, /1 touched function\(s\) at or above 30/);
   assert.match(report, /\| `src\/a\.ts:10` run \| 42\.0 \| 6 \| 20% \|/);
@@ -149,7 +150,7 @@ test('a whole-repository report does not claim the functions were touched', () =
 test('a touched report whose reports cannot answer names the reason and stays ahead of the table', () => {
   const report = render({
     verdict: verdictWith([
-      { kind: 'unscored_touched', files: [{ path: 'src/new.ts', addedLines: 4 }] },
+      { kind: 'unrecorded_eligible', files: [{ path: 'src/new.ts', addedLines: 4 }] },
       { kind: 'corrupt_touched', files: ['src/odd.ts'] },
     ]),
   });
@@ -160,25 +161,16 @@ test('a touched report whose reports cannot answer names the reason and stays ah
   assert.match(report, /Run `pnpm test:coverage` again/);
 });
 
-test('an unanswerable touched report never reads as the empty verdict it was computed from', () => {
-  const report = render({
-    verdict: verdictWith([{ kind: 'enumeration_missing' }]),
-  });
-  assert.doesNotMatch(report, /no touched function\(s\)/);
-  assert.match(report, /\*\*no usable lcov report lists the files the coverage run measured/);
-});
-
 test('the same gap in the whole-repo report is a note, not a verdict', () => {
   const report = render({
     scope: 'all',
     verdict: {
-      ...verdictWith([{ kind: 'map_partial', mapFiles: 9, enumeratedFiles: 12 }]),
+      ...verdictWith([{ kind: 'corrupt_touched', files: ['src/odd.ts'] }]),
       blocking: false,
     },
   });
   assert.match(report, /report-only\): no function\(s\) at or above 30/);
   assert.match(report, /Not gating, but the report is incomplete/);
-  assert.match(report, /\(9 recorded, 12 enumerated\)/);
 });
 
 // The same shape fallow echoes in its health JSON for one health run: each configured override
@@ -282,9 +274,12 @@ test('a report with no overrides section lists neither exemptions nor a gap', ()
   assert.doesNotMatch(report, /exemptions/i);
 });
 
+/** What the run declared it instruments; `scripts/**` is outside it, as in `vitest.config.ts`. */
+const CONFIG: CoverageConfig = { include: ['src/**/*.ts'], exclude: ['src/generated/**'] };
+
 /**
- * A verdict over one touched file in one measured file, with whatever a case cares about overridden.
- * The defaults are the shape of a clean answer, so each case states only its difference.
+ * A verdict over one touched file the map records, with whatever a case cares about overridden. The
+ * defaults are the shape of a clean answer, so each case states only its difference.
  */
 const decide = (input: Partial<Parameters<typeof decideCrapVerdict>[0]> = {}) =>
   decideCrapVerdict({
@@ -294,7 +289,8 @@ const decide = (input: Partial<Parameters<typeof decideCrapVerdict>[0]> = {}) =>
     touched: [{ path: 'src/a.ts', addedLines: 1 }],
     dropped: new Set(),
     mapPaths: new Set(['src/a.ts']),
-    enumeratedPaths: new Set(['src/a.ts']),
+    coverage: CONFIG,
+    ignoredFiles: new Set(),
     ...input,
   });
 
@@ -318,45 +314,38 @@ test('the whole-repo verdict reports the backlog without blocking', () => {
 });
 
 test('a touched file the sanitizer dropped is named once, as corrupt', () => {
-  assert.deepEqual(
-    kinds(
-      decide({
-        touched: [{ path: 'src/odd.ts', addedLines: 1 }],
-        dropped: new Set(['src/odd.ts']),
-      }),
-    ),
-    ['corrupt_touched'],
-  );
-});
-
-test('an unmeasured touched function is a problem only in a file the map records', () => {
-  const estimated = [{ path: 'src/a.ts', name: 'added', line: 40, crap: 42 }];
-  // The map has the file but not the function: it predates the code and the score is a guess.
-  assert.deepEqual(kinds(decide({ estimated })), ['unmeasured_touched']);
-  // A file entirely outside the map is already reported as unscored, not also as unmeasured — and
-  // an empty map is partial on its own, so both names appear and neither is a duplicate.
-  assert.deepEqual(kinds(decide({ estimated, mapPaths: new Set() })), [
-    'map_partial',
-    'unscored_touched',
-  ]);
-});
-
-test('an estimate in a file coverage never enumerated is listed, not blocked on', () => {
-  // `scripts/**` and other out-of-scope files are the shape of a normal tooling PR: coverage does not
-  // instrument them at all, so re-running cannot measure them and the estimate is the only score
-  // available. Blocking would refuse every such PR; staying silent would hide a number ≥ 30.
+  // `mapPaths` is the pre-sanitizer key set, so a dropped record is corrupt and never also missing,
+  // which is the one shape that would otherwise print advice to re-run for counts a re-run repeats.
   const verdict = decide({
-    estimated: [{ path: 'scripts/tool.ts', name: 'parse', line: 12, crap: 31.6 }],
+    touched: [{ path: 'src/odd.ts', addedLines: 1 }],
+    mapPaths: new Set(['src/odd.ts']),
+    dropped: new Set(['src/odd.ts']),
+    estimated: [{ path: 'src/odd.ts', name: 'parse', line: 12, crap: 42 }],
+  });
+  assert.deepEqual(kinds(verdict), ['corrupt_touched']);
+  assert.deepEqual(verdict.uninstrumented, []);
+});
+
+test('a touched file the config instruments and the map omits is a gap', () => {
+  const verdict = decide({ touched: [{ path: 'src/new.ts', addedLines: 3 }] });
+  assert.deepEqual(kinds(verdict), ['unrecorded_eligible']);
+  assert.equal(verdict.blocking, true);
+});
+
+test('a touched file the config excludes is not a gap, and its estimate is listed', () => {
+  // A tooling PR is the ordinary shape of this: coverage never instruments `scripts/**`, so no
+  // re-run would score it. Blocking would refuse every such change; staying silent would hide the 42.
+  const verdict = decide({
     touched: [{ path: 'scripts/tool.ts', addedLines: 3 }],
+    mapPaths: new Set(),
+    estimated: [{ path: 'scripts/tool.ts', name: 'parse', line: 12, crap: 31.6 }],
   });
   assert.deepEqual(verdict.problems, []);
   assert.equal(verdict.blocking, false);
-  assert.deepEqual(verdict.unscoped, [
+  assert.deepEqual(verdict.uninstrumented, [
     { path: 'scripts/tool.ts', name: 'parse', line: 12, crap: 31.6 },
   ]);
-  const report = render({
-    verdict,
-  });
+  const report = render({ verdict });
   assert.match(report, /no touched function\(s\) at or above 30/);
   assert.match(
     report,
@@ -364,59 +353,52 @@ test('an estimate in a file coverage never enumerated is listed, not blocked on'
   );
 });
 
-test('an estimate in a file the map predates stays a blocking problem, not a listing', () => {
-  const verdict = decide({ estimated: [{ path: 'src/a.ts', name: 'added', line: 40, crap: 42 }] });
-  assert.deepEqual(kinds(verdict), ['unmeasured_touched']);
-  assert.deepEqual(verdict.unscoped, []);
-  assert.equal(verdict.blocking, true);
+test('an estimate inside a file the map records is listed, not blocked on', () => {
+  // The stamp proves the map describes this tree, so a function it omits predates nothing: an ignore
+  // comment discarded its lines or it runs out of process. Either way a re-run cannot measure it, so
+  // the report says so instead of sending the reader to re-run coverage forever.
+  const verdict = decide({ estimated: [{ path: 'src/a.ts', name: 'runJob', line: 40, crap: 42 }] });
+  assert.deepEqual(verdict.problems, []);
+  assert.equal(verdict.blocking, false);
+  assert.deepEqual(verdict.uninstrumented, [
+    { path: 'src/a.ts', name: 'runJob', line: 40, crap: 42 },
+  ]);
 });
 
-test('an estimate is never called out-of-scope without an enumeration to check it against', () => {
-  // Without lcov the run cannot tell "coverage does not instrument this" from "the run should have
-  // measured this and did not" — the latter is the gap it already reports. Listing the file as
-  // out-of-scope beside `no trustworthy verdict` would answer a question this run cannot ask.
+test('an excluded path is not a gap either', () => {
   const verdict = decide({
-    estimated: [{ path: 'scripts/tool.ts', name: 'parse', line: 12, crap: 31.6 }],
+    touched: [{ path: 'src/generated/table.ts', addedLines: 4 }],
+    mapPaths: new Set(),
+  });
+  assert.deepEqual(verdict.problems, []);
+  assert.equal(verdict.blocking, false);
+});
+
+test('a file whose source declares itself outside coverage is not a gap', () => {
+  // No run records it, so `unrecorded_eligible` would refuse the file permanently.
+  const verdict = decide({
+    touched: [{ path: 'src/a.ts', addedLines: 4 }],
+    mapPaths: new Set(),
+    ignoredFiles: new Set(['src/a.ts']),
+    estimated: [{ path: 'src/a.ts', name: 'pageScript', line: 3, crap: 42 }],
+  });
+  assert.deepEqual(verdict.problems, []);
+  assert.deepEqual(verdict.uninstrumented, [
+    { path: 'src/a.ts', name: 'pageScript', line: 3, crap: 42 },
+  ]);
+});
+
+test('without a declared config the verdict cannot call a missing record a gap', () => {
+  // `--all` asks no per-file question of a diff, and a run with no stamp never reaches the verdict.
+  // Calling an uninstrumented file a gap, or out of scope, would both be claims this run cannot make.
+  const verdict = decide({
     touched: [{ path: 'scripts/tool.ts', addedLines: 3 }],
     mapPaths: new Set(),
-    enumeratedPaths: null,
+    coverage: null,
+    estimated: [{ path: 'scripts/tool.ts', name: 'parse', line: 12, crap: 31.6 }],
   });
-  assert.deepEqual(verdict.unscoped, []);
-  assert.equal(verdict.blocking, true);
-  const report = render({
-    verdict,
-  });
-  assert.doesNotMatch(report, /does not instrument/);
-});
-
-test('a map that records every enumerated file is trusted, and none is a partial map', () => {
-  const both = ['src/a.ts', 'src/b.ts'];
-  assert.deepEqual(kinds(decide({ mapPaths: new Set(both), enumeratedPaths: new Set(both) })), []);
-  // One enumerated file the map does not record is enough to call the map incomplete.
-  assert.deepEqual(
-    kinds(decide({ mapPaths: new Set(['src/a.ts']), enumeratedPaths: new Set(both) })),
-    ['map_partial'],
-  );
-});
-
-test('a same-sized map holding the wrong paths is still a partial map', () => {
-  // Two coverage runs mixed into one directory can produce equal counts over different files, and a
-  // count comparison would call that complete. The check is per path, so one unrecorded file is
-  // enough — and it names the touched file rather than only the discrepancy.
-  const verdict = decide({
-    mapPaths: new Set(['src/other.ts', 'src/b.ts']),
-    enumeratedPaths: new Set(['src/a.ts', 'src/b.ts']),
-  });
-  assert.deepEqual(kinds(verdict), ['map_partial', 'unscored_touched']);
-  assert.equal(verdict.blocking, true);
-});
-
-test('a run that recorded no files has no record of what it ran, and no verdict', () => {
-  // A truncated or malformed lcov parses to nothing rather than failing, and every completeness
-  // check reads this list: an empty one would silence them all and leave a clean-looking verdict.
-  assert.deepEqual(kinds(decide({ enumeratedPaths: null })), ['enumeration_missing']);
-  // The whole-repo backlog is scored from the map alone, so an absent lcov says nothing about it.
-  assert.deepEqual(kinds(decide({ scope: 'all', enumeratedPaths: null })), []);
+  assert.deepEqual(verdict.problems, []);
+  assert.deepEqual(verdict.uninstrumented, []);
 });
 
 test('a coverage map is only readable as files to counter objects', () => {

@@ -9,6 +9,7 @@ import {
   beginCoverageRun,
   describeStampMismatch,
   finishCoverageRun,
+  isInstrumentedPath,
   verifyCoverageStamp,
   type CoverageConfig,
   type CoverageRun,
@@ -405,4 +406,24 @@ test('a run that declared no include patterns is its own reason', () => {
 
   write(STAMP_PATH, `{${BASE},"include":[],"exclude":{}}`);
   assert.equal(reason(), 'unreadable');
+});
+
+test('eligibility is what the config declares, matched root-relative', () => {
+  const instrumented = (file: string): boolean => isInstrumentedPath(file, CONFIG);
+  assert.equal(instrumented('src/a.ts'), true);
+  assert.equal(instrumented('src/nested/b.ts'), true);
+  // Vitest 5 matches without picomatch's `contains`, so an anchored pattern reaches only the tree it
+  // names — the reason `src/**` cannot stand in for `packages/*/src/**`.
+  assert.equal(instrumented('packages/x/src/a.ts'), false);
+  assert.equal(instrumented('src/generated/table.ts'), false);
+  assert.equal(instrumented('scripts/tool.ts'), false);
+  // A Windows-style path from a report is the same path to this rule.
+  assert.equal(instrumented(String.raw`src\nested\b.ts`), true);
+});
+
+test('eligibility reaches dot-prefixed segments, the way the provider matches them', () => {
+  // The provider matches with picomatch `dot: true`, so a coverage pass does record these files, and a
+  // map that omits one is the gap the verdict reports rather than an out-of-scope file.
+  assert.equal(isInstrumentedPath('src/.hidden.ts', CONFIG), true);
+  assert.equal(isInstrumentedPath('src/.generated/deep.ts', CONFIG), true);
 });
