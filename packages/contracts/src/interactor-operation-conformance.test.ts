@@ -27,6 +27,7 @@ const EXPECTATIONS: {
   back: { method: 'back', input: {} },
   home: { method: 'home', input: {} },
   setOrientation: { method: 'setOrientation', input: { rotation: 'portrait' } },
+  unlockOrientation: { method: 'unlockOrientation', input: {} },
   tvRemote: { method: 'tvRemote', input: { button: 'select' } },
   keyboardStatus: { method: 'keyboardStatus', input: {} },
   keyboardDismiss: { method: 'keyboardDismiss', input: {} },

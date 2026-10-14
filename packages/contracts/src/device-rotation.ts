@@ -52,8 +52,18 @@ export function parseDeviceRotation(input: string | undefined): DeviceRotation {
       'orientation requires an orientation argument. Use portrait|portrait-upside-down|landscape-left|landscape-right.',
     );
   }
-  const normalized = input?.trim().toLowerCase();
-  switch (normalized) {
+  const rotation = matchDeviceRotation(input);
+  if (rotation === undefined) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Invalid rotation: ${input}. Use portrait|portrait-upside-down|landscape-left|landscape-right.`,
+    );
+  }
+  return rotation;
+}
+
+function matchDeviceRotation(input: string): DeviceRotation | undefined {
+  switch (input.trim().toLowerCase()) {
     case 'portrait':
       return 'portrait';
     case 'portrait-upside-down':
@@ -66,11 +76,40 @@ export function parseDeviceRotation(input: string | undefined): DeviceRotation {
     case 'right':
       return 'landscape-right';
     default:
-      throw new AppError(
-        'INVALID_ARGS',
-        `Invalid rotation: ${input}. Use portrait|portrait-upside-down|landscape-left|landscape-right.`,
-      );
+      return undefined;
   }
+}
+
+// ---- Orientation request --------------------------------------------------------------------
+
+/**
+ * The `orientation` command's own argument vocabulary: one fixed rotation, or `auto`, which hands
+ * rotation back to the device's sensor. `auto` is a mode, not a rotation: it never joins
+ * `DeviceRotation`, which every rotation reader and provider maps one-to-one onto a display
+ * rotation, and it binds its own runtime operation (`unlockOrientation`).
+ */
+export const ORIENTATION_AUTO = 'auto' as const;
+export const ORIENTATION_REQUESTS = [...DEVICE_ROTATIONS, ORIENTATION_AUTO] as const;
+export type OrientationRequest = (typeof ORIENTATION_REQUESTS)[number];
+
+export const ORIENTATION_REQUEST_USAGE = ORIENTATION_REQUESTS.join('|');
+
+export function parseOrientationRequest(input: string | undefined): OrientationRequest {
+  if (input === undefined) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `orientation requires an orientation argument. Use ${ORIENTATION_REQUEST_USAGE}.`,
+    );
+  }
+  if (input.trim().toLowerCase() === ORIENTATION_AUTO) return ORIENTATION_AUTO;
+  const rotation = matchDeviceRotation(input);
+  if (rotation === undefined) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Invalid orientation: ${input}. Use ${ORIENTATION_REQUEST_USAGE}.`,
+    );
+  }
+  return rotation;
 }
 
 // ---- Hinge pose ------------------------------------------------------------------------------

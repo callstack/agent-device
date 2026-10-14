@@ -1,5 +1,9 @@
 import { expect, test, vi } from 'vitest';
-import { bindOrientation, orientationRuntimeOperationFacts } from './orientation-runtime.ts';
+import {
+  bindOrientation,
+  bindOrientationUnlock,
+  orientationRuntimeOperationFacts,
+} from './orientation-runtime.ts';
 import type { Interactor } from './interactor-types.ts';
 import { localInteractorSource } from './interactor-operation-binding.ts';
 
@@ -13,8 +17,10 @@ const device = {
 
 test('builds the exact orientation operation fact catalog', () => {
   const orientation = { available: true } as const;
-  expect(orientationRuntimeOperationFacts({ orientation })).toEqual({
+  const unlock = { available: false, reason: 'unsupported-platform-leaf' } as const;
+  expect(orientationRuntimeOperationFacts({ orientation, unlock })).toEqual({
     setOrientation: orientation,
+    unlockOrientation: unlock,
   });
 });
 
@@ -40,4 +46,40 @@ test('a local binding drives the interactor with the requested rotation and retu
   });
   expect(setOrientation).toHaveBeenCalledWith('landscape-left');
   expect(result).toEqual({ orientation: 'landscape-left' });
+});
+
+test('a local unlock binding hands rotation back through the interactor', async () => {
+  const unlockOrientation = vi.fn(async () => undefined);
+  const resolveInteractor = vi.fn(async () => ({ unlockOrientation }) as unknown as Interactor);
+  const signal = new AbortController().signal;
+
+  const operations = bindOrientationUnlock(
+    signal,
+    localInteractorSource({ device, resolveInteractor }),
+  );
+  await operations.unlockOrientation({
+    options: { appBundleId: 'com.example.app' },
+    execution: { logPath: '/tmp/daemon.log', requestId: 'orientation-2' },
+  });
+
+  expect(resolveInteractor).toHaveBeenCalledWith(device, {
+    logPath: '/tmp/daemon.log',
+    requestId: 'orientation-2',
+    appBundleId: 'com.example.app',
+    signal,
+  });
+  expect(unlockOrientation).toHaveBeenCalledTimes(1);
+});
+
+test('an admitted unlock on an interactor without the member fails closed', async () => {
+  const resolveInteractor = vi.fn(async () => ({}) as unknown as Interactor);
+  const operations = bindOrientationUnlock(
+    new AbortController().signal,
+    localInteractorSource({ device, resolveInteractor }),
+  );
+
+  await expect(operations.unlockOrientation({})).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'interactor-method-missing' },
+  });
 });

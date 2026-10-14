@@ -204,6 +204,17 @@ test('structural action events preserve navigation, viewport, keyboard, and gest
     message: 'Rotation requested: portrait (unconfirmed)',
   });
   assert.equal(buildActionSummary(unconfirmedOrientation), 'Requested portrait (unconfirmed)');
+
+  const sensorOrientation = action('orientation', {
+    action: 'orientation',
+    orientation: 'auto',
+    message: 'Rotation follows the device sensor',
+  });
+  assert.equal(buildActionSummary(sensorOrientation), 'Rotation follows the device sensor');
+  assert.deepEqual(buildActionDetails(sensorOrientation), {
+    command: 'orientation',
+    orientation: 'auto',
+  });
   assert.equal(buildActionSummary(viewport), 'Set viewport to 402×874');
   assert.equal(buildActionSummary(keyboard), 'Dismissed keyboard');
   assert.equal(buildActionSummary(gesture), 'Ran pan gesture');

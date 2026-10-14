@@ -53,6 +53,7 @@ agent-device back --system
 agent-device home
 agent-device orientation portrait
 agent-device orientation landscape-left
+agent-device orientation auto
 agent-device app-switcher
 agent-device action-button
 agent-device fold closed
@@ -105,7 +106,8 @@ Back, orientation, and hardware buttons:
 
 - `back` uses app-owned back navigation: visible in-app back UI on Apple targets, and the back keyevent on Android. `--in-app` names this default explicitly.
 - `back --system` sends system back input: the Android back keyevent, the iOS back gesture, or the tvOS Siri Remote Menu button. macOS has no system back, so it reports unavailable.
-- `orientation portrait|portrait-upside-down|landscape-left|landscape-right` works on iOS and Android mobile targets only.
+- `orientation portrait|portrait-upside-down|landscape-left|landscape-right` works on iOS and Android mobile targets only. On ADB-backed Android it turns auto-rotate off, and the lock persists after the session ends until something turns it back on.
+- `orientation auto` hands rotation back to the sensor on ADB-backed Android, local or Limrun (`accelerometer_rotation=1`, `user_rotation` untouched), and reports `orientation: "auto"`. It does not wait for the display to rotate, because there is no target rotation: the sensor decides, and an emulator usually settles on portrait. Use it after a landscape step so later runs, and tests that expect the app to follow physical rotation, find the device as it was. Every other backend (iOS, Appium-backed Android, WebDriver iOS) refuses `auto` with `UNSUPPORTED_OPERATION`; request a rotation there instead.
 - `action-button` presses the iPhone or iPad Action Button once. It takes no arguments, no hold duration, and no `--settle`, and it doesn't activate the session app or drive Camera Control. Other platforms refuse it, and a model without the button (an iPhone SE, most iPad simulators) fails with `UNSUPPORTED_OPERATION`.
 - `action-button` reports that the press was dispatched, not what it triggered. Simulators run no Shortcuts or App Intents, so verify the outcome on a physical iPhone. Expect a press to take about five seconds on a Simulator.
 

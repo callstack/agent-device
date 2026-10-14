@@ -412,7 +412,7 @@ test('orientation command usage is documented', async () => {
   if (help === null) throw new Error('Expected command help text');
   assert.match(
     help,
-    /orientation <portrait\|portrait-upside-down\|landscape-left\|landscape-right>/,
+    /orientation <portrait\|portrait-upside-down\|landscape-left\|landscape-right\|auto>/,
   );
   assert.match(help, /Set device orientation on iOS and Android/);
 });

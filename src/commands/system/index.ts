@@ -8,10 +8,11 @@ import {
   MAX_FOLD_KEYFRAMES,
   parseFoldInput,
   parseFoldKeyframesJson,
-  DEVICE_ROTATIONS,
   FOLD_POSES,
   FOLD_POSE_USAGE,
-  parseDeviceRotation,
+  ORIENTATION_REQUEST_USAGE,
+  ORIENTATION_REQUESTS,
+  parseOrientationRequest,
 } from '@agent-device/contracts/device';
 import { type BackMode, BACK_MODES } from '@agent-device/contracts/back-mode';
 import {
@@ -97,7 +98,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
   orientation: objectSchema(
     {
       action: constSchema('orientation'),
-      orientation: enumSchema(DEVICE_ROTATIONS),
+      orientation: enumSchema(ORIENTATION_REQUESTS),
       message: stringSchema(),
       confirmed: booleanSchema(),
       warning: stringSchema(),
@@ -231,7 +232,8 @@ const backCommandDescription =
   'Navigate back in the app or through system navigation. Use in-app for the app navigation stack and system when the platform back behavior is required.';
 const homeCommandDescription =
   'Send the selected device to its home screen. This leaves the app session open but moves the foreground away from the app.';
-const orientationCommandDescription = 'Set device orientation on iOS and Android';
+const orientationCommandDescription =
+  'Set device orientation on iOS and Android. A rotation locks the device to it; auto hands rotation back to the sensor on ADB-backed Android (local and Limrun) without waiting for the display to rotate; every other backend refuses auto.';
 const foldGuidance = {
   hingeEvent: 'simulator HID hinge event',
   permissions: 'Device Hub and host Accessibility permission are not required.',
@@ -282,7 +284,7 @@ const orientationCommandMetadata = defineFieldCommandMetadata(
   ORIENTATION_COMMAND_NAME,
   orientationCommandDescription,
   {
-    orientation: requiredField(enumField(DEVICE_ROTATIONS)),
+    orientation: requiredField(enumField(ORIENTATION_REQUESTS)),
   },
 );
 
@@ -369,7 +371,7 @@ const backCliSchema = {
 } as const satisfies CommandSchemaOverride;
 
 const orientationCliSchema = {
-  usageOverride: 'orientation <portrait|portrait-upside-down|landscape-left|landscape-right>',
+  usageOverride: `orientation <${ORIENTATION_REQUEST_USAGE}>`,
   positionalArgs: ['orientation'],
 } as const satisfies CommandSchemaOverride;
 
@@ -405,7 +407,7 @@ export const backCliReader: CliReader = (_positionals, flags) => ({
 
 export const orientationCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
-  orientation: parseDeviceRotation(positionals[0]),
+  orientation: parseOrientationRequest(positionals[0]),
 });
 
 export const foldCliReader: CliReader = (positionals, flags) => ({

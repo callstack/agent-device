@@ -43,11 +43,16 @@ export {
   deviceRotationSurfaceDegrees,
   foldPoseForHingeAngle,
   isDeviceRotation,
+  ORIENTATION_AUTO,
+  ORIENTATION_REQUESTS,
+  ORIENTATION_REQUEST_USAGE,
   parseDeviceRotation,
   parseFoldPose,
+  parseOrientationRequest,
 } from '../device-rotation.ts';
 export type {
   DeviceRotation,
+  OrientationRequest,
   FoldPose,
   FoldKeyframe,
   FoldScreenCoordinateSpace,

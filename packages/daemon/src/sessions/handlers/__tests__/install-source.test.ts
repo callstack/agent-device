@@ -458,6 +458,7 @@ function sourceRuntimeFacts(
       readTextAtPoint: unavailable,
       back: unavailable,
       setOrientation: unavailable,
+      unlockOrientation: unavailable,
       tvRemote: unavailable,
       ...keyboardRuntimeOperationFacts({ unsupported: unavailable }),
       ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),

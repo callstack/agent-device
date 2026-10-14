@@ -450,6 +450,7 @@ function expectNavigationAndKeyboardFacts(
   const mobileInputEligible =
     device.appleOs !== 'tvos' && device.appleOs !== 'macos' && device.appleOs !== 'watchos';
   expectOperationAvailability(binding, 'setOrientation', mobileInputEligible);
+  expectOperationAvailability(binding, 'unlockOrientation', false);
   expectOperationAvailability(binding, 'keyboardDismiss', mobileInputEligible);
   expectOperationAvailability(binding, 'keyboardEnter', mobileInputEligible);
 

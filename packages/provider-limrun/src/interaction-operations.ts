@@ -108,6 +108,10 @@ const tvRemoteUnavailableAndroid = unavailableFact(
  * iOS leg has no such reuse, so it stays honestly unavailable rather than guessing at untested
  * provider behavior.
  */
+const orientationUnlockUnavailableIos = unavailableFact(
+  'unsupported-provider-mode',
+  'orientation auto is ADB-backed Android only; Limrun iOS direct sessions do not expose it.',
+);
 const keyboardUnavailableIos = unavailableFact(
   'unsupported-provider-mode',
   'Limrun iOS direct sessions do not expose keyboard actions.',
@@ -214,14 +218,17 @@ export function limrunNavigationOperationFacts(
   if (liveSessionUnavailable) {
     return Object.freeze({
       ...backRuntimeOperationFacts({ back: liveSessionUnavailable }),
-      ...orientationRuntimeOperationFacts({ orientation: liveSessionUnavailable }),
+      ...orientationRuntimeOperationFacts({
+        orientation: liveSessionUnavailable,
+        unlock: liveSessionUnavailable,
+      }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: liveSessionUnavailable }),
     });
   }
   if (device.platform === 'android') {
     return Object.freeze({
       ...backRuntimeOperationFacts({ back: available }),
-      ...orientationRuntimeOperationFacts({ orientation: available }),
+      ...orientationRuntimeOperationFacts({ orientation: available, unlock: available }),
       ...tvRemoteRuntimeOperationFacts({
         tvRemote: device.target === 'tv' ? available : tvRemoteUnavailableAndroid,
       }),
@@ -229,7 +236,10 @@ export function limrunNavigationOperationFacts(
   }
   return Object.freeze({
     ...backRuntimeOperationFacts({ back: available }),
-    ...orientationRuntimeOperationFacts({ orientation: available }),
+    ...orientationRuntimeOperationFacts({
+      orientation: available,
+      unlock: orientationUnlockUnavailableIos,
+    }),
     ...tvRemoteRuntimeOperationFacts({ tvRemote: tvRemoteUnavailableIos }),
   });
 }

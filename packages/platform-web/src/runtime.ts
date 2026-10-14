@@ -397,7 +397,10 @@ function webRuntimeFacts(
       // which is what the legacy dispatch already did once its Apple-runner attempt failed.
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: elementTextUnavailable }),
       ...backRuntimeOperationFacts({ back: navigationUnavailable }),
-      ...orientationRuntimeOperationFacts({ orientation: navigationUnavailable }),
+      ...orientationRuntimeOperationFacts({
+        orientation: navigationUnavailable,
+        unlock: navigationUnavailable,
+      }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: navigationUnavailable }),
       ...keyboardRuntimeOperationFacts({ unsupported: navigationUnavailable }),
       // The web backend never carried a `clipboard` capability bucket (`WEB_QUERY_COMMANDS`

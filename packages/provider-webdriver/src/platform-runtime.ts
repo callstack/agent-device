@@ -167,6 +167,10 @@ const orientationUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'This WebDriver provider runtime does not expose orientation for this device.',
 );
+const orientationUnlockUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'orientation auto is ADB-backed Android only; this WebDriver provider runtime does not expose it.',
+);
 /** The WebDriver interactor's own `tvRemote` always throws unsupported (no capability declares
  * it), so this cell is unavailable unconditionally rather than gated by interactor reachability. */
 const tvRemoteUnavailable = unavailableFact(
@@ -584,6 +588,7 @@ function webDriverFacts(
       ...backRuntimeOperationFacts({ back: declared('back', backUnavailable) }),
       ...orientationRuntimeOperationFacts({
         orientation: declared('orientation', orientationUnavailable),
+        unlock: orientationUnlockUnavailable,
       }),
       ...tvRemoteRuntimeOperationFacts({ tvRemote: tvRemoteUnavailable }),
       // Dismiss rides the same reachable interactor `back`/`home` do, over the driver's

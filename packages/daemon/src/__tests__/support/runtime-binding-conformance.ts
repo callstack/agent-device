@@ -118,6 +118,7 @@ export const conformedRuntimeBindings = {
       ),
   },
   orientation: {
+    plan: { refused: 'setOrientation', admitted: [] },
     resolve: async (device, bindings) =>
       refusable(
         await resolveBoundOrientationRuntime({

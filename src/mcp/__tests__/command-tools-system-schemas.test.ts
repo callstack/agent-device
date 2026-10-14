@@ -157,7 +157,7 @@ const NAVIGATION_DISPATCH_SHAPES: Readonly<
       action: { type: 'string', const: 'orientation' },
       orientation: {
         type: 'string',
-        enum: ['portrait', 'portrait-upside-down', 'landscape-left', 'landscape-right'],
+        enum: ['portrait', 'portrait-upside-down', 'landscape-left', 'landscape-right', 'auto'],
       },
       message: { type: 'string' },
       confirmed: { type: 'boolean' },
