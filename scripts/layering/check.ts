@@ -583,7 +583,7 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     snapshotAssemblyPresentationViolations(context.sources, context.edges),
   'daemon-platform-runtime-inventory': (context) =>
     checkDaemonPlatformRuntimeInventory(context.edges),
-  'daemon-process-reach': (context) => checkDaemonProcessReach(context.edges),
+  'daemon-process-reach': (context) => checkDaemonProcessReach(context.sourceFiles, context.edges),
   'daemon-client-entry': (context) => checkDaemonClientEntry(context.edges),
   'session-authority-overlay': (context) =>
     checkSessionAuthorityOverlay(
