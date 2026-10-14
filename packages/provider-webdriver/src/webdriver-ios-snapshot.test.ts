@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { resolveKeyboardTapOcclusion } from '@agent-device/contracts/tap-keyboard-occlusion';
@@ -65,6 +66,39 @@ test('Appium iOS adapter carries missing viewport evidence without presenting or
   ]);
 });
 
+const iosNativeStateTable = JSON.parse(
+  readFileSync(
+    new URL('../../../contracts/fixtures/native-snapshot-states.json', import.meta.url),
+    'utf8',
+  ),
+) as {
+  cases: {
+    name: string;
+    input: Record<string, string | boolean>;
+    expected: Record<string, boolean>;
+  }[];
+};
+for (const row of iosNativeStateTable.cases) {
+  test(`Appium iOS native states: ${row.name}`, () => {
+    const type = row.input.type ?? 'Other';
+    const attrs = Object.entries(row.input)
+      .filter(([key]) => key !== 'type')
+      .map(([key, value]) => `${key}="${value}"`)
+      .join(' ');
+    const node = acquireWebDriverIosSnapshot(`<${type} label="Node" ${attrs} />`).acquisition
+      .nodes[0]!;
+    assert.deepEqual(
+      Object.fromEntries(
+        ['checked', 'password', 'editable'].flatMap((key) => {
+          const value = node[key as 'checked' | 'password' | 'editable'];
+          return value === undefined ? [] : [[key, value]];
+        }),
+      ),
+      row.expected,
+    );
+  });
+}
+
 test('Appium carries visibility-only and derived keyboard facts before projection', () => {
   assert.deepEqual(acquireWebDriverIosSnapshot(SOURCE, undefined, true).acquisition.keyboard, {
     kind: 'visibility-only',
@@ -106,7 +140,7 @@ test.each([
   '_UIRemoteKeyboardPlaceholderView',
   'TUISystemInputAssistantView',
   'TUISystemInputAssistantPageView',
-])('app controls under %s remain unowned through projection and state assembly', (role) => {
+])('app controls under %s remain unowned through projection and state assembly', async (role) => {
   const source = SOURCE.replace(
     '</XCUIElementTypeApplication>',
     `<XCUIElementTypeKeyboard x="0" y="580" width="390" height="264"><XCUIElementTypeOther class="${role}"><XCUIElementTypeButton name="Save draft" x="200" y="600" width="100" height="40" /></XCUIElementTypeOther><XCUIElementTypeOther class="UIKeyboardLayoutStar"><XCUIElementTypeButton name="Done" x="0" y="600" width="100" height="40" /></XCUIElementTypeOther></XCUIElementTypeKeyboard></XCUIElementTypeApplication>`,

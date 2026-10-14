@@ -1,4 +1,3 @@
-import { interpretIosReactNativeValue } from '@agent-device/capture-kit/ios-react-native-value';
 import {
   createIosSnapshotAcquisition,
   resolveIosViewportEvidenceFromRoots,
@@ -13,7 +12,7 @@ export async function captureLimrunIosSnapshot(
 ): Promise<SnapshotRuntimeAcquiredResult> {
   const tree = (await session.client.elementTree()) as IosTreeNode[];
   const viewport = readLimrunViewport(tree, session.client.deviceInfo);
-  const nodes = flattenIosTree(tree).map(interpretIosReactNativeValue);
+  const nodes = flattenIosTree(tree);
   return createIosSnapshotAcquisition({
     producer: 'limrun-ios-tree',
     ...acquireProviderKeyboard({

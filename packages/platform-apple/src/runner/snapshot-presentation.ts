@@ -1,5 +1,4 @@
 import { isHandheldAppleDevice, type DeviceInfo } from '@agent-device/kernel/device';
-import { interpretIosReactNativeValue } from '@agent-device/capture-kit/ios-react-native-value';
 import type {
   IosRunnerQualityPayloadFacts,
   IosSnapshotInput,
@@ -11,7 +10,10 @@ import {
   presentIosRunnerSnapshot,
   toIosSnapshotEngineErrorDetails,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
-import { resolveIosViewportEvidenceFromRoots } from '@agent-device/capture-kit/ios-snapshot-acquisition';
+import {
+  interpretIosNode,
+  resolveIosViewportEvidenceFromRoots,
+} from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality-warnings';
 import {
   isSparseSnapshotQualityVerdict,
@@ -70,15 +72,15 @@ export function readAppleSnapshotResult(
   );
   const nodes = Array.isArray(result.nodes) ? (result.nodes as RawSnapshotNode[]) : undefined;
   const qualityPayload = readQualityPayload(result.qualityPayload, systemSurface);
-  const interpretValues = isHandheldAppleDevice(device);
+  const interpret = (node: RawSnapshotNode) =>
+    interpretIosNode(node, { reactNativeValue: isHandheldAppleDevice(device) });
   return {
-    nodes: interpretValues ? nodes?.map(interpretIosReactNativeValue) : nodes,
+    nodes: nodes?.map(interpret),
     truncated: typeof result.truncated === 'boolean' ? result.truncated : undefined,
     quality: readSnapshotQualityVerdict(result.snapshotQuality),
-    qualityPayload:
-      interpretValues && qualityPayload
-        ? { ...qualityPayload, nodes: qualityPayload.nodes.map(interpretIosReactNativeValue) }
-        : qualityPayload,
+    qualityPayload: qualityPayload
+      ? { ...qualityPayload, nodes: qualityPayload.nodes.map(interpret) }
+      : qualityPayload,
     runnerFatal: result.runnerFatal === true,
     ...(keyboard ? { keyboard } : {}),
     ...(systemSurface ? { systemSurface } : {}),

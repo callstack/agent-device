@@ -347,6 +347,10 @@ Android snapshot nodes and `get attrs` (including the digest response) carry the
 them. Explicit `false` and `0` are kept; an absent field means the fact was unavailable, not false.
 `hintShowing` and `placeholder` need Android API 26 or later, `heading` API 28 or later.
 
+On iOS, the Apple runner, Simulator accessibility bridge, Appium, and Limrun publish native
+`checked`, `password`, and `editable` facts when available. macOS runner snapshots publish the
+same native facts.
+
 - `selected` is the accessibility selected state an app sets on a control — the active bottom-tab or
   segmented-control item, or the chosen row of a list. Android reports it explicitly as `true` or
   `false`; an older helper APK omits the field, which means the answer is unavailable rather than
@@ -356,9 +360,20 @@ them. Explicit `false` and `0` are kept; an absent field means the fact was unav
   view an app marked checkable. Android reports it as `true` or `false` on those nodes only; a node
   that cannot be checked, or an older helper APK, omits the field. Snapshot text marks the node
   `[checked]` or `[unchecked]`, so a toggle that reads as plain text is one Android did not report as
-  checkable.
+  checkable. On iOS and the macOS runner, native switches, checkboxes, radio buttons, and toggles
+  carry `checked` when their native value reports a boolean state; an unavailable or unrecognized
+  state stays absent.
+- `editable` is the native text-entry capability when available. `is editable` returns false for a
+  disabled node, even when `editable` is true. Otherwise it uses the published fact, including
+  explicit false, and falls back to the platform type only when the fact is absent. Android
+  Appium leaves `editable` absent when the source does not report it.
+- `password` identifies secure text entry. On iOS and the macOS runner, native secure fields report
+  true and ordinary native text-entry fields report false. Android carries the reported native
+  password flag.
 - `heading` is the accessibility heading flag an app sets on a node, the way React Native's
-  `accessibilityRole="header"` does on a plain `View`; it is present only as `true`.
+  `accessibilityRole="header"` does on a plain `View`. The Android helper publishes true for a
+  heading; Appium preserves an explicit true or false when reported. Limrun reports true when
+  the node carries the native heading trait.
 - `roleDescription` is the localized role description an app sets beside the native class, verbatim
   (React Native writes `Tab`, `Tab List`, `Radio Group`, `Link`, `Menu`), when the class alone would
   not say what the control is. The `type` stays the class; a consumer maps the description to a role.
