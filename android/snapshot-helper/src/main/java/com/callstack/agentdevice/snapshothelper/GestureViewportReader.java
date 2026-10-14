@@ -58,7 +58,7 @@ final class GestureViewportReader {
   }
 
   @SuppressWarnings("deprecation")
-  static Reading readReading(UiAutomation automation) {
+  static Reading readReading(UiAutomation automation) throws InterruptedException {
     try {
       automation.waitForIdle(100, 2_000);
     } catch (TimeoutException ignored) {
@@ -136,10 +136,6 @@ final class GestureViewportReader {
           Math.max(struck.bottom, bounds.bottom));
     }
     return struck;
-  }
-
-  static Rect read(UiAutomation automation) {
-    return readReading(automation).application;
   }
 
   private static Rect resolveApplication(
