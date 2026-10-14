@@ -5,7 +5,10 @@ import type { IosTargetActivation, PostGestureOutcome } from '@agent-device/kern
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { markDeferredInteractionOutcome } from '@agent-device/daemon/testing/deferred-interaction-outcome';
-import { makeAndroidSession, makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import {
+  makeAndroidSession,
+  makeIosSession,
+} from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import { handleSnapshotCommands } from '@agent-device/daemon/testing/handlers/snapshot';
