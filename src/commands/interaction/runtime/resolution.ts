@@ -25,7 +25,6 @@ import {
   buildSelectorResolutionDisclosure,
   describeResolvedInteractionNode,
 } from './resolution-disclosure.ts';
-import type { ActionSelectorResolution } from './selector-action-resolution.ts';
 import {
   assertVisibleSelectorTarget,
   runInteractionPipelineStages,
