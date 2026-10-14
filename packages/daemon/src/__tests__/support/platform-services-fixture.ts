@@ -1,8 +1,8 @@
+import { type ClaimRecoveryGatewayFactory } from '@agent-device/daemon-contracts/device-claim-recovery';
 import { vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type { DeviceBootObservation } from '@agent-device/contracts/device-boot';
-import type { ClaimRecoveryGatewayFactory } from '../../resources/device/claim-recovery-gateway.ts';
 import type { DaemonPlatformServices } from '../../core/platform-services.ts';
 import { unavailableDeviceRuntimeGateway } from './unavailable-device-runtime-gateway.ts';
 

@@ -1,10 +1,10 @@
+import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createDaemonHttpServer } from '../http/http-server.ts';
-import { resolveSessionRequestLogPath } from '../../core/session-artifact-paths.ts';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import { DAEMON_HTTP_TENANT_HEADER } from '@agent-device/contracts/daemon-http';
 import type { DaemonRequest } from '../../core/daemon-request.ts';

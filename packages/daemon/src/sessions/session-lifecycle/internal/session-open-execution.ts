@@ -1,4 +1,8 @@
 import {
+  resolveSessionRequestLogPath,
+  resolveSessionRunnerLogPath,
+} from '@agent-device/daemon-contracts/session-artifact-paths';
+import {
   openApplicationRuntimeUse,
   openApplicationWithRuntimeHintApplyUse,
   openApplicationWithRuntimeHintClearUse,
@@ -22,10 +26,6 @@ import {
 import { isRequestCanceled } from '@agent-device/host-kit/request';
 import { createRequestCanceledError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../../core/session-store.ts';
-import {
-  resolveSessionRequestLogPath,
-  resolveSessionRunnerLogPath,
-} from '../../../core/session-artifact-paths.ts';
 import {
   countConfiguredRuntimeHints,
   runtimeHintValues,
@@ -58,8 +58,8 @@ import {
   type DeviceClaimAcquireResult,
   type DeviceClaimSessionOwnership,
   type DeviceClaimReconciler,
-} from '../../../resources/device/device-claims.ts';
-import type { TakenOverDeviceClaim } from '../../../resources/device/device-claim-reboot.ts';
+  type TakenOverDeviceClaim,
+} from '@agent-device/daemon-contracts/device-claims';
 import { appendResponseWarning } from './session-open-warnings.ts';
 import { buildDeviceClaimConflictError } from '../../../resources/device/device-claim-conflict.ts';
 import { deviceClaimRuleForOwner } from '../../../resources/device/device-claim-rule.ts';

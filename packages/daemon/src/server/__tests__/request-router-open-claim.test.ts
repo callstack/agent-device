@@ -57,7 +57,7 @@ import { awaitFixtureReadiness } from '../../__tests__/support/application-lifec
 import { ensureDeviceReady } from '../../core/device/device-ready.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import { inspectDeviceClaims } from '../../resources/device/device-claim-inspection.ts';
+import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import { makeIosDevice, openRequest, storedClaimUpdatedAt } from './request-router-open-harness.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 

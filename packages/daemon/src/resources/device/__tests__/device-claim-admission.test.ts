@@ -1,3 +1,4 @@
+import { resolveDeviceClaimPath } from '@agent-device/daemon-contracts/device-claims-fixtures';
 import { expect, test } from 'vitest';
 import {
   daemonPlatformServicesFixture,
@@ -13,9 +14,12 @@ import {
   retainOrphanedDeviceClaims,
 } from '../../../__tests__/support/device-claim-store.ts';
 import { createDeviceClaimAdmission } from '../device-claim-admission.ts';
-import { abandonDeviceClaim, acquireDeviceClaim } from '../device-claims.ts';
-import { inspectDeviceClaims } from '../device-claim-inspection.ts';
-import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from '../device-claim-paths.ts';
+import {
+  abandonDeviceClaim,
+  acquireDeviceClaim,
+  inspectDeviceClaims,
+  canonicalLocalDeviceKey,
+} from '@agent-device/daemon-contracts/device-claims';
 import { createRequestExecutionScope } from '../../../server/request-execution-scope.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../../core/session-store.ts';

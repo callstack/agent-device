@@ -1,3 +1,5 @@
+import { createDeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claims-fixtures';
+import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -11,9 +13,7 @@ import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform
 import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { createDeviceClaimReconciler } from '../device-claim-reconciliation.ts';
-import type { DeviceClaim } from '../../../resources/device/device-claim-record.ts';
-import { appLogResourceStore } from '../../../resources/app-log-resource-store.ts';
+import type { DeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 
 const scope = {
   signal: new AbortController().signal,

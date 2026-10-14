@@ -1,14 +1,14 @@
-import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
-import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { createDeviceClaimReconciler } from '../../sessions/device/device-claim-reconciliation.ts';
-import type { DeviceClaimReconciler } from '../../resources/device/device-claims.ts';
-import type { ClaimRecoveryGatewayFactory } from '../../resources/device/claim-recovery-gateway.ts';
 import {
   resolveSessionDir,
   resolveSessionAppLogPath,
   resolveSessionAppLogPidPath,
-} from '../../core/session-artifact-paths.ts';
+} from './session-artifact-paths.ts';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';
+import { resolveDaemonPaths } from './daemon-resolution.ts';
+import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
+import type { DeviceClaimReconciler } from './device-claims.ts';
+import type { ClaimRecoveryGatewayFactory } from './claim-recovery-gateway.ts';
 
 export type OwnerScopedClaimRecovery = {
   reconcile: DeviceClaimReconciler;

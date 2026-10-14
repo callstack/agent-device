@@ -41,6 +41,19 @@ import {
 } from './device-claim-settlement.ts';
 import { withDeviceClaimLock, writeDeviceClaim } from './device-claim-store.ts';
 
+export { canonicalLocalDeviceKey } from './device-claim-paths.ts';
+export {
+  deviceClaimOwnerCannotRelease,
+  deviceClaimRequiresStaleInspection,
+  inspectDeviceClaims,
+} from './device-claim-inspection.ts';
+export type {
+  DeviceClaimClassification,
+  DeviceClaimSelectors,
+  InspectedDeviceClaim,
+} from './device-claim-inspection.ts';
+export type { DeviceClaim } from './device-claim-record.ts';
+export type { TakenOverDeviceClaim } from './device-claim-reboot.ts';
 export type { DeviceClaimReconciler } from './device-claim-settlement.ts';
 export type { DeviceClaimSessionOwnership } from './device-claim-record.ts';
 

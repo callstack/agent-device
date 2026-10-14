@@ -11,6 +11,7 @@
  * over `/rpc`.
  */
 
+import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -19,7 +20,6 @@ import { test } from 'vitest';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { localizeRemoteDaemonError } from '../../../src/remote/remote-request-diagnostics.ts';
-import { resolveSessionRequestLogPath } from '@agent-device/daemon/session-artifact-paths';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import type { DaemonError } from '@agent-device/kernel/errors';
 import {

@@ -46,8 +46,10 @@ import {
   prepareApplicationOpenFixture,
 } from '../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
-import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../../../resources/device/device-claims.ts';
-import { inspectDeviceClaims } from '../../../resources/device/device-claim-inspection.ts';
+import {
+  acquireDeviceClaim as acquireProductionDeviceClaim,
+  inspectDeviceClaims,
+} from '@agent-device/daemon-contracts/device-claims';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import {

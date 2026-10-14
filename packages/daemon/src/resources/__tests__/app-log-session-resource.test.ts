@@ -1,3 +1,4 @@
+import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -17,7 +18,6 @@ import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { createAppLogAdmissionLedger } from '../app-log-admission-ledger.ts';
 import { adoptStartedSessionAppLog, finishSessionAppLog } from '../app-log-session-resource.ts';
 import { createNextAppLogFence } from '../app-log-start-preflight.ts';
-import { appLogResourceStore } from '../app-log-resource-store.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import { stopSessionAppLog } from '../../sessions/session-teardown.ts';
 

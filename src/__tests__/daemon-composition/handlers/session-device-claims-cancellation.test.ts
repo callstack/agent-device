@@ -40,7 +40,7 @@ import {
   resolveAndroidPackageForOpen,
 } from '@agent-device/platform-android/mechanics';
 import { clearRequestCanceled, markRequestCanceled } from '@agent-device/host-kit/request';
-import { inspectDeviceClaims } from '@agent-device/daemon/device/device-claim-inspection';
+import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import {
   localRuntimeOwner,
   narrowDeviceBinding,

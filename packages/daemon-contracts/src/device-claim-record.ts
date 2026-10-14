@@ -1,9 +1,9 @@
 import {
   deviceFieldsFromPublicPlatform,
+  decodeDeviceIdentity,
   isPublicPlatform,
   type DeviceIdentity,
 } from '@agent-device/kernel/device';
-import { decodeDeviceIdentity } from '@agent-device/capture-kit';
 import { isRecord } from '@agent-device/kernel/record';
 
 import { canonicalLocalDeviceKey } from './device-claim-paths.ts';

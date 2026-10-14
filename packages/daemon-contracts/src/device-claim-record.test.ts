@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { decodeStoredDeviceClaim } from '../device-claim-record.ts';
+import { decodeStoredDeviceClaim } from './device-claim-record.ts';
 
 const DEVICE_KEY = 'local:android:none:emulator-5554';
 

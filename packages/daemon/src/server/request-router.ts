@@ -1,3 +1,7 @@
+import {
+  createOwnerScopedDeviceClaimReconciler,
+  type ClaimRecoveryGatewayFactory,
+} from '@agent-device/daemon-contracts/device-claim-recovery';
 import { withResolveTargetDeviceCacheScope } from '@agent-device/device-selection/dispatch-resolve';
 import { withDeviceInventoryContext } from '@agent-device/device-selection/device-inventory-context';
 import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
@@ -59,8 +63,6 @@ import {
 } from '@agent-device/ad-script';
 import { createPlatformRequestScope } from './platform-request-scope.ts';
 import { parameterizeSensitiveString } from '@agent-device/selectors/parameterized-recorded-fill';
-import { createOwnerScopedDeviceClaimReconciler } from './device/device-claim-owner-recovery.ts';
-import type { ClaimRecoveryGatewayFactory } from '../resources/device/claim-recovery-gateway.ts';
 import { isConfinedToAppLease, scopeRequestSession } from '../sessions/request-admission.ts';
 import { redactMacOsAppLeaseResponse } from '../resources/macos-app-lease.ts';
 import { resolveEffectiveSessionName } from '../sessions/session-routing.ts';

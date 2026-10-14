@@ -1,6 +1,6 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { leaseScopeToReleaseRequest } from '@agent-device/contracts/lease-scope';
-import { clearDeviceClaim } from '../resources/device/device-claims.ts';
+import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import type {
   DeviceLease,

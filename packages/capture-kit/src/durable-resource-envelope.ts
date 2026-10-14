@@ -1,14 +1,4 @@
-import {
-  isAppleOs,
-  isDeviceTarget,
-  isPlatform,
-  type AppleOS,
-  type DeviceIdentity,
-  type DeviceInfo,
-  type DeviceKind,
-  type DeviceTarget,
-  type Platform,
-} from '@agent-device/kernel/device';
+import { decodeDeviceIdentity, isPlatform, type DeviceIdentity } from '@agent-device/kernel/device';
 import type { JsonObject } from '@agent-device/contracts/client';
 import type {
   DurableDescriptorCodec,
@@ -132,78 +122,6 @@ function decodeRuntimeOwnerRef(value: unknown): RuntimeOwnerRef | null {
   return null;
 }
 
-export function decodeDeviceIdentity(value: unknown): DeviceIdentity | null {
-  if (!isObject(value)) return null;
-  const id = readDeviceIdentityId(value.id);
-  const family = readDeviceIdentityFamily(value.family);
-  const kind = readDeviceIdentityKind(value.kind);
-  const target = readDeviceIdentityTarget(value.target);
-  if (!id || !family || !kind || target === null) return null;
-  if (!hasCoherentAppleIdentity(value, family, kind)) return null;
-  return buildDeviceIdentity(value, id, family, kind, target);
-}
-
-function buildDeviceIdentity(
-  value: Record<string, unknown> & {
-    appleOs?: AppleOS;
-    iosPhysicalDeviceBackend?: DeviceInfo['iosPhysicalDeviceBackend'];
-  },
-  id: string,
-  family: Platform,
-  kind: DeviceKind,
-  target: DeviceTarget | undefined,
-): DeviceIdentity {
-  return Object.freeze({
-    id,
-    family,
-    ...(value.appleOs === undefined ? {} : { appleOs: value.appleOs }),
-    kind,
-    ...(target === undefined ? {} : { target }),
-    ...(value.iosPhysicalDeviceBackend === undefined
-      ? {}
-      : { iosPhysicalDeviceBackend: value.iosPhysicalDeviceBackend }),
-  });
-}
-
-function readDeviceIdentityId(value: unknown): string | null {
-  return isNonEmptyString(value) ? value : null;
-}
-
-function readDeviceIdentityFamily(value: unknown): Platform | null {
-  return isPlatform(value) ? value : null;
-}
-
-function readDeviceIdentityKind(value: unknown): DeviceKind | null {
-  return isDeviceKind(value) ? value : null;
-}
-
-function readDeviceIdentityTarget(value: unknown): DeviceTarget | undefined | null {
-  if (value === undefined) return undefined;
-  return isDeviceTarget(value) ? value : null;
-}
-
-function hasCoherentAppleIdentity(
-  value: Record<string, unknown>,
-  family: Platform,
-  kind: DeviceKind,
-): value is Record<string, unknown> & {
-  appleOs?: AppleOS;
-  iosPhysicalDeviceBackend?: DeviceInfo['iosPhysicalDeviceBackend'];
-} {
-  if (family === 'apple') {
-    if (!isAppleOs(value.appleOs)) return false;
-  } else if (value.appleOs !== undefined || value.iosPhysicalDeviceBackend !== undefined) {
-    return false;
-  }
-  return hasValidPhysicalAppleBackend(value.iosPhysicalDeviceBackend, kind);
-}
-
-function hasValidPhysicalAppleBackend(value: unknown, kind: DeviceKind): boolean {
-  if (value === undefined) return true;
-  if (kind !== 'device') return false;
-  return value === 'coredevice' || value === 'xctest';
-}
-
 function decodeFence(value: unknown): ResourceOwnershipFence | null {
   if (
     !isObject(value) ||
@@ -228,10 +146,6 @@ function decodeEncodedDescriptor(value: unknown): EncodedDurableDescriptor | nul
 
 function isLifecycleState(value: unknown): value is DurableResourceLifecycleState {
   return value === 'open' || value === 'completed';
-}
-
-function isDeviceKind(value: unknown): value is DeviceKind {
-  return value === 'simulator' || value === 'emulator' || value === 'device';
 }
 
 function isNonEmptyString(value: unknown): value is string {

@@ -1,3 +1,4 @@
+import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
 import fs from 'node:fs';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -20,7 +21,6 @@ import {
   type AppLogAdmissionLedger,
 } from '../../../../resources/app-log-admission-ledger.ts';
 import { handleSessionCommands } from '../../../../__tests__/support/handlers/session-command-harness.ts';
-import { appLogResourceStore } from '../../../../resources/app-log-resource-store.ts';
 import type { BindDeviceRuntime } from '../../../../core/request-runtime-binding.ts';
 import type { SessionStore } from '../../../../core/session-store.ts';
 import {

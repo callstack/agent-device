@@ -17,6 +17,7 @@
  * on a request that already failed, so it must not turn one failure into two.
  */
 
+import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DaemonError, DiagnosticsRecordRef } from '@agent-device/kernel/errors';
@@ -27,7 +28,6 @@ import {
   buildDaemonHttpTenantHeaders,
   buildDaemonHttpUrl,
 } from '@agent-device/contracts/daemon-http';
-import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon/session-artifact-paths';
 
 const REMOTE_DIAGNOSTICS_FETCH_TIMEOUT_MS = 10_000;
 const REMOTE_DIAGNOSTICS_MAX_BYTES = 8 * 1024 * 1024;

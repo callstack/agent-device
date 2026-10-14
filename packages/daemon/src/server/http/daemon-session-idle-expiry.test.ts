@@ -1,3 +1,4 @@
+import { resolveDeviceClaimPath } from '@agent-device/daemon-contracts/device-claims-fixtures';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -17,7 +18,6 @@ import {
   makeIosSession,
   makeRepairCompleteSession,
 } from '../../__tests__/support/session-factories.ts';
-import { resolveDeviceClaimPath } from '../../resources/device/device-claim-paths.ts';
 
 /**
  * #2833: what one expiry COMMITS, once it has run. Whether a session past its window is the kind that

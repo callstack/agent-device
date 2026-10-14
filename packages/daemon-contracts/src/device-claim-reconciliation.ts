@@ -1,14 +1,13 @@
+import { appLogDurableResource } from '@agent-device/capture-kit/app-log-durable-resource';
+import { recoverAppLogResourceAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
 import path from 'node:path';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import { sameDeviceIdentity } from '@agent-device/kernel/device';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { appLogDurableResource } from '../../resources/app-log-session-resource.ts';
-import { recoverAppLogResourceAfterDaemonLock } from '../../resources/app-log-resource-recovery.ts';
-import type { DeviceClaim } from '../../resources/device/device-claim-record.ts';
-import type { DeviceClaimReconciler } from '../../resources/device/device-claims.ts';
+import { resolveDaemonPaths } from './daemon-resolution.ts';
+import type { DeviceClaim, DeviceClaimReconciler } from './device-claims.ts';
 import type { DurableCaptureRecoveryOutcome } from '@agent-device/capture-kit/durable-capture';
 import { recoverAudioProbeResourceAfterDaemonLock } from '@agent-device/capture-kit/audio-probe-recovery';
 import { audioProbeDurableResource } from '@agent-device/capture-kit/audio-probe-session-resource';

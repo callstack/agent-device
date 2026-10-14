@@ -1,5 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
-import type { DeviceClaimClearOutcome } from '../resources/device/device-claims.ts';
+import type { DeviceClaimClearOutcome } from '@agent-device/daemon-contracts/device-claims';
 import type { SessionState } from '../core/session-state.ts';
 import type { IdleSessionTombstone } from '../core/session-idle-tombstone.ts';
 

@@ -29,7 +29,7 @@ import {
   resolveForegroundOpenRequest,
 } from './session-open-foreground.ts';
 import { expireRefFrame } from '../../../core/ref-frame.ts';
-import type { DeviceClaimReconciler } from '../../../resources/device/device-claims.ts';
+import type { DeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claims';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

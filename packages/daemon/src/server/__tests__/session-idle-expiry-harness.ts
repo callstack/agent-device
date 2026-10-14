@@ -1,3 +1,4 @@
+import { resolveDeviceClaimPath } from '@agent-device/daemon-contracts/device-claims-fixtures';
 import { assert } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,8 +14,7 @@ import {
 import {
   acquireDeviceClaim,
   type DeviceClaimSessionOwnership,
-} from '../../resources/device/device-claims.ts';
-import { resolveDeviceClaimPath } from '../../resources/device/device-claim-paths.ts';
+} from '@agent-device/daemon-contracts/device-claims';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 

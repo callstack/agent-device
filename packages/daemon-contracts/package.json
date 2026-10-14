@@ -3,8 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "On-disk and wire contracts a daemon process shares with its clients (#2559): state-dir and transport resolution, registration and ownership, process liveness, shutdown reports, the repair tombstone, progress-envelope framing, the diagnostics scope, and owner-cleanup vocabulary. Internal workspace package bundled into the published agent-device artifact.",
+  "description": "On-disk and wire contracts a daemon process shares with its clients (#2559): state-dir and transport resolution, registration and ownership, process liveness, shutdown reports, the repair tombstone, progress-envelope framing, the diagnostics scope, owner-cleanup vocabulary, the stop path, session artifact paths, and the on-disk device-claim record, store and inspection a CLI shares with the daemon. Internal workspace package bundled into the published agent-device artifact.",
   "dependencies": {
+    "@agent-device/capture-kit": "workspace:*",
     "@agent-device/command-registry": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",
@@ -47,6 +48,22 @@
       "types": "./src/daemon-shutdown-report.ts",
       "default": "./src/daemon-shutdown-report.ts"
     },
+    "./daemon-stop": {
+      "types": "./src/daemon-stop.ts",
+      "default": "./src/daemon-stop.ts"
+    },
+    "./device-claim-recovery": {
+      "types": "./src/device-claim-recovery.ts",
+      "default": "./src/device-claim-recovery.ts"
+    },
+    "./device-claims": {
+      "types": "./src/device-claims.ts",
+      "default": "./src/device-claims.ts"
+    },
+    "./device-claims-fixtures": {
+      "types": "./src/device-claims.fixtures.ts",
+      "default": "./src/device-claims.fixtures.ts"
+    },
     "./provider-credentials": {
       "types": "./src/provider-credentials.ts",
       "default": "./src/provider-credentials.ts"
@@ -54,6 +71,10 @@
     "./request-progress-protocol": {
       "types": "./src/request-progress-protocol.ts",
       "default": "./src/request-progress-protocol.ts"
+    },
+    "./session-artifact-paths": {
+      "types": "./src/session-artifact-paths.ts",
+      "default": "./src/session-artifact-paths.ts"
     },
     "./session-repair-tombstone": {
       "types": "./src/session-repair-tombstone.ts",

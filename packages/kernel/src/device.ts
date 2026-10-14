@@ -1,4 +1,5 @@
 import { AppError } from './errors.ts';
+import type { DeviceIdentity } from './device-identity.ts';
 
 export {
   deviceIdentity,
@@ -254,6 +255,90 @@ export function isAppleOs(value: unknown): value is AppleOS {
   // optional `appleOs` field parsed from a daemon response. Its values never include the
   // internal `apple` platform token, so surfacing it does not affect the apple-leak guard.
   return (APPLE_OS_VALUES as readonly unknown[]).includes(value);
+}
+
+export function decodeDeviceIdentity(value: unknown): DeviceIdentity | null {
+  if (!isObject(value)) return null;
+  const id = readDeviceIdentityId(value.id);
+  const family = readDeviceIdentityFamily(value.family);
+  const kind = readDeviceIdentityKind(value.kind);
+  const target = readDeviceIdentityTarget(value.target);
+  if (!id || !family || !kind || target === null) return null;
+  if (!hasCoherentAppleIdentity(value, family, kind)) return null;
+  return buildDeviceIdentity(value, id, family, kind, target);
+}
+
+function buildDeviceIdentity(
+  value: Record<string, unknown> & {
+    appleOs?: AppleOS;
+    iosPhysicalDeviceBackend?: DeviceInfo['iosPhysicalDeviceBackend'];
+  },
+  id: string,
+  family: Platform,
+  kind: DeviceKind,
+  target: DeviceTarget | undefined,
+): DeviceIdentity {
+  return Object.freeze({
+    id,
+    family,
+    ...(value.appleOs === undefined ? {} : { appleOs: value.appleOs }),
+    kind,
+    ...(target === undefined ? {} : { target }),
+    ...(value.iosPhysicalDeviceBackend === undefined
+      ? {}
+      : { iosPhysicalDeviceBackend: value.iosPhysicalDeviceBackend }),
+  });
+}
+
+function readDeviceIdentityId(value: unknown): string | null {
+  return isNonEmptyString(value) ? value : null;
+}
+
+function readDeviceIdentityFamily(value: unknown): Platform | null {
+  return isPlatform(value) ? value : null;
+}
+
+function readDeviceIdentityKind(value: unknown): DeviceKind | null {
+  return isDeviceKind(value) ? value : null;
+}
+
+function readDeviceIdentityTarget(value: unknown): DeviceTarget | undefined | null {
+  if (value === undefined) return undefined;
+  return isDeviceTarget(value) ? value : null;
+}
+
+function hasCoherentAppleIdentity(
+  value: Record<string, unknown>,
+  family: Platform,
+  kind: DeviceKind,
+): value is Record<string, unknown> & {
+  appleOs?: AppleOS;
+  iosPhysicalDeviceBackend?: DeviceInfo['iosPhysicalDeviceBackend'];
+} {
+  if (family === 'apple') {
+    if (!isAppleOs(value.appleOs)) return false;
+  } else if (value.appleOs !== undefined || value.iosPhysicalDeviceBackend !== undefined) {
+    return false;
+  }
+  return hasValidPhysicalAppleBackend(value.iosPhysicalDeviceBackend, kind);
+}
+
+function hasValidPhysicalAppleBackend(value: unknown, kind: DeviceKind): boolean {
+  if (value === undefined) return true;
+  if (kind !== 'device') return false;
+  return value === 'coredevice' || value === 'xctest';
+}
+
+function isDeviceKind(value: unknown): value is DeviceKind {
+  return (DEVICE_KINDS as readonly unknown[]).includes(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function matchesPlatformSelector(

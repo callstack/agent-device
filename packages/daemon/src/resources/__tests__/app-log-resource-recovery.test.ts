@@ -1,3 +1,5 @@
+import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
+import { recoverAppLogResourcesAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -13,8 +15,6 @@ import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
 import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { recoverAppLogResourcesAfterDaemonLock } from '../app-log-resource-recovery.ts';
-import { appLogResourceStore } from '../app-log-resource-store.ts';
 
 const scope = {
   signal: new AbortController().signal,

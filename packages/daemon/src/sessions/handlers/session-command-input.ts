@@ -10,7 +10,7 @@ import type { AppLogAdmissionLedger } from '../../resources/app-log-admission-le
 import { type AudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { type PerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { type ScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
-import type { DeviceClaimReconciler } from '../../resources/device/device-claims.ts';
+import type { DeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claims';
 import type { LeaseRegistry } from '../../resources/lease-registry.ts';
 import type {
   BindDeviceRuntime,

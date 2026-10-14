@@ -3,9 +3,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { acquireDeviceClaim as acquireProductionDeviceClaim } from '../device-claims.ts';
-import { canonicalLocalDeviceKey } from '../device-claim-paths.ts';
-import { inspectDeviceClaims } from '../device-claim-inspection.ts';
+import {
+  acquireDeviceClaim as acquireProductionDeviceClaim,
+  canonicalLocalDeviceKey,
+  inspectDeviceClaims,
+} from '@agent-device/daemon-contracts/device-claims';
 import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';

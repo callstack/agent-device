@@ -1,6 +1,5 @@
 export {
   createDurableResourceEnvelope,
-  decodeDeviceIdentity,
   encodeDurableDescriptor,
 } from './durable-resource-envelope.ts';
 export {

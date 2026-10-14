@@ -20,7 +20,7 @@ import {
 import { isAuthoringArmedSession } from '../../../core/session-script-publication-capability.ts';
 import type { SessionCleanupFailure } from '../../session-teardown.ts';
 import { isWebSession } from '../../web-session-names.ts';
-import { clearDeviceClaim } from '../../../resources/device/device-claims.ts';
+import { clearDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import { applicationLifecycleExecutionFromRequest } from '../../application-lifecycle-execution.ts';
 import { hasRuntimeTransportHints } from '../../session-runtime.ts';
 import type {

@@ -20,8 +20,10 @@ import {
 } from '../../../__tests__/support/device-claim-store.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
-import { acquireDeviceClaim } from '../../../resources/device/device-claims.ts';
-import { inspectDeviceClaims } from '../../../resources/device/device-claim-inspection.ts';
+import {
+  acquireDeviceClaim,
+  inspectDeviceClaims,
+} from '@agent-device/daemon-contracts/device-claims';
 import { createRequestExecutionScope } from '../../../server/request-execution-scope.ts';
 import { handleBootCommand } from '../session-boot.ts';
 import { handleShutdownCommand } from '../session-shutdown.ts';

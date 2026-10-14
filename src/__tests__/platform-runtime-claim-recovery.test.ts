@@ -1,3 +1,4 @@
+import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -6,8 +7,7 @@ import { test, vi } from 'vitest';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import { appLogResourceStore } from '@agent-device/daemon/testing/app-log-resource-store';
-import { runStaleDeviceClaimRelease } from '../cli/commands/device-release.ts';
+import { runStaleDeviceClaimRelease } from '../platform-runtime-claim-recovery.ts';
 import { runCliCapture } from './cli-capture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 

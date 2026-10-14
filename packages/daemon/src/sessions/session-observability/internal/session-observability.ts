@@ -1,3 +1,4 @@
+import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import type { LogBackend } from '@agent-device/contracts/observability';
 import type {
@@ -16,7 +17,6 @@ import { appendAppLogMarker, getAppLogPathMetadata } from '../../../resources/ap
 import type { AppLogAdmissionLedger } from '../../../resources/app-log-admission-ledger.ts';
 import { type AudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { type PerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
-import { appLogResourceStore } from '../../../resources/app-log-resource-store.ts';
 import {
   adoptStartedSessionAppLog,
   bindSessionAppLog,

@@ -5,8 +5,8 @@ import type {
   DeviceBootObservationService,
 } from '@agent-device/contracts/device-boot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { rebootedDeviceClaim } from '../device-claim-reboot.ts';
-import type { DeviceClaim } from '../device-claim-record.ts';
+import { rebootedDeviceClaim } from './device-claim-reboot.ts';
+import type { DeviceClaim } from './device-claim-record.ts';
 
 const device: DeviceInfo = {
   platform: 'apple',

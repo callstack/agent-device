@@ -1,3 +1,5 @@
+import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
+import { recoverAppLogResourcesAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,8 +10,6 @@ import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { recoverAppLogResourcesAfterDaemonLock } from '../../resources/app-log-resource-recovery.ts';
-import { appLogResourceStore } from '../../resources/app-log-resource-store.ts';
 import {
   flushDaemonStartupDiagnostics,
   teardownDaemonSessionForShutdown,

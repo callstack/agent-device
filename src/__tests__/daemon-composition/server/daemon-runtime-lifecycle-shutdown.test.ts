@@ -1,3 +1,4 @@
+import { resolveDeviceClaimPath } from '@agent-device/daemon-contracts/device-claims-fixtures';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -133,8 +134,7 @@ vi.mock('@agent-device/daemon/testing/provider-lease-expiry', async (importOrigi
   };
 });
 
-import { acquireDeviceClaim } from '@agent-device/daemon/device/device-claims';
-import { resolveDeviceClaimPath } from '@agent-device/daemon/testing/device/device-claim-paths';
+import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   isolatedDeviceClaimStores,

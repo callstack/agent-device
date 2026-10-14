@@ -1,3 +1,4 @@
+import { resolveDeviceClaimPath } from '@agent-device/daemon-contracts/device-claims-fixtures';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -8,8 +9,7 @@ import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
 } from '../../__tests__/support/device-claim-store.ts';
-import { acquireDeviceClaim } from '../../resources/device/device-claims.ts';
-import { resolveDeviceClaimPath } from '../../resources/device/device-claim-paths.ts';
+import { acquireDeviceClaim } from '@agent-device/daemon-contracts/device-claims';
 import { existingSessionExecutionLockKeys } from '../request-binding.ts';
 import { withRequestExecutionLockKeys } from '../request-execution-locks.ts';
 import type { SessionStore } from '../../core/session-store.ts';

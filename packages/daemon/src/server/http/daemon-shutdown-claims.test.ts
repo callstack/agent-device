@@ -1,3 +1,4 @@
+import { resolveDeviceClaimPath } from '@agent-device/daemon-contracts/device-claims-fixtures';
 import { afterEach, expect, test, vi } from 'vitest';
 import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
@@ -5,9 +6,10 @@ import {
   retainOrphanedDeviceClaims,
 } from '../../__tests__/support/device-claim-store.ts';
 import fs from 'node:fs';
-import { acquireDeviceClaim } from '../../resources/device/device-claims.ts';
-import { resolveDeviceClaimPath } from '../../resources/device/device-claim-paths.ts';
-import { inspectDeviceClaims } from '../../resources/device/device-claim-inspection.ts';
+import {
+  acquireDeviceClaim,
+  inspectDeviceClaims,
+} from '@agent-device/daemon-contracts/device-claims';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import type { SessionState } from '../../core/session-state.ts';
 

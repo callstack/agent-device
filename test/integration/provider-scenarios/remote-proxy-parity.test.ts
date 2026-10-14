@@ -1,3 +1,4 @@
+import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
@@ -9,7 +10,6 @@ import { test } from 'vitest';
 import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import { resolveSessionRequestLogPath } from '@agent-device/daemon/session-artifact-paths';
 import { createDaemonProxyServer } from '@agent-device/proxy';
 import { AppError, type DaemonError } from '@agent-device/kernel/errors';
 import {

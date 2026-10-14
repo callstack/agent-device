@@ -16,7 +16,7 @@ import type {
   BindExactDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../core/request-runtime-binding.ts';
-import type { DeviceClaimReconciler } from '../resources/device/device-claims.ts';
+import type { DeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claims';
 import type { AppLogAdmissionLedger } from '../resources/app-log-admission-ledger.ts';
 import { type AudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { type PerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';

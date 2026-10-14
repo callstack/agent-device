@@ -1,3 +1,11 @@
+import {
+  resolveSessionRequestLog,
+  resolveSessionRunnerLogPath,
+} from '@agent-device/daemon-contracts/session-artifact-paths';
+import {
+  createOwnerScopedDeviceClaimReconciler,
+  type ClaimRecoveryGatewayFactory,
+} from '@agent-device/daemon-contracts/device-claim-recovery';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { ProviderAppCatalog } from '@agent-device/contracts/device';
@@ -57,10 +65,6 @@ import {
 } from '@agent-device/session-journal/session-event-log';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import { type SessionStore } from '../core/session-store.ts';
-import {
-  resolveSessionRequestLog,
-  resolveSessionRunnerLogPath,
-} from '../core/session-artifact-paths.ts';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { teardownSessionResources } from '../sessions/session-teardown.ts';
@@ -80,8 +84,6 @@ import {
   createDeviceClaimAdmission,
   type DeviceClaimAdmission,
 } from '../resources/device/device-claim-admission.ts';
-import { createOwnerScopedDeviceClaimReconciler } from './device/device-claim-owner-recovery.ts';
-import type { ClaimRecoveryGatewayFactory } from '../resources/device/claim-recovery-gateway.ts';
 import {
   applyCommandDefaults,
   resolveCommandDeviceClaimPolicy,

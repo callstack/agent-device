@@ -31,10 +31,6 @@
     "yaml": "^2.9.0"
   },
   "exports": {
-    "./app-log-files": {
-      "types": "./src/resources/app-log-files.ts",
-      "default": "./src/resources/app-log-files.ts"
-    },
     "./daemon-command-registry": {
       "types": "./src/core/daemon-command-registry.ts",
       "default": "./src/core/daemon-command-registry.ts"
@@ -43,37 +39,9 @@
       "types": "./src/core/daemon-request.ts",
       "default": "./src/core/daemon-request.ts"
     },
-    "./daemon-stop": {
-      "types": "./src/server/daemon-stop.ts",
-      "default": "./src/server/daemon-stop.ts"
-    },
-    "./device/claim-recovery-gateway": {
-      "types": "./src/resources/device/claim-recovery-gateway.ts",
-      "default": "./src/resources/device/claim-recovery-gateway.ts"
-    },
-    "./device/device-claim-inspection": {
-      "types": "./src/resources/device/device-claim-inspection.ts",
-      "default": "./src/resources/device/device-claim-inspection.ts"
-    },
-    "./device/device-claim-owner-recovery": {
-      "types": "./src/server/device/device-claim-owner-recovery.ts",
-      "default": "./src/server/device/device-claim-owner-recovery.ts"
-    },
-    "./device/device-claims": {
-      "types": "./src/resources/device/device-claims.ts",
-      "default": "./src/resources/device/device-claims.ts"
-    },
-    "./managed-session-artifact-path": {
-      "types": "./src/core/managed-session-artifact-path.ts",
-      "default": "./src/core/managed-session-artifact-path.ts"
-    },
     "./platform-owner-lifecycle": {
       "types": "./src/core/platform-owner-lifecycle.ts",
       "default": "./src/core/platform-owner-lifecycle.ts"
-    },
-    "./platform-request-scope": {
-      "types": "./src/server/platform-request-scope.ts",
-      "default": "./src/server/platform-request-scope.ts"
     },
     "./platform-resource-cleanup": {
       "types": "./src/core/platform-resource-cleanup.ts",
@@ -90,10 +58,6 @@
     "./server/daemon-runtime": {
       "types": "./src/server/http/daemon-runtime.ts",
       "default": "./src/server/http/daemon-runtime.ts"
-    },
-    "./session-artifact-paths": {
-      "types": "./src/core/session-artifact-paths.ts",
-      "default": "./src/core/session-artifact-paths.ts"
     },
     "./testing/__tests__/android-observation-fixture": {
       "types": "./src/__tests__/support/android-observation-fixture.ts",
@@ -207,10 +171,6 @@
       "types": "./src/execution/app-events.ts",
       "default": "./src/execution/app-events.ts"
     },
-    "./testing/app-log-resource-store": {
-      "types": "./src/resources/app-log-resource-store.ts",
-      "default": "./src/resources/app-log-resource-store.ts"
-    },
     "./testing/application-lifecycle-recovery": {
       "types": "./src/server/application-lifecycle-recovery.ts",
       "default": "./src/server/application-lifecycle-recovery.ts"
@@ -234,10 +194,6 @@
     "./testing/device/device-claim-conflict": {
       "types": "./src/resources/device/device-claim-conflict.ts",
       "default": "./src/resources/device/device-claim-conflict.ts"
-    },
-    "./testing/device/device-claim-paths": {
-      "types": "./src/resources/device/device-claim-paths.ts",
-      "default": "./src/resources/device/device-claim-paths.ts"
     },
     "./testing/device/device-ready": {
       "types": "./src/core/device/device-ready.ts",

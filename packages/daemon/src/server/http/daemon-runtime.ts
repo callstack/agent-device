@@ -1,24 +1,35 @@
+import { recoverAppLogResourcesAfterDaemonLock } from '@agent-device/capture-kit/app-log-resource-recovery';
+import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
+import {
+  createOwnerScopedDeviceClaimReconciler,
+  createRecoveryPlatformScope,
+  type ClaimRecoveryGatewayFactory,
+} from '@agent-device/daemon-contracts/device-claim-recovery';
 import crypto from 'node:crypto';
 import { asAppError, AppError, normalizeError } from '@agent-device/kernel/errors';
 import { SessionStore } from '../../core/session-store.ts';
-import { resolveSessionRequestLogPath } from '../../core/session-artifact-paths.ts';
 import {
   resolveDaemonPaths,
   resolveDaemonServerMode,
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../../resources/artifact-tracking.ts';
-import { installProviderDeviceAdmission } from '../../core/provider-device-admission.ts';
+import {
+  installProviderDeviceAdmission,
+  type ProviderDeviceAdmission,
+} from '../../core/provider-device-admission.ts';
 import {
   loadDaemonPolicy,
   type DaemonPolicy,
 } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { assertDaemonPolicyAllowsCapability } from '../../core/daemon-policy.ts';
-import { installInteractorResolution } from '../../core/interactor-resolution.ts';
+import {
+  installInteractorResolution,
+  type InteractorResolution,
+} from '../../core/interactor-resolution.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
-import { createRequestHandler } from '../request-router.ts';
-import type { RequestRouterDeps } from '../request-router.ts';
+import { createRequestHandler, type RequestRouterDeps } from '../request-router.ts';
 import {
   createLeaseSessionEnd,
   getLeaseRegistryExecutionLocks,
@@ -41,8 +52,7 @@ import {
   processOwnsActiveDeviceClaim,
   reconcileOrphanedDeviceClaims,
   type DeviceClaimReconciler,
-} from '../../resources/device/device-claims.ts';
-import { createOwnerScopedDeviceClaimReconciler } from '../device/device-claim-owner-recovery.ts';
+} from '@agent-device/daemon-contracts/device-claims';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
@@ -75,15 +85,10 @@ import {
 } from './transport.ts';
 import { prewarmPngWorker, terminatePngWorker } from '@agent-device/capture-kit/png-worker-client';
 import { openWebSessionNames } from '../../sessions/web-session-names.ts';
-import { recoverAppLogResourcesAfterDaemonLock } from '../../resources/app-log-resource-recovery.ts';
-import { createDaemonRecoveryPlatformScope } from '../platform-request-scope.ts';
 import { createAppLogAdmissionLedger } from '../../resources/app-log-admission-ledger.ts';
 import type { AppLogSessionArtifacts } from '@agent-device/contracts/app-log-runtime';
-import type { InteractorResolution } from '../../core/interactor-resolution.ts';
-import type { ProviderDeviceAdmission } from '../../core/provider-device-admission.ts';
 import type { PlatformOwnerLifecycle } from '../../core/platform-owner-lifecycle.ts';
 import type { PlatformResourceCleanup } from '../../core/platform-resource-cleanup.ts';
-import type { ClaimRecoveryGatewayFactory } from '../../resources/device/claim-recovery-gateway.ts';
 import type {
   LeaseLifecycleProvider,
   ProviderDeviceRuntime,
@@ -518,7 +523,7 @@ export async function startDaemonRuntime(
         finalizeApplicationLifecycle: async (sessionToFinalize, runtimeHints) =>
           await finalizeDaemonSessionApplicationLifecycle({
             gateway: deviceRuntimeGateway,
-            scope: createDaemonRecoveryPlatformScope(),
+            scope: createRecoveryPlatformScope(),
             session: sessionToFinalize,
             stateDir: baseDir,
             runtimeHints,
@@ -556,7 +561,7 @@ export async function startDaemonRuntime(
     });
     await finalizeDaemonSessionApplicationLifecycle({
       gateway: deviceRuntimeGateway,
-      scope: createDaemonRecoveryPlatformScope(),
+      scope: createRecoveryPlatformScope(),
       session,
       stateDir: baseDir,
       runtimeHints,
@@ -764,7 +769,7 @@ export async function startDaemonRuntime(
     await recoverAppLogResourcesAfterDaemonLock({
       sessionsDir,
       gateway: deviceRuntimeGateway,
-      scope: createDaemonRecoveryPlatformScope(),
+      scope: createRecoveryPlatformScope(),
       onDiagnostic: (diagnostic) => startupDiagnostics.push(diagnostic),
     });
     await reapOwnedProcessRecordsAtStartup(deps.ownedProcessRecords, {
@@ -806,7 +811,7 @@ export async function startDaemonRuntime(
     await reconcileDeviceClaimsForDaemonStartup(
       logPath,
       createOwnerScopedDeviceClaimReconciler({
-        scope: createDaemonRecoveryPlatformScope(),
+        scope: createRecoveryPlatformScope(),
         composeGateway: deps.claimRecoveryGateway,
       }),
       baseDir,

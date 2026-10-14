@@ -9,9 +9,9 @@ import {
   clearDeviceClaim,
   processOwnsActiveDeviceClaim,
   releaseProvenStaleDeviceClaims,
-} from '../device-claims.ts';
-import { canonicalLocalDeviceKey } from '../device-claim-paths.ts';
-import { inspectDeviceClaims } from '../device-claim-inspection.ts';
+  canonicalLocalDeviceKey,
+  inspectDeviceClaims,
+} from '@agent-device/daemon-contracts/device-claims';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';

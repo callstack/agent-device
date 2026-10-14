@@ -1,10 +1,10 @@
+import { resolveDeviceClaimPath } from '@agent-device/daemon-contracts/device-claims-fixtures';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { reconcileOrphanedDeviceClaims } from '../device-claims.ts';
-import { resolveDeviceClaimPath } from '../device-claim-paths.ts';
+import { reconcileOrphanedDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import { acquireProcessLock } from '@agent-device/host-kit/file';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';

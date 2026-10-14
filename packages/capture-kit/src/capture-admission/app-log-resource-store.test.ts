@@ -2,9 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { appLogResourceStore } from '../app-log-resource-store.ts';
+import { createDurableResourceEnvelope } from '../durable-resource-envelope.ts';
+import { mkdtempForTestSync } from '../tmp-dir.fixtures.ts';
+import { appLogResourceStore } from './app-log-resource-store.ts';
 
 test('app-log resource records publish atomically with owner-only permissions', () => {
   const resourcePath = appLogResourceStore.resolvePath(

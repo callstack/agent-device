@@ -5,6 +5,7 @@
  * locator → fetch → rendered line) is observable end to end.
  */
 
+import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test } from 'vitest';
@@ -13,7 +14,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeError, AppError } from '@agent-device/kernel/errors';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import { resolveSessionRequestLogPath } from '@agent-device/daemon/session-artifact-paths';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import { runCliCapture, type CapturedCliRun } from './cli-capture.ts';
 import {

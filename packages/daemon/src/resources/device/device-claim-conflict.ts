@@ -11,7 +11,7 @@ import {
   deviceClaimRequiresStaleInspection,
   type DeviceClaimClassification,
   type InspectedDeviceClaim,
-} from './device-claim-inspection.ts';
+} from '@agent-device/daemon-contracts/device-claims';
 import { errorResponse } from '@agent-device/kernel/contracts';
 import type { DeviceClaimConflictReason } from '@agent-device/contracts/device';
 

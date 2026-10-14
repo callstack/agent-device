@@ -18,6 +18,18 @@
       "types": "./src/snapshot/android-replacement-surface-occlusion.ts",
       "default": "./src/snapshot/android-replacement-surface-occlusion.ts"
     },
+    "./app-log-durable-resource": {
+      "types": "./src/capture-admission/app-log-durable-resource.ts",
+      "default": "./src/capture-admission/app-log-durable-resource.ts"
+    },
+    "./app-log-files": {
+      "types": "./src/capture-admission/app-log-files.ts",
+      "default": "./src/capture-admission/app-log-files.ts"
+    },
+    "./app-log-resource-recovery": {
+      "types": "./src/capture-admission/app-log-resource-recovery.ts",
+      "default": "./src/capture-admission/app-log-resource-recovery.ts"
+    },
     "./audio-probe-admission-ledger": {
       "types": "./src/capture-admission/audio-probe-admission-ledger.ts",
       "default": "./src/capture-admission/audio-probe-admission-ledger.ts"
@@ -38,6 +50,10 @@
       "types": "./src/capture-admission/audio-probe-session-resource.ts",
       "default": "./src/capture-admission/audio-probe-session-resource.ts"
     },
+    "./durable-capture": {
+      "types": "./src/durable-capture/index.ts",
+      "default": "./src/durable-capture/index.ts"
+    },
     "./durable-capture-admission-ledger": {
       "types": "./src/capture-admission/durable-capture-admission-ledger.ts",
       "default": "./src/capture-admission/durable-capture-admission-ledger.ts"
@@ -49,6 +65,42 @@
     "./durable-capture-runtime-recovery": {
       "types": "./src/capture-admission/durable-capture-runtime-recovery.ts",
       "default": "./src/capture-admission/durable-capture-runtime-recovery.ts"
+    },
+    "./durable-capture/session-binding": {
+      "types": "./src/durable-capture/session-binding.ts",
+      "default": "./src/durable-capture/session-binding.ts"
+    },
+    "./durable-json": {
+      "types": "./src/durable-json.ts",
+      "default": "./src/durable-json.ts"
+    },
+    "./ios-node-interpretation": {
+      "types": "./src/ios-node-interpretation.ts",
+      "default": "./src/ios-node-interpretation.ts"
+    },
+    "./ios-snapshot-acquisition": {
+      "types": "./src/ios-snapshot-acquisition.ts",
+      "default": "./src/ios-snapshot-acquisition.ts"
+    },
+    "./ios-snapshot-engine": {
+      "types": "./src/ios-snapshot-engine/index.ts",
+      "default": "./src/ios-snapshot-engine/index.ts"
+    },
+    "./ios-snapshot-planning": {
+      "types": "./src/ios-snapshot-planning.ts",
+      "default": "./src/ios-snapshot-planning.ts"
+    },
+    "./ios-snapshot-runtime": {
+      "types": "./src/snapshot/ios-snapshot-runtime.ts",
+      "default": "./src/snapshot/ios-snapshot-runtime.ts"
+    },
+    "./ios-snapshot-tree": {
+      "types": "./src/ios-snapshot-engine/tree.ts",
+      "default": "./src/ios-snapshot-engine/tree.ts"
+    },
+    "./mobile-snapshot-semantics": {
+      "types": "./src/mobile-snapshot-semantics.ts",
+      "default": "./src/mobile-snapshot-semantics.ts"
     },
     "./observe-until": {
       "types": "./src/observe-until.ts",
@@ -73,70 +125,6 @@
     "./perf-runtime-plan": {
       "types": "./src/capture-admission/perf-runtime-plan.ts",
       "default": "./src/capture-admission/perf-runtime-plan.ts"
-    },
-    "./screen-recording-admission-ledger": {
-      "types": "./src/capture-admission/screen-recording-admission-ledger.ts",
-      "default": "./src/capture-admission/screen-recording-admission-ledger.ts"
-    },
-    "./screen-recording-recovery": {
-      "types": "./src/capture-admission/screen-recording-resource-recovery.ts",
-      "default": "./src/capture-admission/screen-recording-resource-recovery.ts"
-    },
-    "./screen-recording-resource-store": {
-      "types": "./src/capture-admission/screen-recording-resource-store.ts",
-      "default": "./src/capture-admission/screen-recording-resource-store.ts"
-    },
-    "./screen-recording-session-resource": {
-      "types": "./src/capture-admission/screen-recording-session-resource.ts",
-      "default": "./src/capture-admission/screen-recording-session-resource.ts"
-    },
-    "./screen-recording-stop-recovery": {
-      "types": "./src/capture-admission/screen-recording-stop-recovery.ts",
-      "default": "./src/capture-admission/screen-recording-stop-recovery.ts"
-    },
-    "./durable-capture": {
-      "types": "./src/durable-capture/index.ts",
-      "default": "./src/durable-capture/index.ts"
-    },
-    "./durable-json": {
-      "types": "./src/durable-json.ts",
-      "default": "./src/durable-json.ts"
-    },
-    "./recording-stop-sequence": {
-      "types": "./src/recording/stop-sequence.ts",
-      "default": "./src/recording/stop-sequence.ts"
-    },
-    "./screen-recording-transport": {
-      "types": "./src/screen-recording-transport.ts",
-      "default": "./src/screen-recording-transport.ts"
-    },
-    "./ios-node-interpretation": {
-      "types": "./src/ios-node-interpretation.ts",
-      "default": "./src/ios-node-interpretation.ts"
-    },
-    "./ios-snapshot-acquisition": {
-      "types": "./src/ios-snapshot-acquisition.ts",
-      "default": "./src/ios-snapshot-acquisition.ts"
-    },
-    "./ios-snapshot-engine": {
-      "types": "./src/ios-snapshot-engine/index.ts",
-      "default": "./src/ios-snapshot-engine/index.ts"
-    },
-    "./ios-snapshot-tree": {
-      "types": "./src/ios-snapshot-engine/tree.ts",
-      "default": "./src/ios-snapshot-engine/tree.ts"
-    },
-    "./ios-snapshot-planning": {
-      "types": "./src/ios-snapshot-planning.ts",
-      "default": "./src/ios-snapshot-planning.ts"
-    },
-    "./ios-snapshot-runtime": {
-      "types": "./src/snapshot/ios-snapshot-runtime.ts",
-      "default": "./src/snapshot/ios-snapshot-runtime.ts"
-    },
-    "./mobile-snapshot-semantics": {
-      "types": "./src/mobile-snapshot-semantics.ts",
-      "default": "./src/mobile-snapshot-semantics.ts"
     },
     "./png": {
       "types": "./src/png.ts",
@@ -190,13 +178,13 @@
       "types": "./src/recording/recording-facts.ts",
       "default": "./src/recording/recording-facts.ts"
     },
-    "./recording-mp4-fixtures": {
-      "types": "./src/recording/mp4.fixtures.ts",
-      "default": "./src/recording/mp4.fixtures.ts"
-    },
     "./recording-mp4-duration": {
       "types": "./src/recording/mp4-duration.ts",
       "default": "./src/recording/mp4-duration.ts"
+    },
+    "./recording-mp4-fixtures": {
+      "types": "./src/recording/mp4.fixtures.ts",
+      "default": "./src/recording/mp4.fixtures.ts"
     },
     "./recording-output-path": {
       "types": "./src/recording/output-path.ts",
@@ -205,6 +193,10 @@
     "./recording-overlay": {
       "types": "./src/recording/overlay.ts",
       "default": "./src/recording/overlay.ts"
+    },
+    "./recording-stop-sequence": {
+      "types": "./src/recording/stop-sequence.ts",
+      "default": "./src/recording/stop-sequence.ts"
     },
     "./recording-telemetry": {
       "types": "./src/recording/telemetry.ts",
@@ -217,6 +209,30 @@
     "./repeated-nav-subtree": {
       "types": "./src/snapshot/snapshot-presentation/repeated-nav-subtree.ts",
       "default": "./src/snapshot/snapshot-presentation/repeated-nav-subtree.ts"
+    },
+    "./screen-recording-admission-ledger": {
+      "types": "./src/capture-admission/screen-recording-admission-ledger.ts",
+      "default": "./src/capture-admission/screen-recording-admission-ledger.ts"
+    },
+    "./screen-recording-recovery": {
+      "types": "./src/capture-admission/screen-recording-resource-recovery.ts",
+      "default": "./src/capture-admission/screen-recording-resource-recovery.ts"
+    },
+    "./screen-recording-resource-store": {
+      "types": "./src/capture-admission/screen-recording-resource-store.ts",
+      "default": "./src/capture-admission/screen-recording-resource-store.ts"
+    },
+    "./screen-recording-session-resource": {
+      "types": "./src/capture-admission/screen-recording-session-resource.ts",
+      "default": "./src/capture-admission/screen-recording-session-resource.ts"
+    },
+    "./screen-recording-stop-recovery": {
+      "types": "./src/capture-admission/screen-recording-stop-recovery.ts",
+      "default": "./src/capture-admission/screen-recording-stop-recovery.ts"
+    },
+    "./screen-recording-transport": {
+      "types": "./src/screen-recording-transport.ts",
+      "default": "./src/screen-recording-transport.ts"
     },
     "./screenshot-density": {
       "types": "./src/screenshot-density.ts",
@@ -325,10 +341,6 @@
     "./touch-reference-frame": {
       "types": "./src/snapshot/touch-reference-frame.ts",
       "default": "./src/snapshot/touch-reference-frame.ts"
-    },
-    "./durable-capture/session-binding": {
-      "types": "./src/durable-capture/session-binding.ts",
-      "default": "./src/durable-capture/session-binding.ts"
     }
   },
   "devDependencies": {

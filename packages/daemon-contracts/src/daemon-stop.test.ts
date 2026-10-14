@@ -1,14 +1,14 @@
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
 const mocks = vi.hoisted(() => ({ stopAndRetireDaemon: vi.fn() }));
-vi.mock('@agent-device/daemon-contracts/daemon-registration-owner', () => ({
+vi.mock('./daemon-registration-owner.ts', () => ({
   stopAndRetireDaemon: mocks.stopAndRetireDaemon,
 }));
 
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { stopDaemon } from '../daemon-stop.ts';
+import { resolveDaemonPaths } from './daemon-resolution.ts';
+import { stopDaemon } from './daemon-stop.ts';
 
 afterEach(() => {
   vi.resetAllMocks();

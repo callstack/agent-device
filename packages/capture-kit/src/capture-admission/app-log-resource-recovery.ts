@@ -12,10 +12,10 @@ import {
 import type {
   DurableCaptureRecoveryControl,
   DurableCaptureRecoverySummary,
-} from '@agent-device/capture-kit/durable-capture';
+} from '../durable-capture/index.ts';
 import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { appLogDurableResource } from './app-log-session-resource.ts';
-import { acquireExactDurableCaptureRecoveryControl } from '@agent-device/capture-kit/durable-capture-runtime-recovery';
+import { appLogDurableResource } from './app-log-durable-resource.ts';
+import { acquireExactDurableCaptureRecoveryControl } from './durable-capture-runtime-recovery.ts';
 
 const appLogRecoveryUse = defineUse({
   required: ['appLogReattach', 'appLogCleanup'],

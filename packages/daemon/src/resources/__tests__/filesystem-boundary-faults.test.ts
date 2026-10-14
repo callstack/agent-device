@@ -6,8 +6,10 @@ import { afterEach, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { acquireDeviceClaim } from '../device/device-claims.ts';
-import { canonicalLocalDeviceKey } from '../device/device-claim-paths.ts';
+import {
+  acquireDeviceClaim,
+  canonicalLocalDeviceKey,
+} from '@agent-device/daemon-contracts/device-claims';
 import { createDurableCaptureResourceStore } from '@agent-device/capture-kit/durable-capture';
 import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';

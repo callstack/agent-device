@@ -3,7 +3,7 @@ import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import {
   clearDeviceClaim,
   type DeviceClaimClearOutcome,
-} from '../../resources/device/device-claims.ts';
+} from '@agent-device/daemon-contracts/device-claims';
 import type { DeviceClaimRecord } from '@agent-device/daemon-contracts/daemon-shutdown-report';
 import type { SessionState } from '../../core/session-state.ts';
 

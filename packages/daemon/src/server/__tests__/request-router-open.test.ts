@@ -76,7 +76,7 @@ import { awaitFixtureReadiness } from '../../__tests__/support/application-lifec
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import { inspectDeviceClaims } from '../../resources/device/device-claim-inspection.ts';
+import { inspectDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import {
   makeAndroidDevice,
   makeIosDevice,

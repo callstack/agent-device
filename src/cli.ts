@@ -1,3 +1,4 @@
+import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon-contracts/session-artifact-paths';
 import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
 import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
 import {
@@ -7,7 +8,7 @@ import {
   throwDaemonError,
   type NormalizedError,
 } from '@agent-device/kernel/errors';
-import { resolveRemoteRequestDiagnosticsPath } from '@agent-device/daemon/session-artifact-paths';
+import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { exitAfterFlush } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';
@@ -36,7 +37,6 @@ import {
   registerDiagnosticSensitiveValue,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { applyDefaultPlatformBinding, resolveBindingSettings } from './cli/session-binding.ts';
 import { resolveCliOptions } from './cli/resolve-cli-options.ts';
 import { maybeRunUpgradeNotifier } from './cli/update-check.ts';

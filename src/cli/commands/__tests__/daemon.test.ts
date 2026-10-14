@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
-import type { DaemonStopResult } from '@agent-device/daemon/daemon-stop';
+import type { DaemonStopResult } from '@agent-device/daemon-contracts/daemon-stop';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const mocks = vi.hoisted(() => ({
@@ -12,10 +12,10 @@ const mocks = vi.hoisted(() => ({
   writeCommandOutput: vi.fn(),
 }));
 
-// The mock specifier must be the SUT's exact `@agent-device/daemon/daemon-stop`: the
+// The mock specifier must be the SUT's exact `@agent-device/daemon-contracts/daemon-stop`: the
 // mutation lane aliases only the manifest's exact entries, so the `./testing/*` pattern
 // form resolved outside the Stryker sandbox and the mock silently missed (#3546 CI).
-vi.mock('@agent-device/daemon/daemon-stop', () => ({
+vi.mock('@agent-device/daemon-contracts/daemon-stop', () => ({
   readDaemonStopIdentity: mocks.readDaemonStopIdentity,
   stopDaemon: mocks.stopDaemon,
 }));
