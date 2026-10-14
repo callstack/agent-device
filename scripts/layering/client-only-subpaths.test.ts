@@ -45,7 +45,12 @@ test('the caller-side replay source subpaths are denied to daemon production cod
         file,
       );
     }
-    for (const file of ['src/daemon/replay-runtime.ts', 'packages/daemon/src/replay-runtime.ts']) {
+    for (const file of [
+      'src/daemon/replay-runtime.ts',
+      'packages/daemon/src/replay-runtime.ts',
+      'src/daemon.ts',
+      'src/daemon-composition.ts',
+    ]) {
       const violations = check(file).filter((v) => /caller-side replay sources/.test(v.message));
       assert.equal(violations.length, 1, file);
     }

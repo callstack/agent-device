@@ -204,11 +204,16 @@ export const CLIENT_ONLY_SUBPATHS: ReadonlySet<string> = new Set([
 ]);
 
 const DAEMON_SOURCE_FILE = /^(?:src\/daemon|packages\/daemon\/src)\//;
+// The daemon process also runs its root entry and composition root, outside the daemon tree.
+const DAEMON_PROCESS_ROOT_FILES: ReadonlySet<string> = new Set([
+  'src/daemon.ts',
+  'src/daemon-composition.ts',
+]);
 
 function importsClientOnlyFromDaemon(file: string, specifier: string): boolean {
   return (
     CLIENT_ONLY_SUBPATHS.has(specifier) &&
-    DAEMON_SOURCE_FILE.test(file) &&
+    (DAEMON_SOURCE_FILE.test(file) || DAEMON_PROCESS_ROOT_FILES.has(file)) &&
     !isTestConsumerFile(file)
   );
 }
