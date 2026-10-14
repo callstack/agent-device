@@ -103,6 +103,7 @@
   "@agent-device/contracts/recording-stop-progress",
   "@agent-device/contracts/remote",
   "@agent-device/contracts/replay",
+  "@agent-device/contracts/replay-backend",
   "@agent-device/contracts/runner-lease-context",
   "@agent-device/contracts/runtime-contract",
   "@agent-device/contracts/runtime-contract-error",

@@ -436,6 +436,10 @@
       "types": "./src/facades/replay.ts",
       "default": "./src/facades/replay.ts"
     },
+    "./replay-backend": {
+      "types": "./src/replay-backend.ts",
+      "default": "./src/replay-backend.ts"
+    },
     "./runner-lease-context": {
       "types": "./src/runner-lease-context.ts",
       "default": "./src/runner-lease-context.ts"
