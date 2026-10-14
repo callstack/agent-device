@@ -118,7 +118,13 @@ export async function runStableCaptureLoop(
   let deadlineMs = start + timeoutMs;
   let privateAxRecoveryBudgetReset = false;
   const session = await runtime.sessions.get(options.session ?? 'default');
-  const window = createStableCaptureWindow(params.quietMs);
+  // The quiet window the run holds. An unrequested window is re-priced from each capture the loop
+  // performs: the read that pays the window is the loop's own, not the one the baseline came from,
+  // which can be several commands stale and served by another producer, and a mid-run fallback
+  // changes the price mid-wait. The confirmation applies its own floor on top of the price, so
+  // re-pricing is never a shorter wait. A window the caller asked for is fixed.
+  const requestedQuietMs = params.quietMs;
+  let quietMs = requestedQuietMs ?? DEFAULT_STABLE_QUIET_MS;
   const confirmation = broadTransitionConfirmation({
     baselineNodes: params.broadTransitionBaselineNodes,
     platform: runtime.backend.platform,
@@ -138,7 +144,7 @@ export async function runStableCaptureLoop(
     waitedMs,
     captures,
     nodeCount: pacing.lastNodeCount,
-    quietMs: window.baseQuietMs,
+    quietMs,
     lastCapture,
   });
   while (now(runtime) < deadlineMs) {
@@ -151,12 +157,12 @@ export async function runStableCaptureLoop(
     if (!capture) return result(false, true, now(runtime) - start);
     captures += 1;
     lastCapture = capture;
-    const defaultQuietMs = window.price(capture.snapshot);
+    if (requestedQuietMs === undefined) quietMs = defaultQuietMsForCapture(capture.snapshot);
     const signal = stableCaptureSignal(capture.snapshot);
     // One value carries both: how long this capture must stay quiet, and therefore the cadence that
     // can measure it. Sampling an extended wait on the caller's tight grid would spend the whole
     // extension in capture round trips.
-    const requiredQuietMs = confirmation.requiredQuietMs(capture.snapshot, defaultQuietMs);
+    const requiredQuietMs = confirmation.requiredQuietMs(capture.snapshot, quietMs);
     const pollMs = stableCapturePollMs(requiredQuietMs);
     preferredBackend ??= preferredSnapshotBackendForVerdict(capture.snapshot.snapshotQuality);
     const nowMs = now(runtime);
@@ -198,27 +204,6 @@ export async function runStableCaptureLoop(
     await sleep(runtime, observed.delayMs);
   }
   return result(false, false, now(runtime) - start);
-}
-
-/**
- * The quiet window the run holds. An unrequested window is re-priced from each capture the loop
- * performs: the read that pays the window is the loop's own, not the one the baseline came from,
- * which can be several commands stale and served by another producer, and a mid-run fallback changes
- * the price mid-wait. The confirmation applies its own floor on top of the returned price, so
- * re-pricing is never a shorter wait. A window the caller asked for is fixed.
- */
-function createStableCaptureWindow(requestedQuietMs: number | undefined) {
-  let baseQuietMs = requestedQuietMs ?? DEFAULT_STABLE_QUIET_MS;
-  return {
-    get baseQuietMs(): number {
-      return baseQuietMs;
-    },
-    /** Re-prices the window from a capture the loop just completed, and reports that price. */
-    price(snapshot: SnapshotState): number {
-      if (requestedQuietMs === undefined) baseQuietMs = defaultQuietMsForCapture(snapshot);
-      return baseQuietMs;
-    },
-  };
 }
 
 /**
