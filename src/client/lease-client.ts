@@ -18,7 +18,10 @@ export function createLeaseClient(
   return {
     allocate: async (options) =>
       normalizeLease(
-        await execute(INTERNAL_COMMANDS.leaseAllocate, [], { ...options, leaseId: undefined }),
+        await execute(INTERNAL_COMMANDS.leaseAllocate, [], {
+          ...options,
+          leaseId: options.leaseId,
+        }),
       ),
     heartbeat: async (options) =>
       normalizeLease(await execute(INTERNAL_COMMANDS.leaseHeartbeat, [], options)),

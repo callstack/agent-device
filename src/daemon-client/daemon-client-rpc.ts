@@ -91,7 +91,12 @@ async function rejectDaemonHttpRpcError(
     return;
   }
   const localized = await localizeRemoteDaemonError(payload, {
-    endpoint: { baseUrl: info.baseUrl, token: info.token, tenantId: req.meta?.tenantId },
+    endpoint: {
+      baseUrl: info.baseUrl,
+      token: info.token,
+      tenantId: req.meta?.tenantId,
+      leaseId: leaseScopeFromRequest(req).leaseId,
+    },
     stateDir,
     requestId,
   });

@@ -25,6 +25,8 @@ afterEach(() => {
 
 type LifecycleFixture = Readonly<{
   calls: string[];
+  framePerfResets: string[];
+  launchReports: Array<string | undefined>;
   lifecycle: ReturnType<typeof bindAndroidApplicationLifecycle>;
 }>;
 
@@ -32,6 +34,7 @@ function createLifecycle(
   params: Readonly<{
     snapshot?: (options: SnapshotOptions) => Promise<unknown>;
     openedAppBundleId?: string;
+    launchedAppBundleId?: string;
     signal?: AbortSignal;
     restoreTestIme?: (
       device: DeviceInfo,
@@ -41,14 +44,23 @@ function createLifecycle(
   }> = {},
 ): LifecycleFixture {
   const calls: string[] = [];
+  const framePerfResets: string[] = [];
+  const launchReports: Array<string | undefined> = [];
   const localInteractors: LocalApplicationInteractorHost = {
     resolve: async () =>
       ({
-        open: async (app: string) => {
-          calls.push(`open:${app}`);
+        open: async (app: string, options?: { terminateRunningApp?: boolean }) => {
+          calls.push(`open:${app}${options?.terminateRunningApp ? ' (terminate running)' : ''}`);
+          return {
+            launchedAppBundleId: app.includes('://')
+              ? 'com.example.follow-up'
+              : params.launchedAppBundleId,
+          };
         },
         openDevice: async () => {},
-        close: async () => {},
+        close: async (app: string) => {
+          calls.push(`close:${app}`);
+        },
         setSetting: async () => {},
         snapshot: async (options: SnapshotOptions) => {
           calls.push(`observe:${options.appBundleId}`);
@@ -68,9 +80,18 @@ function createLifecycle(
     },
     androidApplications: {
       resolveOpenTarget: async () => ({}),
-      inferOpenedAppBundleId: async () =>
-        'openedAppBundleId' in params ? params.openedAppBundleId : 'com.example.app',
-      resetFramePerfStats: async () => {},
+      inferOpenedAppBundleId: async (
+        _device: DeviceInfo,
+        _target: string | undefined,
+        _current: string | undefined,
+        launchedAppBundleId: string | undefined,
+      ) => {
+        launchReports.push(launchedAppBundleId);
+        return 'openedAppBundleId' in params ? params.openedAppBundleId : 'com.example.app';
+      },
+      resetFramePerfStats: async (_device: DeviceInfo, appBundleId: string) => {
+        framePerfResets.push(appBundleId);
+      },
       applyRuntimeHints: async () => {},
       clearRuntimeHints: async () => {},
       activateTestIme: async () => {},
@@ -93,7 +114,7 @@ function createLifecycle(
     device,
     signal: params.signal ?? new AbortController().signal,
   });
-  return { calls, lifecycle };
+  return { calls, framePerfResets, launchReports, lifecycle };
 }
 
 function openInput(overrides: Partial<OpenApplicationInput> = {}): OpenApplicationInput {
@@ -233,6 +254,74 @@ function finalizationInput(
     ...overrides,
   };
 }
+
+test('an Android relaunch closes the requested package before opening it', async () => {
+  const { calls, lifecycle } = createLifecycle({ openedAppBundleId: 'com.android.settings' });
+
+  await lifecycle.openApplication(
+    openInput({
+      target: 'com.android.settings',
+      positionals: ['com.android.settings'],
+      appBundleId: 'com.android.settings',
+      relaunch: true,
+    }),
+  );
+
+  expect(calls.slice(0, 2)).toEqual(['close:com.android.settings', 'open:com.android.settings']);
+});
+
+test('an Android intent relaunch has the launch terminate its handler and records the resumed owner', async () => {
+  const { calls, framePerfResets, lifecycle } = createLifecycle({
+    openedAppBundleId: 'com.android.settings',
+  });
+
+  const outcome = await lifecycle.openApplication(
+    openInput({
+      target: 'settings',
+      positionals: ['settings'],
+      appBundleId: undefined,
+      relaunch: true,
+    }),
+  );
+
+  expect(calls).toEqual(['open:settings (terminate running)', 'observe:com.android.settings']);
+  expect(framePerfResets).toEqual(['com.android.settings']);
+  expect(outcome.appBundleId).toBe('com.android.settings');
+});
+
+test('the owner inference receives the package the primary launch reported', async () => {
+  const { launchReports, lifecycle } = createLifecycle({
+    launchedAppBundleId: 'com.android.settings',
+  });
+
+  await lifecycle.openApplication(
+    openInput({
+      target: 'settings',
+      positionals: ['settings'],
+      appBundleId: undefined,
+      runtimeLaunchUrl: 'example://after-open',
+    }),
+  );
+
+  expect(launchReports).toEqual(['com.android.settings']);
+});
+
+test('an Android intent relaunch that resumes no app closes nothing and stays unidentified', async () => {
+  const { calls, lifecycle } = createLifecycle({ openedAppBundleId: undefined });
+
+  const outcome = await lifecycle.openApplication(
+    openInput({
+      target: 'settings',
+      positionals: ['settings'],
+      appBundleId: undefined,
+      relaunch: true,
+    }),
+  );
+
+  expect(calls).toEqual(['open:settings (terminate running)']);
+  expect(outcome.appBundleId).toBeUndefined();
+  expect(outcome.timing.postOpenObservation).toBe('app-unidentified');
+});
 
 test('close --shutdown restores the keyboard and only then kills the emulator (#3318)', async () => {
   const sequence: string[] = [];

@@ -54,7 +54,11 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
 });
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
-  return { ...actual, resolveAndroidPackageForOpen: vi.fn(async () => undefined) };
+  // Every Android target these tests open is an installed package, which resolves to itself.
+  return {
+    ...actual,
+    resolveAndroidPackageForOpen: vi.fn(async (_device: unknown, target?: string) => target),
+  };
 });
 
 import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';

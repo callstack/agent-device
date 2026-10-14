@@ -54,6 +54,26 @@ for (const operation of ['allocate', 'release'] as const) {
   });
 }
 
+test('lease_allocate answers with the lease id the request named', async () => {
+  const registry = new LeaseRegistry();
+  const leaseId = 'abcdef0123456789abcdef0123456789';
+  const response = await handleLeaseCommands({
+    req: {
+      token: 'test-token',
+      session: 'default',
+      command: 'lease_allocate',
+      positionals: [],
+      meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId },
+    },
+    sessionName: 'default',
+    sessionStore: makeSessionStore('agent-device-chosen-lease-id-'),
+    leaseRegistry: registry,
+  });
+  assert.ok(response?.ok);
+  assert.equal((response.data?.lease as DeviceLease | undefined)?.leaseId, leaseId);
+  assert.equal(registry.listActiveLeases()[0]?.leaseId, leaseId);
+});
+
 test('lease_release still releases a retainOnClose lease through the provider', async () => {
   const registry = new LeaseRegistry();
   const lease = registry.allocateLease({

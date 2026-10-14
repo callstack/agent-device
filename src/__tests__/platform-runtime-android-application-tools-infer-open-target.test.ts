@@ -26,7 +26,7 @@ const device: DeviceInfo = {
 
 test('inferOpenedAppBundleId stays best-effort when Android mechanics fails to load for a targetless open', async () => {
   await expect(
-    createAndroidApplicationTools().inferOpenedAppBundleId(device, undefined, undefined),
+    createAndroidApplicationTools().inferOpenedAppBundleId(device, undefined, undefined, undefined),
   ).resolves.toBeUndefined();
 });
 
@@ -36,6 +36,7 @@ test('inferOpenedAppBundleId skips loading Android mechanics when the app-bundle
       device,
       'exp://127.0.0.1:8082',
       'com.example.demo',
+      undefined,
     ),
   ).resolves.toBe('com.example.demo');
   expect(mockLoadAndroidMechanics).not.toHaveBeenCalled();

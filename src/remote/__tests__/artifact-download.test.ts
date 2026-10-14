@@ -11,6 +11,7 @@ import {
 } from '@agent-device/test-kit/loopback';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { downloadRemoteArtifactFromUrl } from '../artifact-download.ts';
+import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 
 type DownloadParams = Parameters<typeof downloadRemoteArtifactFromUrl>[0];
 
@@ -161,6 +162,31 @@ test('downloadRemoteArtifactFromUrl removes directory staging when a 2xx body fa
       ['previous-run-marker.txt'],
       'failed extraction must remove the hidden staging directory it created',
     );
+  } finally {
+    await closeLoopbackServer(server);
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('downloadRemoteArtifactFromUrl names the held lease and sends no lease header without one', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'artifact download lease header coverage')) return;
+  const tempRoot = mkdtempForTestSync('agent-device-artifact-lease-header-');
+  const leaseHeaders: unknown[] = [];
+  const server = http.createServer((req, res) => {
+    leaseHeaders.push(req.headers[DAEMON_HTTP_LEASE_HEADER]);
+    res.statusCode = 200;
+    res.end('png-bytes');
+  });
+  const port = await listenOnLoopback(server);
+
+  try {
+    await downloadTo(tempRoot, port, {
+      requestScope: { requestId: 'req-leased', leaseId: 'lease-1' },
+    });
+    await downloadTo(tempRoot, port, {
+      requestScope: { requestId: 'req-unleased' },
+    });
+    assert.deepEqual(leaseHeaders, ['lease-1', undefined]);
   } finally {
     await closeLoopbackServer(server);
     fs.rmSync(tempRoot, { recursive: true, force: true });

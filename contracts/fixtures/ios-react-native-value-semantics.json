@@ -301,7 +301,10 @@
         "type": "TextField",
         "value": "checkbox, checked"
       },
-      "expected": {}
+      "expected": {
+        "editable": true,
+        "password": false
+      }
     },
     {
       "name": "literal editable generic node",
@@ -334,7 +337,7 @@
       "node": {
         "index": 0,
         "type": "Other",
-        "value": "Kontrollk\u00e4stchen, nicht markiert",
+        "value": "Kontrollkästchen, nicht markiert",
         "role": "RCTView"
       },
       "expected": {}

@@ -1,7 +1,6 @@
 import type { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { inheritPostGestureOutcome } from '@agent-device/kernel/snapshot';
-import type { SelectorResolution } from '@agent-device/selectors';
 import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
@@ -10,7 +9,10 @@ import {
   type InteractionSnapshot,
 } from './interaction-snapshot-capture.ts';
 import { buildCoveredInteractionError } from './target-visibility-stages.ts';
-import { resolveActionSelector } from './selector-action-resolution.ts';
+import {
+  resolveActionSelector,
+  type ActionSelectorResolution,
+} from './selector-action-resolution.ts';
 import { selectorNotFoundFailure } from './selector-read-shared.ts';
 import type {
   InteractionAction,
@@ -19,7 +21,7 @@ import type {
 
 export type SelectorResolutionAttempt = {
   capture: InteractionSnapshot;
-  resolved: SelectorResolution | null;
+  resolved: ActionSelectorResolution | null;
 };
 
 export async function attemptSelectorResolution(
@@ -76,7 +78,7 @@ export async function selectorInteractionFailure(params: {
   nodes: SnapshotState['nodes'];
   selectorExpression: string;
   action: InteractionAction;
-  resolved: SelectorResolution | null;
+  resolved: ActionSelectorResolution | null;
 }): Promise<AppError> {
   const { runtime, nodes, selectorExpression, action, resolved } = params;
   const covered = await detectCoveredSelectorTarget({ runtime, nodes, selectorExpression, action });

@@ -11,6 +11,14 @@ extension RunnerTests {
     guard case .resolved(let resolvedModal) = resolveBlockingSystemModal(deadline: deadline) else {
       return nil
     }
+    return snapshotForBlockingSystemModal(resolvedModal, deadline: deadline)
+    #endif
+  }
+
+  func snapshotForBlockingSystemModal(
+    _ resolvedModal: ResolvedBlockingSystemModal,
+    deadline: Date = .distantFuture
+  ) -> DataPayload? {
     let modal = resolvedModal.root
     let actions = resolvedModal.actions
 
@@ -62,7 +70,6 @@ extension RunnerTests {
     }
 
     return DataPayload(nodes: nodes, truncated: false)
-    #endif
   }
 
   func firstBlockingSystemModal(
@@ -217,13 +224,14 @@ extension RunnerTests {
   ) -> PresentedNode {
     let label = (labelOverride ?? element.label).trimmingCharacters(in: .whitespacesAndNewlines)
     let identifier = (identifierOverride ?? element.identifier).trimmingCharacters(in: .whitespacesAndNewlines)
+    let value = element.value.map { String(describing: $0).trimmingCharacters(in: .whitespacesAndNewlines) }
     return SnapshotPresentation.singleElementRead(
       RawAXNode(
         index: index,
         type: type,
         label: label.isEmpty ? nil : label,
         identifier: identifier.isEmpty ? nil : identifier,
-        value: nil,
+        value: value.flatMap { $0.isEmpty ? nil : $0 },
         rect: SnapshotRect(element.frame),
         enabled: element.isEnabled,
         focused: nil,
