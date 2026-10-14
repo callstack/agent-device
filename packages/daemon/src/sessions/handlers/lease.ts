@@ -90,16 +90,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         req.meta?.providerCredentialFingerprint,
         providerCredentials,
       );
-      const pickedDeviceKey = await pickProxyLeaseDeviceKey(req, leaseScope);
-      const activeLeaseIds = new Set(
-        leaseRegistry.listActiveLeases().map((entry) => entry.leaseId),
-      );
-      const lease = leaseRegistry.allocateLease(
-        leaseScopeToAllocateRequest(
-          pickedDeviceKey ? { ...leaseScope, deviceKey: pickedDeviceKey } : leaseScope,
-        ),
-      );
-      const reused = activeLeaseIds.has(lease.leaseId);
+      const { lease, reused } = await allocateOrRenewLease(req, leaseScope, leaseRegistry);
       const requestId = req.meta?.requestId;
       return await leaseRegistry.runDeviceMutation(lease, async () => {
         let providerData: Record<string, unknown> | undefined;
@@ -184,6 +175,26 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     default:
       return null;
   }
+}
+
+/**
+ * A request repeating the `leaseId` of its own live lease gets that lease back before any device is
+ * picked, so a retry neither fails on a device that left the inventory nor binds another one.
+ */
+async function allocateOrRenewLease(
+  req: DaemonRequest,
+  scope: LeaseScope,
+  leaseRegistry: LeaseRegistry,
+): Promise<{ lease: DeviceLease; reused: boolean }> {
+  const request = leaseScopeToAllocateRequest(scope);
+  const renewed = leaseRegistry.renewRequestedLease(request);
+  if (renewed) return { lease: renewed, reused: true };
+  const pickedDeviceKey = await pickProxyLeaseDeviceKey(req, scope);
+  const activeLeaseIds = new Set(leaseRegistry.listActiveLeases().map((entry) => entry.leaseId));
+  const lease = leaseRegistry.allocateLease(
+    pickedDeviceKey ? { ...request, deviceKey: pickedDeviceKey } : request,
+  );
+  return { lease, reused: activeLeaseIds.has(lease.leaseId) };
 }
 
 /**

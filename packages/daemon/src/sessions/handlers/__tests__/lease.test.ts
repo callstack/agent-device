@@ -483,6 +483,7 @@ function proxyAllocateRequest(
 async function allocateAgainstInventory(
   request: DaemonRequest,
   devices: readonly DeviceInfo[],
+  leaseRegistry = new LeaseRegistry(),
 ): Promise<{ lease: DeviceLease; inventoryReads: number }> {
   let inventoryReads = 0;
   const response = await withTestDeviceInventory(
@@ -497,11 +498,13 @@ async function allocateAgainstInventory(
         req: request,
         sessionName: request.session,
         sessionStore: makeSessionStore('agent-device-proxy-allocate-by-spec-'),
-        leaseRegistry: new LeaseRegistry(),
+        leaseRegistry,
       }),
   );
   assert.ok(response?.ok);
-  return { lease: response.data?.lease as DeviceLease, inventoryReads };
+  const lease = response.data?.lease as DeviceLease | undefined;
+  assert.ok(lease);
+  return { lease, inventoryReads };
 }
 
 test('a proxy allocation that names no device picks one by its selectors and binds its deviceKey', async () => {
@@ -547,4 +550,44 @@ test('an allocation that names its device, names no spec, or is not a proxy leas
   const unspecified = await allocateAgainstInventory(proxyAllocateRequest({}), [IOS_SIMULATOR]);
   assert.equal(unspecified.lease.deviceKey, undefined);
   assert.equal(unspecified.inventoryReads, 0);
+});
+
+test('a proxy allocation retried with its lease id gets its lease back without picking again', async () => {
+  const leaseId = 'abcdef0123456789abcdef0123456789';
+  const registry = new LeaseRegistry();
+  const request = proxyAllocateRequest({ platform: 'ios' }, { leaseId });
+  const first = await allocateAgainstInventory(request, [IOS_SIMULATOR], registry);
+  assert.equal(first.lease.deviceKey, 'ios:mobile:sim-1');
+
+  const deviceGone = await allocateAgainstInventory(request, [], registry);
+  assert.equal(deviceGone.lease.leaseId, leaseId);
+  assert.equal(deviceGone.lease.deviceKey, 'ios:mobile:sim-1');
+  assert.equal(deviceGone.inventoryReads, 0);
+
+  const otherCandidate = await allocateAgainstInventory(request, [SECOND_IOS_SIMULATOR], registry);
+  assert.equal(otherCandidate.lease.leaseId, leaseId);
+  assert.equal(otherCandidate.inventoryReads, 0);
+  assert.deepEqual(
+    registry.listActiveLeases().map((lease) => lease.leaseId),
+    [leaseId],
+  );
+});
+
+test("a proxy allocation naming another owner's lease id still picks and is refused", async () => {
+  const leaseId = 'abcdef0123456789abcdef0123456789';
+  const registry = new LeaseRegistry();
+  await allocateAgainstInventory(
+    proxyAllocateRequest({ platform: 'ios' }, { leaseId }),
+    [IOS_SIMULATOR],
+    registry,
+  );
+  await assert.rejects(
+    allocateAgainstInventory(
+      proxyAllocateRequest({ platform: 'ios' }, { leaseId, clientId: 'client-2' }),
+      [SECOND_IOS_SIMULATOR],
+      registry,
+    ),
+    (error: AppError) =>
+      error.code === 'INVALID_ARGS' && error.details?.reason === 'LEASE_ID_IN_USE',
+  );
 });

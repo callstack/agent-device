@@ -75,6 +75,37 @@ test('allocateLease keeps a caller-chosen lease id and refuses any id it already
   }
 });
 
+test('an allocation repeating its own live lease id gets that lease back, on any device it names or none', () => {
+  const registry = new LeaseRegistry();
+  const leaseId = 'abcdef0123456789abcdef0123456789';
+  const owner = {
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseBackend: 'ios-instance',
+    leaseProvider: 'proxy',
+    clientId: 'client-1',
+  } as const;
+  const lease = registry.allocateLease({ ...owner, leaseId, deviceKey: 'ios:mobile:sim-1' });
+
+  assert.equal(registry.renewRequestedLease({ ...owner, leaseId })?.leaseId, leaseId);
+  assert.equal(registry.allocateLease({ ...owner, leaseId }).deviceKey, lease.deviceKey);
+  assert.equal(
+    registry.renewRequestedLease({ ...owner, leaseId, deviceKey: 'ios:mobile:sim-2' }),
+    undefined,
+  );
+  assert.equal(
+    registry.renewRequestedLease({ ...owner, leaseId, clientId: 'client-2' }),
+    undefined,
+  );
+  assert.equal(registry.renewRequestedLease({ ...owner, leaseId, runId: 'run-2' }), undefined);
+  assert.equal(registry.renewRequestedLease(owner), undefined);
+  assert.throws(
+    () => registry.allocateLease({ ...owner, leaseId, deviceKey: 'ios:mobile:sim-2' }),
+    isLeaseIdInUse,
+  );
+  assert.equal(registry.listActiveLeases().length, 1);
+});
+
 test('an expired provider lease keeps its id and provider session from a caller-chosen reuse', () => {
   let now = 1_000;
   const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 10_000 });

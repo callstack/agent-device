@@ -79,11 +79,9 @@ export class LeaseRegistry {
   }
 
   allocateLease(request: AllocateLeaseRequest): DeviceLease {
-    const chosenLeaseId =
-      request.leaseId === undefined ? undefined : normalizeRequiredLeaseId(request.leaseId);
-    const normalized = normalizeAllocateLeaseRequest(request);
-    this.cleanupExpiredLeases();
-    const leaseTtlMs = this.resolveLeaseTtlMs(normalized.ttlMs);
+    const { chosenLeaseId, normalized, leaseTtlMs } = this.prepareAllocation(request);
+    const requestedLease = this.refreshRequestedLease(chosenLeaseId, normalized, leaseTtlMs);
+    if (requestedLease) return requestedLease;
     this.assertHumanControlAdmission(normalized);
     const existingLease = this.refreshExistingRunBinding(normalized, leaseTtlMs);
     if (existingLease) return existingLease;
@@ -132,6 +130,44 @@ export class LeaseRegistry {
     this.issueLease(lease);
     this.hostTtlMsByLeaseId.set(id, leaseTtlMs);
     return { ...lease };
+  }
+
+  /**
+   * The live lease an allocation gets back when it repeats the `leaseId` it named before, for the
+   * same owner: a retry after a lost reply receives the lease it was issued, not a second one. A
+   * request naming no device matches whichever device the lease binds.
+   */
+  renewRequestedLease(request: AllocateLeaseRequest): DeviceLease | undefined {
+    const { chosenLeaseId, normalized, leaseTtlMs } = this.prepareAllocation(request);
+    return this.refreshRequestedLease(chosenLeaseId, normalized, leaseTtlMs);
+  }
+
+  private prepareAllocation(request: AllocateLeaseRequest): {
+    chosenLeaseId?: string;
+    normalized: NormalizedAllocateLeaseRequest;
+    leaseTtlMs: number;
+  } {
+    const chosenLeaseId =
+      request.leaseId === undefined ? undefined : normalizeRequiredLeaseId(request.leaseId);
+    const normalized = normalizeAllocateLeaseRequest(request);
+    this.cleanupExpiredLeases();
+    return { chosenLeaseId, normalized, leaseTtlMs: this.resolveLeaseTtlMs(normalized.ttlMs) };
+  }
+
+  private refreshRequestedLease(
+    chosenLeaseId: string | undefined,
+    request: NormalizedAllocateLeaseRequest,
+    leaseTtlMs: number,
+  ): DeviceLease | undefined {
+    const lease = chosenLeaseId === undefined ? undefined : this.leases.get(chosenLeaseId);
+    if (!lease) return undefined;
+    const scope = { ...request, deviceKey: request.deviceKey ?? lease.deviceKey };
+    if (!hasAllocatedScope(lease, scope)) return undefined;
+    this.assertHumanControlAdmission(lease);
+    return this.refreshLease(
+      request.retainOnClose ? { ...lease, retainOnClose: true } : lease,
+      leaseTtlMs,
+    );
   }
 
   private issueLease(lease: DeviceLease): void {
