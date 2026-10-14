@@ -180,8 +180,8 @@ const ContactRow = memo(function ContactRow({
   );
 });
 
-// context-cascade: the provider value is a new object on every tick, so every badge re-renders
-// even though only the unrelated `unread` counter changes.
+// context-cascade: the context carries a fast-changing `unread` counter next to the stable `user`
+// name, so every badge that reads only `user` re-renders on each `unread` change.
 type Session = { user: string; unread: number };
 const SessionContext = createContext<Session>({ user: 'guest', unread: 0 });
 
@@ -295,11 +295,13 @@ function FilteredContacts({ items }: { items: Contact[] }) {
 
 // eager-list: showing the catalog mounts every tile at once instead of virtualizing the list.
 function EagerListScenario({ runId, onDone }: ScenarioProps) {
-  const [shown, setShown] = useState(false);
-  useBurst(runId, 1, 50, () => setShown((value) => !value), onDone);
+  const [mountedRun, setMountedRun] = useState(0);
+  useBurst(runId, 1, 50, () => setMountedRun(runId), onDone);
   return (
     <ScrollView style={styles.list}>
-      {shown ? CATALOG.map((id) => <ProductTile id={id} key={id} />) : null}
+      {runId > 0 && mountedRun === runId
+        ? CATALOG.map((id) => <ProductTile id={id} key={id} />)
+        : null}
     </ScrollView>
   );
 }

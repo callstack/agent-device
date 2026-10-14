@@ -253,11 +253,11 @@ agent-device react-devtools profile stop
 | --- | --- | --- |
 | `expensive-render` | `PriceHistoryChart` recomputes its trend on every render | `slow-render PriceHistoryChart` |
 | `memo-defeated` | `ContactList` passes a new callback and style object to memoized rows | `memo-defeated ContactRow` |
-| `context-cascade` | `SessionProvider` builds a new context value on every update | `context-cascade AvatarBadge` |
+| `context-cascade` | A fast-changing `unread` counter shares one context with the stable user name that badges read | `context-cascade AvatarBadge` |
 | `parent-cascade` | Typing re-renders every unmemoized result row | `parent-cascade ResultRow` |
 | `render-storm` | `LiveClock` sets state every 16 ms | `render-storm LiveClock` |
 | `effect-chain` | `FilteredContacts` copies derived state in an effect | `effect-chain FilteredContacts` |
-| `eager-list` | 1,200 tiles mount in one commit instead of a virtualized list | `eager-mount ProductTile` |
+| `eager-list` | 1,200 tiles mount in one commit instead of a virtualized list; every Run mounts them afresh | `eager-mount ProductTile` |
 
 `src/screens/PerfLabScreen.tsx` imports only React and React Native, so it can be copied into a bare React Native app to check the profiler on other React Native versions.
 
