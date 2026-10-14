@@ -132,39 +132,7 @@ export const NEW_ENTRY_CEILINGS: Readonly<Record<EntryCategory, number>> = Objec
  */
 export const APPROVED_OVER_CEILING: Readonly<
   Record<string, { issue: string; reason: string; owner: string }>
-> = Object.freeze({
-  // The single owner of the client-collected replay source bundles tests carry (#1802). Its
-  // weight is the real collector it exists to share, not fixture code.
-  'packages/replay-port/src/replay-script-source.fixtures.ts': {
-    issue: '#3517',
-    reason:
-      'Test-only request fixture whose whole contract is running the real client collector ' +
-      '(script-source-bundle + source-discovery) so the root and daemon test trees cannot ' +
-      'drift from it; the weight is the ad-script format parser behind resolveReplayFormat. ' +
-      'Making that lazy would fork a second collector, which is the duplication #3517 removes. ' +
-      'No platform implementation; never bundled.',
-    owner: 'replay-port',
-  },
-  // The two Android fixture subpaths are by design the REAL walker on archived device trees:
-  // their whole contract is running the shipped projection over captures no hand-written node
-  // could stand in for, so their closure IS the mechanics the subpath exposes.
-  'packages/platform-android/src/snapshot-capture.fixtures.ts': {
-    issue: '#3517',
-    reason:
-      'Test-only Android capture builders over the package mechanics facade, shared by the ' +
-      'daemon and root test trees; a fixture that simulated the walk would prove nothing about ' +
-      'production inclusion decisions. Test-only subpath; never bundled.',
-    owner: 'platform-android',
-  },
-  'packages/platform-android/src/ui-hierarchy.fixtures.ts': {
-    issue: '#3517',
-    reason:
-      'Test-only archived device trees (IME, QS shade) plus the real non-raw/interactive walks ' +
-      'over them, shared by the daemon and root test trees; the closure is the mechanics facade ' +
-      'the fixtures must run. Test-only subpath; never bundled.',
-    owner: 'platform-android',
-  },
-});
+> = Object.freeze({});
 
 /** The category is a function of the path, never a hand-written column. */
 export function entryCategoryOf(entryFile: string): EntryCategory {
