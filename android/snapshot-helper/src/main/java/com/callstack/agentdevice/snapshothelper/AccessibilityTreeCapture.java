@@ -144,7 +144,7 @@ final class AccessibilityTreeCapture {
       AccessibilityTreeXml.WindowMetadata windowMetadata = null;
       try {
         windowMetadata = AccessibilityTreeXml.readWindowMetadata(window, windowCount);
-        root = window.getRoot();
+        root = AccessibilityNodeReads.root(window);
         if (root == null) {
           missingRootWindowTypes.add(windowMetadata.type);
           stats.activeWindowRootMissing |= activeWindow;
