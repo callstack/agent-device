@@ -67,7 +67,6 @@ import type { SessionState } from '../core/session-state.ts';
 
 /**
  * How long a scroll keeps asking whether an untouched surface is really untouched (#1542's window).
- * No per-capture deadline: the scroll capture takes no signal, so a late capture is judged.
  */
 const SCROLL_MOVEMENT_SCHEDULE: ObservationSchedule = {
   intervalMs: 200,
