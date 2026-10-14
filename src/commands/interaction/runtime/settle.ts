@@ -145,7 +145,7 @@ async function settleAfterAction(
       ...(params.quietMs === undefined ? {} : { quietMs: params.quietMs }),
       timeoutMs,
       resetBudgetOnPrivateAxRecovery: true,
-      broadTransitionBaselineNodes: params.baseline.nodes,
+      broadTransitionBaseline: params.baseline,
     });
     if (outcome.failure) return settleUnavailable(base, outcome.quietMs, outcome.failure.error);
     return await readSettledOutcome(runtime, options, params, base, outcome);
@@ -271,8 +271,17 @@ function authorizedRefBaseline(
   return nonEmptyBaseline(surfaceScopedNodes(session?.refFrameSnapshot));
 }
 
+/**
+ * The latest stored tree, for a target no capture resolved. The diff can use its nodes, but its
+ * presented-surface fact may predate a side effect this layer cannot see, and an `absent` read
+ * taken before a sheet was presented must not rule out the confirmation owed to that sheet's
+ * dismissal (#3565).
+ */
 function sessionBaseline(session: CommandSessionRecord | undefined): SurfaceScopedNodes {
-  return surfaceScopedNodes(session?.refFrameSnapshot ?? session?.snapshot);
+  const { presentedSurface: _unverified, ...baseline } = surfaceScopedNodes(
+    session?.refFrameSnapshot ?? session?.snapshot,
+  );
+  return baseline;
 }
 
 function nonEmptyBaseline(

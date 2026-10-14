@@ -9,17 +9,21 @@ import { createAgentDevice } from '../../../runtime.ts';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { runStableCaptureLoop } from './stable-capture.ts';
 import {
+  elementCatalogTabSnapshot,
+  elementPushedDetailSnapshot,
   elementSettingsSnapshot,
   elementSettledRoomSnapshot,
+  elementSettingsTabSnapshot,
   elementThreadsNoticeSnapshot,
   elementTransientRoomSnapshot,
+  systemPermissionPromptSnapshot,
 } from './stable-capture.fixtures.ts';
 import { createMemorySessionStore } from '../../../command-runtime/runtime-factory.ts';
 
 const BROAD_TRANSITION_PARAMS = {
   quietMs: 500,
   timeoutMs: 5_000,
-  broadTransitionBaselineNodes: elementThreadsNoticeSnapshot.nodes,
+  broadTransitionBaseline: { nodes: elementThreadsNoticeSnapshot.nodes },
 };
 
 // Each #1831 case below runs at BOTH windows. The confirmation used to switch itself off for a
@@ -129,7 +133,7 @@ for (const requestedQuietMs of [500, 150]) {
         quietMs: requestedQuietMs,
         // Presented iOS modals can be complete interaction captures without retaining the
         // Application root in their projection.
-        broadTransitionBaselineNodes: elementThreadsNoticeSnapshot.nodes.slice(1),
+        broadTransitionBaseline: { nodes: elementThreadsNoticeSnapshot.nodes.slice(1) },
       },
     );
 
@@ -291,7 +295,7 @@ test('settle confirms an iOS broad replacement when capture omits snapshot backe
       ...BROAD_TRANSITION_PARAMS,
       // Presented iOS modals can be complete interaction captures without retaining the
       // Application root in their projection.
-      broadTransitionBaselineNodes: elementThreadsNoticeSnapshot.nodes.slice(1),
+      broadTransitionBaseline: { nodes: elementThreadsNoticeSnapshot.nodes.slice(1) },
     },
   );
 
@@ -326,6 +330,87 @@ test('settle confirms a tiny modal replacement through a partial post-action pro
   );
 });
 
+test('settle confirms the dismissal of a presented surface larger than a tiny tree', async () => {
+  // A blocking system prompt projects 6 nodes — over `TINY_STABLE_TREE_NODE_COUNT` — and the
+  // captures after it arrive rootless. The producer's `presented` fact is what arms the
+  // confirmation; without it this is the larger partial projection below, which keeps the plain
+  // window.
+  const prompt = systemPermissionPromptSnapshot();
+  const { runtime } = transitionRuntime({
+    presented: prompt,
+    dismissesTo: elementCatalogTabSnapshot(),
+    omitViewportRoot: true,
+    settledAtMs: 1_200,
+  });
+
+  const outcome = await runStableCaptureLoop(
+    runtime,
+    { session: 'default' },
+    {
+      quietMs: 150,
+      timeoutMs: 5_000,
+      broadTransitionBaseline: { nodes: prompt.nodes, presentedSurface: 'presented' },
+    },
+  );
+
+  assert.equal(outcome.settled, true);
+  assert.ok(outcome.waitedMs >= 1_500, `settled prompt dismissal after ${outcome.waitedMs}ms`);
+});
+
+// The three navigation cases #3470 complains about. Each is a BROAD replacement by the identity
+// ratio — both screens project a complete viewport and share under half their node identities. A
+// baseline whose producer read no presented surface has no dismissal to confirm, so they keep the
+// plain window; a producer that cannot answer keeps the parent's arming, which confirms them.
+const NAVIGATION_TRANSITIONS = [
+  ['a tab switch', elementCatalogTabSnapshot(), elementSettingsTabSnapshot()],
+  ['a push', elementCatalogTabSnapshot(), elementPushedDetailSnapshot()],
+  [
+    // The screen a push LANDS ON can be tiny, and that must not arm the confirmation either: only
+    // the surface being dismissed is the trigger.
+    'a push onto a nearly-empty screen',
+    elementCatalogTabSnapshot(),
+    elementThreadsNoticeSnapshot,
+  ],
+] as const;
+for (const [label, from, to] of NAVIGATION_TRANSITIONS) {
+  test(`settle keeps the quiet window across ${label} from a screen with nothing presented`, async () => {
+    const { runtime } = staticSnapshotRuntime(to);
+
+    const outcome = await runStableCaptureLoop(
+      runtime,
+      { session: 'default' },
+      {
+        quietMs: 500,
+        timeoutMs: 5_000,
+        broadTransitionBaseline: { nodes: from.nodes, presentedSurface: 'absent' },
+      },
+    );
+
+    assert.equal(outcome.settled, true);
+    assert.ok(
+      outcome.waitedMs < 800,
+      `${label} settled after ${outcome.waitedMs}ms with ${outcome.captures} captures`,
+    );
+  });
+
+  test(`settle still confirms ${label} when the producer cannot say what was presented`, async () => {
+    const { runtime } = staticSnapshotRuntime(to);
+
+    const outcome = await runStableCaptureLoop(
+      runtime,
+      { session: 'default' },
+      {
+        quietMs: 500,
+        timeoutMs: 5_000,
+        broadTransitionBaseline: { nodes: from.nodes, presentedSurface: 'unknown' },
+      },
+    );
+
+    assert.equal(outcome.settled, true);
+    assert.ok(outcome.waitedMs >= 1_500, `${label} settled after ${outcome.waitedMs}ms`);
+  });
+}
+
 test('a dismissal confirmation is not dropped by a later empty projection', async () => {
   // A confirmation is a fact about the transition, so once armed it holds the floor for the rest of
   // the run: later captures that cannot support the comparison (here, empty projections that match
@@ -341,7 +426,7 @@ test('a dismissal confirmation is not dropped by a later empty projection', asyn
     {
       quietMs: 150,
       timeoutMs: 5_000,
-      broadTransitionBaselineNodes: elementThreadsNoticeSnapshot.nodes,
+      broadTransitionBaseline: { nodes: elementThreadsNoticeSnapshot.nodes },
     },
   );
 
@@ -380,7 +465,9 @@ for (const [label, midAnimation] of MID_ANIMATION_FIRST_CAPTURES) {
         timeoutMs: 5_000,
         // A full-screen settings table: the tiny-presented-baseline escape hatch does not apply, so
         // arming depends entirely on the captures below.
-        broadTransitionBaselineNodes: elementSettingsSnapshot([1_138, 1_423, 2_144, 2_434]).nodes,
+        broadTransitionBaseline: {
+          nodes: elementSettingsSnapshot([1_138, 1_423, 2_144, 2_434]).nodes,
+        },
       },
     );
 
@@ -404,7 +491,9 @@ test('settle keeps the default quiet window for a larger partial projection', as
     { session: 'default' },
     {
       ...BROAD_TRANSITION_PARAMS,
-      broadTransitionBaselineNodes: elementSettingsSnapshot([1_138, 1_423, 2_144, 2_434]).nodes,
+      broadTransitionBaseline: {
+        nodes: elementSettingsSnapshot([1_138, 1_423, 2_144, 2_434]).nodes,
+      },
     },
   );
 
@@ -461,7 +550,7 @@ test('settle keeps the default quiet window for a backend-less overlapping local
     {
       quietMs: 500,
       timeoutMs: 5_000,
-      broadTransitionBaselineNodes: elementSettledRoomSnapshot.nodes,
+      broadTransitionBaseline: { nodes: elementSettledRoomSnapshot.nodes },
     },
   );
 
@@ -492,7 +581,7 @@ test('settle keeps the default quiet window when only keyboard chrome arrives', 
     {
       quietMs: 500,
       timeoutMs: 5_000,
-      broadTransitionBaselineNodes: keyboardUp.nodes.filter((node) => node.index <= 30),
+      broadTransitionBaseline: { nodes: keyboardUp.nodes.filter((node) => node.index <= 30) },
     },
   );
 
@@ -534,10 +623,16 @@ function transitionRuntime(
     rootlessUntilMs?: number;
     /** 1-based capture indices that declare a non-XCTest capture channel. */
     otherChannelAtCaptures?: number[];
+    /** The surface the action dismisses; defaults to #1831's notice. */
+    presented?: SnapshotState;
+    /** What the screen under it looks like once the dismissal completes. */
+    dismissesTo?: SnapshotState;
   } = {},
 ) {
   const captureBackend = options.captureBackend ?? 'tree';
   const settledAtMs = options.settledAtMs ?? 800;
+  const presented = options.presented ?? elementThreadsNoticeSnapshot;
+  const dismissesTo = options.dismissesTo ?? elementSettledRoomSnapshot;
   let elapsedMs = 0;
   let captures = 0;
   const clock = {
@@ -561,9 +656,9 @@ function transitionRuntime(
           };
         }
         const snapshot = keepsBaseline
-          ? elementThreadsNoticeSnapshot
+          ? presented
           : withCaptureBackend(
-              elapsedMs < settledAtMs ? elementTransientRoomSnapshot : elementSettledRoomSnapshot,
+              elapsedMs < settledAtMs ? elementTransientRoomSnapshot : dismissesTo,
               captureBackend,
             );
         const rootless =
@@ -589,7 +684,7 @@ function transitionRuntime(
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
     sessions: createMemorySessionStore([
-      { name: 'default', snapshot: options.sessionSnapshot ?? elementThreadsNoticeSnapshot },
+      { name: 'default', snapshot: options.sessionSnapshot ?? presented },
     ]),
     policy: localCommandPolicy(),
     clock,

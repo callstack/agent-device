@@ -2,7 +2,7 @@ import { composedPlatformServicesFixture } from './platform-services-fixture.ts'
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import type { CommandClock } from '@agent-device/contracts/runtime-contract';
-import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { PresentedSurface, RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   APP_SURFACE,
   iosSystemSurfaceDisclosure,
@@ -11,7 +11,16 @@ import {
 } from '@agent-device/contracts/ios-system-surface';
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { activateCompleteRefFrame, refFrameState } from '@agent-device/daemon/testing/ref-frame';
+import {
+  PRESENTED_SHEET_FULL_NODES,
+  PRESENTED_SHEET_INTERACTIVE_NODES,
+  SHEET_DISMISSED_NODES,
+} from './presented-sheet-trees.ts';
+import {
+  activateCompleteRefFrame,
+  markSessionSnapshotOutdated,
+  refFrameState,
+} from '@agent-device/daemon/testing/ref-frame';
 import { setSessionSnapshot } from '@agent-device/daemon/testing/session-snapshot';
 import type { SessionStore } from '@agent-device/daemon/testing/session-store';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
@@ -77,6 +86,7 @@ type SettlePayload = {
   captures: number;
   quietMs: number;
   timeoutMs: number;
+  waitedMs: number;
   refsGeneration?: number;
   diff?: {
     summary: { additions: number; removals: number; unchanged: number };
@@ -115,7 +125,7 @@ async function emulateCaptureSnapshotForSession(
 }
 
 function mockCommandDispatch(
-  snapshots: Array<typeof BEFORE_NODES>,
+  snapshots: RawSnapshotNode[][],
   producer: NonNullable<GenericSettleTree['producer']> = 'apple-runner',
 ) {
   let snapshotCalls = 0;
@@ -181,6 +191,7 @@ type GenericSettleTree = {
   nodes: RawSnapshotNode[];
   systemSurface?: IosSystemSurfaceProvenance;
   producer?: 'apple-runner' | 'simulator-ax-bridge';
+  presentedSurface?: PresentedSurface;
 };
 
 function snapshotPayload(tree: GenericSettleTree) {
@@ -189,6 +200,7 @@ function snapshotPayload(tree: GenericSettleTree) {
     backend: 'xctest' as const,
     producer: tree.producer ?? ('apple-runner' as const),
     ...(tree.systemSurface ? { systemSurface: tree.systemSurface } : {}),
+    ...(tree.presentedSurface ? { presentedSurface: tree.presentedSurface } : {}),
   };
 }
 
@@ -554,6 +566,75 @@ test('back --settle attaches no diff across a sheet-to-app surface change and di
   });
   const stored = expectNoPublishedRefFrame(sessionStore, sessionName);
   expect(stored.snapshot?.iosSystemSurfaceBundleId).toBeUndefined();
+});
+
+/**
+ * `back --settle` over a sheet left on the session by a capture of one given flavour, which is how
+ * the generic route picks its baseline (`generic-settle.ts` reads the stored tree directly). The
+ * settle loop's budget arithmetic runs on the injected clock, so no caller waits real time.
+ */
+async function dismissSheetFromBaseline(
+  sessionName: string,
+  baseline: GenericSettleTree,
+  options: { outdated?: boolean; captures?: RawSnapshotNode[][] } = {},
+): Promise<SettlePayload> {
+  const sessionStore = makeSessionStore();
+  const session = seedSession(sessionName, sessionStore, baseline);
+  if (options.outdated) markSessionSnapshotOutdated(session);
+  // Rootless, as the first reads after a dismissal can be: only a presented baseline arms on them.
+  mockCommandDispatch(options.captures ?? [SHEET_DISMISSED_NODES.slice(1)]);
+  const response = await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    command: 'back',
+    flags: { settle: true, settleQuietMs: 25, timeoutMs: 30_000 },
+    clock: fakeClock(),
+  });
+  return expectOkData(response).settle as SettlePayload;
+}
+
+test('the confirmation arms for one presented sheet whichever baseline flavour the route holds', async () => {
+  // The interactive capture projects the sheet as 4 nodes and the full read as 6, so a rule keyed on
+  // the projection disarms on the full one. The producer's fact is stamped before projection.
+  const interactive = await dismissSheetFromBaseline('generic-settle-dismiss-sheet-interactive', {
+    nodes: PRESENTED_SHEET_INTERACTIVE_NODES,
+    presentedSurface: 'presented',
+  });
+  const full = await dismissSheetFromBaseline('generic-settle-dismiss-sheet-full', {
+    nodes: PRESENTED_SHEET_FULL_NODES,
+    presentedSurface: 'presented',
+  });
+
+  expect(interactive.settled).toBe(true);
+  expect(full.settled).toBe(true);
+  expect(interactive.waitedMs).toBeGreaterThanOrEqual(1_500);
+  expect(full.waitedMs).toBeGreaterThanOrEqual(1_500);
+});
+
+test('back --settle keeps the plain window when the stored tree presented nothing', async () => {
+  // The same broad replacement, stamped `absent` by its producer: the stored tree's fact reaches
+  // the loop, and a screen with nothing presented over it owes no dismissal confirmation (#3470).
+  const settle = await dismissSheetFromBaseline(
+    'generic-settle-absent',
+    { nodes: PRESENTED_SHEET_FULL_NODES, presentedSurface: 'absent' },
+    { captures: [SHEET_DISMISSED_NODES] },
+  );
+
+  expect(settle.settled).toBe(true);
+  expect(settle.waitedMs).toBeLessThan(1_500);
+});
+
+test('back --settle keeps the confirmation when a side effect outdated an absent stored tree', async () => {
+  // The app screen was read `absent`, then a press presented the sheet without a capture. The
+  // stored fact predates the sheet, so it cannot rule out the confirmation its dismissal owes.
+  const settle = await dismissSheetFromBaseline(
+    'generic-settle-outdated-absent',
+    { nodes: SHEET_DISMISSED_NODES, presentedSurface: 'absent' },
+    { outdated: true, captures: [PRESENTED_SHEET_INTERACTIVE_NODES, SHEET_DISMISSED_NODES] },
+  );
+
+  expect(settle.settled).toBe(true);
+  expect(settle.waitedMs).toBeGreaterThanOrEqual(1_500);
 });
 
 test('the settle observation runs after the post-gesture stabilization marker', async () => {

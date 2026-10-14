@@ -7,6 +7,7 @@ import type {
 } from '@agent-device/kernel/snapshot';
 import { isViewportRootNode } from '@agent-device/contracts/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
+import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
 import { now, sleep } from '../../runtime-common.ts';
 import {
   captureSelectorSnapshot,
@@ -119,7 +120,7 @@ export async function runStableCaptureLoop(
     timeoutMs: number;
     resetBudgetOnPrivateAxRecovery?: boolean;
     /** Immutable pre-action projection; the stored session may advance before settle begins. */
-    broadTransitionBaselineNodes?: SnapshotNode[];
+    broadTransitionBaseline?: SurfaceScopedNodes;
   },
 ): Promise<StableCaptureLoopResult> {
   const { timeoutMs } = params;
@@ -134,7 +135,7 @@ export async function runStableCaptureLoop(
   // A window the caller asked for is fixed.
   let quietMs = params.quietMs ?? DEFAULT_STABLE_QUIET_MS;
   const confirmation = broadTransitionConfirmation({
-    baselineNodes: params.broadTransitionBaselineNodes,
+    baseline: params.broadTransitionBaseline,
     platform: runtime.backend.platform,
     appBundleId: session?.appBundleId,
   });
@@ -343,9 +344,14 @@ function createStableCapturePacing(start: number) {
  * compares each capture against the pre-action tree until one proves the replacement, and holds that
  * window for the rest of the run.
  *
- * Two gates stand before the comparison. The pre-action projection is constant for the run and the
+ * Two gates stand before the comparison. The pre-action baseline is constant for the run and the
  * only input allowed to rule the confirmation out: a caller that passed none has nothing to confirm
- * against. The capture gate — the capture proves an iOS XCTest read and carries a complete viewport
+ * against, and a baseline whose producer read no presented surface (`presentedSurface: 'absent'`)
+ * has no dismissal to confirm — a tab switch or a push replaces the screen broadly but presents
+ * nothing over it (#3470). The fact is stamped before projection, so every flavour of one screen's
+ * baseline (interactive, full, depth-limited, scoped, a stored ref frame) answers it alike; no fact,
+ * or `'unknown'`, keeps the arming below, so the fact only ever narrows the guard (#3565). The
+ * capture gate — the capture proves an iOS XCTest read and carries a complete viewport
  * projection — belongs to each capture, because the first read after a dismissal can still show the
  * dismissed surface, arrive rootless or empty mid-animation, or come from another backend than the
  * next poll will. A capture that fails it leaves the question open; the first capture that passes
@@ -357,11 +363,12 @@ function createStableCapturePacing(start: number) {
  * caller's own window, floored at 1.5 s.
  */
 function broadTransitionConfirmation(params: {
-  baselineNodes: SnapshotNode[] | undefined;
+  baseline: SurfaceScopedNodes | undefined;
   platform: AgentDeviceRuntime['backend']['platform'];
   appBundleId: string | undefined;
 }): StableCaptureConfirmation {
-  const { baselineNodes, platform, appBundleId } = params;
+  const { platform, appBundleId } = params;
+  const baseline = params.baseline?.presentedSurface === 'absent' ? undefined : params.baseline;
   // Open question, not a ruling: `undefined` is the state a capture that cannot support the
   // comparison leaves behind, so arming never depends on which capture happens to land first.
   let transitionBaseline: StableCaptureSignal | undefined;
@@ -374,9 +381,9 @@ function broadTransitionConfirmation(params: {
     // omits `role`, parent links, and >1px-free geometry, all of which the chrome classifier reads,
     // and one pass costs tens of microseconds against the 300 ms poll cadence.
     requiredQuietMs(snapshot, currentQuietMs) {
-      if (transitionBaseline === undefined && baselineNodes) {
+      if (transitionBaseline === undefined && baseline) {
         transitionBaseline = broadTransitionBaseline({
-          baselineNodes,
+          baseline,
           capture: snapshot,
           platform,
           appBundleId,
@@ -415,25 +422,28 @@ type StableCaptureConfirmation = {
  * next capture, rather than ruling the transition out for the run.
  */
 function broadTransitionBaseline(params: {
-  baselineNodes: SnapshotNode[];
+  baseline: SurfaceScopedNodes;
   capture: Parameters<typeof stableCaptureSignal>[0];
   platform: AgentDeviceRuntime['backend']['platform'];
   appBundleId: string | undefined;
 }): StableCaptureSignal | undefined {
-  const { baselineNodes, capture, platform, appBundleId } = params;
+  const { baseline, capture, platform, appBundleId } = params;
   if (!isBoundIosXCTestCapture(capture.backend, platform)) return undefined;
   // A broad *screen* replacement needs a complete post-action viewport projection. The baseline
   // comes from settle's authoritative pre-action capture, but a presented iOS modal can omit its
   // Application root and still be the complete interaction surface. Requiring the root only from
   // the candidate prevents scoped/synthetic post-action fragments from extending settle latency.
   const hasCompleteViewportProjection = capture.nodes.some(isViewportRootNode);
-  // Tiny pre-action surfaces are the other trustworthy completeness signal: iOS presents alerts
-  // and sheets as a handful of nodes, and their first post-dismissal capture can temporarily omit
-  // the viewport root. Treating that rootless replacement as an arbitrary scoped projection lets
-  // a coherent transitional tree win the default 500ms quiet window.
-  const hasTinyPresentedBaseline = baselineNodes.length <= TINY_STABLE_TREE_NODE_COUNT;
-  if (!hasCompleteViewportProjection && !hasTinyPresentedBaseline) return undefined;
-  return stableCaptureComparisonSignal(capture, baselineNodes, appBundleId);
+  // A presented pre-action surface is the other trustworthy completeness signal: the first capture
+  // after its dismissal can temporarily omit the viewport root, and treating that rootless
+  // replacement as an arbitrary scoped projection lets a coherent transitional tree win the plain
+  // quiet window. The producer's fact says so outright; without one, a tiny baseline stands in for
+  // it, because iOS presents alerts and sheets as a handful of nodes.
+  const hasPresentedBaseline =
+    baseline.presentedSurface === 'presented' ||
+    baseline.nodes.length <= TINY_STABLE_TREE_NODE_COUNT;
+  if (!hasCompleteViewportProjection && !hasPresentedBaseline) return undefined;
+  return stableCaptureComparisonSignal(capture, baseline.nodes, appBundleId);
 }
 
 /**

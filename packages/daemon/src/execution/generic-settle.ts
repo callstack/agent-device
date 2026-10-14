@@ -17,10 +17,12 @@ import type { BoundContextFromFlags } from '../core/context.ts';
 import type { RuntimeAdmissionBindings } from '../core/request-runtime-binding.ts';
 import type { DaemonPlatformServices } from '../core/platform-services.ts';
 import { resolveSettleObservationCapture } from '../core/settle-observation-capture.ts';
+import { isOutdatedObservation } from '../core/ref-frame.ts';
 import { issueSettleRefs } from './session-snapshot.ts';
 import type { SessionStore } from '../core/session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../core/session-state.ts';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
 
 /**
  * `--settle` on the generic daemon route (#1638): `scroll` and `back` change
@@ -84,9 +86,21 @@ export function planGenericSettleObservation(
   if (invalidSettleFlags) return { response: invalidSettleFlags };
   const settle = readSettleRequest(params.flags);
   if (!settle) return {};
-  const snapshot = params.session.snapshot;
-  const baseline = surfaceScopedNodes(snapshot);
+  const baseline = storedTreeBaseline(params.session.snapshot);
   return { observe: async () => await observeSettled(params, settle, baseline) };
+}
+
+/**
+ * The stored tree as the settle baseline. Its presented-surface fact describes the screen when the
+ * tree was captured, so a tree a later side effect outdated keeps its nodes for the diff but not
+ * the fact: an `absent` read taken before a sheet was presented must not rule out the confirmation
+ * owed to that sheet's dismissal (#3565).
+ */
+function storedTreeBaseline(snapshot: SnapshotState | undefined): SurfaceScopedNodes {
+  const baseline = surfaceScopedNodes(snapshot);
+  if (!snapshot || !isOutdatedObservation(snapshot)) return baseline;
+  const { presentedSurface: _outdated, ...current } = baseline;
+  return current;
 }
 
 /**
