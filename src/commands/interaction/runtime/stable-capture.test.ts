@@ -360,8 +360,8 @@ test('a dismissal confirmation is not dropped by a later empty projection', asyn
 // and the declared capture backend. A dismissal of anything bigger than an alert or sheet (the
 // `<= TINY_STABLE_TREE_NODE_COUNT` escape hatch) has to meet BOTH before the confirmation may arm,
 // and a mid-animation first read that misses either one leaves the question open for the next
-// capture rather than settling the run on its plain window. These captures declare no producer, so that plain
-// window is the 500 ms default; the 1.5 s floor is what the assertions tell apart.
+// capture rather than settling the run on its plain window. These captures declare no producer, so
+// that plain window is the 500 ms default; the 1.5 s floor is what the assertions tell apart.
 const MID_ANIMATION_FIRST_CAPTURES: Array<
   [string, NonNullable<Parameters<typeof transitionRuntime>[0]>]
 > = [
