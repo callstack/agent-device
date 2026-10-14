@@ -107,7 +107,7 @@ export type SelectorPipelinePolicy = SelectorListPolicy & {
 const WAIT_POLL_BUDGET: WaitPollBudget = { defaultTimeoutMs: 10_000, intervalMs: 300 };
 
 export const SELECTOR_PIPELINE_POLICIES = {
-  /** `click`/`press`/`longpress`: the tap lands on the actionable owner of the match. */
+  /** `click`/`press`/`longpress`: the action dispatches to the actionable owner of the match. */
   promotedTarget: {
     resolution: SELECTOR_RESOLUTION_POLICIES.act,
     occlusion: 'exclude-and-refuse',

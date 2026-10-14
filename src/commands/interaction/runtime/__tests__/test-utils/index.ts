@@ -357,7 +357,7 @@ export function createInteractionDevice(
   > & {
     platform?: AgentDeviceBackend['platform'];
     sessionMetadata?: Record<string, unknown>;
-    /** An advancing clock for wait and post-action observation loops. */
+    /** An advancing clock for wait, post-action observation, and moving-target recheck loops. */
     clock?: { now: () => number; sleep: (ms: number) => Promise<void> };
   } = {},
 ) {

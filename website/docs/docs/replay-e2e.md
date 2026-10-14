@@ -91,8 +91,9 @@ agent-device replay ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --s
 
   Earlier `close` actions still run. `test` does not accept the flag because each suite attempt
   cleans up its own session.
-- `press`, `click`, and `longpress` steps resolve their target once. If a screen needs time to
-  load, add an explicit wait before the interaction, such as `wait 'label="Continue"' 5000`.
+- `press`, `click`, and `longpress` steps do not wait for a missing target to appear. If a screen
+  needs time to load, add an explicit wait before the interaction, such as
+  `wait 'label="Continue"' 5000`.
   Covered, off-screen, and ambiguous targets fail as they do in live commands.
 - When the target is missing, replay stops with `REPLAY_DIVERGENCE`.
   For a step recorded with a target annotation (the `# agent-device:target-v1`
