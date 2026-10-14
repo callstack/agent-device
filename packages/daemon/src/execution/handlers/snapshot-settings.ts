@@ -6,6 +6,7 @@ import {
   resolveDeviceAppleOs,
 } from '@agent-device/kernel/device';
 import {
+  APPLE_MOBILE_DATA_LEAF_REFUSAL,
   APPLE_TEXT_SIZE_LEAF_REFUSAL,
   describeSettingRead,
   describeSettingWrite,
@@ -319,10 +320,10 @@ async function executeSettingsWrite(
 /**
  * The refusals both legs make before a device is touched, so one target answers a read and a write of
  * the same setting with the same code. They key on the requested setting, which an operation fact
- * cannot express: macOS serves `settings` and still refuses `wifi`, and the Apple ladder needs a
- * narrower leaf than the simulator-family write fact admits. Both are daemon-side stops ahead of
- * admission — the mutation leg expires the session ref frame as soon as it is admitted, and a request
- * this surface refuses must not expire it.
+ * cannot express: macOS serves `settings` and still refuses `wifi`, the Apple ladder needs a
+ * narrower leaf than the simulator-family write fact admits, and no Apple leaf has a mobile-data
+ * switch. All are daemon-side stops ahead of admission — the mutation leg expires the session ref
+ * frame as soon as it is admitted, and a request this surface refuses must not expire it.
  */
 function settingsRequestRefusal(
   device: SessionState['device'],
@@ -349,6 +350,18 @@ function settingsRequestRefusal(
         reason: APPLE_TEXT_SIZE_LEAF_REFUSAL.reason,
       },
       { hint: APPLE_TEXT_SIZE_LEAF_REFUSAL.hint },
+    );
+  }
+  if (setting === 'mobile-data' && isApplePlatform(device.platform)) {
+    return errorResponse(
+      'UNSUPPORTED_OPERATION',
+      APPLE_MOBILE_DATA_LEAF_REFUSAL.message,
+      {
+        deviceKind: device.kind,
+        appleOs: resolveDeviceAppleOs(device),
+        reason: APPLE_MOBILE_DATA_LEAF_REFUSAL.reason,
+      },
+      { hint: APPLE_MOBILE_DATA_LEAF_REFUSAL.hint },
     );
   }
   return undefined;

@@ -78,6 +78,17 @@ describe('settings CLI', () => {
     expect(rendered.text).toBe('Updated setting: permission');
   });
 
+  test('reads mobile-data on|off and writes it as two positionals', () => {
+    for (const state of ['on', 'off'] as const) {
+      const input = settingsCliReader(['mobile-data', state], flags());
+      expect(input).toEqual({ setting: 'mobile-data', state });
+      expect(settingsDaemonWriter(input)).toMatchObject({
+        command: 'settings',
+        positionals: ['mobile-data', state],
+      });
+    }
+  });
+
   test('keeps the documented macOS permission form in the command detail', () => {
     expect(settingsCommandFacet.text.cliDetail).toContain(
       'settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>',

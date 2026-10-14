@@ -74,7 +74,7 @@ const TEXT_SIZE_LADDER = [
 ] as const;
 
 const SETTINGS_FORMS = [
-  '<wifi|airplane|location> <on|off>',
+  '<wifi|airplane|mobile-data|location> <on|off>',
   'location set <lat> <lon>',
   'animations <on|off>',
   'appearance <light|dark|toggle>',

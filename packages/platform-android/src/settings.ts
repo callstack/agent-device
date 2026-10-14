@@ -20,7 +20,7 @@ import {
   type SettingOptions,
   type TextSizeSettingPayload,
 } from '@agent-device/contracts/settings';
-import { runAndroidAdb, runAndroidShell } from './adb.ts';
+import { runAndroidAdb, runAndroidShell, sleep } from './adb.ts';
 import { setAndroidAirplaneMode } from './settings-airplane.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
@@ -88,6 +88,9 @@ export async function setAndroidSetting(
     }
     case 'airplane': {
       return await setAndroidAirplaneMode(device, parseSettingState(state));
+    }
+    case 'mobile-data': {
+      return await setAndroidMobileData(device, parseSettingState(state));
     }
     case 'location': {
       if (state.toLowerCase() === 'set') {
@@ -283,6 +286,105 @@ function nearestTextSizeCategory(scale: number): (typeof TEXT_SIZE_CATEGORIES)[n
     nearestDistance = distance;
   }
   return nearest;
+}
+
+type AndroidMobileData = 'enabled' | 'disabled';
+
+/**
+ * `svc data` hands the switch to the telephony service, which can store it after the shell call has
+ * returned. The read-back therefore samples until the stored value agrees with the request or this
+ * budget runs out; a device that stores it inside the call answers on the first sample. Like the
+ * font-scale table, this stays beside the dispatcher because the `mechanics.ts` eager closure may not
+ * grow.
+ */
+const MOBILE_DATA_SETTLE_MS = 2000;
+const MOBILE_DATA_SAMPLE_INTERVAL_MS = 100;
+
+/**
+ * Switches mobile data for the default data SIM and reports the state the device stores rather than
+ * the one requested, so a switch that did not take fails instead of reading as applied.
+ */
+async function setAndroidMobileData(
+  device: DeviceInfo,
+  enabled: boolean,
+): Promise<{ mobileData: AndroidMobileData }> {
+  const requested: AndroidMobileData = enabled ? 'enabled' : 'disabled';
+  await runAndroidShell(device, ['svc', 'data', enabled ? 'enable' : 'disable']);
+  const dataSubscription = await readAndroidDataSubscription(device);
+  const start = Date.now();
+  let stored = await readAndroidMobileData(device, dataSubscription);
+  while (stored.mobileData !== requested && Date.now() - start < MOBILE_DATA_SETTLE_MS) {
+    await sleep(MOBILE_DATA_SAMPLE_INTERVAL_MS);
+    stored = await readAndroidMobileData(device, dataSubscription);
+  }
+  if (stored.mobileData !== requested) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Android mobile data reads ${stored.mobileData} after requesting ${requested}.`,
+      {
+        deviceId: device.id,
+        requested,
+        mobileData: stored.mobileData,
+        setting: stored.setting,
+        hint: `Run \`adb shell settings get global ${stored.setting}\` to see what the device holds. A target without an active SIM can accept svc data without storing the switch.`,
+      },
+    );
+  }
+  return { mobileData: stored.mobileData };
+}
+
+/** The default data subscription id, or `undefined` when the device names none. */
+async function readAndroidDataSubscription(device: DeviceInfo): Promise<string | undefined> {
+  const subscription = await readAndroidGlobalSetting(device, 'multi_sim_data_call');
+  return /^[1-9]\d*$/.test(subscription) ? subscription : undefined;
+}
+
+/**
+ * The switch as the telephony service stores it. With more than one active SIM it keeps the switch
+ * per subscription, in `mobile_data<subId>`, and leaves the plain `mobile_data` row at its seeded
+ * value; with one SIM it keeps the plain row. A per-subscription row that was never written reads
+ * `null`, which is what selects the plain row.
+ */
+async function readAndroidMobileData(
+  device: DeviceInfo,
+  dataSubscription: string | undefined,
+): Promise<{ setting: string; mobileData: AndroidMobileData }> {
+  if (dataSubscription !== undefined) {
+    const setting = `mobile_data${dataSubscription}`;
+    const reported = await readAndroidGlobalSetting(device, setting);
+    if (reported !== 'null') {
+      return { setting, mobileData: parseAndroidMobileData(device, setting, reported) };
+    }
+  }
+  const reported = await readAndroidGlobalSetting(device, 'mobile_data');
+  return {
+    setting: 'mobile_data',
+    mobileData: parseAndroidMobileData(device, 'mobile_data', reported),
+  };
+}
+
+async function readAndroidGlobalSetting(device: DeviceInfo, setting: string): Promise<string> {
+  const result = await runAndroidShell(device, ['settings', 'get', 'global', setting]);
+  return result.stdout.trim();
+}
+
+function parseAndroidMobileData(
+  device: DeviceInfo,
+  setting: string,
+  reported: string,
+): AndroidMobileData {
+  if (reported === '1') return 'enabled';
+  if (reported === '0') return 'disabled';
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Android reported an unusable ${setting} value: ${reported || '(empty)'}`,
+    {
+      deviceId: device.id,
+      setting,
+      mobileData: reported,
+      hint: `Run \`adb shell settings get global ${setting}\` to see what the device holds.`,
+    },
+  );
 }
 
 type AndroidFingerprintAction = 'match' | 'nonmatch';

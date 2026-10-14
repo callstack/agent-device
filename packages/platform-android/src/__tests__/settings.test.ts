@@ -1,10 +1,10 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   SETTINGS_APP_NOT_PACKAGE_REASON,
   TEXT_SIZE_CATEGORIES,
 } from '@agent-device/contracts/settings';
-import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
+import { AppError, PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import { readAndroidSetting, setAndroidSetting } from '../settings.ts';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
 import { assertRejectsAppError } from './test-utils/app-error.ts';
@@ -491,4 +491,222 @@ test('readAndroidSetting text-size fails on a multiplier it cannot order', async
       });
     });
   }
+});
+
+// --- settings mobile-data: `svc data` with a read-back of the stored switch ---
+
+const getGlobal = (setting: string) => `shell settings get global ${setting}`;
+
+/**
+ * A device whose telephony service owns the mobile-data switch. `rows` are the global settings it
+ * holds (an absent row reads `null`), and `storeIn` is the row the service writes the switch to:
+ * the plain `mobile_data` row with one SIM, `mobile_data<subId>` with more than one.
+ * `visibleAfterReads` models the service storing a write after `svc data` has returned;
+ * `honorWrites: false` models a switch the service accepts and never stores.
+ */
+function telephonyService(
+  rows: Record<string, string>,
+  options: { storeIn?: string; honorWrites?: boolean; visibleAfterReads?: number } = {},
+): FakeAdbScript {
+  const held = new Map(Object.entries(rows));
+  const storeIn = options.storeIn ?? 'mobile_data';
+  let pending: string | undefined;
+  let readsUntilVisible = 0;
+  return (args) => {
+    const flat = args.join(' ');
+    const get = /^shell settings get global (\S+)$/.exec(flat)?.[1];
+    if (get !== undefined) {
+      if (get === storeIn && pending !== undefined && readsUntilVisible-- <= 0) {
+        held.set(storeIn, pending);
+        pending = undefined;
+      }
+      return held.get(get) ?? 'null';
+    }
+    if (flat === 'shell svc data enable' || flat === 'shell svc data disable') {
+      if (options.honorWrites !== false) {
+        pending = flat.endsWith('enable') ? '1' : '0';
+        readsUntilVisible = options.visibleAfterReads ?? 0;
+      }
+      return '';
+    }
+    return { stderr: `unexpected args: ${flat}`, exitCode: 1 };
+  };
+}
+
+/** One SIM on subscription 1: the service keeps the switch in the plain row. */
+const SINGLE_SIM_READ = [
+  getGlobal('multi_sim_data_call'),
+  getGlobal('mobile_data1'),
+  getGlobal('mobile_data'),
+];
+
+test('setAndroidSetting mobile-data off disables through svc data and reports the stored state', async () => {
+  await withFakeAdb(
+    telephonyService({ multi_sim_data_call: '1', mobile_data: '1' }),
+    async ({ calls, device }) => {
+      const result = await setAndroidSetting(device, 'mobile-data', 'off');
+      assert.deepEqual(result, { mobileData: 'disabled' });
+      assert.deepEqual(
+        calls.map((args) => args.join(' ')),
+        ['shell svc data disable', ...SINGLE_SIM_READ],
+      );
+    },
+  );
+});
+
+test('setAndroidSetting mobile-data on enables through svc data and reports the stored state', async () => {
+  await withFakeAdb(
+    telephonyService({ multi_sim_data_call: '1', mobile_data: '0' }),
+    async ({ calls, device }) => {
+      const result = await setAndroidSetting(device, 'mobile-data', 'on');
+      assert.deepEqual(result, { mobileData: 'enabled' });
+      assert.deepEqual(
+        calls.map((args) => args.join(' ')),
+        ['shell svc data enable', ...SINGLE_SIM_READ],
+      );
+    },
+  );
+});
+
+test('setAndroidSetting mobile-data reads the data subscription row on a multi-SIM device', async () => {
+  // With two SIMs the plain row keeps its seeded `1`, so reading it would report a switch that never
+  // moved and refuse one that did.
+  await withFakeAdb(
+    telephonyService(
+      { multi_sim_data_call: '2', mobile_data: '1', mobile_data2: '1' },
+      { storeIn: 'mobile_data2' },
+    ),
+    async ({ calls, device }) => {
+      const result = await setAndroidSetting(device, 'mobile-data', 'off');
+      assert.deepEqual(result, { mobileData: 'disabled' });
+      assert.deepEqual(
+        calls.map((args) => args.join(' ')),
+        ['shell svc data disable', getGlobal('multi_sim_data_call'), getGlobal('mobile_data2')],
+      );
+    },
+  );
+});
+
+test('setAndroidSetting mobile-data reads the plain row when no data subscription is named', async () => {
+  for (const subscription of ['null', '-1']) {
+    await withFakeAdb(
+      telephonyService({ multi_sim_data_call: subscription, mobile_data: '0' }),
+      async ({ calls, device }) => {
+        const result = await setAndroidSetting(device, 'mobile-data', 'on');
+        assert.deepEqual(result, { mobileData: 'enabled' });
+        assert.deepEqual(
+          calls.map((args) => args.join(' ')),
+          ['shell svc data enable', getGlobal('multi_sim_data_call'), getGlobal('mobile_data')],
+        );
+      },
+    );
+  }
+});
+
+test('setAndroidSetting mobile-data samples again when the service stores the switch late', async () => {
+  await withFakeAdb(
+    telephonyService({ multi_sim_data_call: '1', mobile_data: '1' }, { visibleAfterReads: 1 }),
+    async ({ calls, device }) => {
+      const result = await setAndroidSetting(device, 'mobile-data', 'off');
+      assert.deepEqual(result, { mobileData: 'disabled' });
+      assert.deepEqual(
+        calls.map((args) => args.join(' ')),
+        [
+          'shell svc data disable',
+          ...SINGLE_SIM_READ,
+          getGlobal('mobile_data1'),
+          getGlobal('mobile_data'),
+        ],
+      );
+    },
+  );
+});
+
+test('setAndroidSetting mobile-data fails with the stored state when the switch never settles', async () => {
+  vi.useFakeTimers({ now: 0, toFake: ['Date'] });
+  try {
+    const script = telephonyService(
+      { multi_sim_data_call: 'null', mobile_data: '0' },
+      { honorWrites: false },
+    );
+    await withFakeAdb(
+      (args) => {
+        // Every sample costs wall clock; two samples exhaust the settle budget.
+        if (args.join(' ') === getGlobal('mobile_data')) vi.setSystemTime(Date.now() + 1_000);
+        return script(args);
+      },
+      async ({ calls, device }) => {
+        await assert.rejects(setAndroidSetting(device, 'mobile-data', 'on'), (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'COMMAND_FAILED');
+          assert.equal(error.details?.requested, 'enabled');
+          assert.equal(error.details?.mobileData, 'disabled');
+          assert.equal(error.details?.setting, 'mobile_data');
+          return true;
+        });
+        assert.deepEqual(
+          calls.map((args) => args.join(' ')),
+          [
+            'shell svc data enable',
+            getGlobal('multi_sim_data_call'),
+            getGlobal('mobile_data'),
+            getGlobal('mobile_data'),
+          ],
+        );
+      },
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('setAndroidSetting mobile-data fails on a stored switch it cannot read', async () => {
+  const unreadable: Record<string, string>[] = [
+    ...['null', '', '2', 'true'].map((value) => ({
+      multi_sim_data_call: 'null',
+      mobile_data: value,
+    })),
+    // A data subscription row that exists is the answer; an unusable one is not a reason to fall
+    // back to the plain row.
+    { multi_sim_data_call: '1', mobile_data1: '2', mobile_data: '1' },
+  ];
+  for (const rows of unreadable) {
+    await withFakeAdb(telephonyService(rows, { honorWrites: false }), async ({ device }) => {
+      await assertRejectsAppError(() => setAndroidSetting(device, 'mobile-data', 'on'), {
+        code: 'COMMAND_FAILED',
+        message: /unusable mobile_data1? value/,
+      });
+    });
+  }
+});
+
+test('setAndroidSetting mobile-data reads nothing back when svc data fails', async () => {
+  await withFakeAdb(
+    (args) =>
+      args.join(' ') === 'shell svc data enable'
+        ? { stderr: "cmd: Can't find service: phone", exitCode: 20 }
+        : undefined,
+    async ({ calls, device }) => {
+      await assertRejectsAppError(() => setAndroidSetting(device, 'mobile-data', 'on'), {
+        code: 'COMMAND_FAILED',
+      });
+      assert.deepEqual(
+        calls.map((args) => args.join(' ')),
+        ['shell svc data enable'],
+      );
+    },
+  );
+});
+
+test('setAndroidSetting mobile-data refuses a state outside on|off before touching the device', async () => {
+  await withFakeAdb(
+    telephonyService({ multi_sim_data_call: '1', mobile_data: '1' }),
+    async ({ calls, device }) => {
+      await assertRejectsAppError(() => setAndroidSetting(device, 'mobile-data', 'cellular'), {
+        code: 'INVALID_ARGS',
+        message: /Invalid setting state: cellular/,
+      });
+      assert.deepEqual(calls, []);
+    },
+  );
 });

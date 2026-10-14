@@ -33,6 +33,15 @@ export type SettingsUpdateOptions =
       state: 'on' | 'off';
     })
   /**
+   * The mobile-data switch for the default data SIM on adb-backed Android targets, applied through
+   * `svc data`; the result reports the `mobileData` state the device stores afterwards. Apple targets
+   * and WebDriver provider sessions refuse it.
+   */
+  | (DeviceCommandBaseOptions & {
+      setting: 'mobile-data';
+      state: 'on' | 'off';
+    })
+  /**
    * On Apple simulators `on`/`off` grants or revokes the app's location permission, so this leg
    * takes the same explicit `app` as `permission` and defaults to the session app. On Android the
    * toggle writes the global `location_mode` and consumes no app, so naming one there is refused

@@ -318,7 +318,7 @@ export async function resolveSettingsApp<Resolved>(
   }
 }
 
-const SETTINGS_WIFI_USAGE = '<wifi|airplane|location> <on|off>';
+const SETTINGS_WIFI_USAGE = '<wifi|airplane|mobile-data|location> <on|off>';
 const SETTINGS_LOCATION_SET_USAGE = 'location set <lat> <lon>';
 const SETTINGS_ANIMATIONS_USAGE = 'animations <on|off>';
 const SETTINGS_APPEARANCE_USAGE = `appearance <${APPEARANCE_ACTIONS.join('|')}>`;
@@ -422,6 +422,18 @@ export const APPLE_TEXT_SIZE_LEAF_REFUSAL = Object.freeze({
 export const APPLE_BIOMETRIC_LEAF_REFUSAL = Object.freeze({
   message: 'Face ID and Touch ID simulation is supported on iOS and iPadOS simulators.',
   hint: 'Select a booted iPhone or iPad simulator, then run `settings faceid <state>` or `settings touchid <state>`.',
+  reason: 'setting-unsupported-on-leaf',
+} as const) satisfies AppleSettingLeafRefusal;
+
+/**
+ * Mobile data is switched through adb's `svc data`, which no Apple target has an equivalent of:
+ * simulators have no cellular radio and `simctl` offers no data toggle, so every Apple leaf refuses it
+ * before binding.
+ */
+export const APPLE_MOBILE_DATA_LEAF_REFUSAL = Object.freeze({
+  message:
+    'settings mobile-data is supported only on adb-backed Android targets; agent-device has no mobile-data control for Apple targets, whose simulators have no cellular radio.',
+  hint: 'Run `settings mobile-data <on|off>` on an adb-backed Android device or emulator.',
   reason: 'setting-unsupported-on-leaf',
 } as const) satisfies AppleSettingLeafRefusal;
 

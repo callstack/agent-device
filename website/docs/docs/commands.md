@@ -620,6 +620,8 @@ agent-device settings wifi on
 agent-device settings wifi off
 agent-device settings airplane on
 agent-device settings airplane off
+agent-device settings mobile-data off
+agent-device settings mobile-data on
 agent-device settings location on
 agent-device settings location off
 agent-device settings location set 37.3349 -122.009
@@ -665,6 +667,8 @@ Device settings:
 
 - `settings animations off|on` (Android) sets the window, transition, and animator scales. Turn animations off to stabilize runs with heavy animation, and back on afterward.
 - `settings airplane on|off` (Android) needs the connectivity service's `cmd connectivity airplane-mode` command, available from Android 11. It reports the resulting `airplaneMode`; a build without that command fails with `UNSUPPORTED_OPERATION` without changing anything. Connectivity takes a moment to settle, so poll the app rather than asserting offline behavior immediately.
+- `settings mobile-data on|off` (Android over adb) switches mobile data for the default data SIM with `svc data enable|disable` and reports the resulting `mobileData`, read back from the global `mobile_data` setting, or from `mobile_data<subId>` for the default data subscription on a multi-SIM device. If the stored value does not settle to the request within 2 seconds, it fails with `COMMAND_FAILED`. Pair it with `settings wifi off` to move a session such as a video stream from Wi-Fi to cellular, and back with `settings wifi on`; poll the app while the network hands over.
+- An emulator or device without an active SIM accepts `svc data` but can leave the stored value unchanged, so there the command fails with `COMMAND_FAILED` unless the value already matches. Such a target has no cellular network either: with Wi-Fi off it is offline rather than on cellular. iOS, tvOS, and visionOS targets refuse `mobile-data` with `UNSUPPORTED_OPERATION` (`error.details.reason: setting-unsupported-on-leaf`), because simulators have no cellular radio; macOS refuses it with `INVALID_ARGS` like its other unsupported settings.
 - `settings text-size` reads the current size; `settings text-size <category>` sets one: `extra-small`, `small`, `medium`, `large`, `extra-large`, `extra-extra-large`, `extra-extra-extra-large`, `accessibility-medium`, `accessibility-large`, `accessibility-extra-large`, `accessibility-extra-extra-large`, or `accessibility-extra-extra-extra-large`. It works on iPhone and iPad simulators and on Android; every other target refuses both read and write. The read reports `category` and the target's own `platformValue` (iOS may capitalize it, for example `extra-Small`).
 - Android has only a font-scale multiplier, mapped so `large` is `1.0` and `accessibility-extra-extra-extra-large` is `3.2`. A value between rungs reads as the nearest category, with the exact multiplier in `platformValue`; an unset scale reads as `large`.
 - A running app adopts a new text size only at its next configuration change. Relaunch it (`open <app> --relaunch`) before asserting rendered sizes.

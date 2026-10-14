@@ -372,6 +372,52 @@ test('settings usage hint documents canonical faceid states', async () => {
   }
 });
 
+test('settings mobile-data reaches the Android owner as an on/off mutation', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-mobile-data';
+  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
+
+  const response = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest(sessionName, 'settings', { positionals: ['mobile-data', 'off'] }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(fixtureSettingsMutations.at(-1)).toMatchObject({ setting: 'mobile-data', state: 'off' });
+});
+
+test('settings mobile-data refuses Apple simulators before it expires the frame', async () => {
+  for (const device of [iosSimulatorDevice, tvOsSimulatorDevice]) {
+    const sessionStore = makeSessionStore();
+    const sessionName = `${device.id}-mobile-data`;
+    const session = makeSession(sessionName, device);
+    activateCompleteRefFrame(session);
+    sessionStore.publish(sessionName, session);
+
+    for (const state of ['on', 'off']) {
+      const response = await handleSnapshotCommands({
+        createCommandSurface: fakeCreateCommandSurface,
+        platformServices: daemonPlatformServicesFixture(),
+        req: snapshotRequest(sessionName, 'settings', { positionals: ['mobile-data', state] }),
+        sessionName,
+        logPath: '/tmp/daemon.log',
+        sessionStore,
+      });
+      expect(response?.ok).toBe(false);
+      if (response && !response.ok) {
+        expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
+        expect(response.error.details?.reason).toBe('setting-unsupported-on-leaf');
+      }
+    }
+    expect(refFrameState(session)).toBe('active');
+  }
+  expect(fixtureSettingsMutations).toHaveLength(0);
+});
+
 test('settings on macOS rejects wifi before dispatch with explicit subset guidance', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'macos-settings-wifi';
