@@ -1,6 +1,7 @@
 import { createBatchDaemonWriter } from './batch/index.ts';
 import type { AnyDaemonWriter, CommandInput, DaemonCommandRequest } from './cli-grammar/types.ts';
 import { findCommandMetadata } from './command-metadata.ts';
+import { refuseRetiredCommonInput } from './common-input-fields.ts';
 import { readMetadataCommandFlags } from './command-flags.ts';
 import { listCommandFamilyDaemonWriters } from './family/registry.ts';
 import { AppError } from '@agent-device/kernel/errors';
@@ -50,6 +51,7 @@ export async function prepareDaemonCommandRequest(
   if (!writer) {
     throw new Error(`Missing daemon writer for command: ${command}`);
   }
+  refuseRetiredCommonInput(input as Record<string, unknown>);
   const metadata = findCommandMetadata(command);
   return await prepareRequestWithMetadataFlags(writer, metadata, input);
 }

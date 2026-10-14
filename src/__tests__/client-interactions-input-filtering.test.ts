@@ -5,7 +5,7 @@ import { createTransport } from './client-transport-fixture.ts';
 
 const RETIRED = /readinessTimeoutMs was removed; add an explicit wait for the target/;
 
-test('tap commands refuse the retired readinessTimeoutMs before sending anything', async () => {
+test('client commands refuse the retired readinessTimeoutMs before sending anything', async () => {
   const setup = createTransport(async () => ({ ok: true, data: {} }));
   const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
 
@@ -16,6 +16,20 @@ test('tap commands refuse the retired readinessTimeoutMs before sending anything
     () => client.interactions.click({ selector: 'label=Foo', readinessTimeoutMs: 1_500 }),
     // @ts-expect-error readinessTimeoutMs is not a client option.
     () => client.interactions.longPress({ selector: 'label=Foo', readinessTimeoutMs: 900 }),
+    () =>
+      client.interactions.fill({
+        selector: 'label=Name',
+        text: 'x',
+        // @ts-expect-error readinessTimeoutMs is not a client option.
+        readinessTimeoutMs: 900,
+      }),
+    () =>
+      client.interactions.swipe({
+        from: { x: 1, y: 1 },
+        to: { x: 2, y: 2 },
+        // @ts-expect-error readinessTimeoutMs is not a client option.
+        readinessTimeoutMs: 900,
+      }),
   ];
   for (const call of calls) {
     await assert.rejects(call(), (error: { code?: string; message: string }) => {

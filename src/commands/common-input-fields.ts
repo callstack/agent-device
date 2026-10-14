@@ -11,7 +11,12 @@ import {
 } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import type { JsonSchema } from './command-contract.ts';
-import { operatorAudience, type InputAudience, type InputAudienceMap } from './input-audience.ts';
+import {
+  operatorAudience,
+  refuseRetiredInput,
+  type InputAudience,
+  type InputAudienceMap,
+} from './input-audience.ts';
 import { compactRecord, optionalBoolean, optionalEnum, optionalString } from './input-readers.ts';
 
 export type CommonCommandInput = Pick<
@@ -88,14 +93,6 @@ const ENV_OR_OPERATOR_CONFIG = operatorAudience({ operatorConfig: true });
 
 const RETIRED_READINESS_TIMEOUT_MESSAGE =
   'readinessTimeoutMs was removed; add an explicit wait for the target before the interaction.';
-
-/** Refuses the released `readinessTimeoutMs` key, which the target-readiness wait owned. */
-export function assertNoRetiredReadinessTimeout(record: Record<string, unknown>): undefined {
-  if (Object.hasOwn(record, 'readinessTimeoutMs')) {
-    throw new AppError('INVALID_ARGS', RETIRED_READINESS_TIMEOUT_MESSAGE);
-  }
-  return undefined;
-}
 
 const COMMON_INPUT_FIELDS = {
   session: {
@@ -228,7 +225,8 @@ const COMMON_INPUT_FIELDS = {
   },
   readinessTimeoutMs: {
     audience: { kind: 'retired', message: RETIRED_READINESS_TIMEOUT_MESSAGE },
-    read: assertNoRetiredReadinessTimeout,
+    read: (record) =>
+      refuseRetiredInput(record, 'readinessTimeoutMs', RETIRED_READINESS_TIMEOUT_MESSAGE),
   },
   daemonBaseUrl: {
     schema: { type: 'string', description: 'Remote daemon base URL.' },
@@ -276,6 +274,16 @@ const COMMON_INPUT_ROWS: ReadonlyArray<readonly [string, CommonInputFieldSpec]> 
 export const COMMON_INPUT_AUDIENCE: InputAudienceMap = Object.fromEntries(
   COMMON_INPUT_ROWS.flatMap(([key, field]) => (field.audience ? [[key, field.audience]] : [])),
 );
+
+/**
+ * Refuses every retired common key. `readFieldInput` reaches the same rows; this covers the Node
+ * client, which hands its options to the daemon writers without reading them through fields.
+ */
+export function refuseRetiredCommonInput(record: Record<string, unknown>): void {
+  for (const [key, audience] of Object.entries(COMMON_INPUT_AUDIENCE)) {
+    if (audience.kind === 'retired') refuseRetiredInput(record, key, audience.message);
+  }
+}
 
 export function commonProperties(): Record<string, JsonSchema> {
   return Object.fromEntries(

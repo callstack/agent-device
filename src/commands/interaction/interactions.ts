@@ -33,7 +33,6 @@ import {
   targetInputFromClientTarget,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
-import { assertNoRetiredReadinessTimeout } from '../common-input-fields.ts';
 import type { ScrollInputDirection } from '@agent-device/contracts/scroll-gesture';
 
 export const interactionCliReaders = {
@@ -121,22 +120,17 @@ export const interactionCliReaders = {
 } satisfies Record<string, CliReader>;
 
 export const interactionDaemonWriters = {
-  click: (input) => {
-    assertNoRetiredReadinessTimeout(input);
-    return request(
-      PUBLIC_COMMANDS.click,
-      interactionTargetPositionals(input as InteractionTarget),
-      { ...input, clickButton: input.button },
-    );
-  },
-  press: direct(PUBLIC_COMMANDS.press, (input) => {
-    assertNoRetiredReadinessTimeout(input);
-    return interactionTargetPositionals(input as InteractionTarget);
-  }),
-  longpress: direct(PUBLIC_COMMANDS.longPress, (input) => {
-    assertNoRetiredReadinessTimeout(input);
-    return longPressPositionals(input as LongPressOptions);
-  }),
+  click: (input) =>
+    request(PUBLIC_COMMANDS.click, interactionTargetPositionals(input as InteractionTarget), {
+      ...input,
+      clickButton: input.button,
+    }),
+  press: direct(PUBLIC_COMMANDS.press, (input) =>
+    interactionTargetPositionals(input as InteractionTarget),
+  ),
+  longpress: direct(PUBLIC_COMMANDS.longPress, (input) =>
+    longPressPositionals(input as LongPressOptions),
+  ),
   hover: direct(PUBLIC_COMMANDS.hover, (input) =>
     interactionTargetPositionals(input as InteractionTarget),
   ),
