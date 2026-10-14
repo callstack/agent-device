@@ -10,10 +10,8 @@ import {
   presentIosRunnerSnapshot,
   toIosSnapshotEngineErrorDetails,
 } from '@agent-device/capture-kit/ios-snapshot-engine';
-import {
-  interpretIosNode,
-  resolveIosViewportEvidenceFromRoots,
-} from '@agent-device/capture-kit/ios-snapshot-acquisition';
+import { interpretIosNode } from '@agent-device/capture-kit/ios-node-interpretation';
+import { resolveIosViewportEvidenceFromRoots } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import { renderSnapshotQualityWarnings } from '@agent-device/capture-kit/quality-warnings';
 import {
   isSparseSnapshotQualityVerdict,

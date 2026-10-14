@@ -1,4 +1,4 @@
-import { interpretIosNode } from '@agent-device/capture-kit/ios-snapshot-acquisition';
+import { interpretIosNode } from '@agent-device/capture-kit/ios-node-interpretation';
 import {
   isGeometricallyActionable,
   isPositiveFiniteRect,

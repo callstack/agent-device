@@ -1,4 +1,4 @@
-import { interpretIosNode } from '@agent-device/capture-kit/ios-snapshot-acquisition';
+import { interpretIosNode } from '@agent-device/capture-kit/ios-node-interpretation';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { ElementSelectorKey } from '@agent-device/contracts/interactor-types';
 import type { AppleRunnerCommandOptions } from '../runner/index.ts';

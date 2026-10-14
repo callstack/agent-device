@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { interpretIosNode } from '@agent-device/capture-kit/ios-snapshot-acquisition';
+import { interpretIosNode } from '@agent-device/capture-kit/ios-node-interpretation';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import fc from 'fast-check';
 import {

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'vitest';
 import fc from 'fast-check';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { interpretIosNode } from './ios-snapshot-acquisition.ts';
+import { interpretIosNode } from './ios-node-interpretation.ts';
 
 const fixture = JSON.parse(
   readFileSync(

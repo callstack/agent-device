@@ -1,3 +1,4 @@
+import { interpretIosNode } from '@agent-device/capture-kit/ios-node-interpretation';
 import {
   createIosSnapshotAcquisition,
   resolveIosViewportEvidenceFromRoots,
@@ -12,7 +13,7 @@ export async function captureLimrunIosSnapshot(
 ): Promise<SnapshotRuntimeAcquiredResult> {
   const tree = (await session.client.elementTree()) as IosTreeNode[];
   const viewport = readLimrunViewport(tree, session.client.deviceInfo);
-  const nodes = flattenIosTree(tree);
+  const nodes = flattenIosTree(tree).map((node) => interpretIosNode(node));
   return createIosSnapshotAcquisition({
     producer: 'limrun-ios-tree',
     ...acquireProviderKeyboard({
