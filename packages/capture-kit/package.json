@@ -166,6 +166,10 @@
       "types": "./src/post-gesture-stability.ts",
       "default": "./src/post-gesture-stability.ts"
     },
+    "./provider-app-log": {
+      "types": "./src/provider-app-log.ts",
+      "default": "./src/provider-app-log.ts"
+    },
     "./quality-warnings": {
       "types": "./src/snapshot/snapshot-presentation/quality-warnings.ts",
       "default": "./src/snapshot/snapshot-presentation/quality-warnings.ts"
