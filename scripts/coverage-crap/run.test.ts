@@ -6,13 +6,21 @@ import path from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { run } from './run.ts';
 import {
+  COVERAGE_STAMP_FILE,
+  beginCoverageRun,
+  finishCoverageRun,
+  type CoverageConfig,
+  type RunSelection,
+} from './stamp.ts';
+import {
   beginStderrCapture,
   beginStdoutCapture,
 } from '../../src/__tests__/test-utils/stream-capture.ts';
 
 // The verdict is what CI enforces on a PR, so these run the real entrypoint against a real git
-// repo, a real fallow and hand-built coverage reports — a stub of fallow could not prove that
-// rename-aware attribution, the map-completeness cross-check and the threshold agree.
+// repo, a real fallow, a real stamp, and hand-built coverage reports — a stub of fallow could not
+// prove that rename-aware attribution, the stamp, the map-completeness cross-check and the
+// threshold agree.
 
 let repo: string;
 
@@ -95,6 +103,23 @@ function writeCoverage(
   write('coverage/lcov.info', lcov.join(''));
 }
 
+/** What the fixture's coverage pass was told to instrument, and what the stamp records with it. */
+const COVERAGE_CONFIG: CoverageConfig = { include: ['src/**/*.ts'], exclude: [] };
+
+/** What `pnpm test:coverage` leaves beside its reports: the stamp naming the run that wrote them. */
+function writeStamp(runSelection: RunSelection = 'full'): void {
+  const outcome = finishCoverageRun(
+    beginCoverageRun(repo),
+    path.join(repo, 'coverage'),
+    COVERAGE_CONFIG,
+    runSelection,
+  );
+  assert.ok(
+    'written' in outcome,
+    'expected a pass over an unmoved fixture tree to write its stamp',
+  );
+}
+
 function commit(message: string): void {
   git('add', '-A');
   git('commit', '-q', '-m', message);
@@ -150,6 +175,9 @@ beforeEach(() => {
   git('config', 'user.name', 'Test');
   git('config', 'diff.renames', 'false');
   git('checkout', '-q', '-b', HEADS[0]!);
+  // Same as this repository's own ignore rules: the reports and the stamp beside them stay outside
+  // the tree the stamp describes, which is what lets writing them leave the hash they moved.
+  write('.gitignore', 'coverage/\n');
   // Same shape as the repository's own config: one per-function CRAP exemption, plus a stale one
   // whose function no longer exists, to prove the report states the scope fallow actually applied.
   write(
@@ -196,6 +224,7 @@ test('a change that touches no function at or above the threshold passes', () =>
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
   write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
   commit('clean edit');
+  writeStamp();
 
   const { code, out } = check(['--base', HEADS[0]!]);
 
@@ -213,6 +242,7 @@ test('editing a function that already scores too high blocks, even though the sc
     DEBT.replace('  return total;', '  if (a === b) {\n    total += 2;\n  }\n  return total;'),
   );
   commit('edit the debt');
+  writeStamp();
 
   const { code, out } = checkOnActions(['--base', HEADS[0]!]);
 
@@ -232,6 +262,7 @@ test("the score of an untouched file is not this change's verdict", () => {
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
   write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
   commit('clean edit, debt left alone');
+  writeStamp();
   const staleDiff = [
     'diff --git a/src/debt.ts b/src/debt.ts',
     '--- a/src/debt.ts',
@@ -252,6 +283,7 @@ test('a pure rename does not touch the functions that moved with the file', () =
   writeCoverage({ 'src/moved.ts': {}, 'src/clean.ts': { hits: 4 } });
   git('mv', 'src/debt.ts', 'src/moved.ts');
   commit('pure move');
+  writeStamp();
 
   const { code, out } = check(['--base', HEADS[0]!]);
 
@@ -268,6 +300,7 @@ test('a rename that also edits the body owes the edited lines', () => {
     DEBT.replace('  return total;', '  if (a === b) {\n    total += 2;\n  }\n  return total;'),
   );
   commit('then edit it');
+  writeStamp();
 
   const { code, out } = check(['--base', HEADS[0]!]);
 
@@ -285,6 +318,7 @@ test('deleting lines from a debt function does not charge the function that surv
   writeCoverage({ 'src/debt.ts': { span: [1, 13] }, 'src/clean.ts': { hits: 4 } });
   write('src/debt.ts', DEBT.replace('    total += 1;\n', ''));
   commit('delete a line inside the debt function');
+  writeStamp();
 
   const { code, out } = check(['--base', HEADS[0]!]);
 
@@ -306,6 +340,7 @@ test('lines added below a debt function do not charge it, though the diff also d
     `${DEBT.replace('    total += 1;\n', '')}\nexport const helper = 2;\nexport const extra = 3;\n`,
   );
   commit('drop a line inside the function, add two below it');
+  writeStamp();
 
   const { code, out } = check(['--base', HEADS[0]!]);
 
@@ -324,6 +359,7 @@ test('a deleted function takes its score with it, out of both scopes', () => {
   writeCoverage({ 'src/debt.ts': { span: [1, 14] }, 'src/clean.ts': { hits: 4 } });
   write('src/debt.ts', TRIVIAL);
   commit('delete the debt function, leave the map recording it');
+  writeStamp();
 
   const { code, out } = check(['--base', HEADS[0]!]);
 
@@ -338,6 +374,7 @@ test('a touched file the sanitizer dropped as corrupt yields no verdict', () => 
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { corrupt: true } });
   write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
   commit('edit the file with impossible counts');
+  writeStamp();
 
   const { code, out } = check(['--base', HEADS[0]!]);
 
@@ -350,6 +387,7 @@ test('a touched file the coverage run enumerated but the map never recorded yiel
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 }, 'src/new.ts': 'lcov-only' });
   write('src/new.ts', TRIVIAL);
   commit('add a file the map is missing');
+  writeStamp();
 
   const { code, out } = check(['--base', HEADS[0]!]);
 
@@ -368,6 +406,7 @@ test('a map with fewer files than the run enumerated yields no verdict for any t
   });
   write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
   commit('clean edit against a stale map');
+  writeStamp();
 
   const { code, out } = check(['--base', HEADS[0]!]);
 
@@ -380,6 +419,7 @@ test('no lcov report is a named gap, not a pass', () => {
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
   write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
   commit('clean edit');
+  writeStamp();
   fs.rmSync(path.join(repo, 'coverage/lcov.info'));
 
   const { code, out } = check(['--base', HEADS[0]!]);
@@ -395,6 +435,7 @@ test('an lcov that lists no files is a gap too, not a trivially-complete enumera
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
   write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
   commit('clean edit');
+  writeStamp();
   write('coverage/lcov.info', 'TN:\n');
 
   const { code, out } = check(['--base', HEADS[0]!]);
@@ -414,6 +455,7 @@ test('a debt finding and a missing enumeration together still say the report can
     DEBT.replace('  return total;', '  if (a === b) {\n    total += 2;\n  }\n  return total;'),
   );
   commit('edit the debt, then lose lcov');
+  writeStamp();
   fs.rmSync(path.join(repo, 'coverage/lcov.info'));
 
   const { code, out } = check(['--base', HEADS[0]!]);
@@ -430,6 +472,7 @@ test('a touched function the map predates is estimated, and an estimate is no ve
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
   write('src/debt.ts', `${DEBT}${DEBT.replace('score', 'added')}`);
   commit('append a complex function to a file the map records');
+  writeStamp();
 
   const { code, out } = check(['--base', HEADS[0]!]);
 
@@ -444,6 +487,7 @@ test('an estimate in a file coverage never instruments is listed, not blocked on
   writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
   write('scripts/tool.ts', DEBT);
   commit('add a tooling file coverage does not instrument');
+  writeStamp();
 
   const { code, out } = check(['--base', HEADS[0]!]);
 
@@ -511,4 +555,79 @@ test('the report lists the per-function exemptions fallow applied, and the stale
     /No longer needed by any function and can be deleted: an override \(“This worker moved out\.”\)/,
   );
   assert.doesNotMatch(out, /\| `src\/exempt\.ts:1`/);
+});
+
+test('coverage written without a stamp is not trustworthy', () => {
+  write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
+  commit('clean edit');
+  writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
+
+  const { code, out } = check(['--base', HEADS[0]!]);
+
+  assert.equal(code, 1);
+  assert.match(out, /no trustworthy verdict/i);
+  assert.match(out, /no coverage-run-stamp\.json.*which run wrote it/s);
+});
+
+test('a coverage run from before the last commit yields no verdict', () => {
+  // The stamp is written against the commit coverage finished on, so committing after the run —
+  // a rebase, a merge, a follow-up fix — is exactly what the reader must be told about.
+  write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
+  writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
+  writeStamp();
+  commit('commit after coverage ran');
+
+  const { code, out } = check(['--base', HEADS[0]!]);
+
+  assert.equal(code, 1);
+  assert.match(out, /no trustworthy verdict/i);
+  assert.match(out, /HEAD moved since the coverage run wrote its stamp/);
+});
+
+test('a function body replaced in place after the run yields no verdict', () => {
+  // The case file lists and function spans cannot catch: the counters are real, the code they
+  // measured is gone, and the report still reads as a clean answer about the new body.
+  writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
+  write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
+  commit('clean edit');
+  writeStamp();
+  write('src/clean.ts', `${TRIVIAL}export const also_trivial = 3;\n`);
+
+  const { code, out } = check(['--base', HEADS[0]!]);
+
+  assert.equal(code, 1);
+  assert.match(out, /no trustworthy verdict/i);
+  assert.match(out, /this checkout changed since the coverage run wrote its stamp/);
+});
+
+for (const narrowed of ['project', 'files', 'test-name', 'shard', 'test-ids'] as const) {
+  test(`a coverage run that narrowed the lane (${narrowed}) yields no verdict`, () => {
+    // A narrowed pass still reports every file the config includes, mostly with no counters, so the
+    // functions its missing tests would have covered arrive as untested. Refusing it is the only
+    // answer that does not blame the author for a gap the run itself created.
+    write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
+    commit('clean edit');
+    writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
+    writeStamp(narrowed);
+
+    const { code, out } = check(['--base', HEADS[0]!]);
+
+    assert.equal(code, 1);
+    assert.match(out, /no trustworthy verdict/i);
+    assert.match(out, /did not exercise the whole coverage lane/);
+  });
+}
+
+test('an unreadable stamp yields no verdict', () => {
+  write('src/clean.ts', `${TRIVIAL}export const also_trivial = 2;\n`);
+  commit('clean edit');
+  writeCoverage({ 'src/debt.ts': {}, 'src/clean.ts': { hits: 4 } });
+  writeStamp();
+  write(`coverage/${COVERAGE_STAMP_FILE}`, '{"schemaVersion":1}');
+
+  const { code, out } = check(['--base', HEADS[0]!]);
+
+  assert.equal(code, 1);
+  assert.match(out, /no trustworthy verdict/i);
+  assert.match(out, /not a stamp this check can read: head is not a commit/);
 });

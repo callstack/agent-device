@@ -153,3 +153,163 @@ export function finishCoverageRun(
   fs.writeFileSync(stampPath, `${JSON.stringify(stamp)}\n`);
   return { written: stamp };
 }
+
+/** A selection that cannot attest a whole-tree map; only `full` can, so it is excluded by name. */
+export type NarrowedRunSelection = Exclude<RunSelection, 'full'>;
+
+/** Why `coverage/` cannot answer for this checkout. The report and the fix both branch on `kind`. */
+export type StampMismatch =
+  | Readonly<{ kind: 'absent' }>
+  | Readonly<{ kind: 'unreadable'; detail: string }>
+  | Readonly<{ kind: 'scope' }>
+  | Readonly<{ kind: 'head'; stampHead: string; head: string }>
+  | Readonly<{ kind: 'selection'; runSelection: NarrowedRunSelection }>
+  | Readonly<{ kind: 'workingTree'; stampHash: string; workingTreeHash: string }>;
+
+const MISMATCH_WHY: Readonly<Record<StampMismatch['kind'], string>> = {
+  absent: `coverage/ carries no ${COVERAGE_STAMP_FILE}, so nothing here says which run wrote it`,
+  unreadable: 'the coverage run stamp is not a stamp this check can read',
+  scope: 'the coverage run declared no include patterns, so its record cannot say what it measured',
+  head: 'HEAD moved since the coverage run wrote its stamp',
+  selection:
+    'the coverage run that wrote these reports did not exercise the whole coverage lane, so files it ' +
+    'never ran a test for read as untested',
+  workingTree: 'this checkout changed since the coverage run wrote its stamp',
+};
+
+const NARROWED_BY: Readonly<Record<NarrowedRunSelection, string>> = {
+  project:
+    'a project filter left projects out, or the run used a config this check cannot recognize',
+  files: 'a file filter ran only some test files',
+  'test-name': 'a test-name pattern ran only matching tests',
+  'test-ids': 'it ran selected tests or lines',
+  shard: 'a shard ran part of the suite',
+  tags: 'a tag filter ran only tests carrying those tags',
+  unattested:
+    'it ran with focused tests allowed, so one `test.only` anywhere in the tree would have run in place ' +
+    'of the lane and still collected every test file — `test:coverage` passes `--allowOnly=false`',
+};
+
+export function describeStampMismatch(mismatch: StampMismatch): string {
+  const detail =
+    mismatch.kind === 'unreadable'
+      ? `: ${mismatch.detail}`
+      : mismatch.kind === 'head'
+        ? ` (stamped ${mismatch.stampHead}, now ${mismatch.head})`
+        : mismatch.kind === 'selection'
+          ? `: ${NARROWED_BY[mismatch.runSelection]}`
+          : mismatch.kind === 'workingTree'
+            ? ` (stamped ${mismatch.stampHash}, now ${mismatch.workingTreeHash})`
+            : '';
+  // A run that declared no scope stays undeclared however often it is re-run, so that one names the
+  // declaration to fix. Every other kind is drift or a narrowed run, and a fresh pass over this commit
+  // restates it.
+  const fix =
+    mismatch.kind === 'scope'
+      ? 'Give `test.coverage.include` a pattern list, then run `pnpm test:coverage`.'
+      : 'Run `pnpm test:coverage` on this commit.';
+  return `${MISMATCH_WHY[mismatch.kind]}${detail}\n  ${fix}`;
+}
+
+function isStringArray(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+function isRunSelection(value: unknown): value is RunSelection {
+  // The union is the whole vocabulary, and `NARROWED_BY` has to cover every member but `full` to compile, so
+  // these two already are the writer's list: adding a selection without a sentence is a type error, and a
+  // record carrying anything else is unreadable rather than a pass. The type test comes first because the
+  // value is whatever JSON said — an object with a null `toString` throws on the way to that verdict, which
+  // is the one outcome `unreadable` exists to cover.
+  return typeof value === 'string' && (value === 'full' || Object.hasOwn(NARROWED_BY, value));
+}
+
+function readStampFile(stampPath: string): CoverageStamp | StampMismatch {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(fs.readFileSync(stampPath, 'utf8'));
+  } catch (error: unknown) {
+    return {
+      kind: 'unreadable',
+      detail: error instanceof Error ? error.message.split('\n')[0]! : String(error),
+    };
+  }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { kind: 'unreadable', detail: 'not an object' };
+  }
+  // Field order: each row has to name the field actually wrong, so validation stops at the first field
+  // it cannot read rather than at whichever branch happens to come first.
+  const stamp = parsed as Partial<CoverageStamp>;
+  if (stamp.schemaVersion !== 1) {
+    // `JSON.stringify` rather than `String`: a record whose `schemaVersion` is an object carrying its own
+    // null `toString` throws at the conversion, and this function's contract is to answer `unreadable`
+    // rather than to throw. JSON can only have produced what stringify can already serialize.
+    return {
+      kind: 'unreadable',
+      detail: `schemaVersion ${JSON.stringify(stamp.schemaVersion)} is not 1`,
+    };
+  }
+  if (typeof stamp.head !== 'string' || stamp.head === '') {
+    return { kind: 'unreadable', detail: 'head is not a commit' };
+  }
+  if (typeof stamp.workingTreeHash !== 'string' || stamp.workingTreeHash === '') {
+    return { kind: 'unreadable', detail: 'workingTreeHash is not a hash' };
+  }
+  if (!isRunSelection(stamp.runSelection)) {
+    return { kind: 'unreadable', detail: 'runSelection is not a run selection' };
+  }
+  if (!isStringArray(stamp.include)) {
+    return { kind: 'unreadable', detail: 'include is not a list of patterns' };
+  }
+  if (!isStringArray(stamp.exclude)) {
+    return { kind: 'unreadable', detail: 'exclude is not a list of patterns' };
+  }
+  // Vitest reads a missing `include` as "whatever the excludes leave", so an empty list is not a scope
+  // the verdict can decide eligibility from: the record cannot say what the run measured, and re-running
+  // would declare no more than this one did. Both lists are read as part of that scope, so a malformed one
+  // is named before this, which would otherwise send the reader to fix the wrong field.
+  if (stamp.include.length === 0) return { kind: 'scope' };
+  return {
+    schemaVersion: 1,
+    head: stamp.head,
+    workingTreeHash: stamp.workingTreeHash,
+    runSelection: stamp.runSelection,
+    include: stamp.include,
+    exclude: stamp.exclude,
+  };
+}
+
+/**
+ * The stamp in `reportsDirectory` against this checkout: same commit, a pass that proved it took the whole
+ * coverage lane, and that same tree still on disk. `reportsDirectory` comes from the reports' own home, so
+ * a run pointed elsewhere is simply absent here rather than quietly trusted.
+ */
+export function verifyCoverageStamp(
+  reportsDirectory: string,
+  root: string,
+): Readonly<{ stamp: CoverageStamp }> | Readonly<{ mismatch: StampMismatch }> {
+  const stampPath = path.join(reportsDirectory, COVERAGE_STAMP_FILE);
+  if (!fs.existsSync(stampPath)) return { mismatch: { kind: 'absent' } };
+  const stamp = readStampFile(stampPath);
+  if ('kind' in stamp) return { mismatch: stamp };
+  const head = checkoutHead(root);
+  if (head !== stamp.head) {
+    return { mismatch: { kind: 'head', stampHead: stamp.head, head } };
+  }
+  // Before the tree hash: a narrowed map is unusable whatever the tree looks like, and this spares
+  // hashing a whole checkout to explain a reason already on disk.
+  if (stamp.runSelection !== 'full') {
+    return { mismatch: { kind: 'selection', runSelection: stamp.runSelection } };
+  }
+  const workingTreeHashNow = workingTreeHash(root);
+  if (workingTreeHashNow !== stamp.workingTreeHash) {
+    return {
+      mismatch: {
+        kind: 'workingTree',
+        stampHash: stamp.workingTreeHash,
+        workingTreeHash: workingTreeHashNow,
+      },
+    };
+  }
+  return { stamp };
+}

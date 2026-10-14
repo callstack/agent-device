@@ -36,11 +36,15 @@ import {
   type IstanbulCoverageMap,
   type TouchedFile,
 } from './model.ts';
+import { describeStampMismatch, verifyCoverageStamp } from './stamp.ts';
 
 const USAGE = 'Usage: pnpm check:coverage-crap [--base <ref> | --all]\n';
-const COVERAGE_PATH = 'coverage/coverage-istanbul.json';
-const LCOV_PATH = 'coverage/lcov.info';
-const SANITIZED_PATH = 'coverage/fallow-crap-coverage.json';
+// One spelling for the reports directory, which the writer side takes from the Vitest config: the three
+// reports all live inside it, so moving the lane's output is a one-line change here.
+const COVERAGE_DIR = 'coverage';
+const COVERAGE_PATH = path.join(COVERAGE_DIR, 'coverage-istanbul.json');
+const LCOV_PATH = path.join(COVERAGE_DIR, 'lcov.info');
+const SANITIZED_PATH = path.join(COVERAGE_DIR, 'fallow-crap-coverage.json');
 const FALLOW_CONFIG = '.fallowrc.json';
 const CRAP_THRESHOLD = 30;
 const FALLOW_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
@@ -130,6 +134,15 @@ function gatherCrapInputs(
     map = parseIstanbulCoverageMap(fs.readFileSync(coveragePath, 'utf8'));
   } catch (error: unknown) {
     return { refusal: `${coveragePath}: ${describe(error)}` };
+  }
+
+  // The stamp is the record of the pass that wrote the map above, so it is read right after it and only
+  // for the scope that attributes findings to a diff. The map's own absence stays the first refusal: with
+  // no reports at all, "run pnpm test:coverage" is the fix for both, and naming the missing file is the
+  // closer half of that.
+  if (scope === 'touched') {
+    const verified = verifyCoverageStamp(path.resolve(root, COVERAGE_DIR), root);
+    if ('mismatch' in verified) return { refusal: describeStampMismatch(verified.mismatch) };
   }
 
   let diff = '';

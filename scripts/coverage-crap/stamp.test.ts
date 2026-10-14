@@ -7,12 +7,15 @@ import { afterEach, beforeEach, test } from 'node:test';
 import {
   COVERAGE_STAMP_FILE,
   beginCoverageRun,
+  describeStampMismatch,
   finishCoverageRun,
+  verifyCoverageStamp,
   type CoverageConfig,
   type CoverageRun,
   type CoverageStamp,
   type CoverageStampWrite,
   type RunSelection,
+  type StampMismatch,
 } from './stamp.ts';
 
 // The stamp is the only thing that tells a later verdict its coverage map is this checkout's, so these run
@@ -44,6 +47,28 @@ function stamp(runSelection: RunSelection = 'full'): CoverageStamp {
   const outcome = finish(beginCoverageRun(repo), runSelection);
   assert.ok('written' in outcome, 'expected a pass over an unmoved tree to write its stamp');
   return outcome.written;
+}
+
+/** The stamp in `coverage/`, read the way a verdict reads it. */
+function verify() {
+  return verifyCoverageStamp(path.join(repo, COVERAGE_DIR), repo);
+}
+
+/** The reason `verify()` gave, or the string `verified` when it gave none. */
+function reason(): string {
+  const result = verify();
+  return 'mismatch' in result ? result.mismatch.kind : 'verified';
+}
+
+function verifyMismatch(): StampMismatch {
+  const result = verify();
+  assert.ok('mismatch' in result, 'expected a mismatch');
+  return result.mismatch;
+}
+
+function commit(message: string): void {
+  git('add', '-A');
+  git('commit', '-q', '-m', message);
 }
 
 function stampOnDisk(): CoverageStamp | null {
@@ -242,4 +267,142 @@ test('the stamp records the commit, the tree, and the run that wrote it', () => 
   assert.equal(written.runSelection, 'full');
   assert.deepEqual(written.include, ['src/**/*.ts']);
   assert.deepEqual(written.exclude, ['src/generated/**']);
+});
+
+test('a stamp written by a run over an unchanged checkout verifies', () => {
+  const written = stamp();
+
+  assert.deepEqual(verify(), { stamp: written });
+});
+
+test('a checkout that wrote no coverage directory has no stamp to trust', () => {
+  assert.equal(reason(), 'absent');
+});
+
+test('a commit after the run is named as HEAD moving', () => {
+  stamp();
+  write('src/a.ts', 'export const a = 2;\n');
+  commit('later');
+
+  const result = verify();
+
+  assert.equal(reason(), 'head');
+  if ('mismatch' in result && result.mismatch.kind === 'head') {
+    assert.notEqual(result.mismatch.stampHead, result.mismatch.head);
+  }
+});
+
+test('an uncommitted edit is named as the working tree changing', () => {
+  stamp();
+  write('src/a.ts', 'export const a = 2;\n');
+
+  const result = verify();
+
+  assert.equal(reason(), 'workingTree');
+  if ('mismatch' in result && result.mismatch.kind === 'workingTree') {
+    assert.match(result.mismatch.stampHash, /^sha256:[0-9a-f]{64}$/);
+    assert.notEqual(result.mismatch.stampHash, result.mismatch.workingTreeHash);
+  }
+});
+
+test('a pass that could not stamp leaves nothing for a reader to mistrust', () => {
+  // The refusal to write is the whole story a reader can tell: no record on disk claims those reports, so
+  // `absent` is the only honest reason available rather than a mismatch invented over a tree that moved.
+  const run = beginCoverageRun(repo);
+  write('src/a.ts', 'export const a = 2;\n');
+  finish(run);
+
+  assert.equal(reason(), 'absent');
+});
+
+for (const narrowed of [
+  'project',
+  'files',
+  'test-name',
+  'test-ids',
+  'shard',
+  'tags',
+  'unattested',
+] as const) {
+  test(`a run that did not take the whole lane is its own reason (${narrowed})`, () => {
+    // A narrowed pass still writes a record for every included file, mostly with no counters, so the map
+    // it leaves behind would report well-tested functions as untested. The kind has to be its own because
+    // the fix is "run the lane", not "the tree moved".
+    stamp(narrowed);
+
+    const result = verify();
+
+    assert.equal(reason(), 'selection');
+    if ('mismatch' in result && result.mismatch.kind === 'selection') {
+      assert.equal(result.mismatch.runSelection, narrowed);
+    }
+    assert.match(describeStampMismatch(verifyMismatch()), /whole coverage lane/);
+  });
+}
+
+test('a narrowed run is refused before the tree is hashed', () => {
+  // Selection is decidable from the record alone, so a stale tree must not be reported as the reason for
+  // a map that is unusable whatever the tree looks like.
+  stamp('files');
+  write('src/a.ts', 'export const a = 2;\n');
+
+  assert.equal(reason(), 'selection');
+});
+
+test('a stamp file that is not a stamp is its own reason', () => {
+  // Each row is what a partial, truncated, or hand-written file would otherwise be allowed to claim. The
+  // rows accumulate valid fields so each one reaches its own check rather than the first.
+  const HEAD = '"head":"abc"';
+  const TREE = '"workingTreeHash":"sha256:x"';
+  const SELECTION = '"runSelection":"full"';
+  const PATTERNS = '"include":["src/**/*.ts"],"exclude":[]';
+  const cases: readonly [string, RegExp][] = [
+    ['not json', /Unexpected token/],
+    ['{"schemaVersion":2}', /schemaVersion 2 is not 1/],
+    // The same crash shape on the first field the reader touches: an object with a null `toString` used to
+    // throw out of the detail it was building. The detail has to name the value it could not accept.
+    ['{"schemaVersion":{"toString":null}}', /schemaVersion \{"toString":null\} is not 1/],
+    ['{"schemaVersion":1}', /head is not a commit/],
+    [`{"schemaVersion":1,${HEAD}}`, /workingTreeHash is not a hash/],
+    [`{"schemaVersion":1,${HEAD},${TREE}}`, /runSelection is not a run selection/],
+    // Not a string at all, and one that throws on the way to being read as a string: a record like this has
+    // to come back `unreadable`, because a verdict that dies here looks like a broken gate.
+    [
+      `{"schemaVersion":1,${HEAD},${TREE},"runSelection":{"toString":null}}`,
+      /runSelection is not a run selection/,
+    ],
+    [`{"schemaVersion":1,${HEAD},${TREE},${SELECTION}}`, /include is not a list/],
+    [
+      `{"schemaVersion":1,${HEAD},${TREE},${SELECTION},"include":["src/**/*.ts"],"exclude":{}}`,
+      /exclude is not a list/,
+    ],
+    [
+      `{"schemaVersion":1,${HEAD},${TREE},${SELECTION},${PATTERNS},"runSelection":"mostly"}`,
+      /runSelection is not a run selection/,
+    ],
+    [`{"schemaVersion":1,"head":123,${TREE}}`, /head is not a commit/],
+  ];
+  for (const [content, detail] of cases) {
+    write(STAMP_PATH, content);
+    assert.equal(reason(), 'unreadable', `for ${content}`);
+    const result = verify();
+    if ('mismatch' in result && result.mismatch.kind === 'unreadable') {
+      assert.match(result.mismatch.detail, detail, `for ${content}`);
+    }
+  }
+});
+
+test('a run that declared no include patterns is its own reason', () => {
+  // Vitest takes a missing `include` as "everything the excludes leave", so an empty list proves no
+  // declaration to decide eligibility from; naming it unreadable would send the reader to re-run a config
+  // that says the same thing. A malformed `exclude` is still named first, because that one is a broken
+  // field to fix.
+  const BASE = `"schemaVersion":1,"head":"abc","workingTreeHash":"sha256:x","runSelection":"full"`;
+  write(STAMP_PATH, `{${BASE},"include":[],"exclude":[]}`);
+
+  assert.equal(reason(), 'scope');
+  assert.match(describeStampMismatch(verifyMismatch()), /declared no include patterns/);
+
+  write(STAMP_PATH, `{${BASE},"include":[],"exclude":{}}`);
+  assert.equal(reason(), 'unreadable');
 });
