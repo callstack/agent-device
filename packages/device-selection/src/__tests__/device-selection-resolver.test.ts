@@ -7,7 +7,7 @@ import {
   resolveExistingSessionDeviceSelection,
   resolveInventoryDeviceSelection,
 } from '../device-selection-resolver.ts';
-import { withTestDeviceInventory } from './test-utils/device-inventory-gateways.ts';
+import { withTestDeviceInventory } from '../inventory-gateways.fixtures.ts';
 import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,

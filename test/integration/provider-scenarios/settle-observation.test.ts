@@ -9,6 +9,7 @@ import {
   simctlDeviceLifecycleHandler,
 } from './providers.ts';
 import { createProviderTranscript, type ProviderScenarioProviderEntry } from './transcript.ts';
+import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from './test-timeouts.ts';
 
 const APP = 'com.example.app';
 const DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
@@ -172,112 +173,124 @@ function tapEntry(x: number, y: number): ProviderScenarioProviderEntry {
   };
 }
 
-test('Provider-backed integration press --settle returns the settled diff and fresh refs', async () => {
-  const runnerTranscript = createProviderTranscript([
-    // snapshot -i: issues refs; the first capture after open settles: one extra read
-    snapshotEntry(BEFORE_NODES),
-    snapshotEntry(BEFORE_NODES),
-    // press label=Continue --settle: resolution capture, tap, settle captures
-    snapshotEntry(BEFORE_NODES),
-    tapEntry(200, 322),
-    quietSnapshotEntry(SETTLED_NODES),
-    // press @e2 (the Done ref from the settled diff): tap on the stored tree
-    tapEntry(200, 522),
-  ]);
-  const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
-    runnerTranscript,
-    'ios.runner',
-  );
-  const appleTool = createRecordingAppleToolProvider({
-    simctl: simctlDeviceLifecycleHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
-      { name: PROVIDER_SCENARIO_IOS_SIMULATOR.name, udid: DEVICE_ID },
-    ]),
-  });
+test(
+  'Provider-backed integration press --settle returns the settled diff and fresh refs',
+  { timeout: PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS },
+  async () => {
+    const runnerTranscript = createProviderTranscript([
+      // snapshot -i: issues refs; the first capture after open settles: one extra read
+      snapshotEntry(BEFORE_NODES),
+      snapshotEntry(BEFORE_NODES),
+      // press label=Continue --settle: resolution capture, tap, settle captures
+      snapshotEntry(BEFORE_NODES),
+      tapEntry(200, 322),
+      quietSnapshotEntry(SETTLED_NODES),
+      // press @e2 (the Done ref from the settled diff): tap on the stored tree
+      tapEntry(200, 522),
+    ]);
+    const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
+      runnerTranscript,
+      'ios.runner',
+    );
+    const appleTool = createRecordingAppleToolProvider({
+      simctl: simctlDeviceLifecycleHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
+        { name: PROVIDER_SCENARIO_IOS_SIMULATOR.name, udid: DEVICE_ID },
+      ]),
+    });
 
-  await withProviderScenarioResource(
-    async () =>
-      await createProviderScenarioHarness({
-        appleRunnerProvider: () => appleRunnerProvider,
-        appleToolProvider: () => appleTool.provider,
-        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
-      }),
-    async (daemon) => {
-      const open = await daemon.callCommand('open', [APP], {
-        platform: 'ios',
-        udid: DEVICE_ID,
-      });
-      assertRpcOk(open);
+    await withProviderScenarioResource(
+      async () =>
+        await createProviderScenarioHarness({
+          appleRunnerProvider: () => appleRunnerProvider,
+          appleToolProvider: () => appleTool.provider,
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
+        }),
+      async (daemon) => {
+        const open = await daemon.callCommand('open', [APP], {
+          platform: 'ios',
+          udid: DEVICE_ID,
+        });
+        assertRpcOk(open);
 
-      const snapshot = await daemon.callCommand('snapshot', [], {
-        snapshotInteractiveOnly: true,
-      });
-      assertRpcOk(snapshot);
+        const snapshot = await daemon.callCommand('snapshot', [], {
+          snapshotInteractiveOnly: true,
+        });
+        assertRpcOk(snapshot);
 
-      const press = await daemon.callCommand('press', ['label=Continue'], {
-        settle: true,
-        settleQuietMs: 25,
-        // Coverage instrumentation can slow provider-backed daemon dispatch
-        // enough that a 2s wall-clock budget expires before the two quiet
-        // captures complete. The contract under test is the settled response,
-        // not timeout pressure.
-        timeoutMs: 10_000,
-      });
-      const pressData = assertRpcOk(press);
-      const settle = pressData.settle as {
-        settled: boolean;
-        captures: number;
-        refsGeneration?: number;
-        diff?: {
-          summary: { additions: number; removals: number; unchanged: number };
-          lines: Array<{ kind: string; text: string; ref?: string }>;
+        const press = await daemon.callCommand('press', ['label=Continue'], {
+          settle: true,
+          settleQuietMs: 25,
+          // Coverage instrumentation can slow provider-backed daemon dispatch
+          // enough that a 2s wall-clock budget expires before the two quiet
+          // captures complete. The contract under test is the settled response,
+          // not timeout pressure.
+          timeoutMs: 10_000,
+        });
+        const pressData = assertRpcOk(press);
+        const settle = pressData.settle as {
+          settled: boolean;
+          captures: number;
+          waitedMs: number;
+          refsGeneration?: number;
+          diff?: {
+            summary: { additions: number; removals: number; unchanged: number };
+            lines: Array<{ kind: string; text: string; ref?: string }>;
+          };
+          tail?: Array<{ ref: string; role: string; label?: string }>;
+          hint?: string;
         };
-        tail?: Array<{ ref: string; role: string; label?: string }>;
-        hint?: string;
-      };
-      assert.ok(settle, 'press --settle must return a settle observation');
-      assert.equal(settle.settled, true);
-      // Snapshot-floor economy: a quiet UI settles on the two identical
-      // captures the verdict needs, or three when the second lands a hair short
-      // of the quiet window. Anything above that is a regression in what settle
-      // spends; pinning a single number would assert the runner's speed.
-      assert.ok(
-        settle.captures >= 2 && settle.captures <= 3,
-        `settle should cost 2-3 captures, got ${settle.captures}`,
-      );
-      assert.equal(typeof settle.refsGeneration, 'number');
-      assert.deepEqual(settle.diff?.summary, { additions: 1, removals: 2, unchanged: 1 });
-      const added = settle.diff?.lines.find((line) => line.kind === 'added');
-      assert.match(added?.text ?? '', /Done/);
-      assert.equal(added?.ref, 'e2');
-      // The added line already hands back a fresh target: the diff's own refs
-      // are the actionable payload, so the tail stays off.
-      assert.equal(settle.tail, undefined);
-      // The settled tree is never serialized into the response.
-      assert.equal(pressData.nodes, undefined);
+        assert.ok(settle, 'press --settle must return a settle observation');
+        assert.equal(settle.settled, true);
+        // The pressed dialog's own button disappears with it, so only the
+        // Application root survives: fewer than half the node identities carry
+        // over, which is the broad replacement #1831 confirms for 1.5s — at this
+        // 25ms window too, since #3470. That wait is the contract below, so the
+        // capture count is the confirmation's, not the quiet UI's 2-3.
+        assert.ok(
+          settle.waitedMs >= 1_500,
+          `short quiet window switched the dismissal confirmation off: ${settle.waitedMs}ms`,
+        );
+        // Same reasoning one level down: pinning a single number would assert the
+        // runner's speed against the confirmation's own deadline arithmetic.
+        assert.ok(
+          settle.captures >= 2,
+          `confirmation settled on fewer than two captures, got ${settle.captures}`,
+        );
+        assert.equal(typeof settle.refsGeneration, 'number');
+        assert.deepEqual(settle.diff?.summary, { additions: 1, removals: 2, unchanged: 1 });
+        const added = settle.diff?.lines.find((line) => line.kind === 'added');
+        assert.match(added?.text ?? '', /Done/);
+        assert.equal(added?.ref, 'e2');
+        // The added line already hands back a fresh target: the diff's own refs
+        // are the actionable payload, so the tail stays off.
+        assert.equal(settle.tail, undefined);
+        // The settled tree is never serialized into the response.
+        assert.equal(pressData.nodes, undefined);
 
-      // ADR 0014: the settle issued a PARTIAL frame authorizing exactly its
-      // emitted ref, so the follow-up consumes it in pinned form — acting
-      // directly on the stored settled tree with no fresh snapshot round trip
-      // and no stale-refs warning. The plain `@e2` would require a complete
-      // frame.
-      const callsBeforeFollowUp = runnerTranscript.calls.length;
-      const followUp = await daemon.callCommand('press', [`@e2~s${settle.refsGeneration}`], {});
-      const followUpData = assertRpcOk(followUp);
-      assert.equal(followUpData.warning, undefined);
-      assert.equal(followUpData.x, 200);
-      assert.equal(followUpData.y, 522);
-      // The round trip settle exists to remove: the follow-up spends a tap and
-      // nothing else. Asserted directly, since a quiet-UI entry would happily
-      // serve a stray capture.
-      assert.deepEqual(
-        runnerTranscript.calls.slice(callsBeforeFollowUp).map((call) => call.command),
-        ['ios.runner.tap'],
-      );
+        // ADR 0014: the settle issued a PARTIAL frame authorizing exactly its
+        // emitted ref, so the follow-up consumes it in pinned form — acting
+        // directly on the stored settled tree with no fresh snapshot round trip
+        // and no stale-refs warning. The plain `@e2` would require a complete
+        // frame.
+        const callsBeforeFollowUp = runnerTranscript.calls.length;
+        const followUp = await daemon.callCommand('press', [`@e2~s${settle.refsGeneration}`], {});
+        const followUpData = assertRpcOk(followUp);
+        assert.equal(followUpData.warning, undefined);
+        assert.equal(followUpData.x, 200);
+        assert.equal(followUpData.y, 522);
+        // The round trip settle exists to remove: the follow-up spends a tap and
+        // nothing else. Asserted directly, since a quiet-UI entry would happily
+        // serve a stray capture.
+        assert.deepEqual(
+          runnerTranscript.calls.slice(callsBeforeFollowUp).map((call) => call.command),
+          ['ios.runner.tap'],
+        );
 
-      runnerTranscript.assertComplete();
-    },
-  );
-});
+        runnerTranscript.assertComplete();
+      },
+    );
+  },
+);
 
 test('Provider-backed integration never-settled press --settle does not issue diff refs', async () => {
   const loadingNodes = (label: string) => [

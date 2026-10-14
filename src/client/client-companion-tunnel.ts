@@ -20,11 +20,15 @@ import {
 import { normalizeBaseUrl } from './base-url.ts';
 import { runCmdDetached } from '@agent-device/host-kit/command';
 import {
+  confirmedProcessStopDetails,
+  describeUnconfirmedProcessStop,
   isProcessAlive,
   readProcessCommand,
   readProcessStartTime,
-  waitForProcessExit,
+  stopProcessAndConfirmExit,
+  type ConfirmedProcessStop,
 } from '@agent-device/host-kit/process';
+import { AppError } from '@agent-device/kernel/errors';
 
 const COMPANION_TUNNEL_TERM_TIMEOUT_MS = 1_000;
 const COMPANION_TUNNEL_KILL_TIMEOUT_MS = 1_000;
@@ -280,29 +284,64 @@ function withoutConsumer(
   };
 }
 
+/** Stops the recorded companion, throwing unless the host proves it left. */
 async function stopCompanionProcess(
   state: CompanionTunnelState,
   definition: CompanionTunnelDefinition,
+  paths: { statePath: string; logPath: string },
 ): Promise<void> {
-  if (!isProcessAlive(state.pid)) return;
-  const command = readProcessCommand(state.pid);
-  if (!command || !isCompanionTunnelCommand(command, definition)) return;
-  try {
-    process.kill(state.pid, 'SIGTERM');
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ESRCH' || code === 'EPERM') return;
-    throw error;
+  const outcome = await stopProcessAndConfirmExit(
+    {
+      pid: state.pid,
+      identity: {
+        startTime: state.startTime,
+        matches: (command) => isCompanionTunnelCommand(command, definition),
+      },
+    },
+    {
+      termTimeoutMs: COMPANION_TUNNEL_TERM_TIMEOUT_MS,
+      killTimeoutMs: COMPANION_TUNNEL_KILL_TIMEOUT_MS,
+    },
+  );
+  if (outcome.status === 'retained') {
+    throw companionStopFailure({ ...outcome, pid: state.pid }, definition, paths);
   }
-  if (await waitForProcessExit(state.pid, COMPANION_TUNNEL_TERM_TIMEOUT_MS)) return;
+}
+
+/** A companion whose exit could not be confirmed: state stays, so a retry stops the same process. */
+function companionStopFailure(
+  retained: { pid: number } & Extract<ConfirmedProcessStop, { status: 'retained' }>,
+  definition: CompanionTunnelDefinition,
+  paths: { statePath: string; logPath: string },
+): AppError {
+  // `identity-unverified` is the one verdict that cannot say "still running": the pid answers
+  // `kill(pid, 0)`, and on Windows an exited process does too while its object keeps handles.
+  const why =
+    retained.reason === 'identity-unverified'
+      ? `${definition.displayName} ${describeUnconfirmedProcessStop(retained.pid, `the ${definition.displayName} this profile started`)}. Stop it yourself, as its owner if needed.`
+      : `${definition.displayName} pid ${retained.pid} is still running${
+          retained.reason === 'exit-timeout'
+            ? `: it survived ${retained.signal}.`
+            : retained.errno === 'EPERM'
+              ? `: it refused ${retained.signal} (${retained.errno}), so it belongs to another user or was started with elevated privileges. Stop it as that user, e.g. \`sudo kill ${retained.pid}\`.`
+              : `: it refused ${retained.signal} (${retained.errno}).`
+        }`;
+  return new AppError('COMMAND_FAILED', why, {
+    ...confirmedProcessStopDetails(retained, retained.pid),
+    statePath: paths.statePath,
+    logPath: paths.logPath,
+    hint: `${paths.statePath} still tracks this pid, so a retry acts on that same companion instead of starting a second one.`,
+  });
+}
+
+/** Records a half-spawned companion a stop could not confirm, so a retry stops the same pid. */
+function persistUnstoppedCompanion(statePath: string, state: CompanionTunnelState): void {
   try {
-    process.kill(state.pid, 'SIGKILL');
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ESRCH' || code === 'EPERM') return;
-    throw error;
+    writeCompanionState(statePath, state);
+  } catch {
+    // A pid this host will not record cannot be tracked on a retry; the refusal names it, and the
+    // caller dispatches on that verdict.
   }
-  await waitForProcessExit(state.pid, COMPANION_TUNNEL_KILL_TIMEOUT_MS);
 }
 
 function setOrDelete(env: NodeJS.ProcessEnv, key: string, value: string | undefined): void {
@@ -428,8 +467,10 @@ export async function ensureCompanionTunnel(
     };
   }
 
+  // Stopping before spawning is what keeps one bridge scope down to one companion: an unconfirmed
+  // exit aborts here instead of registering a second one beside the first.
   if (existing) {
-    await stopCompanionProcess(existing, options.definition);
+    await stopCompanionProcess(existing, options.definition, paths);
     clearCompanionArtifacts(paths, options.definition);
   }
 
@@ -439,8 +480,16 @@ export async function ensureCompanionTunnel(
     spawned = spawnCompanionProcess(options, paths.logPath);
     writeCompanionState(paths.statePath, withConsumer(spawned, consumerKey));
   } catch (error) {
+    // An unconfirmed exit of our own half-spawned companion outranks the spawn failure.
     if (spawned) {
-      await stopCompanionProcess(spawned, options.definition).catch(() => {});
+      try {
+        await stopCompanionProcess(spawned, options.definition, paths);
+      } catch (stopError) {
+        // The failure promises a retry stops the same pid, and the sentinel carries none.
+        persistUnstoppedCompanion(paths.statePath, spawned);
+        if (stopError instanceof AppError) stopError.cause = error;
+        throw stopError;
+      }
     }
     clearCompanionArtifacts(paths, options.definition);
     throw error;
@@ -473,7 +522,7 @@ export async function stopCompanionTunnel(
     writeCompanionState(paths.statePath, nextState);
     return { stopped: false, statePath: paths.statePath };
   }
-  await stopCompanionProcess(existing, options.definition);
+  await stopCompanionProcess(existing, options.definition, paths);
   clearCompanionArtifacts(paths, options.definition);
   return { stopped: true, statePath: paths.statePath };
 }

@@ -76,7 +76,9 @@ export function buildScreenshotOverlayRefs(
   for (const node of snapshot.nodes) {
     if (!isOverlaySourceNode(snapshot, snapshotBounds, node)) continue;
     const target = resolveOverlayTarget(snapshot.nodes, node);
-    if (!target?.rect || !hasPositiveRect(target.rect)) continue;
+    // The overlay labels each box with the ref an agent would act on, so a target the capture
+    // issued no ref for gets no box: nothing can be addressed by it.
+    if (!target?.ref || !target.rect || !hasPositiveRect(target.rect)) continue;
     const label = resolveOverlayLabel(node, target, snapshot.nodes);
     const score = scoreOverlayCandidate(node, target, label);
     const overlaySourceRect = resolveOverlaySourceRect(snapshot, target, snapshot.nodes);

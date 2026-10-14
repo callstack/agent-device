@@ -1,5 +1,6 @@
 import type { AgentDeviceBackend } from './backend.ts';
 import type { ArtifactAdapter } from './artifact-adapter.ts';
+import type { MovingTargetBaseline } from './moving-target-gate.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 
 export type CommandPolicy = {
@@ -23,6 +24,14 @@ export type CommandSessionRecord = {
    * pre-frame sessions and non-daemon runtimes, which resolve against `snapshot`.
    */
   refFrameSnapshot?: SnapshotState;
+  /**
+   * #3471: the tree the session's last resolving mutation acted through, with the instant that
+   * mutation finished. The moving-target gate screens a freshly resolved rect against it to decide
+   * whether the position is still owed a re-observation, which is why the pre-action tree — and not
+   * just a timestamp — has to cross this boundary: the session's newest observation is by
+   * construction the one that cannot prove a target held its position.
+   */
+  movingTargetBaseline?: MovingTargetBaseline;
   metadata?: Record<string, unknown>;
 };
 

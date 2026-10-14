@@ -15,6 +15,7 @@ import {
   isProcessZombie,
   listHostProcesses,
   readHostProcessIdentityObservations,
+  readHostProcessIdentityObservationsAsync,
   readProcessCommand,
   readProcessIdentityFacts,
   readProcessStartTime,
@@ -26,14 +27,26 @@ const DAEMON_PID = 4242;
 // One CIM row as a Windows host answers it: pid|ppid|creation|command.
 const DAEMON_ROW = `${DAEMON_PID}|4321|${DAEMON_START}|C:\\Program Files\\node.exe  C:\\app\\dist\\src\\internal\\daemon.js`;
 
-function windowsPlatform<T>(run: () => T): T {
+function windowsPlatform<T>(run: () => T): T;
+function windowsPlatform<T>(run: () => Promise<T>): Promise<T>;
+function windowsPlatform<T>(run: () => T | Promise<T>): T | Promise<T> {
   const previous = Object.getOwnPropertyDescriptor(process, 'platform');
-  Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-  try {
-    return run();
-  } finally {
+  const restore = () => {
     if (previous) Object.defineProperty(process, 'platform', previous);
+  };
+  Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+  let outcome: T | Promise<T>;
+  try {
+    outcome = run();
+  } catch (error) {
+    restore();
+    throw error;
   }
+  if (!(outcome instanceof Promise)) {
+    restore();
+    return outcome;
+  }
+  return outcome.finally(restore);
 }
 
 function cimAnswers(stdout: string, exitCode = 0): void {
@@ -141,6 +154,17 @@ test('the Windows batch snapshot answers one observation query for every selecte
   });
   assert.equal(mockRunCmdSync.mock.calls.length, 1);
   assert.match(String(mockRunCmdSync.mock.calls[0]![1][3]), /ProcessId=4242 OR ProcessId=4343/);
+});
+
+test('the async Windows batch snapshot awaits one CIM query instead of blocking', async () => {
+  mockRunCmd.mockResolvedValue({ stdout: `${DAEMON_ROW}\r\n`, stderr: '', exitCode: 0 });
+  const observations = await windowsPlatform(() =>
+    readHostProcessIdentityObservationsAsync([DAEMON_PID, 4243]),
+  );
+  assert.deepEqual(observations.get(DAEMON_PID), { state: 'R', startTime: DAEMON_START });
+  assert.equal(observations.get(4243), undefined);
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+  assert.equal(mockRunCmdSync.mock.calls.length, 0);
 });
 
 test('the Windows ownership read answers all three facts from one CIM query', async () => {

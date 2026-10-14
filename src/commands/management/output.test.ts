@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { doctorCliOutput, managementCliOutputFormatters, openCliOutput } from './output.ts';
-import { withNoColorAsync } from '../../__tests__/test-utils/color.ts';
+import { withNoColorAsync } from '@agent-device/test-kit/color';
 import type { AppOpenResult } from '@agent-device/contracts/client';
 
 describe('openCliOutput', () => {

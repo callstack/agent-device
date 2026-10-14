@@ -39,6 +39,7 @@
     { "path": "../../packages/capture-kit" },
     { "path": "../../packages/command-registry" },
     { "path": "../../packages/contracts" },
+    { "path": "../../packages/daemon" },
     { "path": "../../packages/daemon-contracts" },
     { "path": "../../packages/device-selection" },
     { "path": "../../packages/host-kit" },
@@ -59,6 +60,7 @@
     { "path": "../../packages/replay-test" },
     { "path": "../../packages/selectors" },
     { "path": "../../packages/session-journal" },
+    { "path": "../../packages/test-kit" },
     { "path": "../../packages/xml" }
   ]
 }

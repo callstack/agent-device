@@ -68,6 +68,44 @@
   ],
   "treeVectors": [
     {
+      "id": "tap-parent-center-over-interactive-child",
+      "operation": "Maestro.tap on the matched parent dispatches its center inside a clickable child",
+      "selector": {
+        "id": "card"
+      },
+      "nodes": [
+        {
+          "key": "card",
+          "identifier": "card",
+          "rect": {
+            "x": 20,
+            "y": 100,
+            "width": 200,
+            "height": 120
+          },
+          "clickable": true
+        },
+        {
+          "key": "child",
+          "parentKey": "card",
+          "identifier": "child",
+          "rect": {
+            "x": 100,
+            "y": 140,
+            "width": 80,
+            "height": 60
+          },
+          "clickable": true
+        }
+      ],
+      "matches": ["card"],
+      "selected": "card",
+      "tapPoint": {
+        "x": 120,
+        "y": 160
+      }
+    },
+    {
       "id": "containsChild-direct-only",
       "operation": "intersect(id=card, containsChild(id=direct))",
       "selector": {
@@ -1143,5 +1181,5 @@
       "selected": "card"
     }
   ],
-  "contentHash": "7061897332fd8ae7c6af126af620dfaf875ebfaa3c3f13df87dee638c4c41bb7"
+  "contentHash": "c8ef1ffdc4d1a742dfcb3911c8acfbccb82c56dff5b7d33b9155ea1fd097d905"
 }

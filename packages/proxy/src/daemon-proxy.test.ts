@@ -126,6 +126,76 @@ test('upload tickets point at the origin the client used, not the daemon', async
   expect(payload.upload.headers.authorization).toBe('Bearer client-secret');
 });
 
+test('a partial upload chunk answer keeps the resume offset headers', async () => {
+  const upstream = recordingUpstream(
+    () =>
+      new Response(null, {
+        status: 308,
+        headers: { range: 'bytes=0-1023', 'x-upload-offset': '1024' },
+      }),
+  );
+  const proxy = proxyWith(upstream.fetch);
+
+  const response = await proxy.handle(
+    new Request(`${PROXY_ORIGIN}/agent-device/upload/direct/abc`, {
+      method: 'PUT',
+      headers: { authorization: 'Bearer client-secret', 'content-range': 'bytes 0-2047/4096' },
+      body: 'x'.repeat(2048),
+      duplex: 'half',
+    } as RequestInit),
+  );
+
+  expect(response.status).toBe(308);
+  expect(response.headers.get('range')).toBe('bytes=0-1023');
+  expect(response.headers.get('x-upload-offset')).toBe('1024');
+});
+
+test('an artifact download keeps the upstream content-length', async () => {
+  const upstream = recordingUpstream(
+    () =>
+      new Response('artifact-bytes', {
+        headers: { 'content-type': 'application/zip', 'content-length': '14' },
+      }),
+  );
+  const proxy = proxyWith(upstream.fetch);
+
+  const response = await proxy.handle(
+    new Request(`${PROXY_ORIGIN}/agent-device/artifacts/art-1`, {
+      headers: { authorization: 'Bearer client-secret' },
+    }),
+  );
+
+  expect(response.headers.get('content-length')).toBe('14');
+  expect(await response.text()).toBe('artifact-bytes');
+});
+
+test('a rewritten upload ticket drops the upstream content-length', async () => {
+  const upstreamBody = JSON.stringify({
+    ok: true,
+    upload: { url: 'http://127.0.0.1:4310/upload/direct/abc', headers: {} },
+  });
+  const upstream = recordingUpstream(
+    () =>
+      new Response(upstreamBody, {
+        headers: {
+          'content-type': 'application/json',
+          'content-length': String(upstreamBody.length),
+        },
+      }),
+  );
+  const proxy = proxyWith(upstream.fetch);
+
+  const response = await proxy.handle(
+    new Request(`${PROXY_ORIGIN}/agent-device/upload/preflight`, {
+      method: 'POST',
+      headers: { authorization: 'Bearer client-secret' },
+      body: '{}',
+    }),
+  );
+
+  expect(response.headers.get('content-length')).toBeNull();
+});
+
 test('an oversized rpc body resolves with a 400 instead of rejecting', async () => {
   const upstream = recordingUpstream(() => Response.json({}));
   const proxy = proxyWith(upstream.fetch, 16);

@@ -1,12 +1,13 @@
-import { expect, test, vi } from 'vitest';
+import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
 import { connectionWorkspace, createTestClient } from './remote-connection.fixtures.ts';
 import type { AgentDeviceClient } from '../agent-device-client.ts';
 import { connectCommand, disconnectCommand } from '../cli/commands/connection.ts';
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
+import { beginStdoutCapture } from './test-utils/stream-capture.ts';
 import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
-import { LeaseRegistry } from '../daemon/lease-registry.ts';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 
 const LEASE_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 
@@ -107,7 +108,7 @@ async function connectHostedMacosApp(
   overrides: { leaseId?: string; force?: boolean } = {},
   release: AgentDeviceClient['leases']['release'] = async () => ({ released: true }),
 ): Promise<void> {
-  const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  const stdoutCapture = beginStdoutCapture();
   try {
     await connectCommand({
       positionals: [],
@@ -132,7 +133,7 @@ async function connectHostedMacosApp(
       }),
     });
   } finally {
-    stdout.mockRestore();
+    stdoutCapture.restore();
   }
 }
 
@@ -226,7 +227,7 @@ test('disconnect drops the local connection and never releases the host lease', 
   await connectHostedMacosApp(workspace);
   const released: string[] = [];
   const closed: string[] = [];
-  const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  const stdoutCapture = beginStdoutCapture();
   try {
     await disconnectCommand({
       positionals: [],
@@ -244,7 +245,7 @@ test('disconnect drops the local connection and never releases the host lease', 
       }),
     });
   } finally {
-    stdout.mockRestore();
+    stdoutCapture.restore();
   }
   expect(released).toEqual([]);
   expect(closed).toEqual(['hosted']);

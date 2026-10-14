@@ -4,7 +4,7 @@ import { processLockHoldsDaemonIdentity } from '@agent-device/daemon-contracts/d
 import net from 'node:net';
 import { AppError, normalizeError, type NormalizedError } from '@agent-device/kernel/errors';
 import { readReplayDivergenceResume } from '@agent-device/ad-replay/divergence';
-import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { type ExecDetachedExit } from '@agent-device/host-kit/command';
 import { shellQuoteIfNeeded } from '@agent-device/kernel/device-shell';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';

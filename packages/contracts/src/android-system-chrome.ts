@@ -1,4 +1,4 @@
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
 
 /**
  * Android status-bar/navigation-bar chrome identity, shared by the settle-chrome
@@ -9,20 +9,51 @@ import type { SnapshotNode } from '@agent-device/kernel/snapshot';
  */
 export const ANDROID_SYSTEM_CHROME_PACKAGE = 'com.android.systemui';
 
-/**
- * Resource-ids of the status-bar / navigation-bar WINDOW containers. Matched as an id
- * segment, not a prefix, so an expanded shade's `split_shade_status_bar` counts.
- */
+/** Persistent bar roots and shade/keyguard headers whose icon churn settle ignores. */
 export function isAndroidSystemChromeWindowResourceId(
   resourceId: string | null | undefined,
 ): boolean {
-  const identifier = resourceId ?? '';
-  if (!identifier.startsWith(`${ANDROID_SYSTEM_CHROME_PACKAGE}:id/`)) return false;
-  const leaf = identifier.slice(`${ANDROID_SYSTEM_CHROME_PACKAGE}:id/`.length);
-  return /(^|_)(status_bar|navigation_bar)(_|$)/.test(leaf);
+  return (
+    androidSystemBarMembership(ANDROID_SYSTEM_CHROME_PACKAGE, resourceId) !== undefined ||
+    resourceId === 'com.android.systemui:id/split_shade_status_bar' ||
+    resourceId === 'com.android.systemui:id/keyguard_status_bar'
+  );
 }
 
-/** Android-internal provenance retained in daemon session snapshots only. */
+/**
+ * Persistent bar container membership, separate from the broader settle-chrome predicate.
+ * The expanded shade's `split_shade_status_bar` is a shade header, not a persistent bar.
+ * Ownership is checked at every edge so a foreign or unknown-owner child cannot inherit it.
+ */
+export function androidSystemBarMembership(
+  packageName: string | null | undefined,
+  resourceId: string | null | undefined,
+  ancestor?: Pick<RawSnapshotNode, 'bundleId' | 'systemBar'>,
+): RawSnapshotNode['systemBar'] {
+  if (
+    packageName === 'com.android.launcher3' ||
+    packageName === 'com.google.android.apps.nexuslauncher'
+  ) {
+    if (resourceId === `${packageName}:id/navbuttons_view`) return 'navigation';
+    return ancestor?.bundleId === packageName && ancestor.systemBar === 'navigation'
+      ? 'navigation'
+      : undefined;
+  }
+  if (packageName !== ANDROID_SYSTEM_CHROME_PACKAGE) return undefined;
+  switch (resourceId) {
+    case 'com.android.systemui:id/status_bar':
+    case 'com.android.systemui:id/status_bar_container':
+    case 'com.android.systemui:id/status_bar_launch_animation_container':
+      return 'status';
+    case 'com.android.systemui:id/navigation_bar':
+    case 'com.android.systemui:id/navigation_bar_frame':
+      return 'navigation';
+    default:
+      return ancestor?.bundleId === packageName ? ancestor.systemBar : undefined;
+  }
+}
+
+/** Android-internal settle provenance retained in daemon session snapshots only. */
 export type AndroidSystemChromeProvenance = {
   systemChrome?: true;
 };

@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { computeDaemonCodeSignature } from '@agent-device/host-kit/code-signature';
 import { resolveDaemonLaunchSpec } from '../../daemon-client/daemon-launch-spec.ts';
-import { listenOnLoopback } from './loopback.ts';
+import { listenOnLoopback } from '@agent-device/test-kit/loopback';
 
 // A loopback stand-in for a running daemon: answers `GET /health`, echoes `responseData` as the
 // result of every `POST /rpc`, and records what it was asked, for the daemon-client tests that
@@ -67,20 +67,4 @@ export async function startHttpDaemonFixture(
 export function currentDaemonCodeSignature(): string {
   const spec = resolveDaemonLaunchSpec();
   return computeDaemonCodeSignature(spec.useSrc ? spec.srcPath : spec.distPath, spec.root);
-}
-
-/** Swaps `process.stderr.write` for a buffer until `restore`, so a test can read what was printed. */
-export function captureStderr(): { read: () => string; restore: () => void } {
-  const originalWrite = process.stderr.write.bind(process.stderr);
-  let captured = '';
-  (process.stderr as { write: typeof process.stderr.write }).write = ((chunk: unknown) => {
-    captured += String(chunk);
-    return true;
-  }) as typeof process.stderr.write;
-  return {
-    read: () => captured,
-    restore: () => {
-      process.stderr.write = originalWrite;
-    },
-  };
 }

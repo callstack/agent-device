@@ -217,17 +217,22 @@ extension RunnerTests {
     mainOwned.bundleId = nil
     mainOwned.processIdentifier = nil
     resetTargetBoundState()
+    // An announced relaunch covers only the binding its reset dropped; any later drop ends that.
+    firstInteractionWindow = firstInteractionWindow?.attributedToActivation()
   }
 
   @MainActor
   func resetTargetAfterExternalRelaunch() -> Response {
+    // The wire carries no bundle, so the window is attributed to the binding being dropped; with
+    // none bound it matches whichever bundle activates next.
+    let announcedBundleId = mainOwned.bundleId
     invalidateCachedTarget(reason: "external_app_relaunch")
     // The app process is replaced, but the retained runner survives. Clear
     // process-bound capture state explicitly because invalidation drops the
     // old PID before refreshCachedTargetIfProcessChanged can observe it.
     clearSnapshotXCTestChannelPenalty(reason: "external_app_relaunch")
     clearPrivateAXAcceptedDepth(reason: "external_app_relaunch")
-    beginFirstInteractionStabilization()
+    beginFirstInteractionStabilization(origin: .announcedRelaunch(bundleId: announcedBundleId))
     return Response(ok: true, data: DataPayload(message: "target reset"))
   }
 
@@ -366,6 +371,7 @@ extension RunnerTests {
       initialState.rawValue,
       reason
     )
+    var performedActivation = false
     // activate avoids terminating and relaunching the target app
     if initialState == .runningForeground {
       NSLog(
@@ -377,6 +383,7 @@ extension RunnerTests {
       // active set, so the fact would describe the repair instead of the state it repaired (#2682).
       let otherActiveApplicationPid = soleOtherActiveApplicationPid(excluding: Self.processIdentifier(of: target))
       target.activate()
+      performedActivation = true
       pendingTargetActivation = TargetActivationFactPayload(
         reason: reason,
         priorState: Int(initialState.rawValue),
@@ -394,7 +401,12 @@ extension RunnerTests {
     mainOwned.bundleId = bundleId
     mainOwned.processIdentifier = Self.processIdentifier(of: target)
     resetTargetBoundState()
-    beginFirstInteractionStabilization()
+    let announcedRelaunchCoversBinding =
+      !performedActivation
+      && firstInteractionWindow?.origin.announcesRelaunch(of: bundleId) == true
+    if !announcedRelaunchCoversBinding {
+      beginFirstInteractionStabilization(origin: .activation)
+    }
     return target
   }
 
@@ -489,17 +501,43 @@ extension RunnerTests {
       sleepFor(postSnapshotInteractionDelay)
       mainOwned.needsPostSnapshotInteractionDelay = false
     }
-    if let readyUptime = firstInteractionReadyUptime {
-      sleepFor(readyUptime - ProcessInfo.processInfo.systemUptime)
-      firstInteractionReadyUptime = nil
+    if let window = firstInteractionWindow {
+      sleepFor(window.readyUptime - ProcessInfo.processInfo.systemUptime)
+      firstInteractionWindow = nil
+    }
+  }
+
+  struct FirstInteractionWindow {
+    /// Where the deadline came from, so a later binding can tell whether it still describes the
+    /// activation that binding relies on.
+    enum Origin: Equatable {
+      /// Stamped by an activation or binding this runner performed.
+      case activation
+      /// Stamped when the daemon announced it had already relaunched and activated the app.
+      /// `bundleId` is the binding that was dropped, or nil when none was bound.
+      case announcedRelaunch(bundleId: String?)
+
+      func announcesRelaunch(of bundleId: String) -> Bool {
+        guard case .announcedRelaunch(let announcedBundleId) = self else { return false }
+        return announcedBundleId == nil || announcedBundleId == bundleId
+      }
+    }
+
+    let readyUptime: TimeInterval
+    let origin: Origin
+
+    func attributedToActivation() -> FirstInteractionWindow {
+      FirstInteractionWindow(readyUptime: readyUptime, origin: .activation)
     }
   }
 
   /// Start the post-activation settling window. Measured from now, so the time the caller spends
   /// getting back to us counts towards it instead of being charged twice.
-  func beginFirstInteractionStabilization() {
-    firstInteractionReadyUptime =
-      ProcessInfo.processInfo.systemUptime + firstInteractionAfterActivateDelay
+  func beginFirstInteractionStabilization(origin: FirstInteractionWindow.Origin = .activation) {
+    firstInteractionWindow = FirstInteractionWindow(
+      readyUptime: ProcessInfo.processInfo.systemUptime + firstInteractionAfterActivateDelay,
+      origin: origin
+    )
   }
 
   func sleepFor(_ delay: TimeInterval) {

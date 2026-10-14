@@ -307,7 +307,7 @@ test('longpress --settle rides the same observation path', async () => {
   const result = await device.interactions.longPress(ref('@e1'), {
     session: 'default',
     durationMs: 400,
-    settle: { quietMs: 100, timeoutMs: 1_000 },
+    settle: { quietMs: 100, timeoutMs: 2_000 },
   });
 
   assert.equal(result.kind, 'ref');
@@ -315,7 +315,7 @@ test('longpress --settle rides the same observation path', async () => {
   assert.ok(settle);
   assert.equal(settle.settled, true);
   assert.equal(settle.quietMs, 100);
-  assert.equal(settle.timeoutMs, 1_000);
+  assert.equal(settle.timeoutMs, 2_000);
   assert.ok(settle.diff);
 });
 

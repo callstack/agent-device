@@ -5,7 +5,7 @@ import path from 'node:path';
 import { readRecentNetworkTrafficFromText } from '@agent-device/capture-kit';
 import { afterEach, test } from 'vitest';
 import { readRecentAppLogLines } from './platform-runtime-network-host.ts';
-import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const temporaryDirectories: string[] = [];
 

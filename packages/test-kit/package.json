@@ -1,0 +1,92 @@
+{
+  "name": "@agent-device/test-kit",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private generic test helpers (temp dirs, device/session/snapshot fixtures, mocked processes, loopback servers) shared by the root and workspace-package test trees. One narrow subpath per helper; test-only, never bundled, and never importing root `src/` so the daemon package can depend on it.",
+  "dependencies": {
+    "@agent-device/capture-kit": "workspace:*",
+    "@agent-device/command-registry": "workspace:*",
+    "@agent-device/contracts": "workspace:*",
+    "@agent-device/daemon-contracts": "workspace:*",
+    "@agent-device/host-kit": "workspace:*",
+    "@agent-device/kernel": "workspace:*"
+  },
+  "exports": {
+    "./app-error": {
+      "types": "./src/app-error.ts",
+      "default": "./src/app-error.ts"
+    },
+    "./app-log-live-handle": {
+      "types": "./src/app-log-live-handle.ts",
+      "default": "./src/app-log-live-handle.ts"
+    },
+    "./boundary-fault-matrix": {
+      "types": "./src/boundary-fault-matrix.ts",
+      "default": "./src/boundary-fault-matrix.ts"
+    },
+    "./color": {
+      "types": "./src/color.ts",
+      "default": "./src/color.ts"
+    },
+    "./device-fixtures": {
+      "types": "./src/device-fixtures.ts",
+      "default": "./src/device-fixtures.ts"
+    },
+    "./env": {
+      "types": "./src/env.ts",
+      "default": "./src/env.ts"
+    },
+    "./filesystem-boundary-faults": {
+      "types": "./src/filesystem-boundary-faults.ts",
+      "default": "./src/filesystem-boundary-faults.ts"
+    },
+    "./host-execution": {
+      "types": "./src/host-execution.ts",
+      "default": "./src/host-execution.ts"
+    },
+    "./host-process-mock": {
+      "types": "./src/host-process-mock.ts",
+      "default": "./src/host-process-mock.ts"
+    },
+    "./legacy-daemon-fixture": {
+      "types": "./src/legacy-daemon-fixture.ts",
+      "default": "./src/legacy-daemon-fixture.ts"
+    },
+    "./loopback": {
+      "types": "./src/loopback.ts",
+      "default": "./src/loopback.ts"
+    },
+    "./plugin.fixtures": {
+      "types": "./src/plugin.fixtures.ts",
+      "default": "./src/plugin.fixtures.ts"
+    },
+    "./property-arbitraries": {
+      "types": "./src/property-arbitraries.ts",
+      "default": "./src/property-arbitraries.ts"
+    },
+    "./runtime-operation-facts": {
+      "types": "./src/runtime-operation-facts.ts",
+      "default": "./src/runtime-operation-facts.ts"
+    },
+    "./snapshot-builders": {
+      "types": "./src/snapshot-builders.ts",
+      "default": "./src/snapshot-builders.ts"
+    },
+    "./tmp-dir": {
+      "types": "./src/tmp-dir.ts",
+      "default": "./src/tmp-dir.ts"
+    },
+    "./video-fixtures": {
+      "types": "./src/video-fixtures.ts",
+      "default": "./src/video-fixtures.ts"
+    },
+    "./web-managed-agent-browser": {
+      "types": "./src/web-managed-agent-browser.ts",
+      "default": "./src/web-managed-agent-browser.ts"
+    }
+  },
+  "devDependencies": {
+    "fast-check": "^4.9.0"
+  }
+}

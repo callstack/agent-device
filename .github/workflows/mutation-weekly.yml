@@ -5,10 +5,8 @@ name: Mutation Weekly
 # decorative"; a full-suite sweep is unaffordable, so the scope is the kernel
 # registry in scripts/mutation/modules.ts and nothing else.
 #
-# Sharded one job per module: the whole sweep is ~2,150 mutants, and the selector
-# module alone is ~1,280 of them, so a single job would sit near the 30-minute
-# acceptance budget on an ubuntu runner. The shards' JSON reports are merged into
-# one score table by the report job (`--report-dir`).
+# Sharded from the decision-kernel registry. Oversized sources are partitioned
+# at syntax boundaries; the report job merges all required shards into one table.
 #
 # The lane reports and never gates (#1457): the per-kernel table lands in the job
 # summary and the artifact, and a low score is an input for a human-authored
@@ -31,9 +29,7 @@ jobs:
   shard:
     name: Mutants (${{ matrix.name }})
     runs-on: ubuntu-latest
-    # The acceptance budget is 30 minutes of wall clock for the lane, and shards
-    # run in parallel, so the budget is per shard. The observed rate on a 2-core
-    # runner is ~3s/mutant, which is why selectors (~1,280 mutants) is sliced.
+    # Bound setup and mutation separately, leaving headroom for evidence and upload.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -42,24 +38,35 @@ jobs:
         # scripts/mutation/workflow.test.ts, which also pins --expect-shards to
         # the number of entries here.
         include:
-          - { name: kernel-errors, module: kernel-errors }
+          - { name: kernel-errors-1, module: kernel-errors, shard: 1/5 }
+          - { name: kernel-errors-2, module: kernel-errors, shard: 2/5 }
+          - { name: kernel-errors-3, module: kernel-errors, shard: 3/5 }
+          - { name: kernel-errors-4, module: kernel-errors, shard: 4/5 }
+          - { name: kernel-errors-5, module: kernel-errors, shard: 5/5 }
           - { name: daemon-ref-frame, module: daemon-ref-frame }
           - { name: interaction-settle, module: interaction-settle }
           - { name: scroll-edge-state, module: scroll-edge-state }
-          - { name: selectors-1, module: selectors, shard: 1/4 }
-          - { name: selectors-2, module: selectors, shard: 2/4 }
-          - { name: selectors-3, module: selectors, shard: 3/4 }
-          - { name: selectors-4, module: selectors, shard: 4/4 }
+          - { name: selectors-1, module: selectors, shard: 1/8 }
+          - { name: selectors-2, module: selectors, shard: 2/8 }
+          - { name: selectors-3, module: selectors, shard: 3/8 }
+          - { name: selectors-4, module: selectors, shard: 4/8 }
+          - { name: selectors-5, module: selectors, shard: 5/8 }
+          - { name: selectors-6, module: selectors, shard: 6/8 }
+          - { name: selectors-7, module: selectors, shard: 7/8 }
+          - { name: selectors-8, module: selectors, shard: 8/8 }
           - { name: target-annotation-serde, module: target-annotation-serde }
           - { name: snapshot-occlusion, module: snapshot-occlusion }
     steps:
       - name: Checkout
+        timeout-minutes: 1
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup toolchain
+        timeout-minutes: 2
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run mutants for ${{ matrix.name }}
+        timeout-minutes: 22
         uses: ./.github/actions/run-gate
         with:
           gate: mutation
@@ -73,7 +80,7 @@ jobs:
       # without this the artifact is absent and "shard failed" is indistinguishable
       # from "lane never ran". --fail-envelope leaves a real verdict untouched.
       - name: Record a failed shard envelope
-        if: failure()
+        if: failure() || cancelled()
         run: |
           pnpm gate mutation --modules ${{ matrix.module }} --fail-envelope \
             "shard ${{ matrix.name }} failed before producing a report (run ${{ github.run_id }})" || true
@@ -126,12 +133,12 @@ jobs:
             --report-dir
             .tmp/mutation/shards
             --expect-shards
-            10
+            18
 
       # The self-test and the artifact download both run before the scoring step,
       # so a failure there would otherwise leave the aggregate lane with no envelope.
       - name: Record a failed lane envelope
-        if: failure()
+        if: failure() || cancelled()
         run: |
           pnpm gate mutation --fail-envelope \
             "weekly report job failed before producing a score table (run ${{ github.run_id }})" || true

@@ -1,4 +1,5 @@
 import type { AgentDeviceBackend } from '@agent-device/contracts/backend';
+import type { CommandClock, CommandSessionRecord } from '@agent-device/contracts/runtime-contract';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createLocalArtifactAdapter } from '../../../src/io.ts';
 import { createAgentDevice } from '../../../src/runtime.ts';
@@ -18,6 +19,16 @@ type ContractBackendOverrides = Partial<
   >
 > & {
   platform?: AgentDeviceBackend['platform'];
+  /**
+   * A scenario-owned clock, so a guarantee with a time budget (the moving-target window) can state
+   * its timing claim without a wall-clock race. Without one the runtime falls back to real time.
+   */
+  clock?: CommandClock;
+  /**
+   * Session state beyond the stored snapshot — the #3471 moving-target baseline is the case that
+   * needs it, because the gate's whole premise is a session that has just finished mutating.
+   */
+  sessionState?: Partial<Omit<CommandSessionRecord, 'name'>>;
 };
 
 /**
@@ -44,7 +55,28 @@ export function createContractDevice(
       resolveGestureViewport: overrides.resolveGestureViewport,
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
-    sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
+    sessions: createMemorySessionStore([
+      { name: 'default', snapshot, ...overrides.sessionState } as CommandSessionRecord,
+    ]),
     policy: localCommandPolicy(),
+    ...(overrides.clock ? { clock: overrides.clock } : {}),
   });
+}
+
+/**
+ * A contract-scenario clock: `now()` reads elapsed virtual time and `sleep()` advances it. A
+ * guarantee with a time budget — the #3471 moving-target window — can then assert what it waited
+ * without racing the machine it runs on.
+ */
+export function createContractClock(startMs = 0): {
+  now(): number;
+  sleep(ms: number): Promise<void>;
+} {
+  let elapsed = startMs;
+  return {
+    now: () => elapsed,
+    sleep: async (ms: number) => {
+      elapsed += Math.max(ms, 0);
+    },
+  };
 }

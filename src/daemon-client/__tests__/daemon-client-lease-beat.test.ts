@@ -2,7 +2,7 @@ import { afterEach, describe, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
-import { closeLoopbackServer, listenOnLoopback } from '../../__tests__/test-utils/loopback.ts';
+import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit/loopback';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   buildLeaseHeartbeatRequest,
@@ -10,7 +10,7 @@ import {
   runProtectedLeaseWork,
 } from '../daemon-client-lease-beat.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
-import type { DaemonRequest } from '../../daemon/daemon-request.ts';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 
 function lostLeaseError(reason: string): AppError {
   return new AppError('UNAUTHORIZED', 'Lease is not active', { reason });

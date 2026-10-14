@@ -170,9 +170,11 @@ export function limrunAppLogFacts(
       }),
       ...screenshotRuntimeOperationFacts({ capture: available }),
       // Provider ownership is authoritative: no native text reading is exposed, so text waits
-      // on a Limrun-owned device poll the canonical tree rather than borrowing Apple's.
+      // on a Limrun-owned device poll the canonical tree rather than borrowing Apple's. The same
+      // ownership answer covers the live selector read: no rescue hook on a provider device.
       ...selectorObservationRuntimeOperationFacts({
         findText: customSnapshotUnavailable,
+        querySelector: customSnapshotUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
       // Focus rides the same provider interactor the captures do, and a live-session Limrun
@@ -238,6 +240,7 @@ export function limrunAppLogRecoveryFacts(
       ...screenshotRuntimeOperationFacts({ capture: liveSessionUnavailable }),
       ...selectorObservationRuntimeOperationFacts({
         findText: liveSessionUnavailable,
+        querySelector: liveSessionUnavailable,
       }),
       ...viewportRuntimeOperationFacts({ setViewport: liveSessionUnavailable }),
       ...limrunInteractionOperationFacts(device, liveSessionUnavailable),

@@ -19,6 +19,7 @@ import {
   type StableCaptureSignal,
 } from './stable-capture-signal.ts';
 import { preferredSnapshotBackendForVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
+import { withoutSettleChrome } from '@agent-device/capture-kit/snapshot-chrome';
 
 /**
  * The quiet-window stable-capture loop shared by `wait stable` and the
@@ -32,6 +33,12 @@ import { preferredSnapshotBackendForVerdict } from '@agent-device/capture-kit/sn
 
 const STABLE_POLL_INTERVAL_MS = 300;
 const STABLE_MIN_POLL_MS = 25;
+// Never slower than the default poll, never faster than the minimum: a tight window gets a cadence
+// that can measure it, a window the confirmation extends gets one that does not sample the whole
+// extended wait at the caller's original grid.
+function stableCapturePollMs(quietMs: number): number {
+  return Math.min(STABLE_POLL_INTERVAL_MS, Math.max(STABLE_MIN_POLL_MS, quietMs));
+}
 // Wake PAST the quiet deadline rather than exactly on it. `setTimeout(n)` can
 // advance `Date.now()` by only n-1 — libuv times the sleep on the monotonic
 // loop clock while `now()` reads the wall clock — so a capture landing on the
@@ -40,6 +47,12 @@ const QUIET_DEADLINE_EPSILON_MS = 2;
 // Broad replacements (for example, dismissing a modal into a room) can expose a coherent but
 // transitional AX tree for the default quiet window. Confirm those transitions longer without
 // adding latency to local mutations whose pre/post trees substantially overlap.
+//
+// The confirmation is decided by the transition alone: a caller asking for a shorter quiet window
+// asked for a tighter verdict, not for a different set of transitions to distrust. It used to arm
+// only at `requestedQuietMs >= DEFAULT_STABLE_QUIET_MS`, which made `--settle-quiet 499` behave
+// differently from 500 and left `settleQuietMs: 150` callers (tester-army/e2e) with no guard at all
+// (#3470). A confirmed replacement is held for the caller's own window, floored at 1.5 s.
 const BROAD_TRANSITION_CONFIRMATION_QUIET_MS = 1_500;
 export const DEFAULT_STABLE_QUIET_MS = 500;
 export const DEFAULT_STABLE_TIMEOUT_MS = 10_000;
@@ -81,10 +94,12 @@ export async function runStableCaptureLoop(
   const session = await runtime.sessions.get(options.session ?? 'default');
   let transitionBaseline: StableCaptureSignal | undefined;
   let preferredBackend = preferredSnapshotBackendForVerdict(session?.snapshot?.snapshotQuality);
-  // Cadence derives from the quiet window (never slower than the default
+  // Cadence derives from the quiet window in force (never slower than the default
   // poll): a caller asking for a 50ms quiet window should not be forced onto a
-  // 300ms grid — and tests inject the budget instead of waiting real time.
-  const pollMs = Math.min(STABLE_POLL_INTERVAL_MS, Math.max(STABLE_MIN_POLL_MS, quietMs));
+  // 300ms grid, and a run the confirmation has extended to 1.5s should not spend
+  // that wait on the caller's tight grid — every sample is a capture round trip.
+  // Tests inject the budget instead of waiting real time.
+  let pollMs = stableCapturePollMs(quietMs);
   let captures = 0;
   let lastSignal: StableCaptureSignal | undefined;
   let lastNodeCount = 0;
@@ -114,14 +129,19 @@ export async function runStableCaptureLoop(
       params.broadTransitionBaselineNodes,
       capture.snapshot,
       runtime.backend.platform,
+      session?.appBundleId,
     );
     const signal = stableCaptureSignal(capture.snapshot);
-    requiredQuietMs = stableCaptureTransitionQuietMs({
+    requiredQuietMs = stableCaptureNextQuietWindowMs({
       baseline: transitionBaseline,
-      signal,
+      snapshot: capture.snapshot,
+      appBundleId: session?.appBundleId,
       requestedQuietMs: quietMs,
       currentQuietMs: requiredQuietMs,
     });
+    // Recomputed from the window in force rather than only when it changed: the window is a
+    // monotonic max, so this is the same value, and the cadence cannot drift from it.
+    pollMs = stableCapturePollMs(requiredQuietMs);
     preferredBackend ??= preferredSnapshotBackendForVerdict(capture.snapshot.snapshotQuality);
     const nowMs = now(runtime);
     const recoveredDeadlineMs = extendedDeadlineAfterPrivateAxRecovery({
@@ -187,6 +207,7 @@ function stableCaptureTransitionBaseline(
   baselineNodes: SnapshotNode[] | undefined,
   snapshot: Parameters<typeof stableCaptureSignal>[0] | undefined,
   platform: AgentDeviceRuntime['backend']['platform'],
+  appBundleId: string | undefined,
 ): StableCaptureSignal | undefined {
   // SnapshotState.backend is optional at the runtime boundary. The bound iOS backend remains
   // authoritative when a presented capture omits that provenance; a declared non-XCTest backend
@@ -205,7 +226,25 @@ function stableCaptureTransitionBaseline(
   // a coherent transitional tree win the default 500ms quiet window.
   const hasTinyPresentedBaseline = baselineNodes.length <= TINY_STABLE_TREE_NODE_COUNT;
   if (!hasCompleteViewportProjection && !hasTinyPresentedBaseline) return undefined;
-  return stableCaptureSignal({ ...snapshot, nodes: baselineNodes });
+  return stableCaptureReplacementSignal({ ...snapshot, nodes: baselineNodes }, appBundleId);
+}
+
+/**
+ * The comparison signal for the broad-replacement verdict: the capture minus the chrome the
+ * settle diff also collapses (`withoutSettleChrome`). Keyboard surface arriving or leaving —
+ * ~40 keys, the candidate bar, the dock buttons on a fill — is not a screen replacement, and
+ * counting it as one made every keyboard-raising action pay the 1.5 s confirmation window
+ * (#3469). The survivor rule lives in the shared classifier, so this signal and the diff agree
+ * on what keyboard chrome is; here it only decides the quiet window, never the visible diff.
+ */
+function stableCaptureReplacementSignal(
+  snapshot: Parameters<typeof stableCaptureSignal>[0],
+  appBundleId: string | undefined,
+): StableCaptureSignal {
+  return stableCaptureSignal({
+    ...snapshot,
+    nodes: withoutSettleChrome(snapshot.nodes, appBundleId),
+  });
 }
 
 function isBoundIosXCTestCapture(
@@ -216,16 +255,25 @@ function isBoundIosXCTestCapture(
   return backend === undefined && platform === 'ios';
 }
 
-function stableCaptureTransitionQuietMs(params: {
+/**
+ * The quiet window the candidate capture demands: the broad-replacement verdict runs on the
+ * chrome-free candidate signal (see `stableCaptureReplacementSignal`), so a keyboard pop never
+ * reaches the confirmation branch at all. Do not memoize this on `stableCaptureSignalsEqual`:
+ * the signal identity omits `role`, parent links, and >1px-free geometry, all of which the
+ * classifier reads, and one pass costs tens of microseconds against the 300 ms poll cadence.
+ */
+function stableCaptureNextQuietWindowMs(params: {
   baseline: StableCaptureSignal | undefined;
-  signal: StableCaptureSignal;
+  snapshot: Parameters<typeof stableCaptureSignal>[0];
+  appBundleId: string | undefined;
   requestedQuietMs: number;
   currentQuietMs: number;
 }): number {
-  if (
-    params.requestedQuietMs < DEFAULT_STABLE_QUIET_MS ||
-    !stableCaptureSignalsHaveBroadReplacement(params.baseline, params.signal)
-  ) {
+  if (!params.baseline) {
+    return params.currentQuietMs;
+  }
+  const replacementSignal = stableCaptureReplacementSignal(params.snapshot, params.appBundleId);
+  if (!stableCaptureSignalsHaveBroadReplacement(params.baseline, replacementSignal)) {
     return params.currentQuietMs;
   }
   return Math.max(params.requestedQuietMs, BROAD_TRANSITION_CONFIRMATION_QUIET_MS);

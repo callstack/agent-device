@@ -3,6 +3,7 @@
 // a tooling change beside it still fails open to the full set.
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'node:test';
 import { deviceLaneLeaf, deviceLanesFor, isDeviceLaneSurface, isUnitTest } from './device-lanes.ts';
 import { selectChecks, type CheckId } from './model.ts';
@@ -71,9 +72,9 @@ test('the macOS coverage manifest selects its executable gate and macOS replay l
 
 test('shared runtime surface owns every device lane', () => {
   for (const file of [
-    'src/daemon/handlers/session.ts',
+    'packages/daemon/src/sessions/handlers/session.ts',
     'packages/kernel/src/errors.ts',
-    'src/daemon/android-system-dialog.ts', // naming convention in a shared dir, not a boundary
+    'packages/daemon/src/execution/android-system-dialog.ts', // naming convention in a shared dir, not a boundary
     'test/integration/smoke-daemon-clean.test.ts',
     'packages/provision-kit/src/install-source.ts',
   ]) {
@@ -127,7 +128,7 @@ test('the fixture app owns the mobile lanes whichever subtree changes', () => {
 
 test('unit tests under src/ and packages/*/src own no lane', () => {
   for (const file of [
-    'src/daemon/selectors.test.ts',
+    'packages/daemon/src/sessions/handlers/snapshot-runtime-route.test.ts',
     'src/__tests__/contracts/interaction-guarantees.test.ts',
     'packages/platform-apple/src/core/__tests__/apps.test.ts',
     'packages/platform-apple/src/runtime.test.ts',
@@ -137,7 +138,11 @@ test('unit tests under src/ and packages/*/src own no lane', () => {
     assert.deepEqual(lanes(file), [], file);
   }
   // Non-TypeScript under __tests__ is a fixture the selector cannot place, not a unit test.
-  assert.ok(!isUnitTest('src/__tests__/test-utils/android-ime-capture.raw.json'));
+  // The existence pin keeps this from going vacuous when the fixture moves again: a path that
+  // no longer exists satisfies !isUnitTest for the wrong reason.
+  const imeFixture = 'packages/platform-android/src/fixtures/android-ime-capture.raw.json';
+  assert.ok(fs.existsSync(imeFixture), imeFixture);
+  assert.ok(!isUnitTest(imeFixture));
   // Package tests outside src/ have no owner and keep failing open.
   assert.ok(!isUnitTest('packages/maestro/test/conformance/verify.test.ts'));
   assert.equal(

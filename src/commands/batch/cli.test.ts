@@ -9,7 +9,7 @@ import {
   type CapturedDaemonRequest,
   type CliCaptureOptions,
 } from '../../__tests__/cli-capture.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { AppError } from '@agent-device/kernel/errors';
 import { createBatchCommandMetadata } from './metadata.ts';
 

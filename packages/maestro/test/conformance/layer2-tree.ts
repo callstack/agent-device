@@ -22,6 +22,7 @@ export type Layer2TreeVector = {
   intermediateRelation?: 'below' | 'above' | 'leftOf' | 'rightOf';
   intermediate?: string[];
   clickableFirstMatches?: string[];
+  tapPoint?: { x: number; y: number };
 };
 
 export type Layer2TreeResult = {

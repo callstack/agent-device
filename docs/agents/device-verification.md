@@ -39,11 +39,9 @@ physical devices. Live verification steps apply when exercising a device-facing 
 - `DEVICE_IN_USE` has two flavors. "already in use by session X" is this daemon — follow its
   `close --session` hint. "owned by session X in workspace Y" is another worktree's device
   claim — non-retriable; run the error's `device status`/`device release --stale` recovery,
-never PID hunting. One claim settles itself: if that device rebooted after the last `open` its owner
-made, its app, runner, and accessibility session were destroyed, so `open` reconciles the owner's
-resources, takes the claim, and says so in its warnings. A reboot you caused yourself during
-verification looks exactly like that to the next `open` — until the owner reopens, which stamps the
-boot it is now running on and makes the claim live again.
+  never PID hunting. A live or uncertain claim blocks `open`. If the device rebooted since the
+  owner's last `open` (including a reboot you caused), `open` settles the owner's app, runner, and
+  accessibility resources, takes the claim, and reports the release in `warnings`.
 
 The OS-neutral Apple runner lives under `packages/platform-apple/src/runner/`. For connection errors,
 start at `runner-startup-transport.ts`; for retry policy, at `runner-error-classification.ts`; for
@@ -83,15 +81,9 @@ toolchain per command:
   three poses, active panel capture, and an app interaction. Duo coverage remains local until GHA
   supports the runtime. To inspect the angle independently:
   `xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5`.
-- Touch overlays export at the captured track size again (#2707). The burn-in used to re-encode
-  through a fixed 480px preset, so a recording with touches collapsed to `220x480` (landscape
-  `480x220`) on any panel — not just the `rot90` inner one — and went all-black on long clips,
-  always with exit 0. That preset is gone: both quality tiers export through the one
-  geometry-preserving preset, and the compositor now checks its own output (size and non-black)
-  against the raw before publishing it — on failure it drops the overlay, keeps the raw capture, and
-  reports it as `overlayWarning` on `record stop` rather than returning a broken file. Only reach
-  for `record start --hide-touches` when you want the fastest raw capture, not to dodge the defect.
-  See ADR 0025 and #2707.
+- Touch overlays export at the captured track size. The compositor checks its output (size,
+  non-black) against the raw capture; on failure `record stop` keeps the raw file and reports
+  `overlayWarning`. `record start --hide-touches` is only for the fastest raw capture.
 - An app built with the iOS 27 SDK must adopt the UIScene lifecycle to launch on an iOS 27.0 or
   27.1 simulator at all: a legacy `UIApplicationDelegate` app traps at launch inside
   `___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`, which reads like a broken

@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../../../daemon/__tests__/platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '@agent-device/daemon/testing/__tests__/platform-services-fixture';
 // Characterization of the shipped reporter contract for the MAESTRO adapter (#1478 P3).
 //
 // The sibling session-test-reporter-values.test.ts covers the same contract for native `.ad`.
@@ -20,7 +20,7 @@ import { daemonPlatformServicesFixture } from '../../../daemon/__tests__/platfor
 // Maestro replay resolves a target device through core/dispatch. Gesture viewport reads re-enter
 // the admitted internal runtime command; the invoke fixture below returns its typed viewport.
 import { expect, test, vi } from 'vitest';
-import { testCreateCommandSurface } from '../../../daemon/__tests__/command-surface-fixture.ts';
+import { testCreateCommandSurface } from '../../../__tests__/daemon-composition/command-surface-fixture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -41,9 +41,9 @@ import fs from 'node:fs';
 
 import path from 'node:path';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
-import { handleSessionCommands } from '../../../daemon/handlers/__tests__/session-command-harness.ts';
-import { SessionStore } from '../../../daemon/session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../../daemon/daemon-request.ts';
+import { handleSessionCommands } from '@agent-device/daemon/testing/handlers/__tests__/session-command-harness';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { withRequestProgressSink } from '@agent-device/host-kit/request';
 import {
   getReplayTestReporterExitCode,
@@ -51,7 +51,7 @@ import {
   runReplayTestReporters,
 } from '../reporters/registry.ts';
 import type { ReplayTestReporter, ReplayTestReporterContext } from '../reporters/types.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 type RecordedHook = {
   hook: 'onSuiteStart' | 'onTestStart' | 'onTestStep' | 'onTestResult' | 'onSuiteEnd';

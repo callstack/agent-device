@@ -24,7 +24,7 @@ is accepted.
 
 Completed 2026-08-27 through #2070–#2072. Every descriptor now declares `none`, `host`,
 `inventory`, or `device-runtime`; capability buckets and the legacy execution shape are gone.
-Production `src/daemon/**` has zero dependencies on concrete platform implementations, enforced by
+Production `packages/daemon/src/**` has zero dependencies on concrete platform implementations, enforced by
 R65. The per-command cutover table was retired after completion as required by section 6; R66 now
 enforces the permanent facts-only admission and runtime-proof invariants without naming historical
 routes or handler functions.
@@ -783,6 +783,14 @@ set to read facts — is retired for new units: they may not introduce admission
 an already-migrated handler onto facts inspection changes production admission behavior; it is its
 own independently reviewed unit with parity evidence, never a side effect of a structural change.
 
+One second bind per request is permitted, and is not the retired idiom: a post-action observation
+(`--settle`) whose action use carries no capture admits the `capture-only` plan for its own reads
+(#3510). It is not an admission-only bind — it never reads facts through a binding, admits through
+the facts probe, and binds only on admission — and where the action's use already required
+`captureSnapshot` (`scroll top|bottom`, `scroll --until`) it projects the request's cached device
+binding rather than acquiring a second one. It stays capture-only: a second bind that carries a
+mutating operation is the execution use the plan should have selected.
+
 Use declarations share one neutral `defineUse`; per-domain currying wrappers add a module per
 domain for no information and are not added. Required-only declarations are the default. Declaring
 a preferred operation requires a recorded measurement of the fast path's benefit in the unit
@@ -822,7 +830,7 @@ helper stops follow the owning platform module's lifecycle policy, and close-tim
 neutral owner services.
 
 R65 is the daemon-side end-state enforcement: its planted-red AST tests reject every dependency edge — static,
-dynamic, re-export, and type-only — from production `src/daemon/**` modules (test files excluded,
+dynamic, re-export, and type-only — from production `packages/daemon/src/**` modules (test files excluded,
 matching the layering scanner's scope) to `src/platforms/**` and concrete
 `@agent-device/platform-*` packages. R13 governs concrete package imports across the whole tree,
 while `retired-platforms-zone` prevents the old root seam from being recreated; platform freedom is
@@ -833,12 +841,15 @@ therefore structurally enforced rather than periodically measured.
 Some request-path work asks the host machine something without ever taking a device runtime:
 concrete local readiness, boot-time and runner-session observation, and open-target
 classification. Those asks now cross the daemon boundary as one required dependency,
-`DaemonPlatformServices` (`src/daemon/platform-services.ts`), composed by the root in
-`src/platform-runtime-daemon-services.ts` and threaded root → `RequestRouterDeps` → the request
-execution scope → the handlers and consumers. Stale-claim reconciliation gets the same treatment
-for the one act it may not perform itself: the root supplies a `ClaimRecoveryGatewayFactory`
-(`src/daemon/device/claim-recovery-gateway.ts`), and the daemon keeps the transaction — what to
-rebuild from (the dead owner's recorded state dir), in what order, and when to dispose it.
+`DaemonPlatformServices` (`packages/daemon/src/core/platform-services.ts`), assembled by the daemon runtime's
+root-composition module in `src/daemon-composition.ts` — which reaches the concrete adapters
+through `src/platform-runtime-daemon-services.ts` behind a function-scoped `await import` — and
+threaded composition → `startDaemonRuntime` deps → `RequestRouterDeps` → the request execution
+scope → the handlers and consumers. Stale-claim reconciliation gets the same treatment
+for the one act it may not perform itself: the composition supplies the `ClaimRecoveryGatewayFactory`
+the daemon declares in `packages/daemon/src/resources/device/claim-recovery-gateway.ts`, built from
+`src/platform-runtime-claim-recovery.ts` (likewise deferred), and the daemon keeps the transaction —
+what to rebuild from (the dead owner's recorded state dir), in what order, and when to dispose it.
 
 The port is not a raw escape hatch back into platform mechanics. Its observation members are the
 already-published neutral contract types from `@agent-device/contracts`, readiness is a boolean,
@@ -926,7 +937,7 @@ baseline and are open for revision or rejection.
 
 **Daemon top-level footprint.** `git ls-tree --name-only origin/main src/daemon/ | grep -E
 '\.ts$' | grep -vE '\.test\.ts$' | wc -l` measured 199 production files at `e624ef9d3f`. Proposed
-target: ≤ 60. `src/daemon/**` is a permanent zone under R65; the target is about what remains
+target: ≤ 60. `packages/daemon/src/**` is a permanent zone under R65; the target is about what remains
 there, not about retiring the directory.
 
 **Entry-to-platform hop count.** Corrected 2026-09-03, re-measured for #2278 at `27a97ee619`:

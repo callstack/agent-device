@@ -15,6 +15,7 @@ vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
 });
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import {
   buildInventory,
   queryAppleDisplayInventory,
@@ -381,3 +382,70 @@ test.each([
     expect(mockHinge).toHaveBeenCalledTimes(2);
   },
 );
+
+test('reports a dispatched but unverifiable pose when the first hinge read returns no sample', async () => {
+  mockInventory
+    .mockResolvedValueOnce(duoInventory('outer'))
+    .mockResolvedValueOnce(duoInventory('inner'));
+  mockHinge.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'CoreDevice reported no hinge angle sample', {
+      reason: 'fold-hinge-angle-no-sample',
+    }),
+  );
+
+  await expect(setAppleFoldPose(duo, { pose: 'open' })).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: expect.objectContaining({
+      reason: 'fold-pose-dispatched-unverified',
+      requestedPose: 'open',
+      screen: { display: 'LCD-1', coordinateSpace: 'native-panel', widthPt: 669, heightPt: 951 },
+    }),
+  });
+  expect(mockSend).toHaveBeenCalledWith(duo, 'open', undefined);
+  expect(mockHinge).toHaveBeenCalledTimes(1);
+});
+
+test('does not rewrite other hinge read failures as dispatched-unverified', async () => {
+  mockInventory.mockResolvedValueOnce(duoInventory('inner'));
+  mockHinge.mockRejectedValue(new AppError('COMMAND_FAILED', 'devicectl wedged'));
+
+  await expect(setAppleFoldPose(duo, { pose: 'open' })).rejects.toMatchObject({
+    details: expect.not.objectContaining({ reason: 'fold-pose-dispatched-unverified' }),
+  });
+});
+
+test('keeps a mid-settle hinge read failure as the read failure, not a missing toolchain', async () => {
+  mockInventory.mockResolvedValueOnce(duoInventory('inner'));
+  mockHinge.mockResolvedValueOnce(100).mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'CoreDevice reported no hinge angle sample', {
+      reason: 'fold-hinge-angle-no-sample',
+    }),
+  );
+
+  await expect(setAppleFoldPose(duo, { pose: 'half-open' })).rejects.toMatchObject({
+    details: expect.objectContaining({ reason: 'fold-hinge-angle-no-sample' }),
+  });
+});
+
+test('omits the screen from the dispatched-unverified refusal when no panel is lit', async () => {
+  const noneLit = buildInventory([
+    panel({ power: 'dark' }),
+    panel({ name: 'LCD-1', displayId: 3, primary: false, power: 'dark' }),
+  ]);
+  mockInventory.mockResolvedValueOnce(duoInventory('outer')).mockResolvedValueOnce(noneLit);
+  mockHinge.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'CoreDevice reported no hinge angle sample', {
+      reason: 'fold-hinge-angle-no-sample',
+      stderr: "Unknown option '--device'",
+    }),
+  );
+
+  const failure = await setAppleFoldPose(duo, { pose: 'open' }).catch((error: unknown) => error);
+  expect(failure).toMatchObject({
+    details: {
+      reason: 'fold-pose-dispatched-unverified',
+      hingeReadFailure: { stderr: "Unknown option '--device'" },
+    },
+  });
+  expect((failure as AppError).details).not.toHaveProperty('screen');
+});

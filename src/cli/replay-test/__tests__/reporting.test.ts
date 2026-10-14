@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { test } from 'vitest';
 import { runCliCapture } from '../../../__tests__/cli-capture.ts';
-import { mkdtempForTest } from '../../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
 
 test.each([false, true])('CLI refuses a wrapping reporter exit code (json=%s)', async (json) => {
   const root = await mkdtempForTest('agent-device-reporter-exit-');

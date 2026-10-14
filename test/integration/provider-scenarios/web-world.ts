@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { likelyPlayableWebmContainer } from '../../../src/__tests__/test-utils/video-fixtures.ts';
+import { likelyPlayableWebmContainer } from '@agent-device/test-kit/video-fixtures';
 import type { WebProvider } from '@agent-device/platform-web';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { validPng } from './assertions.ts';
@@ -55,7 +55,10 @@ export async function createWebDesktopWorld(): Promise<WebDesktopWorld> {
         String(options?.interactiveOnly ?? ''),
         String(options?.surface ?? ''),
       ]);
-      return { nodes: webSnapshotNodes(state), truncated: false };
+      return {
+        nodes: webSnapshotNodes(state, options?.interactiveOnly === true),
+        truncated: false,
+      };
     },
     screenshot: async (outPath, options) => {
       semanticCalls.push([
@@ -142,10 +145,14 @@ export async function createWebDesktopWorld(): Promise<WebDesktopWorld> {
   };
 }
 
-function webSnapshotNodes(state: WebPageState): RawSnapshotNode[] {
+function webSnapshotNodes(state: WebPageState, interactiveOnly: boolean): RawSnapshotNode[] {
+  // Every element of the emulated page carries a ref, in the tree order the backend mints them in:
+  // a web capture publishes its producer's refs and mints no replacement, so a page that wants to be
+  // addressable has to issue them itself.
   return [
     {
       index: 0,
+      ref: 'e1',
       role: 'document',
       label: state.openedTarget,
       rect: { x: 0, y: 0, width: 390, height: 720 },
@@ -156,6 +163,7 @@ function webSnapshotNodes(state: WebPageState): RawSnapshotNode[] {
     },
     {
       index: 1,
+      ref: 'e2',
       role: 'static text',
       label: 'Ready',
       rect: { x: 24, y: 32, width: 160, height: 28 },
@@ -167,6 +175,7 @@ function webSnapshotNodes(state: WebPageState): RawSnapshotNode[] {
     },
     {
       index: 2,
+      ref: 'e3',
       role: 'text field',
       label: 'Email',
       value: state.inputValue,
@@ -179,6 +188,7 @@ function webSnapshotNodes(state: WebPageState): RawSnapshotNode[] {
     },
     {
       index: 3,
+      ref: 'e4',
       role: 'button',
       label: 'Submit order',
       rect: BUTTON_RECT,
@@ -190,6 +200,7 @@ function webSnapshotNodes(state: WebPageState): RawSnapshotNode[] {
     },
     {
       index: 4,
+      ref: 'e5',
       role: 'static text',
       label: state.statusText,
       rect: { x: 24, y: 204, width: 180, height: 28 },
@@ -201,6 +212,7 @@ function webSnapshotNodes(state: WebPageState): RawSnapshotNode[] {
     },
     {
       index: 5,
+      ref: 'e6',
       role: 'static text',
       label: state.scrolled ? 'Scrolled section' : 'Below the fold',
       rect: { x: 24, y: 620, width: 180, height: 28 },
@@ -210,6 +222,24 @@ function webSnapshotNodes(state: WebPageState): RawSnapshotNode[] {
       depth: 1,
       parentIndex: 0,
     },
+    // On-screen text the backend reports but issues no ref for, exactly as a real agent-browser
+    // capture prints a ref-less line: text on `value`, no ref, and no box to ask for. Nothing may
+    // mint it an address (#2283) — every web tree reaching `buildSnapshotState` publishes only the
+    // refs its producer issued. `--interactive` prints only the lines carrying a handle, so the
+    // interactive capture leaves it out.
+    ...(interactiveOnly
+      ? []
+      : [
+          {
+            index: 6,
+            type: 'StaticText',
+            role: 'StaticText',
+            value: 'Order saved',
+            visibleToUser: true,
+            depth: 1,
+            parentIndex: 0,
+          },
+        ]),
   ];
 }
 

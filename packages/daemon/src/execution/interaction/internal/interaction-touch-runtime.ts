@@ -1,0 +1,253 @@
+import { bindInteractionSession } from './interaction-session.ts';
+import type {
+  FillCommandResult,
+  InteractionTarget,
+  LongPressCommandResult,
+  PressCommandResult,
+  ResolvedInteractionTarget,
+} from '@agent-device/contracts/interaction';
+import type { GestureReferenceFrame } from '@agent-device/contracts/scroll-gesture';
+import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import { asAppError, normalizeError } from '@agent-device/kernel/errors';
+import { readResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
+import { publishAmbiguousMatchCandidateRefs } from '../../session-snapshot.ts';
+import { isSessionRecording } from '../../../core/session-script-publication-capability.ts';
+import type { DaemonResponse } from '../../../core/daemon-request.ts';
+import type { SessionState } from '../../../core/session-state.ts';
+import {
+  createInteractionRuntimeForRoute,
+  finalizeTouchInteraction,
+} from './interaction-runtime.ts';
+import type {
+  CaptureSnapshotForSession,
+  InteractionRouteInput,
+} from '../../../core/interaction/internal/types.ts';
+import { isAndroidEscapeError } from './interaction-android-escape.ts';
+import { corroborateIosTapFailure, interactionTargetExtra } from './interaction-ios-tap-outcome.ts';
+import {
+  runWithAndroidDialogReadinessCheck,
+  type RefAdmissionContext,
+} from './interaction-touch-android-readiness.ts';
+import { readSnapshotNodesReferenceFrame } from '@agent-device/capture-kit/touch-reference-frame';
+import {
+  buildCorroboratedTapResponseData,
+  buildInteractionResponseData,
+  type InteractionResponsePayloads,
+} from './interaction-touch-response.ts';
+import type { BoundTouchExecutor } from '../../../core/touch-runtime.ts';
+import type { BoundSnapshotCapture } from '../../../core/snapshot-runtime-binding.ts';
+import { noActiveSessionError } from '@agent-device/kernel/contracts';
+
+/**
+ * The lifecycle every tree-resolved touch dispatch shares: Android readiness
+ * around the device op, warning composition over the builder's payloads,
+ * finalization, and the one same-scope iOS corroboration of a failed tap.
+ */
+
+export async function dispatchRuntimeInteraction<
+  TResult extends PressCommandResult | FillCommandResult | LongPressCommandResult,
+>(
+  params: InteractionRouteInput & {
+    captureSnapshotForSession: CaptureSnapshotForSession;
+  },
+  options: {
+    touchExecutor: BoundTouchExecutor;
+    /** The request's own observation capture when its action use carries none (#3510). */
+    settleObservationCapture?: BoundSnapshotCapture;
+    androidFreshnessBaseline?: SessionState['snapshot'];
+    /**
+     * Present when the action targets a `@ref`: if Android dialog recovery
+     * expires the frame before dispatch, the action aborts through the shared
+     * admission rejection built from this context.
+     */
+    refContext?: RefAdmissionContext;
+    /** A failed local iOS tap may be corroborated against one same-scope capture. */
+    iosTapCorroboration?: {
+      target: InteractionTarget;
+      extra: Record<string, unknown>;
+    };
+    run(runtime: Awaited<ReturnType<typeof createInteractionRuntimeForRoute>>): Promise<TResult>;
+    /** May return a warning to append to the successful response (e.g. a pending Android permission dialog). */
+    afterRun?(result: TResult): Promise<string | undefined>;
+    buildPayloads(
+      result: TResult,
+    ): InteractionResponsePayloads | Promise<InteractionResponsePayloads>;
+  },
+): Promise<DaemonResponse> {
+  params = bindInteractionSession(params);
+  if (!params.sessionRef) return noActiveSessionError();
+  const session = params.sessionStore.requireCurrent(params.sessionRef);
+  const consumedCapture: { state?: SnapshotState } = {};
+  const runtime = await createInteractionRuntimeForRoute({
+    ...params,
+    touchExecutor: options.touchExecutor,
+    settleObservationCapture: options.settleObservationCapture,
+    consumedCapture,
+  });
+  const actionStartedAt = Date.now();
+  try {
+    let afterRunWarning: string | undefined;
+    const outcome = await runWithAndroidDialogReadinessCheck(
+      session,
+      params.req.command,
+      { refContext: options.refContext },
+      async () => {
+        const result = await options.run(runtime);
+        afterRunWarning = await options.afterRun?.(result);
+        return result;
+      },
+      params.androidObservation,
+    );
+    if (outcome.aborted) return outcome.response;
+    const { readiness, runtimeResult } = outcome;
+    const actionFinishedAt = Date.now();
+    const { result, responseData, recordedTarget } = await options.buildPayloads(runtimeResult);
+    // Append, don't clobber — the builder may already carry a warning
+    // (e.g. stale-refs, #1076).
+    const appendedWarnings = [
+      ...(readiness.status === 'recovered' ? [readiness.warning] : []),
+      ...(afterRunWarning ? [afterRunWarning] : []),
+    ];
+    if (appendedWarnings.length > 0) {
+      const warning = [
+        ...(typeof responseData.warning === 'string' ? [responseData.warning] : []),
+        ...appendedWarnings,
+      ].join(' ');
+      result.warning = warning;
+      responseData.warning = warning;
+    }
+    return finalizeTouchInteraction({
+      ref: params.sessionRef,
+      sessionStore: params.sessionStore,
+      command: params.req.command,
+      positionals: params.req.positionals ?? [],
+      flags: params.req.flags,
+      result,
+      responseData,
+      recordedTarget,
+      actionStartedAt,
+      actionFinishedAt,
+      androidFreshnessBaseline: options.androidFreshnessBaseline,
+      preActionTree: runtimeResult.preAction,
+      // The action's own settle observation, so the baseline can be the tree that proved rest
+      // instead of the tree the action started from. Without it the follow-up press re-observes a
+      // surface the settle already proved quiet — the round trip `--settle` exists to remove.
+      settle: runtimeResult.settle,
+    });
+  } catch (error) {
+    const appError = publishAmbiguousMatchCandidateRefs(
+      params.sessionRef,
+      params.sessionStore,
+      asAppError(error),
+      consumedCapture.state,
+    );
+    if (isAndroidEscapeError(appError)) throw appError;
+    if (appError.code === 'AMBIGUOUS_MATCH') return appErrorResponse(appError);
+    const corroboratedResponse = await buildRuntimeIosCorroboratedResponse({
+      error: appError,
+      handlerParams: params,
+      observationCapture: options.settleObservationCapture,
+      session,
+      target: options.iosTapCorroboration?.target,
+      extra: options.iosTapCorroboration?.extra,
+      actionStartedAt,
+      androidFreshnessBaseline: options.androidFreshnessBaseline,
+    });
+    if (corroboratedResponse) return corroboratedResponse;
+    return appErrorResponse(appError);
+  }
+}
+
+async function buildRuntimeIosCorroboratedResponse(params: {
+  error: unknown;
+  handlerParams: InteractionRouteInput & {
+    captureSnapshotForSession: CaptureSnapshotForSession;
+  };
+  /** The capture this request's own pre-action baseline was taken with, when it holds one (#3510). */
+  observationCapture: BoundSnapshotCapture | undefined;
+  session: SessionState;
+  target: InteractionTarget | undefined;
+  extra: Record<string, unknown> | undefined;
+  actionStartedAt: number;
+  androidFreshnessBaseline: SessionState['snapshot'] | undefined;
+}): Promise<DaemonResponse | undefined> {
+  if (!params.target) return undefined;
+  const resolvedTarget = readResolvedInteractionTarget(params.error);
+  if (!resolvedTarget && isSessionRecording(params.session)) return undefined;
+  const corroboration = await corroborateIosTapFailure({
+    error: params.error,
+    command: params.handlerParams.req.command,
+    requestId: params.handlerParams.req.meta?.requestId,
+    flags: params.handlerParams.req.flags,
+    ref: params.handlerParams.sessionRef!,
+    sessionStore: params.handlerParams.sessionStore,
+    contextFromFlags: params.handlerParams.contextFromFlags,
+    captureSnapshotForSession: params.handlerParams.captureSnapshotForSession,
+    boundCapture: params.observationCapture,
+  });
+  if (!corroboration) return undefined;
+
+  const payloads = buildIosCorroboratedPayloads({
+    target: params.target,
+    resolvedTarget,
+    warning: corroboration.warning,
+    referenceFrame: readSnapshotNodesReferenceFrame(params.session.snapshot?.nodes ?? []),
+    extra: params.extra,
+  });
+  return finalizeTouchInteraction({
+    ref: params.handlerParams.sessionRef!,
+    sessionStore: params.handlerParams.sessionStore,
+    command: params.handlerParams.req.command,
+    positionals: params.handlerParams.req.positionals ?? [],
+    flags: params.handlerParams.req.flags,
+    result: payloads.result,
+    responseData: payloads.responseData,
+    recordedTarget: payloads.recordedTarget,
+    actionStartedAt: params.actionStartedAt,
+    actionFinishedAt: Date.now(),
+    androidFreshnessBaseline: params.androidFreshnessBaseline,
+    // A corroborated failure still acted through a tree, and its own effect may still be animating.
+    // Withholding it would retire the evidence a previous mutation recorded and leave the next press
+    // unscreened, which is the opposite of what a dispatch that touched the device should do.
+    preActionTree: resolvedTarget?.preAction,
+  });
+}
+
+function buildIosCorroboratedPayloads(params: {
+  target: InteractionTarget;
+  resolvedTarget: ResolvedInteractionTarget | undefined;
+  warning: string;
+  referenceFrame: GestureReferenceFrame | undefined;
+  extra: Record<string, unknown> | undefined;
+}): InteractionResponsePayloads {
+  if (params.resolvedTarget) {
+    return buildInteractionResponseData({
+      source: {
+        kind: 'runtime',
+        result: { ...params.resolvedTarget, warning: params.warning },
+      },
+      referenceFrame: params.referenceFrame,
+      extra: params.extra,
+    });
+  }
+  return buildCorroboratedTapResponseData({
+    targetKind: params.target.kind,
+    point: pointFromInteractionTarget(params.target),
+    warning: params.warning,
+    referenceFrame: params.referenceFrame,
+    extra: {
+      ...interactionTargetExtra(params.target),
+      ...(params.extra ?? {}),
+    },
+  });
+}
+
+function pointFromInteractionTarget(
+  target: InteractionTarget,
+): { x: number; y: number } | undefined {
+  return target.kind === 'point' ? { x: target.x, y: target.y } : undefined;
+}
+
+function appErrorResponse(error: unknown): DaemonResponse {
+  return { ok: false, error: normalizeError(error) };
+}

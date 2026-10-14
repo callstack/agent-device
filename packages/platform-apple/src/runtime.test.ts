@@ -47,6 +47,31 @@ const leaves = {
   watchos: appleDevice({ appleOs: 'watchos' }),
 } satisfies Record<AppleOS, DeviceInfo>;
 
+// #1542 wiring on the owner side: the CONDITIONAL live selector read must be advertised AND
+// bound on every leaf the kind cell covers, and absent on the macOS desktop. Dropping
+// `...selectorQueryOperations` from the binding (while the fact stays available) breaks the
+// second expectation here; mis-declaring the fact breaks the first.
+test.each([
+  ['iOS simulator', leaves.ios, true],
+  ['iOS physical device', appleDevice({ kind: 'device' }), true],
+  ['macOS host', leaves.macos, false],
+] as const)(
+  'binds the querySelector read on the %s leaf per its fact',
+  async (_name, device, advertised) => {
+    const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    expect(binding.facts.operations.querySelector.available).toBe(advertised);
+    expect(binding.operations.querySelector).toBeTypeOf(advertised ? 'function' : 'undefined');
+  },
+);
+
 test('tvOS audio capture availability follows the exact host-owned runtime fact', async () => {
   const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
     device: leaves.tvos,

@@ -22,8 +22,8 @@ pnpm gate --help
 ```
 
 `check:affected --run` reports coverage obligations without instrumenting; when related tests are
-selected, it runs one capped `vitest related` command. Run local coverage to investigate a specific
-coverage question or CI failure.
+selected, it runs one capped `vitest related` command. Run local coverage, then
+`check:coverage-crap` gates the touched functions (CONTRIBUTING.md).
 
 Two selection traps recur:
 
@@ -67,14 +67,13 @@ Read the entry file before running a lane. Do not copy its environment matrix he
 
 ## Shared test utilities
 
-Before creating fixtures, look in `src/__tests__/test-utils/`. Import named builders from the module
-that defines them (`session-factories.ts`, `device-fixtures.ts`, `store-factory.ts`); avoid importing
-unrelated helpers through a barrel. Shared `DeviceInfo`, session, snapshot, store, runtime-fact,
-and mocked-binary values belong in a sibling fixture module, not in repeated test literals.
-`PROPERTY_RUNS` and the interaction touch-point/rect arbitraries live in
-`@agent-device/selectors/snapshot-geometry-fixtures` — the canonical location root tests and the
-selectors package both build on — not in `src/__tests__/test-utils/`. `makeSnapshotState` itself
-canonically lives in `@agent-device/capture-kit/snapshot-state-fixtures`, re-exported from there.
+Before creating fixtures, look in `@agent-device/test-kit/` (generic) and
+`packages/daemon/src/__tests__/support/` (daemon-shaped). Import named builders from their
+defining module, never through a barrel. Shared `DeviceInfo`, session, snapshot, store,
+runtime-fact, and mocked-binary values belong in a sibling fixture module, not in repeated
+test literals. `PROPERTY_RUNS` and the touch-point/rect arbitraries live in
+`@agent-device/selectors/snapshot-geometry-fixtures`;
+`makeSnapshotState` lives in `@agent-device/capture-kit/snapshot-state-fixtures`.
 
 Use `mkdtempForTest` or `mkdtempForTestSync`. Global setup redirects `TMPDIR` for the run and
 removes it after every worker exits — skip per-test cleanup. An interrupted run may leave a
@@ -125,8 +124,8 @@ worker process, so a case that never returns or kills its process is reported as
 against the exact input. Promote a discovered case with the command the harness prints — never
 hand-copy an unshrunk input.
 
-Mutation is report-only and limited to the registry in `scripts/mutation/modules.ts`. It measures
-whether tests distinguish changed decision logic. Do not infer redundancy from line coverage alone.
+Mutation scope: `scripts/mutation/modules.ts#KERNEL_MODULES` (weekly), `scripts/mutation/run.ts#LANE_TOOLING`
+(PR canary). Scores are advisory; incomplete sweeps fail. Pilot protocol: `pnpm mutation:run --help`.
 
 ## Before editing a shared module
 
@@ -134,7 +133,7 @@ Run `pnpm depgraph affected` before touching a high-fan-in module:
 
 ```sh
 pnpm depgraph affected packages/host-kit/src/command.ts
-pnpm depgraph affected src/daemon/ref-frame.ts --json --limit 25
+pnpm depgraph affected packages/daemon/src/core/ref-frame.ts --json --limit 25
 ```
 
 Use its dependent, command, and guarantee-cell report to scope inspection. `pnpm check:affected --run`
@@ -147,8 +146,7 @@ action with a literal gate id; `pnpm check:gate-manifest` verifies registration,
 path reachability, and routed device lanes. Raw shell text cannot declare ownership.
 
 New check: update the catalog and its executable model. Changed path ownership: plant a path that
-would previously be misrouted and watch the selector or manifest fail before fixing it. Workflow
-limitations (manual-only, opaque owners) belong in the gate declarations, not here.
+would previously be misrouted and watch the selector or manifest fail before fixing it.
 
 ## Concurrency torture lane
 

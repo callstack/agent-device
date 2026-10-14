@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { parseSync } from 'oxc-parser';
-import { isProductionSourceFile } from './tracked-sources.ts';
+import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts';
 import type { LayeringViolation } from './model.ts';
 
 /**
@@ -330,12 +330,12 @@ function tripleSlashDependencies(file: string, source: string): DaemonPlatformDe
 function dependencyMessage(dependency: DaemonPlatformDependency): string {
   return (
     `${dependency.kind} '${dependency.spec}' resolves to concrete platform code ` +
-    `(${dependency.target}); production src/daemon/ must use the request-bound runtime contract`
+    `(${dependency.target}); production packages/daemon/src/ must use the request-bound runtime contract`
   );
 }
 
 /**
- * Find every concrete platform dependency in tracked production `src/daemon/**` sources.
+ * Find every concrete platform dependency in tracked production `packages/daemon/src/**` sources.
  *
  * The input is intentionally source records rather than a filesystem walk. Callers use the
  * canonical tracked-production enumerator, while synthetic tests can plant one edge at a time
@@ -345,7 +345,7 @@ export function findDaemonPlatformDependencies(
   sources: readonly ProductionSource[],
 ): DaemonPlatformDependency[] {
   return sources
-    .filter(({ path: file }) => file.startsWith('src/daemon/') && isProductionSourceFile(file))
+    .filter(({ path: file }) => file.startsWith(DAEMON_SOURCE_ROOT) && isProductionSourceFile(file))
     .flatMap(({ path: file, source }) => [
       ...staticDependencies(file, source),
       ...dynamicDependencies(file, source),
@@ -373,9 +373,9 @@ export function daemonPlatformBoundaryViolations(
 }
 
 const CLEANUP_ORCHESTRATORS = new Set([
-  'src/daemon/session-teardown.ts',
-  'src/daemon/session-lifecycle/internal/session-close-lifecycle-teardown.ts',
-  'src/daemon/snapshot-session.ts',
+  'packages/daemon/src/sessions/session-teardown.ts',
+  'packages/daemon/src/sessions/session-lifecycle/internal/session-close-lifecycle-teardown.ts',
+  'packages/daemon/src/core/snapshot-session.ts',
 ]);
 
 function cleanupDispatchViolations(sources: readonly ProductionSource[]): LayeringViolation[] {

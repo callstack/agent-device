@@ -31,6 +31,14 @@
     "./mechanics": {
       "types": "./src/mechanics.ts",
       "default": "./src/mechanics.ts"
+    },
+    "./snapshot-capture-fixtures": {
+      "types": "./src/snapshot-capture.fixtures.ts",
+      "default": "./src/snapshot-capture.fixtures.ts"
+    },
+    "./ui-hierarchy-fixtures": {
+      "types": "./src/ui-hierarchy.fixtures.ts",
+      "default": "./src/ui-hierarchy.fixtures.ts"
     }
   }
 }

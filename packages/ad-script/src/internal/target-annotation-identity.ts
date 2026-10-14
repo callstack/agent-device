@@ -15,7 +15,7 @@
  * here, not through `@agent-device/ad-replay`'s façade (#1555 review).
  */
 
-import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 import type {
   LocalIdentity,
@@ -119,6 +119,27 @@ export function demoteNonUniqueLocalIdentity(
   const { role, label } = identity;
   return { role, ...(label !== undefined ? { label } : {}) };
 }
+
+/**
+ * Where `nodes` puts the node carrying `node`'s local identity, or nothing when the list cannot
+ * answer: absent, named by more than one node, or named by a node carrying no rect. Local identity is
+ * role/id/label, NOT element identity, so two sibling rows both reading `label="Item"` are one
+ * identity — and an ambiguous identity answers nothing, the same fail-closed direction
+ * `demoteNonUniqueLocalIdentity` takes for a non-unique id. `#3471`'s moving-target gate pairs this
+ * with `areCapturedRectsAtSamePosition` to ask whether one node held its position between two trees.
+ */
+export function nodeRectByIdentity(
+  nodes: readonly IdentityPositionedNode[],
+  node: IdentityPositionedNode,
+): Rect | undefined {
+  const identity = readNodeLocalIdentity(node);
+  const carriers = nodes.filter((candidate) =>
+    localIdentitiesEqual(identity, readNodeLocalIdentity(candidate)),
+  );
+  return carriers.length === 1 ? carriers[0]?.rect : undefined;
+}
+
+type IdentityPositionedNode = IdentityTreeNode & { rect?: Rect };
 
 type StructuralNode = Pick<RawSnapshotNode, 'index' | 'parentIndex'>;
 

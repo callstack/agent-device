@@ -10,7 +10,7 @@ import type { CaptureSnapshotResult } from '@agent-device/contracts/client';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
-import type { DaemonRequest } from '../../../src/daemon/daemon-request.ts';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import * as iosSnapshotRuntime from '@agent-device/capture-kit/ios-snapshot-runtime';
 import {
   createProviderScenarioHarness,

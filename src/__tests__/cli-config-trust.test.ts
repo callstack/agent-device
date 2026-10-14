@@ -9,7 +9,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from './test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 
 test('project config rejects remote connection fields before daemon dispatch without echoing values', async () => {
   const { root, home, project } = makeTempWorkspace();

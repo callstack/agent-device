@@ -211,37 +211,38 @@ describe('run envelope', () => {
 });
 
 describe('artifact promotion', () => {
-  it('promotes a saved failing case into the corpus, once', () => {
+  it.each([false, true])('promotes a saved failing case once (existing corpus: %s)', (existing) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fuzz-promote-'));
     const corpus = path.join(dir, 'regressions.json');
-    fs.writeFileSync(corpus, '[]\n');
+    const entry = { target: 'self-check-untyped-throw', input: 'promote me', note: 'existing' };
+    fs.writeFileSync(corpus, JSON.stringify(existing ? [entry] : []));
     const artifact = path.join(dir, 'case.json');
     fs.writeFileSync(
       artifact,
       JSON.stringify({
         target: 'self-check-untyped-throw',
         input: 'promote me',
-        kind: 'untyped-throw',
-        detail: 'seeded',
+        kind: 'empty-hint',
+        detail: 'artifact-only',
       }),
     );
     const env = { AGENT_DEVICE_FUZZ_CORPUS: corpus };
 
-    const first = runHarness(['--input-file', artifact, '--append-corpus'], env);
-    expect(first.stdout).toContain('Case still violates the invariant');
-    expect(first.stdout).toContain('Appended 1 case(s)');
-    expect(first.status).toBe(1);
+    const { status, stdout } = runHarness(['--input-file', artifact, '--append-corpus'], env);
+    expect(stdout).toContain('Case still violates the invariant');
+    expect(stdout).toContain(
+      existing ? 'already contains every failing case' : 'Appended 1 case(s)',
+    );
+    expect(status).toBe(1);
     expect(JSON.parse(fs.readFileSync(corpus, 'utf8'))).toEqual([
       {
-        target: 'self-check-untyped-throw',
-        input: 'promote me',
-        note: expect.stringContaining('untyped-throw'),
+        ...entry,
+        note: existing
+          ? entry.note
+          : expect.stringContaining('untyped-throw: Error: self-check untyped throw'),
       },
     ]);
 
-    const second = runHarness(['--input-file', artifact, '--append-corpus'], env);
-    expect(second.stdout).toContain('already contains every failing case');
-    expect(JSON.parse(fs.readFileSync(corpus, 'utf8'))).toHaveLength(1);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });

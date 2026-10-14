@@ -7,7 +7,7 @@ import {
   writeRemoteConnectionState,
   type RemoteConnectionState,
 } from '../remote/remote-connection-state.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 export const unexpectedCommandCall = async (): Promise<never> => {
   throw new Error('unexpected call');

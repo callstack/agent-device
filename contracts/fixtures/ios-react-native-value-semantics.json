@@ -1,0 +1,554 @@
+{
+  "sources": {
+    "fabric": "https://github.com/facebook/react-native/blob/v0.87.1/packages/react-native/React/Fabric/Mounting/ComponentViews/View/RCTViewComponentView.mm",
+    "current": "https://github.com/facebook/react-native/blob/da7c29f6d747ab296c9f8f7d0066ae2aca741ef5/packages/react-native/React/Fabric/Mounting/ComponentViews/View/RCTViewComponentView.mm",
+    "paper": "https://github.com/facebook/react-native/blob/da7c29f6d747ab296c9f8f7d0066ae2aca741ef5/packages/react-native/React/Views/RCTView.m",
+    "localization": "https://github.com/facebook/react-native/blob/da7c29f6d747ab296c9f8f7d0066ae2aca741ef5/packages/react-native/React/I18n/RCTLocalizedString.mm",
+    "englishTables": [
+      "https://github.com/facebook/react-native/blob/da7c29f6d747ab296c9f8f7d0066ae2aca741ef5/packages/react-native/React/I18n/strings/en.lproj/Localizable.strings",
+      "https://github.com/facebook/react-native/blob/da7c29f6d747ab296c9f8f7d0066ae2aca741ef5/packages/react-native/React/I18n/strings/en-GB.lproj/Localizable.strings"
+    ]
+  },
+  "cases": [
+    {
+      "name": "Fabric checkbox unchecked",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, unchecked"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "checkbox",
+          "checked": false
+        },
+        "checked": false
+      }
+    },
+    {
+      "name": "Fabric radio checked",
+      "renderer": "fabric",
+      "locale": "en-GB",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "radio button, checked"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "radio",
+          "checked": true
+        },
+        "checked": true
+      }
+    },
+    {
+      "name": "Fabric mixed is not unchecked",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, mixed"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "checkbox",
+          "checked": "mixed"
+        }
+      }
+    },
+    {
+      "name": "Fabric explicit expansion",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, checked, expanded, busy, 50 percent"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "checkbox",
+          "checked": true,
+          "expanded": true,
+          "busy": true
+        },
+        "checked": true
+      }
+    },
+    {
+      "name": "current Fabric explicit collapsed",
+      "renderer": "fabric-current",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, unchecked, collapsed"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "checkbox",
+          "checked": false,
+          "expanded": false
+        },
+        "checked": false
+      }
+    },
+    {
+      "name": "Paper dictionary state order",
+      "renderer": "paper",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "radio button, busy, collapsed, mixed"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "radio",
+          "checked": "mixed",
+          "expanded": false,
+          "busy": true
+        }
+      }
+    },
+    {
+      "name": "Paper role prefix",
+      "renderer": "paper",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "menu item, expanded, Item 1",
+        "role": "RCTView"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "menuitem",
+          "expanded": true
+        }
+      }
+    },
+    {
+      "name": "known Fabric class state only",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "mixed, expanded",
+        "role": "RCTViewComponentView"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "checked": "mixed",
+          "expanded": true
+        }
+      }
+    },
+    {
+      "name": "native checked wins over derived",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, unchecked",
+        "checked": true
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "checkbox",
+          "checked": false
+        }
+      }
+    },
+    {
+      "name": "native false wins over derived",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "radio button, checked",
+        "checked": false
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "radio",
+          "checked": true
+        }
+      }
+    },
+    {
+      "name": "native class preserved",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, checked",
+        "role": "RCTViewComponentView",
+        "subrole": "UIView"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "checkbox",
+          "checked": true
+        },
+        "checked": true
+      }
+    },
+    {
+      "name": "literal state on anonymous Other",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "unchecked"
+      },
+      "expected": {}
+    },
+    {
+      "name": "literal role on anonymous Other",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox"
+      },
+      "expected": {}
+    },
+    {
+      "name": "literal prefix prose",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, unchecked purchases"
+      },
+      "expected": {}
+    },
+    {
+      "name": "literal non-RN class",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, checked",
+        "role": "UIView"
+      },
+      "expected": {}
+    },
+    {
+      "name": "explicit semantic role",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, checked",
+        "role": "button"
+      },
+      "expected": {}
+    },
+    {
+      "name": "native control value",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Switch",
+        "value": "checkbox, checked"
+      },
+      "expected": {}
+    },
+    {
+      "name": "literal text field value",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "TextField",
+        "value": "checkbox, checked"
+      },
+      "expected": {}
+    },
+    {
+      "name": "literal editable generic node",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, checked",
+        "editable": true
+      },
+      "expected": {}
+    },
+    {
+      "name": "literal password generic node",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, checked",
+        "password": true
+      },
+      "expected": {}
+    },
+    {
+      "name": "German unknown",
+      "renderer": "fabric",
+      "locale": "de",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "Kontrollk\u00e4stchen, nicht markiert",
+        "role": "RCTView"
+      },
+      "expected": {}
+    },
+    {
+      "name": "Polish unknown",
+      "renderer": "fabric",
+      "locale": "pl",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "pole wyboru, niezaznaczone",
+        "role": "RCTView"
+      },
+      "expected": {}
+    },
+    {
+      "name": "mixed language rejected",
+      "renderer": "fabric",
+      "locale": "pl",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, zaznaczone"
+      },
+      "expected": {}
+    },
+    {
+      "name": "Fabric checked plus unchecked custom text",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, checked, unchecked",
+        "role": "RCTViewComponentView"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "checkbox",
+          "checked": true
+        },
+        "checked": true
+      }
+    },
+    {
+      "name": "Fabric collapsed plus expanded custom text",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, checked, collapsed, expanded",
+        "role": "RCTViewComponentView"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "checkbox",
+          "checked": true,
+          "expanded": false
+        },
+        "checked": true
+      }
+    },
+    {
+      "name": "Fabric checked plus checked custom text",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, checked, checked",
+        "role": "RCTViewComponentView"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "checkbox",
+          "checked": true
+        },
+        "checked": true
+      }
+    },
+    {
+      "name": "unknown suffix stays evidence",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox, unchecked, custom, checked"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "role": "checkbox",
+          "checked": false
+        },
+        "checked": false
+      }
+    },
+    {
+      "name": "case-sensitive encoding",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "Checkbox, Checked"
+      },
+      "expected": {}
+    },
+    {
+      "name": "separator-sensitive encoding",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "value": "checkbox,checked"
+      },
+      "expected": {}
+    },
+    {
+      "name": "Paper-only role words are literal on a Fabric class",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "role": "RCTViewComponentView",
+        "value": "menu item, expanded, Item 1"
+      },
+      "expected": {}
+    },
+    {
+      "name": "fabric repeated busy starts custom text",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "role": "RCTViewComponentView",
+        "value": "busy, busy, unchecked"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "busy": true
+        }
+      }
+    },
+    {
+      "name": "paper repeated busy starts custom text",
+      "renderer": "paper",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "role": "RCTView",
+        "value": "busy, busy, unchecked"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "busy": true
+        }
+      }
+    },
+    {
+      "name": "Fabric backward state order starts custom text",
+      "renderer": "fabric",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "role": "RCTViewComponentView",
+        "value": "busy, unchecked"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "busy": true
+        }
+      }
+    },
+    {
+      "name": "known Paper dictionary state order",
+      "renderer": "paper",
+      "locale": "en",
+      "node": {
+        "index": 0,
+        "type": "Other",
+        "role": "RCTView",
+        "value": "busy, collapsed, mixed"
+      },
+      "expected": {
+        "iosValueSemantics": {
+          "source": "react-native-ios-value-heuristic",
+          "encoding": "en",
+          "checked": "mixed",
+          "expanded": false,
+          "busy": true
+        }
+      }
+    }
+  ]
+}

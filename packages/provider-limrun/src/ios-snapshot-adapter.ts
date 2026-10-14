@@ -1,9 +1,11 @@
+import { interpretIosReactNativeValue } from '@agent-device/capture-kit/ios-react-native-value';
 import {
   createIosSnapshotAcquisition,
   resolveIosViewportEvidenceFromRoots,
 } from '@agent-device/capture-kit/ios-snapshot-acquisition';
 import type { SnapshotRuntimeAcquiredResult } from '@agent-device/contracts/interactor-types';
 import type { LimrunIosSession } from './ios.ts';
+import { acquireProviderKeyboard } from '@agent-device/contracts/tap-keyboard-occlusion';
 import { flattenIosTree, type IosTreeNode } from './snapshot.ts';
 
 export async function captureLimrunIosSnapshot(
@@ -11,9 +13,13 @@ export async function captureLimrunIosSnapshot(
 ): Promise<SnapshotRuntimeAcquiredResult> {
   const tree = (await session.client.elementTree()) as IosTreeNode[];
   const viewport = readLimrunViewport(tree, session.client.deviceInfo);
+  const nodes = flattenIosTree(tree).map(interpretIosReactNativeValue);
   return createIosSnapshotAcquisition({
     producer: 'limrun-ios-tree',
-    nodes: flattenIosTree(tree),
+    ...acquireProviderKeyboard({
+      nodes,
+      viewport: viewport.kind === 'missing' ? null : viewport.rect,
+    }),
     viewport,
     lineage: { targetId: session.instanceId },
   });

@@ -1,0 +1,38 @@
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 1c85b95f5e48e6e47ee8bc720133ec162b1088bb..3924e7a06a2bf7a317ccdb2b4d742fae802e3c14 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -528,6 +528,22 @@ var b = class CoverageMapper {
+ 		let i = [], a = [];
+ 		for (let e of n) {
+ 			if (!e) {
++				let e = getCount({
++					startOffset: t.start + this.wrapperLength,
++					endOffset: t.end + this.wrapperLength
++				}, this.ranges), n = a.at(-1) || 0;
++				// An unlocatable path (`if` with no `else`, `switch` with no `default`) is
++				// "the count of the region the node covers, minus the located paths". Inside
++				// an `async` function that difference is not the path's count: V8 records the
++				// statements after an `await` (e.g. after `x ?? await p()`) as a continuation
++				// block counted for the awaited path only, while a block taken by the callers
++				// that skipped the await is counted on that other path. A located path can
++				// then out-count the region said to contain it, and the subtraction goes
++				// negative -- a count no execution can produce. The entry count of the node
++				// is not recoverable from such a record, so publish the branch with only its
++				// located paths instead of an impossible counter; this is also exactly what
++				// the reference v8-to-istanbul converter emits for the same input.
++				if (e - n < 0) continue;
+ 				i.push({
+ 					start: {
+ 						line: void 0,
+@@ -538,10 +554,6 @@ var b = class CoverageMapper {
+ 						column: void 0
+ 					}
+ 				});
+-				let e = getCount({
+-					startOffset: t.start + this.wrapperLength,
+-					endOffset: t.end + this.wrapperLength
+-				}, this.ranges), n = a.at(-1) || 0;
+ 				a.push(e - n);
+ 				continue;
+ 			}

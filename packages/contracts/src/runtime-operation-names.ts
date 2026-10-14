@@ -65,6 +65,7 @@ export const RUNTIME_OPERATION_NAMES = [
   'performTargetAuthoredDrag',
   'prepareAppleRunner',
   'prepareApplicationOpen',
+  'querySelector',
   'readAlert',
   'readClipboard',
   'readSetting',

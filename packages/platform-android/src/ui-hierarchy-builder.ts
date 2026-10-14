@@ -1,5 +1,6 @@
 import {
   type AndroidSystemChromeProvenance,
+  androidSystemBarMembership,
   isAndroidSystemChromeWindowResourceId,
 } from '@agent-device/contracts/android-system-chrome';
 import type { AndroidSiblingOrderEvidence } from '@agent-device/contracts/capture';
@@ -194,9 +195,15 @@ function walkUiHierarchyNode(
   ancestorSystemChrome: boolean = false,
   ancestorWindowRect?: Rect,
   ancestorClip?: Rect,
+  ancestorSystemBar?: Pick<RawSnapshotNode, 'bundleId' | 'systemBar'>,
 ): void {
   state.presentationBudget.check('work');
   if (shouldStopAndroidWalk(state, node, depth)) return;
+  const systemBar = androidSystemBarMembership(
+    node.packageName,
+    node.identifier,
+    ancestorSystemBar,
+  );
   const currentWindowRect = node.windowRect ?? ancestorWindowRect ?? state.viewport;
   const effectiveRect = resolveAndroidEffectiveRect(state, node, ancestorClip, currentWindowRect);
   const currentIndex = appendAndroidNodeIfPresented(
@@ -208,6 +215,7 @@ function walkUiHierarchyNode(
     ancestorSystemChrome,
     effectiveRect,
     currentWindowRect,
+    systemBar,
   );
   const nextAncestorHittable = ancestorHittable || isAgentTarget(node);
   const nextAncestorCollection = ancestorCollection || isCollectionContainerType(node.type);
@@ -222,6 +230,7 @@ function walkUiHierarchyNode(
     ancestorSystemChrome || isAndroidSystemChromeWindowResourceId(node.identifier),
     currentWindowRect,
     nextAncestorClip,
+    { bundleId: node.packageName ?? undefined, systemBar },
   );
 }
 
@@ -255,6 +264,7 @@ function appendAndroidNodeIfPresented(
   ancestorSystemChrome: boolean,
   effectiveRect: Rect | undefined,
   windowRect: Rect | undefined,
+  systemBar: RawSnapshotNode['systemBar'],
 ): number | undefined {
   if (
     !state.options.raw &&
@@ -277,6 +287,7 @@ function appendAndroidNodeIfPresented(
     systemChrome,
     effectiveRect,
     windowRect,
+    systemBar,
   );
 }
 
@@ -300,6 +311,7 @@ function walkAndroidChildren(
   ancestorSystemChrome: boolean,
   ancestorWindowRect: Rect | undefined,
   ancestorClip: Rect | undefined,
+  systemBar: Pick<RawSnapshotNode, 'bundleId' | 'systemBar'>,
 ): void {
   for (const child of node.children) {
     walkUiHierarchyNode(
@@ -312,6 +324,7 @@ function walkAndroidChildren(
       ancestorSystemChrome,
       ancestorWindowRect,
       ancestorClip,
+      systemBar,
     );
     if (state.truncated) return;
   }
@@ -324,6 +337,7 @@ function appendAndroidSnapshotNode(
   systemChrome: boolean,
   effectiveRect: Rect | undefined,
   windowRect: Rect | undefined,
+  systemBar: RawSnapshotNode['systemBar'],
 ): number {
   const currentIndex = state.nodes.length;
   // Snapshot filtering removes Compose layout wrappers. Keep depth aligned with
@@ -331,7 +345,7 @@ function appendAndroidSnapshotNode(
   // fixed sibling that follows scroll content can be re-parented under the last
   // retained row by normalizeSnapshotTree's depth fallback (#1377).
   state.sourceNodes.push(node);
-  const rawNode = createAndroidRawSnapshotNode(state, node, parentIndex, systemChrome);
+  const rawNode = createAndroidRawSnapshotNode(state, node, parentIndex, systemChrome, systemBar);
   publishAndroidPresentationNode(state, node, rawNode, effectiveRect, windowRect);
   return currentIndex;
 }
@@ -341,6 +355,7 @@ function createAndroidRawSnapshotNode(
   node: AndroidNode,
   parentIndex: number | undefined,
   systemChrome: boolean,
+  systemBar: RawSnapshotNode['systemBar'],
 ): AndroidRawSnapshotNode {
   return {
     index: state.nodes.length,
@@ -358,6 +373,7 @@ function createAndroidRawSnapshotNode(
     parentIndex,
     ...androidScrollActionHints(node, state.hidden),
     ...(systemChrome ? { systemChrome: true } : {}),
+    ...(systemBar ? { systemBar } : {}),
   };
 }
 

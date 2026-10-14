@@ -71,6 +71,8 @@ const FORWARDED_RESPONSE_HEADERS = [
   'x-request-id',
   DAEMON_HTTP_INSTANCE_MISMATCH_HEADER,
 ];
+const FORWARDED_UPLOAD_CHUNK_RESPONSE_HEADERS = ['range', 'x-upload-offset'];
+const FORWARDED_ARTIFACT_DOWNLOAD_RESPONSE_HEADERS = ['content-length'];
 
 export function createDaemonProxy(options: DaemonProxyOptions): DaemonProxy {
   const normalized = normalizeProxyOptions(options);
@@ -199,7 +201,7 @@ async function forwardProxyRequest(params: {
     }),
   );
 
-  const headers = copyProxyResponseHeaders(upstreamResponse, request);
+  const headers = copyProxyResponseHeaders(upstreamResponse, request, route);
   if (isUploadPreflightRoute(route)) {
     return await rewrittenUploadPreflightResponse({
       request,
@@ -219,14 +221,25 @@ function upstreamSignal(request: Request, options: NormalizedProxyOptions): Abor
   return AbortSignal.any([request.signal, AbortSignal.timeout(options.upstreamTimeoutMs)]);
 }
 
-function copyProxyResponseHeaders(upstreamResponse: Response, request: Request): Headers {
+function copyProxyResponseHeaders(
+  upstreamResponse: Response,
+  request: Request,
+  route: string,
+): Headers {
   const headers = new Headers();
-  for (const name of FORWARDED_RESPONSE_HEADERS) {
+  for (const name of [...FORWARDED_RESPONSE_HEADERS, ...routeResponseHeaders(route)]) {
     const value = upstreamResponse.headers.get(name);
     if (value) headers.set(name, value);
   }
   if (!headers.has('x-request-id')) headers.set('x-request-id', resolveRequestId(request));
   return headers;
+}
+
+/** `content-length` stays off the preflight route because the proxy rewrites that body. */
+function routeResponseHeaders(route: string): readonly string[] {
+  if (route.startsWith('/upload/direct/')) return FORWARDED_UPLOAD_CHUNK_RESPONSE_HEADERS;
+  if (route.startsWith('/artifacts/')) return FORWARDED_ARTIFACT_DOWNLOAD_RESPONSE_HEADERS;
+  return [];
 }
 
 async function rewrittenUploadPreflightResponse(params: {

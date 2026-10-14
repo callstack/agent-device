@@ -64,7 +64,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
   return { ...actual, runAppleRunnerCommand: vi.fn(async () => ({})) };
 });
 
-vi.mock('../../../src/daemon/ios-app-session-hint.ts', () => ({
+vi.mock('@agent-device/daemon/testing/ios-app-session-hint', () => ({
   buildIosOpenCommandHint: vi.fn(async () => undefined),
 }));
 
@@ -127,6 +127,7 @@ test('Limrun iOS acquisition reaches one host presenter and the public snapshot 
       true,
     );
     assert.equal(result.truncated, undefined);
+    assert.deepEqual(result.keyboard, { kind: 'unmeasurable', reason: 'keyboard-not-observed' });
     assert.deepEqual(result.warnings, [
       'iOS snapshot acquisition does not provide hittability evidence; regular snapshots omit unverified hittability while raw snapshots preserve supplied facts.',
       'iOS snapshot acquisition does not report hierarchy completeness; provider-side depth or child limits may omit nodes.',

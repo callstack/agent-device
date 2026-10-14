@@ -3,9 +3,17 @@ import fs from 'node:fs';
 // oxlint-disable-next-line no-restricted-imports -- real Unix socket path under TMPDIR (104-char limit)
 import os from 'node:os';
 import path from 'node:path';
-import type { CommandExecutorOverride, ExecOptions } from '@agent-device/host-kit/command';
+import {
+  type CommandExecutorOverride,
+  type ExecOptions,
+  type ExecResult,
+} from '@agent-device/host-kit/command';
+import type { OwnedProcessRecordStore } from '@agent-device/host-kit/process';
+import { vi } from 'vitest';
+import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
+import type { WebProvider } from '../provider.ts';
 
-const TEST_AGENT_BROWSER_VERSION = '0.27.1';
+const TEST_AGENT_BROWSER_VERSION = '0.39.0';
 
 export function mkdtempForTestSync(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -43,6 +51,61 @@ export function createFailNthCommandExecutor(
 }
 
 type FakeManagedAgentBrowserInstall = ReturnType<typeof expectedManagedAgentBrowserInstall>;
+
+/**
+ * Drives one scenario through the real provider against a managed install whose CLI answers come
+ * from the caller's command-executor override, in a state dir of its own. Tests that only need the
+ * CLI answers leave `options` empty: without an owned-process record store the provider keeps no
+ * fleet record, so no scenario pays for or trips over a real process-table read.
+ */
+export async function withManagedAgentBrowserProvider(
+  options: {
+    session?: string;
+    openWebSessionNames?: () => readonly string[];
+    ownedProcessRecords?: OwnedProcessRecordStore;
+  },
+  testFn: (provider: WebProvider) => void | Promise<void>,
+): Promise<void> {
+  const stateDir = mkdtempForTestSync('agent device web provider ');
+  installFakeManagedAgentBrowser(stateDir);
+  await testFn(createAgentBrowserWebProvider({ ...options, stateDir }));
+}
+
+/** The answer shape the managed backend answers every command with. */
+export function agentBrowserJsonResult(value: unknown, exitCode = 0): ExecResult {
+  return { stdout: JSON.stringify(value), stderr: '', exitCode };
+}
+
+/** A fleet record store that records what was asked of it and holds nothing. */
+export function ownedProcessRecordStore(): OwnedProcessRecordStore {
+  return { replace: vi.fn(), clear: vi.fn(), read: vi.fn(() => []) };
+}
+
+/**
+ * Strips the `node <entry>` prefix the backend is spawned with, so a test reads the agent-browser
+ * CLI arguments it is about. The spawn shape itself is owned and asserted by agent-browser-tool.
+ */
+export function managedAgentBrowserCliArgs(args: readonly string[]): string[] {
+  return args.slice(1);
+}
+
+export type ManagedAgentBrowserExecutor = {
+  override: CommandExecutorOverride;
+  /** The agent-browser CLI arguments the provider asked for, in order, prefix stripped. */
+  commands: () => string[][];
+};
+
+/** Answers every managed command with success and remembers the agent-browser arguments. */
+export function recordingAgentBrowserExecutor(): ManagedAgentBrowserExecutor {
+  const commands: string[][] = [];
+  return {
+    commands: () => commands,
+    override: async (_command, args) => {
+      commands.push(managedAgentBrowserCliArgs(args));
+      return agentBrowserJsonResult({ success: true, data: {} });
+    },
+  };
+}
 
 export function installFakeManagedAgentBrowser(stateDir: string): FakeManagedAgentBrowserInstall {
   const install = writeFakeManagedAgentBrowserPackage(stateDir);
