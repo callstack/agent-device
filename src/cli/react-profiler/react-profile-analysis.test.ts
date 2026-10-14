@@ -241,6 +241,10 @@ test('every large mount group in a commit is its own eager-mount finding', () =>
     ],
   ]);
   assert.deepEqual(kinds(raw).sort(), ['eager-mount Row', 'eager-mount Tile']);
+  const costs = Object.fromEntries(
+    analyzeReactProfile(raw).findings.map((finding) => [finding.component, finding.costMs]),
+  );
+  assert.deepEqual(costs, { Tile: 220, Row: 210 });
 });
 
 test('many commits from one updater in a short span are a render storm', () => {

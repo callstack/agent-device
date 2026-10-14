@@ -162,22 +162,26 @@ const EAGER_MOUNT_INSTANCES = 200;
 function eagerMountFindings(profile: RawReactProfile, commits: CommitProfile[]): Finding[] {
   const findings = new Map<string, Finding>();
   profile.commits.forEach((commit, index) => {
-    const mounts = new Map<string, number>();
-    let total = 0;
+    const groups = new Map<string, { count: number; actualMs: number }>();
+    let mounted = 0;
     for (const render of commitRenders(profile, commit)) {
       if (!render.causes.includes('mount')) continue;
-      total += 1;
-      if (!isFrameworkPrimitive(render.name))
-        mounts.set(render.name, (mounts.get(render.name) ?? 0) + 1);
+      mounted += 1;
+      if (isFrameworkPrimitive(render.name)) continue;
+      const group = groups.get(render.name) ?? { count: 0, actualMs: 0 };
+      group.count += 1;
+      group.actualMs += render.actualMs;
+      groups.set(render.name, group);
     }
     const durationMs = commits[index]!.durationMs;
-    for (const [name, count] of mounts) {
-      if (count < EAGER_MOUNT_INSTANCES || findings.has(name)) continue;
+    for (const [name, group] of groups) {
+      if (group.count < EAGER_MOUNT_INSTANCES || findings.has(name)) continue;
+      const costMs = Math.min(group.actualMs, durationMs);
       findings.set(name, {
         kind: 'eager-mount',
         component: name,
-        costMs: durationMs,
-        evidence: `${count} instances mounted at once in commit #${index} (${total} components, ${ms(durationMs)})`,
+        costMs,
+        evidence: `${group.count} instances mounted at once in commit #${index}, ${ms(costMs)} of its ${ms(durationMs)} (${mounted} components mounted)`,
         fix: 'virtualize the list (FlatList/FlashList)',
       });
     }
