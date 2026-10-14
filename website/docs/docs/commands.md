@@ -66,7 +66,7 @@ agent-device daemon stop --clean
 Boot and shut down:
 
 - `boot` gets the selected target ready without launching an app. It needs an active session or a device selector. You mainly need it when `open` fails because no simulator or emulator is booted.
-- Android: `boot --platform android --device <avd-name>` launches that emulator with a window; add `--headless` to launch it without one.
+- Android: `boot --platform android --device <avd-name>` launches that emulator with a window; add `--headless` to launch it without one. On macOS the window opens behind the app you are using and returns focus to it.
 - `shutdown` turns off the selected Apple simulator or Android emulator. It refuses the active session's device; use `close --shutdown` to end the session and turn the device off.
 - `--timeout <ms>` on `boot`, `open <app>`, and `prepare ios-runner` is the startup budget for booting an iOS Simulator or Android emulator (for `prepare ios-runner`, shared with runner preparation). A never-booted iOS Simulator can take several minutes. When the budget runs out, the command fails with `error.details.reason: boot_timeout` and the device keeps booting, so a retry finds it further along. See [Sessions](/docs/sessions#wait-for-a-slow-or-busy-device).
 
