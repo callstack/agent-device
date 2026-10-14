@@ -40,16 +40,13 @@ test('a scheduled nightly publishes main once its CI passed', () => {
   });
 });
 
-test('a scheduled nightly waits for new commits, a new day, and green CI', () => {
+test('a scheduled nightly waits for new commits and green CI', () => {
   assert.match(planRelease(run({ sha: NIGHTLY_COMMIT })).reason, /already ships/);
-  assert.match(planRelease(run({ today: '20261010' })).reason, /shipped today/);
-  assert.match(planRelease(run({ ciConclusion: 'in_progress' })).reason, /is in_progress/);
-  const published = run({ publishedNightly: '0.21.25-nightly.20261011.40' });
-  assert.match(planRelease(published).reason, /20261011\.40 shipped today/);
+  assert.match(planRelease(run({ ciConclusion: 'failure' })).reason, /is failure/);
 });
 
-test('a dispatched nightly skips the cadence checks but still requires green CI', () => {
-  const dispatched = run({ event: 'workflow_dispatch', sha: NIGHTLY_COMMIT, today: '20261010' });
+test('a dispatched nightly republishes the shipped HEAD but still requires green CI', () => {
+  const dispatched = run({ event: 'workflow_dispatch', sha: NIGHTLY_COMMIT });
   assert.equal(planRelease(dispatched).mode, 'nightly');
   assert.throws(() => planRelease({ ...dispatched, ciConclusion: 'failure' }), /CI on .* failure/);
 });
@@ -123,9 +120,6 @@ function protectedSetup() {
       { name: 'main', type: 'branch' },
       { name: 'v*', type: 'tag' },
     ],
-    release: {
-      protection_rules: [{ type: 'required_reviewers', reviewers: [{ type: 'User' }] }],
-    },
     tagRulesets: [
       {
         enforcement: 'active',
@@ -142,10 +136,9 @@ test('publishing needs the protections GitHub enforces, not this script', () => 
     repositorySetupGaps({
       npmPublish: null,
       npmPublishPolicies: [],
-      release: null,
       tagRulesets: [],
     }).length,
-    3,
+    2,
   );
 });
 
@@ -156,8 +149,6 @@ test('each missing protection is named on its own', () => {
     npmPublishPolicies: [...setup.npmPublishPolicies, { name: '*', type: 'branch' }],
   };
   assert.match(repositorySetupGaps(anyBranch).join(), /npm-publish environment/);
-  const unreviewed = { ...setup, release: { protection_rules: [] } };
-  assert.match(repositorySetupGaps(unreviewed).join(), /release environment/);
   const evaluating = {
     ...setup,
     tagRulesets: [{ ...setup.tagRulesets[0], enforcement: 'evaluate' }],

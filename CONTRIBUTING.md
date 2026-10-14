@@ -93,18 +93,20 @@ described below. A local `npm publish` from the repository root refuses to run.
 The core and every public workspace package release together at one version. Private packages
 stay unpublished. There are three channels:
 
-- **Nightly** (`npm install -g agent-device@nightly`): every few hours the workflow checks `main`.
-  It publishes `X.Y.Z-nightly.<YYYYMMDD>.<run>` under the `nightly` dist-tag when `main`'s HEAD has
-  changed since the last nightly, its CI passed, and no nightly shipped that UTC day. It then tags
-  the commit `nightly/v<nightly version>`. To publish one now, run **Release** on `main`.
+- **Nightly** (`npm install -g agent-device@nightly`): once a day, at 01:23 UTC, the workflow
+  checks `main`. It publishes `X.Y.Z-nightly.<YYYYMMDD>.<run>` under the `nightly` dist-tag when
+  `main`'s HEAD has changed since the last nightly and its CI passed, waiting up to 20 minutes for
+  CI that is still running. If that CI fails, is cancelled, or is still running after the wait, no
+  nightly ships that day. A published nightly is tagged `nightly/v<nightly version>`. To publish one now, run **Release** on `main`.
 - **Stable** (`latest`): a repository admin publishes a GitHub release with a new `vX.Y.Z` tag
   targeting `main`. Use the version `main` builds towards (its `X.Y.Z-dev`), or a later one, and
   write the notes or generate them in the release form. The tag starts a **Release** run. It waits
-  up to 20 minutes for that commit's CI to pass, then waits for approval in the `release`
-  environment. Once approved, it publishes the packages, attaches the iOS runner and Android helper
-  assets to the release, publishes the MCP Registry entry, and commits `main`'s next `-dev` version.
-  If you reject the run, delete the release and its tag. Pushing the tag instead (`git push origin
-  main:refs/tags/vX.Y.Z`) starts the same run, which then drafts the release itself.
+  up to 20 minutes for that commit's CI to pass, then publishes the packages without asking for
+  approval, attaches the iOS runner and Android helper assets to the release, publishes the MCP
+  Registry entry, and commits `main`'s next `-dev` version. Creating the tag is the approval. To
+  stop a release, cancel the run before its publish job starts, then delete the release and its
+  tag. Pushing the tag instead (`git push origin main:refs/tags/vX.Y.Z`) starts the same run, which
+  then drafts the release itself.
 - **Dry run**: a pull request that changes release tooling builds and verifies every package with a
   nightly version, and publishes nothing.
 
@@ -137,20 +139,19 @@ npm access set mfa=publish @agent-device/<name>
 ### One-time repository setup
 
 npm trusts every run of `release.yml` that reaches the `npm-publish` environment, so GitHub
-settings, not the workflow, decide who can publish. The plan job refuses to publish until the first
-three are in place. Apply them before granting npm trust:
+settings, not the workflow, decide who can publish. The tag ruleset approves a stable release, so
+the plan job refuses to publish until the first two settings are in place. Apply them before
+granting npm trust:
 
 1. **Environment `npm-publish`** (Settings → Environments): deployment branches and tags limited to
    the branch `main` and the tag pattern `v*`. No reviewers and no secrets, so nightlies run
    unattended.
-2. **Environment `release`**: required reviewers. Turn on "Prevent self-review" only when another
-   maintainer can approve, because the admin who creates the tag cannot approve their own run.
-3. **Tag ruleset** (Settings → Rules → Rulesets → New tag ruleset): active, targeting
+2. **Tag ruleset** (Settings → Rules → Rulesets → New tag ruleset): active, targeting
    `refs/tags/v*` with no exclusions, restricting creations, updates, and deletions, with only the
    Repository admin role allowed to bypass. Nightly tags live under `nightly/` and stay outside it.
-4. **Actions** (Settings → Actions → General): workflow permissions set to read repository contents,
+3. **Actions** (Settings → Actions → General): workflow permissions set to read repository contents,
    and "Allow GitHub Actions to create and approve pull requests" turned off.
-5. **Releases** (Settings → General): leave release immutability off, because the run attaches its
+4. **Releases** (Settings → General): leave release immutability off, because the run attaches its
    assets after the release is published.
 
 Confirm the result, then grant npm trust to each public package and, once a nightly has published,
@@ -159,8 +160,6 @@ refuse token-based publishing:
 ```bash
 gh api repos/callstack/agent-device/environments/npm-publish/deployment-branch-policies \
   --jq '.branch_policies[] | "\(.type) \(.name)"'   # branch main, tag v*
-gh api repos/callstack/agent-device/environments/release \
-  --jq '.protection_rules[] | select(.type == "required_reviewers")'
 gh api repos/callstack/agent-device/rulesets --jq '.[] | select(.target == "tag") | .name'
 npm trust github <package> --file release.yml --repository callstack/agent-device \
   --environment npm-publish --allow-publish --yes
