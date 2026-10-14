@@ -103,34 +103,38 @@ test('runCmd writes stdin through pipeline', async () => {
   assert.equal(result.stdout, String(stdin.length));
 });
 
-test.sequential('runCmdBackground emits bounded exec_command diagnostics when AGENT_DEVICE_EXEC_TRACE is enabled', async () => {
-  const diagnosticsPath = await withExecTraceEnv(
-    async () =>
-      await withDiagnosticsScope(
-        {
-          session: 'exec-trace',
-          requestId: 'exec-trace-1',
-          command: 'background',
-        },
-        async () => {
-          const { wait } = runCmdBackground(process.execPath, [
-            '-e',
-            'process.stdout.write("ok")',
-            'a',
-            'b',
-            'c',
-            'd',
-            'e',
-            'f',
-          ]);
-          await wait;
-          return flushDiagnosticsToSessionFile()?.path ?? null;
-        },
-      ),
-  );
+test(
+  'runCmdBackground emits bounded exec_command diagnostics when AGENT_DEVICE_EXEC_TRACE is enabled',
+  { concurrent: false },
+  async () => {
+    const diagnosticsPath = await withExecTraceEnv(
+      async () =>
+        await withDiagnosticsScope(
+          {
+            session: 'exec-trace',
+            requestId: 'exec-trace-1',
+            command: 'background',
+          },
+          async () => {
+            const { wait } = runCmdBackground(process.execPath, [
+              '-e',
+              'process.stdout.write("ok")',
+              'a',
+              'b',
+              'c',
+              'd',
+              'e',
+              'f',
+            ]);
+            await wait;
+            return flushDiagnosticsToSessionFile()?.path ?? null;
+          },
+        ),
+    );
 
-  assertBackgroundExecTraceEvents(readExecDiagnosticEvents(diagnosticsPath));
-});
+    assertBackgroundExecTraceEvents(readExecDiagnosticEvents(diagnosticsPath));
+  },
+);
 
 test('runCmdBackground can leave output streams to the caller', async () => {
   const { child, wait } = runCmdBackground(
@@ -157,7 +161,7 @@ test('runCmdBackground can leave output streams to the caller', async () => {
   assert.equal(stderr, 'err');
 });
 
-test.sequential('runCmd stays silent when exec tracing is not enabled', async () => {
+test('runCmd stays silent when exec tracing is not enabled', { concurrent: false }, async () => {
   const previousTraceEnv = process.env.AGENT_DEVICE_EXEC_TRACE;
   delete process.env.AGENT_DEVICE_EXEC_TRACE;
 
@@ -281,21 +285,25 @@ test('whichCmd rejects suspicious command strings', async () => {
   assert.equal(await whichCmd('./node'), false);
 });
 
-test.sequential('whichCmd ignores directories that match a command name in PATH', async () => {
-  const root = mkdtempForTestSync('agent-device-whichcmd-');
-  const fakeCommandDir = path.join(root, 'fake-tool');
-  fs.mkdirSync(fakeCommandDir);
+test(
+  'whichCmd ignores directories that match a command name in PATH',
+  { concurrent: false },
+  async () => {
+    const root = mkdtempForTestSync('agent-device-whichcmd-');
+    const fakeCommandDir = path.join(root, 'fake-tool');
+    fs.mkdirSync(fakeCommandDir);
 
-  const previousPath = process.env.PATH;
-  process.env.PATH = `${root}${path.delimiter}${previousPath ?? ''}`;
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${root}${path.delimiter}${previousPath ?? ''}`;
 
-  try {
-    assert.equal(await whichCmd('fake-tool'), false);
-  } finally {
-    process.env.PATH = previousPath;
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
+    try {
+      assert.equal(await whichCmd('fake-tool'), false);
+    } finally {
+      process.env.PATH = previousPath;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  },
+);
 
 function readExecDiagnosticEvents(diagnosticsPath: string | null): Array<{
   level?: string;
@@ -542,55 +550,63 @@ test('an allowFailure xcrun result guarded by requireExecSuccess gets the toolch
   );
 });
 
-test.sequential('without a developer dir the toolchain hint points at xcode-select', () => {
-  const saved = process.env.DEVELOPER_DIR;
-  delete process.env.DEVELOPER_DIR;
-  try {
-    // No cmd/args: the call site only had the result, so xcrun's own stderr identifies the tool.
-    assert.throws(
-      () => requireExecSuccess(XCRUN_DEVICECTL_NOT_FOUND, 'Failed to list devices'),
-      (error: unknown) => {
-        assert.ok(error instanceof AppError);
-        assert.equal(error.details?.developerDir, null);
-        assert.match(
-          String(error.details?.hint),
-          /devicectl in the developer dir selected by xcode-select/,
-        );
-        return true;
-      },
-    );
-  } finally {
-    if (saved !== undefined) process.env.DEVELOPER_DIR = saved;
-  }
-});
-
-test.sequential('a request that clears DEVELOPER_DIR is not reported under the daemon one', async () => {
-  const saved = process.env.DEVELOPER_DIR;
-  process.env.DEVELOPER_DIR = '/daemon/Developer';
-  try {
-    // The child runs without a usable DEVELOPER_DIR (xcode-select decides), so the key and report
-    // must too, whether the request clears it or carries it unset.
-    for (const requestEnv of [{ DEVELOPER_DIR: '' }, { DEVELOPER_DIR: undefined }]) {
-      await withRequestCommandEnv(requestEnv, async () => {
-        assert.equal((await runCmd(process.execPath, PRINT_DEVELOPER_DIR)).stdout, '');
-        assert.equal(commandDeveloperDir(), undefined);
-        assert.throws(
-          () => requireExecSuccess(XCRUN_DEVICECTL_NOT_FOUND, 'Failed to list devices'),
-          (error: unknown) => {
-            assert.ok(error instanceof AppError);
-            assert.equal(error.details?.developerDir, null);
-            assert.match(String(error.details?.hint), /selected by xcode-select/);
-            return true;
-          },
-        );
-      });
+test(
+  'without a developer dir the toolchain hint points at xcode-select',
+  { concurrent: false },
+  () => {
+    const saved = process.env.DEVELOPER_DIR;
+    delete process.env.DEVELOPER_DIR;
+    try {
+      // No cmd/args: the call site only had the result, so xcrun's own stderr identifies the tool.
+      assert.throws(
+        () => requireExecSuccess(XCRUN_DEVICECTL_NOT_FOUND, 'Failed to list devices'),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.details?.developerDir, null);
+          assert.match(
+            String(error.details?.hint),
+            /devicectl in the developer dir selected by xcode-select/,
+          );
+          return true;
+        },
+      );
+    } finally {
+      if (saved !== undefined) process.env.DEVELOPER_DIR = saved;
     }
-    assert.equal(commandDeveloperDir(), '/daemon/Developer');
-  } finally {
-    if (saved === undefined) delete process.env.DEVELOPER_DIR;
-    else process.env.DEVELOPER_DIR = saved;
-  }
-});
+  },
+);
+
+test(
+  'a request that clears DEVELOPER_DIR is not reported under the daemon one',
+  { concurrent: false },
+  async () => {
+    const saved = process.env.DEVELOPER_DIR;
+    process.env.DEVELOPER_DIR = '/daemon/Developer';
+    try {
+      // The child runs without a usable DEVELOPER_DIR (xcode-select decides), so the key and report
+      // must too, whether the request clears it or carries it unset.
+      for (const requestEnv of [{ DEVELOPER_DIR: '' }, { DEVELOPER_DIR: undefined }]) {
+        await withRequestCommandEnv(requestEnv, async () => {
+          assert.equal((await runCmd(process.execPath, PRINT_DEVELOPER_DIR)).stdout, '');
+          assert.equal(commandDeveloperDir(), undefined);
+          assert.throws(
+            () => requireExecSuccess(XCRUN_DEVICECTL_NOT_FOUND, 'Failed to list devices'),
+            (error: unknown) => {
+              assert.ok(error instanceof AppError);
+              assert.equal(error.details?.developerDir, null);
+              assert.match(String(error.details?.hint), /selected by xcode-select/);
+              return true;
+            },
+          );
+        });
+      }
+      assert.equal(commandDeveloperDir(), '/daemon/Developer');
+    } finally {
+      if (saved === undefined) delete process.env.DEVELOPER_DIR;
+      else process.env.DEVELOPER_DIR = saved;
+    }
+  },
+);
 
 test('a non-xcrun failure keeps the caller hint', () => {
   assert.throws(

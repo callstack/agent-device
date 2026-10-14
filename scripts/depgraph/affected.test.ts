@@ -69,11 +69,11 @@ test('collectDependents ignores type-only and dynamic dependents, which are coun
 
 test('zoneBreakdown and rankByFanIn order by weight, then name', () => {
   const nodes = nodesOf({
-    'src/daemon/a.ts': { zone: 'daemon-server', fanIn: 3 },
-    'src/daemon/b.ts': { zone: 'daemon-server', fanIn: 9 },
+    'packages/daemon/src/a.ts': { zone: 'daemon-server', fanIn: 3 },
+    'packages/daemon/src/b.ts': { zone: 'daemon-server', fanIn: 9 },
     'src/core/c.ts': { zone: 'core', fanIn: 9 },
   });
-  const files = ['src/daemon/a.ts', 'src/daemon/b.ts', 'src/core/c.ts'];
+  const files = ['packages/daemon/src/a.ts', 'packages/daemon/src/b.ts', 'src/core/c.ts'];
 
   assert.deepEqual(zoneBreakdown(files, nodes), [
     { zone: 'daemon-server', count: 2 },
@@ -81,25 +81,29 @@ test('zoneBreakdown and rankByFanIn order by weight, then name', () => {
   ]);
   assert.deepEqual(
     rankByFanIn(files, nodes).map((entry) => entry.file),
-    ['src/core/c.ts', 'src/daemon/b.ts', 'src/daemon/a.ts'],
+    ['packages/daemon/src/b.ts', 'src/core/c.ts', 'packages/daemon/src/a.ts'],
   );
 });
 
 test('commandsReaching follows the dynamic import a route uses to load its handler', () => {
   // These are in-memory arbitrary paths for graph traversal, not repository ownership metadata.
   const edges = edgesOf({
-    'src/daemon/handlers/session.ts':
-      "import { helper } from '../../utils/helper.ts';\nexport const h = helper;",
-    'src/daemon/interaction/index.ts': 'export const f = 1;',
+    'packages/daemon/src/sessions/handlers/session.ts':
+      "import { helper } from '../../../../../src/utils/helper.ts';\nexport const h = helper;",
+    'packages/daemon/src/execution/interaction/index.ts': 'export const f = 1;',
     'src/utils/helper.ts': 'export const helper = 1;',
-    'src/daemon/chain.ts': [
-      "export const routes = { session: () => import('./handlers/session.ts'),",
-      "  find: () => import('./interaction/index.ts') };",
+    'packages/daemon/src/chain.ts': [
+      "export const routes = { session: () => import('./sessions/handlers/session.ts'),",
+      "  find: () => import('./execution/interaction/index.ts') };",
     ].join('\n'),
   });
   const chains = [
-    { command: 'open', route: 'session', entry: 'src/daemon/handlers/session.ts' },
-    { command: 'find', route: 'find', entry: 'src/daemon/interaction/index.ts' },
+    {
+      command: 'open',
+      route: 'session',
+      entry: 'packages/daemon/src/sessions/handlers/session.ts',
+    },
+    { command: 'find', route: 'find', entry: 'packages/daemon/src/execution/interaction/index.ts' },
   ];
 
   assert.deepEqual(
@@ -108,7 +112,7 @@ test('commandsReaching follows the dynamic import a route uses to load its handl
   );
   // The entry module itself counts as part of its own chain.
   assert.deepEqual(
-    commandsReaching('src/daemon/interaction/index.ts', chains, edges).map(
+    commandsReaching('packages/daemon/src/execution/interaction/index.ts', chains, edges).map(
       (chain) => chain.command,
     ),
     ['find'],
@@ -153,14 +157,14 @@ test('bounded lists disclose what they hid', () => {
 });
 
 test('every daemon route in the real route table resolves to a handler entry', () => {
-  const chainFile = 'src/daemon/request-handler-chain.ts';
+  const chainFile = 'packages/daemon/src/sessions/request-handler-chain.ts';
   const source = readFileSync(path.join(repoRoot, chainFile), 'utf8');
   const entries = parseRouteEntries(source, chainFile);
   const declared = [...source.matchAll(/(\w+): defineDaemonRoute\(/g)].map((match) => match[1]!);
 
   assert.ok(declared.length > 0, 'route table shape changed: no defineDaemonRoute entries found');
   assert.deepEqual([...entries.keys()].sort(), [...declared].sort());
-  assert.equal(entries.get('generic'), 'src/daemon/request-generic-dispatch.ts');
+  assert.equal(entries.get('generic'), 'packages/daemon/src/execution/request-generic-dispatch.ts');
 });
 
 test('the real guarantee matrix contributes module-qualified rows', () => {
@@ -209,7 +213,9 @@ test('text output bounds every list and says what it hid', () => {
         weakDirect: { type: 2, dynamic: 1 },
       },
       gates: { checks: ['lint', 'typecheck'], failOpen: false },
-      commands: [{ command: 'click', route: 'interaction', entry: 'src/daemon/handlers/x.ts' }],
+      commands: [
+        { command: 'click', route: 'interaction', entry: 'packages/daemon/src/handlers/x.ts' },
+      ],
       liveOwners: { manifest: 'test/…/coverage-manifest.ts', present: false, owners: [] },
       guaranteeRows: [],
     },

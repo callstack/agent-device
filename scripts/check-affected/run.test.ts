@@ -10,6 +10,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { STALE_NODE_MODULES_MESSAGE } from './lockfile-install-sync.ts';
+import { beginStderrCapture } from '../../src/__tests__/test-utils/stream-capture.ts';
 import { CHECK_CATALOG } from './checks.ts';
 import { selectChecks } from './model.ts';
 import { type CommandExecutor, readChangedFiles, runChecks } from './run.ts';
@@ -320,12 +321,7 @@ test('runChecks proceeds normally when the install is in sync', async () => {
 });
 
 test('runChecks names the real cause on stderr instead of surfacing as an unrelated failure', async () => {
-  const stderrChunks: string[] = [];
-  const originalWrite = process.stderr.write.bind(process.stderr);
-  process.stderr.write = ((chunk: string | Uint8Array) => {
-    stderrChunks.push(chunk.toString());
-    return true;
-  }) as typeof process.stderr.write;
+  const stderrCapture = beginStderrCapture();
 
   try {
     const plan = selectChecks({
@@ -339,14 +335,14 @@ test('runChecks names the real cause on stderr instead of surfacing as an unrela
     });
     assert.equal(code, 1);
     assert.ok(
-      stderrChunks.some((chunk) => chunk.includes(STALE_NODE_MODULES_MESSAGE)),
-      `expected stderr to name the stale-install cause, got: ${stderrChunks.join('')}`,
+      stderrCapture.read().includes(STALE_NODE_MODULES_MESSAGE),
+      `expected stderr to name the stale-install cause, got: ${stderrCapture.read()}`,
     );
-    const stderr = stderrChunks.join('');
+    const stderr = stderrCapture.read();
     assert.match(stderr, /Worktree: \.\n/);
     assert.match(stderr, /pnpm install --frozen-lockfile/);
     assert.doesNotMatch(stderr, /agent-device doctor/);
   } finally {
-    process.stderr.write = originalWrite;
+    stderrCapture.restore();
   }
 });

@@ -1,0 +1,83 @@
+import path from 'node:path';
+import { beforeEach, expect, test, vi } from 'vitest';
+
+import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { SessionStore } from '../../../core/session-store.ts';
+import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
+import {
+  captureSnapshotThroughLegacyDispatchFixture,
+  legacyDispatchCapture,
+} from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
+import { captureSnapshotWithInteractor } from '../../../core/snapshot-interactor-capture.ts';
+import {
+  baseReplayRequest,
+  writeReplayFile,
+} from '../replay-runtime/session-replay-runtime.fixtures.ts';
+
+vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
+  return { ...actual, resolveTargetDevice: vi.fn() };
+});
+
+vi.mock('../../../core/snapshot-interactor-capture.ts', () => ({
+  captureSnapshotWithInteractor: vi.fn(),
+}));
+
+const mockDispatchCommand = legacyDispatchCapture;
+const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);
+
+beforeEach(() => {
+  mockDispatchCommand.mockReset();
+  mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
+  mockCaptureSnapshotWithInteractor.mockReset();
+  mockCaptureSnapshotWithInteractor.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
+});
+
+test('replay executes selector reads before reporting a covered-target divergence', async () => {
+  const root = mkdtempForTestSync('agent-device-replay-selector-routes-');
+  const sessionName = 'default';
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  sessionStore.publish(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, [
+    'open "Demo"',
+    String.raw`get text "id=\"field-name\""`,
+    String.raw`get attrs "id=\"field-name\""`,
+    String.raw`is visible "id=\"field-name\""`,
+    'find id "field-name" get attrs',
+    String.raw`click "id=\"field-name\""`,
+  ]);
+  const invoked: string[] = [];
+
+  const response = await runReplayForTest({
+    req: baseReplayRequest({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (request) => {
+      invoked.push(request.command);
+      if (request.command !== 'click') return { ok: true, data: {} };
+      return {
+        ok: false,
+        error: {
+          code: 'COMMAND_FAILED',
+          message: 'Target is covered by another visible element',
+        },
+      };
+    },
+  });
+
+  expect(invoked).toEqual(['open', 'get', 'get', 'is', 'find', 'click']);
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('REPLAY_DIVERGENCE');
+  expect(response.error.details?.divergence).toMatchObject({
+    kind: 'action-failure',
+    step: { index: 6 },
+    cause: {
+      code: 'COMMAND_FAILED',
+      message: 'Target is covered by another visible element',
+    },
+  });
+});

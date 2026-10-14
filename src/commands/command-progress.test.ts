@@ -1,28 +1,14 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { withCapturedStderr } from '../__tests__/test-utils/stream-capture.ts';
 import { createCommandProgressState, createStderrCommandProgressSink } from './command-progress.ts';
-
-function captureStderr(run: () => void): string {
-  let stderr = '';
-  const originalWrite = process.stderr.write.bind(process.stderr);
-  (process.stderr as { write: unknown }).write = ((chunk: unknown) => {
-    stderr += String(chunk);
-    return true;
-  }) as typeof process.stderr.write;
-  try {
-    run();
-  } finally {
-    process.stderr.write = originalWrite;
-  }
-  return stderr;
-}
 
 test('the stderr sink renders command progress and records that it did', () => {
   const state = createCommandProgressState();
   const sink = createStderrCommandProgressSink(state);
   assert.equal(state.renderedToStderr, false);
 
-  const stderr = captureStderr(() => {
+  const stderr = withCapturedStderr(() => {
     sink({ type: 'command', status: 'progress', message: 'Building Apple runner...' });
   });
 
@@ -34,7 +20,7 @@ test('the stderr sink leaves reporter-owned event types alone', () => {
   const state = createCommandProgressState();
   const sink = createStderrCommandProgressSink(state);
 
-  const stderr = captureStderr(() => {
+  const stderr = withCapturedStderr(() => {
     sink({
       type: 'replay-test',
       file: '/tmp/01-login.ad',

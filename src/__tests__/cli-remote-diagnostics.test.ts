@@ -10,17 +10,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeError, AppError } from '@agent-device/kernel/errors';
-import { createDaemonHttpServer } from '../daemon/server/http-server.ts';
-import { resolveSessionRequestLogPath } from '../daemon/session-artifact-paths.ts';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
+import { resolveSessionRequestLogPath } from '@agent-device/daemon/session-artifact-paths';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
-import type { DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
+import type { DaemonRequest, DaemonResponse } from '@agent-device/daemon/daemon-request';
 import { runCliCapture, type CapturedCliRun } from './cli-capture.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from './test-utils/loopback.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+} from '@agent-device/test-kit/loopback';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const DAEMON_TOKEN = 'daemon-secret';
 const DAEMON_SESSION = 'cwd:abcdef0123456789:default';

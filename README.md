@@ -15,11 +15,25 @@
 
 **Mobile app automation and verification for AI coding agents.** Give coding agents a live app feedback loop through a CLI, built-in MCP server, or typed Node.js API.
 
-<!-- Intro rule: category line, job pitch with the platform list, works-with/proof line, nothing else. Per-platform transports, tool names, vendor lists, and support caveats belong in "How it works" and website/docs, never here. Every name in the proof line must link to public evidence. -->
+<!-- Intro rule: category line, job pitch with the platform list, works-with/proof lines, nothing else. Per-platform transports, tool names, vendor lists, and support caveats belong in "How it works" and website/docs, never here. Every name in the proof lines must link to public evidence. -->
 
 Let your coding agent verify its changes in the running app. `agent-device` lets agents inspect, control, debug, and verify apps on iOS, Android, and HarmonyOS (simulators, emulators, and physical devices), plus tvOS, Android TV, Amazon Vega OS TV (Vega Virtual Device), web, macOS, and Linux. Agents read token-efficient accessibility snapshots instead of reasoning over screenshots alone, act through refs and selectors, and save evidence for review. It also coordinates device access across parallel agent worktrees and connects to remote device clouds.
 
 Works with Claude Code, Codex, Cursor, Windsurf, Cline, Goose, and any agent that can run a CLI or connect over MCP, or as the runtime under agents you build with the [AI SDK](https://oss.callstack.com/agent-device/docs/ai-sdk) or [Eve](https://oss.callstack.com/agent-device/docs/eve). Developers at [Expensify](https://www.callstack.com/blog/how-expensify-uses-agent-device-for-mobile-bug-evidence-and-profiling), [Shopify](https://x.com/mustafa01ali/status/2036577353178943826), and [others](#who-uses-agent-device) use it to verify their apps.
+
+<p>
+  agent-device powers mobile automation in
+  <a href="https://e2e.tester.army/?utm_source=github&utm_medium=organic&utm_campaign=agent-device-readme-202610&utm_content=readme-powered-by">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/assets/e2e-logo-dark.png">
+      <img src="docs/assets/e2e-logo-light.png" width="24" height="24" align="middle" alt="">
+    </picture>
+    e2e</a>
+  and
+  <a href="https://github.com/pingdotgg/t3code">
+    <img src="docs/assets/t3-code-logo.svg" width="24" height="24" align="middle" alt="">
+    T3 Code</a>.
+</p>
 
 ## Quick start
 

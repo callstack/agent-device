@@ -445,26 +445,82 @@ extension RunnerTests {
       .trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
+  /// What a text entry element's value says about its text.
+  enum TextValueRead: Equatable {
+    case text(String)
+    /// The value carries no information about the text: a secure field, or a masked value.
+    case unreadable
+    /// The read could not answer, or no input resolves.
+    case unavailable
+  }
+
+  /// What a text entry element's accessibility value says about its text. The one owner of the
+  /// "value unreadable" rule: a `.secureTextField`, or a plain field whose value is a password
+  /// mask, as a React Native `secureTextEntry` input reports (tester-army/e2e#872). Every route
+  /// that decides readability reads through here, so none can disagree with another.
+  func textValueRead(
+    for element: (any XCUIElementAttributes)?,
+    treatingPlaceholderAsEmpty: Bool = false
+  ) -> TextValueRead {
+    guard let element else {
+      return .unavailable
+    }
+    let elementType = element.elementType
+    switch elementType {
+    case .textField, .searchField, .textView:
+      let value = String(describing: element.value ?? "")
+      if treatingPlaceholderAsEmpty && isPlaceholderValue(value, for: element) {
+        return .text("")
+      }
+      return Self.textValueRead(elementType: elementType, value: value)
+    default:
+      return Self.textValueRead(elementType: elementType, value: "")
+    }
+  }
+
+  /// `textValueRead(for:)` with the element's type and value already read, so the rule is
+  /// exercisable without an element.
+  static func textValueRead(elementType: XCUIElement.ElementType, value: String) -> TextValueRead {
+    switch elementType {
+    case .secureTextField:
+      return .unreadable
+    case .textField, .searchField, .textView:
+      return isMaskedTextValue(value) ? .unreadable : .text(value)
+    default:
+      return .unavailable
+    }
+  }
+
+  /// The element's text when it can be read, nil when it is unreadable or unavailable. Callers
+  /// that need the two told apart read `textValueRead(for:)` instead.
   func editableTextValue(
     for element: (any XCUIElementAttributes)?,
     treatingPlaceholderAsEmpty: Bool = false
   ) -> String? {
-    guard let element else {
+    guard case .text(let value) = textValueRead(
+      for: element,
+      treatingPlaceholderAsEmpty: treatingPlaceholderAsEmpty
+    ) else {
       return nil
     }
-    switch element.elementType {
-    case .textField, .searchField, .textView:
-      let value = String(describing: element.value ?? "")
-      if treatingPlaceholderAsEmpty && isPlaceholderValue(value, for: element) {
-        return ""
-      }
-      return value
-    case .secureTextField:
-      return nil
-    default:
-      return nil
-    }
+    return value
   }
+
+  /// Whether an accessibility value is a masked rendering of a secure field: one or more
+  /// password bullets and nothing else. The bullet count need not match the typed length, so
+  /// such a value carries no information about what the field holds. A field whose real text is
+  /// only bullets is unreadable too, so a failed fill into it reports unverified, not a mismatch.
+  static func isMaskedTextValue(_ value: String) -> Bool {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      return false
+    }
+    return trimmed.allSatisfy { Self.passwordMaskCharacters.contains($0) }
+  }
+
+  /// U+2022 is what UIKit renders for a secure field; U+25CF is the other bullet some custom
+  /// inputs substitute for it.
+  private static let passwordMaskCharacters: Set<Character> = ["\u{2022}", "\u{25CF}"]
 
   private func isPlaceholderValue(_ value: String, for element: any XCUIElementAttributes) -> Bool {
     if Self.textMatchesPlaceholder(value, placeholder: element.placeholderValue) {

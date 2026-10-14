@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
@@ -12,11 +12,9 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
 
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { sendToDaemon } from '../daemon-client.ts';
-import { closeLoopbackServer, supportsLoopbackBind } from '../../__tests__/test-utils/loopback.ts';
-import {
-  captureStderr,
-  startHttpDaemonFixture,
-} from '../../__tests__/test-utils/daemon-http-fixture.ts';
+import { closeLoopbackServer, supportsLoopbackBind } from '@agent-device/test-kit/loopback';
+import { startHttpDaemonFixture } from '../../__tests__/test-utils/daemon-http-fixture.ts';
+import { beginStderrCapture } from '../../__tests__/test-utils/stream-capture.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { runCmdDetachedMonitored } from '@agent-device/host-kit/command';
 
@@ -51,7 +49,7 @@ test('sendToDaemon refuses to replace a reachable daemon newer than the client',
     })}\n`,
     'utf8',
   );
-  const stderrCapture = captureStderr();
+  const stderrCapture = beginStderrCapture();
 
   try {
     await assert.rejects(
@@ -103,7 +101,7 @@ test('sendToDaemon refuses a newer socket-only daemon when the client prefers ht
     })}\n`,
     'utf8',
   );
-  const stderrCapture = captureStderr();
+  const stderrCapture = beginStderrCapture();
 
   try {
     await assert.rejects(

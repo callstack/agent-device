@@ -12,8 +12,11 @@ import { runXcrun } from './tool-provider.ts';
  */
 const HINGE_ANGLE_SAMPLE = /Angle:\s*(-?\d+(?:[.,]\d+)?)\s*°/g;
 
-const HINGE_ANGLE_UNSUPPORTED_HINT =
-  "This Xcode/CoreDevice toolchain does not stream 'devicectl device motion hinge-angle' for this device. Foldable poses can be verified only through that stream; update Xcode to a version that ships it.";
+/** The read returned no sample line; stderr in the details says why. */
+export const HINGE_ANGLE_NO_SAMPLE_REASON = 'fold-hinge-angle-no-sample';
+
+const HINGE_ANGLE_NO_SAMPLE_HINT =
+  "'devicectl device motion hinge-angle' printed no sample, and foldable poses can be verified only through that stream. The stderr in the details names the cause, such as a devicectl without the subcommand or a device CoreDevice cannot reach.";
 
 /**
  * Reads the hinge angle CoreDevice currently reports for one Apple device, in degrees: 0 is
@@ -56,7 +59,8 @@ export async function readAppleHingeAngle(
       stdout: result.stdout,
       stderr: result.stderr,
       deviceId: device.id,
-      hint: HINGE_ANGLE_UNSUPPORTED_HINT,
+      reason: HINGE_ANGLE_NO_SAMPLE_REASON,
+      hint: HINGE_ANGLE_NO_SAMPLE_HINT,
     }),
   );
 }

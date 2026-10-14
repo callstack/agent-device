@@ -5,6 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 import { run } from './run.ts';
+import {
+  beginStderrCapture,
+  beginStdoutCapture,
+} from '../../src/__tests__/test-utils/stream-capture.ts';
 
 let repo: string;
 
@@ -25,23 +29,14 @@ function writeLcov(records: string): void {
 // Redirect the module's stdout/stderr writers so the entrypoint's rendering
 // runs without spamming the test reporter.
 function capture(fn: () => number): { code: number; out: string } {
-  const chunks: string[] = [];
-  const original = process.stdout.write.bind(process.stdout);
-  const originalErr = process.stderr.write.bind(process.stderr);
-  process.stdout.write = ((chunk: string | Uint8Array): boolean => {
-    chunks.push(String(chunk));
-    return true;
-  }) as typeof process.stdout.write;
-  process.stderr.write = ((chunk: string | Uint8Array): boolean => {
-    chunks.push(String(chunk));
-    return true;
-  }) as typeof process.stderr.write;
+  const stdoutCapture = beginStdoutCapture();
+  const stderrCapture = beginStderrCapture();
   try {
     const code = fn();
-    return { code, out: chunks.join('') };
+    return { code, out: stdoutCapture.read() + stderrCapture.read() };
   } finally {
-    process.stdout.write = original;
-    process.stderr.write = originalErr;
+    stdoutCapture.restore();
+    stderrCapture.restore();
   }
 }
 

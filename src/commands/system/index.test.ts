@@ -210,6 +210,42 @@ describe('system command interface', () => {
     expect(output.text).toBe(['Foreground app: com.example', 'Activity: .MainActivity'].join('\n'));
   });
 
+  test('appstate CLI output renders the macOS session app', () => {
+    // macOS appState is never admitted by the Apple runtime facts, so the live
+    // daemon always answers from the session record: no State line.
+    const output = systemCliOutputFormatters.appstate({
+      input: {},
+      result: {
+        platform: 'macos',
+        appName: 'System Settings',
+        appBundleId: 'com.apple.systempreferences',
+        source: 'session',
+        surface: 'app',
+      },
+    });
+    expect(output.text).toBe(
+      [
+        'Session app: System Settings',
+        'Bundle: com.apple.systempreferences',
+        'Source: session',
+      ].join('\n'),
+    );
+  });
+
+  test('appstate CLI output renders the HarmonyOS foreground app and activity', () => {
+    const output = systemCliOutputFormatters.appstate({
+      input: {},
+      result: {
+        platform: 'harmonyos',
+        package: 'com.example.hmapp',
+        activity: 'EntryAbility',
+      },
+    });
+    expect(output.text).toBe(
+      ['Foreground app: com.example.hmapp', 'Activity: EntryAbility'].join('\n'),
+    );
+  });
+
   test('orientation reader and writer normalize orientation', () => {
     expect(orientationCliReader(['left'], flags())).toMatchObject({
       orientation: 'landscape-left',

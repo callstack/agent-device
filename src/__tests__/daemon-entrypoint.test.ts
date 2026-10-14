@@ -6,12 +6,12 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { startDaemonRuntimeFixture } from '../daemon/__tests__/daemon-runtime-fixture.ts';
-import type { DaemonRuntimeController } from '../daemon/server/daemon-runtime.ts';
+import { startDaemonRuntimeFixture } from './daemon-composition/daemon-runtime-fixture.ts';
+import type { DaemonRuntimeController } from '@agent-device/daemon/server/daemon-runtime';
 import {
   cleanupDownloadableArtifact,
   trackDownloadableArtifact,
-} from '../daemon/artifact-tracking.ts';
+} from '@agent-device/daemon/testing/artifact-tracking';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
   createOwnedProcessRecordStore,
@@ -23,8 +23,12 @@ import {
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen-recording-session-resource';
 
-import { closeLoopbackServer, listenOnLoopback, waitForHttpOk } from './test-utils/loopback.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import {
+  closeLoopbackServer,
+  listenOnLoopback,
+  waitForHttpOk,
+} from '@agent-device/test-kit/loopback';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 type DaemonInfoFile = {
   httpPort?: number;

@@ -9,8 +9,8 @@ import {
   skipWhenLoopbackUnavailable,
   closeLoopbackServer,
   listenOnLoopback,
-} from '../../../__tests__/test-utils/loopback.ts';
-import { mkdtempForTestSync } from '../../../__tests__/test-utils/tmp-dir.ts';
+} from '@agent-device/test-kit/loopback';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
 const mocks = vi.hoisted(() => ({

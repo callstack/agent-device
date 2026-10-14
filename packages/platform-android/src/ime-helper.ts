@@ -1,5 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { isCommandTimeoutError } from '@agent-device/host-kit/command';
+import { sleep } from '@agent-device/host-kit/retry';
 import {
   readAndroidHelperManifestInteger,
   readAndroidHelperManifestLiteral,
@@ -28,6 +30,8 @@ const ANDROID_IME_HELPER_PROTOCOL = 'android-ime-helper-v1';
 export const ANDROID_IME_HELPER_SERVICE_COMPONENT = ANDROID_IME_HELPER_SERVICE;
 const ANDROID_IME_HELPER_INSTALL_TIMEOUT_MS = 30_000;
 const ANDROID_IME_HELPER_BROADCAST_TIMEOUT_MS = 10_000;
+const ANDROID_IME_HELPER_REGISTRATION_TIMEOUT_MS = 5_000;
+const ANDROID_IME_HELPER_REGISTRATION_POLL_MS = 100;
 
 const ACTION_INPUT_TEXT_B64 = 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64';
 const ACTION_CLEAR_TEXT = 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT';
@@ -109,7 +113,7 @@ export async function ensureAndroidImeHelper(options: {
   artifact: AndroidImeHelperArtifact;
   deviceKey: string;
 }): Promise<AndroidHelperInstallDecision> {
-  return await requireAndroidAdbHost().ensureHelperInstalled(
+  const decision = await requireAndroidAdbHost().ensureHelperInstalled(
     {
       cache: installedImeHelpers,
       installTimeoutMs: ANDROID_IME_HELPER_INSTALL_TIMEOUT_MS,
@@ -117,6 +121,33 @@ export async function ensureAndroidImeHelper(options: {
     },
     options,
   );
+  if (decision.installed) {
+    await waitForAndroidImeRegistration(options.adb, options.artifact.manifest.serviceComponent);
+  }
+  return decision;
+}
+
+// `adb install` returns before the input method manager registers the new service, and until it
+// does, `ime enable` and `ime set` reject it as unknown. The wait is best-effort: once its budget
+// runs out, the activation's read-back reports the refusal.
+async function waitForAndroidImeRegistration(
+  adb: AndroidAdbExecutor,
+  serviceComponent: string,
+): Promise<void> {
+  const deadline = Date.now() + ANDROID_IME_HELPER_REGISTRATION_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    try {
+      const result = await runAdbShell(adb, ['ime', 'list', '-a', '-s'], {
+        allowFailure: true,
+        timeoutMs: Math.max(1, deadline - Date.now()),
+      });
+      if (result.stdout.split(/\r?\n/).includes(serviceComponent)) return;
+    } catch (error) {
+      if (isCommandTimeoutError(error)) return;
+      throw error;
+    }
+    await sleep(ANDROID_IME_HELPER_REGISTRATION_POLL_MS);
+  }
 }
 
 /**

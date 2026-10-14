@@ -11,7 +11,7 @@ import {
 import {
   withTestDeviceInventory,
   withTestDeviceInventoryProvider as withDeviceInventoryProvider,
-} from './test-utils/device-inventory-gateways.ts';
+} from '../inventory-gateways.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { DeviceInventoryRequest } from '@agent-device/contracts/device';
 import { AppError } from '@agent-device/kernel/errors';

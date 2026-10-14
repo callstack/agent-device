@@ -17,8 +17,6 @@ import {
 } from './snapshot-helper-types.ts';
 import type { AndroidAdbProcess } from './adb-executor.ts';
 
-const SESSION_REQUEST_OVERHEAD_MS = 3_000;
-
 export function allocateAndroidSnapshotHelperSessionPort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -85,28 +83,20 @@ export function sendAndroidSnapshotHelperSessionCommand(
 
 export async function requestAndroidSnapshotHelperSessionSnapshot(params: {
   port: number;
-  timeoutMs: number;
   commandTimeoutMs: number;
   signal?: AbortSignal;
 }): Promise<AndroidSnapshotHelperOutput> {
   const requestId = `snapshot-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  // The socket waits out the whole command budget the session was given. The device-side
+  // `timeoutMs` bounds only the UiAutomation connect wait, not the traversal after it, so a deadline
+  // built from that wait plus a fixed overhead cut off slow-but-healthy captures (tester-army/e2e#841).
   const response = await sendAndroidSnapshotHelperSessionCommand(
     params.port,
     `snapshot ${requestId}`,
-    resolveAndroidSnapshotHelperSessionRequestTimeoutMs(params),
+    params.commandTimeoutMs,
     params.signal,
   );
   return parseAndroidSnapshotHelperSessionSnapshotResponse(response, requestId);
-}
-
-export function resolveAndroidSnapshotHelperSessionRequestTimeoutMs(params: {
-  timeoutMs: number;
-  commandTimeoutMs: number;
-}): number {
-  return Math.min(
-    params.commandTimeoutMs,
-    Math.max(params.timeoutMs + SESSION_REQUEST_OVERHEAD_MS, 3_000),
-  );
 }
 
 const SESSION_READY_TIMEOUT_REASON = 'android_snapshot_helper_session_ready_timeout';

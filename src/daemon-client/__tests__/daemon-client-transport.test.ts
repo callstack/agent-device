@@ -4,7 +4,7 @@ import net from 'node:net';
 import fs from 'node:fs';
 import path from 'node:path';
 import { withDiagnosticsScope } from '@agent-device/host-kit/diagnostics';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { test, vi } from 'vitest';
 import * as hostTransport from '@agent-device/host-kit/transport';
 import { sleep } from '@agent-device/host-kit/retry';
@@ -26,7 +26,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 
 function sendWithStaleInstance(port: number, timeoutMs: number) {
   return sendRequest(

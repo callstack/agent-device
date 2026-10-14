@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationDir": "./dist-types",
+    "rootDir": "./src",
+    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../capture-kit" },
+    { "path": "../command-registry" },
+    { "path": "../contracts" },
+    { "path": "../daemon-contracts" },
+    { "path": "../host-kit" },
+    { "path": "../kernel" }
+  ]
+}

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test, vi } from 'vitest';
 import type { AgentDeviceClient } from '../../client/client-types.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 
 // Operator-owned inputs are never model-writable: the model reads untrusted

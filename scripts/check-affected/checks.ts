@@ -66,7 +66,7 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   gate('unit', 'Unit + smoke suite', 'check:unit'),
   // CI owns the default coverage run; the scripts remain available for explicit local diagnosis.
   gate('coverage', 'Changed-line coverage', 'check:coverage-changed', false),
-  gate('coverage-crap', 'Coverage-based CRAP report', 'check:coverage-crap', false),
+  gate('coverage-crap', 'Coverage-based CRAP verdict', 'check:coverage-crap', false),
   gate('provider-integration', 'Provider-backed integration suite', 'test:integration:provider'),
   gate(
     'integration-progress',

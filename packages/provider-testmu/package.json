@@ -1,6 +1,6 @@
 {
   "name": "@agent-device/testmu",
-  "version": "0.21.27-dev",
+  "version": "0.21.28-dev",
   "type": "module",
   "description": "TestMu AI real and virtual mobile device plugin for agent-device.",
   "files": [

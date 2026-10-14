@@ -11,7 +11,14 @@ import type {
 import fs from 'node:fs';
 import path from 'node:path';
 import { runCmdSync, runCmdDetached } from '@agent-device/host-kit/command';
-import { waitForProcessExit } from '@agent-device/host-kit/process';
+import {
+  confirmedProcessStopDetails,
+  describeUnconfirmedProcessStop,
+  readConfirmedProcessStopDetails,
+  readProcessStartTime,
+  stopProcessAndConfirmExit,
+  type ConfirmedProcessStop,
+} from '@agent-device/host-kit/process';
 import { sleep } from '@agent-device/host-kit/retry';
 import { ensureMetroCompanion } from './client-metro-companion.ts';
 import type {
@@ -53,6 +60,8 @@ type PackageManagerConfig = {
 
 type MetroProcessResult = {
   pid: number;
+  /** The lifetime the host reported at spawn; a stale pid cannot imitate it. */
+  startTime?: string;
 };
 
 type ResolvedMetroPrepareSettings = {
@@ -406,27 +415,34 @@ function startMetroProcess(
 
   return {
     pid,
+    startTime: readProcessStartTime(pid) ?? undefined,
   };
 }
 
-async function stopSpawnedMetroProcess(pid: number): Promise<void> {
-  if (!Number.isInteger(pid) || pid <= 0) return;
-  try {
-    process.kill(pid, 'SIGTERM');
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ESRCH' || code === 'EPERM') return;
-    throw error;
-  }
-  if (await waitForProcessExit(pid, METRO_TERM_TIMEOUT_MS)) return;
-  try {
-    process.kill(pid, 'SIGKILL');
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === 'ESRCH' || code === 'EPERM') return;
-    throw error;
-  }
-  await waitForProcessExit(pid, METRO_KILL_TIMEOUT_MS);
+/**
+ * Readiness failure, carrying what the cleanup proved: a dev server still live afterwards names its
+ * pid, signal and typed `details.reason`, so the user learns what still holds the port.
+ */
+function metroStartupFailure(
+  statusUrl: string,
+  settings: ResolvedMetroPrepareSettings,
+  pid: number,
+  stop: ConfirmedProcessStop | { throws: unknown },
+): AppError {
+  const message = `React Native dev server did not become ready at ${statusUrl} within ${settings.startupTimeoutMs}ms. Check ${settings.logPath}.`;
+  // Cleanup stays best effort: an unclassifiable fault travels as the cause, not as the failure.
+  if ('throws' in stop)
+    return new AppError('COMMAND_FAILED', message, { logPath: settings.logPath }, stop.throws);
+  if (stop.status === 'stopped')
+    return new AppError('COMMAND_FAILED', message, { logPath: settings.logPath });
+  const kept =
+    stop.reason === 'identity-unverified'
+      ? describeUnconfirmedProcessStop(pid, 'the process this run started')
+      : `pid ${pid} is still running${stop.reason === 'signal-failed' ? ` and refused ${stop.signal} (${stop.errno})` : ''}`;
+  return new AppError('COMMAND_FAILED', `${message} Dev server ${kept}; stop it before retrying.`, {
+    logPath: settings.logPath,
+    ...confirmedProcessStopDetails(stop, pid),
+  });
 }
 
 function createProxyHeaders(baseUrl: string, bearerToken: string): Record<string, string> {
@@ -848,12 +864,16 @@ async function ensureMetroProcessReady(
     return { started: true, reused: false, pid: startedProcess.pid, statusUrl };
   }
 
-  await stopSpawnedMetroProcess(startedProcess.pid).catch(() => {});
-  throw new AppError(
-    'COMMAND_FAILED',
-    `React Native dev server did not become ready at ${statusUrl} within ${settings.startupTimeoutMs}ms. Check ${settings.logPath}.`,
-    { logPath: settings.logPath },
-  );
+  // The recorded start time is what keeps this from signaling whatever process inherits the pid
+  // after a slow readiness timeout.
+  const stop = await stopProcessAndConfirmExit(
+    { pid: startedProcess.pid, identity: { startTime: startedProcess.startTime } },
+    {
+      termTimeoutMs: METRO_TERM_TIMEOUT_MS,
+      killTimeoutMs: METRO_KILL_TIMEOUT_MS,
+    },
+  ).catch((error: unknown) => ({ throws: error }));
+  throw metroStartupFailure(statusUrl, settings, startedProcess.pid, stop);
 }
 
 async function configureProxyBridgeForRuntime(
@@ -917,6 +937,9 @@ async function configureProxyBridgeViaCompanion(
     });
     companionLogPath = companion.logPath;
   } catch (error) {
+    // The wrapper flattens the cause into an undispatchable `bridgeError=`, so the verdict travels
+    // in `details`. Only the verdict: the companion's own log path and advice describe a surface
+    // this caller did not ask about, and would outrank this command's own `details`.
     throw new AppError(
       'COMMAND_FAILED',
       describeBridgeFailure(
@@ -925,7 +948,7 @@ async function configureProxyBridgeViaCompanion(
         bridge,
         initialBridgeError,
       ),
-      undefined,
+      error instanceof AppError ? readConfirmedProcessStopDetails(error.details) : undefined,
       error,
     );
   }

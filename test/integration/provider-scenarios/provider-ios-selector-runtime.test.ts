@@ -9,7 +9,7 @@ import type {
 } from '@agent-device/contracts/device';
 import type { Interactor, SnapshotResult } from '@agent-device/contracts/interactor-types';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
-import type { DaemonRequest } from '../../../src/daemon/daemon-request.ts';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';

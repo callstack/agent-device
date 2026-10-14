@@ -1,0 +1,888 @@
+import { withResolveTargetDeviceCacheScope } from '@agent-device/device-selection/dispatch-resolve';
+import { withDeviceInventoryContext } from '@agent-device/device-selection/device-inventory-context';
+import type { LeaseLifecycleProvider, ProviderAppCatalog } from '@agent-device/contracts/device';
+import type { ComposedDeviceInventoryGateways } from '@agent-device/contracts/platform-module';
+import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import {
+  AppError,
+  normalizeError,
+  retriableForErrorCode,
+  type DaemonError,
+} from '@agent-device/kernel/errors';
+import { withRequestCommandEnv } from '@agent-device/host-kit/command';
+import { timingSafeStringEqual } from '@agent-device/host-kit/transport';
+import {
+  type ResponseCost,
+  errorResponse,
+  noActiveSessionError,
+} from '@agent-device/kernel/contracts';
+import type { CloudArtifactProvider } from '@agent-device/contracts/observability';
+import type { TrackDownloadableArtifact } from '../resources/artifact-tracking.ts';
+import type {
+  RequestPlatformProviderScope,
+  RequestPlatformProviders,
+} from '@agent-device/contracts/platform-providers';
+import type {
+  DaemonInvokeFn,
+  DaemonRequest,
+  DaemonResponse,
+  DaemonResponseData,
+} from '../core/daemon-request.ts';
+import { RESPONSE_VIEWS } from './response-views.ts';
+import { SessionStore } from '../core/session-store.ts';
+import { resolvePlatformProviderRequestContext } from './request-platform-provider-context.ts';
+import {
+  countDiagnosticEventsByPhase,
+  emitDiagnostic,
+  flushDiagnosticsToSessionFile,
+  getDiagnosticsMeta,
+  registerDiagnosticSensitiveValue,
+  withDiagnosticsScope,
+} from '@agent-device/host-kit/diagnostics';
+import type { LeaseRegistry } from '../resources/lease-registry.ts';
+import {
+  loadGenericRequestHandlerModule,
+  runRequestHandlerChain,
+} from '../sessions/request-handler-chain.ts';
+import {
+  createRequestExecutionScope,
+  finalizeRequestExecutionScope,
+  type LockedRequestScope,
+  prepareLockedRequestScope,
+  type RequestExecutionScope,
+} from './request-execution-scope.ts';
+import { unsupportedSaveScriptFlagResponse } from './request-save-script-policy.ts';
+import { canRunReplayScopedAction } from '../core/daemon-command-registry.ts';
+import { isWebSession } from '../sessions/web-session-names.ts';
+import {
+  inferFillText,
+  isSensitiveFillText,
+  sensitiveFillPlaceholder,
+} from '@agent-device/ad-script';
+import { createPlatformRequestScope } from './platform-request-scope.ts';
+import { parameterizeSensitiveString } from '@agent-device/selectors/parameterized-recorded-fill';
+import { createOwnerScopedDeviceClaimReconciler } from './device/device-claim-owner-recovery.ts';
+import type { ClaimRecoveryGatewayFactory } from '../resources/device/claim-recovery-gateway.ts';
+import { isConfinedToAppLease, scopeRequestSession } from '../sessions/request-admission.ts';
+import { redactMacOsAppLeaseResponse } from '../resources/macos-app-lease.ts';
+import { resolveEffectiveSessionName } from '../sessions/session-routing.ts';
+import { sessionIdleExpiredError } from './session-idle-expiry.ts';
+import type { IdleSessionTombstone } from '../core/session-idle-tombstone.ts';
+import {
+  createAppLogAdmissionLedger,
+  type AppLogAdmissionLedger,
+} from '../resources/app-log-admission-ledger.ts';
+import {
+  type AudioProbeAdmissionLedger,
+  createAudioProbeAdmissionLedger,
+} from '@agent-device/capture-kit/audio-probe-admission-ledger';
+import {
+  createPerfCaptureAdmissionLedger,
+  type PerfCaptureAdmissionLedger,
+} from '@agent-device/capture-kit/perf-capture-admission-ledger';
+import {
+  createScreenRecordingAdmissionLedger,
+  type ScreenRecordingAdmissionLedger,
+} from '@agent-device/capture-kit/screen-recording-admission-ledger';
+import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
+import { resolveGenericRuntimeExecution } from '../execution/generic-runtime-execution.ts';
+import {
+  discloseRequestDispatch,
+  refusedBeforeDispatch,
+} from '../execution/request-dispatch-disclosure.ts';
+import { recordNestedRequests } from '../core/request-dispatch-ledger.ts';
+import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
+import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
+import type { DaemonPlatformServices } from '../core/platform-services.ts';
+import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
+import { restrictDeviceInventoryToDaemonPolicy } from '../core/daemon-policy.ts';
+import type { DaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
+
+// ---------------------------------------------------------------------------
+// Request handler API
+// ---------------------------------------------------------------------------
+
+export type RequestRouterDeps = {
+  logPath: string;
+  token: string;
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+  requestPlatformProviders?: RequestPlatformProviders;
+  deviceInventoryGateways: ComposedDeviceInventoryGateways;
+  deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations>;
+  /**
+   * Root-composed platform services for the request-path asks that bind no device runtime
+   * (readiness, boot and runner-session observation, open-target classification). Required: a
+   * process that never ran root composition cannot build one, and no daemon module may.
+   */
+  platformServices: DaemonPlatformServices;
+  /**
+   * Root composition's per-transaction claim-recovery gateway (#2168). Rebuilding the dead owner's
+   * gateway is the act that names platform modules, so the router holds only this factory and
+   * passes it to every reconciler it builds; only root composition can construct a router.
+   */
+  claimRecoveryGateway: ClaimRecoveryGatewayFactory;
+  appLogAdmissionLedger?: AppLogAdmissionLedger;
+  audioProbeAdmissionLedger?: AudioProbeAdmissionLedger;
+  perfCaptureAdmissionLedger?: PerfCaptureAdmissionLedger;
+  screenRecordingAdmissionLedger?: ScreenRecordingAdmissionLedger;
+  hostDiagnostics?: HostDiagnostics;
+  providerRuntimeIds?: readonly string[];
+  providerRuntimeRequiredIds?: readonly string[];
+  providerCredentials: DaemonProviderCredentials;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
+  cloudArtifactProvider?: CloudArtifactProvider;
+  providerAppCatalog?: ProviderAppCatalog;
+  androidObservation?: AndroidObservationAdapter;
+  /** Builds the per-request command surface the device-facing runtimes execute through. */
+  createCommandSurface: CreateDaemonCommandSurface;
+  platformResourceCleanup?: PlatformResourceCleanup;
+  providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
+  /** ADR 0029: the daemon policy every admitted request, including nested steps, obeys. */
+  daemonPolicy?: DaemonPolicy;
+  trackDownloadableArtifact: TrackDownloadableArtifact;
+};
+
+const unavailableAndroidObservation = new Proxy({} as AndroidObservationAdapter, {
+  get() {
+    return async () => {
+      throw new AppError(
+        'INTERNAL_ERROR',
+        'Android observation was not supplied by root runtime composition',
+      );
+    };
+  },
+});
+
+function missingPlatformResourceCleanup(): AppError {
+  return new AppError(
+    'INTERNAL_ERROR',
+    'Platform resource cleanup was not supplied by root runtime composition',
+  );
+}
+
+const unavailablePlatformResourceCleanup: PlatformResourceCleanup = Object.freeze({
+  stopSnapshotHelper: async () => {
+    throw missingPlatformResourceCleanup();
+  },
+  closeManagedBrowser: async () => {
+    throw missingPlatformResourceCleanup();
+  },
+  cleanupSessionlessExecutionHost: async () => {
+    throw missingPlatformResourceCleanup();
+  },
+  retainExecutionHostAfterClose: () => {
+    throw missingPlatformResourceCleanup();
+  },
+});
+
+export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
+  const {
+    logPath,
+    token,
+    requestPlatformProviders = EMPTY_REQUEST_PLATFORM_PROVIDERS,
+    deviceRuntimeGateway,
+    platformServices,
+    claimRecoveryGateway,
+    appLogAdmissionLedger = createAppLogAdmissionLedger(),
+    audioProbeAdmissionLedger = createAudioProbeAdmissionLedger(),
+    perfCaptureAdmissionLedger = createPerfCaptureAdmissionLedger(),
+    screenRecordingAdmissionLedger = createScreenRecordingAdmissionLedger(),
+    hostDiagnostics,
+    providerRuntimeIds,
+    providerRuntimeRequiredIds,
+    providerCredentials,
+    leaseLifecycleProvider,
+    cloudArtifactProvider,
+    providerAppCatalog,
+    androidObservation = unavailableAndroidObservation,
+    createCommandSurface,
+    platformResourceCleanup = unavailablePlatformResourceCleanup,
+    providerDeviceRuntimeScope,
+    trackDownloadableArtifact,
+    daemonPolicy,
+  } = deps;
+  const { sessionStore, leaseRegistry } = deps;
+  const deviceInventoryGateways = daemonPolicy
+    ? restrictDeviceInventoryToDaemonPolicy(deps.deviceInventoryGateways, daemonPolicy)
+    : deps.deviceInventoryGateways;
+
+  async function handleRequest(req: DaemonRequest): Promise<DaemonResponse> {
+    const start = Date.now();
+    const debug = Boolean(req.meta?.debug || req.flags?.verbose);
+    return await withDiagnosticsScope(
+      {
+        session: req.session,
+        requestId: req.meta?.requestId,
+        command: req.command,
+        debug,
+        logPath,
+      },
+      async () => {
+        const response = await withRequestCommandEnv(
+          requestCommandEnv(req),
+          async () => await runRequestWithinScope(req),
+        );
+        if (!response.ok) {
+          // ADR 0012 decision 6, R7 (C5a): a command that finds no session but
+          // hits a live repair tombstone gets `REPAIR_SESSION_EXPIRED` with
+          // re-run guidance, never a bare SESSION_NOT_FOUND. #2833 adds the
+          // sibling case: an idle-expired session explains itself the same way.
+          const error = idleExpiredIfTombstoned(
+            req,
+            repairExpiredIfTombstoned(req, response.error, sessionStore),
+            sessionStore,
+          );
+          return {
+            ok: false,
+            error: redactSensitiveFillTextInError(req, enrichDaemonError(error)),
+          };
+        }
+        // Phase 4 (agent-cost) grafts on the success path. Runs inside the
+        // diagnostics scope so cost can read this request's runner-round-trip tally.
+        return applyAgentCostGrafts(req, response, start);
+      },
+    );
+  }
+
+  async function runRequestWithinScope(req: DaemonRequest): Promise<DaemonResponse> {
+    if (!timingSafeStringEqual(req.token, token)) {
+      return unauthorizedResponse();
+    }
+    registerParameterizedFillDiagnosticValue(req);
+    const invalidRecordingFlags = recordingFlagsResponse(req);
+    if (invalidRecordingFlags) return invalidRecordingFlags;
+    const invalidCustomActionFlags = customActionFlagsResponse(req);
+    if (invalidCustomActionFlags) return invalidCustomActionFlags;
+    // #1478: raw `flags.saveScript` on a non-owner command never reaches
+    // admission, device work, or a handler that could arm publication.
+    const unsupportedSaveScript = unsupportedSaveScriptFlagResponse(req);
+    if (unsupportedSaveScript) return unsupportedSaveScript;
+
+    let scope: RequestExecutionScope | undefined;
+    let response: DaemonResponse;
+    const platformRequestScope = createPlatformRequestScope(req);
+    try {
+      response = await withDeviceInventoryContext(
+        {
+          ...deviceInventoryGateways,
+          requestScope: platformRequestScope,
+        },
+        async () =>
+          await withResolveTargetDeviceCacheScope(async () => {
+            scope = await createRequestExecutionScope({
+              req,
+              sessionStore,
+              leaseRegistry,
+              deviceRuntimeGateway,
+              platformServices,
+              claimRecoveryGateway,
+              platformRequestScope,
+              platformResourceCleanup,
+              providerAppCatalog,
+              daemonPolicy,
+            });
+            return await executeRequestScope(scope);
+          }),
+      );
+    } catch (error) {
+      response = finalizeThrownRequestError(error);
+    }
+    return redactForMacOsAppLease(req, scope, await finalizeRequestBindingCleanup(scope, response));
+  }
+
+  // Not covered, by choice: a request refused before its scope exists that names no lease in its
+  // own metadata and relies on its session's lease. Leased remote clients always send the lease.
+  function redactForMacOsAppLease(
+    req: DaemonRequest,
+    scope: RequestExecutionScope | undefined,
+    response: DaemonResponse,
+  ): DaemonResponse {
+    const session = scope ? sessionStore.lookup(scope.sessionName)?.session : undefined;
+    return isConfinedToAppLease(scope?.req ?? req, leaseRegistry, session, daemonPolicy)
+      ? redactMacOsAppLeaseResponse(req.command, response)
+      : response;
+  }
+
+  async function executeRequestScope(
+    scope: RequestExecutionScope,
+    inheritedProviderScope?: RequestPlatformProviderScope,
+  ): Promise<DaemonResponse> {
+    const run = async (): Promise<DaemonResponse> => {
+      const locked = await prepareLockedRequestScope({
+        scope,
+        sessionStore,
+        trackDownloadableArtifact,
+      });
+      if (locked.type === 'response') return locked.response;
+      const lockedScope = locked.scope;
+      const executeLocked = async (providerScope: RequestPlatformProviderScope) => {
+        const runLockedRequest = async () =>
+          await executeLockedRequest({
+            lockedScope,
+            providerScope,
+            allowReplayActions: inheritedProviderScope === undefined,
+          });
+        return providerDeviceRuntimeScope
+          ? await providerDeviceRuntimeScope(runLockedRequest)
+          : await runLockedRequest();
+      };
+
+      if (inheritedProviderScope) return await executeLocked(inheritedProviderScope);
+      const useDefaultWebProvider = shouldUseDefaultWebProvider(lockedScope);
+      if (!requestPlatformProviders.hasConfiguredResolvers && !useDefaultWebProvider) {
+        return await executeLocked({});
+      }
+      const context = await resolvePlatformProviderRequestContext({
+        req: lockedScope.req,
+        existingSession: lockedScope.existingSession,
+        useDefaultWebProvider,
+      });
+      return context
+        ? await requestPlatformProviders.run(context, executeLocked)
+        : await executeLocked({});
+    };
+
+    return inheritedProviderScope ? await scope.runAdmitted(run) : await scope.runLocked(run);
+  }
+
+  async function executeLockedRequest(params: {
+    lockedScope: LockedRequestScope;
+    providerScope: RequestPlatformProviderScope;
+    allowReplayActions: boolean;
+  }): Promise<DaemonResponse> {
+    const { lockedScope, providerScope, allowReplayActions } = params;
+    return await discloseRequestDispatch(
+      lockedScope.req,
+      lockedScope.dispatchLedger,
+      async () => await routeLockedRequest({ lockedScope, providerScope, allowReplayActions }),
+    );
+  }
+
+  async function routeLockedRequest(params: {
+    lockedScope: LockedRequestScope;
+    providerScope: RequestPlatformProviderScope;
+    allowReplayActions: boolean;
+  }): Promise<DaemonResponse> {
+    const { lockedScope, providerScope, allowReplayActions } = params;
+    const { dispatchLedger } = lockedScope;
+    const requestScope = createPlatformRequestScope(lockedScope.req);
+    const handlerResponse = await runRequestHandlerChain({
+      req: lockedScope.req,
+      sessionName: lockedScope.sessionName,
+      logPath: lockedScope.logPath,
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider,
+      providerRuntimeIds,
+      providerRuntimeRequiredIds,
+      providerCredentials,
+      cloudArtifactProvider,
+      providerAppCatalog,
+      invoke: recordNestedRequests(handleRequest, dispatchLedger),
+      invokeReplayAction: allowReplayActions
+        ? recordNestedRequests(
+            createReplayScopedActionInvoker(lockedScope, providerScope),
+            dispatchLedger,
+          )
+        : undefined,
+      providerScope,
+      androidObservation,
+      createCommandSurface,
+      platformResourceCleanup,
+      bindDevice: lockedScope.bindDevice,
+      platformServices: lockedScope.platformServices,
+      inspectFacts: lockedScope.inspectFacts,
+      bindExactDevice: lockedScope.bindExactDevice,
+      reconcileOrphanedDeviceClaim: createOwnerScopedDeviceClaimReconciler({
+        scope: requestScope,
+        composeGateway: claimRecoveryGateway,
+      }),
+      appLogAdmissionLedger,
+      audioProbeAdmissionLedger,
+      perfCaptureAdmissionLedger,
+      screenRecordingAdmissionLedger,
+      hostDiagnostics,
+      requestScope,
+      retainDeviceExecutionLock: lockedScope.retainDeviceExecutionLock,
+      throwIfCanceled: lockedScope.throwIfCanceled,
+      contextFromFlags: lockedScope.handlerContextFromFlags,
+    });
+    if (handlerResponse) return handlerResponse;
+
+    return await dispatchGenericForLockedScope({
+      lockedScope,
+      logPath: lockedScope.logPath,
+      sessionStore,
+      androidObservation,
+      createCommandSurface,
+    });
+  }
+
+  function createReplayScopedActionInvoker(
+    parentScope: LockedRequestScope,
+    providerScope: RequestPlatformProviderScope,
+  ): DaemonInvokeFn {
+    return async (req) => {
+      if (!canRunReplayActionInCurrentScope(req, parentScope)) return await handleRequest(req);
+      if (!timingSafeStringEqual(req.token, token)) {
+        return unauthorizedResponse();
+      }
+      registerParameterizedFillDiagnosticValue(req);
+
+      let childScope: RequestExecutionScope | undefined;
+      let response: DaemonResponse;
+      try {
+        const scopedReq = bindReplayDeviceExecutionLock(req, parentScope);
+        childScope = await createRequestExecutionScope({
+          req: scopedReq,
+          sessionStore,
+          leaseRegistry,
+          deviceRuntimeGateway,
+          platformServices,
+          claimRecoveryGateway,
+          platformRequestScope: createPlatformRequestScope(scopedReq),
+          platformResourceCleanup,
+          providerAppCatalog,
+          daemonPolicy,
+        });
+        // The outer replay keeps its stable session lock plus the device lock
+        // from the first device binding through response projection and ref
+        // finalization. A same-session replay action reuses that admitted scope
+        // instead of reacquiring the non-reentrant locks. Nested changes remain
+        // visible to capture lineage through snapshot/frame/runtime/store state.
+        response =
+          childScope.sessionName === parentScope.sessionName
+            ? await executeRequestScope(childScope, providerScope)
+            : await executeRequestScope(childScope);
+      } catch (error) {
+        response = finalizeThrownRequestError(error);
+      }
+      // This entry point registers a sensitive fill too, so it redacts that fill's error as well.
+      return redactSensitiveFillResponse(
+        req,
+        await finalizeRequestBindingCleanup(childScope, response),
+      );
+    };
+  }
+
+  return handleRequest;
+}
+
+function requestCommandEnv(req: DaemonRequest): NodeJS.ProcessEnv | undefined {
+  const developerDir = req.meta?.developerDir;
+  return typeof developerDir === 'string' ? { DEVELOPER_DIR: developerDir } : undefined;
+}
+
+const EMPTY_REQUEST_PLATFORM_PROVIDERS: RequestPlatformProviders = Object.freeze({
+  hasConfiguredResolvers: false,
+  run: async (_context, task) => await task({}),
+});
+
+function shouldUseDefaultWebProvider(scope: LockedRequestScope): boolean {
+  return (
+    (scope.existingSession !== undefined && isWebSession(scope.existingSession)) ||
+    scope.req.flags?.platform === 'web'
+  );
+}
+
+function unauthorizedResponse(): DaemonResponse {
+  return {
+    ok: false,
+    error: normalizeError(new AppError('UNAUTHORIZED', 'Invalid token')),
+  };
+}
+
+/**
+ * #1271 stage 2 (ADR 0012 amendment): `--record` and `--no-record` express
+ * opposite recording intents for the same action — force it into a
+ * repair-armed heal versus opt it out entirely — so both together is a
+ * contradiction the daemon rejects up front, uniformly for every surface
+ * (CLI/Node client/MCP all funnel through this same request entry point),
+ * rather than silently letting one win.
+ */
+function mutuallyExclusiveRecordFlagsResponse(): DaemonResponse {
+  return errorResponse(
+    'INVALID_ARGS',
+    '--record and --no-record are mutually exclusive; pass at most one.',
+  );
+}
+
+const FILL_ONLY_FLAGS = [
+  ['recordAs', '--record-as', 'string'],
+  ['textStdin', '--text-stdin', 'boolean'],
+] as const;
+
+function recordingFlagsResponse(req: DaemonRequest): DaemonResponse | undefined {
+  if (req.flags?.record && req.flags?.noRecord) return mutuallyExclusiveRecordFlagsResponse();
+  if (req.command === 'fill') return malformedFillOnlyFlagResponse(req);
+  const fillOnly = FILL_ONLY_FLAGS.find(([key]) => req.flags?.[key] !== undefined);
+  if (!fillOnly) return undefined;
+  return errorResponse('INVALID_ARGS', `${fillOnly[1]} is supported only by fill.`);
+}
+
+/**
+ * Both fill-only flags mark the text as sensitive, and the request boundary only checks that
+ * `flags` is an object. A marker of the wrong type is refused here instead of read as unmarked.
+ */
+function malformedFillOnlyFlagResponse(req: DaemonRequest): DaemonResponse | undefined {
+  const malformed = FILL_ONLY_FLAGS.find(([key, , type]) => {
+    const value = req.flags?.[key];
+    return value !== undefined && typeof value !== type;
+  });
+  if (!malformed) return undefined;
+  return errorResponse('INVALID_ARGS', `${malformed[1]} must be a ${malformed[2]}.`);
+}
+
+/**
+ * `--actions` reads custom actions through the private-AX snapshot path, which
+ * a raw capture deliberately does not take (ADR 0004: raw preserves the tree
+ * backend's own errors). Asking for both is a contradiction, and answering it
+ * with a capture that structurally cannot carry actions would be a requested
+ * capability silently no-opped. Rejected at the request seam so CLI, Node
+ * client, and MCP all get the same answer before any device work.
+ */
+function customActionFlagsResponse(req: DaemonRequest): DaemonResponse | undefined {
+  if (req.flags?.snapshotCustomActions !== true) return undefined;
+  if (req.flags?.snapshotRaw === true) {
+    return errorResponse(
+      'INVALID_ARGS',
+      '--actions and --raw are mutually exclusive: custom actions are only readable through the private-AX snapshot path, which a raw capture does not use.',
+    );
+  }
+  return undefined;
+}
+
+/** The text of a fill the caller marked sensitive, or `undefined` for any other request. */
+function sensitiveFillText(req: DaemonRequest): string | undefined {
+  if (req.command !== 'fill' || !isSensitiveFillText(req.flags)) return undefined;
+  return inferFillText({
+    ts: 0,
+    command: 'fill',
+    positionals: req.positionals ?? [],
+    flags: req.flags,
+  });
+}
+
+function registerParameterizedFillDiagnosticValue(req: DaemonRequest): void {
+  const text = sensitiveFillText(req);
+  if (text !== undefined) registerDiagnosticSensitiveValue(text);
+}
+
+/** Error fields that carry text a backend may have built from the value it was typing. */
+const ERROR_TEXT_FIELDS: ReadonlySet<string> = new Set(['message', 'hint', 'cause', 'details']);
+
+/**
+ * A backend error can quote the text a sensitive fill failed to type. Only that fill's own text is
+ * redacted, and only in the error's text fields: `logPath`, `diagnosticId` and the other
+ * daemon-owned fields come back as they are, and so does every other request's error.
+ */
+function redactSensitiveFillTextInError(req: DaemonRequest, error: DaemonError): DaemonError {
+  const text = sensitiveFillText(req);
+  if (!text) return error;
+  const placeholder = sensitiveFillPlaceholder(req.flags);
+  const replace = (value: string) => parameterizeSensitiveString(value, text, placeholder);
+  return Object.fromEntries(
+    Object.entries(error).map(([field, value]) => [
+      field,
+      ERROR_TEXT_FIELDS.has(field) ? mapErrorStrings(value, replace) : value,
+    ]),
+  ) as DaemonError;
+}
+
+function mapErrorStrings(value: unknown, replace: (value: string) => string): unknown {
+  if (typeof value === 'string') return replace(value);
+  if (Array.isArray(value)) return value.map((entry) => mapErrorStrings(entry, replace));
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [replace(key), mapErrorStrings(entry, replace)]),
+  );
+}
+
+function redactSensitiveFillResponse(req: DaemonRequest, response: DaemonResponse): DaemonResponse {
+  return response.ok
+    ? response
+    : { ...response, error: redactSensitiveFillTextInError(req, response.error) };
+}
+
+async function dispatchGenericForLockedScope(params: {
+  lockedScope: LockedRequestScope;
+  logPath: string;
+  sessionStore: SessionStore;
+  androidObservation: AndroidObservationAdapter;
+  createCommandSurface: CreateDaemonCommandSurface;
+}): Promise<DaemonResponse> {
+  const { lockedScope, logPath, sessionStore, androidObservation, createCommandSurface } = params;
+  const ref = sessionStore.lookup(lockedScope.sessionName);
+  if (!ref) {
+    return noActiveSessionError();
+  }
+  const session = sessionStore.requireCurrent(ref);
+
+  const runtimeExecution = await resolveGenericRuntimeExecution({
+    req: lockedScope.req,
+    session,
+    // `scroll` parses its distance/timing flags during admission, so the resolved context is
+    // needed before the dispatcher builds its own.
+    context: lockedScope.contextFromFlags(
+      lockedScope.req.flags,
+      session.appBundleId,
+      session.trace?.outPath,
+    ),
+    inspectFacts: lockedScope.inspectFacts,
+    platformServices: lockedScope.platformServices,
+    bindDevice: lockedScope.bindDevice,
+    createCommandSurface,
+  });
+  if (!runtimeExecution.ok) return refusedBeforeDispatch(runtimeExecution.response);
+
+  const { dispatchGenericCommand } = await loadGenericRequestHandlerModule();
+  const dispatchResponse = await dispatchGenericCommand({
+    req: lockedScope.req,
+    ref,
+    sessionName: lockedScope.sessionName,
+    logPath,
+    sessionStore,
+    contextFromFlags: lockedScope.contextFromFlags,
+    platformServices: lockedScope.platformServices,
+    executePlatformCommand: runtimeExecution.execute,
+    androidObservation,
+    createCommandSurface,
+    // The settle observation binds its own capture on this route, so it needs the same
+    // request-scoped seams the action's admission above already used (#3510).
+    inspectFacts: lockedScope.inspectFacts,
+    bindDevice: lockedScope.bindDevice,
+    ...(runtimeExecution.recorded ? { recordedRequest: runtimeExecution.recorded } : {}),
+  });
+  return dispatchResponse;
+}
+
+function bindReplayDeviceExecutionLock(
+  req: DaemonRequest,
+  parentScope: LockedRequestScope,
+): DaemonRequest {
+  if (req.command !== 'open') return req;
+  const retainDeviceExecutionLock = req.internal?.retainDeviceExecutionLock;
+  return {
+    ...req,
+    internal: {
+      ...req.internal,
+      retainDeviceExecutionLock: async (deviceId) => {
+        await parentScope.retainDeviceExecutionLock(deviceId);
+        await retainDeviceExecutionLock?.(deviceId);
+      },
+    },
+  };
+}
+
+function canRunReplayActionInCurrentScope(
+  req: DaemonRequest,
+  parentScope: LockedRequestScope,
+): boolean {
+  return req.session === parentScope.sessionName && canRunReplayScopedAction(req.command);
+}
+
+function finalizeThrownRequestError(error: unknown): DaemonResponse {
+  emitDiagnostic({
+    level: 'error',
+    phase: 'request_failed',
+    data: {
+      error: error instanceof Error ? error.message : String(error),
+    },
+  });
+  const details = getDiagnosticsMeta();
+  const flushed = flushDiagnosticsToSessionFile({ force: true });
+  const normalizedError = normalizeError(error, {
+    diagnosticId: details.diagnosticId,
+    logPath: flushed?.path,
+    diagnosticsRecord: flushed?.ref,
+  });
+  return { ok: false, error: normalizedError };
+}
+
+async function finalizeRequestBindingCleanup(
+  scope: RequestExecutionScope | undefined,
+  response: DaemonResponse,
+): Promise<DaemonResponse> {
+  if (!scope) return response;
+  let finalResponse = response;
+  try {
+    await scope[Symbol.asyncDispose]();
+  } catch (cleanupError) {
+    if (response.ok) {
+      finalResponse = finalizeThrownRequestError(cleanupError);
+    } else {
+      emitDiagnostic({
+        level: 'error',
+        phase: 'request_binding_cleanup_failed',
+        data: {
+          primaryCode: response.error.code,
+          cleanupError: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+        },
+      });
+      flushDiagnosticsToSessionFile({ force: true });
+    }
+  }
+  return finalizeRequestExecutionScope(scope, finalResponse);
+}
+
+/**
+ * ADR 0012 decision 6, R7 (C5a, BLOCKER 2): when a request finds no session
+ * (SESSION_NOT_FOUND) but a live repair tombstone exists for its session key,
+ * rewrite the error to an actionable recovery error. Any other error, or the
+ * absence of a (non-expired) tombstone, passes through untouched.
+ *
+ * BLOCKER 2: a tombstone carrying `commitFailure` means the transaction
+ * actually COMPLETED and a commit was attempted at teardown but FAILED (e.g.
+ * no-clobber refusal, a filesystem error) — that is a materially different,
+ * more specific situation than "reaped before it ever finished", so it gets
+ * its own `REPAIR_COMMIT_FAILED` code carrying the real cause, rather than
+ * being folded into the generic `REPAIR_SESSION_EXPIRED` expiry message.
+ */
+function repairExpiredIfTombstoned(
+  req: DaemonRequest,
+  error: DaemonError,
+  sessionStore: SessionStore,
+): DaemonError {
+  if (error.code !== 'SESSION_NOT_FOUND') return error;
+  const address = resolveTombstoneSessionAddress(req, sessionStore);
+  if (address === undefined) return error;
+  const tombstone = sessionStore.readRepairTombstone(address);
+  if (!tombstone) return error;
+  const reRun = tombstone.sourcePath
+    ? `re-run: replay ${tombstone.sourcePath} --save-script`
+    : 're-run your replay <script> --save-script from the start';
+  if (tombstone.commitFailure) {
+    return normalizeError(
+      new AppError(
+        'REPAIR_COMMIT_FAILED',
+        `The repair transaction for session "${req.session}" completed, but committing its healed script failed at teardown: ${tombstone.commitFailure.message}. ${reRun}.`,
+      ),
+    );
+  }
+  return normalizeError(
+    new AppError(
+      'REPAIR_SESSION_EXPIRED',
+      `The --save-script repair session "${req.session}" was reaped before it was finalized (idle-reap); ${reRun}.`,
+    ),
+  );
+}
+
+/**
+ * #2833: when a command finds no session because this daemon already expired it for idleness, the
+ * answer stays `SESSION_NOT_FOUND` — the session genuinely is gone — but carries the typed reason,
+ * the window it missed, and the device it released. A bare "Run open first" tells an agent on a
+ * shared machine to retry an `open` that will collide with its own expired session's claim if the
+ * release is still in flight, and gives it nothing to reason about either way.
+ *
+ * Consulted after the repair tombstone so an abandoned repair transaction keeps its own, more
+ * specific recovery guidance. The address is resolved through the same routing the request took; a
+ * name that cannot be resolved has no marker rather than an error that would replace the caller's.
+ */
+function idleExpiredIfTombstoned(
+  req: DaemonRequest,
+  error: DaemonError,
+  sessionStore: SessionStore,
+): DaemonError {
+  if (error.code !== 'SESSION_NOT_FOUND') return error;
+  const tombstone = readIdleExpiryTombstoneSafely(req, sessionStore);
+  if (!tombstone) return error;
+  return normalizeError(sessionIdleExpiredError(tombstone.owner, tombstone));
+}
+
+function resolveTombstoneSessionAddress(
+  req: DaemonRequest,
+  sessionStore: SessionStore,
+): string | undefined {
+  try {
+    return resolveEffectiveSessionName(scopeRequestSession(req), sessionStore, {
+      attachesToSession: false,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+function readIdleExpiryTombstoneSafely(
+  req: DaemonRequest,
+  sessionStore: SessionStore,
+): IdleSessionTombstone | undefined {
+  const address = resolveTombstoneSessionAddress(req, sessionStore);
+  if (address === undefined) return undefined;
+  try {
+    return sessionStore.readIdleExpiryTombstone(address);
+  } catch {
+    return undefined;
+  }
+}
+
+// Phase 2 typed-error graft: add machine-readable signals to an error response.
+// Returns the error unchanged unless a signal applies, so the default wire shape
+// is preserved for the common codes.
+function enrichDaemonError(error: DaemonError): DaemonError {
+  // A throw-site classification (lifted from details by normalizeError) wins
+  // over the conservative code-level policy.
+  const retriable = error.retriable ?? retriableForErrorCode(error.code);
+  if (retriable === undefined) return error;
+  return {
+    ...error,
+    retriable,
+  };
+}
+
+// Phase 4 (agent-cost) success-path grafts: a leveled response view and an
+// opt-in cost block, both purely additive. With responseLevel `default` (or
+// unset) AND no registered view AND no --cost, the original `response` object is
+// returned unchanged — byte-identical to today (Maestro `.ad` recompare safe).
+function applyAgentCostGrafts(
+  req: DaemonRequest,
+  response: Extract<DaemonResponse, { ok: true }>,
+  startedAt: number,
+): DaemonResponse {
+  const viewed = applyResponseLevelView(req, response);
+  if (!req.meta?.includeCost) return viewed;
+  const cost = buildResponseCost(response.data, startedAt);
+  return { ok: true, data: { ...(viewed.data ?? {}), cost } };
+}
+
+// Returns the response untouched when responseLevel is `default` (or unset) or no
+// view is registered for the command — preserving today's byte-exact wire shape.
+function applyResponseLevelView(
+  req: DaemonRequest,
+  response: Extract<DaemonResponse, { ok: true }>,
+): Extract<DaemonResponse, { ok: true }> {
+  const level = req.meta?.responseLevel ?? 'default';
+  if (level === 'default') return response;
+  const view = RESPONSE_VIEWS[req.command];
+  return view ? { ok: true, data: view(response.data ?? {}, level) } : response;
+}
+
+// Diagnostic phases emitted once per real iOS-runner round-trip. `..._command_send`
+// is the command itself; `..._readiness_preflight` is the pre-command uptime probe
+// (a real network round-trip). The `..._skipped` / `..._recovered` markers do NOT
+// hit the runner and are intentionally excluded.
+const RUNNER_ROUND_TRIP_PHASES = [
+  'ios_runner_command_send',
+  'ios_runner_readiness_preflight',
+] as const;
+
+function buildResponseCost(
+  originalData: DaemonResponseData | undefined,
+  startedAt: number,
+): ResponseCost {
+  const cost: ResponseCost = {
+    wallClockMs: Date.now() - startedAt,
+    // Counts this request's real runner round-trips from the flush-surviving
+    // diagnostics phase tally. Reads 0 when no runner was hit (e.g. a no-op or a
+    // command served entirely from the daemon). Must run inside the request's
+    // diagnostics scope (see `applyAgentCostGrafts` call site).
+    runnerRoundTrips: countDiagnosticEventsByPhase(RUNNER_ROUND_TRIP_PHASES),
+  };
+  // nodeCount reads the ORIGINAL node tree (the digest view may have already
+  // collapsed `data.nodes`), so the count stays accurate.
+  const nodes = originalData?.nodes;
+  if (Array.isArray(nodes)) cost.nodeCount = nodes.length;
+  return cost;
+}

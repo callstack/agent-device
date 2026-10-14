@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { createDaemonProxyServer } from '@agent-device/proxy';
-import { createDaemonHttpServer } from '../daemon/server/http-server.ts';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { readHostCpuArch } from '@agent-device/host-kit/process';
 import { executeRunScriptHttpRequest } from '@agent-device/maestro/run-script-http';
@@ -19,7 +19,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from './test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 
 const PROXY_ARTIFACT_INVENTORY_ENTRY = {
   id: 'shot-1',

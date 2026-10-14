@@ -2,7 +2,7 @@
 //
 // The lane does NOT hand-write which locks an operation takes. It derives the
 // plan from the REAL router primitive `resolveRequestExecutionLockPlan`
-// (src/daemon/request-binding.ts), driven with a fake in-memory device
+// (packages/daemon/src/server/request-binding.ts), driven with a fake in-memory device
 // inventory via the production `withDeviceInventoryProvider` seam. This is what
 // makes the same-device serialization invariant revert-sensitive: if production
 // stops returning a `device:` key (e.g. the router's same-device open
@@ -20,13 +20,13 @@
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { DaemonRequest } from '../../../../src/daemon/daemon-request.ts';
-import type { SessionRef } from '../../../../src/daemon/session-state.ts';
-import type { SessionStore } from '../../../../src/daemon/session-store.ts';
-import { resolveRequestExecutionLockPlan } from '../../../../src/daemon/request-binding.ts';
-import { shouldLockSessionExecution } from '../../../../src/daemon/daemon-command-registry.ts';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { SessionRef } from '@agent-device/daemon/testing/session-state';
+import type { SessionStore } from '@agent-device/daemon/testing/session-store';
+import { resolveRequestExecutionLockPlan } from '@agent-device/daemon/testing/request-binding';
+import { shouldLockSessionExecution } from '@agent-device/daemon/daemon-command-registry';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
-import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '../../../../src/__tests__/test-utils/device-inventory-gateways.ts';
+import { withTestDeviceInventoryProvider as withDeviceInventoryProvider } from '@agent-device/device-selection/inventory-gateways-fixtures';
 
 import type { LockKey } from './deterministic-scheduler.ts';
 

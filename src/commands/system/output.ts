@@ -54,14 +54,18 @@ export const systemCliOutputFormatters = withSettleCapableNotes({
   'tv-remote': messageOutput,
 } satisfies Record<string, CliOutputFormatter>);
 
-function formatAppState(data: AppStateCommandResult): string | null {
-  if (data.platform === 'ios') return formatAppleAppState(data);
-  if (data.platform === 'android') {
-    const lines = [`Foreground app: ${data.package ?? 'unknown'}`];
-    if (data.activity) lines.push(`Activity: ${data.activity}`);
-    return lines.join('\n');
+function formatAppState(data: AppStateCommandResult): string {
+  switch (data.platform) {
+    case 'ios':
+    case 'macos':
+      return formatAppleAppState(data);
+    case 'android':
+    case 'harmonyos': {
+      const lines = [`Foreground app: ${data.package ?? 'unknown'}`];
+      if (data.activity) lines.push(`Activity: ${data.activity}`);
+      return lines.join('\n');
+    }
   }
-  return null;
 }
 
 function formatAppleAppState(

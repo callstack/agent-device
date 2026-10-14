@@ -1,3 +1,4 @@
+import { IOS_SIMULATOR } from '../../__tests__/device-fixtures.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -84,17 +85,23 @@ test('a sparse capture of a presented system surface names the surface host', ()
 // The registry, not the wire, decides the kind: a payment host stamped with the wrong kind reads
 // back as `payment`, and a bundle id the registry does not know is dropped rather than surfaced.
 test('the wire reader takes surface kind from the registry and drops unregistered hosts', () => {
-  const mismatched = readAppleSnapshotResult({
-    systemSurface: { bundleId: 'com.apple.PassbookUIService', kind: 'web-auth' },
-  });
+  const mismatched = readAppleSnapshotResult(
+    {
+      systemSurface: { bundleId: 'com.apple.PassbookUIService', kind: 'web-auth' },
+    },
+    IOS_SIMULATOR,
+  );
   assert.deepEqual(mismatched.systemSurface, {
     bundleId: 'com.apple.PassbookUIService',
     kind: 'payment',
   });
 
-  const unregistered = readAppleSnapshotResult({
-    systemSurface: { bundleId: 'com.example.notahost', kind: 'payment' },
-  });
+  const unregistered = readAppleSnapshotResult(
+    {
+      systemSurface: { bundleId: 'com.example.notahost', kind: 'payment' },
+    },
+    IOS_SIMULATOR,
+  );
   assert.equal(unregistered.systemSurface, undefined);
 });
 
@@ -171,16 +178,22 @@ test('a presented system surface travels with an undeclared-payload refusal as t
 });
 
 test('readAppleSnapshotResult keeps registry-known system surface provenance only', () => {
-  const known = readAppleSnapshotResult({
-    nodes: [],
-    systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
-  });
+  const known = readAppleSnapshotResult(
+    {
+      nodes: [],
+      systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
+    },
+    IOS_SIMULATOR,
+  );
   assert.deepEqual(known.systemSurface, SYSTEM_SHEET);
 
-  const unknown = readAppleSnapshotResult({
-    nodes: [],
-    systemSurface: { bundleId: 'com.example.PhishingService', kind: 'web-auth' },
-  });
+  const unknown = readAppleSnapshotResult(
+    {
+      nodes: [],
+      systemSurface: { bundleId: 'com.example.PhishingService', kind: 'web-auth' },
+    },
+    IOS_SIMULATOR,
+  );
   assert.equal(unknown.systemSurface, undefined);
 });
 
@@ -246,18 +259,27 @@ test('the reader forwards each published keyboard band shape unchanged', () => {
   // The landscape band #2653 confirmed on iPhone 17 Pro: the runner answers `app.keyboards` in the
   // app's own orientation space, so the daemon reads these numbers beside node rects unchanged.
   assert.deepEqual(
-    readAppleSnapshotResult({
-      keyboard: { kind: 'visible', frame: { x: 0, y: 198, width: 874, height: 204 } },
-    }).keyboard,
+    readAppleSnapshotResult(
+      {
+        keyboard: { kind: 'visible', frame: { x: 0, y: 198, width: 874, height: 204 } },
+      },
+      IOS_SIMULATOR,
+    ).keyboard,
     { kind: 'visible', frame: { x: 0, y: 198, width: 874, height: 204 } },
   );
-  assert.deepEqual(readAppleSnapshotResult({ keyboard: { kind: 'absent' } }).keyboard, {
-    kind: 'absent',
-  });
   assert.deepEqual(
-    readAppleSnapshotResult({
-      keyboard: { kind: 'unmeasurable', reason: 'keyboard-frame-query-timeout' },
-    }).keyboard,
+    readAppleSnapshotResult({ keyboard: { kind: 'absent' } }, IOS_SIMULATOR).keyboard,
+    {
+      kind: 'absent',
+    },
+  );
+  assert.deepEqual(
+    readAppleSnapshotResult(
+      {
+        keyboard: { kind: 'unmeasurable', reason: 'keyboard-frame-query-timeout' },
+      },
+      IOS_SIMULATOR,
+    ).keyboard,
     { kind: 'unmeasurable', reason: 'keyboard-frame-query-timeout' },
   );
 });
@@ -265,7 +287,7 @@ test('the reader forwards each published keyboard band shape unchanged', () => {
 test('a capture from a tier that never reads the keyboard publishes no fact at all', () => {
   // The query sweep and private-AX tiers answer with no `keyboard` key, which is how the daemon
   // learns to keep deriving the band from that tree instead of being told the screen is clear.
-  assert.equal(readAppleSnapshotResult({ nodes: [] }).keyboard, undefined);
+  assert.equal(readAppleSnapshotResult({ nodes: [] }, IOS_SIMULATOR).keyboard, undefined);
 });
 
 // Routing proof: every reason below is emitted only by the kernel reader, never by a wire producer.
@@ -280,7 +302,7 @@ test('a malformed keyboard payload is restated by the kernel reader, never forwa
   ];
 
   for (const [payload, reason] of cases) {
-    const read = readAppleSnapshotResult({ keyboard: payload }).keyboard;
+    const read = readAppleSnapshotResult({ keyboard: payload }, IOS_SIMULATOR).keyboard;
     assert.deepEqual(read, { kind: 'unmeasurable', reason }, `payload ${JSON.stringify(payload)}`);
   }
 });
@@ -385,4 +407,22 @@ test('a raw projection publishes no viewport, because nothing validated its box 
   );
 
   assert.equal('viewport' in presented, false);
+});
+
+test('runner presented and quality nodes share RN interpretation without replacing raw evidence', () => {
+  const node = { index: 0, type: 'Other', value: 'checkbox, unchecked' };
+  const result = readAppleSnapshotResult(
+    {
+      nodes: [node],
+      qualityPayload: { nodes: [node], truncated: false },
+    },
+    IOS_SIMULATOR,
+  );
+  for (const interpreted of [result.nodes?.[0], result.qualityPayload?.nodes[0]]) {
+    assert.equal(interpreted?.checked, false);
+    assert.equal(interpreted?.value, node.value);
+    assert.equal(interpreted?.type, node.type);
+    assert.equal(interpreted?.iosValueSemantics?.role, 'checkbox');
+  }
+  assert.equal('checked' in node, false);
 });

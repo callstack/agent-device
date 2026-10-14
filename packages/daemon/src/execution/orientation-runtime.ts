@@ -1,0 +1,87 @@
+import type { SetOrientationInput } from '@agent-device/contracts/orientation-runtime';
+import { parseDeviceRotation, type DeviceRotation } from '@agent-device/contracts/device';
+import { orientationRuntimeUse } from '@agent-device/contracts/platform-runtime-operations';
+import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
+import type { DeviceInfo } from '@agent-device/kernel/device';
+import { successText } from '@agent-device/kernel/success-text';
+import type { DaemonCommandContext } from '../core/context.ts';
+import type { ResolvedGenericExecution } from '../core/generic-leaf-execution.ts';
+import {
+  resolveBoundGenericRuntime,
+  type RuntimeAdmissionBindings,
+} from '../core/runtime-admission.ts';
+import { runtimeExecutionFromContext } from '../core/snapshot-runtime-capture-input.ts';
+
+/** `orientation <rotation>`, on the same parse the retired leaf used. */
+export function readRequestedOrientation(positionals: readonly string[]): DeviceRotation {
+  return parseDeviceRotation(positionals[0]);
+}
+
+/** The neutral intent one orientation change carries, projected from a resolved command context. */
+function setOrientationInput(
+  rotation: DeviceRotation,
+  context: DaemonCommandContext,
+): SetOrientationInput {
+  return {
+    rotation,
+    ...(context.appBundleId === undefined ? {} : { options: { appBundleId: context.appBundleId } }),
+    execution: runtimeExecutionFromContext(context),
+  };
+}
+
+/**
+ * The one place `orientation` reaches a device (ADR 0019). Admission inspects the exact owner's
+ * `setOrientation` fact and binds once, before the dispatcher runs, so an owner that cannot rotate
+ * is refused rather than discovered mid-execution.
+ */
+export async function resolveBoundOrientationRuntime(
+  params: {
+    device: DeviceInfo;
+    positionals: readonly string[];
+  } & RuntimeAdmissionBindings,
+): Promise<ResolvedGenericExecution> {
+  const rotation = readRequestedOrientation(params.positionals);
+  return await resolveBoundGenericRuntime(
+    {
+      command: 'orientation',
+      device: params.device,
+      use: orientationRuntimeUse,
+      inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
+      bindDevice: params.bindDevice,
+    },
+    (runtime, context) => executeSetOrientation(runtime, rotation, context),
+  );
+}
+
+/**
+ * The ONE place a bound `setOrientation` executes (R44). Typed off `typeof orientationRuntimeUse`
+ * rather than a hand-restated operations shape, so a change to what `setOrientation` binds can't
+ * silently drift here.
+ */
+async function executeSetOrientation(
+  runtime: BoundDeviceRuntime<typeof orientationRuntimeUse>,
+  requestedRotation: DeviceRotation,
+  context: DaemonCommandContext,
+): Promise<Record<string, unknown>> {
+  const result = await runtime.operations.setOrientation(
+    setOrientationInput(requestedRotation, context),
+  );
+  const reported = result?.orientation;
+  if (reported) {
+    return {
+      action: 'orientation',
+      orientation: reported,
+      ...successText(`Rotated to ${reported}`),
+    };
+  }
+  // An owner that reports no resulting rotation is not evidence the device rotated: keep the
+  // requested rotation for compatibility, but disclose the unconfirmed claim instead of asserting it.
+  return {
+    action: 'orientation',
+    orientation: requestedRotation,
+    confirmed: false,
+    warning: `Requested ${requestedRotation}; the device owner reported no resulting orientation, so the rotation is unconfirmed.`,
+    ...successText(`Rotation requested: ${requestedRotation} (unconfirmed)`),
+  };
+}

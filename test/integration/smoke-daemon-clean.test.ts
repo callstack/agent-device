@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
+import { skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
 import { runCmdSync } from '@agent-device/host-kit/command';
 import { isProcessAlive, readProcessStartTime } from '@agent-device/host-kit/process';
 import { stopAndRetireDaemon } from '@agent-device/daemon-contracts/daemon-registration-owner';

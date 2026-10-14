@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
-import { installFakeManagedAgentBrowser } from './test-utils/web-managed-agent-browser.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { installFakeManagedAgentBrowser } from '@agent-device/test-kit/web-managed-agent-browser';
 
 const { cleanupManagedAgentBrowserOrphansMock } = vi.hoisted(() => ({
   cleanupManagedAgentBrowserOrphansMock: vi.fn(),
@@ -17,9 +17,9 @@ vi.mock('@agent-device/platform-web', async (importOriginal) => {
   };
 });
 
-import { WEB_DESKTOP_DEVICE } from './test-utils/device-fixtures.ts';
-import { SessionStore } from '../daemon/session-store.ts';
-import { openWebSessionNames } from '../daemon/web-session-names.ts';
+import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import { openWebSessionNames } from '@agent-device/daemon/testing/web-session-names';
 import { cleanupWebBrowserOrphansForDaemonStartup } from '../daemon-composition.ts';
 
 const mockCleanupManagedAgentBrowserOrphans = vi.mocked(cleanupManagedAgentBrowserOrphansMock);

@@ -90,6 +90,27 @@ test('a kernel diff selects nothing — only a harness diff spends mutants', () 
   );
 });
 
-test('a docs-only diff selects nothing', () => {
-  assert.deepEqual(affectedMatrixFor(['docs/agents/testing.md']), []);
+test('non-harness paths, including near-miss manifests, select nothing', () => {
+  for (const file of [
+    'docs/agents/testing.md',
+    'package.json.md',
+    'packages/kernel/src/package.json',
+    'packages/selectors/src/internal/parse.ts',
+  ]) {
+    assert.deepEqual(affectedMatrixFor([file]), [], file);
+  }
+});
+
+test('workflow, Vitest, dependency, and workspace manifest changes select the harness canary', () => {
+  for (const file of [
+    'vitest.mutation.config.ts',
+    'vitest.config.ts',
+    '.github/workflows/mutation-weekly.yml',
+    '.github/workflows/mutation-affected.yml',
+    'package.json',
+    'pnpm-lock.yaml',
+    'packages/kernel/package.json',
+  ]) {
+    assert.deepEqual(affectedMatrixFor([file]), shardMatrix([LANE_CANARY]), file);
+  }
 });

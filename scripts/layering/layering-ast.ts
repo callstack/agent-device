@@ -69,15 +69,12 @@ function unwrapImportInit(node: unknown): Record<string, unknown> | null {
 export type DestructuredDynamicImport = Readonly<{
   /** Export names captured from static (non-computed) property keys. */
   symbols: readonly string[];
-  /** True when the pattern also holds a rest element or a computed key: the import surface is wider than `symbols`. */
-  residue: boolean;
 }>;
 
 /**
  * Bindings captured by destructuring a dynamic import
  * (`const { a, b: local } = await import('...')` captures `a` and `b`), keyed by the import
- * expression's source offset. A rest element or a computed key is a binding the scanner cannot
- * name and is reported as residue, never dropped: it exposes exports beyond `symbols`.
+ * expression's source offset. A rest element or a computed key names no export and is skipped.
  * Namespace-form and bare dynamic imports capture nothing.
  */
 export function destructuredDynamicImportBindings(
@@ -102,11 +99,8 @@ export function destructuredDynamicImportBindings(
         (id as Record<string, unknown>).type === 'ObjectPattern'
       ) {
         const symbols: string[] = [];
-        let residue = false;
         const properties = (id as Record<string, unknown>).properties;
-        if (!Array.isArray(properties)) {
-          residue = true;
-        } else {
+        if (Array.isArray(properties)) {
           for (const property of properties) {
             if (
               property === null ||
@@ -114,15 +108,13 @@ export function destructuredDynamicImportBindings(
               (property as Record<string, unknown>).type !== 'Property' ||
               (property as Record<string, unknown>).computed === true
             ) {
-              residue = true;
               continue;
             }
             const name = propertyName((property as Record<string, unknown>).key);
             if (name) symbols.push(name);
-            else residue = true;
           }
         }
-        captures.set(init.start, { symbols, residue });
+        captures.set(init.start, { symbols });
       }
     }
     for (const child of Object.values(record)) visit(child);

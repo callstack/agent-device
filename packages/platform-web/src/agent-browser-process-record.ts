@@ -7,16 +7,24 @@ import {
   expandProcessTree,
   hostProcessId,
   listHostProcesses,
+  readHostProcessIdentityObservationsAsync,
   readProcessCommand,
   readProcessStartTime,
   type HostProcessInfo,
   type OwnedProcessRecordStore,
 } from '@agent-device/host-kit/process';
 
+import {
+  listManagedInstallPaths,
+  type ManagedInstallPaths,
+} from './agent-browser-install-paths.ts';
 import type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
 
 const HOST_PROCESS_LIST_TIMEOUT_MS = 1_500;
 const AGENT_DEVICE_BROWSER_MARKER_PREFIX = '--agent-device-managed-web=';
+
+/** The `purpose` every owned-process record for the managed web fleet carries. */
+export const MANAGED_WEB_BROWSER_PROCESS_PURPOSE = 'managed-web-browser';
 
 export type AgentBrowserProcessMatch = {
   process: HostProcessInfo;
@@ -29,7 +37,9 @@ export type AgentBrowserProcessSummary = {
   processes: AgentBrowserProcessMatch[];
 };
 
-export function agentBrowserChromeLaunchMarker(status: AgentBrowserToolStatus): string {
+export function agentBrowserChromeLaunchMarker(
+  status: Pick<ManagedInstallPaths, 'stateDir' | 'installDir'>,
+): string {
   const hash = crypto.createHash('sha256');
   hash.update(path.resolve(status.stateDir));
   hash.update('\0');
@@ -48,47 +58,19 @@ export function appendAgentDeviceChromeArgs(
   return `${existing},${marker}`;
 }
 
-export function matchAgentBrowserChromeProcess(
-  processInfo: HostProcessInfo,
-  status: AgentBrowserToolStatus,
-): AgentBrowserProcessMatch | undefined {
-  if (processInfo.pid === hostProcessId() || !isChromeLikeCommand(processInfo.command))
-    return undefined;
-  if (processInfo.command.includes(agentBrowserChromeLaunchMarker(status))) {
-    return { process: processInfo, reason: 'launch-marker' };
-  }
-  if (managedBrowserHomeMarkers(status).some((marker) => isCommandUnderPath(processInfo, marker))) {
-    return { process: processInfo, reason: 'managed-browser-home' };
-  }
-  return undefined;
-}
-
 export function summarizeAgentBrowserProcesses(
   processes: HostProcessInfo[],
   status: AgentBrowserToolStatus,
 ): AgentBrowserProcessSummary {
-  return summarizeMatches(processes, (processInfo) =>
-    matchAgentBrowserChromeProcess(processInfo, status),
-  );
+  const ownership = managedFleetOwnership(status);
+  return summarizeMatches(processes, (processInfo) => matchChromeProcess(processInfo, ownership));
 }
 
 function matchManagedAgentBrowserProcess(
   processInfo: HostProcessInfo,
-  status: AgentBrowserToolStatus,
+  ownership: ManagedFleetOwnership,
 ): AgentBrowserProcessMatch | undefined {
-  return (
-    matchAgentBrowserChromeProcess(processInfo, status) ??
-    matchAgentBrowserDaemonProcess(processInfo, status)
-  );
-}
-
-export function summarizeManagedAgentBrowserProcesses(
-  processes: HostProcessInfo[],
-  status: AgentBrowserToolStatus,
-): AgentBrowserProcessSummary {
-  return summarizeMatches(processes, (processInfo) =>
-    matchManagedAgentBrowserProcess(processInfo, status),
-  );
+  return matchChromeProcess(processInfo, ownership) ?? matchDaemonProcess(processInfo, ownership);
 }
 
 export async function inspectManagedAgentBrowserProcesses(
@@ -102,25 +84,74 @@ export async function recordManagedAgentBrowserProcesses(
   store: OwnedProcessRecordStore,
 ): Promise<AgentBrowserProcessSummary> {
   const processes = await listRealHostProcesses();
-  const roots = summarizeManagedAgentBrowserProcesses(processes, status);
+  const ownership = managedFleetOwnership(status);
+  const roots = summarizeMatches(processes, (processInfo) =>
+    matchManagedAgentBrowserProcess(processInfo, ownership),
+  );
   const ownedProcesses = expandProcessTree(roots.pids, processes);
   const summary: AgentBrowserProcessSummary = {
     count: ownedProcesses.length,
     pids: ownedProcesses.map(({ pid }) => pid),
     processes: ownedProcesses.map((process) => ({
       process,
-      reason: matchManagedAgentBrowserProcess(process, status)?.reason ?? 'descendant',
+      reason: matchManagedAgentBrowserProcess(process, ownership)?.reason ?? 'descendant',
     })),
   };
   const records: OwnedProcessRecord[] = summary.processes.flatMap(({ process: processInfo }) => {
     const startTime = readProcessStartTime(processInfo.pid);
     const command = readProcessCommand(processInfo.pid);
     return startTime && command
-      ? [{ pid: processInfo.pid, startTime, command, purpose: 'managed-web-browser' }]
+      ? [{ pid: processInfo.pid, startTime, command, purpose: MANAGED_WEB_BROWSER_PROCESS_PURPOSE }]
       : [];
   });
   if (records.length > 0) store.replace({ kind: 'daemon' }, records);
   return summary;
+}
+
+/**
+ * Whether the daemon-scoped record still describes a live managed fleet.
+ *
+ * `true` only when every process the record names is alive under the identity the record carries:
+ * named by one same-pid snapshot, not a zombie, started at the recorded time. Unknown evidence —
+ * an unanswered probe, an undecodable or empty record — reads as not-live, so the caller rescans
+ * and re-owns. This vouches for the recorded pids, not for fleet membership: a browser child the
+ * fleet minted after the last scan stays unrecorded, and dies with the recorded browser process
+ * that parents it. Liveness-and-lifetime is the whole question here; the reaper that signals
+ * proves identity per pid with its own facts.
+ */
+export async function managedWebBrowserProcessRecordIsLive(
+  store: OwnedProcessRecordStore,
+): Promise<boolean> {
+  const records = readDaemonManagedWebBrowserRecords(store);
+  if (records.length === 0) return false;
+  const observations = await readHostProcessIdentityObservationsAsync(
+    records.map((record) => record.pid),
+  );
+  return records.every((record) => {
+    const observation = observations.get(record.pid);
+    return (
+      observation !== undefined &&
+      !observation.state.startsWith('Z') &&
+      observation.startTime === record.startTime
+    );
+  });
+}
+
+/**
+ * The daemon-scoped managed browser records. A store that cannot answer has none, which is
+ * unknown evidence: the probe reports not-live and the caller re-derives by scanning.
+ */
+function readDaemonManagedWebBrowserRecords(store: OwnedProcessRecordStore): OwnedProcessRecord[] {
+  let entries: ReturnType<OwnedProcessRecordStore['read']>;
+  try {
+    entries = store.read();
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((entry) => entry.scope.kind === 'daemon' && entry.status === 'decoded')
+    .flatMap((entry) => entry.records)
+    .filter((record) => record.purpose === MANAGED_WEB_BROWSER_PROCESS_PURPOSE);
 }
 
 async function listRealHostProcesses(): Promise<HostProcessInfo[]> {
@@ -157,24 +188,65 @@ function isChromeLikeCommand(command: string): boolean {
   );
 }
 
-function matchAgentBrowserDaemonProcess(
+/**
+ * What marks a process as part of the managed fleet: the current install plus every sibling
+ * version directory under the same state dir, so a fleet left running by a previous pin still
+ * matches after an upgrade moves the current install.
+ */
+type ManagedFleetOwnership = {
+  launchMarkers: string[];
+  browserHomeRoots: string[];
+  installRoots: string[];
+};
+
+function managedFleetOwnership(status: AgentBrowserToolStatus): ManagedFleetOwnership {
+  const siblings = listManagedInstallPaths(status.stateDir).filter(
+    (install) => path.resolve(install.installDir) !== path.resolve(status.installDir),
+  );
+  const installs: ManagedInstallPaths[] = [status, ...siblings];
+  return {
+    launchMarkers: installs.map(agentBrowserChromeLaunchMarker),
+    browserHomeRoots: uniqueStrings(installs.flatMap(managedBrowserHomeMarkers)),
+    installRoots: installs.map(
+      (install) => `${normalizePathSeparators(path.resolve(install.installDir))}/`,
+    ),
+  };
+}
+
+function matchChromeProcess(
   processInfo: HostProcessInfo,
-  status: AgentBrowserToolStatus,
+  ownership: ManagedFleetOwnership,
+): AgentBrowserProcessMatch | undefined {
+  if (processInfo.pid === hostProcessId() || !isChromeLikeCommand(processInfo.command))
+    return undefined;
+  if (ownership.launchMarkers.some((marker) => processInfo.command.includes(marker))) {
+    return { process: processInfo, reason: 'launch-marker' };
+  }
+  if (ownership.browserHomeRoots.some((root) => isCommandUnderPath(processInfo, root))) {
+    return { process: processInfo, reason: 'managed-browser-home' };
+  }
+  return undefined;
+}
+
+function matchDaemonProcess(
+  processInfo: HostProcessInfo,
+  ownership: ManagedFleetOwnership,
 ): AgentBrowserProcessMatch | undefined {
   if (processInfo.pid === hostProcessId() || isChromeLikeCommand(processInfo.command))
     return undefined;
   const command = normalizePathSeparators(processInfo.command);
-  const installDir = normalizePathSeparators(path.resolve(status.installDir));
-  return command.includes(`${installDir}/`)
+  return ownership.installRoots.some((root) => command.includes(root))
     ? { process: processInfo, reason: 'agent-browser-daemon' }
     : undefined;
 }
 
-function managedBrowserHomeMarkers(status: AgentBrowserToolStatus): string[] {
-  return uniqueStrings([
+function managedBrowserHomeMarkers(
+  status: Pick<ManagedInstallPaths, 'homeDir' | 'runtimeHomeDir'>,
+): string[] {
+  return [
     path.join(status.homeDir, '.agent-browser', 'browsers'),
     path.join(status.runtimeHomeDir, '.agent-browser', 'browsers'),
-  ]);
+  ];
 }
 
 function isCommandUnderPath(processInfo: HostProcessInfo, rootPath: string): boolean {

@@ -241,6 +241,24 @@ export function continueButtonSnapshot(): SnapshotState {
   ]);
 }
 
+/**
+ * The #3471 fixture: one Continue button reported at a caller-chosen rect. A press resolving the
+ * button at one rect while a later observation reports another is the moving-target exposure, so the
+ * scenarios vary the rect and nothing else.
+ */
+export function continueButtonAtRect(x: number, y: number): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Button',
+      label: 'Continue',
+      rect: { x, y, width: 100, height: 40 },
+      hittable: true,
+    },
+  ]);
+}
+
 // Same button, reported non-hittable.
 export function nonHittableButtonSnapshot(): SnapshotState {
   return makeSnapshotState([

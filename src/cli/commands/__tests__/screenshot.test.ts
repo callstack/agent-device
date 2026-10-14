@@ -1,24 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { withCapturedStdoutAsync } from '../../../__tests__/test-utils/stream-capture.ts';
 import { createAgentDeviceClient } from '../../../agent-device-client.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { screenshotCommand } from '../screenshot.ts';
-
-async function captureStdout(fn: () => Promise<unknown>): Promise<string> {
-  const chunks: string[] = [];
-  const original = process.stdout.write.bind(process.stdout);
-  process.stdout.write = ((chunk: unknown) => {
-    chunks.push(String(chunk));
-    return true;
-  }) as typeof process.stdout.write;
-  try {
-    await fn();
-  } finally {
-    process.stdout.write = original;
-  }
-  return chunks.join('');
-}
 
 function clientReturning(
   data: Record<string, unknown>,
@@ -45,7 +31,9 @@ test('screenshot --level digest --json preserves the digest payload through the 
   const client = clientReturning(digest, 'digest');
   const flags = { json: true, responseLevel: 'digest' } as CliFlags;
 
-  const out = await captureStdout(() => screenshotCommand({ positionals: [], flags, client }));
+  const out = await withCapturedStdoutAsync(() =>
+    screenshotCommand({ positionals: [], flags, client }),
+  );
   const parsed = JSON.parse(out) as { success: boolean; data: Record<string, unknown> };
 
   assert.equal(parsed.success, true);
@@ -61,7 +49,9 @@ test('screenshot surfaces response-level warnings under the summary', async () =
   const client = clientReturning(full);
   const flags = { json: false } as CliFlags;
 
-  const out = await captureStdout(() => screenshotCommand({ positionals: [], flags, client }));
+  const out = await withCapturedStdoutAsync(() =>
+    screenshotCommand({ positionals: [], flags, client }),
+  );
 
   assert.equal(out, `/tmp/shot.png (40x20)\n${CROP_WARNING}\n`);
 });
@@ -71,7 +61,9 @@ test('screenshot --json carries response-level warnings in the data', async () =
   const client = clientReturning(full);
   const flags = { json: true } as CliFlags;
 
-  const out = await captureStdout(() => screenshotCommand({ positionals: [], flags, client }));
+  const out = await withCapturedStdoutAsync(() =>
+    screenshotCommand({ positionals: [], flags, client }),
+  );
   const parsed = JSON.parse(out) as { data: { path: string; warnings?: string[] } };
 
   assert.equal(parsed.data.path, '/tmp/shot.png');
@@ -91,7 +83,9 @@ test('screenshot --json at the default level still emits normalized screenshot m
   const client = clientReturning(full);
   const flags = { json: true } as CliFlags;
 
-  const out = await captureStdout(() => screenshotCommand({ positionals: [], flags, client }));
+  const out = await withCapturedStdoutAsync(() =>
+    screenshotCommand({ positionals: [], flags, client }),
+  );
   const parsed = JSON.parse(out) as {
     data: { path: string; width?: number; pixelDensity?: number };
   };

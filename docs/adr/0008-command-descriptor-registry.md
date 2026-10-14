@@ -24,7 +24,7 @@ Accepted
 A command's identity is restated, by hand, across roughly ten tables that must stay aligned by
 convention: `PUBLIC_COMMANDS` (`src/command-catalog.ts`), the per-command metadata and family facets
 (`src/commands/**`), the capability matrix (`src/core/capabilities.ts`), the daemon command registry
-(`src/daemon/daemon-command-registry.ts`, ADR 0003), the structured-batch allowlist
+(`packages/daemon/src/core/daemon-command-registry.ts`, ADR 0003), the structured-batch allowlist
 (`src/batch-policy.ts`), the MCP exposure sets, the Node client interface and impl (`src/client-types.ts`,
 `src/client.ts`), and the generic-dispatch `switch` (`src/core/dispatch.ts`, whose `default: throw` makes a
 missing or renamed command a runtime error, not a compile error). Adding one command touches ~24 files, the

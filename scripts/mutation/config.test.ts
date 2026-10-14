@@ -39,3 +39,31 @@ test('the config content hash is stable and content-addressed', () => {
   assert.notEqual(configHash('a'), configHash('b'));
   assert.match(configHash('a'), /^sha256:[0-9a-f]{12}$/);
 });
+
+test('stryker disables per-mutant related discovery and uses perTest coverage', () => {
+  const config = readConfig();
+  assert.equal((config.vitest as { related: boolean }).related, false);
+  assert.equal(config.coverageAnalysis, 'perTest');
+});
+
+test('shard planning pins the same instrumenter version as Stryker core', () => {
+  const root = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+  const core = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, 'node_modules/@stryker-mutator/core/package.json'), 'utf8'),
+  );
+  assert.equal(
+    root.devDependencies['@stryker-mutator/instrumenter'],
+    core.dependencies['@stryker-mutator/instrumenter'],
+  );
+});
+
+test('coverage reporting pins the same public API version as Stryker core', () => {
+  const root = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+  const core = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, 'node_modules/@stryker-mutator/core/package.json'), 'utf8'),
+  );
+  assert.equal(
+    root.devDependencies['@stryker-mutator/api'],
+    core.dependencies['@stryker-mutator/api'],
+  );
+});

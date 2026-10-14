@@ -8,7 +8,7 @@ import {
   selectPlugin,
   registrationSource,
   webDriverPluginSource,
-} from './plugin.fixtures.ts';
+} from '@agent-device/test-kit/plugin.fixtures';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderPluginHost } from '../sdk/plugins.ts';
 import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
