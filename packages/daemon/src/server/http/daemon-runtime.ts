@@ -19,7 +19,10 @@ import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { createRequestHandler } from '../request-router.ts';
 import type { RequestRouterDeps } from '../request-router.ts';
-import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
+import {
+  createLeaseSessionEnd,
+  getLeaseRegistryExecutionLocks,
+} from '../request-execution-scope.ts';
 import type { LeaseEndReason } from '../../sessions/lease-lifecycle.ts';
 import { stopSessionAppLog, teardownSessionResources } from '../../sessions/session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-teardown-budget.ts';
@@ -32,7 +35,6 @@ import type { RuntimeHintValues } from '@agent-device/contracts/application-life
 import { createDaemonIdleReap } from '../../sessions/server/daemon-idle-reap.ts';
 import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemon-diagnostics-scope';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
-import { createLeaseSessionEnd } from './daemon-lease-session-end.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
 import { finalizeDaemonLeases } from './daemon-lease-finalizer.ts';
 import {

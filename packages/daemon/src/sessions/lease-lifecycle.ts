@@ -102,6 +102,7 @@ export async function endLeasedSession(
       },
     });
   });
+  sessionStore.finalizeRepairTeardown(ref);
   sessionStore.retire(ref);
 }
 

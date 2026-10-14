@@ -407,10 +407,6 @@
       "types": "./src/execution/selector-runtime-backend.ts",
       "default": "./src/execution/selector-runtime-backend.ts"
     },
-    "./testing/server/daemon-lease-session-end": {
-      "types": "./src/server/http/daemon-lease-session-end.ts",
-      "default": "./src/server/http/daemon-lease-session-end.ts"
-    },
     "./testing/server/http-server": {
       "types": "./src/server/http/http-server.ts",
       "default": "./src/server/http/http-server.ts"

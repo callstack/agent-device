@@ -1,6 +1,8 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import { makeIosSession } from '../../__tests__/support/session-factories.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { authoringPublication, makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import {
   isolatedDeviceClaimStores,
@@ -12,7 +14,7 @@ import { existingSessionExecutionLockKeys } from '../request-binding.ts';
 import { withRequestExecutionLockKeys } from '../request-execution-locks.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { SessionTeardown } from '../../sessions/lease-lifecycle.ts';
-import { createLeaseSessionEnd } from './daemon-lease-session-end.ts';
+import { createLeaseSessionEnd } from '../request-execution-scope.ts';
 
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
@@ -68,6 +70,21 @@ function leaseSessionEnd(sessionStore: SessionStore, teardownSession: SessionTea
 }
 
 const settle = async (): Promise<void> => await new Promise((resolve) => setImmediate(resolve));
+
+test('end publishes the recorded script of the session it ends', async () => {
+  const sessionStore = makeSessionStore('agent-device-lease-end-script-');
+  await publishLeasedSession(sessionStore, 'leased', 'lease-1');
+  const scriptPath = path.join(mkdtempForTestSync('agent-device-lease-end-ad-'), 'flow.ad');
+  sessionStore.update(sessionStore.lookup('leased')!, {
+    scriptPublication: authoringPublication('armed', { path: scriptPath }),
+    actions: [{ ts: 1, command: 'click', positionals: ['id="recorded-step"'], flags: {} }],
+  });
+
+  await leaseSessionEnd(sessionStore, async () => {}).ender.end('lease-1', 'LEASE_EXPIRED');
+
+  expect(sessionStore.get('leased')).toBeUndefined();
+  expect(fs.readFileSync(scriptPath, 'utf8')).toMatch(/recorded-step/);
+});
 
 test('end tears down the session opened under the lease and clears its device claim', async () => {
   const sessionStore = makeSessionStore('agent-device-lease-end-');
