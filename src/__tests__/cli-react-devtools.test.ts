@@ -358,3 +358,15 @@ for (const { label, leaseBackend } of remoteBridgeBackends) {
     assertNoRemoteCompanion();
   });
 }
+
+test('react-devtools profile runs the built-in profiler: no npm exec and no remote companion', async () => {
+  await assert.rejects(
+    runReactDevtoolsCommand(['profile', 'export', 'out.json'], {
+      flags: { ...remoteBridgeScope, leaseBackend: 'android-instance' },
+      stateDir: '/tmp/agent-device-state',
+    }),
+    /Unknown react-devtools profile command: export/,
+  );
+  assert.equal(vi.mocked(runCmdStreaming).mock.calls.length, 0);
+  assert.equal(vi.mocked(ensureReactDevtoolsCompanion).mock.calls.length, 0);
+});

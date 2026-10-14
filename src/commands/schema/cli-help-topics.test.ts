@@ -522,37 +522,34 @@ test('usageForCommand resolves macos help topic', async () => {
 test('usageForCommand resolves react-devtools help topic', async () => {
   const help = await usageForCommand('react-devtools');
   if (help === null) throw new Error('Expected react-devtools help text');
+  assert.match(help, /agent-device react-devtools profile start/);
+  assert.match(help, /agent-device react-devtools profile report <Component>/);
+  assert.match(help, /agent-device react-devtools profile commit <N>/);
+  assert.match(help, /agent-device react-devtools profile timeline --limit 20 --sort duration/);
+  assert.match(help, /React Native 0\.74 or newer, with no app, Metro, or Babel changes/);
+  assert.match(help, /no status, start, or wait --connected step/);
+  assert.match(help, /Add --app <bundle-id> when several apps share the dev server/);
+  assert.match(help, /ranked findings, each naming a component, its evidence, and a fix/);
+  assert.match(help, /memo-defeated: a memoized component receives new props on every render/);
+  assert.match(help, /compare runs instead of reading absolute numbers/);
+  assert.match(help, /logs clear --restart before the first logs mark/);
   assert.match(help, /agent-device react-devtools start/);
   assert.match(help, /agent-device react-devtools wait --component <ComponentName>/);
   assert.match(help, /agent-device react-devtools find <ComponentName> --exact/);
   assert.match(help, /agent-device react-devtools errors/);
-  assert.match(help, /agent-device react-devtools profile report @c5/);
-  assert.match(help, /agent-device react-devtools profile timeline --limit 20/);
-  assert.match(help, /agent-device react-devtools profile export profile\.json/);
-  assert.match(
-    help,
-    /agent-device react-devtools profile diff before\.json after\.json --limit 10/,
-  );
-  assert.match(help, /render causes and changed props\/state\/hooks/);
-  assert.match(help, /Run agent-device react-devtools status first/);
+  assert.match(help, /Run status first/);
   assert.match(help, /start is not a connection check/);
-  assert.match(help, /Always run agent-device react-devtools wait --connected after status/);
-  assert.match(help, /logs clear --restart before the first logs mark/);
-  assert.match(help, /one bounded first-pass survey/);
-  assert.match(help, /profile slow --limit 5 once/);
-  assert.match(help, /profile rerenders --limit 5 once/);
-  assert.match(help, /profile timeline --limit 20 only when commit timing matters/);
-  assert.match(help, /Do not repeatedly raise broad profile slow limits/);
-  assert.match(help, /profile report unless you have a specific target/);
+  assert.match(help, /run wait --connected before trusting any result/);
+  assert.match(help, /Do not repeatedly raise table limits/);
   assert.match(help, /agent-device logs mark "before catalog search"/);
-  assert.match(help, /agent-device react-devtools profile timeline --limit 20/);
   assert.match(help, /Do not write agent-devtools/);
   assert.match(help, /Every profiling and survey line must begin with agent-device react-devtools/);
   assert.match(help, /agent-device network dump --include headers/);
-  assert.match(help, /@c refs reset after reload\/remount/);
+  assert.match(help, /@c refs reset after reload or remount/);
   assert.match(help, /use separate sessions\/devices/);
   assert.match(help, /local service tunnel/);
   assert.match(help, /Remote iOS apps attempt the legacy React DevTools websocket/);
+  assert.doesNotMatch(help, /profile export|profile diff|profile report @c/);
 });
 
 test('usageForCommand resolves cdp help topic', async () => {
@@ -587,7 +584,7 @@ test('usageForCommand resolves react-native help topic', async () => {
   assert.match(help, /--metro-host 127\.0\.0\.1 --metro-port 8081/);
   assert.match(help, /One simulator cannot run two copies of the same bundle id/);
   assert.match(help, /Keep the agent-device react-devtools prefix/);
-  assert.match(help, /Use help react-devtools for status\/wait/);
+  assert.match(help, /Use help react-devtools for render profiles/);
   assert.match(help, /Keep the agent-device cdp prefix/);
   assert.match(help, /Use help cdp for JS heap usage samples/);
   assert.match(help, /logs clear --restart/);

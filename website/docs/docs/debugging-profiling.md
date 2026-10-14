@@ -15,28 +15,67 @@ When UI automation is not enough, use these commands to collect runtime evidence
 - Apple crash symbolication with `debug symbols`
 - Screenshots, recordings, and replayable repro flows
 
+## React Native render profiling
+
+To find out why an interaction renders slowly, record a React profile around it:
+
+```bash
+agent-device react-devtools profile start
+agent-device fill 'id="catalog-search"' "tart" --delay-ms 80
+agent-device react-devtools profile stop
+```
+
+`profile stop` prints a short diagnosis: how many commits React made, how long they took, how many went over the 16 ms frame budget, and the problems it found, worst first. Each finding names a component, shows the evidence, and suggests a fix:
+
+```text
+React profile 8.3s: 8 commits, 1303ms rendering, 8 over 16ms (worst #6 188ms)
+1. memo-defeated ContactRow: memo bypassed on 480/480 updates; new highlight (object), onSelect (function) every render from ContactList -> stabilize those props in ContactList with useCallback/useMemo
+```
+
+| Finding | Meaning |
+| --- | --- |
+| `slow-render` | The component's own render is expensive. |
+| `memo-defeated` | A memoized component receives new props on every render. |
+| `parent-cascade` | The component re-renders with unchanged props whenever its owner renders. |
+| `context-cascade` | Context consumers re-render on unrelated context changes. |
+| `effect-chain` | An effect sets state right after a render, so every change commits twice. |
+| `render-storm` | One component commits many times per second. |
+| `eager-mount` | Hundreds of instances of one component mount in a single commit. |
+| `slow-commit` | A commit took over three frames and no other finding explains it. |
+
+To dig into a finding, use the saved profile:
+
+```bash
+agent-device react-devtools profile report ContactRow
+agent-device react-devtools profile commit 6
+agent-device react-devtools profile slow --limit 5
+agent-device react-devtools profile rerenders --limit 5
+agent-device react-devtools profile timeline --limit 20 --sort duration
+```
+
+Profiling works with development builds of React Native 0.74 and later, including Expo. It connects to the app through the Metro dev server, so the app, Metro config, and Babel config need no changes. If several apps use the same dev server, pass `--app <bundle-id>`. If the dev server is not the session's Metro server or `localhost:8081`, pass `--metro-port` and `--metro-host`.
+
+Development builds render slower than release builds. Compare profiles of the same interaction before and after a change rather than reading the numbers as absolute.
+
+Render profiling has not been verified on remote bridge sessions yet.
+
 ## React Native component internals
 
-To inspect the React Native component tree, props, state, hooks, or render profiling, use `react-devtools`:
+To inspect the React Native component tree, props, state, or hooks, use `react-devtools`:
 
 ```bash
 agent-device react-devtools status
 agent-device react-devtools wait --connected
 agent-device react-devtools get tree --depth 3
 agent-device react-devtools get component @c5
-agent-device react-devtools profile start
-agent-device react-devtools profile stop
-agent-device react-devtools profile slow --limit 5
-agent-device react-devtools profile rerenders --limit 5
-agent-device react-devtools profile timeline --limit 20
-agent-device react-devtools profile report @c5
+agent-device react-devtools find Button
 ```
 
-`react-devtools` runs a pinned version of `agent-react-devtools` and passes your arguments to it.
+These commands run a pinned version of `agent-react-devtools` and pass your arguments to it.
 
 On React Native 0.87 and later, set up the app once before `react-devtools wait --connected` can succeed, locally or through a remote bridge: install `agent-react-devtools` as a dev dependency of the app project, run `npx agent-react-devtools init` there, and rebundle. The package `react-devtools` runs is temporary and does not install it into the app. Run `npx agent-react-devtools uninit` when you no longer need the setup.
 
-For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to React DevTools or debugging evidence, start with `agent-device help react-native`. For slow-flow investigations, combine `help react-devtools` for the narrow React profile window with `help debugging` for log markers, network/audio evidence, traces, and perf samples. Start with one bounded survey: the `profile stop` summary, the `slow` and `rerenders` tables with a `--limit`, and `timeline` only when commit timing matters. Then drill into a specific `@c` ref with `profile report` instead of raising the `profile slow` limit again and again.
+For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to React DevTools or debugging evidence, start with `agent-device help react-native`. For slow-flow investigations, combine `help react-devtools` for the React profile with `help debugging` for log markers, network/audio evidence, traces, and perf samples.
 
 React Native warning and error overlays come from the app. Treat them as findings or blockers: capture them, check `react-devtools errors` when connected, run `agent-device react-native dismiss-overlay` when the overlay is unrelated, then re-snapshot and report the overlay.
 
@@ -44,7 +83,7 @@ For permission prompts and other alerts already on screen, see [Wait and alerts]
 
 ### Remote bridge sessions
 
-On Android and iOS sessions connected through a remote bridge profile, `react-devtools` opens a tunnel to the DevTools daemon at `127.0.0.1:8097` inside the remote sandbox. Android uses the bridge's `adb reverse` mapping; iOS uses the bridge's wildcard Metro host tunnel. The tunnel stays up until you run `agent-device react-devtools stop` or `agent-device disconnect`.
+On Android and iOS sessions connected through a remote bridge profile, the component inspection commands open a tunnel to the DevTools daemon at `127.0.0.1:8097` inside the remote sandbox. Android uses the bridge's `adb reverse` mapping; iOS uses the bridge's wildcard Metro host tunnel. The tunnel stays up until you run `agent-device react-devtools stop` or `agent-device disconnect`.
 
 React Native tries to reach DevTools once, during JavaScript startup. On remote iOS, start DevTools before that launch:
 

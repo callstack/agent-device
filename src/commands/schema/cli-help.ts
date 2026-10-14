@@ -281,9 +281,32 @@ Focus and visual truth:
     summary: 'React Native performance, profiling, and component internals',
     body: `agent-device help react-devtools
 
-Use this for React Native performance/profiling and internals that the accessibility tree cannot expose: components, props, state, hooks, ownership, slow renders, and rerenders.
+Use this for React Native render performance and internals that the accessibility tree cannot expose: slow renders, rerenders and their causes, components, props, state, hooks, and ownership.
 
-Core commands:
+Render profiling (built in):
+  agent-device react-devtools profile start
+  agent-device react-devtools profile stop
+  agent-device react-devtools profile report <Component>
+  agent-device react-devtools profile commit <N>
+  agent-device react-devtools profile slow --limit 5
+  agent-device react-devtools profile rerenders --limit 5
+  agent-device react-devtools profile timeline --limit 20 --sort duration
+  agent-device react-devtools profile status
+  Profiling attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes and no status, start, or wait --connected step.
+  Add --app <bundle-id> when several apps share the dev server, and --metro-port/--metro-host when the dev server is neither the session's nor localhost:8081.
+
+Profiling loop:
+  1. Run profile start immediately before the interaction; keep the window narrow.
+  2. Drive the interaction with normal agent-device commands. When correlating with logs, run logs clear --restart before the first logs mark.
+  3. Run profile stop. It prints the commit count, render time, frames over budget, and ranked findings, each naming a component, its evidence, and a fix.
+  4. Drill into one finding with profile report <Component> or profile commit <N> before reaching for the slow and rerenders tables.
+  5. After a fix, repeat the same start, interaction, and stop, and compare the findings.
+
+Findings:
+  slow-render: the component's own render is expensive. memo-defeated: a memoized component receives new props on every render. parent-cascade: renders with unchanged props whenever the owner renders. context-cascade: consumers re-render on unrelated context changes. effect-chain: an effect sets state right after a render, committing twice. render-storm: one component commits many times per second. eager-mount: hundreds of instances mount in one commit. slow-commit: a commit over three frames that no other finding explains.
+  Timings come from development builds and run slower than release builds; compare runs instead of reading absolute numbers.
+
+Component inspection (pinned agent-react-devtools):
   agent-device react-devtools status
   agent-device react-devtools start
   agent-device react-devtools stop
@@ -295,52 +318,28 @@ Core commands:
   agent-device react-devtools find <ComponentName> --exact
   agent-device react-devtools get component @c5
   agent-device react-devtools errors
-  agent-device react-devtools profile start
-  agent-device react-devtools profile stop
-  agent-device react-devtools profile slow --limit 5
-  agent-device react-devtools profile rerenders --limit 5
-  agent-device react-devtools profile report @c5
-  agent-device react-devtools profile timeline --limit 20
-  agent-device react-devtools profile export profile.json
-  agent-device react-devtools profile diff before.json after.json --limit 10
 
-Profiling loop:
-  1. Run agent-device react-devtools status first. Use start only if status reports the React DevTools helper is not running; start is not a connection check.
-  2. Always run agent-device react-devtools wait --connected after status and before profiling so the app, not just the helper, is attached.
-  3. If correlating with logs or network, run logs clear --restart before the first logs mark.
-  4. Start profiling immediately before the interaction.
-  5. Drive the interaction with normal agent-device commands and mark before/after the repro when timing matters.
-  6. Stop profiling.
-  7. Make one bounded first-pass survey: profile stop for the summary, profile slow --limit 5 once, profile rerenders --limit 5 once, and profile timeline --limit 20 only when commit timing matters.
-  8. Use profile report @cN for targeted render causes and changed props/state/hooks; use get component @cN for current props/state/hooks.
+Component inspection rules:
+  Run status first. Use start only if status reports the React DevTools helper is not running; start is not a connection check. Then run wait --connected before trusting any result: with 0 connected apps, count, errors, and get tree return empty results that look like a clean pass.
+  Start with get tree --depth 3 or find <name>; use find --exact when fuzzy results are noisy. @c refs reset after reload or remount; after a reload, wait --connected and inspect again.
+  React Native 0.87+ needs agent-react-devtools installed as a dev dependency of the app project, then a one-time npx agent-react-devtools init there and a rebundle, before wait --connected can succeed. The npm exec package this wrapper runs is temporary and does not install it into the app. Run npx agent-react-devtools uninit when the task is done unless the user wants to keep the setup.
+  For cross-platform validation with explicit device selectors, use separate sessions/devices and restart react-devtools between platforms.
+  Remote Android and iOS bridge runs work through agent-device react-devtools; the CLI keeps the needed local service tunnel alive until agent-device react-devtools stop or disconnect. Remote iOS apps attempt the legacy React DevTools websocket during JavaScript startup: if the app was already open before react-devtools start, run open <bundle-id> --platform ios --relaunch, then wait --connected.
 
 Rules:
   Every React DevTools command is an agent-device subcommand: agent-device react-devtools ...
   Do not write agent-devtools, agent-react-devtools, or bare react-devtools commands in final command plans. Every profiling and survey line must begin with agent-device react-devtools.
-  Start with get tree --depth 3 or find <name>; use find --exact when fuzzy results are noisy.
-  @c refs reset after reload/remount. After reload, wait --connected and inspect again.
-  Keep the profile window narrow; unrelated navigation makes render data noisy.
-  Do not repeatedly raise broad profile slow limits such as --limit 50, --limit 200, or --limit 500. Drill into a specific @c ref with profile report unless you have a specific target that needs more rows.
+  Do not repeatedly raise table limits such as --limit 50 or --limit 200; drill into one component with profile report instead.
   For network evidence, use agent-device network dump --include headers; headers is not a positional argument.
-  For cross-platform validation with explicit device selectors, use separate sessions/devices and restart react-devtools between platforms.
-  Remote Android and iOS bridge runs normally through agent-device react-devtools; the CLI keeps the needed local service tunnel alive until agent-device react-devtools stop or disconnect. Expo support depends on the SDK's bundled React Native runtime.
-  Remote iOS apps attempt the legacy React DevTools websocket during JavaScript startup. If the app was already open before react-devtools start, run open <bundle-id> --platform ios --relaunch, then wait --connected.
-  React Native 0.87+ needs agent-react-devtools installed as a dev dependency of the app project, then a one-time npx agent-react-devtools init there and a rebundle, before wait --connected can succeed. The npm exec package this wrapper runs is temporary and does not install it into the app. Run npx agent-react-devtools uninit when the task is done unless the user wants to keep the setup.
-  Verify an attached app with status or wait --connected before trusting any result. With 0 connected apps, count, errors, and get tree return empty results that look like a clean pass.
 
 Example:
-  agent-device react-devtools status
-  agent-device react-devtools wait --connected
   agent-device logs clear --restart
   agent-device logs mark "before catalog search"
   agent-device react-devtools profile start
   agent-device fill 'id="catalog-search"' "tart" --delay-ms 80
   agent-device logs mark "after catalog search"
   agent-device react-devtools profile stop
-  agent-device react-devtools profile slow --limit 5
-  agent-device react-devtools profile rerenders --limit 5
-  agent-device react-devtools profile timeline --limit 20
-  agent-device react-devtools profile report @c5
+  agent-device react-devtools profile report CatalogScreen
   agent-device network dump --include headers
 
 Device busy and ownership:
@@ -461,7 +460,7 @@ Overlays and busy RN UIs:
 
 React DevTools routing:
   Keep the agent-device react-devtools prefix on every React DevTools command.
-  Use help react-devtools for status/wait, component trees, props/state/hooks, profile windows, slow renders, rerenders, and remote bridge rules.
+  Use help react-devtools for render profiles, slow renders, rerenders, component trees, props/state/hooks, and remote bridge rules.
   If React DevTools cannot connect, report status and continue with logs, network, perf frames, perf memory, screenshot, and trace evidence instead of blocking the whole flow.
 
 CDP memory routing:

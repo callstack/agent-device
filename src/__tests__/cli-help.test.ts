@@ -65,7 +65,7 @@ test('help react-devtools prints agent workflow topic and skips daemon dispatch'
   assert.equal(result.code, 0);
   assert.equal(result.calls.length, 0);
   assert.match(result.stdout, /^agent-device \S+ — react-devtools/);
-  assert.match(result.stdout, /React Native performance\/profiling/);
+  assert.match(result.stdout, /React Native render performance/);
   assert.match(result.stdout, /agent-device react-devtools status/);
 });
 

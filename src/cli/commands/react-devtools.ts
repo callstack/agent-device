@@ -15,6 +15,7 @@ const AGENT_REACT_DEVTOOLS_BIN = 'agent-react-devtools';
 type ReactDevtoolsFlags = Pick<
   CliFlags,
   | 'leaseBackend'
+  | 'metroPublicBaseUrl'
   | 'metroProxyBaseUrl'
   | 'metroBearerToken'
   | 'tenant'
@@ -22,9 +23,10 @@ type ReactDevtoolsFlags = Pick<
   | 'leaseId'
   | 'remoteConfig'
   | 'session'
-> & {
-  leaseProvider?: string;
-};
+> &
+  Partial<Pick<CliFlags, 'json'>> & {
+    leaseProvider?: string;
+  };
 
 type ReactDevtoolsCommandOptions = {
   flags?: ReactDevtoolsFlags;
@@ -193,6 +195,14 @@ export async function runReactDevtoolsCommand(
   args: string[],
   options: ReactDevtoolsCommandOptions = {},
 ): Promise<number> {
+  if (args[0] === 'profile') {
+    const { runReactProfileCommand } = await import('../react-profiler/react-profile-command.ts');
+    return await runReactProfileCommand(args.slice(1), {
+      flags: options.flags,
+      stateDir: options.stateDir ?? process.cwd(),
+      session: options.session ?? options.flags?.session ?? 'default',
+    });
+  }
   const cwd = options.cwd ?? process.cwd();
   const env = options.env ?? process.env;
   const exitCode = await withRemoteDevtoolsCompanion(args, options, async () => {
