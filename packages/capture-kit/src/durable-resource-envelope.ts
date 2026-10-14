@@ -1,5 +1,6 @@
 import {
   isAppleOs,
+  isDeviceTarget,
   isPlatform,
   type AppleOS,
   type DeviceIdentity,
@@ -231,10 +232,6 @@ function isLifecycleState(value: unknown): value is DurableResourceLifecycleStat
 
 function isDeviceKind(value: unknown): value is DeviceKind {
   return value === 'simulator' || value === 'emulator' || value === 'device';
-}
-
-function isDeviceTarget(value: unknown): value is DeviceTarget {
-  return value === 'mobile' || value === 'tv' || value === 'desktop';
 }
 
 function isNonEmptyString(value: unknown): value is string {
