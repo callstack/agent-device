@@ -1,10 +1,27 @@
 import { expect, test } from 'vitest';
-import { maestroBackend } from '../replay-maestro-backend.ts';
+import type { ReplayBackendHost } from '@agent-device/contracts/replay-backend';
+import { maestroReplayBackendPlugin } from '../replay-maestro-backend.ts';
 
 // The backend adapter maps the host's capability vocabulary onto the engine's façade. The hosts
 // that consume it (source discovery, request device binding, `replay export`, the replay command)
-// each test the behavior through the registry; what is pinned here is the adapter's own mapping,
-// which is the contract the 0.22 plugin (#3377) relocates unchanged.
+// each test the behavior through the registry; what is pinned here is the adapter's own mapping.
+// None of these capabilities reach host services, so the host is never called.
+const unusedHost: ReplayBackendHost = {
+  appendTraceEvent: () => {
+    throw new Error('host unused');
+  },
+  buildBuiltinVars: () => {
+    throw new Error('host unused');
+  },
+  readScriptSourceFile: () => {
+    throw new Error('host unused');
+  },
+  scriptSourceRequiredMessage: '',
+  resolveTargetDevice: () => Promise.reject(new Error('host unused')),
+  requestSignal: () => undefined,
+  buildActionFailureResponse: () => Promise.reject(new Error('host unused')),
+};
+const maestroBackend = maestroReplayBackendPlugin.create(unusedHost);
 
 test('inspectSource reports the flow title and static app target', () => {
   const inspection = maestroBackend.inspectSource(

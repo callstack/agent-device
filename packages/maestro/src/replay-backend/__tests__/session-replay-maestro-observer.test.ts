@@ -1,15 +1,12 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { MaestroActionEvent } from '@agent-device/maestro';
-import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 import { createMaestroReplayObserver } from '../session-replay-maestro-observer.ts';
 
 test('forwards command labels to progress and replay trace projection', () => {
-  const root = mkdtempForTestSync('agent-device-maestro-label-trace-');
-  const tracePath = path.join(root, 'replay-timing.ndjson');
-  const replayPath = path.join(root, 'flow.yaml');
+  const tracePath = '/trace/replay-timing.ndjson';
+  const replayPath = '/flows/flow.yaml';
   const onStep = vi.fn();
+  const appendTraceEvent = vi.fn();
   const event: MaestroActionEvent = {
     action: 'tapOn',
     value: 'save action',
@@ -19,7 +16,12 @@ test('forwards command labels to progress and replay trace projection', () => {
     stepTotal: 1,
   };
 
-  const observer = createMaestroReplayObserver({ tracePath, filePath: replayPath, onStep });
+  const observer = createMaestroReplayObserver({
+    appendTraceEvent,
+    tracePath,
+    filePath: replayPath,
+    onStep,
+  });
   observer.actionStarted?.(event);
   observer.actionCompleted?.({
     ...event,
@@ -39,13 +41,12 @@ test('forwards command labels to progress and replay trace projection', () => {
     command: 'tapOn',
     value: 'save action',
   });
-  const traceStart = JSON.parse(fs.readFileSync(tracePath, 'utf8').split('\n')[0]!) as Record<
-    string,
-    unknown
-  >;
-  expect(traceStart).toMatchObject({
-    type: 'replay_action_start',
-    command: 'tapOn',
-    positionals: ['save action'],
-  });
+  expect(appendTraceEvent).toHaveBeenCalledWith(
+    tracePath,
+    expect.objectContaining({
+      type: 'replay_action_start',
+      command: 'tapOn',
+      positionals: ['save action'],
+    }),
+  );
 });

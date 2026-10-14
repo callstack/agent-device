@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { stringify } from 'yaml';
-import { runTypedMaestroReplay } from '@agent-device/replay-port/session-replay-maestro-runtime';
+import { getReplayBackend } from '@agent-device/replay-port/replay-backend-registry';
 import { SessionStore } from '../../../core/session-store.ts';
 import { replayCommandForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
@@ -37,7 +37,9 @@ test('a typed Maestro selector conflict names the session store key, not "defaul
     meta: { requestId: 'req-maestro-address' },
   } as unknown as DaemonRequest;
 
-  const response = await runTypedMaestroReplay(
+  const response = await (
+    await getReplayBackend('maestro')
+  ).runReplay(
     replayCommandForTest({
       req,
       sessionName: SCOPED_ADDRESS,

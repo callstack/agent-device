@@ -1,12 +1,12 @@
 import type {
   MaestroDaemonDispatchOptions,
   MaestroDaemonOperationRequest,
-} from '@agent-device/maestro/daemon-runtime-port';
-import { stripUndefined } from '@agent-device/kernel/record';
+} from '../daemon-port/daemon-runtime-port.ts';
 import type {
   ReplayBackendDispatchOptions,
   ReplayDispatchRequest,
 } from '@agent-device/contracts/replay-backend';
+import { stripUndefined } from '@agent-device/kernel/record';
 
 /**
  * The daemon half of the Maestro runtime port. The port projects a flow step onto one public

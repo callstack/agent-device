@@ -7,31 +7,24 @@ import {
   type MaestroPlatform,
 } from '@agent-device/maestro';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
-import { getRequestSignal } from '@agent-device/host-kit/request';
 import {
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
 } from '@agent-device/ad-script';
-import { createDaemonMaestroRuntimePort } from '@agent-device/maestro/daemon-runtime-port';
+import { createDaemonMaestroRuntimePort } from '../daemon-port/daemon-runtime-port.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { buildReplayBuiltinVars } from '@agent-device/replay-port/session-replay-vars';
-import { createMaestroReplayObserver } from '@agent-device/replay-port/session-replay-maestro-observer';
-import { maestroOperationDispatchRequest } from '@agent-device/replay-port/session-replay-maestro-request';
+import { createMaestroReplayObserver } from './session-replay-maestro-observer.ts';
+import { maestroOperationDispatchRequest } from './session-replay-maestro-request.ts';
 import {
   buildTypedMaestroReplayErrorResponse,
   buildTypedMaestroSuccessResponse,
 } from './session-replay-maestro-response.ts';
-import { buildMaestroReplayTargetDeviceResolutionOptions } from '@agent-device/replay-port/replay-script-selection';
-import {
-  readReplayScriptSourceFile,
-  REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE,
-} from '@agent-device/replay-port/script-source';
 import type { ReplayScriptSourceBundle } from '@agent-device/contracts/replay';
 import type {
   ReplayBackendCommand,
+  ReplayBackendHost,
   ReplayDispatchRequest,
   ReplaySessionStore,
 } from '@agent-device/contracts/replay-backend';
@@ -46,6 +39,7 @@ type TypedMaestroReplayState = {
 };
 
 type TypedMaestroReplayPreparation = Readonly<{
+  host: ReplayBackendHost;
   command: ReplayBackendCommand;
   bundle: ReplayScriptSourceBundle;
 }>;
@@ -74,11 +68,12 @@ type MaestroReplayBinding = Pick<
 >;
 
 export async function runTypedMaestroReplay(
+  host: ReplayBackendHost,
   command: ReplayBackendCommand,
 ): Promise<DaemonResponse> {
   const { request: req } = command;
   const bundle = req.flags?.replayScriptSource;
-  if (!bundle) return errorResponse('INVALID_ARGS', REPLAY_SCRIPT_SOURCE_REQUIRED_MESSAGE);
+  if (!bundle) return errorResponse('INVALID_ARGS', host.scriptSourceRequiredMessage);
   if (req.flags?.saveScript !== undefined) {
     return errorResponse(
       'INVALID_ARGS',
@@ -89,13 +84,14 @@ export async function runTypedMaestroReplay(
   const state: TypedMaestroReplayState = { snapshotStart: 0 };
   try {
     return await executeTypedMaestroReplay({
+      host,
       command,
       bundle,
       startedAt,
       state,
     });
   } catch (error) {
-    return await buildTypedMaestroReplayErrorResponse({
+    return await buildTypedMaestroReplayErrorResponse(host, {
       command,
       replayPath: bundle.entry,
       state,
@@ -107,14 +103,14 @@ export async function runTypedMaestroReplay(
 async function executeTypedMaestroReplay(
   params: TypedMaestroReplayExecution,
 ): Promise<DaemonResponse> {
-  const { command, bundle, startedAt, state } = params;
+  const { host, command, bundle, startedAt, state } = params;
   const {
     request: req,
     session: { store: sessionStore },
     tracePath,
     onStep,
   } = command;
-  const context = await prepareTypedMaestroReplay({ command, bundle });
+  const context = await prepareTypedMaestroReplay({ host, command, bundle });
   // evalScript runs via node:vm, which is not a security sandbox; only trust it
   // for flows that did not arrive over the daemon's remote HTTP surface.
   const publicNetworkOnly = command.publicNetworkOnly === true;
@@ -139,15 +135,16 @@ async function executeTypedMaestroReplay(
     trustedScripts: !publicNetworkOnly,
     // #1802: `runFlow` includes resolve out of the caller's bundle, so a local
     // and a remote run compile the same flow closure.
-    readSource: (includePath) => readReplayScriptSourceFile(bundle, includePath),
+    readSource: (includePath) => host.readScriptSourceFile(bundle, includePath),
     observer: createMaestroReplayObserver({
+      appendTraceEvent: host.appendTraceEvent,
       filePath: context.filePath,
       tracePath,
       onStep,
     }),
   });
   if (!outcome.ok) {
-    return await buildTypedMaestroReplayErrorResponse({
+    return await buildTypedMaestroReplayErrorResponse(host, {
       command,
       replayPath: bundle.entry,
       state,
@@ -165,19 +162,20 @@ async function executeTypedMaestroReplay(
 async function prepareTypedMaestroReplay(
   params: TypedMaestroReplayPreparation,
 ): Promise<TypedMaestroReplayContext> {
-  const { command, bundle } = params;
+  const { host, command, bundle } = params;
   const {
     request: req,
     session: { name: sessionName, store: sessionStore },
   } = command;
   const filePath = bundle.entry;
-  const flow = inspectMaestroFlow(readReplayScriptSourceFile(bundle, filePath), filePath);
+  const flow = inspectMaestroFlow(host.readScriptSourceFile(bundle, filePath), filePath);
   // `sessionName` is the resolved store key, so the lookup carries the address a selector
   // conflict must tell the caller to close or reuse.
   const sessionRef = sessionStore.lookup();
   const session = sessionRef?.session;
   if (sessionRef) sessionStore.assertSelectorMatches(req.flags);
   const binding = await resolveMaestroReplayBinding({
+    host,
     req,
     sessionStore,
     sessionName,
@@ -189,6 +187,7 @@ async function prepareTypedMaestroReplay(
     flow,
     ...binding,
     defaults: buildTypedMaestroDefaults({
+      host,
       req,
       sessionName,
       filePath,
@@ -196,27 +195,28 @@ async function prepareTypedMaestroReplay(
       target: binding.target,
     }),
     env: buildTypedMaestroEnv(req),
-    signal: getRequestSignal(req.meta?.requestId),
+    signal: host.requestSignal(req.meta?.requestId),
   };
 }
 
 async function resolveMaestroReplayBinding(params: {
+  host: ReplayBackendHost;
   req: DaemonWireRequest;
   sessionStore: ReplaySessionStore;
   sessionName: string;
   session: ReturnType<ReplaySessionStore['get']>;
   flow: MaestroFlow;
 }): Promise<MaestroReplayBinding> {
-  const { req, sessionStore, sessionName, session, flow } = params;
+  const { host, req, sessionStore, sessionName, session, flow } = params;
   const requestedPlatform = req.flags?.platform;
   const device =
     session?.device ??
     (requestedPlatform === 'android' || requestedPlatform === 'ios'
       ? undefined
-      : await resolveTargetDevice(
-          req.flags ?? {},
-          buildMaestroReplayTargetDeviceResolutionOptions(flow.appTarget, requestedPlatform),
-        ));
+      : await host.resolveTargetDevice(req.flags ?? {}, {
+          appTarget: flow.appTarget,
+          platform: requestedPlatform,
+        }));
   const platform = resolveMaestroPlatform(req, device);
   const runtimeHints = resolveReplayRuntimeHints({
     req,
@@ -226,6 +226,7 @@ async function resolveMaestroReplayBinding(params: {
     platform,
   });
   return await completeMaestroRuntimeBinding({
+    host,
     req,
     sessionStore,
     sessionName,
@@ -239,6 +240,7 @@ async function resolveMaestroReplayBinding(params: {
 
 async function completeMaestroRuntimeBinding(
   params: {
+    host: ReplayBackendHost;
     req: DaemonWireRequest;
     sessionStore: ReplaySessionStore;
     sessionName: string;
@@ -246,10 +248,10 @@ async function completeMaestroRuntimeBinding(
   } & MaestroReplayBinding,
 ): Promise<MaestroReplayBinding> {
   if (params.device || !requiresDeviceRuntimeDefaults(params.runtimeHints)) return params;
-  const device = await resolveTargetDevice(
-    params.req.flags ?? {},
-    buildMaestroReplayTargetDeviceResolutionOptions(params.flow.appTarget, params.platform),
-  );
+  const device = await params.host.resolveTargetDevice(params.req.flags ?? {}, {
+    appTarget: params.flow.appTarget,
+    platform: params.platform,
+  });
   return {
     device,
     platform: params.platform,
@@ -287,6 +289,7 @@ function requiresDeviceRuntimeDefaults(runtimeHints: SessionRuntimeHints | undef
 }
 
 function buildTypedMaestroDefaults(params: {
+  host: ReplayBackendHost;
   req: DaemonWireRequest;
   sessionName: string;
   filePath: string;
@@ -294,10 +297,9 @@ function buildTypedMaestroDefaults(params: {
   target: string;
 }): Record<string, string> {
   return {
-    ...buildReplayBuiltinVars({
+    ...params.host.buildBuiltinVars({
       req: params.req,
       sessionName: params.sessionName,
-      metadata: {},
       resolvedPath: params.filePath,
     }),
     AD_PLATFORM: params.platform,

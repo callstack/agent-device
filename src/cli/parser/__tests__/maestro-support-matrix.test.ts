@@ -3,11 +3,23 @@ import { expect, test } from 'vitest';
 import { usageForCommand } from '../args.ts';
 import { getFlagDefinitions } from '@agent-device/command-registry/flag-registry';
 import {
-  MAESTRO_COMPATIBILITY_ADR_URL,
-  MAESTRO_COMPATIBILITY_ISSUE_URL,
   MAESTRO_COMPAT_LIMITATIONS,
   MAESTRO_COMPAT_SUPPORTED_CAPABILITIES,
 } from '@agent-device/maestro';
+import { maestroReplayBackendDeclaration } from '@agent-device/maestro/replay-backend-declaration';
+
+const MAESTRO_COMPATIBILITY_ADR_URL = declaredUrl('declared conformance divergences: ');
+const MAESTRO_COMPATIBILITY_ISSUE_URL = declaredUrl('Focused compatibility request: ');
+
+function declaredUrl(prefix: string): string {
+  const line = maestroReplayBackendDeclaration.help.body
+    .split('\n')
+    .find((candidate) => candidate.includes(prefix));
+  const url = line?.slice(line.indexOf(prefix) + prefix.length).trim();
+  if (!url?.startsWith('https://'))
+    throw new Error(`declaration help has no URL after "${prefix}"`);
+  return url;
+}
 
 test('Maestro flag routes to the versioned compatibility help topic', () => {
   const flag = getFlagDefinitions().find((definition) => definition.key === 'replayMaestro');

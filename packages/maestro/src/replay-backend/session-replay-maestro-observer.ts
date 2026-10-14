@@ -5,33 +5,50 @@ import type {
   MaestroFailedAction,
 } from '@agent-device/maestro';
 import { AppError } from '@agent-device/kernel/errors';
-import type { ReplayTestAttemptStepSink } from '@agent-device/replay-test';
+import type {
+  ReplayBackendCommand,
+  ReplayBackendHost,
+} from '@agent-device/contracts/replay-backend';
 import { stripUndefined } from '@agent-device/kernel/record';
-import { appendReplayTraceEvent } from '@agent-device/replay-port/session-replay-trace';
+
+type AppendTraceEvent = ReplayBackendHost['appendTraceEvent'];
 
 export function createMaestroReplayObserver(params: {
+  appendTraceEvent: AppendTraceEvent;
   filePath: string;
   tracePath: string | undefined;
-  onStep?: ReplayTestAttemptStepSink;
+  onStep?: ReplayBackendCommand['onStep'];
 }): MaestroExecutionObserver {
-  const { filePath, tracePath, onStep } = params;
+  const { appendTraceEvent, filePath, tracePath, onStep } = params;
   const traceStarts = new Map<number, MaestroActionEvent>();
   return {
     actionStarted: (event) => {
       traceStarts.set(event.stepIndex, event);
       runTelemetrySink(() => emitMaestroStep(onStep, event));
-      runTelemetrySink(() => appendMaestroTraceStart(tracePath, filePath, event));
+      runTelemetrySink(() => appendMaestroTraceStart(appendTraceEvent, tracePath, filePath, event));
     },
     actionCompleted: (event) => {
       const traceEvent = takeTraceStart(traceStarts, event.stepIndex);
       runTelemetrySink(() =>
-        appendMaestroTraceStop(tracePath, filePath, traceStopEvent(traceEvent, event), true),
+        appendMaestroTraceStop(
+          appendTraceEvent,
+          tracePath,
+          filePath,
+          traceStopEvent(traceEvent, event),
+          true,
+        ),
       );
     },
     actionFailed: (event) => {
       const traceEvent = takeTraceStart(traceStarts, event.stepIndex);
       runTelemetrySink(() =>
-        appendMaestroTraceStop(tracePath, filePath, traceStopEvent(traceEvent, event), false),
+        appendMaestroTraceStop(
+          appendTraceEvent,
+          tracePath,
+          filePath,
+          traceStopEvent(traceEvent, event),
+          false,
+        ),
       );
     },
   };
@@ -65,10 +82,7 @@ function traceStopEvent(
   });
 }
 
-function emitMaestroStep(
-  onStep: ReplayTestAttemptStepSink | undefined,
-  event: MaestroActionEvent,
-): void {
+function emitMaestroStep(onStep: ReplayBackendCommand['onStep'], event: MaestroActionEvent): void {
   onStep?.({
     index: event.stepIndex,
     total: event.stepTotal,
@@ -78,6 +92,7 @@ function emitMaestroStep(
 }
 
 function appendMaestroTraceStart(
+  appendReplayTraceEvent: AppendTraceEvent,
   tracePath: string | undefined,
   replayPath: string,
   event: MaestroActionEvent,
@@ -97,6 +112,7 @@ function appendMaestroTraceStart(
 }
 
 function appendMaestroTraceStop(
+  appendReplayTraceEvent: AppendTraceEvent,
   tracePath: string | undefined,
   replayPath: string,
   event: MaestroCompletedActionEvent | MaestroFailedAction,

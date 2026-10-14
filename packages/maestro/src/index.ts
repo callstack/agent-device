@@ -29,9 +29,6 @@ export {
 export { MAESTRO_SELECTOR_PROJECTION } from './internal/selector-vocabulary.ts';
 
 export {
-  formatMaestroCompatibilityReference,
-  MAESTRO_COMPATIBILITY_ADR_URL,
-  MAESTRO_COMPATIBILITY_ISSUE_URL,
   MAESTRO_COMPAT_LIMITATIONS,
   MAESTRO_COMPAT_SUPPORTED_CAPABILITIES,
 } from './internal/facade-support.ts';

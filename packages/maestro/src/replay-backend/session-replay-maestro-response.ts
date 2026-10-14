@@ -5,6 +5,7 @@ import { summarizeSnapshotTimingSamples } from '@agent-device/contracts/capture'
 import { buildTypedMaestroFailureResponse } from './session-replay-maestro-failure.ts';
 import type {
   ReplayBackendCommand,
+  ReplayBackendHost,
   ReplaySessionStore,
 } from '@agent-device/contracts/replay-backend';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
@@ -51,6 +52,7 @@ type TypedMaestroErrorResponseParams = Readonly<{
 }>;
 
 export async function buildTypedMaestroReplayErrorResponse(
+  host: ReplayBackendHost,
   params: TypedMaestroErrorResponseParams,
 ): Promise<DaemonResponse> {
   const { command, replayPath, state, outcome } = params;
@@ -61,7 +63,7 @@ export async function buildTypedMaestroReplayErrorResponse(
   const { failure } = outcome;
   const normalizedError = normalizeError(outcome.error);
   if (failure) {
-    return await buildTypedMaestroFailureResponse({
+    return await buildTypedMaestroFailureResponse(host, {
       error: normalizedError,
       failure,
       replayPath,

@@ -2,12 +2,17 @@ import type { DaemonError } from '@agent-device/kernel/errors';
 import type { DaemonResponse, SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
+import type { CommandFlags } from './command-flags.ts';
 import type { DaemonWireRequest } from './daemon-wire-request.ts';
 import type {
   ReplayDivergenceResume,
   ReplayDivergenceSuggestionBasis,
 } from './replay-divergence.ts';
-import type { ReplayDispatchOptions, ReplayObservationAuthorityBinder } from './replay.ts';
+import type {
+  ReplayDispatchOptions,
+  ReplayObservationAuthorityBinder,
+  ReplayScriptSourceBundle,
+} from './replay.ts';
 import type { SessionAction } from './session-action.ts';
 import type {
   SnapshotDiagnosticsState,
@@ -15,9 +20,12 @@ import type {
 } from './snapshot-diagnostics.ts';
 
 /**
- * The replay backend contract (#3377): the session and command shapes a non-native replay engine
- * is handed, the capabilities it implements, and the failure descriptor the daemon reports for a
- * failed step. Everything here is type-only, so an engine can depend on this module without
+ * The replay backend plugin contract (#3377): what a non-native replay engine implements
+ * (`ReplayBackendPlugin`) and the host services the daemon lends it (`ReplayBackendHost`).
+ *
+ * The replay port owns the registry and builds the host; an engine package owns its plugin and
+ * reaches process state, session policy, and daemon dispatch only through `host` and the command
+ * it is handed. Everything here is type-only, so an engine can depend on this module without
  * evaluating any host code.
  */
 
@@ -204,4 +212,53 @@ export type ReplayBackendActionFailure = Readonly<{
   suggestNodes(
     snapshot: Readonly<{ createdAt: number; nodes: SnapshotNode[] }>,
   ): readonly Readonly<{ node: SnapshotNode; basis: ReplayDivergenceSuggestionBasis }>[];
+}>;
+
+/** The device-binding facts a backend resolves a target device from. */
+export type ReplayBackendDeviceBinding = Readonly<{
+  /** The flow's static app target, when it declares one. */
+  appTarget: string | undefined;
+  platform: CommandFlags['platform'] | undefined;
+}>;
+
+/**
+ * The host services a backend plugin reaches. Everything holding process state or daemon
+ * session policy is a member; stateless workspace packages stay direct imports of the plugin.
+ */
+export type ReplayBackendHost = Readonly<{
+  /** Appends one record to the run's trace file, if any; failures are diagnostics, never thrown. */
+  appendTraceEvent(tracePath: string | undefined, event: Record<string, unknown>): void;
+  /** The `AD_*` variables every replay run is seeded with. */
+  buildBuiltinVars(params: {
+    req: DaemonWireRequest;
+    sessionName: string;
+    resolvedPath: string;
+  }): Record<string, string>;
+  /** Reads one file out of the request's script source bundle; throws when it was not sent. */
+  readScriptSourceFile(bundle: ReplayScriptSourceBundle, resolvedPath: string): string;
+  scriptSourceRequiredMessage: string;
+  /** Selects the device a run binds when no session or explicit platform already names one. */
+  resolveTargetDevice(
+    flags: CommandFlags,
+    binding: ReplayBackendDeviceBinding,
+  ): Promise<DeviceInfo>;
+  /** The abort signal of the in-flight daemon request. */
+  requestSignal(requestId: string | undefined): AbortSignal | undefined;
+  /** Builds the REPLAY_DIVERGENCE failure response: screen capture, ranking, bounding, resume. */
+  buildActionFailureResponse(failure: ReplayBackendActionFailure): Promise<DaemonResponse>;
+}>;
+
+/**
+ * Versioned like `apiVersion` in the provider plugin manifest. A declaration is engine-free
+ * metadata, importable without evaluating the engine, so help and registry listings stay light.
+ */
+export type ReplayBackendDeclaration<TId extends string = string> = Readonly<{
+  apiVersion: 1;
+  id: TId;
+  help: Readonly<{ summary: string; body: string }>;
+}>;
+
+export type ReplayBackendPlugin<TId extends string = string> = Readonly<{
+  declaration: ReplayBackendDeclaration<TId>;
+  create(host: ReplayBackendHost): ReplayBackend<TId>;
 }>;

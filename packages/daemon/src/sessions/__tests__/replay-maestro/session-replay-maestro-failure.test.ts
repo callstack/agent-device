@@ -1,4 +1,3 @@
-import { noMaestroIncludeSources } from '@agent-device/replay-port/replay-script-source-fixtures';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
@@ -13,23 +12,12 @@ vi.mock('../../../core/snapshot-interactor-capture.ts', () => ({
 import fs from 'node:fs';
 import path from 'node:path';
 import { stringify } from 'yaml';
-import {
-  executeMaestroFlow,
-  inspectMaestroFlow,
-  type MaestroFailedAction,
-  type MaestroRuntimeCommand,
-  type MaestroRuntimePort,
-} from '@agent-device/maestro';
-import {
-  buildTypedMaestroFailureReportProjection,
-  buildTypedMaestroFailureResponse,
-} from '@agent-device/replay-port/session-replay-maestro-failure';
+import type { MaestroRuntimeCommand } from '@agent-device/maestro';
 import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { captureSnapshotWithInteractor } from '../../../core/snapshot-interactor-capture.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { baseReplayRequest as baseReq } from '../replay-runtime/session-replay-runtime.fixtures.ts';
-import { replaySessionForTest } from '../replay-divergence/replay-session-fixture.ts';
 import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
@@ -47,30 +35,35 @@ beforeEach(() => {
   mockCaptureSnapshotWithInteractor.mockImplementation(captureSnapshotThroughLegacyDispatchFixture);
 });
 
+/**
+ * Runs a one-step flow whose action fails, so the divergence report is built the way the daemon
+ * builds it: `nodes` is the screen captured after the failure, `engineNodes` what the flow's own
+ * target lookup sees before it.
+ */
 async function buildFailureScenario(
   command: MaestroRuntimeCommand,
   nodes: SnapshotNode[],
-  options: { warnings?: readonly string[] } = {},
-): Promise<{
-  response: Extract<Awaited<ReturnType<typeof buildTypedMaestroFailureResponse>>, { ok: false }>;
-  sessionStore: SessionStore;
-  sessionName: string;
-}> {
+  options: { engineNodes?: SnapshotNode[] } = {},
+) {
   const root = mkdtempForTestSync('agent-device-maestro-suggestions-');
   const sessionName = 'default';
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   sessionStore.publish(sessionName, makeIosSession(sessionName));
-  const replaySession = replaySessionForTest(sessionStore, sessionName);
+  const flowPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(flowPath, maestroFlowForCommand(command));
   mockDispatchCommand.mockResolvedValue({ nodes, truncated: false, backend: 'xctest' });
-  const failure = await captureMaestroFailure(command, path.join(root, 'flow.yaml'));
-  const response = await buildTypedMaestroFailureResponse({
-    error: { code: 'COMMAND_FAILED', message: 'typed Maestro action failed' },
-    failure: options.warnings ? { ...failure, warnings: options.warnings } : failure,
-    replayPath: path.join(root, 'flow.yaml'),
-    req: baseReq({ flags: { replayBackend: 'maestro', platform: 'ios' } }),
-    sessionStore: replaySession.store,
-    observationStore: replaySession.observationStore,
+  const response = await runReplayForTest({
+    req: baseReq({
+      positionals: [flowPath],
+      flags: { replayBackend: 'maestro', platform: 'ios' },
+    }),
+    sessionName,
     logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) =>
+      req.command === 'snapshot'
+        ? { ok: true, data: { nodes: options.engineNodes ?? nodes } }
+        : { ok: false, error: { code: 'COMMAND_FAILED', message: 'typed Maestro action failed' } },
   });
   if (response.ok) throw new Error('expected typed Maestro failure response');
   return { response, sessionStore, sessionName };
@@ -79,83 +72,9 @@ async function buildFailureScenario(
 async function buildFailureResponse(
   command: MaestroRuntimeCommand,
   nodes: SnapshotNode[],
-  options: { warnings?: readonly string[] } = {},
-): Promise<Extract<Awaited<ReturnType<typeof buildTypedMaestroFailureResponse>>, { ok: false }>> {
+  options: { engineNodes?: SnapshotNode[] } = {},
+) {
   return (await buildFailureScenario(command, nodes, options)).response;
-}
-
-test('typed Maestro failure response carries warnings accumulated before the failing step (#2560)', async () => {
-  const response = await buildFailureResponse(
-    {
-      kind: 'tapOn' as const,
-      source: { path: '/flows/login.yaml', line: 4 },
-      target: { space: 'target' as const, selector: { id: 'save' } },
-    },
-    [],
-    { warnings: ['Optional Maestro assertVisible skipped at line 2: no match'] },
-  );
-
-  if (!response.error.details) throw new Error('expected error details on the failure response');
-  const details = response.error.details;
-  expect(details.warnings).toEqual(['Optional Maestro assertVisible skipped at line 2: no match']);
-  expect((details.divergence as { kind: string }).kind).toBe('action-failure');
-});
-
-test('typed Maestro failure response omits an empty warnings channel', async () => {
-  const response = await buildFailureResponse(
-    {
-      kind: 'tapOn' as const,
-      source: { path: '/flows/login.yaml', line: 4 },
-      target: { space: 'target' as const, selector: { id: 'save' } },
-    },
-    [],
-    { warnings: [] },
-  );
-
-  expect('warnings' in (response.error.details ?? {})).toBe(false);
-});
-
-test('typed Maestro failure projection keeps action and source provenance', async () => {
-  const command = {
-    kind: 'tapOn' as const,
-    source: { path: '/flows/login.yaml', line: 4 },
-    target: { space: 'target' as const, selector: { id: 'save' } },
-  };
-  const request = baseReq({ flags: { replayBackend: 'maestro' } });
-  const failure = await captureMaestroFailure(command, command.source.path);
-  const projection = buildTypedMaestroFailureReportProjection(failure, request);
-
-  expect(projection.command).toEqual({ kind: 'tapOn' });
-  expect(projection.source).toEqual({ path: command.source.path, line: 3 });
-  expect(projection.progress).toEqual({ command: 'tapOn', value: 'save' });
-  expect(projection.action).toEqual({
-    command: 'click',
-    positionals: ['save'],
-    flags: request.flags,
-  });
-  expect(Object.keys(projection.action)).toEqual(['command', 'positionals', 'flags']);
-});
-
-async function captureMaestroFailure(
-  command: MaestroRuntimeCommand,
-  sourcePath: string,
-): Promise<MaestroFailedAction> {
-  const flow = inspectMaestroFlow(maestroFlowForCommand(command), sourcePath);
-  const error = new Error('typed Maestro action failed');
-  const port: MaestroRuntimePort = {
-    execute: async () => {
-      throw error;
-    },
-    observe: async () => {
-      throw error;
-    },
-  };
-  const outcome = await executeMaestroFlow(flow, port, {
-    platform: 'ios',
-    readSource: noMaestroIncludeSources,
-  });
-  if (outcome.ok || !outcome.failure) throw new Error('expected typed Maestro failure');
-  return outcome.failure;
 }
 
 function maestroFlowForCommand(command: MaestroRuntimeCommand): string {
@@ -378,7 +297,7 @@ test('typed Maestro failure publishes exactly the refs exposed by its divergence
     source: { path: '/flows/actions.yaml', line: 4 },
     target: { space: 'target' as const, selector: { text: 'Missing' } },
   } satisfies Extract<MaestroRuntimeCommand, { kind: 'tapOn' }>;
-  const scenario = await buildFailureScenario(command, [
+  const screen: SnapshotNode[] = [
     {
       ref: 'e1',
       index: 0,
@@ -394,7 +313,20 @@ test('typed Maestro failure publishes exactly the refs exposed by its divergence
       rect: { x: 16, y: 40, width: 140, height: 44 },
       hittable: true,
     },
-  ]);
+  ];
+  const scenario = await buildFailureScenario(command, screen, {
+    engineNodes: [
+      ...screen,
+      {
+        index: 2,
+        parentIndex: 0,
+        label: 'Missing',
+        type: 'Button',
+        rect: { x: 16, y: 96, width: 140, height: 44 },
+        hittable: true,
+      },
+    ],
+  });
   const divergence = scenario.response.error.details?.divergence as {
     screen: { state: string; refs: Array<{ ref: string }> };
   };

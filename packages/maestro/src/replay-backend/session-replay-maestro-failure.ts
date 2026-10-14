@@ -5,11 +5,11 @@ import { formatScriptArg } from '@agent-device/ad-script';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type {
   ReplayBackendActionFailure,
+  ReplayBackendHost,
   ReplaySessionObservation,
   ReplaySessionStore,
 } from '@agent-device/contracts/replay-backend';
 import { type DaemonResponse } from '@agent-device/kernel/contracts';
-import { buildReplayBackendActionFailureResponse } from './replay-backend-failure.ts';
 
 export type MaestroFailureReportAction = ReplayBackendActionFailure['captureAction'];
 
@@ -40,19 +40,22 @@ export function buildTypedMaestroFailureReportProjection(
   };
 }
 
-export async function buildTypedMaestroFailureResponse(params: {
-  readonly error: DaemonError;
-  readonly failure: MaestroFailedAction;
-  readonly replayPath: string;
-  readonly req: DaemonWireRequest;
-  readonly sessionStore: ReplaySessionStore;
-  readonly observationStore: ReplaySessionObservation;
-  readonly logPath: string;
-  readonly snapshotDiagnostics?: SnapshotDiagnosticsSummary;
-}): Promise<DaemonResponse> {
+export async function buildTypedMaestroFailureResponse(
+  host: ReplayBackendHost,
+  params: {
+    readonly error: DaemonError;
+    readonly failure: MaestroFailedAction;
+    readonly replayPath: string;
+    readonly req: DaemonWireRequest;
+    readonly sessionStore: ReplaySessionStore;
+    readonly observationStore: ReplaySessionObservation;
+    readonly logPath: string;
+    readonly snapshotDiagnostics?: SnapshotDiagnosticsSummary;
+  },
+): Promise<DaemonResponse> {
   const { failure, req } = params;
   const report = buildTypedMaestroFailureReportProjection(failure, req);
-  return await buildReplayBackendActionFailureResponse({
+  return await host.buildActionFailureResponse({
     error: params.error,
     req,
     sessionStore: params.sessionStore,
