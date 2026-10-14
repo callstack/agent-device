@@ -473,6 +473,21 @@ test('the committed-tree reader walks what was committed, not the working direct
   expect(eagerClosureGraphOf(entry).size, 'working tree: one edge').toBe(2);
 });
 
+test('a JSON module imported at the merge-base is read from the committed tree', () => {
+  const repo = mkGitFixtureRepo('eager-closure-json-leaf-');
+  const entry = path.join(repo, 'packages/demo/src/entry.ts');
+  fs.writeFileSync(
+    entry,
+    "import data from './data.json' with { type: 'json' };\nexport const a = data;\n",
+  );
+  fs.writeFileSync(path.join(repo, 'packages/demo/src/data.json'), '{"a":1}\n');
+  execFileSync('git', ['add', '.'], { cwd: repo });
+  execFileSync('git', ['commit', '-qm', 'json'], { cwd: repo });
+
+  const graph = eagerClosureGraphOf(entry, createCommittedSourceTree(repo, 'HEAD'));
+  expect([...graph.keys()]).toEqual([entry, path.join(repo, 'packages/demo/src/data.json')]);
+});
+
 test('a renamed entry is followed to its path at the base, not treated as first-introduced', () => {
   const repo = mkGitFixtureRepo('eager-closure-renamed-entry-');
   execFileSync('git', ['mv', 'packages/demo/src/entry.ts', 'packages/demo/src/moved.ts'], {

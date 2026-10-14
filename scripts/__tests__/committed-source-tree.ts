@@ -8,6 +8,7 @@ import { isProductionSourceFile } from '../layering/tracked-sources.ts';
 
 const WALKED_SOURCE = /^(?:src|packages\/[^/]+\/src)\/.*\.ts$/;
 const WALKED_MANIFEST = /^packages\/[^/]+\/package\.json$/;
+const WALKED_JSON_MODULE = /^(?:src|packages\/[^/]+\/src)\/.*\.json$/;
 
 function git(repoRoot: string, args: readonly string[], input = ''): Buffer {
   return execFileSync('git', [...args], {
@@ -127,15 +128,18 @@ function listCommittedTree(repoRoot: string, treeish: string): string[] {
 
 /**
  * The sources this reader serves, split by kind: production TypeScript under `src/` and
- * `packages/<pkg>/src/`, and workspace package manifests. One definition, so a consumer reading
- * a committed tree cannot classify it differently from the walker.
+ * `packages/<pkg>/src/`, JSON modules a source there can import, and workspace package
+ * manifests. One definition, so a consumer reading a committed tree cannot classify it
+ * differently from the walker.
  */
 function committedSourceSet(tracked: readonly string[]): {
   sources: string[];
+  jsonModules: string[];
   manifests: string[];
 } {
   return {
     sources: tracked.filter((file) => WALKED_SOURCE.test(file) && isProductionSourceFile(file)),
+    jsonModules: tracked.filter((file) => WALKED_JSON_MODULE.test(file)),
     manifests: tracked.filter((file) => WALKED_MANIFEST.test(file)),
   };
 }
@@ -202,16 +206,21 @@ function directoriesOf(files: ReadonlySet<string>): Set<string> {
 
 /**
  * The walker's view of `treeish`: tracked paths from one `git ls-tree`, and every source the
- * walker can reach (production TypeScript under `src/` and `packages/<pkg>/src/`, package
- * manifests) from ONE `git cat-file --batch` fed those paths up front -- two processes for the
- * whole tree, never one per file. A read outside that set is a widening request, not a fallback.
+ * walker can reach (production TypeScript and JSON modules under `src/` and
+ * `packages/<pkg>/src/`, package manifests) from ONE `git cat-file --batch` fed those paths up
+ * front -- two processes for the whole tree, never one per file. A read outside that set is a
+ * widening request, not a fallback.
  */
 export function createCommittedSourceTree(repoRoot: string, treeish: string): SourceTreeReader {
   const listing = listCommittedTree(repoRoot, treeish);
   const tracked = new Set(listing);
   const directories = directoriesOf(tracked);
-  const { sources, manifests } = committedSourceSet(listing);
-  const contents = readCommittedBlobs(repoRoot, treeish, [...sources, ...manifests]);
+  const { sources, jsonModules, manifests } = committedSourceSet(listing);
+  const contents = readCommittedBlobs(repoRoot, treeish, [
+    ...sources,
+    ...jsonModules,
+    ...manifests,
+  ]);
   const relative = (file: string) => path.relative(repoRoot, file).split(path.sep).join('/');
   return {
     exists: (file) => tracked.has(relative(file)) || directories.has(relative(file)),
