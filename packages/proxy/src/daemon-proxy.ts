@@ -14,6 +14,7 @@ import {
   DAEMON_HTTP_TENANT_HEADER,
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpUrl,
+  normalizeTenantId,
 } from '@agent-device/contracts/daemon-http';
 import {
   carriesUnbackedHostPathInstallSource,
@@ -168,6 +169,9 @@ async function handleProxyRequest(
       { status: 401 },
     );
   }
+  if (caller.tenantId && route === '/rpc' && !isTenantStampedRpcMethod(rpcBody)) {
+    return tenantRpcMethodRefusedResponse(readJsonRpcId(rpcBody));
+  }
 
   const staleInstance = refuseStaleProxyInstance(
     request,
@@ -201,9 +205,13 @@ async function authenticateCaller(
     }),
   );
   if (!result) return null;
-  const tenantId = typeof result.tenantId === 'string' ? result.tenantId.trim() : '';
+  const tenantId = normalizeTenantId(
+    typeof result.tenantId === 'string' ? result.tenantId : undefined,
+  );
   if (!tenantId) {
-    throw new AppError('COMMAND_FAILED', 'Proxy authenticate returned no tenantId');
+    throw new AppError('COMMAND_FAILED', 'Proxy authenticate returned an invalid tenantId', {
+      hint: 'Return a tenantId of 1-128 letters, digits, ".", "_" or "-".',
+    });
   }
   return { tenantId };
 }
@@ -219,6 +227,23 @@ function isRouteWithinTenant(route: string, tenantId: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** The RPC methods whose every tenant field `stampRpcTenant` sets. */
+const TENANT_STAMPED_RPC_METHODS = new Set([
+  'agent_device.command',
+  'agent-device.command',
+  'agent_device.lease.allocate',
+  'agent-device.lease.allocate',
+  'agent_device.lease.heartbeat',
+  'agent-device.lease.heartbeat',
+  'agent_device.lease.release',
+  'agent-device.lease.release',
+]);
+
+function isTenantStampedRpcMethod(rpcBody: string | undefined): boolean {
+  const method = readJsonRpcMethod(rpcBody);
+  return method !== undefined && TENANT_STAMPED_RPC_METHODS.has(method);
 }
 
 async function proxyHealthResponse(
@@ -622,6 +647,16 @@ function readJsonRpcToken(body: string): string {
   }
 }
 
+function readJsonRpcMethod(body: string | undefined): string | undefined {
+  if (!body) return undefined;
+  try {
+    const { method } = JSON.parse(body) as { method?: unknown };
+    return typeof method === 'string' ? method : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function readJsonRpcId(body: string | undefined): unknown {
   if (!body) return null;
   try {
@@ -682,6 +717,22 @@ function unauthorizedResponse(route: string, rpcId: unknown): Response {
   }
   return Response.json(
     { ok: false, error: 'Invalid proxy token', code: 'UNAUTHORIZED' },
+    { status: 401 },
+  );
+}
+
+function tenantRpcMethodRefusedResponse(rpcId: unknown): Response {
+  const error = new AppError(
+    'UNAUTHORIZED',
+    'This RPC method cannot act as an authenticated tenant through the proxy',
+    { hint: 'Use agent_device.command or the agent_device.lease methods.' },
+  );
+  return Response.json(
+    {
+      jsonrpc: '2.0',
+      id: rpcId,
+      error: { code: -32001, message: error.message, data: normalizeError(error) },
+    },
     { status: 401 },
   );
 }

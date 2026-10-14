@@ -109,8 +109,10 @@ const proxy = createDaemonProxy({
 
 The proxy then sends every request to the daemon as that tenant, whatever tenant the client named,
 and isolates its sessions from other tenants' sessions. A tenant id is 1-128 letters, numbers, dots,
-underscores or hyphens. Upload tickets carry the client's own `authorization` or
-`x-agent-device-token` header, so the upload is authenticated the same way.
+underscores or hyphens; any other id fails the request with a 500. On `/rpc` the proxy accepts only
+`agent_device.command` and the `agent_device.lease.*` methods, and refuses others with a 401. Upload
+tickets carry the client's own `authorization` or `x-agent-device-token` header, so the upload is
+authenticated the same way.
 
 ## Options
 

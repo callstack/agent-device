@@ -407,3 +407,21 @@ test('without authenticate, the tenant a client declares is forwarded unchanged'
   expect(params.meta).toEqual({ tenantId: 'bob' });
   expect(params.tenantId).toBeUndefined();
 });
+
+test('authenticate returning a tenantId the daemon rejects refuses the request before the daemon', async () => {
+  const upstream = recordingUpstream(() => Response.json({ ok: true }));
+  const proxy = createDaemonProxy({
+    upstreamBaseUrl: 'http://daemon.internal:4310',
+    upstreamToken: 'daemon-secret',
+    upstreamFetch: upstream.fetch,
+    authenticate: () => ({ tenantId: 'alice@example.com' }),
+  });
+
+  const response = await proxy.handle(
+    new Request(`${PROXY_ORIGIN}/agent-device/upload/preflight`, { method: 'POST', body: '{}' }),
+  );
+
+  expect(response.status).toBe(500);
+  expect(await response.json()).toMatchObject({ ok: false, code: 'COMMAND_FAILED' });
+  expect(upstream.requests).toHaveLength(0);
+});
