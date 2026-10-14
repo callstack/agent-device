@@ -93,7 +93,7 @@ test('profile start, an interaction, and profile stop print a compact diagnosis 
   assert.equal(stopped.code, 0);
   assert.equal(
     stopped.text.split('\n')[1],
-    '1. memo-defeated Row: memo bypassed on 36/36 updates; new onPress (function) on those updates from List -> wrap those props in useCallback/useMemo in List',
+    '1. memo-defeated Row: memo bypassed on 36/36 updates; new onPress (function) 36x from List -> wrap those props in useCallback/useMemo in List',
   );
   assert.ok(fs.existsSync(path.join(stateDir, 'react-profiles', 'qa.json')));
 
@@ -175,7 +175,7 @@ test('a failed prop inspection becomes a note instead of failing the stop', asyn
       }) as unknown as InspectorSession,
   );
   const { text } = await run('stop');
-  assert.match(text, /onPress changed from List \(value kinds not inspected\)/);
+  assert.match(text, /changed onPress 36x from List \(value kinds not inspected\)/);
   assert.match(text, /\nNote: Changed prop values could not be inspected: inspector gone\n/);
 });
 

@@ -70,11 +70,14 @@ function pageNumber(target: MetroInspectorTarget): number {
   return Number.isInteger(suffix) ? suffix : Number.MAX_SAFE_INTEGER;
 }
 
+/** Identifies the device behind a target; display names can repeat, so they are the last resort. */
 function deviceKey(target: MetroInspectorTarget): string {
+  const separator = target.id.lastIndexOf('-');
   return (
     target.reactNative?.logicalDeviceId ??
+    (separator > 0 ? target.id.slice(0, separator) : undefined) ??
     target.deviceName ??
-    target.id.slice(0, target.id.lastIndexOf('-'))
+    target.id
   );
 }
 

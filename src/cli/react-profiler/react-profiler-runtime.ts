@@ -161,8 +161,9 @@ export const REACT_PROFILER_RUNTIME_SOURCE = String.raw`
     var known = elements.get(id);
     if (known) { out[id] = known; return; }
     var name = lookupName(ri, id);
-    out[id] = [name || 'Unknown', 0, 0, 0];
-    if (name) elements.set(id, out[id]);
+    if (!name) return;
+    out[id] = [name, 0, 0, 0];
+    elements.set(id, out[id]);
   }
 
   function internAll(list, table) {

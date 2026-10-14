@@ -53,7 +53,7 @@ Accepted (2026-09-29).
   - any other name is decided by the rules, so an allow list fails closed for it.
 
   Names are checked against that vocabulary at load; a local-cli name such as `react-devtools` is
-  refused with a pointer to the daemon command it sends. With `allow`, commands added by a later
+  refused, because it runs in the client. With `allow`, commands added by a later
   upgrade are denied by default.
 - `capabilities.deny` — operations denied whichever command reaches them. `device-shutdown` is the
   only capability today.

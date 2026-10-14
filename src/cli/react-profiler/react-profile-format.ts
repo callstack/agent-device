@@ -48,7 +48,7 @@ export function formatProfileSummary(
   for (const note of analysis.notes) lines.push(`Note: ${note}`);
   if (analysis.naming === 'lookup') {
     lines.push(
-      'Note: component names came from mounted elements; components unmounted during the profile may show as Unknown.',
+      'Note: component names came from mounted elements; components unmounted during the profile are left out.',
     );
   }
   lines.push(

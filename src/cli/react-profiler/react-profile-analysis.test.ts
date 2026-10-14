@@ -60,7 +60,7 @@ test('memo bypassed by props that change on every render names the props, their 
   assert.equal(finding?.component, 'Row');
   assert.match(
     finding?.evidence ?? '',
-    /onPress \(function\), style \(object\) on those updates from List/,
+    /new onPress \(function\) 60x, style \(object\) 60x from List/,
   );
 });
 
@@ -218,7 +218,7 @@ test('without inspected value kinds a memo bypass names the changed props withou
   const [finding] = analyzeReactProfile(raw).findings;
   assert.equal(
     finding?.evidence,
-    'memo bypassed on 36/36 updates; onPress changed from List (value kinds not inspected)',
+    'memo bypassed on 36/36 updates; changed onPress 36x from List (value kinds not inspected)',
   );
 });
 
@@ -266,6 +266,113 @@ test('mounting hundreds of one component in a commit is an eager list, reported 
   ]);
 
   assert.deepEqual(kinds(raw), ['eager-mount Tile']);
+});
+
+test('a component mounted eagerly in several commits is one finding costed across them', () => {
+  const tiles = repeat(250, (i) => 10 + i);
+  const elements: Record<number, [string, number?, number?]> = { 1: ['Catalog'] };
+  for (const id of tiles) elements[id] = ['Tile', FUNCTION, 1];
+  const mount = (at: number, duration: number): [number, number, number[], Render[]] => [
+    at,
+    duration,
+    [1],
+    [[1, 5, [0, null, [0], null]], ...tiles.map((id): Render => [id, 1, 1, duration / 300])],
+  ];
+  const [finding, ...rest] = analyzeReactProfile(
+    rawProfile(elements, [mount(0, 300), mount(1_000, 600)]),
+  ).findings;
+
+  assert.equal(finding?.kind, 'eager-mount');
+  assert.equal(rest.length, 0);
+  assert.equal(Math.round(finding!.costMs), 750);
+  assert.match(
+    finding!.evidence,
+    /^250 instances mounted at once in commit #1, 500ms of its 600ms/,
+  );
+  assert.match(finding!.evidence, /; 2 such commits, 750ms in all$/);
+});
+
+test('an Animated wrapper stays a framework component instead of merging into the one it wraps', () => {
+  const rows = repeat(30, (i) => 10 + i);
+  const elements: Record<number, [string, number?, number?]> = { 1: ['Screen'] };
+  for (const id of rows) elements[id] = ['Animated(Row)', FUNCTION, 1];
+  const raw = rawProfile(
+    elements,
+    repeat(5, (i) => [
+      i * 100,
+      20,
+      [1],
+      [[1, 1, [0, null, [0], null]], ...rows.map((id): Render => [id, 1, 'parent'])],
+    ]),
+  );
+
+  assert.deepEqual(kinds(raw), []);
+  assert.deepEqual(
+    analyzeReactProfile(raw).components.map((c) => c.name),
+    ['Animated(Row)', 'Screen'],
+  );
+});
+
+test('renders of elements the profile could not name stay out of components and findings', () => {
+  const unnamed = repeat(30, (i) => 10 + i);
+  const raw = rawProfile(
+    { 1: ['Screen'] },
+    repeat(5, (i) => [
+      i * 100,
+      20,
+      [1],
+      [[1, 1, [0, null, [0], null]], ...unnamed.map((id): Render => [id, 1, 'parent'])],
+    ]),
+  );
+
+  assert.deepEqual(kinds(raw), []);
+  assert.deepEqual(
+    analyzeReactProfile(raw).components.map((c) => c.name),
+    ['Screen'],
+  );
+});
+
+test('memo-wrapped and plain components of one name are profiled separately', () => {
+  const raw = rawProfile({ 1: ['List'], 2: ['Memo(Row)', MEMO, 1], 3: ['Row', FUNCTION, 1] }, [
+    [
+      0,
+      20,
+      [1],
+      [
+        [1, 1, [0, null, [0], null]],
+        [2, 4, 'parent'],
+        [3, 9, 'parent'],
+      ],
+    ],
+  ]);
+
+  assert.deepEqual(
+    analyzeReactProfile(raw).components.map((c) => `${c.name} ${c.kind} ${c.selfMs}`),
+    ['Row function 9', 'Row memo 4', 'List function 1'],
+  );
+});
+
+test('a prop whose inspected instances disagree on its kind claims no new identity', () => {
+  const rows = repeat(12, (i) => 10 + i);
+  const elements: Record<number, [string, number?, number?]> = { 1: ['List'] };
+  for (const id of rows) elements[id] = ['Memo(Row)', MEMO, 1];
+  const raw = rawProfile(
+    elements,
+    repeat(3, (i) => [
+      i * 200,
+      30,
+      [1],
+      [[1, 1, [0, null, [0], null]], ...rows.map((id): Render => [id, 1, [0, [0], null, null]])],
+    ]),
+    ['label'],
+  );
+  const [finding] = analyzeReactProfile(raw, {
+    10: { label: 'object' },
+    11: { label: 'string' },
+  }).findings;
+
+  assert.equal(finding?.kind, 'memo-defeated');
+  assert.match(finding!.evidence, /changed label 36x from List \(value kinds not inspected\)$/);
 });
 
 test('framework primitives never head a finding even when they re-render the most', () => {

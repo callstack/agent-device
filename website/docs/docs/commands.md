@@ -841,7 +841,7 @@ agent-device react-devtools profile status
 
 - `profile start` begins recording React renders in the app; `profile stop` ends it and prints the commit count, render time, commits over the 16 ms frame budget, and up to five findings (`--limit` changes that). It also saves the profile for the session, so `report`, `commit`, `slow`, `rerenders`, and `timeline` read it without the app.
 - Profiling connects through the app's Metro dev server and needs no app or Metro setup. It works with development builds of React Native 0.74 and later; Android emulators and iOS simulators are verified, remote bridge sessions are not yet.
-- `--app <bundle-id>` picks the app when several share the dev server, and `--metro-device <name>` picks the device when one app runs on several. `--metro-port` and `--metro-host` pick the dev server when it is neither the session's Metro server nor `localhost:8081`.
+- `--app <bundle-id>` picks the app when several share the dev server, and `--metro-device <name>` picks the device when one app runs on several. `--metro-port` and `--metro-host`, or `--bundle-url` for a dev server behind a URL path, pick the dev server when it is neither the session's Metro server nor `localhost:8081`.
 - With `--json`, `profile stop` returns the findings and the path of the saved profile.
 - See [Debugging & Profiling](/docs/debugging-profiling#react-native-performance-profiling) for the findings and the workflow.
 

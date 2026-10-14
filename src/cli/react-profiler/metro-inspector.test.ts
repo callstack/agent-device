@@ -81,6 +81,20 @@ test('devices that share a name are listed by a key --metro-device can select', 
   assert.equal(selectReactNativeTarget(targets, { device: 'sim-b' }).id, 'sim-b-1');
 });
 
+test('devices without a logical id are told apart by their target ids, not their names', () => {
+  const targets = [
+    target('sim-a-1', { appId: 'com.app', deviceName: 'iPhone 17', reactNative: {} }),
+    target('sim-b-1', { appId: 'com.app', deviceName: 'iPhone 17', reactNative: {} }),
+  ];
+
+  assert.throws(
+    () => selectReactNativeTarget(targets),
+    (error: { details: { hint: string } }) =>
+      error.details.hint === 'Pass --metro-device with one of: sim-a, sim-b.',
+  );
+  assert.equal(selectReactNativeTarget(targets, { device: 'sim-a' }).id, 'sim-a-1');
+});
+
 test('distinct apps need --app; older dev servers report the app id as the description', () => {
   const targets = [
     target('a-1', { appId: 'com.one' }),

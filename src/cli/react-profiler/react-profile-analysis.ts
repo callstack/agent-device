@@ -2,7 +2,7 @@ import {
   bump,
   chronological,
   commitRenders,
-  componentName,
+  componentNames,
   formatMs,
   FRAME_BUDGET_MS,
   isFrameworkPrimitive,
@@ -11,6 +11,7 @@ import {
   type CommitProfile,
   type ComponentProfile,
   type PropKindsById,
+  type RawProfileCommit,
   type RawReactProfile,
 } from './react-profile-renders.ts';
 
@@ -113,12 +114,13 @@ function memoDefeatedFinding(entry: ComponentProfile): Finding | null {
   const from = owner ? ` from ${owner}` : '';
   const inOwner = owner ? ` in ${owner}` : '';
   const identities = unstable.filter((key) => entry.propKinds[key] !== undefined);
+  const changes = (key: string) => `${entry.changedProps[key]}x`;
   if (identities.length === 0) {
     return {
       kind: 'memo-defeated',
       component: entry.name,
       costMs: costShare(entry, entry.causes.props),
-      evidence: `memo bypassed on ${entry.causes.props}/${updates} updates; ${unstable.join(', ')} changed${from} (value kinds not inspected)`,
+      evidence: `memo bypassed on ${entry.causes.props}/${updates} updates; changed ${unstable.map((key) => `${key} ${changes(key)}`).join(', ')}${from} (value kinds not inspected)`,
       fix: `check whether those props are recreated on each render${inOwner}; stabilize them with useCallback/useMemo`,
     };
   }
@@ -126,7 +128,7 @@ function memoDefeatedFinding(entry: ComponentProfile): Finding | null {
     kind: 'memo-defeated',
     component: entry.name,
     costMs: costShare(entry, entry.causes.props),
-    evidence: `memo bypassed on ${entry.causes.props}/${updates} updates; new ${identities.map((key) => `${key} (${entry.propKinds[key]})`).join(', ')} on those updates${from}`,
+    evidence: `memo bypassed on ${entry.causes.props}/${updates} updates; new ${identities.map((key) => `${key} (${entry.propKinds[key]}) ${changes(key)}`).join(', ')}${from}`,
     fix: `wrap those props in useCallback/useMemo${inOwner}`,
   };
 }
@@ -159,8 +161,16 @@ function parentCascadeFinding(entry: ComponentProfile): Finding | null {
 /** Commit that renders more than this many instances of one component at mount is eager. */
 const EAGER_MOUNT_INSTANCES = 200;
 
+type EagerMount = {
+  index: number;
+  count: number;
+  costMs: number;
+  durationMs: number;
+  mounted: number;
+};
+
 function eagerMountFindings(profile: RawReactProfile, commits: CommitProfile[]): Finding[] {
-  const findings = new Map<string, Finding>();
+  const mountsByName = new Map<string, EagerMount[]>();
   profile.commits.forEach((commit, index) => {
     const groups = new Map<string, { count: number; actualMs: number }>();
     let mounted = 0;
@@ -175,18 +185,26 @@ function eagerMountFindings(profile: RawReactProfile, commits: CommitProfile[]):
     }
     const durationMs = commits[index]!.durationMs;
     for (const [name, group] of groups) {
-      if (group.count < EAGER_MOUNT_INSTANCES || findings.has(name)) continue;
+      if (group.count < EAGER_MOUNT_INSTANCES) continue;
       const costMs = Math.min(group.actualMs, durationMs);
-      findings.set(name, {
-        kind: 'eager-mount',
-        component: name,
-        costMs,
-        evidence: `${group.count} instances mounted at once in commit #${index}, ${ms(costMs)} of its ${ms(durationMs)} (${mounted} components mounted)`,
-        fix: 'virtualize the list (FlatList/FlashList)',
-      });
+      const mounts = mountsByName.get(name) ?? [];
+      mounts.push({ index, count: group.count, costMs, durationMs, mounted });
+      mountsByName.set(name, mounts);
     }
   });
-  return [...findings.values()];
+  return [...mountsByName.entries()].map(([name, mounts]) => {
+    const worst = mounts.reduce((a, b) => (b.costMs > a.costMs ? b : a));
+    const costMs = mounts.reduce((sum, mount) => sum + mount.costMs, 0);
+    const repeated =
+      mounts.length > 1 ? `; ${mounts.length} such commits, ${ms(costMs)} in all` : '';
+    return {
+      kind: 'eager-mount' as const,
+      component: name,
+      costMs,
+      evidence: `${worst.count} instances mounted at once in commit #${worst.index}, ${ms(worst.costMs)} of its ${ms(worst.durationMs)} (${worst.mounted} components mounted)${repeated}`,
+      fix: 'virtualize the list (FlatList/FlashList)',
+    };
+  });
 }
 
 /**
@@ -196,6 +214,20 @@ function eagerMountFindings(profile: RawReactProfile, commits: CommitProfile[]):
  */
 const CHAINED_COMMIT_GAP_MS = FRAME_BUDGET_MS;
 
+/** App components that rendered in `previous` without triggering it, then triggered `commit`. */
+function chainedUpdaterNames(
+  profile: RawReactProfile,
+  previous: RawProfileCommit,
+  commit: RawProfileCommit,
+): string[] {
+  const renderedBefore = new Set(previous.fibers.filter((_, offset) => offset % 3 === 0));
+  const triggeredBefore = new Set(previous.updaters);
+  const chained = commit.updaters.filter(
+    (updater) => renderedBefore.has(updater) && !triggeredBefore.has(updater),
+  );
+  return componentNames(profile, chained).filter((name) => !isFrameworkPrimitive(name));
+}
+
 function effectChainFindings(profile: RawReactProfile): Finding[] {
   const chains = new Map<string, { count: number; costMs: number }>();
   for (let index = 1; index < profile.commits.length; index += 1) {
@@ -203,15 +235,7 @@ function effectChainFindings(profile: RawReactProfile): Finding[] {
     const commit = profile.commits[index]!;
     const gap = commit.timestamp - commit.duration - previous.timestamp;
     if (gap > CHAINED_COMMIT_GAP_MS) continue;
-    const renderedBefore = new Set(previous.fibers.filter((_, offset) => offset % 3 === 0));
-    const triggeredBefore = new Set(previous.updaters);
-    const chainedNames = new Set<string>();
-    for (const updater of commit.updaters) {
-      if (!renderedBefore.has(updater) || triggeredBefore.has(updater)) continue;
-      const name = componentName(profile, updater);
-      if (!isFrameworkPrimitive(name)) chainedNames.add(name);
-    }
-    for (const name of chainedNames) {
+    for (const name of chainedUpdaterNames(profile, previous, commit)) {
       const chain = chains.get(name) ?? { count: 0, costMs: 0 };
       chain.count += 1;
       chain.costMs += commit.duration;
@@ -235,7 +259,7 @@ const STORM_MIN_RATE_PER_SECOND = 20;
 function renderStormFindings(profile: RawReactProfile): Finding[] {
   const byUpdater = new Map<string, number[]>();
   profile.commits.forEach((commit, index) => {
-    for (const name of new Set(commit.updaters.map((id) => componentName(profile, id)))) {
+    for (const name of componentNames(profile, commit.updaters)) {
       const indexes = byUpdater.get(name) ?? [];
       indexes.push(index);
       byUpdater.set(name, indexes);
@@ -340,7 +364,7 @@ function contextTriggers(profile: RawReactProfile, name: string): string[] {
       }
     }
     if (!contextRender) continue;
-    for (const id of new Set(commit.updaters)) bump(triggers, componentName(profile, id));
+    for (const name of componentNames(profile, commit.updaters)) bump(triggers, name);
   }
   return topKeys(triggers, 1).slice(0, 2);
 }

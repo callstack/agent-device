@@ -61,6 +61,15 @@ export function splitDisplayName(displayName: string): { name: string; wrappers:
   return { name, wrappers };
 }
 
+/**
+ * The name findings and tables use. An `Animated(...)` wrapper keeps its full name: it is a separate
+ * framework component that renders the inner one, and `isFrameworkPrimitive` recognizes it by it.
+ */
+function renderName(displayName: string): { name: string; wrappers: string[] } {
+  const split = splitDisplayName(displayName);
+  return split.wrappers.includes('Animated') ? { ...split, name: displayName } : split;
+}
+
 export function isFrameworkPrimitive(name: string): boolean {
   const { name: inner, wrappers } = splitDisplayName(name);
   return FRAMEWORK_PRIMITIVES.has(inner) || wrappers.includes('Animated');
@@ -74,7 +83,7 @@ type RawProfileElement = [string, number, number, number];
 /** `1` marks a first mount; otherwise `[bits, propKeyIndexes, stateKeyIndexes, hookIndexes]`. */
 export type RawProfileChange = 1 | [number, number[] | null, number[] | null, number[] | null];
 
-type RawProfileCommit = {
+export type RawProfileCommit = {
   timestamp: number;
   duration: number;
   updaters: number[];
@@ -187,12 +196,23 @@ function componentKind(type: number): ComponentKind {
   }
 }
 
-function elementOf(profile: RawReactProfile, id: number): RawProfileElement {
-  return profile.elements[String(id)] ?? ['Unknown', ELEMENT_UNKNOWN, 0, 0];
+/** Undefined when the profile could not name the element; such renders stay out of the analysis. */
+function elementOf(profile: RawReactProfile, id: number): RawProfileElement | undefined {
+  return profile.elements[String(id)];
 }
 
-export function componentName(profile: RawReactProfile, id: number): string {
-  return splitDisplayName(elementOf(profile, id)[0]).name;
+function componentName(profile: RawReactProfile, id: number): string | undefined {
+  const element = elementOf(profile, id);
+  return element ? renderName(element[0]).name : undefined;
+}
+
+export function componentNames(profile: RawReactProfile, ids: number[]): string[] {
+  const names = new Set<string>();
+  for (const id of ids) {
+    const name = componentName(profile, id);
+    if (name) names.add(name);
+  }
+  return [...names];
 }
 
 function keysAt(profile: RawReactProfile, indexes: number[] | null): string[] {
@@ -209,9 +229,10 @@ export function* commitRenders(
 ): Generator<ParsedRender> {
   for (let offset = 0; offset + 2 < commit.fibers.length; offset += 3) {
     const id = commit.fibers[offset]!;
-    const [displayName, type] = elementOf(profile, id);
-    if (!COMPONENT_TYPES.has(type)) continue;
-    const { name, wrappers } = splitDisplayName(displayName);
+    const element = elementOf(profile, id);
+    if (!element || !COMPONENT_TYPES.has(element[1])) continue;
+    const [displayName, type] = element;
+    const { name, wrappers } = renderName(displayName);
     yield {
       id,
       name,
@@ -280,18 +301,21 @@ function recordRender(
     for (const key of keysAt(profile, change[2])) bump(entry.changedState, key);
     for (const hook of change[3] ?? []) bump(entry.changedHooks, String(hook));
   }
-  const ownerId = elementOf(profile, render.id)[2];
-  if (ownerId) bump(entry.owners, componentName(profile, ownerId));
+  const ownerId = elementOf(profile, render.id)?.[2];
+  const owner = ownerId ? componentName(profile, ownerId) : undefined;
+  if (owner) bump(entry.owners, owner);
 }
 
+/** A memo-wrapped and a plain component of one name are separate components with separate costs. */
 function accumulateComponents(profile: RawReactProfile): Map<string, ComponentAccumulator> {
   const components = new Map<string, ComponentAccumulator>();
   profile.commits.forEach((commit, commitIndex) => {
     for (const render of commitRenders(profile, commit)) {
-      let entry = components.get(render.name);
+      const key = `${render.name}\0${componentKind(render.type)}`;
+      let entry = components.get(key);
       if (!entry) {
         entry = createAccumulator(render);
-        components.set(render.name, entry);
+        components.set(key, entry);
       }
       recordRender(entry, render, profile, commit, commitIndex);
     }
@@ -352,7 +376,7 @@ function summarizeCommits(profile: RawReactProfile): CommitProfile[] {
       durationMs: commit.duration,
       rendered,
       mounts,
-      updaters: [...new Set(commit.updaters.map((id) => componentName(profile, id)))],
+      updaters: componentNames(profile, commit.updaters),
       top: [...byName.values()].sort((a, b) => b.selfMs - a.selfMs).slice(0, COMMIT_TOP_LIMIT),
     };
   });
@@ -365,15 +389,28 @@ export function chronological(profile: RawReactProfile): RawReactProfile {
   return { ...profile, commits: [...profile.commits].sort((a, b) => a.timestamp - b.timestamp) };
 }
 
+/** Each prop's kind where every inspected instance agrees; a prop whose instances disagree has none. */
+function commonPropKinds(ids: Set<number>, propKindsById: PropKindsById): Record<string, string> {
+  const kinds: Record<string, string> = {};
+  const conflicting = new Set<string>();
+  for (const id of ids) {
+    for (const [key, kind] of Object.entries(propKindsById[String(id)] ?? {})) {
+      if (kinds[key] !== undefined && kinds[key] !== kind) conflicting.add(key);
+      else kinds[key] = kind;
+    }
+  }
+  for (const key of conflicting) delete kinds[key];
+  return kinds;
+}
+
 /** Per-component render totals and per-commit summaries of a chronological profile. */
 export function summarizeRenders(
   profile: RawReactProfile,
   propKindsById: PropKindsById = {},
 ): { components: ComponentProfile[]; commits: CommitProfile[] } {
   const accumulators = accumulateComponents(profile);
-  for (const entry of accumulators.values()) {
-    for (const id of entry.ids) Object.assign(entry.propKinds, propKindsById[String(id)] ?? {});
-  }
+  for (const entry of accumulators.values())
+    entry.propKinds = commonPropKinds(entry.ids, propKindsById);
   const components: ComponentProfile[] = [...accumulators.values()]
     .map(({ ids: _ids, recentIds: _recentIds, commitCosts: _commitCosts, ...entry }) => entry)
     .sort((a, b) => b.selfMs - a.selfMs);

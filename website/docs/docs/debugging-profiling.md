@@ -29,7 +29,7 @@ agent-device react-devtools profile stop
 
 ```text
 React profile 8.3s: 8 commits, 1303ms rendering, 8 over 16ms (worst #6 188ms)
-1. memo-defeated ContactRow: memo bypassed on 480/480 updates; new highlight (object), onSelect (function) on those updates from ContactList -> wrap those props in useCallback/useMemo in ContactList
+1. memo-defeated ContactRow: memo bypassed on 480/480 updates; new highlight (object) 480x, onSelect (function) 480x from ContactList -> wrap those props in useCallback/useMemo in ContactList
 ```
 
 | Finding | Meaning |

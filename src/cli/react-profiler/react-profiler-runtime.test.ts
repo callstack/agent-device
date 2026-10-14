@@ -98,7 +98,7 @@ test('an operation the runtime cannot decode switches naming to lookups instead 
   const stopped = app.call<Stopped>('stop');
   assert.equal(stopped.naming, 'lookup');
   assert.equal(stopped.elements['5']![0], 'Parsed');
-  assert.deepEqual(stopped.elements['6'], ['Unknown', 0, 0, 0]);
+  assert.equal(stopped.elements['6'], undefined);
 });
 
 test('a backend that needs a frontend attaches through the Fusebox domain with a stand-in binding', () => {
