@@ -22,7 +22,7 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../daemon/request-runtime-binding.ts';
-import { daemonPlatformServicesFixture } from '../../../daemon/__tests__/platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 import { handleInteractionCommands } from '../../../daemon/interaction/index.ts';
 import type { SessionStore } from '../../../daemon/session-store.ts';

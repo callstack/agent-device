@@ -2,7 +2,7 @@
 import {
   daemonPlatformServicesFixture,
   daemonClaimRecoveryGatewayFixture,
-} from '../../../../src/daemon/__tests__/platform-services-fixture.ts';
+} from '../../../../src/__tests__/daemon-composition/platform-services-fixture.ts';
 // (#1416). The seeded sweep models the mutex GRANT (a seed cannot reproduce
 // `withKeyedLock`'s native microtask hand-off), so on its own it could stay
 // green if the PRODUCTION lock APPLICATION path regressed. This guard closes

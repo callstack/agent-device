@@ -1,4 +1,4 @@
-import { daemonPlatformServicesFixture } from '../../../src/daemon/__tests__/platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../../../src/__tests__/daemon-composition/platform-services-fixture.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { vi } from 'vitest';
