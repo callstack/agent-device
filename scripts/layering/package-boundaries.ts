@@ -26,7 +26,8 @@
 // instanceof), and, for `scripts/` files which sit outside the type graph by design, the
 // root-side unknown-package and exports-map checks that compiled files get from TS2307.
 // On top, `TEST_ONLY_FIXTURE_SUBPATHS` mirrors R13's Android fixture gate for the non-platform
-// packages: a production file importing one of those fixture subpaths is an R11 violation.
+// packages: a production file importing one of those fixture subpaths is an R11 violation, and
+// `CLIENT_ONLY_SUBPATHS` keeps the caller-side replay source collector out of daemon code.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -181,14 +182,35 @@ export const TEST_ONLY_FIXTURE_SUBPATHS: ReadonlySet<string> = new Set([
   '@agent-device/replay-port/replay-script-source-fixtures',
 ]);
 
-/** Consumer side of `TEST_ONLY_FIXTURE_SUBPATHS`, mirroring R13's non-production predicate. */
+// Root `test/`, package-local `packages/<pkg>/test/`, *.test.ts, and __tests__ trees are test
+// consumers; anything else is production. Mirrors R13's non-production predicate.
+function isTestConsumerFile(file: string): boolean {
+  return /(?:^|\/)test\//.test(file) || file.endsWith('.test.ts') || file.includes('/__tests__/');
+}
+
+/** Consumer side of `TEST_ONLY_FIXTURE_SUBPATHS`. */
 function importsTestOnlyFixtureFromProduction(file: string, specifier: string): boolean {
-  if (!TEST_ONLY_FIXTURE_SUBPATHS.has(specifier)) return false;
-  // Root `test/`, package-local `packages/*/test/`, *.test.ts, and __tests__ trees are all
-  // test consumers; anything else is production.
-  const isTestConsumer =
-    /(?:^|\/)test\//.test(file) || file.endsWith('.test.ts') || file.includes('/__tests__/');
-  return !isTestConsumer;
+  return TEST_ONLY_FIXTURE_SUBPATHS.has(specifier) && !isTestConsumerFile(file);
+}
+
+/**
+ * Caller-side replay source acquisition: the client reads script files from the caller's
+ * filesystem and ships their contents in the request. Daemon production code receives that
+ * bundle and must never read caller paths itself, so it may not import these subpaths.
+ */
+export const CLIENT_ONLY_SUBPATHS: ReadonlySet<string> = new Set([
+  '@agent-device/replay-port/script-source-bundle',
+  '@agent-device/replay-port/source-discovery',
+]);
+
+const DAEMON_SOURCE_FILE = /^(?:src\/daemon|packages\/daemon\/src)\//;
+
+function importsClientOnlyFromDaemon(file: string, specifier: string): boolean {
+  return (
+    CLIENT_ONLY_SUBPATHS.has(specifier) &&
+    DAEMON_SOURCE_FILE.test(file) &&
+    !isTestConsumerFile(file)
+  );
 }
 
 /**
@@ -247,6 +269,16 @@ export function checkPackageInternalSites(
         message:
           `'${site.specifier}' is a test-only fixture subpath — production code may not ` +
           `import it; use the package's production subpath instead.`,
+      });
+    }
+    if (importsClientOnlyFromDaemon(site.file, site.specifier)) {
+      violations.push({
+        rule: 'R11 package-boundaries',
+        file: site.file,
+        line: site.line,
+        message:
+          `'${site.specifier}' reads caller-side replay sources — daemon code receives the ` +
+          `client's source bundle and may not read caller paths; take it from the request.`,
       });
     }
     const target = packageByName(allPackages, name);
@@ -328,6 +360,16 @@ export function checkRootSites(
         message:
           `'${site.specifier}' is a test-only fixture subpath — production code may not ` +
           `import it; use the package's production subpath instead.`,
+      });
+    }
+    if (importsClientOnlyFromDaemon(site.file, site.specifier)) {
+      violations.push({
+        rule: 'R11 package-boundaries',
+        file: site.file,
+        line: site.line,
+        message:
+          `'${site.specifier}' reads caller-side replay sources — daemon code receives the ` +
+          `client's source bundle and may not read caller paths; take it from the request.`,
       });
     }
     const target = packageByName(packages, name);
