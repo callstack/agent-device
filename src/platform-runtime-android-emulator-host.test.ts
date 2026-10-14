@@ -48,6 +48,17 @@ test('a macOS launch with no readable frontmost app starts no focus watcher', as
   expect(runCmdDetached).toHaveBeenCalledOnce();
 });
 
+test('a failed frontmost-app read still launches the emulator, without a focus watcher', async () => {
+  runCmd.mockRejectedValueOnce(new Error('lsappinfo timed out after 1000ms'));
+
+  await expect(createAndroidEmulatorHost('darwin').launch('Pixel_9', false, 90_000)).resolves.toBe(
+    4242,
+  );
+
+  expect(runCmdDetached).toHaveBeenCalledOnce();
+  expect(runCmdDetached).toHaveBeenCalledWith('emulator', ['-avd', 'Pixel_9']);
+});
+
 test('a headless launch has no window to keep in the background', async () => {
   await createAndroidEmulatorHost('darwin').launch('Pixel_9', true, 90_000);
 

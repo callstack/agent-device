@@ -42,7 +42,9 @@ export function createAndroidEmulatorHost(
       const args = ['-avd', avdName];
       if (headless) args.push('-no-window', '-no-audio');
       const frontmostPid =
-        !headless && hostPlatform === 'darwin' ? await readFrontmostAppPid() : undefined;
+        !headless && hostPlatform === 'darwin'
+          ? await readFrontmostAppPid().catch(() => undefined)
+          : undefined;
       const pid = runCmdDetached('emulator', args);
       if (frontmostPid !== undefined) {
         runCmdDetached('osascript', [
@@ -66,13 +68,13 @@ export function createAndroidEmulatorHost(
 async function readFrontmostAppPid(): Promise<number | undefined> {
   const front = await runCmd('/usr/bin/lsappinfo', ['front'], {
     allowFailure: true,
-    timeoutMs: 2_000,
+    timeoutMs: 1_000,
   });
   const asn = front.stdout.trim();
   if (!asn) return undefined;
   const info = await runCmd('/usr/bin/lsappinfo', ['info', '-only', 'pid', asn], {
     allowFailure: true,
-    timeoutMs: 2_000,
+    timeoutMs: 1_000,
   });
   const pid = LSAPPINFO_PID.exec(info.stdout)?.[1];
   return pid === undefined ? undefined : Number(pid);
