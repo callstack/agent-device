@@ -124,11 +124,7 @@ export {
   type AndroidKeyboardState,
 } from './device-input-state.ts';
 export { androidDeviceChecks, androidToolchainCheck } from './doctor.ts';
-export {
-  ensureAndroidEmulatorBooted,
-  waitForAndroidBoot,
-  type AndroidEmulatorLifecycleDependencies,
-} from './emulator-lifecycle.ts';
+export { waitForAndroidBoot } from './emulator-lifecycle.ts';
 export {
   androidFillFailureDetails,
   androidFillFailureMessage,
