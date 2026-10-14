@@ -130,6 +130,7 @@ test('leaseScopeToLeaseRpcParams projects canonical provider and command-specifi
       leaseProvider: 'proxy',
       clientId: 'client-a',
       deviceKey: 'android:emulator-5554',
+      leaseId: 'lease-1',
       ttlMs: 60_000,
       backend: 'android-instance',
     },

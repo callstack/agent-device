@@ -110,6 +110,10 @@
       "types": "./src/screen-recording-transport.ts",
       "default": "./src/screen-recording-transport.ts"
     },
+    "./ios-node-interpretation": {
+      "types": "./src/ios-node-interpretation.ts",
+      "default": "./src/ios-node-interpretation.ts"
+    },
     "./ios-snapshot-acquisition": {
       "types": "./src/ios-snapshot-acquisition.ts",
       "default": "./src/ios-snapshot-acquisition.ts"
@@ -317,10 +321,6 @@
     "./durable-capture/session-binding": {
       "types": "./src/durable-capture/session-binding.ts",
       "default": "./src/durable-capture/session-binding.ts"
-    },
-    "./ios-react-native-value": {
-      "types": "./src/ios-react-native-value.ts",
-      "default": "./src/ios-react-native-value.ts"
     }
   },
   "devDependencies": {

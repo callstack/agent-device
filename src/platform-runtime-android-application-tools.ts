@@ -24,11 +24,16 @@ const loadRuntimeHints = () =>
 export function createAndroidApplicationTools(): AndroidApplicationTools {
   return Object.freeze({
     resolveOpenTarget: async (device, input) => await resolveAndroidOpenTarget(device, input),
-    inferOpenedAppBundleId: async (device, target, currentAppBundleId) => {
+    inferOpenedAppBundleId: async (device, target, currentAppBundleId, launchedAppBundleId) => {
       if (currentAppBundleId) return currentAppBundleId;
       try {
         const { inferAndroidPackageAfterOpen } = await loadAndroidMechanics();
-        return await inferAndroidPackageAfterOpen(device, target, currentAppBundleId);
+        return await inferAndroidPackageAfterOpen(
+          device,
+          target,
+          currentAppBundleId,
+          launchedAppBundleId,
+        );
       } catch {
         return currentAppBundleId;
       }

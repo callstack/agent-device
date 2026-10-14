@@ -61,13 +61,15 @@ export function createAndroidInteractor(
     },
   });
   const interactor: Interactor = {
-    open: (app, options) =>
-      openAndroidApp(device, app, {
+    open: async (app, options) => ({
+      launchedAppBundleId: await openAndroidApp(device, app, {
         activity: options?.activity,
         appBundleId: options?.appBundleId,
         launchArgs: options?.launchArgs,
+        terminateRunningApp: options?.terminateRunningApp,
         url: options?.url,
       }),
+    }),
     openDevice: () => openAndroidDevice(device),
     close: (app) => closeAndroidApp(device, app),
     tap: (x, y) => pressAndroid(device, x, y),

@@ -23,6 +23,7 @@ import type { DaemonError, DiagnosticsRecordRef } from '@agent-device/kernel/err
 import { loadNodeHttpRequester } from '@agent-device/host-kit/transport';
 import {
   buildDaemonHttpAuthHeaders,
+  buildDaemonHttpLeaseHeaders,
   buildDaemonHttpTenantHeaders,
   buildDaemonHttpUrl,
 } from '@agent-device/contracts/daemon-http';
@@ -35,6 +36,7 @@ export type RemoteDiagnosticsEndpoint = {
   baseUrl: string;
   token: string;
   tenantId?: string;
+  leaseId?: string;
 };
 
 /**
@@ -170,6 +172,7 @@ async function fetchRemoteRequestDiagnostics(params: {
           headers: {
             ...buildDaemonHttpAuthHeaders(endpoint.token),
             ...buildDaemonHttpTenantHeaders(endpoint.tenantId),
+            ...buildDaemonHttpLeaseHeaders(endpoint.leaseId),
           },
         },
         (res) => {

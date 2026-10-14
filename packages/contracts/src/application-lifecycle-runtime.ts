@@ -391,6 +391,7 @@ export type AndroidApplicationTools = Readonly<{
     device: DeviceInfo,
     target: string | undefined,
     currentAppBundleId: string | undefined,
+    launchedAppBundleId: string | undefined,
   ): Promise<string | undefined>;
   resetFramePerfStats(device: DeviceInfo, appBundleId: string): Promise<void>;
   applyRuntimeHints(device: DeviceInfo, input: RuntimeHintsApplicationInput): Promise<void>;

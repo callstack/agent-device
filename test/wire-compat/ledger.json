@@ -62,7 +62,7 @@
     "src/daemon-client/daemon-client-rpc.ts#isLeaseRpcCommand": "sha256:955dc1b73462d40593e5728dbcbaeec1307944b08262a22627e84cc5dc507e8f",
     "src/daemon-client/daemon-client-rpc.ts#leaseRpcMethodForCommand": "sha256:3613555c6002c23ab5bec4b98bc1b4d6947014b52fa100176177f955cf762881",
     "src/daemon-client/daemon-client-rpc.ts#parseDaemonHttpResponseBody": "sha256:0cbe39dbd09e321ec00854a1626a7d89b6344e59c6faabe2fe02504268b2d886",
-    "src/daemon-client/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:83b0312fe88bc3b3497de799e23d8d14455f665b7cf880f4617cd62b181351cd",
+    "src/daemon-client/daemon-client-rpc.ts#rejectDaemonHttpRpcError": "sha256:1272b06f13da00e05923cbb1aed15ab8fdf96e9caeb697fac52f78b0a2ba69e1",
     "src/daemon-client/daemon-client-rpc.ts#resolveDaemonHttpResult": "sha256:296f9d376ce67c8cb20209bdf1c59c2423ffcfa35b5565a99e70271263149048",
     "src/daemon-client/daemon-client-rpc.ts#toDaemonHttpRpcError": "sha256:888246763c48670e7da893054d025744654f8715c3b4906312617a2b5028316b",
     "src/daemon-client/daemon-client-transport.ts#RemoteDaemonHealth": "sha256:3bac36fa97090b273afe1128103e1bf476d05441fd9de41317f1b78775b88304",
@@ -145,7 +145,7 @@
     "packages/daemon/src/server/upload-http.ts#sendJson": "sha256:c2317b4b14a10731684c9160038005965856150f05f8923765a3fa833d2ecae9",
     "packages/daemon/src/server/upload-http.ts#sendUploadedArtifactResponse": "sha256:9e418403448d58a96284fed605762fa71f9349bf2c70ad79df69b2b3e27487d6",
     "src/remote/artifact-download.ts#RemoteArtifactDownload": "sha256:f73a888f4f8c9d603701c505bb342787b1ca6559a13b15da2385e60349ecea8e",
-    "src/remote/artifact-download.ts#downloadRemoteArtifactFromUrl": "sha256:5176697267907e3f5e4383a881969721e4ea3f6776128d28c313bdc210128834",
+    "src/remote/artifact-download.ts#downloadRemoteArtifactFromUrl": "sha256:cde1ed3649d73da51a0413216aa24a561a2ec57d08ed533ffa985b95b1941cf6",
     "src/remote/daemon-artifacts.ts#DaemonArtifactEndpoint": "sha256:45226717ac52c0af2a62f74e91549582d95f4a4abc49be87989e026291a88c82",
     "src/remote/daemon-artifacts.ts#DownloadRemoteArtifactParams": "sha256:3ec63be2dbdb542e30b19d1500bc16874607823afb7ae392e92b0b535865859e",
     "src/remote/daemon-artifacts.ts#buildDaemonArtifactUrl": "sha256:06dcde057809b507f70f7bb5cdef9bde6515be84b67e45865cf19e70b8636208",
@@ -154,23 +154,23 @@
     "src/remote/daemon-artifacts.ts#materializeRemoteArtifacts": "sha256:6a62429723f52231951ef263950f4b304529bad984ab216b73db1750f58c7f84",
     "src/remote/daemon-artifacts.ts#resolveMaterializedArtifactPath": "sha256:db5c44effc41ff9fa40bd094945e56ac60fac89a42fa68c65c9293e6de6fb1dc",
     "src/remote/remote-request-diagnostics.ts#RemoteDaemonErrorPayload": "sha256:8fbcbcdf4bae7b66a08e465a72593794f36364759f18f1a814cd39dfdb76f309",
-    "src/remote/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:bdf63219ecea77d1290f0f5eeef6d5adc55077fa2fa6750ba4608aa3efd540f0",
+    "src/remote/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
     "src/remote/remote-request-diagnostics.ts#buildRemoteRequestDiagnosticsUrl": "sha256:30a1a9bf0df24d3564a616699916a3bb4360c2b4d21c4ad0562fb0c1e738d0a9",
-    "src/remote/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics": "sha256:d856cc83f831491a4c34b1e4feb0867741310bc435808dc469800a643c6b5c31",
+    "src/remote/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics": "sha256:6f68c317e4c0fe5de008ec1fe5e7e030a9d298ad4a7dfd561db933d22e12ae9e",
     "src/remote/remote-request-diagnostics.ts#localizeRemoteDaemonError": "sha256:35cfa186ad64663ae4dbb4e102d49238532cd7e3b75e8337edcc3d1fd77f92d5",
     "src/remote/upload-client-artifact.ts#PreparedUploadArtifact": "sha256:5c40027d47feda3c946e836372b9f08ad866ab1612708b0d506551545f931ea4",
     "src/remote/upload-client.ts#ARTIFACT_HASH_ALGORITHM": "sha256:328c135ea5f9d89fd2c142b440d5402a61d19f9044bf0504dfc2c525e58c1909",
     "src/remote/upload-client.ts#UploadPreflightResponse": "sha256:196a1d9ef41a1aec192589fa7ccb30cf71d971a005349d5d73eed42e6ab21327",
     "src/remote/upload-client.ts#UploadPreflightResult": "sha256:bd8fc6d617c0630325455fd64d0fe319daaced198ee6745e4673a8ace3df460d",
     "src/remote/upload-client.ts#UploadResponse": "sha256:499e01466b5e0e03413f8d3f1986f5af6bc120704c50a3747d84de422b3f0314",
-    "src/remote/upload-client.ts#finalizeDirectUpload": "sha256:5d283353df5f089a6ab26b7be96c44997e6b9905b329cb993d300c615479d715",
+    "src/remote/upload-client.ts#finalizeDirectUpload": "sha256:61f2811d571e57dcca41689c7b1dd37db1fd7a982fbf5eaf33a33cf1541f6ee4",
     "src/remote/upload-client.ts#isStringRecord": "sha256:b6d6b571b90baf0976d9c347c4a45a4363a4df5ad184ea1087cb3b9febd4b624",
     "src/remote/upload-client.ts#parseUploadPreflightResult": "sha256:7ce3f43b45c03df8b7f2690432beedc7a537c1bba540961716862f8a632d5623",
-    "src/remote/upload-client.ts#requestUploadPreflight": "sha256:4c9863bce8757f1dc0f01ec7374019e752efc8e786cd070200f516a1d72d09e1",
+    "src/remote/upload-client.ts#requestUploadPreflight": "sha256:b8caf697f613d9b7e6176007d9cd7f367519338a76f50c1107687bd800ff0a5a",
     "src/remote/upload-client.ts#shouldRetryDirectUpload": "sha256:29059f076ff7f2b9540ad15408be48792b2d63a601ef2b9fb2d54f5576d49bbd",
-    "src/remote/upload-client.ts#tryDirectUploadWithResume": "sha256:67596a2ff2b8a5402566c3b7b99a6fa1baaf9d5de3d647bf35398185cc45eea6",
-    "src/remote/upload-client.ts#uploadDirectArtifact": "sha256:c16cb5dd74895931b8e41e16629a0519e5601340563c976b7f800c6de8d158b2",
-    "src/remote/upload-client.ts#uploadLegacyArtifact": "sha256:a7a82d6eb2925d6f510b9cc00f01f9ce865638368e0bec503b700f0bc59871bc",
+    "src/remote/upload-client.ts#tryDirectUploadWithResume": "sha256:db1042b6b8f6969add9480f30a8649d83eecf60af38e80f00a4e789fcf925f97",
+    "src/remote/upload-client.ts#uploadDirectArtifact": "sha256:3edb622eabee720085a544a4d4e6fdd74c19ec25d3e14e7f9f06ea10d550c1c7",
+    "src/remote/upload-client.ts#uploadLegacyArtifact": "sha256:3acabacbdea5b7da7f3d8e6e87496728eb3b1df122c490751a9edabc1e9c9adc",
     "src/remote/upload-stream.ts#MAX_UPLOAD_REDIRECTS": "sha256:12ff46dfe33a1dce95bdb79c90c17a3ba4f3919e7dc4b3a1b04590fff430f79f",
     "src/remote/upload-stream.ts#UploadStreamResponse": "sha256:724e284c2a6bd7b4b3a49b1d8c61c8923d6cc24777c3d76224a69d190e56adce",
     "src/remote/upload-stream.ts#buildUploadRequestHeaders": "sha256:827576b13a9f3e6cea445119a6a29b2ac5eaa23b66436cf810b2d09765c82a4c",
@@ -315,31 +315,6 @@
       "rationale": "#2894 lets an iOS runner start outlive the caller whose deadline gave up on it, so a progress event can arrive after the response ended. The sink now also skips a response whose writable side has ended, next to the destroyed check it already had. No byte written to a live response changes: the envelope framing and payload are untouched, and a released client never sees an event it could not have received before."
     },
     {
-      "declaration": "src/remote/upload-client.ts#requestUploadPreflight",
-      "digest": "sha256:4c9863bce8757f1dc0f01ec7374019e752efc8e786cd070200f516a1d72d09e1",
-      "rationale": "#2946 runs the preflight fetch under the caller's abort signal in addition to its own timeout. Route, headers, and JSON body are unchanged, so a protocol-2 daemon parses an uncancelled preflight exactly as before; an aborted one is the client disconnect it already handles."
-    },
-    {
-      "declaration": "src/remote/upload-client.ts#uploadDirectArtifact",
-      "digest": "sha256:c16cb5dd74895931b8e41e16629a0519e5601340563c976b7f800c6de8d158b2",
-      "rationale": "#2946 threads an optional abort signal into the PUT so a lost lease can stop the stream. Method, ticket url and headers, and body bytes are unchanged for an uncancelled upload; an abort truncates the request, which a protocol-2 daemon sees as the client disconnect it already handles."
-    },
-    {
-      "declaration": "src/remote/upload-client.ts#tryDirectUploadWithResume",
-      "digest": "sha256:67596a2ff2b8a5402566c3b7b99a6fa1baaf9d5de3d647bf35398185cc45eea6",
-      "rationale": "#2946 stops a canceled upload from re-preflighting and lifts the retry leg into its own function. The request sequence a daemon sees — preflight, direct PUT, finalize, or the legacy fallback after a retryable failure — is unchanged."
-    },
-    {
-      "declaration": "src/remote/upload-client.ts#finalizeDirectUpload",
-      "digest": "sha256:5d283353df5f089a6ab26b7be96c44997e6b9905b329cb993d300c615479d715",
-      "rationale": "#2946 adds the caller's abort signal to finalize's existing timeout and lets a canceled one reject with the signal's own reason instead of a wrapped transport error. Route and body keys are unchanged, so a protocol-2 daemon parses an uncancelled finalize exactly as before."
-    },
-    {
-      "declaration": "src/remote/upload-client.ts#uploadLegacyArtifact",
-      "digest": "sha256:a7a82d6eb2925d6f510b9cc00f01f9ce865638368e0bec503b700f0bc59871bc",
-      "rationale": "#2946 threads an optional abort signal into the legacy upload stream. Method, route, artifact headers, and chunked body are unchanged for an uncancelled upload; an abort truncates the request, which a protocol-2 daemon sees as the client disconnect it already handles."
-    },
-    {
       "declaration": "src/remote/upload-stream.ts#streamFileToHttpRequest",
       "digest": "sha256:ce07ea33a275e06e4cceaf0c75a079bd0c7938f36df6817407dbb1cc8c4ff900",
       "rationale": "#2946 widens the options with an optional abort signal handed to node:http.request. The request line, headers built by buildUploadRequestHeaders, and piped payload are unchanged, so an older daemon's 200/308 handling is unaffected."
@@ -433,6 +408,51 @@
       "declaration": "src/daemon-client/daemon-client-transport.ts#readDaemonHttpHealth",
       "digest": "sha256:6ce1f9be1e6a977130d0875003ac22da2de5e90b514a3b22b30b9347e63d81c7",
       "rationale": "The health-probe budget includes requester loading and response completion. The caller AbortSignal joins the probe timer only in-process; caller cancellation remains distinct from probe expiry. No signal, timedOut flag, request route, auth header or accepted health payload field changes on the wire, so released daemons and proxies parse and respond as before (ADR 0006)."
+    },
+    {
+      "declaration": "src/remote/remote-request-diagnostics.ts#RemoteDiagnosticsEndpoint",
+      "digest": "sha256:c1d5fe2fe90c425502cf8b7c87d6606374d6af65b4e9faf942a416f683930bdc",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
+    },
+    {
+      "declaration": "src/remote/remote-request-diagnostics.ts#fetchRemoteRequestDiagnostics",
+      "digest": "sha256:6f68c317e4c0fe5de008ec1fe5e7e030a9d298ad4a7dfd561db933d22e12ae9e",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
+    },
+    {
+      "declaration": "src/daemon-client/daemon-client-rpc.ts#rejectDaemonHttpRpcError",
+      "digest": "sha256:1272b06f13da00e05923cbb1aed15ab8fdf96e9caeb697fac52f78b0a2ba69e1",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
+    },
+    {
+      "declaration": "src/remote/upload-client.ts#requestUploadPreflight",
+      "digest": "sha256:b8caf697f613d9b7e6176007d9cd7f367519338a76f50c1107687bd800ff0a5a",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
+    },
+    {
+      "declaration": "src/remote/upload-client.ts#uploadDirectArtifact",
+      "digest": "sha256:3edb622eabee720085a544a4d4e6fdd74c19ec25d3e14e7f9f06ea10d550c1c7",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
+    },
+    {
+      "declaration": "src/remote/upload-client.ts#tryDirectUploadWithResume",
+      "digest": "sha256:db1042b6b8f6969add9480f30a8649d83eecf60af38e80f00a4e789fcf925f97",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
+    },
+    {
+      "declaration": "src/remote/upload-client.ts#finalizeDirectUpload",
+      "digest": "sha256:61f2811d571e57dcca41689c7b1dd37db1fd7a982fbf5eaf33a33cf1541f6ee4",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
+    },
+    {
+      "declaration": "src/remote/upload-client.ts#uploadLegacyArtifact",
+      "digest": "sha256:3acabacbdea5b7da7f3d8e6e87496728eb3b1df122c490751a9edabc1e9c9adc",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
+    },
+    {
+      "declaration": "src/remote/artifact-download.ts#downloadRemoteArtifactFromUrl",
+      "digest": "sha256:cde1ed3649d73da51a0413216aa24a561a2ec57d08ed533ffa985b95b1941cf6",
+      "rationale": "Clients name a held agent-device lease in an optional x-agent-device-lease-id request header on upload, artifact download and request diagnostics HTTP calls, so a gateway can route them. Released daemons ignore unknown request headers and the proxy forwards only its allowlist, so routes, bodies and responses parse as before; with no lease held the request is unchanged (ADR 0006)."
     }
   ]
 }

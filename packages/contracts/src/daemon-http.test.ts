@@ -4,6 +4,7 @@ import {
   buildDaemonHealthPayload,
   buildDaemonHttpAuthHeaders,
   buildDaemonHttpBaseUrl,
+  buildDaemonHttpLeaseHeaders,
   buildDaemonHttpTenantHeaders,
   buildDaemonHttpUrl,
   buildRemoteTempArtifactDirPath,
@@ -47,6 +48,14 @@ test('buildDaemonHttpTenantHeaders omits blank tenant identities', () => {
     'x-agent-device-tenant': 'tenant-a',
   });
   assert.deepEqual(buildDaemonHttpTenantHeaders(''), {});
+});
+
+test('buildDaemonHttpLeaseHeaders names a held lease and omits a blank one', () => {
+  assert.deepEqual(buildDaemonHttpLeaseHeaders(' lease-1 '), {
+    'x-agent-device-lease-id': 'lease-1',
+  });
+  assert.deepEqual(buildDaemonHttpLeaseHeaders(''), {});
+  assert.deepEqual(buildDaemonHttpLeaseHeaders(undefined), {});
 });
 
 test('buildDaemonHealthPayload takes the version from its caller and keeps the payload shape', () => {
