@@ -15,9 +15,7 @@ export {
   agentBrowserChromeLaunchMarker,
   appendAgentDeviceChromeArgs,
   inspectManagedAgentBrowserProcesses,
-  matchAgentBrowserChromeProcess,
   summarizeAgentBrowserProcesses,
-  summarizeManagedAgentBrowserProcesses,
 } from './agent-browser-process-record.ts';
 export type { AgentBrowserProcessSummary } from './agent-browser-process-record.ts';
 

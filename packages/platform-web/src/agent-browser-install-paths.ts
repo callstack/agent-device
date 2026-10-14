@@ -72,6 +72,6 @@ function isDirectory(entryPath: string): boolean {
   }
 }
 
-function isNoEntryError(error: unknown): boolean {
+export function isNoEntryError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }

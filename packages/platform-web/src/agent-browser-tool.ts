@@ -26,7 +26,7 @@ import {
   installManagedAgentBrowserPackage,
   writeManagedAgentBrowserManifest,
 } from './agent-browser-install.ts';
-import { managedInstallPaths } from './agent-browser-install-paths.ts';
+import { isNoEntryError, managedInstallPaths } from './agent-browser-install-paths.ts';
 import {
   appendAgentDeviceChromeArgs,
   resolveAgentBrowserIdleTimeoutMs,
@@ -215,7 +215,7 @@ function hasManifest(installDir: string): boolean {
 /**
  * The backend's declared `bin` entry. Read from the installed manifest rather
  * than hard-coded, because the path inside the package is the package's to
- * choose (`bin/agent-browser.js` in 0.27.1).
+ * choose.
  */
 function resolveManagedEntryScript(packageDir: string): string | undefined {
   let bin: unknown;
@@ -287,10 +287,6 @@ function assertWebNodeSupported(nodeMajor: number): void {
     requiredNodeMajor: MINIMUM_WEB_NODE_MAJOR,
     hint: 'Run agent-device with Node 24+ for web setup and web automation.',
   });
-}
-
-function isNoEntryError(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }
 
 function defaultStateDir(): string {

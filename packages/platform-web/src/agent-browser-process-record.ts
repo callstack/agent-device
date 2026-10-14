@@ -58,13 +58,6 @@ export function appendAgentDeviceChromeArgs(
   return `${existing},${marker}`;
 }
 
-export function matchAgentBrowserChromeProcess(
-  processInfo: HostProcessInfo,
-  status: AgentBrowserToolStatus,
-): AgentBrowserProcessMatch | undefined {
-  return matchChromeProcess(processInfo, managedFleetOwnership(status));
-}
-
 export function summarizeAgentBrowserProcesses(
   processes: HostProcessInfo[],
   status: AgentBrowserToolStatus,
@@ -78,16 +71,6 @@ function matchManagedAgentBrowserProcess(
   ownership: ManagedFleetOwnership,
 ): AgentBrowserProcessMatch | undefined {
   return matchChromeProcess(processInfo, ownership) ?? matchDaemonProcess(processInfo, ownership);
-}
-
-export function summarizeManagedAgentBrowserProcesses(
-  processes: HostProcessInfo[],
-  status: AgentBrowserToolStatus,
-): AgentBrowserProcessSummary {
-  const ownership = managedFleetOwnership(status);
-  return summarizeMatches(processes, (processInfo) =>
-    matchManagedAgentBrowserProcess(processInfo, ownership),
-  );
 }
 
 export async function inspectManagedAgentBrowserProcesses(
