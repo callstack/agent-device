@@ -4,35 +4,49 @@ import type {
   AppLogOutputSink,
   AppLogRuntimeHost,
 } from '@agent-device/contracts/app-log-runtime';
-import type { FinishOutcome } from '@agent-device/contracts/durable-resource';
 import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
-import { createAppLogLiveHandleFromFinish } from '@agent-device/capture-kit';
+import type { FinishOutcome } from '@agent-device/contracts/durable-resource';
 import type { LogBackend } from '@agent-device/contracts/observability';
-import { awaitLimrunOperation } from './request-cancellation.ts';
-import type { LimrunInstanceOwnership } from './instance-access.ts';
+import { createAppLogLiveHandleFromFinish } from './app-log-live-handle.ts';
 
-export type LimrunAppLogReader = AsyncDisposable &
+const EXISTING_TAIL_BYTES = 256 * 1024;
+const POLL_INTERVAL_MS = 1_000;
+const READ_TIMEOUT_MS = 5_000;
+const READ_LINE_LIMIT = 1_000;
+
+export type ProviderAppLogReader = AsyncDisposable &
   Readonly<{
-    platform: 'ios' | 'android';
-    leaseId: string;
-    instanceId: string;
-    ownership: LimrunInstanceOwnership;
-    readLogs(appBundleId: string, lineLimit: number): Promise<string>;
+    /**
+     * Returns the provider's current log tail. A reader may ignore `signal`: the poller abandons a
+     * read that outlives its budget without waiting for the provider request to end.
+     */
+    readLogs(appBundleId: string, lineLimit: number, signal: AbortSignal): Promise<string>;
   }>;
 
-export async function startLimrunAppLogPoller(options: {
-  host: AppLogRuntimeHost;
-  reader: LimrunAppLogReader;
+export type ProviderAppLogPollerOptions = Readonly<{
+  host: Pick<AppLogRuntimeHost, 'outputs' | 'clock'>;
+  /** Names the provider in cleanup messages. */
+  provider: string;
+  backend: LogBackend;
+  reader: ProviderAppLogReader;
   appBundleId: string;
   outputPath: string;
-}): Promise<AppLogLiveHandle> {
+}>;
+
+/** Takes ownership of `reader`: it is disposed on acquisition failure or when the poll finishes. */
+export async function startProviderAppLogPoller(
+  options: ProviderAppLogPollerOptions,
+): Promise<AppLogLiveHandle> {
   const rollback = new AsyncCleanupStack();
   let adopted = false;
   rollback.defer(async () => {
     if (!adopted) await options.reader[Symbol.asyncDispose]();
   });
   try {
-    const existingTail = await options.host.outputs.readTail(options.outputPath, 256 * 1024);
+    const existingTail = await options.host.outputs.readTail(
+      options.outputPath,
+      EXISTING_TAIL_BYTES,
+    );
     const output = await options.host.outputs.openAppend(options.outputPath);
     rollback.defer(async () => {
       if (!adopted) await output[Symbol.asyncDispose]();
@@ -46,17 +60,12 @@ export async function startLimrunAppLogPoller(options: {
 }
 
 function createPollerHandle(
-  options: {
-    host: AppLogRuntimeHost;
-    reader: LimrunAppLogReader;
-    appBundleId: string;
-    outputPath: string;
-  },
+  options: ProviderAppLogPollerOptions,
   output: AppLogOutputSink,
   existingTail: string,
 ): AppLogLiveHandle {
-  const backend = backendForReader(options.reader);
-  const startedAt = options.host.clock.now();
+  const { backend, host } = options;
+  const startedAt = host.clock.now();
   let state: AppLogLiveSnapshot['state'] = 'active';
   let stopped = false;
   let previous = existingTail;
@@ -70,14 +79,14 @@ function createPollerHandle(
         }
         if (stopped) return;
         const delta = appendedTail(previous, read.text);
-        previous = read.text;
         if (delta) await output.write(delta.endsWith('\n') ? delta : `${delta}\n`);
+        previous = read.text;
         state = 'active';
       } catch {
         if (stopped) return;
         state = 'recovering';
       }
-      await options.host.clock.sleep(1_000);
+      await host.clock.sleep(POLL_INTERVAL_MS);
     }
   })();
   let finishPromise:
@@ -93,17 +102,13 @@ function createPollerHandle(
         return {
           status: 'cleanup-pending',
           reason: 'transport-failed',
-          message: 'Limrun app-log cleanup did not settle every owned resource',
+          message: `${options.provider} app-log cleanup did not settle every owned resource`,
         } as const;
       }
       state = 'ended';
       return {
         status: 'completed',
-        result: {
-          backend,
-          outputPath: options.outputPath,
-          completedAt: options.host.clock.now(),
-        },
+        result: { backend, outputPath: options.outputPath, completedAt: host.clock.now() },
       } as const;
     })());
   return createAppLogLiveHandleFromFinish({
@@ -112,34 +117,24 @@ function createPollerHandle(
   });
 }
 
-async function boundedRead(options: {
-  host: AppLogRuntimeHost;
-  reader: LimrunAppLogReader;
-  appBundleId: string;
-}): Promise<Readonly<{ status: 'read'; text: string }> | Readonly<{ status: 'timeout' }>> {
+async function boundedRead(
+  options: ProviderAppLogPollerOptions,
+): Promise<Readonly<{ status: 'read'; text: string }> | Readonly<{ status: 'timeout' }>> {
   const controller = new AbortController();
-  const read = awaitLimrunOperation(
-    options.reader.readLogs(options.appBundleId, 1_000),
-    controller.signal,
-    'App-log provider read aborted',
-  ).then((text) => ({ status: 'read' as const, text }));
+  const read = options.reader.readLogs(options.appBundleId, READ_LINE_LIMIT, controller.signal);
   try {
-    const result = await Promise.race([
-      read,
+    return await Promise.race([
+      read.then((text) => ({ status: 'read' as const, text })),
       options.host.clock
-        .sleep(5_000, controller.signal)
+        .sleep(READ_TIMEOUT_MS, controller.signal)
         .then(() => ({ status: 'timeout' as const })),
     ]);
-    if (result.status === 'timeout') {
-      controller.abort();
-      await read.catch(() => undefined);
-    }
-    return result;
   } finally {
     controller.abort();
   }
 }
 
+/** The new tail minus its longest overlap with the previous tail's suffix. */
 function appendedTail(previous: string, current: string): string {
   if (!previous || !current) return current;
   const prefix = buildPrefixTable(current);
@@ -180,12 +175,5 @@ async function disposeAll(resources: readonly AsyncDisposable[]): Promise<unknow
   const results = await Promise.allSettled(
     resources.map(async (resource) => await resource[Symbol.asyncDispose]()),
   );
-  const failures = results.flatMap((result) =>
-    result.status === 'rejected' ? [result.reason] : [],
-  );
-  return failures;
-}
-
-function backendForReader(reader: LimrunAppLogReader): 'ios-simulator' | 'android' {
-  return reader.platform === 'ios' ? 'ios-simulator' : 'android';
+  return results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
 }

@@ -45,7 +45,7 @@ import type {
 } from '@agent-device/contracts/platform-runtime-operations';
 import { providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
-import type { LimrunAppLogReader } from './app-log-poller.ts';
+import type { LimrunAppLogReader } from './app-log-runtime.ts';
 import { LIMRUN_CLIENT_ID, requireLimrunOrgClient } from './client-options.ts';
 import { resolveLimrunRuntimeInstance } from './runtime-instance.ts';
 import type { LimrunRequestOperationDrain } from './request-cancellation.ts';

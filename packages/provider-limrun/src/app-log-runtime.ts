@@ -20,20 +20,14 @@ import type {
   PlatformRuntimeOwner,
 } from '@agent-device/contracts/platform-runtime-operations';
 import {
-  appLogSessionArtifactsMatch,
-  assertAppLogSessionArtifacts,
-  createAppLogRecoveryOperations,
-  createAppLogStartResult,
-  readRecentNetworkTrafficFromText,
-} from '@agent-device/capture-kit';
+  createProviderAppLogOperations,
+  type ProviderAppLogReader,
+  type ProviderAppLogReconnectOutcome,
+} from '@agent-device/capture-kit/provider-app-log';
 import { availableApplicationLifecycleOperations } from '@agent-device/contracts/application-lifecycle-runtime';
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
-import {
-  createLimrunAppLogEnvelope,
-  limrunAppLogDescriptorCodec,
-  type LimrunAppLogDescriptor,
-} from './app-log-descriptor.ts';
-import { startLimrunAppLogPoller, type LimrunAppLogReader } from './app-log-poller.ts';
+import { limrunAppLogDescriptorCodec, type LimrunAppLogDescriptor } from './app-log-descriptor.ts';
+import type { LimrunInstanceOwnership } from './instance-access.ts';
 import { bindLimrunApplicationLifecycle } from './lifecycle.ts';
 import {
   createLimrunAppDeploymentOperations,
@@ -52,10 +46,15 @@ import {
   liveSessionUnavailable,
 } from './facts-runtime.ts';
 
-export type LimrunAppLogReconnectOutcome =
-  | Readonly<{ status: 'opened'; reader: LimrunAppLogReader }>
-  | Readonly<{ status: 'missing' }>
-  | Readonly<{ status: 'ownership-lost' }>;
+export type LimrunAppLogReader = ProviderAppLogReader &
+  Readonly<{
+    platform: 'ios' | 'android';
+    leaseId: string;
+    instanceId: string;
+    ownership: LimrunInstanceOwnership;
+  }>;
+
+export type LimrunAppLogReconnectOutcome = ProviderAppLogReconnectOutcome<LimrunAppLogReader>;
 
 export type LimrunPlatformRuntimeOwnerOptions = Omit<
   LimrunAppDeploymentRuntimeOptions,
@@ -173,107 +172,32 @@ function bindLimrunAppLogs(
     ? limrunAppLogRecoveryFacts(options, device)
     : limrunAppLogFacts(options, device);
   const deploymentOperationDrain = createLimrunRequestOperationDrain();
-  const recovery = createAppLogRecoveryOperations({
+  const appLogs = createProviderAppLogOperations({
+    host: options.host,
+    device,
+    owner,
+    signal,
+    provider: 'Limrun',
+    backend: device.platform === 'apple' ? 'ios-simulator' : 'android',
+    sessionCheck: 'limrunSessionAvailable',
+    unavailableMessage: 'Limrun app logs require an active instance',
     codec: limrunAppLogDescriptorCodec,
-    reattach: async (descriptor, context) => {
-      if (
-        !descriptorMatchesDevice(descriptor, device) ||
-        !appLogSessionArtifactsMatch(options.host, context.sessionId, descriptor)
-      ) {
-        return {
-          status: 'unreattachable',
-          reason: 'descriptor-invalid',
-          message: 'Limrun app-log descriptor does not match the bound device or owning session',
-        };
-      }
-      const reconnected = await options.reconnect(descriptor, signal);
-      if (reconnected.status === 'missing') return { status: 'missing' };
-      if (reconnected.status === 'ownership-lost') {
-        return { status: 'unreattachable', reason: 'ownership-fence-lost' };
-      }
-      return {
-        status: 'active',
-        handle: await startLimrunAppLogPoller({
-          host: options.host,
-          reader: reconnected.reader,
-          appBundleId: descriptor.appBundleId,
-          outputPath: descriptor.outputPath,
-        }),
-      };
-    },
-    cleanup: async (descriptor, context) =>
-      descriptorMatchesDevice(descriptor, device) &&
-      appLogSessionArtifactsMatch(options.host, context.sessionId, descriptor)
-        ? { status: 'cleaned' }
-        : {
-            status: 'cleanup-pending',
-            reason: 'ownership-fence-lost',
-            message: 'Limrun app-log descriptor does not match the bound device or owning session',
-          },
+    openCurrent: async () => await options.openCurrent(device),
+    describe: (reader, target) => ({
+      transport: 'limrun-log-poller' as const,
+      platform: reader.platform,
+      leaseId: reader.leaseId,
+      instanceId: reader.instanceId,
+      ownership: reader.ownership,
+      appBundleId: target.appBundleId,
+      outputPath: target.outputPath,
+    }),
+    matchesDevice: (descriptor) => descriptorMatchesDevice(descriptor, device),
+    reconnect: async (descriptor, reconnectSignal) =>
+      await options.reconnect(descriptor, reconnectSignal),
   });
   const operations = {
-    appLogInspect: async () => ({ backend: backendForDevice(device) }),
-    appLogDoctor: async () => ({
-      backend: backendForDevice(device),
-      checks: { limrunSessionAvailable: await currentSessionAvailable(options, device, signal) },
-      notes: [],
-    }),
-    appLogStart: async (input) => {
-      assertAppLogSessionArtifacts(options.host, input);
-      signal.throwIfAborted();
-      const reader = await options.openCurrent(device);
-      if (!reader) {
-        throw new AppError('UNSUPPORTED_OPERATION', 'Limrun app logs require an active instance');
-      }
-      const descriptor: LimrunAppLogDescriptor = {
-        transport: 'limrun-log-poller',
-        platform: reader.platform,
-        leaseId: reader.leaseId,
-        instanceId: reader.instanceId,
-        ownership: reader.ownership,
-        appBundleId: input.appBundleId,
-        outputPath: input.outputPath,
-      };
-      let pollerOwnsReader = false;
-      try {
-        signal.throwIfAborted();
-        const envelope = createLimrunAppLogEnvelope({
-          sessionId: input.sessionId,
-          device,
-          owner,
-          fence: input.fence,
-          descriptor,
-        });
-        pollerOwnsReader = true;
-        const handle = await startLimrunAppLogPoller({
-          host: options.host,
-          reader,
-          appBundleId: input.appBundleId,
-          outputPath: input.outputPath,
-        });
-        return createAppLogStartResult(handle, envelope);
-      } catch (error) {
-        if (!pollerOwnsReader) await reader[Symbol.asyncDispose]();
-        throw error;
-      }
-    },
-    ...recovery,
-    networkDump: async (input) => {
-      const recent = await options.host.appLogs.readRecent(input.sessionId, input.maxScanLines);
-      const backend = backendForDevice(device);
-      const { dump } = readRecentNetworkTrafficFromText(recent.text, {
-        ...input,
-        path: recent.path,
-        exists: recent.exists,
-        lineNumberOffset: recent.skippedLines,
-        backend,
-      });
-      const notes =
-        dump.entries.length === 0
-          ? ['No HTTP(s) entries were found in recent session app logs.']
-          : [];
-      return Object.freeze({ source: 'app-log' as const, backend, dump, notes });
-    },
+    ...appLogs,
     ensureReady: async () => ({ ...device, booted: true }),
     bootTarget: async () => ({ ...device, booted: true }),
     listApps: async (input) => await options.listApps(input.device, input.filter, signal),
@@ -324,31 +248,11 @@ function bindLimrunAppLogs(
     facts: runtimeFacts,
     operations: Object.freeze(
       recoveryOnly
-        ? { appLogReattach: recovery.appLogReattach, appLogCleanup: recovery.appLogCleanup }
+        ? { appLogReattach: appLogs.appLogReattach, appLogCleanup: appLogs.appLogCleanup }
         : operations,
     ),
     [Symbol.asyncDispose]: async () => await deploymentOperationDrain[Symbol.asyncDispose](),
   });
-}
-
-async function currentSessionAvailable(
-  options: LimrunPlatformRuntimeOwnerOptions,
-  device: DeviceInfo,
-  signal: AbortSignal,
-): Promise<boolean> {
-  signal.throwIfAborted();
-  const reader = await options.openCurrent(device);
-  if (!reader) return false;
-  try {
-    signal.throwIfAborted();
-  } finally {
-    await reader[Symbol.asyncDispose]();
-  }
-  return true;
-}
-
-function backendForDevice(device: DeviceInfo): 'ios-simulator' | 'android' {
-  return device.platform === 'apple' ? 'ios-simulator' : 'android';
 }
 
 function descriptorMatchesDevice(descriptor: LimrunAppLogDescriptor, device: DeviceInfo): boolean {

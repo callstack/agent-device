@@ -7,7 +7,8 @@ import {
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { expect, test, vi } from 'vitest';
-import { createLimrunAppLogEnvelope } from './app-log-descriptor.ts';
+import { createProviderAppLogEnvelope } from '@agent-device/capture-kit/provider-app-log';
+import { limrunAppLogDescriptorCodec } from './app-log-descriptor.ts';
 import {
   limrunIosSimulator as device,
   limrunOwnerOptions,
@@ -29,7 +30,9 @@ test('rejects a cross-platform durable descriptor before provider reconnection',
     scope,
   });
   expect(binding.facts.device.providerMode).toBe('provider-runtime');
-  const envelope = createLimrunAppLogEnvelope({
+  const envelope = createProviderAppLogEnvelope({
+    provider: 'Limrun',
+    codec: limrunAppLogDescriptorCodec,
     sessionId: 'session',
     device,
     owner: owner.owner,
@@ -65,7 +68,9 @@ test('rejects cross-session paths before reconnecting or opening a provider read
     }),
   );
   const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
-  const envelope = createLimrunAppLogEnvelope({
+  const envelope = createProviderAppLogEnvelope({
+    provider: 'Limrun',
+    codec: limrunAppLogDescriptorCodec,
     sessionId: 'one',
     device,
     owner: owner.owner,
@@ -116,7 +121,9 @@ test('keeps exact-owner app-log recovery available without a process-local sessi
     },
     scope,
   });
-  const envelope = createLimrunAppLogEnvelope({
+  const envelope = createProviderAppLogEnvelope({
+    provider: 'Limrun',
+    codec: limrunAppLogDescriptorCodec,
     sessionId: 'session',
     device,
     owner: owner.owner,
@@ -531,4 +538,104 @@ test('an iOS limrun dump bounded to one entry reports unnamed traffic without it
   if (result?.source !== 'app-log') throw new Error('expected app-log result');
   expect(result.dump.unnamedRequests).toBe(5);
   expect(result.dump).not.toHaveProperty('unnamedRequestIds');
+});
+
+test.each([
+  ['iOS simulator', device, 'ios', 'ios-simulator'],
+  [
+    'Android emulator',
+    {
+      platform: 'android' as const,
+      id: 'limrun:android:lease-a',
+      name: 'Limrun Android',
+      kind: 'emulator' as const,
+      target: 'mobile' as const,
+      booted: true,
+    },
+    'android',
+    'android',
+  ],
+] as const)(
+  'persists the Limrun %s instance identity and backend when app logs start',
+  async (_name, runtimeDevice, platform, backend) => {
+    const dispose = vi.fn(async () => {});
+    const reader = {
+      platform,
+      leaseId: 'lease-a',
+      instanceId: 'instance-a',
+      ownership: 'attached' as const,
+      readLogs: async () => '',
+      [Symbol.asyncDispose]: dispose,
+    };
+    const base = unusedHost();
+    const owner = createLimrunPlatformRuntimeOwner(
+      limrunOwnerOptions({
+        host: {
+          ...base,
+          outputs: {
+            readTail: async () => '',
+            openAppend: async () => ({
+              write: async () => {},
+              [Symbol.asyncDispose]: async () => {},
+            }),
+          },
+          clock: {
+            now: () => 100,
+            sleep: async () => await new Promise<void>((resolve) => setTimeout(resolve, 0)),
+          },
+        },
+        openCurrent: async () => reader,
+      }),
+    );
+    const binding = await owner.bind({
+      device: runtimeDevice,
+      intent: { kind: 'ordinary' },
+      scope,
+    });
+
+    await expect(binding.operations.appLogInspect?.()).resolves.toEqual({ backend });
+    await expect(binding.operations.appLogDoctor?.({})).resolves.toMatchObject({
+      backend,
+      checks: { limrunSessionAvailable: true },
+    });
+    const started = await binding.operations.appLogStart?.({
+      sessionId: 'session',
+      appBundleId: 'com.example.app',
+      outputPath: '/sessions/session/app.log',
+      fence: { token: 'fence', generation: 1 },
+    });
+    expect(started?.envelope.descriptor.body).toEqual({
+      transport: 'limrun-log-poller',
+      platform,
+      leaseId: 'lease-a',
+      instanceId: 'instance-a',
+      ownership: 'attached',
+      appBundleId: 'com.example.app',
+      outputPath: '/sessions/session/app.log',
+    });
+    await expect(started?.pendingHandle.transfer().finish()).resolves.toMatchObject({
+      status: 'completed',
+      result: { backend },
+    });
+  },
+);
+
+test('refuses to start Limrun app logs without an active instance', async () => {
+  const owner = createLimrunPlatformRuntimeOwner(limrunOwnerOptions());
+  const binding = await owner.bind({ device, intent: { kind: 'ordinary' }, scope });
+
+  await expect(binding.operations.appLogDoctor?.({})).resolves.toMatchObject({
+    checks: { limrunSessionAvailable: false },
+  });
+  await expect(
+    binding.operations.appLogStart?.({
+      sessionId: 'session',
+      appBundleId: 'com.example.app',
+      outputPath: '/sessions/session/app.log',
+      fence: { token: 'fence', generation: 1 },
+    }),
+  ).rejects.toMatchObject({
+    code: 'UNSUPPORTED_OPERATION',
+    message: 'Limrun app logs require an active instance',
+  });
 });

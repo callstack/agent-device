@@ -4,8 +4,7 @@ import { createInstanceClient as createAndroidInstanceClient } from '@limrun/api
 import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios-client';
 import { AsyncCleanupStack } from '@agent-device/contracts/async-lifecycle';
 import type { LimrunAppLogDescriptor } from './app-log-descriptor.ts';
-import type { LimrunAppLogReader } from './app-log-poller.ts';
-import type { LimrunAppLogReconnectOutcome } from './app-log-runtime.ts';
+import type { LimrunAppLogReader, LimrunAppLogReconnectOutcome } from './app-log-runtime.ts';
 import { requireLimrunOrgClient } from './client-options.ts';
 import { attachedLimrunInstanceId } from './device.ts';
 import type {
