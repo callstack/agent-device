@@ -67,7 +67,7 @@ test('refuses a stream that printed no sample, naming the toolchain gap', async 
   await expect(readAppleHingeAngle(IOS_TEST_SIMULATOR)).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
     details: expect.objectContaining({
-      reason: 'fold-hinge-angle-unavailable',
+      reason: 'fold-hinge-angle-no-sample',
       hint: expect.stringContaining('hinge-angle'),
     }),
   });

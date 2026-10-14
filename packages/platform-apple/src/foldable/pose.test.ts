@@ -383,13 +383,13 @@ test.each([
   },
 );
 
-test('reports a dispatched but unverifiable pose when the toolchain has no hinge-angle stream', async () => {
+test('reports a dispatched but unverifiable pose when the first hinge read returns no sample', async () => {
   mockInventory
     .mockResolvedValueOnce(duoInventory('outer'))
     .mockResolvedValueOnce(duoInventory('inner'));
   mockHinge.mockRejectedValue(
     new AppError('COMMAND_FAILED', 'CoreDevice reported no hinge angle sample', {
-      reason: 'fold-hinge-angle-unavailable',
+      reason: 'fold-hinge-angle-no-sample',
     }),
   );
 
@@ -418,12 +418,12 @@ test('keeps a mid-settle hinge read failure as the read failure, not a missing t
   mockInventory.mockResolvedValueOnce(duoInventory('inner'));
   mockHinge.mockResolvedValueOnce(100).mockRejectedValueOnce(
     new AppError('COMMAND_FAILED', 'CoreDevice reported no hinge angle sample', {
-      reason: 'fold-hinge-angle-unavailable',
+      reason: 'fold-hinge-angle-no-sample',
     }),
   );
 
   await expect(setAppleFoldPose(duo, { pose: 'half-open' })).rejects.toMatchObject({
-    details: expect.objectContaining({ reason: 'fold-hinge-angle-unavailable' }),
+    details: expect.objectContaining({ reason: 'fold-hinge-angle-no-sample' }),
   });
 });
 
@@ -435,7 +435,7 @@ test('omits the screen from the dispatched-unverified refusal when no panel is l
   mockInventory.mockResolvedValueOnce(duoInventory('outer')).mockResolvedValueOnce(noneLit);
   mockHinge.mockRejectedValue(
     new AppError('COMMAND_FAILED', 'CoreDevice reported no hinge angle sample', {
-      reason: 'fold-hinge-angle-unavailable',
+      reason: 'fold-hinge-angle-no-sample',
       stderr: "Unknown option '--device'",
     }),
   );
