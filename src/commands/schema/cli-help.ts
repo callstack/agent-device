@@ -146,7 +146,7 @@ Escalate:
   help scripting recording, save-script, batch, replay repair
   help gestures multi-touch gesture shapes/quirks
   help tv Android TV, tvOS, Vega VVD remote
-  help react-devtools RN perf/profiling, hooks, renders
+  help react-devtools RN performance profiling
   help react-native RN hazards, Metro/Re.Pack, routing
   help remote remote/cloud config, lease, tunnels
   help macos desktop, frontmost-app, menu bar
@@ -292,17 +292,17 @@ Focus and visual truth:
   },
   ...debuggingHelpTopics,
   'react-devtools': {
-    summary: 'React Native performance, profiling, and component internals',
+    summary: 'React Native performance profiling',
     body: `agent-device help react-devtools
 
-Use this for React Native render performance and internals that the accessibility tree cannot expose: slow renders, rerenders and their causes, components, props, state, hooks, and ownership.
+Use this for React Native performance profiling: slow renders, rerenders and their causes, and commits that drop frames.
 
-Render profiling (built in):
+Commands:
   agent-device react-devtools profile start
   agent-device react-devtools profile stop
   agent-device react-devtools profile stop --limit 10
   agent-device react-devtools profile status
-  Profiling attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes and no status, start, or wait --connected step. It is verified on Android emulators and iOS simulators; remote bridge sessions, which reach the dev server through the remote config's public Metro URL, are not verified yet.
+  Profiling attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes. It is verified on Android emulators and iOS simulators; remote bridge sessions, which reach the dev server through the remote config's public Metro URL, are not verified yet.
   Add --app <bundle-id> when several apps share the dev server, --metro-device <name> when one app runs on several devices connected to it, and --metro-port/--metro-host when the dev server is neither the session's nor localhost:8081.
 
 Profiling loop:
@@ -315,29 +315,8 @@ Findings:
   slow-render: the component's own render is expensive. memo-defeated: a memoized component often re-renders because props change identity. parent-cascade: the component often re-renders with unchanged props, state, and context when its owner renders. context-cascade: most of the component's renders come from context changes. effect-chain: the component triggers a follow-up commit right after rendering, likely state set in an effect. render-storm: one component commits many times per second. eager-mount: hundreds of instances mount in one commit. slow-commit: a commit of three frames or more that other findings leave mostly unexplained.
   Timings come from development builds and run slower than release builds; compare runs instead of reading absolute numbers.
 
-Component inspection (pinned agent-react-devtools):
-  agent-device react-devtools status
-  agent-device react-devtools start
-  agent-device react-devtools stop
-  agent-device react-devtools wait --connected
-  agent-device react-devtools wait --component <ComponentName>
-  agent-device react-devtools count
-  agent-device react-devtools get tree --depth 3
-  agent-device react-devtools find <ComponentName>
-  agent-device react-devtools find <ComponentName> --exact
-  agent-device react-devtools get component @c5
-  agent-device react-devtools errors
-
-Component inspection rules:
-  Run status first. Use start only if status reports the React DevTools helper is not running; start is not a connection check. Then run wait --connected before trusting any result: with 0 connected apps, count, errors, and get tree return empty results that look like a clean pass.
-  Start with get tree --depth 3 or find <name>; use find --exact when fuzzy results are noisy. @c refs reset after reload or remount; after a reload, wait --connected and inspect again.
-  React Native 0.87+ needs agent-react-devtools installed as a dev dependency of the app project, then a one-time npx agent-react-devtools init there and a rebundle, before wait --connected can succeed. The npm exec package this wrapper runs is temporary and does not install it into the app. Run npx agent-react-devtools uninit when the task is done unless the user wants to keep the setup.
-  For cross-platform validation with explicit device selectors, use separate sessions/devices and restart react-devtools between platforms.
-  Remote Android and iOS bridge runs work through agent-device react-devtools; the CLI keeps the needed local service tunnel alive until agent-device react-devtools stop or disconnect. Remote iOS apps attempt the legacy React DevTools websocket during JavaScript startup: if the app was already open before react-devtools start, run open <bundle-id> --platform ios --relaunch, then wait --connected.
-
 Rules:
-  Every React DevTools command is an agent-device subcommand: agent-device react-devtools ...
-  Do not write agent-devtools, agent-react-devtools, or bare react-devtools commands in final command plans. Every profiling and survey line must begin with agent-device react-devtools.
+  Every profiling command is an agent-device subcommand: agent-device react-devtools profile ...
   For network evidence, use agent-device network dump --include headers; headers is not a positional argument.
 
 Example:
@@ -354,7 +333,7 @@ Device busy and ownership:
   Inspect ownership without any daemon: agent-device device status (add --stale for proven-dead owners; settle and release those with agent-device device release --stale). devices marks rows that are claimed, so pick an unclaimed device instead of contending.
   A live foreign owner is released by closing its session from its own workspace or stopping its daemon: agent-device daemon stop --state-dir <owner state dir> (the error names the state dir). The device itself can settle a claim: when it rebooted after that claim was taken, its app, runner, and accessibility session were destroyed, so open reconciles the owner's resources, takes the claim, and reports the release in warnings. Never recover by hunting PIDs with ps/kill. boot/install/shutdown take the same claims as open and refuse foreign-claimed devices identically; they do not ask the device about its boot.
 
-Use snapshot, screenshot, logs, network, perf frames, and perf memory for device/app runtime evidence. Use react-devtools when component internals or React rendering behavior matters.`,
+Use snapshot, screenshot, logs, network, perf frames, and perf memory for device/app runtime evidence. Use react-devtools when React rendering performance matters.`,
   },
   cdp: {
     summary: 'React Native CDP targets, JS heap snapshots, and leak triage',
@@ -406,7 +385,7 @@ Output contract:
   Until cdp has a compact leak report command, synthesize one from memory usage diff, snapshot diff, leak-triplet, and retainers. Report heap deltas, top retained classes/shapes, leak-triplet rows that stayed high after cleanup, and the shortest useful retaining paths. Do not paste raw heap snapshots or large allocation profiles into the response; use exported artifacts only when the user asks for raw data.
 
 Target caveats:
-  React Native/Hermes implements a subset of browser CDP. If a command reports an unsupported method, keep the target selected and switch to heap usage samples plus heap snapshots. Prefer react-devtools for component tree/render causes; prefer perf memory sample or perf memory snapshot for native/process memory.`,
+  React Native/Hermes implements a subset of browser CDP. If a command reports an unsupported method, keep the target selected and switch to heap usage samples plus heap snapshots. Prefer react-devtools profile for render causes; prefer perf memory sample or perf memory snapshot for native/process memory.`,
   },
   'react-native': {
     summary: 'React Native app automation hazards and routing',
@@ -420,7 +399,7 @@ Choose the next help topic:
   Routine QA/dogfood/manual-test flow (open, snapshot -i, press/fill --settle, verify, close): help manual-qa; it has the concrete command shapes, so you should not need generic navigation help for a normal pass.
   Deep exploration of navigation/selector/ref edge cases, or a serial-command question manual-qa does not answer: help workflow (full reference, larger read).
   Logs, network, diagnostics, traces, permission dialogs, or runtime failures: help debugging.
-  Component tree, props/state/hooks, slow renders, rerenders, or render causes: help react-devtools.
+  Slow renders, rerenders, render causes, or dropped frames in React: help react-devtools.
   JS heap growth, heap snapshots, allocation hotspots, or retained-object leaks: help cdp.
   Remote/cloud config, leases, and local service tunnels: help remote.
 
@@ -451,10 +430,9 @@ Overlays and busy RN UIs:
     agent-device snapshot -i
     agent-device press 'id="submit-order"'
   Do not use a plain snapshot after dismiss-overlay when the next step needs current refs; use snapshot -i.
-  When overlay evidence and React diagnostics are required before continuing, keep the sequence explicit:
+  When overlay evidence is required before continuing, keep the sequence explicit:
     agent-device snapshot -i
     agent-device screenshot --overlay-refs
-    agent-device react-devtools errors
     agent-device react-native dismiss-overlay
     agent-device snapshot -i
     agent-device press 'id="submit-order"'
@@ -465,10 +443,10 @@ Overlays and busy RN UIs:
     agent-device snapshot -i
   Android runtime permission dialogs and native alerts are handled by alert wait/accept/dismiss. If alert reports no alert, treat the visible surface as app-owned UI and use snapshot -i plus press by label/ref.
 
-React DevTools routing:
-  Keep the agent-device react-devtools prefix on every React DevTools command.
-  Use help react-devtools for render profiles, slow renders, rerenders, component trees, props/state/hooks, and remote bridge rules.
-  If React DevTools cannot connect, report status and continue with logs, network, perf frames, perf memory, screenshot, and trace evidence instead of blocking the whole flow.
+Performance profiling routing:
+  Keep the agent-device react-devtools prefix on every profiling command.
+  Use help react-devtools for render profiles, slow renders, rerenders, and their causes.
+  If profiling cannot attach, report the error and continue with logs, network, perf frames, perf memory, screenshot, and trace evidence instead of blocking the whole flow.
 
 CDP memory routing:
   Keep the agent-device cdp prefix on every CDP command.
@@ -481,8 +459,7 @@ Slow-flow investigation:
     agent-device open "Agent Device Tester" --platform android
     agent-device snapshot -i
   If the task says to open the app, include the open command even when it also describes the current screen.
-  Use help react-devtools for the narrow React profile window. profile start and profile stop need no react-devtools status or wait --connected step.
-  Component inspection (get tree, find, get component) needs react-devtools status, then wait --connected. Do not substitute react-devtools start for status; start launches the helper, while status reports connection state.
+  Use help react-devtools for the narrow React profile window: react-devtools profile start right before the interaction and react-devtools profile stop after it.
   Use help debugging for logs clear --restart, logs mark, network dump --include headers, perf frames, perf memory, native profiles, traces, and runtime failure evidence.
   For 15-20s async work, use wait with the exact expected text or selector instead of repeated snapshots.
   Report React render offenders separately from network/backend waits and device frame/CPU/memory findings.`,
@@ -685,7 +662,7 @@ Rules:
   connect without --session always creates a fresh remote session and prints that session in its next-step commands. Concurrent callers must pass the returned --session on every command; the ambient active connection is only a single-workflow convenience.
   To replace an existing connection, pass its returned session explicitly with --session <name> --force. --force without --session creates another fresh session and does not release or overwrite an unrelated active connection.
   Prefer short-lived AWS role credentials in CI. Generated connection profiles store app/device selectors and ARNs, not Limrun API keys or instance tokens, BrowserStack or TestMu AI access keys, or AWS credentials.
-  Limrun Android supports direct ADB port reverse for local Metro. Limrun iOS requires a public Metro/React DevTools URL because it cannot reach local host ports directly.
+  Limrun Android supports direct ADB port reverse for local Metro. Limrun iOS requires a public Metro URL because it cannot reach local host ports directly.
   After closing a device cloud session, run agent-device artifacts --json to retrieve provider video/log/dashboard URLs when the provider has made them available.
   connect proxy stores the connection profile and client identity. Proxy device leases are acquired on open and expire after five minutes without commands; when a lease expires or is released, the daemon ends the session opened under it and frees its device; devices may inspect proxy inventory without allocating.
   Multiple agents can share one proxy when each uses connect proxy, open, commands, close, and disconnect.
@@ -693,14 +670,13 @@ Rules:
   A busy direct-proxy device error means another agent owns the device until it closes or its inactivity lease expires.
   Keep the proxy token secret. Anyone with the token can control the proxied daemon.
   A daemon with AGENT_DEVICE_HTTP_AUTH_HOOK configured treats HTTP requests as remote: host-path install sources are rejected, uploaded artifacts remain supported, and Maestro runScript HTTP helpers allow only public network destinations. No-hook local HTTP and socket flows retain their local behavior.
-  A daemon started with AGENT_DEVICE_DAEMON_POLICY=<policy.json> enforces that policy for every request, including batch steps and replay actions: it can limit which devices are visible and bindable, allow or deny commands (react-devtools and Maestro flows reach the daemon as the runtime command), and deny device-shutdown. A denial is UNAUTHORIZED with details.reason DAEMON_POLICY_DENIED; do not retry it. Use an allowed command or device, or ask the daemon operator to change the policy; a denied capability such as device-shutdown has no allowed alternative.
+  A daemon started with AGENT_DEVICE_DAEMON_POLICY=<policy.json> enforces that policy for every request, including batch steps and replay actions: it can limit which devices are visible and bindable, allow or deny commands (Maestro flows reach the daemon as the runtime command), and deny device-shutdown. A denial is UNAUTHORIZED with details.reason DAEMON_POLICY_DENIED; do not retry it. Use an allowed command or device, or ask the daemon operator to change the policy; a denied capability such as device-shutdown has no allowed alternative.
   If local/proxy iOS reports that the runner is already owned by another agent-device daemon after lease admission, retry after the owning session closes or after lease expiry. If the conflict repeats, clean stale daemon state on the machine with simulator access.
   Do not use --config as a remote profile flag. --config loads CLI defaults; --remote-config selects remote daemon/profile settings.
   For self-contained scripts, pass the same --remote-config to every operational command, including disconnect; a preceding connect is optional but not required.
   For remote artifact installs, use install-from-source <url> or install-from-source --github-actions-artifact org/repo:artifact; do not download CI artifacts locally first.
   After connect, let the active remote connection supply runtime hints.
   For connected phone/tablet setup and iOS signing prerequisites, read agent-device help physical-device.
-  For remote Android and iOS bridge React DevTools, run agent-device react-devtools normally. The CLI opens the needed local service tunnel for the DevTools daemon and keeps it alive until agent-device react-devtools stop or disconnect.
   Use --debug when remote connection or transport errors need diagnostic ids and remote log hints.`,
   },
   macos: {

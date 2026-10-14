@@ -1,7 +1,6 @@
 import crypto from 'node:crypto';
 import type { MetroBridgeScope } from '@agent-device/contracts/remote';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { stopReactDevtoolsCompanion } from '../../client/client-react-devtools-companion.ts';
 import { stopMetroTunnel } from '../../metro/metro.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 // Provenance-preserving file-only read (no ambient env defaults merged in) —
@@ -561,22 +560,6 @@ export async function stopMetroCleanup(
   if (!cleanup) return;
   try {
     await stopMetroTunnel(cleanup);
-  } catch {
-    // Connection lifecycle cleanup must stay best-effort.
-  }
-}
-
-export async function stopReactDevtoolsCleanup(options: {
-  stateDir: string;
-  state: Pick<RemoteConnectionState, 'remoteConfigPath' | 'session'>;
-}): Promise<void> {
-  try {
-    await stopReactDevtoolsCompanion({
-      projectRoot: process.cwd(),
-      stateDir: options.stateDir,
-      profileKey: options.state.remoteConfigPath,
-      consumerKey: options.state.session,
-    });
   } catch {
     // Connection lifecycle cleanup must stay best-effort.
   }
