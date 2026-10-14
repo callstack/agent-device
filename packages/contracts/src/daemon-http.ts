@@ -42,6 +42,11 @@ export function normalizeTenantId(raw: string | undefined): string | undefined {
   return value;
 }
 
+/** Whether `sessionName` lies beneath the `<tenant>:` prefix tenant isolation names sessions with. */
+export function isTenantOwnedSessionName(tenant: string, sessionName: string): boolean {
+  return sessionName.startsWith(`${tenant}:`);
+}
+
 export function buildDaemonHttpTenantHeaders(tenantId: string | undefined): Record<string, string> {
   const normalizedTenantId = tenantId?.trim();
   if (!normalizedTenantId) return {};

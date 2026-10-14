@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { AppError, normalizeError } from '@agent-device/kernel/errors';
+import { buildDaemonHttpAuthHeaders } from '@agent-device/contracts/daemon-http';
 import type { DaemonRequest } from '../core/daemon-request.ts';
 import { trackUploadedArtifact } from '../resources/artifact-tracking.ts';
 import {
@@ -134,7 +135,7 @@ async function handleUploadPreflight(
     const preflight = readUploadPreflightBody(body);
     const upload = beginResumableUpload({
       baseUrl: resolveHttpRequestBaseUrl(req),
-      tokenHeaders: buildUploadTicketAuthHeaders(token),
+      tokenHeaders: buildDaemonHttpAuthHeaders(token),
       ...preflight,
       tenantId: auth.tenantId,
     });
@@ -286,13 +287,6 @@ function readRequiredArtifactType(record: Record<string, unknown>): 'file' | 'ap
   const value = readRequiredText(record, 'artifactType');
   if (value === 'file' || value === 'app-bundle') return value;
   throw new AppError('INVALID_ARGS', 'artifactType must be "file" or "app-bundle"');
-}
-
-function buildUploadTicketAuthHeaders(token: string): Record<string, string> {
-  return {
-    authorization: `Bearer ${token}`,
-    'x-agent-device-token': token,
-  };
 }
 
 function resolveHttpRequestBaseUrl(req: http.IncomingMessage): string {

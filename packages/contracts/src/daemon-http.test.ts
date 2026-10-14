@@ -11,6 +11,7 @@ import {
   buildRemoteTempArtifactPath,
   DAEMON_RPC_PROTOCOL_VERSION,
   isRemoteTempArtifactPath,
+  isTenantOwnedSessionName,
   normalizeTenantId,
 } from './daemon-http.ts';
 
@@ -115,4 +116,11 @@ test('a temp path of another prefix, a directory, or an escape is not a remote t
     isRemoteTempArtifactPath('/Users/me/agent-device-screenshot-1-a.png', 'screenshot', '.png'),
     false,
   );
+});
+
+test('isTenantOwnedSessionName accepts only names beneath the tenant prefix', () => {
+  assert.equal(isTenantOwnedSessionName('alice', 'alice:default'), true);
+  assert.equal(isTenantOwnedSessionName('alice', 'alice'), false);
+  assert.equal(isTenantOwnedSessionName('alice', 'alice-2:default'), false);
+  assert.equal(isTenantOwnedSessionName('alice', 'bob:alice:default'), false);
 });
