@@ -137,8 +137,7 @@ test('an allocation naming an issued lease id gets exactly that lease or LEASE_I
 
   assert.notEqual(first.leaseId, second.leaseId);
   assert.throws(
-    () =>
-      registry.allocateLease({ ...owner, leaseId: first.leaseId, deviceKey: second.deviceKey }),
+    () => registry.allocateLease({ ...owner, leaseId: first.leaseId, deviceKey: second.deviceKey }),
     isLeaseIdInUse,
   );
 });
