@@ -36,13 +36,11 @@ export const SNAPSHOT_PRODUCER_ADAPTER_ROOTS: readonly string[] = [
 
 /**
  * iOS presentation. The engine owns projection, geometry, scope, depth, actionability narrowing
- * and semantic compaction; the acquisition module owns the producer capability table that decides
- * them. Reading either one from the assembly or from a producer adapter is how the deleted
- * backend-name policy grows back.
+ * and semantic compaction. Producer adapters can acquire shared raw-node facts but cannot present
+ * them; the assembly cannot read either presentation or producer acquisition policy.
  */
 const IOS_PRESENTATION_TARGETS: readonly string[] = [
   'packages/capture-kit/src/ios-snapshot-engine/',
-  'packages/capture-kit/src/ios-snapshot-acquisition.ts',
 ];
 
 /**
@@ -84,8 +82,9 @@ function missingOwnerViolations(sources: ReadonlyMap<string, string>): LayeringV
 function importViolations(edges: readonly ResolvedImportEdge[]): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
   for (const edge of edges) {
-    if (!isIosPresentationTarget(edge.target)) continue;
-    if (SNAPSHOT_ASSEMBLY_FILES.includes(edge.file)) {
+    const presentation = isIosPresentationTarget(edge.target);
+    const acquisition = edge.target === 'packages/capture-kit/src/ios-snapshot-acquisition.ts';
+    if (SNAPSHOT_ASSEMBLY_FILES.includes(edge.file) && (presentation || acquisition)) {
       violations.push({
         rule: SNAPSHOT_ASSEMBLY_PRESENTATION_RULE,
         file: edge.file,
@@ -94,7 +93,7 @@ function importViolations(edges: readonly ResolvedImportEdge[]): LayeringViolati
       });
       continue;
     }
-    if (isProducerAdapter(edge.file)) {
+    if (isProducerAdapter(edge.file) && presentation) {
       violations.push({
         rule: SNAPSHOT_ASSEMBLY_PRESENTATION_RULE,
         file: edge.file,

@@ -148,3 +148,13 @@ test('R74 fails closed when the assembly moves out from under it', () => {
     [...SNAPSHOT_ASSEMBLY_FILES],
   );
 });
+
+test('R74 accepts producer imports of raw iOS node acquisition facts', () => {
+  const result = violations(
+    appended(
+      producerAdapter,
+      `\nimport { interpretIosNode } from '@agent-device/capture-kit/ios-snapshot-acquisition';\nvoid interpretIosNode;\n`,
+    ),
+  );
+  assert.deepEqual(result, []);
+});
