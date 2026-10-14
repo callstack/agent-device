@@ -56,7 +56,8 @@ function planStable(run, tag) {
   if (!run.onMain) throw new Error(`${tag} is not on main.`);
   if (run.ciConclusion !== 'success') {
     throw new Error(
-      `CI on ${run.sha} is ${run.ciConclusion}. Once it passes, run Release on ${tag} to publish it.`,
+      `CI on ${run.sha} is ${run.ciConclusion}. Re-running Release does not re-run CI: once CI ` +
+        `passes on that commit, or ${tag} moves to a commit whose CI passed, run Release on ${tag}.`,
     );
   }
   const previousTag = previousReleaseTag([...run.tags.keys()], version) ?? '';
