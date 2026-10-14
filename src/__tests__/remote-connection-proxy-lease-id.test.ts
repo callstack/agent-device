@@ -22,18 +22,24 @@ import { readRemoteConnectionState } from '../remote/remote-connection-state.ts'
 
 const DAEMON_LEASE_ID = 'abc123abc123abc1';
 
+const LEASED_DEVICE = {
+  android: { backend: 'android-instance', deviceKey: 'android:mobile:emulator-5554' },
+  ios: { backend: 'ios-instance', deviceKey: 'ios:mobile:SIM-1' },
+} as const;
+
 function recordingAllocate(requests: LeaseAllocateRequest[]) {
   return async (request: LeaseAllocateRequest) => {
     requests.push(request);
+    const leased = LEASED_DEVICE[request.platform === 'ios' ? 'ios' : 'android'];
     // The daemon's own id, as an older daemon that ignores the requested one answers.
     return {
       leaseId: DAEMON_LEASE_ID,
       tenantId: request.tenant,
       runId: request.runId,
-      backend: request.leaseBackend ?? 'android-instance',
+      backend: request.leaseBackend ?? leased.backend,
       leaseProvider: request.leaseProvider,
       clientId: request.clientId,
-      deviceKey: request.deviceKey ?? 'android:mobile:emulator-5554',
+      deviceKey: request.deviceKey ?? leased.deviceKey,
     };
   };
 }

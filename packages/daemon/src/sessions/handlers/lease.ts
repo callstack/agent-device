@@ -21,6 +21,7 @@ import {
   resolveLeaseScope,
   resolveRequestOrSessionLeaseScope,
 } from '../../core/lease-context.ts';
+import { hasDeviceSelectionInput } from '../../core/device/device-selector-intent.ts';
 import {
   leaseDeviceKey,
   leaseScopeToAllocateRequest,
@@ -196,9 +197,7 @@ async function pickProxyLeaseDeviceKey(
 ): Promise<string | undefined> {
   if (!isProxyLeaseScope(scope) || scope.deviceKey) return undefined;
   const flags = req.flags ?? {};
-  if (![flags.platform, flags.target, flags.device, flags.udid, flags.serial].some(Boolean)) {
-    return undefined;
-  }
+  if (!hasDeviceSelectionInput(flags)) return undefined;
   const { resolveTargetDevice } = await import('@agent-device/device-selection/dispatch-resolve');
   const device = await resolveTargetDevice({
     platform:
