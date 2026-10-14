@@ -112,6 +112,34 @@ test('lease_release still releases a retainOnClose lease through the provider', 
   assert.equal(registry.listActiveLeases().length, 0);
 });
 
+test('lease_release ends the sessions opened under the released lease', async () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  const ended: string[] = [];
+  const release = (leaseId: string) =>
+    handleLeaseCommands({
+      req: {
+        token: 'test-token',
+        session: 'default',
+        command: 'lease_release',
+        positionals: [],
+        meta: { tenantId: 'tenant-a', runId: 'run-1', leaseId },
+      },
+      sessionName: 'default',
+      sessionStore: makeSessionStore('agent-device-release-ends-session-'),
+      leaseRegistry: registry,
+      endSessionsForLease: async (id) => {
+        ended.push(id);
+      },
+    });
+
+  assert.equal((await release(lease.leaseId))?.ok, true);
+  assert.deepEqual(ended, [lease.leaseId]);
+  // A release that releases nothing has no session to end.
+  assert.equal((await release(lease.leaseId))?.ok, true);
+  assert.deepEqual(ended, [lease.leaseId]);
+});
+
 test('lease_release refuses a host-allocated macos-app lease and keeps it', async () => {
   const registry = new LeaseRegistry();
   const lease = registry.putHostLease('a1b2c3d4e5f60718293a4b5c6d7e8f90', {

@@ -19,7 +19,11 @@ import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts';
 import { createRequestHandler } from '../request-router.ts';
 import type { RequestRouterDeps } from '../request-router.ts';
-import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
+import {
+  createLeaseSessionEnd,
+  getLeaseRegistryExecutionLocks,
+} from '../request-execution-scope.ts';
+import type { LeaseEndReason } from '../../sessions/lease-lifecycle.ts';
 import { stopSessionAppLog, teardownSessionResources } from '../../sessions/session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-teardown-budget.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
@@ -88,6 +92,7 @@ import type {
 import type { HostDiagnostics } from '@agent-device/contracts/host-diagnostics';
 
 const DAEMON_LEASE_RELEASE_TIMEOUT_MS = 1_000;
+const LEASE_EXPIRY_SWEEP_INTERVAL_MS = 1_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
 const DAEMON_PROVIDER_RELEASE_DRAIN_TIMEOUT_MS = 2_000;
 // An orphaned `simctl recordVideo` releases the host-wide recording lock only after it finishes
@@ -454,13 +459,22 @@ export async function startDaemonRuntime(
     maxLeaseTtlMs: parseIntegerEnv(env.AGENT_DEVICE_LEASE_MAX_TTL_MS),
     onLeaseExpired: (lease) => {
       void expiredProviderLeaseReleaser.release(lease);
+      void endSessionsForLease(lease.leaseId, 'LEASE_EXPIRED');
     },
   });
+  // The registry only notices an expired lease when something calls it; this sweep ends an
+  // abandoned lease (and, through `onLeaseExpired`, its session and claim) without a later request.
+  const leaseExpirySweep = setInterval(
+    () => leaseRegistry.consumeExpiredLeases(),
+    LEASE_EXPIRY_SWEEP_INTERVAL_MS,
+  );
+  leaseExpirySweep.unref();
   const dispatchRequest = createRequestHandler({
     logPath,
     token,
     sessionStore,
     leaseRegistry,
+    endSessionsForLease: async (leaseId) => await endSessionsForLease(leaseId, 'LEASE_RELEASED'),
     appLogAdmissionLedger,
     audioProbeAdmissionLedger,
     perfCaptureAdmissionLedger,
@@ -558,6 +572,18 @@ export async function startDaemonRuntime(
     // holds the session back to retry. The reaper runs it once the expiry is committed to.
   };
 
+  const leaseSessionEnd = createLeaseSessionEnd({
+    sessionStore,
+    executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
+    teardownSession: settleIdleExpiredSession,
+    withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
+  });
+
+  const endSessionsForLease = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
+    await leaseSessionEnd.end(leaseId, reason);
+    idleReap.noteActivity();
+  };
+
   const sessionIdleExpiry = createSessionIdleExpiry({
     sessionStore,
     idleExpiryMs: resolveSessionIdleExpiryMs(env),
@@ -637,6 +663,8 @@ export async function startDaemonRuntime(
       const httpServer = await createDaemonHttpServer({
         handleRequest,
         leaseRegistry,
+        endSessionsForLease: async (leaseId) =>
+          await endSessionsForLease(leaseId, 'LEASE_RELEASED'),
         token,
         retainArtifacts,
         env,
@@ -810,6 +838,8 @@ export async function startDaemonRuntime(
   const shutdown = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) => {
     idleReap.cancel();
     sessionIdleExpiry.cancel();
+    leaseSessionEnd.cancel();
+    clearInterval(leaseExpirySweep);
     if (shuttingDown) return;
     shuttingDown = true;
     stopMetadataLossWatch();
@@ -818,6 +848,7 @@ export async function startDaemonRuntime(
     }
     await closeDaemonServers(servers);
     await Promise.allSettled(inFlightRequests);
+    await leaseSessionEnd.drain();
     // Hand healthy runners off before durable session teardown. The lifecycle gateway later
     // terminates only still-owned generations once all resources have finalized.
     //
