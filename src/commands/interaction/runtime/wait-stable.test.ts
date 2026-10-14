@@ -334,6 +334,38 @@ test('runtime wait stable times out with capture stats when never settling', asy
   assert.ok(captures > 1);
 });
 
+test('runtime wait stable surfaces a capture failure instead of reporting a timeout', async () => {
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async () => {
+        throw new Error('AX bridge crashed');
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default' }]),
+    policy: localCommandPolicy(),
+    clock: createFakeClock(),
+  });
+
+  await assert.rejects(
+    () =>
+      device.selectors.wait({
+        session: 'default',
+        target: { kind: 'stable', quietMs: 500, timeoutMs: 1_000 },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.notEqual(
+        (error as { details?: { reason?: string } }).details?.reason,
+        'wait_stable_timeout',
+      );
+      assert.match(error.message, /AX bridge crashed/);
+      return true;
+    },
+  );
+});
+
 test('runtime wait stable times out when a backend capture stalls past the wait budget', async () => {
   const clock = createFakeClock();
   let captureAborted = false;
