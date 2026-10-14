@@ -1,19 +1,8 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { withStreamTty } from '../../../__tests__/test-utils/stream-capture.ts';
 import { createReplayTestProgressRenderer } from '../progress.ts';
 import type { ReplayTestResult } from '../reporters/types.ts';
-
-function withStreamTty<T>(stream: NodeJS.WriteStream, isTTY: boolean, run: () => T): T {
-  const descriptor = Object.getOwnPropertyDescriptor(stream, 'isTTY');
-  const mutableStream = stream as unknown as Record<string, unknown>;
-  try {
-    Object.defineProperty(stream, 'isTTY', { configurable: true, value: isTTY });
-    return run();
-  } finally {
-    if (descriptor) Object.defineProperty(stream, 'isTTY', descriptor);
-    else delete mutableStream.isTTY;
-  }
-}
 
 function renderTestResult(
   event: ReplayTestResult,

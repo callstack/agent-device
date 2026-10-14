@@ -197,7 +197,7 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /never a placeholder \(@ref, @eN, @Label_Name\)/);
   assert.match(
     help,
-    /iOS rejects a stale pinned ref -- refresh with snapshot -i or use a selector/,
+    /every platform rejects a stale pinned ref -- refresh with snapshot -i or use a selector/,
   );
   assert.match(help, /Known flow: batch --steps-file \.\/steps\.json \(help batch\)/);
   assert.match(help, /Shapes and platform quirks: help gestures/);

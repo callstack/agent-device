@@ -5,7 +5,7 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   spawnRegisteredDaemonFixture,
   finishRegisteredDaemonFixture,
@@ -29,13 +29,13 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   supportsLoopbackBind,
-} from '../../__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 import {
-  captureStderr,
   startHttpDaemonFixture,
   type HttpDaemonFixture,
   currentDaemonCodeSignature,
 } from '../../__tests__/test-utils/daemon-http-fixture.ts';
+import { beginStderrCapture } from '../../__tests__/test-utils/stream-capture.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { tryAcquireProcessLock, inspectProcessLock } from '@agent-device/host-kit/file';
 import { runCmdDetachedMonitored, runCmdSync } from '@agent-device/host-kit/command';
@@ -445,7 +445,7 @@ test('sendToDaemon does not reuse reachable daemon metadata with mismatched vers
       ...(fixture.version ? { version: fixture.version } : {}),
       ...(fixture.codeSignature ? { codeSignature: fixture.codeSignature } : {}),
     });
-    const stderrCapture = captureStderr();
+    const stderrCapture = beginStderrCapture();
 
     try {
       const response = await sendToDaemon({
@@ -494,7 +494,7 @@ test('sendToDaemon prints a takeover notice before replacing an unreachable daem
     transport: 'http',
     pid: 999_999,
   });
-  const stderrCapture = captureStderr();
+  const stderrCapture = beginStderrCapture();
 
   try {
     const response = await sendToDaemon({
@@ -533,7 +533,7 @@ test('sendToDaemon replaces socket-only daemon metadata when HTTP transport is r
     transport: 'socket',
     pid: 999_999,
   });
-  const stderrCapture = captureStderr();
+  const stderrCapture = beginStderrCapture();
 
   try {
     const response = await sendToDaemon({

@@ -6,7 +6,7 @@ import {
   type AndroidAdbExecutorResult,
   type AndroidAdbProvider,
 } from '@agent-device/platform-android/mechanics';
-import { ANDROID_EMULATOR } from './device-fixtures.ts';
+import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import '../../platform-runtime-android-adb-host.ts';
 
 /**

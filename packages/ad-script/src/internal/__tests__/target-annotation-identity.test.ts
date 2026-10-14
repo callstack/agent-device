@@ -6,6 +6,7 @@ import {
   idMatchCountInTree,
   matchesAncestryPrefix,
   matchesLocalIdentity,
+  nodeRectByIdentity,
   readNodeLocalIdentity,
 } from '../target-annotation-identity.ts';
 
@@ -123,4 +124,49 @@ test('demoteNonUniqueLocalIdentity passes through identities without an id', () 
   const identity = readNodeLocalIdentity(nodes[0]!);
   assert.equal(identity.id, undefined);
   assert.deepEqual(demoteNonUniqueLocalIdentity(identity, nodes), identity);
+});
+
+// ---------------------------------------------------------------------------
+// nodeRectByIdentity: the fail-closed same-node lookup #3471's gate screens with
+// ---------------------------------------------------------------------------
+
+const RECT = { x: 10, y: 240, width: 120, height: 50 };
+
+test('nodeRectByIdentity reports the position a list names once', () => {
+  const nodes: RawSnapshotNode[] = [{ index: 0, type: 'Button', label: 'Continue', rect: RECT }];
+
+  assert.deepEqual(nodeRectByIdentity(nodes, nodes[0]!), RECT);
+});
+
+test('nodeRectByIdentity answers nothing for an absent or unmeasurable node', () => {
+  const target: RawSnapshotNode = { index: 0, type: 'Button', label: 'Continue', rect: RECT };
+  const frameless: RawSnapshotNode = { index: 0, type: 'Button', label: 'Continue' };
+
+  assert.equal(nodeRectByIdentity([], target), undefined);
+  assert.equal(nodeRectByIdentity([frameless], target), undefined);
+});
+
+test('nodeRectByIdentity answers nothing when an identity names several nodes', () => {
+  // Local identity is role/id/label, so two sibling rows both reading `label="Item"` are ONE
+  // identity. Guessing between them is positional coincidence — the same fail-closed direction
+  // `demoteNonUniqueLocalIdentity` takes for a non-unique id.
+  const rows: RawSnapshotNode[] = [
+    { index: 0, type: 'Cell', label: 'Item', rect: { x: 0, y: 100, width: 400, height: 60 } },
+    { index: 1, type: 'Cell', label: 'Item', rect: { x: 0, y: 160, width: 400, height: 60 } },
+  ];
+
+  assert.equal(nodeRectByIdentity(rows, rows[0]!), undefined);
+});
+
+test('nodeRectByIdentity keys on the exact identity triple, so a relabel is a different node', () => {
+  const before: RawSnapshotNode = {
+    index: 0,
+    type: 'Button',
+    identifier: 'save-action',
+    label: 'Save',
+    rect: RECT,
+  };
+  const after: RawSnapshotNode = { ...before, label: 'Saved' };
+
+  assert.equal(nodeRectByIdentity([before], after), undefined);
 });

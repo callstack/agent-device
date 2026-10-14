@@ -1,4 +1,5 @@
 import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/contracts/backend';
+import { annotateCoveredSnapshotNodes } from '@agent-device/capture-kit/snapshot-occlusion';
 import { createLocalArtifactAdapter } from '../../../../../io.ts';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { createAgentDevice } from '../../../../../runtime.ts';
@@ -181,6 +182,42 @@ export function coveredByTabBarSnapshot(): SnapshotState {
       hittable: true,
     },
   ]);
+}
+
+/**
+ * The same tab-bar-over-button shape run through the real annotation pass, so the covered node
+ * carries the scan's `coveredBy` description exactly as a capture publishes it.
+ */
+export function coveredByScanSnapshot(): SnapshotState {
+  return makeSnapshotState(
+    annotateCoveredSnapshotNodes([
+      {
+        index: 0,
+        depth: 0,
+        type: 'Application',
+        label: 'Example',
+        rect: { x: 0, y: 0, width: 390, height: 844 },
+      },
+      {
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'Button',
+        label: 'Save draft',
+        rect: { x: 16, y: 790, width: 140, height: 44 },
+        hittable: true,
+      },
+      {
+        index: 2,
+        depth: 1,
+        parentIndex: 0,
+        type: 'TabBar',
+        label: 'Media',
+        rect: { x: 0, y: 760, width: 390, height: 84 },
+        hittable: true,
+      },
+    ]),
+  );
 }
 
 export function duplicateCoveredLabelSnapshot(): SnapshotState {

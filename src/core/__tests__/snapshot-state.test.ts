@@ -674,3 +674,69 @@ test('buildSnapshotState leaves an unmeasured viewport absent (#3182)', () => {
 
   expect('viewport' in state).toBe(false);
 });
+
+// The ref-minting mode reaches the stored tree through ONE argument here, and the whole web
+// ref-collision fix (#2283) rests on it: an agent-browser tree that got dense numbering publishes
+// refs its own backend cannot resolve. These two cases are that argument's only end-to-end pin —
+// delete the `snapshotRefMinting(data)` argument and the first one goes red.
+test('buildSnapshotState publishes only the refs an agent-browser capture issued (#2283)', () => {
+  const state = buildSnapshotState(
+    {
+      nodes: [
+        {
+          index: 0,
+          depth: 0,
+          type: 'document',
+          label: 'Checkout',
+          ref: 'e1',
+          rect: { x: 0, y: 0, width: 390, height: 720 },
+          hittable: true,
+        },
+        // On-screen text the backend reports without a ref: it cannot be addressed, so nothing
+        // here may hand it a positional one that collides with a real control.
+        { index: 1, depth: 1, parentIndex: 0, type: 'static text', value: 'Order summary' },
+        {
+          index: 2,
+          depth: 1,
+          parentIndex: 0,
+          type: 'button',
+          label: 'Submit order',
+          ref: 'e3',
+          rect: { x: 24, y: 120, width: 160, height: 44 },
+          hittable: true,
+        },
+      ],
+      backend: 'web',
+      producer: 'agent-browser',
+    },
+    undefined,
+  );
+
+  expect('ref' in state.nodes[1]!).toBe(false);
+  // The producer's own numbering is non-dense (tree order, gaps where it minted nothing) and stays
+  // byte-identical: a renumbered tree would read as a working capture acting on another element.
+  expect(state.nodes.map((node) => node.ref)).toEqual(['e1', undefined, 'e3']);
+});
+
+test('buildSnapshotState numbers an Android capture densely so every node is addressable', () => {
+  const state = buildSnapshotState(
+    {
+      nodes: [
+        { index: 0, depth: 0, type: 'android.widget.FrameLayout', label: 'Checkout' },
+        { index: 1, depth: 1, parentIndex: 0, type: 'android.widget.TextView', label: 'Total' },
+        {
+          index: 2,
+          depth: 1,
+          parentIndex: 0,
+          type: 'android.widget.Button',
+          label: 'Submit order',
+        },
+      ],
+      backend: 'android',
+      producer: 'android-uiautomator',
+    },
+    undefined,
+  );
+
+  expect(state.nodes.map((node) => node.ref)).toEqual(['e1', 'e2', 'e3']);
+});

@@ -114,10 +114,7 @@ test('factory uses the injected Android and host adapters as its construction se
       name: 'metro',
     });
 
-    assert.deepEqual(state.constructorOptions[0]?.defaultHeaders, {
-      'x-agent-device-client': 'agent-device-cli',
-      'x-agent-device-version': 'test-version',
-    });
+    assert.equal(state.constructorOptions[0]?.defaultHeaders, undefined);
     assert.equal(fixture.createInteractor.mock.calls[0]?.[0], device);
     assert.equal(fixture.listApps.mock.calls[0]?.[1], 'all');
     assert.equal(fixture.getKeyboardState.mock.calls.length, 1);

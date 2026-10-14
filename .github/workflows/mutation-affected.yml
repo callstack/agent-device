@@ -1,4 +1,4 @@
-name: Mutation Affected
+name: Mutation Harness Canary
 
 # PR-side half of the decision-kernel mutation lane (issue #1415).
 #
@@ -9,7 +9,7 @@ name: Mutation Affected
 # spends mutants on one thing only — proving the harness still runs end to end
 # when the harness itself changes. `select` therefore returns an empty matrix
 # unless the diff touches the lane's own sources. Selecting on derived kernel
-# ownership instead would run the full ten-shard sweep on 24 of the last 40
+# ownership instead would run the full sweep on 24 of the last 40
 # merged PRs.
 #
 # On a harness diff the matrix is the canary (`LANE_CANARY`, selected by
@@ -22,14 +22,20 @@ name: Mutation Affected
 on:
   pull_request:
     paths:
-      # Exactly `LANE_TOOLING` in scripts/mutation/run.ts plus this file — the
+      # Exactly `LANE_TOOLING` in scripts/mutation/run.ts — the
       # only diffs that can produce a non-empty matrix, asserted both ways by
       # scripts/mutation/workflow.test.ts. A kernel or test path here would only
       # start a job that selects nothing.
       - 'scripts/mutation/**'
       - 'scripts/lib/**'
       - 'stryker.config.json'
+      - 'vitest.mutation.config.ts'
+      - 'vitest.config.ts'
+      - '.github/workflows/mutation-weekly.yml'
       - '.github/workflows/mutation-affected.yml'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'packages/*/package.json'
 
 permissions:
   contents: read
@@ -40,7 +46,7 @@ concurrency:
 
 jobs:
   select:
-    name: Select affected kernels
+    name: Select harness validation kernels
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -71,13 +77,13 @@ jobs:
       # The self-test and the derivation run before any mutant, so a failure here
       # would leave the lane with no envelope at all (#1430).
       - name: Record a failed lane envelope
-        if: failure()
+        if: failure() || cancelled()
         run: |
           pnpm gate mutation --affected --fail-envelope \
             "affected selection failed before any mutant ran (run ${{ github.run_id }})" || true
 
       - name: Upload selection envelope
-        if: failure()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: mutation-affected-select
@@ -97,12 +103,15 @@ jobs:
         include: ${{ fromJSON(needs.select.outputs.modules) }}
     steps:
       - name: Checkout
+        timeout-minutes: 1
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup toolchain
+        timeout-minutes: 2
         uses: ./.github/actions/setup-node-pnpm
 
       - name: Run mutants for ${{ matrix.name }}
+        timeout-minutes: 22
         uses: ./.github/actions/run-gate
         with:
           gate: mutation
@@ -113,7 +122,7 @@ jobs:
             ${{ matrix.shard || '' }}
 
       - name: Record a failed shard envelope
-        if: failure()
+        if: failure() || cancelled()
         run: |
           pnpm gate mutation --affected --modules ${{ matrix.module }} --fail-envelope \
             "shard ${{ matrix.name }} failed before producing a report (run ${{ github.run_id }})" || true
@@ -167,7 +176,7 @@ jobs:
           fi
 
       - name: Record a failed lane envelope
-        if: failure()
+        if: failure() || cancelled()
         run: |
           pnpm gate mutation --affected --fail-envelope \
             "affected report failed before producing a score table (run ${{ github.run_id }})" || true

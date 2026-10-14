@@ -137,6 +137,40 @@ extension RunnerTests {
     }
   }
 
+  /// A React Native `secureTextEntry` input reports as a plain text field whose value is a mask
+  /// (tester-army/e2e#872). On the penalized route the commit wait could never observe the typed
+  /// text, so it ran out its stall budget into TEXT_INPUT_COMMIT_NOT_OBSERVED, and a pre-filled
+  /// one ended the clear as a field that could not be read. Both read through the shared rule now
+  /// and are typed into unverified, with nothing tapping the show/hide toggle over the field edge.
+  @MainActor
+  func testSynthesizedReplacementLeavesAMaskedFieldUnverified() throws {
+    for prefilled in [false, true] {
+      let textField = try focusSynthesizedReplacementField(extraLaunchArguments: [
+        "--agent-device-text-entry-masked-value",
+      ] + (prefilled ? ["--agent-device-text-entry-prefilled"] : []))
+      defer { tearDownSynthesizedReplacementField() }
+      let togglePresses = app.staticTexts["agent-device-masked-toggle-presses"]
+      XCTAssertTrue(togglePresses.waitForExistence(timeout: appExistenceTimeout))
+      XCTAssertEqual(
+        textField.value as? String,
+        prefilled ? String(repeating: "\u{2022}", count: 6) : "",
+        "prefilled: \(prefilled)"
+      )
+
+      let response = try replaceSynthesizedFieldText(
+        textField,
+        text: "not-a-secret-123",
+        commandId: prefilled ? "fill-masked-prefilled" : "fill-masked-empty"
+      )
+
+      XCTAssertTrue(response.ok, "prefilled: \(prefilled) \(String(describing: response.error))")
+      XCTAssertEqual(response.data?.textEntryRoute, "synthesized-first-responder-replacement")
+      XCTAssertEqual(response.data?.message, "typed", "prefilled: \(prefilled)")
+      XCTAssertEqual(textField.value as? String, String(repeating: "\u{2022}", count: 8), "prefilled: \(prefilled)")
+      XCTAssertEqual(togglePresses.label, "presses=0", "prefilled: \(prefilled)")
+    }
+  }
+
   /// A replacement the command budget cannot carry is refused before the first character is posted,
   /// so a `fill` cannot end in a transport timeout that leaves the runner typing into a field nobody
   /// is waiting for and the next command finding it busy.

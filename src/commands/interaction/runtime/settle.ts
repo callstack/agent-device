@@ -1,4 +1,4 @@
-import type { Point, SnapshotNode } from '@agent-device/kernel/snapshot';
+import { hasSnapshotRef, type Point, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import type {
   AgentDeviceRuntime,
   CommandContext,
@@ -373,14 +373,15 @@ export function buildSettleTailEntries(
   appBundleId?: string,
 ): Pick<SettleObservation, 'tail' | 'tailTruncated'> {
   const chromeRefs = collectSettleChromeRefs(settledNodes, appBundleId);
-  const candidates = settledNodes.filter(
-    (node) =>
-      node.ref &&
-      node.interactionBlocked !== 'covered' &&
-      !excludeRefs.has(node.ref) &&
-      !chromeRefs.has(node.ref) &&
-      !STRUCTURAL_TAIL_ROLES.has(formatRole(node.type ?? 'Element')),
-  );
+  const candidates = settledNodes
+    .filter(
+      (node) =>
+        node.interactionBlocked !== 'covered' &&
+        !STRUCTURAL_TAIL_ROLES.has(formatRole(node.type ?? 'Element')),
+    )
+    // The tail is a list of next actionable targets, so only addressable nodes enter it.
+    .filter(hasSnapshotRef)
+    .filter((node) => !excludeRefs.has(node.ref) && !chromeRefs.has(node.ref));
   if (candidates.length === 0) return {};
   const tail: SettleTailEntry[] = candidates.slice(0, MAX_SETTLE_TAIL_ENTRIES).map((node) => {
     const role = formatRole(node.type ?? 'Element');

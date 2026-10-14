@@ -12,6 +12,8 @@ vi.mock('../client/client-react-devtools-companion.ts', () => ({
 }));
 
 import { runCmdStreaming } from '@agent-device/host-kit/command';
+import { AppError } from '@agent-device/kernel/errors';
+import { withCapturedStderrAsync } from './test-utils/stream-capture.ts';
 import {
   ensureReactDevtoolsCompanion,
   stopReactDevtoolsCompanion,
@@ -149,12 +151,6 @@ for (const { label, leaseBackend } of remoteBridgeBackends) {
 
 test('react-devtools wait hints to relaunch remote iOS after startup-time connection misses', async () => {
   const env = { ...process.env };
-  let stderr = '';
-  const originalStderrWrite = process.stderr.write.bind(process.stderr);
-  process.stderr.write = ((chunk: string | Uint8Array) => {
-    stderr += chunk.toString();
-    return true;
-  }) as typeof process.stderr.write;
   vi.mocked(runCmdStreaming).mockResolvedValueOnce({
     exitCode: 1,
     stdout: '',
@@ -167,7 +163,7 @@ test('react-devtools wait hints to relaunch remote iOS after startup-time connec
     logPath: '/tmp/companion.log',
   });
 
-  try {
+  const stderr = await withCapturedStderrAsync(async () => {
     const exitCode = await runReactDevtoolsCommand(['wait', '--connected'], {
       stateDir: '/tmp/agent-device-state',
       session: 'default',
@@ -182,11 +178,9 @@ test('react-devtools wait hints to relaunch remote iOS after startup-time connec
     });
 
     assert.equal(exitCode, 1);
-    assert.match(stderr, /Remote iOS React DevTools connects during JavaScript startup/);
-    assert.match(stderr, /open <bundle-id> --platform ios --relaunch/);
-  } finally {
-    process.stderr.write = originalStderrWrite;
-  }
+  });
+  assert.match(stderr, /Remote iOS React DevTools connects during JavaScript startup/);
+  assert.match(stderr, /open <bundle-id> --platform ios --relaunch/);
 });
 
 test('react-devtools stop cleans up remote companion', async () => {
@@ -233,6 +227,51 @@ test('react-devtools stop cleans up remote companion', async () => {
     profileKey: '/tmp/remote.json',
     consumerKey: 'default',
   });
+});
+
+// What the companion stop answers decides the verdict of `react-devtools stop`: an unconfirmed exit
+// is reported instead of a clean teardown, and the command's own fault still outranks it.
+const runRemoteStop = () =>
+  runReactDevtoolsCommand(['stop'], {
+    cwd: '/tmp/project',
+    flags: { ...remoteBridgeScope, leaseBackend: 'ios-instance', remoteConfig: '/tmp/remote.json' },
+  });
+
+test('react-devtools stop reports a companion whose stop could not be confirmed', async () => {
+  const refusal = new AppError('COMMAND_FAILED', 'companion pid 4321 is still running', {
+    reason: 'signal-failed',
+    signal: 'SIGTERM',
+    pid: 4321,
+  });
+  vi.mocked(runCmdStreaming).mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+  vi.mocked(stopReactDevtoolsCompanion).mockRejectedValueOnce(refusal);
+
+  await assert.rejects(runRemoteStop, refusal);
+});
+
+test('react-devtools stop keeps its own failure ahead of an unconfirmed companion stop', async () => {
+  const actionFault = new Error('devtools package failed');
+  const stopFault = new AppError('COMMAND_FAILED', 'companion pid 4322 is still running', {
+    reason: 'signal-failed',
+    pid: 4322,
+  });
+  vi.mocked(runCmdStreaming).mockRejectedValueOnce(actionFault);
+  vi.mocked(stopReactDevtoolsCompanion).mockRejectedValueOnce(stopFault);
+
+  const stderr = await withCapturedStderrAsync(() => assert.rejects(runRemoteStop(), actionFault));
+  assert.equal(vi.mocked(stopReactDevtoolsCompanion).mock.calls.length, 1, 'cleanup still ran');
+  // The action's fault is what the command reports, so the surviving companion has to be named here.
+  assert.match(stderr, /companion pid 4322 is still running/);
+});
+
+// The stop's own transport can reject with anything, and an unconfirmed exit may only ever be
+// reported, never swallowed: the command fails on the rejection value itself, not on its shape.
+test('react-devtools stop fails on a stop rejection that is not an Error', async () => {
+  vi.mocked(runCmdStreaming).mockResolvedValueOnce({ exitCode: 0, stdout: '', stderr: '' });
+  vi.mocked(stopReactDevtoolsCompanion).mockRejectedValueOnce('worker exited before answering');
+
+  const settled = await runRemoteStop().catch((error: unknown) => error);
+  assert.equal(settled, 'worker exited before answering');
 });
 
 test('react-devtools start configures direct remote port reverse', async () => {

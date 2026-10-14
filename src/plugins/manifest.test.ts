@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { readPluginManifest, RESERVED_PLUGIN_PROVIDERS } from './manifest.ts';
 import { DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS } from '../provider-device-runtimes.ts';
-import { pluginHome, writePlugin } from './plugin.fixtures.ts';
+import { pluginHome, writePlugin } from '@agent-device/test-kit/plugin.fixtures';
 
 test('manifest compatibility is checked without evaluating plugin code', () => {
   const { home } = pluginHome();

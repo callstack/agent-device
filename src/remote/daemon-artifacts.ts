@@ -5,7 +5,11 @@ import {
   buildRemoteTempArtifactPath,
 } from '@agent-device/contracts/daemon-http';
 import { AppError } from '@agent-device/kernel/errors';
-import type { DaemonArtifact, DaemonRequest, DaemonResponse } from '../daemon/daemon-request.ts';
+import type {
+  DaemonArtifact,
+  DaemonRequest,
+  DaemonResponse,
+} from '@agent-device/daemon/daemon-request';
 import {
   appendRecordingExtensionWhenMissing,
   recordingExtensionForPlatform,

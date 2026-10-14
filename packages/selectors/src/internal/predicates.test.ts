@@ -241,6 +241,27 @@ test('visible predicate does not use non-hittable Android layout ancestors for r
   assert.equal(result.pass, false);
 });
 
+test('editable predicate follows a published editable fact and infers from type without one', () => {
+  const editableAt = (node: Partial<SnapshotNode>) => {
+    const full: SnapshotNode = { index: 0, ref: 'e1', ...node };
+    return evaluateIsPredicate({
+      predicate: 'editable',
+      node: full,
+      visibility: createSnapshotVisibility([full]),
+      platform: 'android',
+    }).pass;
+  };
+
+  assert.equal(editableAt({ type: 'com.example.RichEditor', editable: true }), true);
+  assert.equal(editableAt({ type: 'android.widget.EditText', editable: false }), false);
+  assert.equal(
+    editableAt({ type: 'android.widget.EditText', editable: true, enabled: false }),
+    false,
+  );
+  assert.equal(editableAt({ type: 'android.widget.EditText' }), true);
+  assert.equal(editableAt({ type: 'com.example.RichEditor' }), false);
+});
+
 /** One capture whose two rows share a label: one on screen, one below the fold. */
 const SHARED_CAPTURE: SnapshotNode[] = [
   {

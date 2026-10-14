@@ -25,7 +25,7 @@ import {
   leaseScopeFromOptions,
   leaseScopeToRequestMeta,
 } from '@agent-device/contracts/lease-scope';
-import type { DaemonRequest } from '../daemon/daemon-request.ts';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import {
   asRecord,
   isRecord,

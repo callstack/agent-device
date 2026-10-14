@@ -205,7 +205,7 @@ describe('state-dir residue rules', () => {
     ['torn publish temporary', file('device-claims/a.json.55.tmp'), AFTER_SHUTDOWN, 'stray'],
     [
       'managed tool download',
-      file('tools/agent-browser/0.27.1/dl.tmp'),
+      file('tools/agent-browser/0.39.0/dl.tmp'),
       AFTER_SHUTDOWN,
       'expected',
     ],

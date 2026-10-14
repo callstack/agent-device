@@ -170,15 +170,14 @@ test('a startup deadline is one budget shared by simctl boot and bootstatus, and
   }
 });
 
-test('a boot confirmed only after the deadline is a boot_timeout, and the confirming listing runs inside the budget', async () => {
+test('a bootstatus that exits only after the deadline is a boot_timeout and publishes no readiness', async () => {
   vi.useFakeTimers();
   try {
     const startedAtMs = 1_000_000;
     vi.setSystemTime(startedAtMs);
-    const { host, calls } = coldSimulatorHost({
+    const { host, calls, markBooted } = coldSimulatorHost({
       onBoot: () => vi.setSystemTime(startedAtMs + 2_000),
-      onBootstatus: () => vi.setSystemTime(startedAtMs + 22_000),
-      onBootedList: () => vi.setSystemTime(startedAtMs + 31_000),
+      onBootstatus: () => vi.setSystemTime(startedAtMs + 31_000),
     });
 
     await expect(
@@ -187,12 +186,47 @@ test('a boot confirmed only after the deadline is a boot_timeout, and the confir
       }),
     ).rejects.toMatchObject({ details: { reason: 'boot_timeout', deviceId: 'sim-1' } });
 
-    const listings = calls.filter((call) => call.args.includes('list'));
-    expect(listings.at(-1)?.timeoutMs).toBe(8_000);
-    expect(calls.some((call) => call.args.includes('shutdown'))).toBe(false);
+    expect(calls.map((call) => simctlVerb(call.args))).toEqual(['list', 'boot', 'bootstatus']);
+    expect(markBooted).not.toHaveBeenCalled();
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('a cold boot ends at bootstatus: one listing, one boot, one bootstatus, then the readied device', async () => {
+  const { host, calls, markBooted, showSimulator } = coldSimulatorHost({});
+  const original = simulator();
+
+  const readied = await ensureAppleReady(host, original, new AbortController().signal);
+
+  expect(calls.map((call) => simctlVerb(call.args))).toEqual(['list', 'boot', 'bootstatus']);
+  expect(showSimulator).toHaveBeenCalledOnce();
+  expect(markBooted).toHaveBeenCalledOnce();
+  expect(readied).toEqual({ ...original, booted: true });
+  expect(original.booted).toBe(false);
+});
+
+test('a failed bootstatus publishes no readiness and returns no device', async () => {
+  const { host, markBooted } = coldSimulatorHost({ bootstatusExitCode: 1 });
+
+  await expect(
+    ensureAppleReady(host, simulator(), new AbortController().signal),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED', message: 'simctl bootstatus failed' });
+
+  expect(markBooted).not.toHaveBeenCalled();
+});
+
+test('a request cancelled while bootstatus runs publishes no readiness', async () => {
+  const controller = new AbortController();
+  const { host, markBooted } = coldSimulatorHost({
+    onBootstatus: () => controller.abort(new Error('cancel boot')),
+  });
+
+  await expect(ensureAppleReady(host, simulator(), controller.signal)).rejects.toThrow(
+    'cancel boot',
+  );
+
+  expect(markBooted).not.toHaveBeenCalled();
 });
 
 test('without a startup deadline the boot wait keeps its default budget', async () => {
@@ -224,18 +258,33 @@ test('physical readiness forwards the request signal to the focused host port', 
   expect(ensureConnected).toHaveBeenCalledWith(expect.anything(), controller.signal);
 });
 
-/** A Shutdown Simulator whose boot, bootstatus, and post-boot listing run the given hooks first. */
+test('a cold boot reveals Simulator.app without taking focus from the frontmost app', async () => {
+  const { host } = coldSimulatorHost({});
+  const commandRun = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
+
+  await ensureAppleReady(
+    { ...host, commands: { ...host.commands, run: commandRun } },
+    simulator(),
+    new AbortController().signal,
+  );
+
+  expect(commandRun).toHaveBeenCalledWith(
+    expect.objectContaining({ executable: 'open', args: ['-g', '-a', 'Simulator'] }),
+    expect.anything(),
+  );
+});
+
+/** A Shutdown Simulator whose boot and bootstatus run the given hooks first. */
 function coldSimulatorHost(hooks: {
   onBoot?: () => void;
   onBootstatus?: () => void;
-  onBootedList?: () => void;
+  bootstatusExitCode?: number;
 }) {
   const calls: Array<{ args: string[]; timeoutMs?: number }> = [];
   let state = 'Shutdown';
   const run: PlatformRuntimeHost['appleTools']['run'] = vi.fn(async (request) => {
     calls.push({ args: [...request.args], timeoutMs: request.timeoutMs });
     if (request.args.includes('list')) {
-      if (state === 'Booted') hooks.onBootedList?.();
       return {
         stdout: JSON.stringify({ devices: { ios: [{ udid: 'sim-1', state }] } }),
         stderr: '',
@@ -246,23 +295,33 @@ function coldSimulatorHost(hooks: {
       hooks.onBoot?.();
       state = 'Booted';
     }
-    if (request.args.includes('bootstatus')) hooks.onBootstatus?.();
+    if (request.args.includes('bootstatus')) {
+      hooks.onBootstatus?.();
+      return { stdout: '', stderr: '', exitCode: hooks.bootstatusExitCode ?? 0 };
+    }
     return { stdout: '', stderr: '', exitCode: 0 };
   });
+  const markBooted = vi.fn();
+  const showSimulator = vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 }));
   const base = platformRuntimeHostFixture();
   const host = {
     ...base,
     appleTools: { isXcrunAvailable: async () => true, run },
+    commands: { ...base.commands, run: showSimulator },
     deviceReadiness: {
       ...base.deviceReadiness,
       appleAutomation: {
         keepHot: vi.fn(),
-        markBooted: vi.fn(),
+        markBooted,
         wasRecentlyObservedBooted: vi.fn(async () => false),
       },
     },
   } satisfies PlatformRuntimeHost;
-  return { host, calls };
+  return { host, calls, markBooted, showSimulator };
+}
+
+function simctlVerb(args: readonly string[]): string {
+  return args.find((arg) => ['list', 'boot', 'bootstatus', 'shutdown'].includes(arg)) ?? '';
 }
 
 function simulator(overrides: Partial<DeviceInfo> = {}): DeviceInfo {

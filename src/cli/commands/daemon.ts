@@ -3,7 +3,7 @@ import {
   readDaemonStopIdentity,
   stopDaemon,
   type DaemonStopResult,
-} from '../../daemon/daemon-stop.ts';
+} from '@agent-device/daemon/daemon-stop';
 import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
 import { AppError } from '@agent-device/kernel/errors';
 import { writeCommandOutput } from './shared.ts';

@@ -83,6 +83,14 @@ export const INTERACTION_GUARANTEES = [
   // a settled diff). Distinct from the opt-in verifyEvidence/settleObservation features; this is the
   // path's baseline, always-on claim.
   'outcomeObservation',
+  // The position the path dispatches at is one the target is confirmed to be at REST in (#3471).
+  // Distinct from every guard above: those judge a tree, this judges the tree against the previous
+  // action's tree. A capture is one instant's photograph of a surface that may still be rearranging
+  // itself — the ADB-backed Android helper is measured reporting frames in flight — so a press
+  // issued right after an action that animated the UI can resolve a point the target has already
+  // vacated and report success on the vacancy. The gate is backend-neutral: it re-observes past the
+  // window and refuses rather than dispatching at a position two observations disagree about.
+  'targetStability',
 ] as const;
 
 export type InteractionGuarantee = (typeof INTERACTION_GUARANTEES)[number];
@@ -149,15 +157,29 @@ export type InteractionPathContract = {
 };
 
 const GAPS_UMBRELLA_ISSUE = 'https://github.com/callstack/agent-device/issues/1081';
-const PARENT_OWNED_TOUCH_POINT_GAP_ISSUE = 'https://github.com/callstack/agent-device/issues/1718';
 const TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE = 'https://github.com/callstack/agent-device/issues/3335';
+
+/**
+ * The moving-target gate's shared cell (#3471). Scoped to the two commands that dispatch a tap the
+ * daemon aimed at a rect it captured: `fill` aims at a field it expects to be found wherever it
+ * is, and its own staleness failure mode is a wrong focus rather than a silent miss, which the
+ * guard's re-resolve would not fix. `longpress` aims the same way and is deliberately left out for
+ * now: a hold that begins one frame early is a gesture the recognizer still owns, the measured
+ * failure and the caller-visible recovery are both tap-shaped, and widening this list is one
+ * declaration plus one scenario per added command.
+ */
+const RUNTIME_TREE_TARGET_STABILITY: GuaranteeEnforcement = {
+  kind: 'runtime',
+  via: 'src/commands/interaction/runtime/moving-target-gate.ts#guardResolvedTargetAgainstMotion',
+  appliesTo: ['press', 'click'],
+};
 
 // Every path shares the SAME cell by construction: response payloads have one
 // construction site (ADR 0011 Layer 2), and the hand-rolled-literal guard test
 // (interaction-response-construction-guard.test.ts) keeps new branches on it.
 const SHARED_RESPONSE_CONSTRUCTION: GuaranteeEnforcement = {
   kind: 'runtime',
-  via: 'src/daemon/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
+  via: 'packages/daemon/src/execution/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
 };
 
 // runtime-selector, runtime-ref, and coordinate share this waiver: all three finalize through
@@ -170,7 +192,7 @@ const TAP_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
   trackingIssue: TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE,
 };
 
-// Both Maestro-compatible fast paths (src/daemon/interaction/internal/interaction-touch-direct-ios.ts)
+// Both Maestro-compatible fast paths (packages/daemon/src/execution/interaction/internal/interaction-touch-direct-ios.ts)
 // dispatch ONE fused XCTest runner request (`command: 'tap'` with a selectorKey/selectorValue) built
 // in packages/platform-apple/src/interactions.ts#tapElementSelector — not the separate
 // packages/maestro/ flow-script engine, which drives standalone `.yaml` Maestro flows and never
@@ -183,7 +205,7 @@ const DIRECT_IOS_SINGLE_QUERY_READINESS: GuaranteeEnforcement = {
 
 // Shares the SAME reasoning as TAP_OUTCOME_NOT_OBSERVED_GAP: the tap outcome is not observed on the
 // success path here either. The shared ambiguous-XCTest-failure corroboration
-// (src/daemon/interaction/internal/interaction-ios-tap-outcome.ts#corroborateIosTapFailure) is
+// (packages/daemon/src/execution/interaction/internal/interaction-ios-tap-outcome.ts#corroborateIosTapFailure) is
 // invoked identically from this fast path and from the tree-based runtime dispatch, but only ever
 // reconsiders a THROWN error — it never validates a call that returned success, so it is not a
 // baseline outcome claim for either path.
@@ -192,6 +214,16 @@ const DIRECT_IOS_OUTCOME_NOT_OBSERVED_GAP: GuaranteeEnforcement = {
   reason:
     "gap: this replay-only route observes no outcome beyond the runner's own report; --verify/--settle do not apply here (see the inapplicable cells on this row), and the shared ambiguous-failure corroboration only reconsiders a thrown error, never a successful dispatch.",
   trackingIssue: TAP_OUTCOME_NOT_OBSERVED_GAP_ISSUE,
+};
+
+/**
+ * Shares the SAME reasoning as DIRECT_IOS_SINGLE_QUERY_READINESS: the fused request is one XCTest
+ * round trip, so it also cannot carry a stale daemon-captured position into the tap.
+ */
+const DIRECT_IOS_TARGET_STABILITY: GuaranteeEnforcement = {
+  kind: 'waived',
+  reason:
+    "Intentional: the fused runner request queries the element and taps it inside one XCTest request, so the runner aims at the element's own live frame at tap time rather than at a rect the daemon captured earlier and carried across a round trip — the capture-to-dispatch distance #3471 closes does not exist on this route. Its hittability semantics stay the runner's, as the offscreen cell above already records.",
 };
 
 // The two runtime tree paths (selector and ref resolution) run the SAME shared
@@ -250,7 +282,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
   responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
   responseIdentity: {
     kind: 'runtime',
-    via: 'src/daemon/interaction/internal/interaction-touch-targets.ts#interactionResultExtra',
+    via: 'packages/daemon/src/execution/interaction/internal/interaction-touch-targets.ts#interactionResultExtra',
   },
   verifyEvidence: {
     kind: 'runtime',
@@ -261,6 +293,7 @@ const RUNTIME_TREE_SHARED_GUARANTEES = {
     kind: 'runtime',
     via: 'src/commands/interaction/runtime/settle.ts#settleAfterInteraction',
   },
+  targetStability: RUNTIME_TREE_TARGET_STABILITY,
 } satisfies Partial<Record<InteractionGuarantee, GuaranteeEnforcement>>;
 
 export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPathContract> = {
@@ -357,7 +390,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       responseConstruction: {
         kind: 'runtime',
-        via: 'src/daemon/interaction/internal/interaction-gesture-response.ts#gestureResponseData',
+        via: 'packages/daemon/src/execution/interaction/internal/interaction-gesture-response.ts#gestureResponseData',
       },
       responseIdentity: {
         kind: 'runtime',
@@ -390,6 +423,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         reason:
           'gap: target-authored drag has no --settle/--verify observation of the destination; the tap-shaped runtime paths are the only ones with an opt-in evidence route today.',
         trackingIssue: GAPS_UMBRELLA_ISSUE,
+      },
+      targetStability: {
+        kind: 'inapplicable',
+        reason:
+          "Drag endpoints name contact coordinates for one uninterrupted pointer plan (ADR 0013); re-pointing an endpoint after resolution would split the plan the gesture's integrity depends on, and a drag whose surface moved mid-gesture is the surface behavior, not a misaimed tap. #3471 guards the tap-shaped paths, where one captured point is the whole action.",
       },
     },
   },
@@ -444,7 +482,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
       responseIdentity: {
         kind: 'runtime',
-        via: 'src/daemon/interaction/internal/interaction-touch-targets.ts#interactionResultExtra',
+        via: 'packages/daemon/src/execution/interaction/internal/interaction-touch-targets.ts#interactionResultExtra',
       },
       verifyEvidence: {
         kind: 'delegated',
@@ -475,6 +513,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         reason:
           'gap: the fast path observes no post-action outcome by default; --settle/--verify disable it and delegate to runtime-ref instead of running here.',
         trackingIssue: GAPS_UMBRELLA_ISSUE,
+      },
+      targetStability: {
+        kind: 'inapplicable',
+        reason:
+          'The fast path activates a provider-owned semantic handle rather than a point the daemon aimed from a capture, so there is no daemon-captured position that could have gone stale — the exposure #3471 guards is created by capture-to-dispatch distance and this path has none. Where the daemon does read a rect on this path, its preflight reads the same stored node the other guards judge.',
       },
     },
   },
@@ -539,6 +582,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
           'Coordinates name a point, not an element; there is no target existence to wait for.',
       },
       outcomeObservation: TAP_OUTCOME_NOT_OBSERVED_GAP,
+      targetStability: {
+        kind: 'inapplicable',
+        reason:
+          'Coordinates are the escape hatch that dispatches the point it was given; there is no resolved element whose position could be confirmed, and re-resolving a caller-authored coordinate would replace the instruction rather than verify it.',
+      },
     },
   },
   'maestro-direct-selector': {
@@ -564,8 +612,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       parentOwnedTouchPoint: {
         kind: 'waived',
         reason:
-          'gap: the runner has the matched element but no daemon snapshot tree from which to exclude independently interactive descendants.',
-        trackingIssue: PARENT_OWNED_TOUCH_POINT_GAP_ISSUE,
+          'Intentional: pinned Maestro 2.5.1 taps the matched element center, even when an independently interactive descendant covers it; excluding descendants would change authored Maestro behavior.',
       },
       offscreen: {
         kind: 'waived',
@@ -599,10 +646,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/daemon/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
+        via: 'packages/daemon/src/execution/interaction/internal/interaction-touch-response.ts#buildInteractionResponseData',
       },
       targetReadiness: DIRECT_IOS_SINGLE_QUERY_READINESS,
       outcomeObservation: DIRECT_IOS_OUTCOME_NOT_OBSERVED_GAP,
+      targetStability: DIRECT_IOS_TARGET_STABILITY,
     },
   },
   'maestro-non-hittable-fallback': {
@@ -627,8 +675,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       parentOwnedTouchPoint: {
         kind: 'waived',
         reason:
-          'gap: Maestro compatibility executes the matched element center runner-side without a daemon snapshot tree of independently interactive descendants.',
-        trackingIssue: PARENT_OWNED_TOUCH_POINT_GAP_ISSUE,
+          'Intentional: pinned Maestro 2.5.1 taps the matched element center, even when an independently interactive descendant covers it; the non-hittable coordinate fallback preserves that compatibility behavior.',
       },
       offscreen: {
         // hasTappableFrame keeps two path-specific choices (empty element
@@ -667,6 +714,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       targetReadiness: DIRECT_IOS_SINGLE_QUERY_READINESS,
       outcomeObservation: DIRECT_IOS_OUTCOME_NOT_OBSERVED_GAP,
+      targetStability: DIRECT_IOS_TARGET_STABILITY,
     },
   },
 };

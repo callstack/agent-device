@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 export function installIsolatedCliTestEnv(
   explicitEnv: Record<string, string | undefined> = {},

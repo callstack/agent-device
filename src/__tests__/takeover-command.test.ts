@@ -9,7 +9,7 @@ import {
 import {
   HUMAN_CONTROL_HOLD,
   createControlLatch,
-} from '../daemon/__tests__/human-control-fixtures.ts';
+} from '@agent-device/daemon/testing/__tests__/human-control-fixtures';
 import type { DaemonRequest } from '@agent-device/kernel/contracts';
 import { TAKEOVER_CLI_FLAGS } from './test-utils/client-lease-fixtures.ts';
 

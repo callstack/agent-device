@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { formatSnapshotText } from './snapshot.ts';
-import { withNoColor } from '../../__tests__/test-utils/color.ts';
+import { withNoColor } from '@agent-device/test-kit/color';
 
 test('formatSnapshotText collapses Android helper nodes in agent-facing output', () => {
   const nodes = [

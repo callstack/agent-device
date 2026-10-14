@@ -42,7 +42,6 @@ afterEach(() => {
 test('Limrun verification reads the selected instance service without creating an instance', async () => {
   const result = await verifyLimrunConnection({
     apiKey: 'lim_test_key',
-    clientVersion: '1.2.3',
     platform: 'android',
   });
 
@@ -63,10 +62,7 @@ test('Limrun verification reads the selected instance service without creating a
   assert.deepEqual(mockState.androidList.mock.calls, [[{ limit: 1 }]]);
   assert.equal(mockState.iosList.mock.calls.length, 0);
   assert.equal(mockState.constructorOptions[0]?.apiKey, 'lim_test_key');
-  assert.deepEqual(mockState.constructorOptions[0]?.defaultHeaders, {
-    'x-agent-device-client': 'agent-device-cli',
-    'x-agent-device-version': '1.2.3',
-  });
+  assert.equal(mockState.constructorOptions[0]?.defaultHeaders, undefined);
 });
 
 test('Limrun verification classifies authentication failures', async () => {
@@ -75,7 +71,6 @@ test('Limrun verification classifies authentication failures', async () => {
   await assert.rejects(
     verifyLimrunConnection({
       apiKey: 'lim_bad_key',
-      clientVersion: '1.2.3',
       platform: 'ios',
     }),
     (error: unknown) => {
@@ -91,7 +86,6 @@ test('Limrun verification connects to an attached instance instead of the contro
   const result = await verifyLimrunConnection({
     apiKey: 'lim_test_key',
     instances: { android },
-    clientVersion: '1.2.3',
     platform: 'android',
   });
 
@@ -123,14 +117,11 @@ test('Limrun verification names the variables to check when an instance rejects 
   ] as const;
   for (const { platform, instances, create, variables } of cases) {
     create.mockRejectedValueOnce(new Error('Unexpected server response: 401'));
-    await assert.rejects(
-      verifyLimrunConnection({ instances, clientVersion: '1.2.3', platform }),
-      (error: unknown) => {
-        assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
-        assert.match(JSON.stringify(error), variables);
-        assert.doesNotMatch(JSON.stringify(error), /lim_st_secret/);
-        return true;
-      },
-    );
+    await assert.rejects(verifyLimrunConnection({ instances, platform }), (error: unknown) => {
+      assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
+      assert.match(JSON.stringify(error), variables);
+      assert.doesNotMatch(JSON.stringify(error), /lim_st_secret/);
+      return true;
+    });
   }
 });

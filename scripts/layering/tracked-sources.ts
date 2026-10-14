@@ -69,6 +69,12 @@ function listTrackedFiles(repoRoot: string, pathspecs: readonly string[]): strin
   return out.split('\0').filter(Boolean);
 }
 
+/**
+ * The daemon package's source root, as every layering filter sees it. One constant so a
+ * rule cannot filter on a stale path when the daemon moves again (#3546 review).
+ */
+export const DAEMON_SOURCE_ROOT = 'packages/daemon/src/';
+
 /** Production sources only: test files and `__tests__/` trees are not layering subjects. */
 export function isProductionSourceFile(file: string): boolean {
   return file.endsWith('.ts') && !/(?:^|\/)__tests__\//.test(file) && !/\.test\.ts$/.test(file);

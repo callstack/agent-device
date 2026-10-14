@@ -1,3 +1,9 @@
+import { isDaemonHandlerFile } from './daemon-layers.ts';
+import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
+
+/** The handler surface as a shape rule: any `<layer>/handlers/` folder, owning layer agnostic. */
+const DAEMON_HANDLER_TARGET_SHAPES = [isDaemonHandlerFile] as const;
+
 type FacadeDeclaration = Readonly<{
   root: string;
   exports: readonly string[];
@@ -8,11 +14,18 @@ export type LogicalModulePolicy = Readonly<{
   roots: readonly string[];
   forbiddenTargetRoots: readonly string[];
   internalForbiddenTargetRoots?: readonly string[];
+  /**
+   * Shape-based forbidden targets, paired with (never replacing) the path-root arrays: e.g.
+   * `isDaemonHandlerFile` guards the handler surface wherever a `<layer>/handlers/` folder lives,
+   * so a handler folder under a layer nobody listed is still off-limits.
+   */
+  forbiddenTargetShapes?: readonly ((file: string) => boolean)[];
+  internalForbiddenTargetShapes?: readonly ((file: string) => boolean)[];
   facade?: FacadeDeclaration;
 }>;
 
 const DAEMON_SESSION_LIFECYCLE_FACADE = {
-  root: 'src/daemon/session-lifecycle/index.ts',
+  root: 'packages/daemon/src/sessions/session-lifecycle/index.ts',
   exports: [
     'SessionCloseCommandInput',
     'SessionInventoryCommandInput',
@@ -24,52 +37,52 @@ const DAEMON_SESSION_LIFECYCLE_FACADE = {
 } as const;
 
 const DAEMON_SESSION_OBSERVABILITY_FACADE = {
-  root: 'src/daemon/session-observability/index.ts',
+  root: 'packages/daemon/src/sessions/session-observability/index.ts',
   exports: ['SessionObservabilityCommandInput', 'handleSessionObservabilityCommands'],
 } as const;
 
 export const SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS = [
-  'src/daemon/handlers/session-device-utils.ts',
-  'src/daemon/handlers/session-runtime-admission.ts',
-  'src/daemon/handlers/session-open.ts',
-  'src/daemon/handlers/session-open-prepare.ts',
-  'src/daemon/handlers/session-open-execution.ts',
-  'src/daemon/handlers/session-open-foreground.ts',
-  'src/daemon/handlers/session-open-surface.ts',
-  'src/daemon/handlers/session-startup-metrics.ts',
+  'packages/daemon/src/handlers/session-device-utils.ts',
+  'packages/daemon/src/handlers/session-runtime-admission.ts',
+  'packages/daemon/src/handlers/session-open.ts',
+  'packages/daemon/src/handlers/session-open-prepare.ts',
+  'packages/daemon/src/handlers/session-open-execution.ts',
+  'packages/daemon/src/handlers/session-open-foreground.ts',
+  'packages/daemon/src/handlers/session-open-surface.ts',
+  'packages/daemon/src/handlers/session-startup-metrics.ts',
 ] as const;
 
 export const INTERACTION_RETIRED_HANDLER_PATHS = [
-  'src/daemon/handlers/find.ts',
-  'src/daemon/handlers/find-match-ranking.ts',
-  'src/daemon/handlers/find-match-resolution.ts',
-  'src/daemon/handlers/find-target-capture.ts',
-  'src/daemon/handlers/interaction.ts',
-  'src/daemon/handlers/interaction-android-escape.ts',
-  'src/daemon/handlers/interaction-gesture.ts',
-  'src/daemon/handlers/interaction-gesture-response.ts',
-  'src/daemon/handlers/interaction-ios-tap-outcome.ts',
-  'src/daemon/handlers/interaction-targeting.ts',
-  'src/daemon/handlers/interaction-touch.ts',
-  'src/daemon/handlers/interaction-touch-android-freshness.ts',
-  'src/daemon/handlers/interaction-touch-android-readiness.ts',
-  'src/daemon/handlers/interaction-touch-direct-ios-eligibility.ts',
-  'src/daemon/handlers/interaction-touch-direct-ios.ts',
-  'src/daemon/handlers/interaction-touch-fill.ts',
-  'src/daemon/handlers/interaction-touch-payload.ts',
-  'src/daemon/handlers/interaction-touch-policy.ts',
-  'src/daemon/handlers/interaction-touch-prepare.ts',
-  'src/daemon/handlers/interaction-touch-press-admission.ts',
-  'src/daemon/handlers/interaction-touch-press.ts',
-  'src/daemon/handlers/interaction-touch-reference-frame.ts',
-  'src/daemon/handlers/interaction-touch-response.ts',
-  'src/daemon/handlers/interaction-touch-runtime.ts',
-  'src/daemon/handlers/interaction-touch-targets.ts',
-  'src/daemon/handlers/system-surface-disclosure.ts',
+  'packages/daemon/src/handlers/find.ts',
+  'packages/daemon/src/handlers/find-match-ranking.ts',
+  'packages/daemon/src/handlers/find-match-resolution.ts',
+  'packages/daemon/src/handlers/find-target-capture.ts',
+  'packages/daemon/src/handlers/interaction.ts',
+  'packages/daemon/src/handlers/interaction-android-escape.ts',
+  'packages/daemon/src/handlers/interaction-gesture.ts',
+  'packages/daemon/src/handlers/interaction-gesture-response.ts',
+  'packages/daemon/src/handlers/interaction-ios-tap-outcome.ts',
+  'packages/daemon/src/handlers/interaction-targeting.ts',
+  'packages/daemon/src/handlers/interaction-touch.ts',
+  'packages/daemon/src/handlers/interaction-touch-android-freshness.ts',
+  'packages/daemon/src/handlers/interaction-touch-android-readiness.ts',
+  'packages/daemon/src/handlers/interaction-touch-direct-ios-eligibility.ts',
+  'packages/daemon/src/handlers/interaction-touch-direct-ios.ts',
+  'packages/daemon/src/handlers/interaction-touch-fill.ts',
+  'packages/daemon/src/handlers/interaction-touch-payload.ts',
+  'packages/daemon/src/handlers/interaction-touch-policy.ts',
+  'packages/daemon/src/handlers/interaction-touch-prepare.ts',
+  'packages/daemon/src/handlers/interaction-touch-press-admission.ts',
+  'packages/daemon/src/handlers/interaction-touch-press.ts',
+  'packages/daemon/src/handlers/interaction-touch-reference-frame.ts',
+  'packages/daemon/src/handlers/interaction-touch-response.ts',
+  'packages/daemon/src/handlers/interaction-touch-runtime.ts',
+  'packages/daemon/src/handlers/interaction-touch-targets.ts',
+  'packages/daemon/src/handlers/system-surface-disclosure.ts',
 ] as const;
 
 const DAEMON_INTERACTION_FACADE = {
-  root: 'src/daemon/interaction/index.ts',
+  root: 'packages/daemon/src/execution/interaction/index.ts',
   exports: [
     'FindRouteInput',
     'InteractionRouteInput',
@@ -86,16 +99,16 @@ const DAEMON_INTERACTION_FACADE = {
 } as const;
 
 export const SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS = [
-  'src/daemon/handlers/session-observability.ts',
-  'src/daemon/handlers/session-perf-runtime.ts',
-  'src/daemon/handlers/session-network.ts',
-  'src/daemon/handlers/session-audio.ts',
+  'packages/daemon/src/handlers/session-observability.ts',
+  'packages/daemon/src/handlers/session-perf-runtime.ts',
+  'packages/daemon/src/handlers/session-network.ts',
+  'packages/daemon/src/handlers/session-audio.ts',
 ] as const;
 
 export const SNAPSHOT_EXECUTION_RETIRED_HANDLER_PATHS = [
-  'src/daemon/handlers/snapshot-capture.ts',
-  'src/daemon/handlers/snapshot-interactor-capture.ts',
-  'src/daemon/handlers/snapshot-session.ts',
+  'packages/daemon/src/handlers/snapshot-capture.ts',
+  'packages/daemon/src/handlers/snapshot-interactor-capture.ts',
+  'packages/daemon/src/handlers/snapshot-session.ts',
 ] as const;
 
 export const LOGICAL_MODULE_POLICIES = [
@@ -103,7 +116,7 @@ export const LOGICAL_MODULE_POLICIES = [
     name: 'ad-replay',
     roots: ['packages/ad-replay/src/'],
     forbiddenTargetRoots: [
-      'src/daemon/',
+      DAEMON_SOURCE_ROOT,
       'src/providers/',
       'src/compat/',
       'packages/maestro/',
@@ -114,7 +127,7 @@ export const LOGICAL_MODULE_POLICIES = [
     name: 'maestro',
     roots: ['packages/maestro/src/'],
     forbiddenTargetRoots: [
-      'src/daemon/',
+      DAEMON_SOURCE_ROOT,
       'src/providers/',
       'packages/ad-replay/',
       'packages/replay-port/',
@@ -124,7 +137,7 @@ export const LOGICAL_MODULE_POLICIES = [
     name: 'replay-test',
     roots: ['packages/replay-test/src/'],
     forbiddenTargetRoots: [
-      'src/daemon/',
+      DAEMON_SOURCE_ROOT,
       'src/providers/',
       'src/request/',
       'src/compat/',
@@ -136,25 +149,26 @@ export const LOGICAL_MODULE_POLICIES = [
   {
     name: 'replay-port',
     roots: ['packages/replay-port/src/'],
-    forbiddenTargetRoots: ['src/daemon/', 'src/providers/', 'src/compat/'],
+    forbiddenTargetRoots: [DAEMON_SOURCE_ROOT, 'src/providers/', 'src/compat/'],
   },
   {
     name: 'daemon-session-lifecycle',
-    roots: ['src/daemon/session-lifecycle/'],
-    forbiddenTargetRoots: ['src/daemon/handlers/'],
+    roots: ['packages/daemon/src/sessions/session-lifecycle/'],
+    forbiddenTargetRoots: [],
+    forbiddenTargetShapes: DAEMON_HANDLER_TARGET_SHAPES,
     facade: DAEMON_SESSION_LIFECYCLE_FACADE,
   },
   {
     name: 'daemon-interaction',
-    roots: ['src/daemon/interaction/'],
+    roots: ['packages/daemon/src/execution/interaction/'],
     forbiddenTargetRoots: [],
-    internalForbiddenTargetRoots: ['src/daemon/handlers/'],
+    internalForbiddenTargetShapes: DAEMON_HANDLER_TARGET_SHAPES,
     facade: DAEMON_INTERACTION_FACADE,
   },
   {
     name: 'daemon-session-observability',
-    roots: ['src/daemon/session-observability/'],
-    forbiddenTargetRoots: ['src/daemon/handlers/'],
+    roots: ['packages/daemon/src/sessions/session-observability/'],
+    forbiddenTargetShapes: DAEMON_HANDLER_TARGET_SHAPES,
     facade: DAEMON_SESSION_OBSERVABILITY_FACADE,
   },
 ] as const satisfies readonly LogicalModulePolicy[];
@@ -190,7 +204,7 @@ export const ARCHITECTURE_OWNERSHIP = {
     {
       name: 'request-runtime-binding',
       kind: 'capability',
-      root: 'src/daemon/request-runtime-binding.ts',
+      root: 'packages/daemon/src/core/request-runtime-binding.ts',
       exports: [
         'BindDeviceRuntime',
         'BindExactDeviceRuntime',
@@ -205,7 +219,7 @@ export const ARCHITECTURE_OWNERSHIP = {
     {
       name: 'session-script-publication',
       kind: 'capability',
-      root: 'src/daemon/session-script-publication-capability.ts',
+      root: 'packages/daemon/src/core/session-script-publication-capability.ts',
       exports: [
         'abortAuthoringOnSecondOpen',
         'applyRecordedSaveScriptFlags',
@@ -224,13 +238,13 @@ export const ARCHITECTURE_OWNERSHIP = {
     {
       name: 'session-state-shape',
       kind: 'live-state-shape',
-      root: 'src/daemon/session-state.ts',
+      root: 'packages/daemon/src/core/session-state.ts',
       exports: ['SessionState'],
     },
     {
       name: 'session-store-authority',
       kind: 'live-state-authority',
-      root: 'src/daemon/session-store.ts',
+      root: 'packages/daemon/src/core/session-store.ts',
       exports: ['SessionStore'],
     },
   ],
@@ -239,7 +253,7 @@ export const ARCHITECTURE_OWNERSHIP = {
       name: 'snapshot-policy',
       kind: 'executable-policy',
       roots: ['packages/capture-kit/src/snapshot/'],
-      forbiddenTargetRoots: ['src/daemon/'],
+      forbiddenTargetRoots: [DAEMON_SOURCE_ROOT],
     },
   ],
 } as const;

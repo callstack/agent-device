@@ -26,9 +26,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { LeaseRegistry } from '../../../../src/daemon/lease-registry.ts';
-import { SessionStore } from '../../../../src/daemon/session-store.ts';
-import type { SessionState } from '../../../../src/daemon/session-state.ts';
+import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { AppError } from '@agent-device/kernel/errors';
 
 import { makePrng, type Prng } from './prng.ts';

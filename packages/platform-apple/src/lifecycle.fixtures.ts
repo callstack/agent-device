@@ -192,3 +192,43 @@ export function launchUrlSimulator(
     resolutions: () => resolutions,
   };
 }
+
+/** A Shutdown Simulator host whose boot and bootstatus calls run the given hooks before succeeding. */
+export function coldSimulatorLifecycleHost(
+  hooks: { onBoot?: () => void; onBootstatus?: () => void; bootstatusExitCode?: number } = {},
+) {
+  const calls: Array<{ args: string[]; timeoutMs?: number }> = [];
+  let state = 'Shutdown';
+  const run: PlatformRuntimeHost['appleTools']['run'] = vi.fn(async (request) => {
+    calls.push({ args: [...request.args], timeoutMs: request.timeoutMs });
+    if (request.args.includes('list')) {
+      return {
+        stdout: JSON.stringify({ devices: { ios: [{ udid: simulator.id, state }] } }),
+        stderr: '',
+        exitCode: 0,
+      };
+    }
+    if (request.args.includes('boot')) {
+      hooks.onBoot?.();
+      state = 'Booted';
+    }
+    if (request.args.includes('bootstatus')) {
+      hooks.onBootstatus?.();
+      return { stdout: '', stderr: '', exitCode: hooks.bootstatusExitCode ?? 0 };
+    }
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+  const prepareRunner = vi.fn(async () => ({ runner: {}, connectMs: 0, healthCheckMs: 0 }));
+  const prewarmRunnerSession = vi.fn(async () => {});
+  const interactor = { open: async () => {}, close: async () => {} } as unknown as Interactor;
+  const resolveInteractor = vi.fn(async (_device: DeviceInfo) => interactor);
+  const base = platformRuntimeHostFixture();
+  const host = {
+    ...base,
+    clock: { ...base.clock, sleep: async () => {} },
+    appleTools: { isXcrunAvailable: async () => true, run },
+    localInteractors: { resolve: resolveInteractor },
+    appleApplications: { ...base.appleApplications, prepareRunner, prewarmRunnerSession },
+  } as unknown as PlatformRuntimeHost;
+  return { host, calls, prepareRunner, prewarmRunnerSession, resolveInteractor };
+}

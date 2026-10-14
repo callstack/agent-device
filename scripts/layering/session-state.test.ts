@@ -7,7 +7,7 @@ import {
   sessionStateWritePressure,
 } from './session-state.ts';
 
-const OWNER = 'src/daemon/app-log-session-resource.ts';
+const OWNER = 'packages/daemon/src/resources/app-log-session-resource.ts';
 const FIELDS = ['appLog', 'appLogFailure', 'lease', 'lastPerfProfile'];
 function scan(source: string, file = OWNER) {
   assert.deepEqual(parseSync(file, source).errors, [], `fixture must parse as a module: ${file}`);
@@ -28,7 +28,7 @@ test('explicit owner patches name their writes and retain direct assignment chec
   assert.ok(SESSION_STATE_FIELD_OWNERS.appLogFailure!.includes(OWNER));
   const foreign = scan(
     'sessionStore.update(ref, { appLogFailure: error });',
-    'src/daemon/handlers/probe.ts',
+    'packages/daemon/src/sessions/handlers/probe.ts',
   )[0]!;
   assert.equal(foreign.field, 'appLogFailure');
   assert.ok(!SESSION_STATE_FIELD_OWNERS[foreign.field]!.includes(foreign.file));
@@ -353,8 +353,8 @@ test('alias declarations and patch parameters are collected before checking writ
 
 test('draft exceptions cover only the declared constructors and fresh open publication', () => {
   for (const [file, constructor] of [
-    ['src/daemon/snapshot-session.ts', 'createSnapshotSession'],
-    ['src/daemon/handlers/record-runtime.ts', 'createRecordOnlySession'],
+    ['packages/daemon/src/core/snapshot-session.ts', 'createSnapshotSession'],
+    ['packages/daemon/src/sessions/handlers/record-runtime.ts', 'createRecordOnlySession'],
   ]) {
     assert.deepEqual(
       scan(
@@ -369,7 +369,7 @@ test('draft exceptions cover only the declared constructors and fresh open publi
       ),
     );
   }
-  const open = 'src/daemon/session-lifecycle/internal/session-open-state.ts';
+  const open = 'packages/daemon/src/sessions/session-lifecycle/internal/session-open-state.ts';
   assert.deepEqual(
     scan(
       'function publishOpenSession(session: SessionState) { return store.publish(address, { ...session }); }',
@@ -395,7 +395,7 @@ test('the owning store can merge records, while unrelated updates and platform s
   assert.deepEqual(
     scan(
       'sessionStore.update(ref, changes); session.appLogFailure = error;',
-      'src/daemon/session-store.ts',
+      'packages/daemon/src/core/session-store.ts',
     ),
     [],
   );
@@ -413,17 +413,17 @@ test('pressure counts capture-kit record replacement and daemon patches with the
   const declaration =
     'export type SessionState = {\n  appLogFailure?: Error;\n  lease?: object;\n};';
   const baseline = new Map([
-    ['src/daemon/session-state.ts', declaration],
-    ['src/daemon/owner.ts', 'session.appLogFailure = error;'],
+    ['packages/daemon/src/core/session-state.ts', declaration],
+    ['packages/daemon/src/owner.ts', 'session.appLogFailure = error;'],
     [
       'packages/capture-kit/src/capture-admission/owner.ts',
       'const next = { ...session, appLogFailure: error };',
     ],
   ]);
   const current = new Map([
-    ['src/daemon/session-state.ts', declaration],
+    ['packages/daemon/src/core/session-state.ts', declaration],
     [OWNER, 'store.update(ref, { appLogFailure: error });'],
-    ['src/daemon/invalid.ts', 'store.update(ref, changes);'],
+    ['packages/daemon/src/invalid.ts', 'store.update(ref, changes);'],
   ]);
   assert.deepEqual(sessionStateWritePressure(baseline), {
     writerOwnedFields: 1,

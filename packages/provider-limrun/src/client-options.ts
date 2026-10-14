@@ -1,20 +1,7 @@
 import type Limrun from '@limrun/api';
 import { AppError } from '@agent-device/kernel/errors';
 
-export const LIMRUN_CLIENT_HEADER = 'agent-device-cli';
-
-export function buildLimrunClientOptions(options: { apiKey: string; clientVersion: string }): {
-  apiKey: string;
-  defaultHeaders: Record<string, string>;
-} {
-  return {
-    apiKey: options.apiKey,
-    defaultHeaders: {
-      'x-agent-device-client': LIMRUN_CLIENT_HEADER,
-      'x-agent-device-version': options.clientVersion,
-    },
-  };
-}
+export const LIMRUN_CLIENT_ID = 'agent-device-cli';
 
 /** The organization client, or a typed refusal for an operation that needs the API key. */
 export function requireLimrunOrgClient(

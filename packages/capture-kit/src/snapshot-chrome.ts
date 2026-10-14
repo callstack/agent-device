@@ -1,10 +1,17 @@
-import { isAndroidInputMethodNode } from '@agent-device/contracts/android-input-ownership';
 import {
   ANDROID_SYSTEM_CHROME_PACKAGE,
   hasAndroidSystemChromeProvenance,
   isAndroidSystemChromeWindowResourceId,
 } from '@agent-device/contracts/android-system-chrome';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  hasIosKeyboardRole,
+  IOS_KEYBOARD_CHROME_MARKER_ROLES,
+  IOS_KEYBOARD_SETTLE_CHROME_ROLES,
+  IOS_KEYBOARD_SUBTREE_CHROME_ROLES,
+  IOS_KEYBOARD_SURFACE_ROLES,
+  isAndroidInputMethodNode,
+} from '@agent-device/contracts/android-input-ownership';
+import { snapshotRefBodies, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { normalizeType } from '@agent-device/contracts/snapshot';
 
 /**
@@ -75,11 +82,41 @@ type SettleChrome = {
 const EMPTY_SETTLE_CHROME: SettleChrome = { strippedIndexes: new Set(), refs: new Set() };
 
 function collectKeyboardChrome(nodes: SnapshotNode[]): SettleChrome {
+  const byIndex = new Map(nodes.map((node) => [node.index, node]));
   const containerIndexes = new Set(
     nodes.filter((node) => normalizeType(node.type ?? '') === 'keyboard').map((node) => node.index),
   );
-  if (containerIndexes.size === 0) return EMPTY_SETTLE_CHROME;
-  const byIndex = new Map(nodes.map((node) => [node.index, node]));
+  // Role-declared keyboard surfaces, reached because the interactive projection flattens them
+  // beside app content: chrome PER NODE (surface roles), chrome by SUBTREE (system-only hosts),
+  // or chrome AS A MARKER with no subtree (hosts the app can also fill — its custom inputView,
+  // its inputAssistantItem bar buttons — so the app content under a marker survives).
+  const surfaceIndexes = new Set(
+    nodes
+      .filter(
+        (node) =>
+          hasIosKeyboardRole(node, IOS_KEYBOARD_SURFACE_ROLES) ||
+          hasIosKeyboardRole(node, IOS_KEYBOARD_SETTLE_CHROME_ROLES),
+      )
+      .map((node) => node.index),
+  );
+  const markerIndexes = new Set(
+    nodes
+      .filter((node) => hasIosKeyboardRole(node, IOS_KEYBOARD_CHROME_MARKER_ROLES))
+      .map((node) => node.index),
+  );
+  const subtreeChromeRootIndexes = new Set(
+    nodes
+      .filter((node) => hasIosKeyboardRole(node, IOS_KEYBOARD_SUBTREE_CHROME_ROLES))
+      .map((node) => node.index),
+  );
+  if (
+    containerIndexes.size === 0 &&
+    surfaceIndexes.size === 0 &&
+    markerIndexes.size === 0 &&
+    subtreeChromeRootIndexes.size === 0
+  ) {
+    return EMPTY_SETTLE_CHROME;
+  }
   const containerSubtreeIndexes = collectSubtreeIndexes(nodes, byIndex, containerIndexes);
   const chromeIndexes = new Set(containerSubtreeIndexes);
   const windowIndexes = resolveKeyboardWindowIndexes(nodes, byIndex, containerSubtreeIndexes);
@@ -97,9 +134,16 @@ function collectKeyboardChrome(nodes: SnapshotNode[]): SettleChrome {
   )) {
     chromeIndexes.delete(index);
   }
-  const refs = new Set(
-    nodes.filter((node) => node.ref && chromeIndexes.has(node.index)).map((node) => node.ref),
-  );
+  // No role claim may reach app content: surface roles are chrome per node, subtree claims only
+  // start at system-only hosts the app can never fill, and markers own no subtree. That is why
+  // these passes need no interaction with the accessory exemption or an editable-text guard —
+  // an app node under the assistant view or the inputView placeholder is simply never claimed.
+  for (const index of surfaceIndexes) chromeIndexes.add(index);
+  for (const index of collectSubtreeIndexes(nodes, byIndex, subtreeChromeRootIndexes)) {
+    chromeIndexes.add(index);
+  }
+  for (const index of markerIndexes) chromeIndexes.add(index);
+  const refs = new Set(snapshotRefBodies(nodes.filter((node) => chromeIndexes.has(node.index))));
   // The [Keyboard] container line itself survives the diff so "keyboard
   // appeared/left" stays one visible signal line; everything else collapses.
   const strippedIndexes = new Set(
@@ -210,6 +254,7 @@ function isAndroidSystemChromeNode(
   node: SnapshotNode,
   byIndex: Map<number, SnapshotNode>,
 ): boolean {
+  if (node.systemBar !== undefined) return true;
   if (node.bundleId !== ANDROID_SYSTEM_CHROME_PACKAGE) return false;
   if (hasAndroidSystemChromeProvenance(node)) return true;
   const seen = new Set<number>();
@@ -261,11 +306,9 @@ function collectAndroidSettleChrome(
   );
   for (const index of systemChromeIndexes) strippedIndexes.add(index);
   const refs = new Set(
-    nodes
-      .filter(
-        (node) => node.ref && (imeIndexes.has(node.index) || systemChromeIndexes.has(node.index)),
-      )
-      .map((node) => node.ref),
+    snapshotRefBodies(
+      nodes.filter((node) => imeIndexes.has(node.index) || systemChromeIndexes.has(node.index)),
+    ),
   );
   if (strippedIndexes.size === 0 && refs.size === 0) return EMPTY_SETTLE_CHROME;
   return { strippedIndexes, refs };
@@ -333,7 +376,7 @@ export function collectSettleChromeRefs(
  * only excludes nodes whose OWN type is `keyboard` still leaks every key and
  * assistant control as "discriminating" evidence.
  *
- * Used by `src/daemon/interaction-surface-signature.ts`'s post-gesture
+ * Used by `packages/daemon/src/core/interaction-surface-signature.ts`'s post-gesture
  * baseline-distrust discriminating-overlap classification (#1542 defect 2,
  * #1563 review): that comparison operates on flat signature entries with no
  * ref-selection budget of its own, so it needs the ref set directly rather

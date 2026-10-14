@@ -10,6 +10,10 @@ const REGULAR_ELIGIBLE_TYPES = new Set([
   'cell',
   'checkbox',
   'collectionview',
+  // The keyboard plane. The shared chrome classifier (`snapshot-chrome`) anchors keyboard
+  // detection on this container; dropping it re-parents every `Key` onto the app root, where no
+  // structural rule can tell a key from app content (#3469).
+  'keyboard',
   'link',
   'menuitem',
   'picker',

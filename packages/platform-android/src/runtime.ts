@@ -299,9 +299,11 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         ...screenshotRuntimeOperationFacts({
           capture: device.kind === 'simulator' ? screenshotKindUnavailable : available,
         }),
-        // No native text reading: every text wait on this owner polls the canonical tree.
+        // No native text reading: every text wait on this owner polls the canonical tree. No live
+        // selector read either: the off-screen guard refuses on the capture's verdict unchanged.
         ...selectorObservationRuntimeOperationFacts({
           findText: snapshotKindUnavailable,
+          querySelector: snapshotKindUnavailable,
         }),
         ...viewportRuntimeOperationFacts({ setViewport: viewportUnavailable }),
         ...focusRuntimeOperationFacts({ focus: androidTouchFact(device) }),

@@ -15,6 +15,7 @@ import type { AndroidAdbExecutor, AndroidAdbProvider } from '../adb-executor.ts'
 import { mkdtempForTest } from './test-utils/tmp-dir.ts';
 
 const PACKAGE = 'com.callstack.agentdevice.imehelper';
+const LATIN_IME = 'com.google.android.inputmethod.latin/com.android.inputmethod.latin.LatinIME';
 
 const manifest = {
   name: 'android-ime-helper' as const,
@@ -90,6 +91,9 @@ test('ensureAndroidImeHelper installs with semantic provider install options', a
     if (args.includes('--show-versioncode')) {
       return { exitCode: 1, stdout: '', stderr: 'not found' };
     }
+    if (isImeListCall(args)) {
+      return { exitCode: 0, stdout: `${manifest.serviceComponent}\n`, stderr: '' };
+    }
     throw new Error(`unexpected adb call: ${args.join(' ')}`);
   };
   const adbProvider: AndroidAdbProvider = {
@@ -147,6 +151,118 @@ test('ensureAndroidImeHelper skips install when a newer version is already prese
   assert.equal(result.reason, 'current');
 });
 
+test('ensureAndroidImeHelper returns from an install once the IME is registered', async () => {
+  const tmpDir = await mkdtempForTest('ime-helper-registration-');
+  const apkPath = path.join(tmpDir, 'helper.apk');
+  await fs.writeFile(apkPath, 'helper-apk');
+  let imeListCalls = 0;
+  const adb: AndroidAdbExecutor = async (args) => {
+    if (args.includes('--show-versioncode')) {
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }
+    if (isImeListCall(args)) {
+      imeListCalls += 1;
+      const helper = imeListCalls > 1 ? `${manifest.serviceComponent}\n` : '';
+      return { exitCode: 0, stdout: `${LATIN_IME}\n${helper}`, stderr: '' };
+    }
+    throw new Error(`unexpected adb call: ${args.join(' ')}`);
+  };
+  const adbProvider: AndroidAdbProvider = {
+    exec: adb,
+    install: async () => ({ exitCode: 0, stdout: 'Success', stderr: '' }),
+  };
+
+  const result = await ensureAndroidImeHelper({
+    adb,
+    adbProvider,
+    artifact: { apkPath, manifest: { ...manifest, sha256: sha256Text('helper-apk') } },
+    deviceKey: 'android:emulator-5554',
+  });
+
+  assert.equal(result.installed, true);
+  assert.equal(imeListCalls, 2);
+});
+
+test('ensureAndroidImeHelper returns the install when the registration listing times out', async () => {
+  const tmpDir = await mkdtempForTest('ime-helper-registration-timeout-');
+  const apkPath = path.join(tmpDir, 'helper.apk');
+  await fs.writeFile(apkPath, 'helper-apk');
+  const adb: AndroidAdbExecutor = async (args) => {
+    if (args.includes('--show-versioncode')) {
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }
+    if (isImeListCall(args)) {
+      throw new AppError('COMMAND_FAILED', 'adb timed out after 5000ms', {
+        stdout: '',
+        stderr: '',
+        exitCode: 1,
+        timeoutMs: 5_000,
+      });
+    }
+    throw new Error(`unexpected adb call: ${args.join(' ')}`);
+  };
+  const adbProvider: AndroidAdbProvider = {
+    exec: adb,
+    install: async () => ({ exitCode: 0, stdout: 'Success', stderr: '' }),
+  };
+
+  const result = await ensureAndroidImeHelper({
+    adb,
+    adbProvider,
+    artifact: { apkPath, manifest: { ...manifest, sha256: sha256Text('helper-apk') } },
+    deviceKey: 'android:emulator-5554',
+  });
+
+  assert.equal(result.installed, true);
+});
+
+test('ensureAndroidImeHelper reinstalls a remembered helper the device no longer has', async () => {
+  const tmpDir = await mkdtempForTest('ime-helper-removed-');
+  const apkPath = path.join(tmpDir, 'helper.apk');
+  await fs.writeFile(apkPath, 'helper-apk');
+  let present = false;
+  const adb: AndroidAdbExecutor = async (args) => {
+    if (args.includes('--show-versioncode')) {
+      return present
+        ? {
+            exitCode: 0,
+            stdout: `package:${manifest.packageName} versionCode:${manifest.versionCode}`,
+            stderr: '',
+          }
+        : { exitCode: 0, stdout: '', stderr: '' };
+    }
+    if (isImeListCall(args)) {
+      return { exitCode: 0, stdout: `${manifest.serviceComponent}\n`, stderr: '' };
+    }
+    throw new Error(`unexpected adb call: ${args.join(' ')}`);
+  };
+  let installs = 0;
+  const adbProvider: AndroidAdbProvider = {
+    exec: adb,
+    install: async () => {
+      installs += 1;
+      present = true;
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+  };
+  const ensure = () =>
+    ensureAndroidImeHelper({
+      adb,
+      adbProvider,
+      artifact: { apkPath, manifest: { ...manifest, sha256: sha256Text('helper-apk') } },
+      deviceKey: 'android:emulator-5554',
+    });
+
+  assert.equal((await ensure()).installed, true);
+  assert.equal((await ensure()).installed, false);
+  present = false;
+  const result = await ensure();
+
+  assert.equal(result.installed, true);
+  assert.equal(result.reason, 'missing');
+  assert.equal(installs, 2);
+});
+
 test('ensureAndroidImeHelper install timeout points at the OEM install dialog', async () => {
   const tmpDir = await mkdtempForTest('ime-helper-install-timeout-');
   const apkPath = path.join(tmpDir, 'helper.apk');
@@ -188,6 +304,10 @@ test('ensureAndroidImeHelper install timeout points at the OEM install dialog', 
     },
   );
 });
+
+function isImeListCall(args: readonly string[]): boolean {
+  return args.includes('ime') && args.includes('list');
+}
 
 function sha256Text(text: string): string {
   return crypto.createHash('sha256').update(text).digest('hex');

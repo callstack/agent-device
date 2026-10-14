@@ -49,6 +49,7 @@ export function presentIosSnapshotAcquisition(
       backend: 'xctest',
       producer: acquired.acquisition.producer,
       nodes: [...presentation.payload.nodes],
+      ...(acquired.acquisition.keyboard ? { keyboard: acquired.acquisition.keyboard } : {}),
       comparisonIdentity: presentation.comparisonIdentity,
       ...(acquired.acquisition.truncated === undefined
         ? {}

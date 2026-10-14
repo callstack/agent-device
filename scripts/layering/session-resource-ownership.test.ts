@@ -12,7 +12,7 @@ test('session resources are constructed only by their durable domain owners', ()
   assert.deepEqual(
     summaries([
       [
-        'src/daemon/handlers/planted.ts',
+        'packages/daemon/src/sessions/handlers/planted.ts',
         `sessionStore.set(name, {
           ...session,
           appLog: log,
@@ -23,17 +23,17 @@ test('session resources are constructed only by their durable domain owners', ()
         });`,
       ],
       [
-        'src/daemon/app-log-session-resource.ts',
+        'packages/daemon/src/resources/app-log-session-resource.ts',
         `sessionStore.update(ref, { appLog: log, appLogFailure: undefined });`,
       ],
       [
-        'src/daemon/session-capture-binding.ts',
+        'packages/daemon/src/core/session-capture-binding.ts',
         `sessionStore.update(ref, { audioProbe: audio });
          sessionStore.update(ref, { perfCapture: perf });
          sessionStore.update(ref, { screenRecording: recording });`,
       ],
       [
-        'src/daemon/screen-recording-session-binding.ts',
+        'packages/daemon/src/screen-recording-session-binding.ts',
         `sessionStore.publish(address, { ...draft, screenRecording });`,
       ],
       [
@@ -46,12 +46,12 @@ test('session resources are constructed only by their durable domain owners', ()
       ],
     ]),
     [
-      'src/daemon/handlers/planted.ts: session appLog record constructed outside its owner',
-      'src/daemon/handlers/planted.ts: session appLogFailure record constructed outside its owner',
-      'src/daemon/handlers/planted.ts: session audioProbe record constructed outside its owner',
-      'src/daemon/handlers/planted.ts: session perfCapture record constructed outside its owner',
-      'src/daemon/handlers/planted.ts: session screenRecording record constructed outside its owner',
-      'src/daemon/screen-recording-session-binding.ts: session screenRecording record constructed outside its owner',
+      'packages/daemon/src/sessions/handlers/planted.ts: session appLog record constructed outside its owner',
+      'packages/daemon/src/sessions/handlers/planted.ts: session appLogFailure record constructed outside its owner',
+      'packages/daemon/src/sessions/handlers/planted.ts: session audioProbe record constructed outside its owner',
+      'packages/daemon/src/sessions/handlers/planted.ts: session perfCapture record constructed outside its owner',
+      'packages/daemon/src/sessions/handlers/planted.ts: session screenRecording record constructed outside its owner',
+      'packages/daemon/src/screen-recording-session-binding.ts: session screenRecording record constructed outside its owner',
       'packages/capture-kit/src/capture-admission/audio-probe-session-resource.ts: session audioProbe record constructed outside its owner',
       'packages/capture-kit/src/capture-admission/perf-capture-session-resource.ts: session perfCapture record constructed outside its owner',
     ],
@@ -76,12 +76,17 @@ test('teardown app-log discriminants are policy input rather than session constr
   assert.deepEqual(
     summaries([
       [
-        'src/daemon/session-teardown.ts',
+        'packages/daemon/src/sessions/session-teardown.ts',
         `teardownSessionResources({ appLog: 'run' });
          teardownSessionResources({ appLog: 'already-settled' });`,
       ],
-      ['src/daemon/handlers/planted.ts', `teardownSessionResources({ appLog: 'skip' });`],
+      [
+        'packages/daemon/src/sessions/handlers/planted.ts',
+        `teardownSessionResources({ appLog: 'skip' });`,
+      ],
     ]),
-    ['src/daemon/handlers/planted.ts: session appLog record constructed outside its owner'],
+    [
+      'packages/daemon/src/sessions/handlers/planted.ts: session appLog record constructed outside its owner',
+    ],
   );
 });

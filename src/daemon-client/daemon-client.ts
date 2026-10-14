@@ -2,7 +2,7 @@ import type { RequestProgressSink } from '@agent-device/contracts/progress';
 import type {
   DaemonRequest as SharedDaemonRequest,
   DaemonResponse as SharedDaemonResponse,
-} from '../daemon/daemon-request.ts';
+} from '@agent-device/daemon/daemon-request';
 import type { AgentDeviceDaemonTransportContext } from '@agent-device/contracts/client';
 import { AppError } from '@agent-device/kernel/errors';
 import {

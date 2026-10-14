@@ -504,5 +504,41 @@
     "producer": "webdriver",
     "trigger": "orientation refused by both the rotation route and the orientation route: each answer said the route is not implemented, so nothing ran",
     "dispatched": "no"
+  },
+  {
+    "id": "web-agent-browser.backend-missing",
+    "producer": "web-agent-browser",
+    "trigger": "the managed backend entry is not installed, so the provider refuses before spawning the CLI at all",
+    "dispatched": "no"
+  },
+  {
+    "id": "web-agent-browser.cli-unknown-command",
+    "producer": "web-agent-browser",
+    "trigger": "the CLI envelope refuses an unknown command by type: argv parsing never reached the browser daemon, which a newer provider against an older managed backend can hit",
+    "dispatched": "no"
+  },
+  {
+    "id": "web-agent-browser.cli-missing-arguments",
+    "producer": "web-agent-browser",
+    "trigger": "the CLI envelope refuses keyboard type with no text by type: argv validation, before any browser operation",
+    "dispatched": "no"
+  },
+  {
+    "id": "web-agent-browser.click-pointer-down-refused",
+    "producer": "web-agent-browser",
+    "trigger": "a coordinate click whose mouse move returned and whose mouse down the backend refused: the move landed, so the failure reports unknown with details.dispatchedSteps 1",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "web-agent-browser.scroll-third-step-refused",
+    "producer": "web-agent-browser",
+    "trigger": "a paced scroll whose first two wheel steps returned and whose third the backend refused: the page already scrolled, so the failure reports unknown with details.dispatchedSteps 2",
+    "dispatched": "unknown"
+  },
+  {
+    "id": "web-agent-browser.fill-selection-press-refused",
+    "producer": "web-agent-browser",
+    "trigger": "a coordinate fill whose click (move, down, up) returned and whose select-all press the backend refused: the page already took the click, so the failure reports unknown with details.dispatchedSteps 3",
+    "dispatched": "unknown"
   }
 ]

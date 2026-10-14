@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { runCmd } from '@agent-device/host-kit/command';
 import { changePlugin, installedPlugins, listPlugins } from './store.ts';
-import { pluginHome, writePlugin, selectPlugin } from './plugin.fixtures.ts';
+import { pluginHome, writePlugin, selectPlugin } from '@agent-device/test-kit/plugin.fixtures';
 
 vi.mock('@agent-device/host-kit/command', () => ({ runCmd: vi.fn() }));
 afterEach(() => vi.mocked(runCmd).mockReset());

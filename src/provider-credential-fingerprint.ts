@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
 import { cloudWebDriverProviderDeclaration } from '@agent-device/provider-webdriver/providers';
 import type { LIMRUN_PROVIDER } from '@agent-device/provider-limrun';
 import type { EnvMap } from '@agent-device/kernel/source-value';
@@ -45,13 +46,6 @@ function declaredCredentialVariables(provider: string, env: EnvMap): readonly st
   return installedPlugins(env).find((plugin) => plugin.agentDevicePlugin.provider === provider)
     ?.agentDevicePlugin.credentialVariables;
 }
-
-/** The provider credentials a daemon started with, and the state dir that names that daemon. */
-export type DaemonProviderCredentials = Readonly<{
-  /** Undefined when the daemon's environment holds none of the credentials such a lease reads. */
-  fingerprint(provider: string, leaseBackend?: string): string | undefined;
-  stateDir: string;
-}>;
 
 export function readDaemonProviderCredentials(
   env: EnvMap,

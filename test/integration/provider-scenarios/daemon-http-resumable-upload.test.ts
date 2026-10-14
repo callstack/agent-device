@@ -6,14 +6,14 @@ import { test } from 'vitest';
 import {
   cleanupUploadedArtifact,
   prepareUploadedArtifact,
-} from '../../../src/daemon/artifact-tracking.ts';
-import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
-import type { DaemonResponse } from '../../../src/daemon/daemon-request.ts';
+} from '@agent-device/daemon/testing/artifact-tracking';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
+import type { DaemonResponse } from '@agent-device/daemon/daemon-request';
 import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../../src/__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 
 test('chunked ranged overflow rolls back before an exact retry and finalize', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP resumable upload coverage')) return;

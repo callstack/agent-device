@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { replayScriptArb } from '../../__tests__/test-utils/property-arbitraries.ts';
+import { replayScriptArb } from '@agent-device/test-kit/property-arbitraries';
 import { PROPERTY_RUNS } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   formatPortableActionLine,

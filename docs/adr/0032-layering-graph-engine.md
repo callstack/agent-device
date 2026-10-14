@@ -14,9 +14,8 @@ whose production tree is `7dda0c2bf`'s; the harness lives only at that commit
   `resolveImportEdges`. Do not enforce a subset of them from a second, disagreeing import graph.
 - The model's implementation remains replaceable. Besides these eight rules, it must supply
   resolved edges with value, type-only and dynamic kinds to R9/R10, R19, R73–R76 and
-  `scripts/depgraph/`; named symbols and the binding residue of dynamic imports to R76; and raw
-  specifier sites to R11 and R13. Eleven other registry entries read source ASTs or text only, and
-  one reads paths only.
+  `scripts/depgraph/`; named symbols to R75; and raw specifier sites to R11 and R13. Eleven other
+  registry entries read source ASTs or text only, and one reads paths only.
 - Fix the demonstrated parser gap in #3293: `parseImports` misses TypeScript `import('x').T` type
   positions (9 file pairs). It already parses an OXC AST for dynamic imports but scans static
   imports with regexes; read both from that AST, `TSImportType` included, keeping symbol and

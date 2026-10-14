@@ -4,13 +4,13 @@ import { createTtlMemo } from './ttl-memo.ts';
 
 const crossTestMemo = createTtlMemo<string, string>({ ttlMs: 60_000 });
 
-test.sequential('process memo setup clears values after each test: seed', () => {
+test('process memo setup clears values after each test: seed', { concurrent: false }, () => {
   crossTestMemo.set('key', 'value');
 
   expect(crossTestMemo.get('key')).toBe('value');
 });
 
-test.sequential('process memo setup clears values after each test: verify', () => {
+test('process memo setup clears values after each test: verify', { concurrent: false }, () => {
   expect(crossTestMemo.get('key')).toBeUndefined();
 });
 

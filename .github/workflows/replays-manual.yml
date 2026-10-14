@@ -58,25 +58,7 @@ jobs:
           profile: pixel_7
           target: google_apis_playstore
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
-          script: |
-            # android-emulator-runner executes this with /usr/bin/sh, which is dash on
-            # ubuntu runners and rejects `-o pipefail`. The serial assignment below is
-            # validated by the `test -n` guard instead.
-            set -eu
-            ANDROID_SERIAL="$(adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
-            test -n "$ANDROID_SERIAL"
-            BOOT_FINISHED_AT="$(date +%s)"
-            pnpm gate build
-            pnpm clean:daemon
-            adb -s "$ANDROID_SERIAL" install -r "${{ steps.fixture-app.outputs.apk-path }}"
-            node --experimental-strip-types src/bin.ts replay examples/test-app/replays/drag-android.ad --platform android --serial "$ANDROID_SERIAL" --session nightly-android-target-drag --json
-            pnpm clean:daemon
-            FULL_STARTED_AT="$(date +%s)"
-            AGENT_DEVICE_ANDROID_E2E=1 AGENT_DEVICE_ANDROID_E2E_TIER=full AGENT_DEVICE_ANDROID_SERIAL="$ANDROID_SERIAL" AGENT_DEVICE_FIXTURE_APP_PATH="${{ steps.fixture-app.outputs.apk-path }}" AGENT_DEVICE_FIXTURE_APP_ID="${{ steps.fixture-app.outputs.app-id }}" node --experimental-strip-types scripts/node-test-tmpdir.ts --test test/integration/smoke-android-emulator.test.ts
-            FULL_FINISHED_AT="$(date +%s)"
-            echo "Android setup before emulator: $((BOOT_FINISHED_AT - ${{ steps.android-setup.outputs.seconds }}))s"
-            echo "Android full scenario wall time: $((FULL_FINISHED_AT - FULL_STARTED_AT))s"
-            pnpm gate replay-android --retries 2 --artifacts-dir test/artifacts/replays-android --report-junit test/artifacts/replays-android.junit.xml
+          script: sh scripts/replays/android-manual.sh "${{ steps.fixture-app.outputs.apk-path }}" "${{ steps.fixture-app.outputs.app-id }}" "${{ steps.android-setup.outputs.seconds }}"
 
       - name: Upload Android artifacts
         if: always()

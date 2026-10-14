@@ -54,9 +54,11 @@
 //     brand casts inside those two modules, so a udid never runs outside the set that holds it.
 //   - Over REQUEST-BOUND RUNTIME EXECUTION: facts remain the only admission authority and daemon
 //     code cannot manufacture or repair a narrowed runtime proof (R66).
-//   - Over THE DAEMON'S INTERIOR: every production file under src/daemon/ is owned by exactly one
-//     layer of the manifest in scripts/layering/daemon-layers.ts, and no static edge reads up the
-//     daemon-local order core < resources < execution < sessions < server (R81). The global spine
+//   - Over THE DAEMON'S INTERIOR: every production file under the daemon root (DAEMON_ROOT) sits
+//     under one of the five layer folders — the first path segment under the daemon root is its
+//     layer — and no
+//     static edge reads up the daemon-local order core < resources < execution < sessions <
+//     server (R81). The global spine
 //     ranks all five layers at daemon-server's rank, so R5/R6/R80 are blind inside the zone.
 //   - Over CONTRACTS PRODUCTION SOURCE: contracts owns vocabulary only — host, process, and timer
 //     mechanics belong in capture-kit or an adapter (R18).
@@ -129,14 +131,12 @@ import { selectorPipelineOwnershipViolations } from './selector-pipeline-ownersh
 import { recordRuntimeRegistryJoinViolations } from './record-runtime-registry-policy.ts';
 import { recordRuntimeDaemonMechanicsViolations } from './record-runtime-mechanics-policy.ts';
 import { checkDaemonPlatformBoundary } from './daemon-platform-boundary.ts';
-import {
-  checkDaemonPlatformRuntimeInventory,
-  DAEMON_PLATFORM_RUNTIME_EDGES,
-} from './daemon-platform-runtime-inventory.ts';
+import { checkDaemonPlatformRuntimeInventory } from './daemon-platform-runtime-inventory.ts';
 import { checkDaemonClientEntry } from './daemon-client-entry.ts';
-import { checkDaemonLayers, readDaemonLayerManifest } from './daemon-layers.ts';
+import { checkDaemonLayers, DAEMON_ROOT } from './daemon-layers.ts';
 import { checkSessionAuthorityOverlay, handlerOwnedOverlay } from './session-authority-overlay.ts';
 import {
+  DAEMON_SOURCE_ROOT,
   listTrackedPlatformZoneFiles,
   listTrackedProductionSources,
   listTrackedSrcUtilsFiles,
@@ -284,7 +284,7 @@ function checkSessionStateOwnership(sources: ReadonlyMap<string, string>): Layer
     return [
       {
         rule: 'R7 session-state-ownership',
-        file: 'src/daemon/session-state.ts',
+        file: `${DAEMON_ROOT}/core/session-state.ts`,
         line: 1,
         message: 'no daemon module declares SessionState, so its ownership cannot be checked.',
       },
@@ -429,15 +429,16 @@ function report(
         `${ratchets.largestTypeCycle.length} files (R9); ${daemonModularitySummary(reference)}; ` +
         `${packageBoundariesSummary(repoRoot)}; ${platformPackagePolicySummary()}; ` +
         `runtime facts remain the only device-command admission authority and daemon code cannot ` +
-        `manufacture narrowed runtime proof (R66); R65 keeps production src/daemon free of ` +
+        `manufacture narrowed runtime proof (R66); R65 keeps production packages/daemon/src ` +
+        `free of ` +
         `concrete platform imports in every executable and type-only form; ` +
-        `${DAEMON_PLATFORM_RUNTIME_EDGES.length} daemon-to-root platform-runtime edges hold ` +
-        `their #2278 classification (R76); and the handler-owned SessionState/SessionStore ` +
+        `no production daemon file reaches the root platform-runtime family or a hub that ` +
+        `does (R76); and the handler-owned SessionState/SessionStore ` +
         `authority overlay holds at or under the merge-base (R75, ` +
         `${handlerOwnedShapeFiles} shape / ${handlerOwnedAuthorityFiles} authority files); and ` +
-        `every production daemon file is owned by one layer with no upward static edges across ` +
-        `core < resources < execution < sessions < server (R81; dynamic cross-layer edges are ` +
-        `reported above when present).\n`,
+        `every production daemon file lives under a layer folder with no upward static edges ` +
+        `across core < resources < execution < sessions < server (R81; dynamic cross-layer edges ` +
+        `are reported above when present).\n`,
     );
     return 0;
   }
@@ -587,9 +588,8 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
     ),
   'daemon-layers': (context) =>
     checkDaemonLayers(
-      context.sourceFiles.filter((file) => file.startsWith('src/daemon/')),
+      context.sourceFiles.filter((file) => file.startsWith(DAEMON_SOURCE_ROOT)),
       context.edges,
-      readDaemonLayerManifest(repoRoot),
     ),
 };
 

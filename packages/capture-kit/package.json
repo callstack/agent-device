@@ -230,6 +230,10 @@
       "types": "./src/snapshot-chrome.ts",
       "default": "./src/snapshot-chrome.ts"
     },
+    "./snapshot-chrome-fixtures": {
+      "types": "./src/snapshot-chrome.fixtures.ts",
+      "default": "./src/snapshot-chrome.fixtures.ts"
+    },
     "./snapshot-desktop-projection": {
       "types": "./src/snapshot-desktop-projection.ts",
       "default": "./src/snapshot-desktop-projection.ts"
@@ -313,6 +317,10 @@
     "./durable-capture/session-binding": {
       "types": "./src/durable-capture/session-binding.ts",
       "default": "./src/durable-capture/session-binding.ts"
+    },
+    "./ios-react-native-value": {
+      "types": "./src/ios-react-native-value.ts",
+      "default": "./src/ios-react-native-value.ts"
     }
   },
   "devDependencies": {

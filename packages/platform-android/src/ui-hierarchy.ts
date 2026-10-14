@@ -1,3 +1,4 @@
+import { androidFieldValue as fieldValue } from '@agent-device/contracts/snapshot';
 import {
   type AndroidSystemChromeProvenance,
   isAndroidSystemChromeWindowResourceId,
@@ -327,7 +328,7 @@ function normalizeAndroidUiHierarchyNode(
     {
       type: attrs.className,
       label,
-      value: attrs.text,
+      value: androidFieldValue(attrs),
       passiveFacts: {
         contentDescription: attrs.desc && attrs.desc !== label ? attrs.desc : undefined,
         enabled: attrs.enabled,
@@ -364,5 +365,17 @@ function normalizeAndroidUiHierarchyNode(
       children: [],
     },
     attrs.drawingOrder === undefined ? undefined : { parent, order: attrs.drawingOrder },
+  );
+}
+
+function androidFieldValue(attrs: AndroidUiNodeMetadata): string | null {
+  return (
+    fieldValue({
+      type: attrs.className,
+      text: attrs.text,
+      editable: attrs.editable,
+      password: attrs.password,
+      hintShowing: attrs.hintShowing,
+    }) ?? null
   );
 }

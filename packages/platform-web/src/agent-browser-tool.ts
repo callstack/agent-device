@@ -1,4 +1,3 @@
-import crypto from 'node:crypto';
 import path from 'node:path';
 import { runCmd, type ExecResult } from '@agent-device/host-kit/command';
 import { acquireProcessLock, withProcessLock } from '@agent-device/host-kit/file';
@@ -8,7 +7,6 @@ import {
   hostFileExistsSync,
   hostFileLstatSync,
   hostFileStatSync,
-  hostTemporaryDirectory,
   readHostSymbolicLinkSync,
   readHostTextFileSync,
   removeHostFileSync,
@@ -28,12 +26,13 @@ import {
   installManagedAgentBrowserPackage,
   writeManagedAgentBrowserManifest,
 } from './agent-browser-install.ts';
+import { isNoEntryError, managedInstallPaths } from './agent-browser-install-paths.ts';
 import {
   appendAgentDeviceChromeArgs,
   resolveAgentBrowserIdleTimeoutMs,
 } from './agent-browser-lifecycle.ts';
 
-const MANAGED_AGENT_BROWSER_VERSION = '0.27.1';
+const MANAGED_AGENT_BROWSER_VERSION = '0.39.0';
 
 const AGENT_BROWSER = 'agent-browser';
 const MINIMUM_WEB_NODE_MAJOR = 24;
@@ -47,6 +46,8 @@ export type ManagedAgentBrowserRunOptions = {
   timeoutMs: number;
   allowFailure?: boolean;
   signal?: AbortSignal;
+  /** Written to the backend's stdin, for the command that reads its work from it (`batch`). */
+  stdin?: string;
 };
 
 /**
@@ -127,13 +128,13 @@ export function getManagedAgentBrowserStatus(options: {
 }): AgentBrowserToolStatus {
   const stateDir =
     options.stateDir ?? hostEnvironment().AGENT_DEVICE_STATE_DIR ?? defaultStateDir();
-  const installDir = path.join(stateDir, 'tools', 'agent-browser', MANAGED_AGENT_BROWSER_VERSION);
+  const { installDir, homeDir, runtimeHomeDir, socketDir } = managedInstallPaths(
+    stateDir,
+    MANAGED_AGENT_BROWSER_VERSION,
+  );
   const packageDir = resolveManagedPackageDir(installDir);
   const binaryPath = resolveManagedBinaryPath(installDir);
   const entryScript = resolveManagedEntryScript(packageDir);
-  const homeDir = path.join(installDir, 'home');
-  const runtimeHomeDir = resolveManagedRuntimeHomeDir(installDir);
-  const socketDir = resolveManagedSocketDir(installDir);
   const installed = entryScript !== undefined && hasManifest(installDir);
   const nodeMajor = Number.parseInt(hostNodeVersion().replace(/^v/, '').split('.')[0] ?? '0', 10);
   return {
@@ -165,6 +166,7 @@ async function spawnManagedAgentBrowser(
     env: managedAgentBrowserEnv(status, hostEnvironment()),
     timeoutMs: options.timeoutMs,
     signal: options.signal,
+    stdin: options.stdin,
   });
 }
 
@@ -213,7 +215,7 @@ function hasManifest(installDir: string): boolean {
 /**
  * The backend's declared `bin` entry. Read from the installed manifest rather
  * than hard-coded, because the path inside the package is the package's to
- * choose (`bin/agent-browser.js` in 0.27.1).
+ * choose.
  */
 function resolveManagedEntryScript(packageDir: string): string | undefined {
   let bin: unknown;
@@ -285,21 +287,6 @@ function assertWebNodeSupported(nodeMajor: number): void {
     requiredNodeMajor: MINIMUM_WEB_NODE_MAJOR,
     hint: 'Run agent-device with Node 24+ for web setup and web automation.',
   });
-}
-
-function resolveManagedRuntimeHomeDir(installDir: string): string {
-  if (hostPlatform() === 'win32') return path.join(installDir, 'home');
-  const hash = crypto.createHash('sha1').update(installDir).digest('hex').slice(0, 12);
-  return path.join(hostTemporaryDirectory(), 'agent-device-web', hash);
-}
-
-function resolveManagedSocketDir(installDir: string): string {
-  const hash = crypto.createHash('sha1').update(installDir).digest('hex').slice(0, 12);
-  return path.join(hostTemporaryDirectory(), 'adw', hash);
-}
-
-function isNoEntryError(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }
 
 function defaultStateDir(): string {

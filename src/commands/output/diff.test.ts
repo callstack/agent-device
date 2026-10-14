@@ -4,7 +4,7 @@ import { stripVTControlCharacters } from 'node:util';
 import path from 'node:path';
 import { formatScreenshotDiffText, formatSnapshotDiffText } from './diff.ts';
 import { normalizedRect } from '@agent-device/kernel/screenshot-geometry';
-import { withNoColor } from '../../__tests__/test-utils/color.ts';
+import { withNoColor } from '@agent-device/test-kit/color';
 
 const DIFF_DATA = {
   mode: 'snapshot',

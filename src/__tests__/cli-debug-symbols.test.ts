@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { runCliCapture } from './cli-capture.ts';
-import { mkdtempForTest } from './test-utils/tmp-dir.ts';
+import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
 
 const UUID = 'ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB';
 

@@ -17,6 +17,7 @@ import {
 } from '@agent-device/contracts/scroll-gesture';
 import type { TvRemoteButton } from '@agent-device/contracts/tv-remote';
 import type { SettingOptions } from '@agent-device/contracts/settings';
+import { snapshotViewportSizeFrom } from '@agent-device/kernel/rect';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   capabilitySupported,
@@ -46,6 +47,9 @@ const TEXT_ENTRY_READINESS_POLL_MS = 100;
  * WebDriver client's much longer default request timeout.
  */
 const TEXT_ENTRY_PROBE_TIMEOUT_MS = 1_500;
+const SNAPSHOT_KEYBOARD_PROBE_TIMEOUT_MS = 500;
+
+const SNAPSHOT_VIEWPORT_PROBE_TIMEOUT_MS = 500;
 
 /** The Android `KEYCODE_ENTER` the IME's return key sends. */
 const ANDROID_KEYCODE_ENTER = 66;
@@ -323,17 +327,68 @@ class WebDriverInteractor implements Interactor {
    * driver keeps walking the tree and every later command queues behind it (#2509).
    */
   private async captureSource(signal?: AbortSignal) {
+    const viewportBefore =
+      this.backend === 'android' ? await this.readAndroidSnapshotViewport(signal) : undefined;
     const source = await this.readSource(signal);
+    signal?.throwIfAborted();
+    const visibility = await this.readSnapshotKeyboardVisibility(signal);
     if (this.backend === 'xctest') {
       const { acquireWebDriverIosSnapshot } = await import('./webdriver-ios-snapshot.ts');
-      return acquireWebDriverIosSnapshot(source, this.targetId);
+      return acquireWebDriverIosSnapshot(source, this.targetId, visibility);
     }
-    const { parseWebDriverSourceFacts } = await import('./webdriver-source.ts');
+    const { parseWebDriverAndroidSnapshotNodes } = await import('./webdriver-android-source.ts');
+    const { acquireProviderKeyboard } =
+      await import('@agent-device/contracts/tap-keyboard-occlusion');
+    const nodes = parseWebDriverAndroidSnapshotNodes(source);
+    const viewportAfter =
+      viewportBefore === undefined ? undefined : await this.readAndroidSnapshotViewport(signal);
+    const viewport =
+      viewportBefore !== undefined &&
+      viewportAfter !== undefined &&
+      viewportBefore.width === viewportAfter.width &&
+      viewportBefore.height === viewportAfter.height
+        ? viewportBefore
+        : undefined;
     return {
       backend: 'android' as const,
       producer: 'appium-source' as const,
-      nodes: parseWebDriverSourceFacts(source, 'android').nodes,
+      ...acquireProviderKeyboard({ nodes, viewport: null, visibility }),
+      ...(viewport === undefined ? {} : { viewport }),
     };
+  }
+
+  /**
+   * W3C window rect has no server-side deadline. The transport bound limits client
+   * waiting; Appium can keep its command lock until the downstream read finishes.
+   */
+  private async readAndroidSnapshotViewport(signal?: AbortSignal) {
+    try {
+      const rect = await this.client.windowRect({
+        timeoutMs: SNAPSHOT_VIEWPORT_PROBE_TIMEOUT_MS,
+        retryAttempts: 0,
+        ...(signal === undefined ? {} : { signal }),
+      });
+      return snapshotViewportSizeFrom(rect);
+    } catch {
+      signal?.throwIfAborted();
+      return undefined;
+    }
+  }
+
+  private async readSnapshotKeyboardVisibility(
+    signal?: AbortSignal,
+  ): Promise<boolean | 'unsupported' | 'failed'> {
+    try {
+      const visibility = await this.client.isKeyboardShown(
+        SNAPSHOT_KEYBOARD_PROBE_TIMEOUT_MS,
+        signal,
+      );
+      signal?.throwIfAborted();
+      return visibility;
+    } catch {
+      signal?.throwIfAborted();
+      return 'failed';
+    }
   }
 
   private async readSource(signal?: AbortSignal): Promise<string> {

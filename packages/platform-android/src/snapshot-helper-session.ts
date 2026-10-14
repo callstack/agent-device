@@ -55,7 +55,6 @@ async function captureFromAndroidSnapshotHelperSession(params: {
     const reused = session.capturedCount > 0;
     const output = await requestAndroidSnapshotHelperSessionSnapshot({
       port: session.port,
-      timeoutMs: resolved.timeoutMs,
       commandTimeoutMs: resolved.commandTimeoutMs,
       signal: options.signal,
     });

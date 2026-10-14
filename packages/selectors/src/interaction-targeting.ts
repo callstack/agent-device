@@ -337,9 +337,9 @@ function findPreferredActionableDescendant(
   if (!targetRect) return null;
 
   let current = node;
-  const visited = new Set<string>();
-  while (!visited.has(current.ref)) {
-    visited.add(current.ref);
+  const visited = new Set<number>();
+  while (!visited.has(current.index)) {
+    visited.add(current.index);
     const children = index
       ? (index.childrenByParentIndex.get(current.index) ?? [])
       : nodes.filter((candidate) => candidate.parentIndex === current.index);

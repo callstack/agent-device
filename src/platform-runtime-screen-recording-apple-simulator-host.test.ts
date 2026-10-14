@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, onTestFinished, test, vi } from 'vitest';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from './__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createAppleScreenRecordingHost } from './platform-runtime-screen-recording-apple-host.ts';
 import { startAppleSimulatorRecording } from './platform-runtime-screen-recording-apple-simulator-host.ts';
 import { withAppleSimulatorScreenRecordingTransport } from './platform-runtime-screen-recording-apple-transport.ts';

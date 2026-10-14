@@ -22,7 +22,7 @@ private final class RunnerTargetActivationStub: NSObject {
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
   @MainActor
-  func testActivateTargetSkipsForegroundAndActivatesNonForegroundApplication() {
+  private func withStubbedTargetActivation(_ body: () -> Void) {
     let stateSelector = #selector(getter: XCUIApplication.state)
     let activateSelector = #selector(XCUIApplication.activate)
     guard
@@ -48,34 +48,195 @@ extension RunnerTests {
       RunnerTargetActivationSpy.activationCount = 0
       invalidateCachedTarget(reason: "unit_test_cleanup")
     }
+    body()
+  }
 
-    RunnerTargetActivationSpy.state = .runningForeground
-    textEntryTapWitness = TextEntryTapWitness(
-      element: app,
-      bundleId: "com.example.previous",
-      processIdentifier: 41
-    )
-    // The happy path owes two things: no activation work at all, and no fact to disclose. Clearing
-    // first makes the nil below a claim about THIS call rather than whatever an earlier test left.
-    pendingTargetActivation = nil
-    _ = activateTarget(bundleId: "com.example.foreground", reason: "unit_test")
-    XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 0)
-    XCTAssertNil(textEntryTapWitness)
-    XCTAssertNil(
-      pendingTargetActivation,
-      "an already-foreground command performed no repair and must stamp nothing (#2682)"
-    )
+  @MainActor
+  func testActivateTargetSkipsForegroundAndActivatesNonForegroundApplication() {
+    withStubbedTargetActivation {
+      RunnerTargetActivationSpy.state = .runningForeground
+      textEntryTapWitness = TextEntryTapWitness(
+        element: app,
+        bundleId: "com.example.previous",
+        processIdentifier: 41
+      )
+      // The happy path owes two things: no activation work at all, and no fact to disclose. Clearing
+      // first makes the nil below a claim about THIS call rather than whatever an earlier test left.
+      pendingTargetActivation = nil
+      _ = activateTarget(bundleId: "com.example.foreground", reason: "unit_test")
+      XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 0)
+      XCTAssertNil(textEntryTapWitness)
+      XCTAssertNil(
+        pendingTargetActivation,
+        "an already-foreground command performed no repair and must stamp nothing (#2682)"
+      )
 
-    RunnerTargetActivationSpy.state = .runningBackground
-    _ = activateTarget(bundleId: "com.example.background", reason: "unit_test")
-    XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 1)
-    // The stamped state is the one read BEFORE `activate()` ran, so the fact describes what was
-    // repaired. A value read after the repair would report `.runningForeground` here (#2682).
-    XCTAssertEqual(
-      pendingTargetActivation?.priorState,
-      Int(XCUIApplication.State.runningBackground.rawValue)
+      RunnerTargetActivationSpy.state = .runningBackground
+      _ = activateTarget(bundleId: "com.example.background", reason: "unit_test")
+      XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 1)
+      // The stamped state is the one read BEFORE `activate()` ran, so the fact describes what was
+      // repaired. A value read after the repair would report `.runningForeground` here (#2682).
+      XCTAssertEqual(
+        pendingTargetActivation?.priorState,
+        Int(XCUIApplication.State.runningBackground.rawValue)
+      )
+      XCTAssertEqual(pendingTargetActivation?.reason, "unit_test")
+    }
+  }
+
+  @MainActor
+  func testSkippedActivationAfterAnnouncedRelaunchKeepsAnElapsedWindow() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningForeground
+      mainOwned.app = app
+      mainOwned.bundleId = "com.example.app"
+      _ = resetTargetAfterExternalRelaunch()
+      stampElapsedWindow(origin: .announcedRelaunch(bundleId: "com.example.app"))
+
+      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
+
+      XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 0)
+      XCTAssertLessThan(measureStabilizationDuration(), firstInteractionAfterActivateDelay / 2)
+      XCTAssertNil(firstInteractionWindow)
+    }
+  }
+
+  @MainActor
+  func testSkippedActivationAfterAnnouncedRelaunchWaitsOnlyForTheRemainingWindow() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningForeground
+      mainOwned.app = app
+      mainOwned.bundleId = "com.example.app"
+      _ = resetTargetAfterExternalRelaunch()
+      let resetWindow = firstInteractionWindow
+      sleepFor(firstInteractionAfterActivateDelay / 2)
+
+      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
+
+      XCTAssertEqual(firstInteractionWindow?.readyUptime, resetWindow?.readyUptime)
+      XCTAssertEqual(firstInteractionWindow?.origin, .announcedRelaunch(bundleId: "com.example.app"))
+      XCTAssertLessThan(measureStabilizationDuration(), firstInteractionAfterActivateDelay * 0.75)
+      XCTAssertNil(firstInteractionWindow)
+    }
+  }
+
+  @MainActor
+  func testAnnouncedRelaunchWithNoBoundTargetCoversWhicheverBundleActivatesNext() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningForeground
+      invalidateCachedTarget(reason: "unit_test_setup")
+      _ = resetTargetAfterExternalRelaunch()
+      XCTAssertEqual(firstInteractionWindow?.origin, .announcedRelaunch(bundleId: nil))
+      stampElapsedWindow(origin: .announcedRelaunch(bundleId: nil))
+
+      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
+
+      XCTAssertLessThan(measureStabilizationDuration(), firstInteractionAfterActivateDelay / 2)
+    }
+  }
+
+  @MainActor
+  func testSkippedActivationOfAnotherBundleThanTheAnnouncedRelaunchStampsFresh() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningForeground
+      stampElapsedWindow(origin: .announcedRelaunch(bundleId: "com.example.a"))
+
+      _ = activateTarget(bundleId: "com.example.b", reason: "bundle_changed")
+
+      XCTAssertEqual(firstInteractionWindow?.origin, .activation)
+      XCTAssertGreaterThanOrEqual(
+        measureStabilizationDuration(),
+        firstInteractionAfterActivateDelay * 0.8
+      )
+    }
+  }
+
+  @MainActor
+  func testStaleActivationWindowSurvivingTerminateInvalidationStampsFreshOnSkippedActivation() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningForeground
+      mainOwned.app = app
+      mainOwned.bundleId = "com.example.app"
+      stampElapsedWindow(origin: .activation)
+
+      invalidateCachedTarget(reason: "target_terminated")
+      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
+
+      XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 0)
+      XCTAssertGreaterThanOrEqual(
+        measureStabilizationDuration(),
+        firstInteractionAfterActivateDelay * 0.8
+      )
+    }
+  }
+
+  @MainActor
+  func testAnnouncedRelaunchWindowDoesNotSurviveALaterInvalidation() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningForeground
+      mainOwned.app = app
+      mainOwned.bundleId = "com.example.app"
+      _ = resetTargetAfterExternalRelaunch()
+      stampElapsedWindow(origin: .announcedRelaunch(bundleId: "com.example.app"))
+
+      invalidateCachedTarget(reason: "ax_snapshot_failure")
+      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
+
+      XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 0)
+      XCTAssertGreaterThanOrEqual(
+        measureStabilizationDuration(),
+        firstInteractionAfterActivateDelay * 0.8
+      )
+    }
+  }
+
+  @MainActor
+  func testSkippedActivationWithoutAWindowStampsOne() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningForeground
+      firstInteractionWindow = nil
+
+      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
+
+      XCTAssertEqual(firstInteractionWindow?.origin, .activation)
+      XCTAssertGreaterThanOrEqual(
+        measureStabilizationDuration(),
+        firstInteractionAfterActivateDelay * 0.8
+      )
+    }
+  }
+
+  @MainActor
+  func testPerformedActivationReplacesAnElapsedAnnouncedWindow() {
+    withStubbedTargetActivation {
+      mainOwned.needsPostSnapshotInteractionDelay = false
+      RunnerTargetActivationSpy.state = .runningBackground
+      stampElapsedWindow(origin: .announcedRelaunch(bundleId: "com.example.app"))
+
+      _ = activateTarget(bundleId: "com.example.app", reason: "bundle_changed")
+
+      XCTAssertEqual(RunnerTargetActivationSpy.activationCount, 1)
+      XCTAssertEqual(firstInteractionWindow?.origin, .activation)
+      XCTAssertGreaterThanOrEqual(
+        measureStabilizationDuration(),
+        firstInteractionAfterActivateDelay * 0.8
+      )
+    }
+  }
+
+  @MainActor
+  private func stampElapsedWindow(origin: FirstInteractionWindow.Origin) {
+    firstInteractionWindow = FirstInteractionWindow(
+      readyUptime: ProcessInfo.processInfo.systemUptime - 1,
+      origin: origin
     )
-    XCTAssertEqual(pendingTargetActivation?.reason, "unit_test")
   }
 #endif
 
@@ -150,7 +311,7 @@ extension RunnerTests {
     mainOwned.bundleId = "com.example.app"
     mainOwned.processIdentifier = 42
     snapshotXCTestPenaltyWarmupExemption.isPending = true
-    firstInteractionReadyUptime = nil
+    firstInteractionWindow = nil
     penalizeSnapshotXCTestChannel(bundleId: "com.example.app", reason: "test")
     XCTAssertTrue(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
 
@@ -162,7 +323,7 @@ extension RunnerTests {
     XCTAssertNil(mainOwned.processIdentifier)
     XCTAssertFalse(snapshotXCTestPenaltyWarmupExemption.isPending)
     XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
-    XCTAssertNotNil(firstInteractionReadyUptime)
+    XCTAssertEqual(firstInteractionWindow?.origin, .announcedRelaunch(bundleId: "com.example.app"))
   }
 
   /// The settling window is a deadline measured from the activation, not a pause charged at the
@@ -173,10 +334,13 @@ extension RunnerTests {
     mainOwned.needsPostSnapshotInteractionDelay = false
 
     // An activation whose window has already elapsed: the caller spent it getting back to us.
-    firstInteractionReadyUptime = ProcessInfo.processInfo.systemUptime - 1
+    firstInteractionWindow = FirstInteractionWindow(
+      readyUptime: ProcessInfo.processInfo.systemUptime - 1,
+      origin: .activation
+    )
     let elapsedAfterSatisfiedWindow = measureStabilizationDuration()
     XCTAssertLessThan(elapsedAfterSatisfiedWindow, firstInteractionAfterActivateDelay / 2)
-    XCTAssertNil(firstInteractionReadyUptime)
+    XCTAssertNil(firstInteractionWindow)
 
     // A fresh activation still gets the whole guard.
     beginFirstInteractionStabilization()
@@ -185,7 +349,7 @@ extension RunnerTests {
       elapsedAfterFreshActivation,
       firstInteractionAfterActivateDelay * 0.8
     )
-    XCTAssertNil(firstInteractionReadyUptime)
+    XCTAssertNil(firstInteractionWindow)
   }
 
   @MainActor
