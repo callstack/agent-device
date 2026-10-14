@@ -185,10 +185,6 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
           }),
         });
         await dispatchCliCommand(ctx, client, replayTestReporterRuntime, commandProgress);
-        if (command === 'close') {
-          const { releaseProxyLeaseAfterClose } = await import('./cli/commands/connection.ts');
-          await releaseProxyLeaseAfterClose(client, ctx.effectiveFlags);
-        }
       } catch (error) {
         await handleRunCliFailure(error, ctx, logTailStopper);
       } finally {
@@ -815,6 +811,28 @@ function hasExplicitMetroRuntimeOverrides(explicitFlagKeys: Set<FlagKey>): boole
   return false;
 }
 
+type CliDaemonTransportSetup = {
+  command: string;
+  flags: CliFlags;
+  replayTestReporterRuntime?: ReplayTestReporterRuntime;
+  commandProgress: CommandProgressState;
+  transport: CliDaemonTransport;
+};
+
+/**
+ * A remote connection reads each daemon reply for a session close that released its stored lease.
+ */
+function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
+  const send = createCliProgressTransport(options);
+  if (!options.flags.remoteConfig) return send;
+  return async (req, context) => {
+    const response = await send(req, context);
+    const { forgetProxyLeaseReleasedByClose } = await import('./cli/connection/closed-lease.ts');
+    forgetProxyLeaseReleasedByClose(options.flags, response);
+    return response;
+  };
+}
+
 /**
  * The human CLI renders streamed progress itself: `test` hands its events to the
  * replay-test reporter, every other command streams `command` lines to stderr
@@ -822,13 +840,7 @@ function hasExplicitMetroRuntimeOverrides(explicitFlagKeys: Set<FlagKey>): boole
  * doctor summary does not repeat checks progress already printed). `--json` opts
  * out of progress entirely, so it installs no sink.
  */
-function createCliDaemonTransport(options: {
-  command: string;
-  flags: CliFlags;
-  replayTestReporterRuntime?: ReplayTestReporterRuntime;
-  commandProgress: CommandProgressState;
-  transport: CliDaemonTransport;
-}): AgentDeviceDaemonTransport {
+function createCliProgressTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
   const { command, flags, replayTestReporterRuntime, transport } = options;
   if (flags.json) return createClientDaemonTransport(transport);
   const onProgress =

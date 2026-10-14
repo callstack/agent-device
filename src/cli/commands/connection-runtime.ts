@@ -399,7 +399,6 @@ function leaseStateMatches(
   return (
     state.leaseId === lease.leaseId &&
     state.leaseBackend === leaseBackend &&
-    state.leaseRetainOnClose === lease.retainOnClose &&
     state.deviceKey === (lease.deviceKey ?? state.deviceKey)
   );
 }
@@ -415,7 +414,6 @@ function buildMaterializedLeaseState(
     ...state,
     leaseId: lease.leaseId,
     leaseBackend,
-    leaseRetainOnClose: lease.retainOnClose,
     ...connection,
     platform: state.platform ?? flags.platform,
     target: state.target ?? flags.target,

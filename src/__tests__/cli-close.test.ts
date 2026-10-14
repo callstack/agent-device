@@ -1,25 +1,15 @@
-import { test, vi } from 'vitest';
+import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import fs from 'node:fs';
 import { runCliCapture, type CapturedCliRun } from './cli-capture.ts';
 import {
   connectionWorkspace,
-  createTestClient,
   seedConnectionState,
   type StoredConnectionSeed,
 } from './remote-connection.fixtures.ts';
-import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { readRemoteConnectionState } from '../remote/remote-connection-state.ts';
-import type { DaemonResponse } from '../daemon-client/daemon-client.ts';
-
-const emitDiagnostic = vi.hoisted(() => vi.fn());
-
-vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();
-  emitDiagnostic.mockImplementation(actual.emitDiagnostic);
-  return { ...actual, emitDiagnostic };
-});
+import type { DaemonRequest, DaemonResponse } from '../daemon-client/daemon-client.ts';
 
 function runCliWithDaemonStartupFailure(argv: string[]): Promise<CapturedCliRun> {
   return runCliCapture(argv, async () => {
@@ -105,11 +95,9 @@ test('close --shutdown --json treats daemon startup failure as no-op success', a
 });
 
 const PROXY_LEASE_ID = 'abc123abc123abc1';
+const RELEASED = { outcome: 'released', leaseId: PROXY_LEASE_ID } as const;
 
-function seedProxyConnection(overrides: Partial<StoredConnectionSeed> = {}): {
-  stateDir: string;
-  remoteConfigPath: string;
-} {
+function seedProxyConnection(overrides: Partial<StoredConnectionSeed> = {}): string {
   const { stateDir, remoteConfigPath } = connectionWorkspace('agent-device-close-proxy-');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
   seedConnectionState({
@@ -129,124 +117,101 @@ function seedProxyConnection(overrides: Partial<StoredConnectionSeed> = {}): {
       ...overrides,
     },
   });
-  return { stateDir, remoteConfigPath };
+  return stateDir;
 }
 
-function closeProxySession(
+function storedLeaseId(stateDir: string): string | undefined {
+  return readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId;
+}
+
+function runProxyCli(
   stateDir: string,
-  releaseResponse: DaemonResponse = { ok: true, data: { released: false } },
+  argv: string[],
+  respond: (req: Omit<DaemonRequest, 'token'>) => DaemonResponse,
 ): Promise<CapturedCliRun> {
   return runCliCapture(
-    ['close', '--state-dir', stateDir, '--session', 'adc-proxy', '--json'],
+    [...argv, '--state-dir', stateDir, '--session', 'adc-proxy', '--json'],
     async (req) =>
-      req.command === 'lease_release'
-        ? releaseResponse
-        : { ok: true, data: { session: 'adc-proxy' } },
+      req.command === 'lease_heartbeat'
+        ? {
+            ok: true,
+            data: {
+              lease: {
+                leaseId: PROXY_LEASE_ID,
+                tenantId: 'proxy',
+                runId: 'proxy-client-1',
+                backend: 'ios-instance',
+              },
+            },
+          }
+        : respond(req),
   );
 }
 
-test('proxy close sends lease_release for the stored lease and forgets it locally', async () => {
-  const { stateDir } = seedProxyConnection();
-  const result = await closeProxySession(stateDir);
+test('proxy close forgets the stored lease the daemon reports released, and sends no release', async () => {
+  const stateDir = seedProxyConnection();
+  const result = await runProxyCli(stateDir, ['close'], () => ({
+    ok: true,
+    data: { session: 'adc-proxy', lease: RELEASED },
+  }));
   assert.equal(result.code, null);
   assert.deepEqual(
     result.calls.map((call) => call.command),
-    ['close', 'lease_release'],
+    ['close'],
   );
-  assert.equal(result.calls[1]?.flags?.leaseId, PROXY_LEASE_ID);
-  assert.equal(result.calls[1]?.meta?.deviceKey, 'ios:mobile:SIM-001');
-  assert.equal(JSON.parse(result.stdout).success, true);
-  const state = readRemoteConnectionState({ stateDir, session: 'adc-proxy' });
-  assert.equal(state?.leaseId, undefined);
-  assert.equal(state?.leaseProvider, 'proxy');
+  assert.equal(storedLeaseId(stateDir), undefined);
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseProvider,
+    'proxy',
+  );
 });
 
-test('proxy close succeeds and forgets the lease when the release finds no lease', async () => {
-  const { stateDir } = seedProxyConnection();
-  const result = await closeProxySession(stateDir, {
+test('a failed proxy close forgets the stored lease the daemon already released', async () => {
+  const stateDir = seedProxyConnection();
+  const result = await runProxyCli(stateDir, ['close'], () => ({
     ok: false,
     error: {
-      code: 'UNAUTHORIZED',
-      message: 'Lease is not active',
-      details: { reason: 'LEASE_NOT_FOUND' },
+      code: 'DEVICE_UNAVAILABLE',
+      message: 'platform close failed',
+      details: { lease: RELEASED },
     },
-  });
-  assert.equal(result.code, null);
-  assert.equal(result.stderr, '');
-  assert.equal(JSON.parse(result.stdout).success, true);
-  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId, undefined);
-  const releaseFailure = emitDiagnostic.mock.calls
-    .map(([event]) => event)
-    .find((event) => event.phase === 'proxy_lease_release_after_close_failed');
-  assert.deepEqual(releaseFailure?.data, {
-    session: 'adc-proxy',
-    leaseId: PROXY_LEASE_ID,
-    code: 'UNAUTHORIZED',
-    reason: 'LEASE_NOT_FOUND',
-  });
+  }));
+  assert.equal(result.code, 1);
+  assert.equal(storedLeaseId(stateDir), undefined);
 });
 
-test('proxy close keeps a lease the daemon retained on close, as heartbeats reported it', async () => {
-  const { stateDir, remoteConfigPath } = seedProxyConnection();
-  await materializeRemoteConnectionForCommand({
-    command: 'snapshot',
-    flags: {
-      json: true,
-      help: false,
-      version: false,
+test('a proxy batch forgets the stored lease its close step reports released', async () => {
+  const closeStep = { step: 1, command: 'close', ok: true, data: { lease: RELEASED } };
+  const batchReplies: DaemonResponse[] = [
+    {
+      ok: true,
+      data: {
+        total: 1,
+        executed: 1,
+        totalDurationMs: 1,
+        results: [{ ...closeStep, durationMs: 1 }],
+      },
+    },
+    {
+      ok: false,
+      error: {
+        code: 'SESSION_NOT_FOUND',
+        message: 'Batch failed at step 2 (snapshot): No active session',
+        details: { step: 2, partialResults: [{ ...closeStep, durationMs: 1 }] },
+      },
+    },
+  ];
+  for (const reply of batchReplies) {
+    const stateDir = seedProxyConnection();
+    const result = await runProxyCli(
       stateDir,
-      remoteConfig: remoteConfigPath,
-      session: 'adc-proxy',
-    },
-    client: createTestClient({
-      heartbeat: async (request) => ({
-        leaseId: request.leaseId,
-        tenantId: 'proxy',
-        runId: 'proxy-client-1',
-        backend: 'ios-instance',
-        retainOnClose: true,
-      }),
-    }),
-  });
-  const result = await closeProxySession(stateDir);
-  assert.equal(result.code, null);
-  assert.deepEqual(
-    result.calls.map((call) => call.command),
-    ['close'],
-  );
-  assert.equal(
-    readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId,
-    PROXY_LEASE_ID,
-  );
-});
-
-test('close sends no lease_release for host-allocated or non-proxy leases', async () => {
-  for (const overrides of [
-    { leaseBackend: 'macos-app', platform: 'macos', deviceKey: 'com.example.app@4242' },
-    { leaseProvider: undefined },
-  ] satisfies Partial<StoredConnectionSeed>[]) {
-    const { stateDir } = seedProxyConnection(overrides);
-    const result = await closeProxySession(stateDir);
-    assert.equal(result.code, null);
+      ['batch', '--steps', '[{"command":"close","input":{}},{"command":"snapshot","input":{}}]'],
+      () => reply,
+    );
     assert.deepEqual(
-      result.calls.map((call) => call.command),
-      ['close'],
+      result.calls.map((call) => call.command).filter((command) => command !== 'lease_heartbeat'),
+      ['batch'],
     );
-    assert.equal(
-      readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.leaseId,
-      PROXY_LEASE_ID,
-    );
+    assert.equal(storedLeaseId(stateDir), undefined);
   }
-});
-
-test('local close sends no lease_release', async () => {
-  const result = await runCliCapture(['close', '--json'], {
-    stateDirPrefix: 'agent-device-close-local-',
-    defaultResponse: { ok: true, data: { session: 'default' } },
-  });
-  assert.equal(result.code, null);
-  assert.deepEqual(
-    result.calls.map((call) => call.command),
-    ['close'],
-  );
 });
