@@ -106,6 +106,21 @@ test('an allocation repeating its own live lease id gets that lease back, on any
   assert.equal(registry.listActiveLeases().length, 1);
 });
 
+test('a retried allocation renews its own lease for the window that lease carries', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 10_000 });
+  const leaseId = 'abcdef0123456789abcdef0123456789';
+  const owner = { tenantId: 'tenant-a', runId: 'run-1', clientId: 'client-1' } as const;
+  const lease = registry.allocateLease({ ...owner, leaseId, ttlMs: 60_000 });
+
+  now = 31_000;
+  const retried = registry.renewRequestedLease({ ...owner, leaseId });
+
+  assert.equal(lease.expiresAt, 61_000);
+  assert.equal(retried?.heartbeatAt, 31_000);
+  assert.equal(retried?.expiresAt, 91_000);
+});
+
 test('an expired provider lease keeps its id and provider session from a caller-chosen reuse', () => {
   let now = 1_000;
   const registry = new LeaseRegistry({ now: () => now, defaultLeaseTtlMs: 10_000 });

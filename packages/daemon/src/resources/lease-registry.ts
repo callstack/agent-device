@@ -135,7 +135,8 @@ export class LeaseRegistry {
   /**
    * The live lease an allocation gets back when it repeats the `leaseId` it named before, for the
    * same owner: a retry after a lost reply receives the lease it was issued, not a second one. A
-   * request naming no device matches whichever device the lease binds.
+   * request naming no device matches whichever device the lease binds, and one naming no `ttlMs`
+   * keeps the window the lease already carries.
    */
   renewRequestedLease(request: AllocateLeaseRequest): DeviceLease | undefined {
     const { chosenLeaseId, normalized, leaseTtlMs } = this.prepareAllocation(request);
@@ -166,7 +167,7 @@ export class LeaseRegistry {
     this.assertHumanControlAdmission(lease);
     return this.refreshLease(
       request.retainOnClose ? { ...lease, retainOnClose: true } : lease,
-      leaseTtlMs,
+      request.ttlMs === undefined ? leaseOwnTtlMs(lease) : leaseTtlMs,
     );
   }
 
