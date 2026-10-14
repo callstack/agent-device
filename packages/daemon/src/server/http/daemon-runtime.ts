@@ -20,9 +20,7 @@ import { createExpiredProviderLeaseReleaser } from '../provider-lease-expiry.ts'
 import { createRequestHandler } from '../request-router.ts';
 import type { RequestRouterDeps } from '../request-router.ts';
 import { getLeaseRegistryExecutionLocks } from '../request-execution-scope.ts';
-import { endLeaseSessions } from '../../sessions/lease-lifecycle.ts';
-import { existingSessionExecutionLockKeys } from '../request-binding.ts';
-import { withRequestExecutionLockKeys } from '../request-execution-locks.ts';
+import type { LeaseEndReason } from '../../sessions/lease-lifecycle.ts';
 import { stopSessionAppLog, teardownSessionResources } from '../../sessions/session-teardown.ts';
 import { resolveDaemonSessionTeardownTimeoutMs } from '../../sessions/session-teardown-budget.ts';
 import { finalizeDaemonSessionApplicationLifecycle } from '../application-lifecycle-recovery.ts';
@@ -34,6 +32,7 @@ import type { RuntimeHintValues } from '@agent-device/contracts/application-life
 import { createDaemonIdleReap } from '../../sessions/server/daemon-idle-reap.ts';
 import { withDaemonDiagnosticsScope } from '@agent-device/daemon-contracts/daemon-diagnostics-scope';
 import { createSessionIdleExpiry } from './daemon-session-idle-expiry.ts';
+import { createLeaseSessionEnd } from './daemon-lease-session-end.ts';
 import { resolveSessionIdleExpiryMs } from '../session-idle-expiry.ts';
 import { finalizeDaemonLeases } from './daemon-lease-finalizer.ts';
 import {
@@ -571,33 +570,15 @@ export async function startDaemonRuntime(
     // holds the session back to retry. The reaper runs it once the expiry is committed to.
   };
 
-  const endSessionsForLease = async (
-    leaseId: string,
-    reason: 'LEASE_RELEASED' | 'LEASE_EXPIRED',
-  ): Promise<void> => {
-    if (shuttingDown) return;
-    await withDaemonDiagnosticsScope({ logPath }, async () => {
-      try {
-        await endLeaseSessions({
-          leaseId,
-          reason,
-          sessionStore,
-          withSessionLocks: async (ref, task) =>
-            await withRequestExecutionLockKeys(
-              getLeaseRegistryExecutionLocks(leaseRegistry),
-              existingSessionExecutionLockKeys(ref.address, ref.session.device.id),
-              task,
-            ),
-          teardownSession: settleIdleExpiredSession,
-        });
-      } catch (error) {
-        emitDiagnostic({
-          level: 'warn',
-          phase: 'leased_session_end_failed',
-          data: { leaseId, reason, error: error instanceof Error ? error.message : String(error) },
-        });
-      }
-    });
+  const leaseSessionEnd = createLeaseSessionEnd({
+    sessionStore,
+    executionLocks: getLeaseRegistryExecutionLocks(leaseRegistry),
+    teardownSession: settleIdleExpiredSession,
+    withinDiagnosticsScope: async (run) => await withDaemonDiagnosticsScope({ logPath }, run),
+  });
+
+  const endSessionsForLease = async (leaseId: string, reason: LeaseEndReason): Promise<void> => {
+    await leaseSessionEnd.end(leaseId, reason);
     idleReap.noteActivity();
   };
 
@@ -855,6 +836,7 @@ export async function startDaemonRuntime(
   const shutdown = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) => {
     idleReap.cancel();
     sessionIdleExpiry.cancel();
+    leaseSessionEnd.cancel();
     clearInterval(leaseExpirySweep);
     if (shuttingDown) return;
     shuttingDown = true;
@@ -864,6 +846,7 @@ export async function startDaemonRuntime(
     }
     await closeDaemonServers(servers);
     await Promise.allSettled(inFlightRequests);
+    await leaseSessionEnd.drain();
     // Hand healthy runners off before durable session teardown. The lifecycle gateway later
     // terminates only still-owned generations once all resources have finalized.
     //

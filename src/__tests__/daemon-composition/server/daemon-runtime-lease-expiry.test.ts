@@ -4,6 +4,7 @@ import { afterEach, test, vi } from 'vitest';
 
 const leaseProbe = vi.hoisted(() => ({
   registries: [] as import('@agent-device/daemon/testing/lease-registry').LeaseRegistry[],
+  ended: [] as Array<[string, string]>,
 }));
 vi.mock('@agent-device/daemon/testing/lease-registry', async (importOriginal) => {
   const actual =
@@ -16,19 +17,23 @@ vi.mock('@agent-device/daemon/testing/lease-registry', async (importOriginal) =>
   }
   return { ...actual, LeaseRegistry: RecordedLeaseRegistry };
 });
-vi.mock('@agent-device/daemon/testing/lease-lifecycle', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/lease-lifecycle')>();
-  return { ...actual, endLeaseSessions: vi.fn(async () => {}) };
-});
+vi.mock('@agent-device/daemon/testing/server/daemon-lease-session-end', () => ({
+  createLeaseSessionEnd: () => ({
+    end: async (leaseId: string, reason: string) => {
+      leaseProbe.ended.push([leaseId, reason]);
+    },
+    cancel: () => {},
+    drain: async () => {},
+  }),
+}));
 
-import { endLeaseSessions } from '@agent-device/daemon/testing/lease-lifecycle';
 import { startDaemonRuntimeFixture } from '../daemon-runtime-fixture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 afterEach(() => {
   vi.useRealTimers();
   leaseProbe.registries.length = 0;
+  leaseProbe.ended.length = 0;
 });
 
 test('an expired lease ends its session without any further request', async () => {
@@ -53,13 +58,10 @@ test('an expired lease ends its session without any further request', async () =
     const lease = registry!.allocateLease({ tenantId: 'tenant-a', runId: 'run-1', ttlMs: 50 });
 
     await vi.advanceTimersByTimeAsync(40);
-    assert.equal(vi.mocked(endLeaseSessions).mock.calls.length, 0);
+    assert.deepEqual(leaseProbe.ended, []);
 
     await vi.advanceTimersByTimeAsync(1_000);
-    assert.deepEqual(
-      vi.mocked(endLeaseSessions).mock.calls.map(([params]) => [params.leaseId, params.reason]),
-      [[lease.leaseId, 'LEASE_EXPIRED']],
-    );
+    assert.deepEqual(leaseProbe.ended, [[lease.leaseId, 'LEASE_EXPIRED']]);
 
     const shutdown = runtime?.shutdown();
     await vi.runOnlyPendingTimersAsync();

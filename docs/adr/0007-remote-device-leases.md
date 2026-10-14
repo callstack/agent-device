@@ -58,7 +58,9 @@ released (tenant `lease_release` or host `DELETE /admin/leases/<lease-id>`) or
 expires, the daemon tears the session down under its execution locks and clears
 its device claim, even when the device no longer answers. The daemon sweeps for
 expired leases every second, so expiry does not wait for a later request;
-in-flight work and human-control holds still keep a lease from expiring.
+in-flight work and human-control holds still keep a lease from expiring. Once
+daemon shutdown begins, no new lease-end teardown starts, and shutdown waits for
+any that already started before it tears sessions down itself.
 
 ## Consequences
 

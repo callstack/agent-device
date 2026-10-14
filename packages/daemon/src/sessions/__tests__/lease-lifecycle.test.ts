@@ -1,22 +1,11 @@
-import fs from 'node:fs';
 import { test, expect, vi } from 'vitest';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import {
-  isolatedDeviceClaimStores,
-  retainOrphanedDeviceClaims,
-} from '../../__tests__/support/device-claim-store.ts';
-import { acquireDeviceClaim } from '../../resources/device/device-claims.ts';
-import { resolveDeviceClaimPath } from '../../resources/device/device-claim-paths.ts';
-import { existingSessionExecutionLockKeys } from '../../server/request-binding.ts';
-import { withRequestExecutionLockKeys } from '../../server/request-execution-locks.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
-import type { SessionStore } from '../../core/session-store.ts';
 import {
   admitRequestLeaseForLockedScope,
   cleanupExpiredLeasedSession,
-  endLeaseSessions,
   releaseExpiredProviderLease,
   releaseSessionLease,
   resolveSessionLeaseForRequest,
@@ -105,112 +94,6 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
   );
   expect(sessionStore.get('default')).toBeUndefined();
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
-});
-
-const claimStores = isolatedDeviceClaimStores('agent-device-lease-end-claims-');
-
-async function publishLeasedSession(
-  sessionStore: SessionStore,
-  name: string,
-  leaseId: string,
-): Promise<string> {
-  const { stateDir } = claimStores();
-  const session = makeIosSession(name, {
-    lease: { leaseId, tenantId: 'tenant-a', runId: 'run-1' },
-  });
-  const acquired = await acquireDeviceClaim({
-    device: session.device,
-    session: name,
-    workspace: stateDir,
-    stateDir,
-    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
-  });
-  if (acquired.status !== 'acquired') throw new Error('expected an acquired claim');
-  sessionStore.publish(name, { ...session, deviceClaim: acquired.ownership });
-  return resolveDeviceClaimPath(acquired.ownership.deviceKey);
-}
-
-test('endLeaseSessions ends the session opened under the lease and clears its device claim', async () => {
-  const sessionStore = makeSessionStore('agent-device-lease-end-');
-  const claimPath = await publishLeasedSession(sessionStore, 'leased', 'lease-1');
-  sessionStore.publish(
-    'other',
-    makeIosSession('other', {
-      lease: { leaseId: 'lease-2', tenantId: 'tenant-b', runId: 'run-2' },
-    }),
-  );
-  expect(fs.existsSync(claimPath)).toBe(true);
-  const teardownSession = vi.fn(async () => {});
-
-  await endLeaseSessions({
-    leaseId: 'lease-1',
-    reason: 'LEASE_RELEASED',
-    sessionStore,
-    withSessionLocks: async (_ref, task) => await task(),
-    teardownSession,
-  });
-
-  expect(teardownSession).toHaveBeenCalledTimes(1);
-  expect(teardownSession).toHaveBeenCalledWith(expect.objectContaining({ address: 'leased' }));
-  expect(sessionStore.get('leased')).toBeUndefined();
-  expect(fs.existsSync(claimPath)).toBe(false);
-  expect(sessionStore.get('other')).toBeDefined();
-});
-
-test('endLeaseSessions clears the claim of a session whose device no longer answers', async () => {
-  const sessionStore = makeSessionStore('agent-device-lease-end-unreachable-');
-  const claimPath = await publishLeasedSession(sessionStore, 'leased', 'lease-1');
-
-  await endLeaseSessions({
-    leaseId: 'lease-1',
-    reason: 'LEASE_EXPIRED',
-    sessionStore,
-    withSessionLocks: async (_ref, task) => await task(),
-    teardownSession: async () => {
-      throw new Error('device unreachable');
-    },
-  });
-
-  expect(sessionStore.get('leased')).toBeUndefined();
-  expect(fs.existsSync(claimPath)).toBe(false);
-});
-
-test('endLeaseSessions waits for the command still running on the session', async () => {
-  const sessionStore = makeSessionStore('agent-device-lease-end-locked-');
-  await publishLeasedSession(sessionStore, 'leased', 'lease-1');
-  const executionLocks = new Map<string, Promise<unknown>>();
-  let finishCommand!: () => void;
-  const commandRunning = new Promise<void>((resolve) => {
-    finishCommand = resolve;
-  });
-  const command = withRequestExecutionLockKeys(
-    executionLocks,
-    existingSessionExecutionLockKeys('leased', sessionStore.get('leased')!.device.id),
-    async () => await commandRunning,
-  );
-  const teardownSession = vi.fn(async () => {});
-
-  const ending = endLeaseSessions({
-    leaseId: 'lease-1',
-    reason: 'LEASE_RELEASED',
-    sessionStore,
-    withSessionLocks: async (ref, task) =>
-      await withRequestExecutionLockKeys(
-        executionLocks,
-        existingSessionExecutionLockKeys(ref.address, ref.session.device.id),
-        task,
-      ),
-    teardownSession,
-  });
-  await new Promise((resolve) => setImmediate(resolve));
-  expect(teardownSession).not.toHaveBeenCalled();
-  expect(sessionStore.get('leased')).toBeDefined();
-
-  finishCommand();
-  await command;
-  await ending;
-  expect(teardownSession).toHaveBeenCalledTimes(1);
-  expect(sessionStore.get('leased')).toBeUndefined();
 });
 
 test('releaseSessionLease releases with the stored session owner scope', async () => {

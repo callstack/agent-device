@@ -20,6 +20,8 @@ export type ExpiredProviderLeaseRecovery = (lease: DeviceLease) => Promise<void>
 
 export type SessionTeardown = (ref: SessionRef) => Promise<void>;
 
+export type LeaseEndReason = 'LEASE_RELEASED' | 'LEASE_EXPIRED';
+
 export async function releaseExpiredProviderLease(
   recoverExpiredLease: ExpiredProviderLeaseRecovery | undefined,
   lease: DeviceLease,
@@ -66,41 +68,14 @@ export async function cleanupExpiredLeasedSession(params: {
 }
 
 /**
- * Ends every session opened under a lease that is gone (released or expired), each inside
- * `withSessionLocks` (the session's execution lock pair) so a command still running on it finishes
- * first. The device claim is cleared even when teardown fails: the lease that paid for the device
- * has ended, so nobody may keep it.
+ * Ends one session whose lease is gone (released or expired). The device claim is cleared even when
+ * teardown fails: the lease that paid for the device has ended, so nobody may keep it.
  */
-export async function endLeaseSessions(params: {
-  leaseId: string;
-  reason: 'LEASE_RELEASED' | 'LEASE_EXPIRED';
-  sessionStore: SessionStore;
-  withSessionLocks: (ref: SessionRef, task: () => Promise<void>) => Promise<void>;
-  teardownSession: SessionTeardown;
-}): Promise<void> {
-  const { leaseId, sessionStore } = params;
-  const refs = sessionStore.listRefs().filter((ref) => ref.session.lease?.leaseId === leaseId);
-  await Promise.all(
-    refs.map(
-      async (ref) =>
-        await params.withSessionLocks(ref, async () => {
-          if (sessionStore.resolveCurrent(ref)?.lease?.leaseId !== leaseId) return;
-          await endLeasedSession(
-            sessionStore.refresh(ref),
-            sessionStore,
-            params.teardownSession,
-            params.reason,
-          );
-        }),
-    ),
-  );
-}
-
-async function endLeasedSession(
+export async function endLeasedSession(
   ref: SessionRef,
   sessionStore: SessionStore,
   teardownSession: SessionTeardown,
-  reason: 'LEASE_RELEASED' | 'LEASE_EXPIRED',
+  reason: LeaseEndReason,
 ): Promise<void> {
   const session = ref.session;
   const leaseId = session.lease?.leaseId;
