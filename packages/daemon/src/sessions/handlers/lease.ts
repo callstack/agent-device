@@ -28,10 +28,8 @@ import {
   leaseScopeToReleaseRequest,
   type LeaseScope,
 } from '@agent-device/contracts/lease-scope';
-import type { LeaseDevice } from '@agent-device/contracts/client';
-import { publicPlatformString, resolveDevice } from '@agent-device/kernel/device';
+import { publicPlatformString } from '@agent-device/kernel/device';
 import { platformForLeaseBackend } from '@agent-device/kernel/contracts';
-import { resolveInventoryDevices } from '../session-lifecycle/index.ts';
 import { AppError, createRequestCanceledError, errorMessage } from '@agent-device/kernel/errors';
 import { LEASE_ALLOCATION_BUDGET_MS } from '@agent-device/command-registry/timeout-policy';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
@@ -90,13 +88,13 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         req.meta?.providerCredentialFingerprint,
         providerCredentials,
       );
-      const pickedDevice = await pickProxyLeaseDevice(req, leaseScope);
+      const pickedDeviceKey = await pickProxyLeaseDeviceKey(req, leaseScope);
       const activeLeaseIds = new Set(
         leaseRegistry.listActiveLeases().map((entry) => entry.leaseId),
       );
       const lease = leaseRegistry.allocateLease(
         leaseScopeToAllocateRequest(
-          pickedDevice ? { ...leaseScope, deviceKey: leaseDeviceKey(pickedDevice) } : leaseScope,
+          pickedDeviceKey ? { ...leaseScope, deviceKey: pickedDeviceKey } : leaseScope,
         ),
       );
       const reused = activeLeaseIds.has(lease.leaseId);
@@ -139,11 +137,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         const allocated = leaseRegistry.getLease(leaseReleaseRequestFor(lease)) ?? lease;
         return {
           ok: true,
-          data: {
-            lease: allocated,
-            ...(pickedDevice ? { device: pickedDevice } : {}),
-            ...(providerData ? { provider: providerData } : {}),
-          },
+          data: { lease: allocated, ...(providerData ? { provider: providerData } : {}) },
         };
       });
     }
@@ -189,27 +183,34 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
 
 /**
  * A proxy allocation that names no `deviceKey` but does name a device spec leaves the device to this
- * daemon: it picks one from the request's platform, target, name, and identity selectors, by the
- * rules a client applies to the `devices` inventory, and the lease binds that device.
+ * daemon: it resolves the request's selectors as a command would, and the lease binds that device.
  */
-async function pickProxyLeaseDevice(
+async function pickProxyLeaseDeviceKey(
   req: DaemonRequest,
   scope: LeaseScope,
-): Promise<LeaseDevice | undefined> {
+): Promise<string | undefined> {
   if (!isProxyLeaseScope(scope) || scope.deviceKey) return undefined;
-  const { target, device: deviceName, udid, serial } = req.flags ?? {};
-  if (![req.flags?.platform, target, deviceName, udid, serial].some(Boolean)) return undefined;
-  const platform =
-    req.flags?.platform ??
-    (scope.leaseBackend ? platformForLeaseBackend(scope.leaseBackend) : undefined);
-  const devices = await resolveInventoryDevices({ ...req, flags: { ...req.flags, platform } });
-  const device = await resolveDevice(devices, { platform, target, deviceName, udid, serial });
-  return {
+  const flags = req.flags ?? {};
+  if (![flags.platform, flags.target, flags.device, flags.udid, flags.serial].some(Boolean)) {
+    return undefined;
+  }
+  const { resolveTargetDevice } = await import('@agent-device/device-selection/dispatch-resolve');
+  const device = await resolveTargetDevice({
+    platform:
+      flags.platform ??
+      (scope.leaseBackend ? platformForLeaseBackend(scope.leaseBackend) : undefined),
+    target: flags.target,
+    device: flags.device,
+    udid: flags.udid,
+    serial: flags.serial,
+    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
+    androidDeviceAllowlist: flags.androidDeviceAllowlist,
+  });
+  return leaseDeviceKey({
     platform: publicPlatformString(device),
-    ...(device.target ? { target: device.target } : {}),
+    target: device.target,
     id: device.id,
-    name: device.name,
-  };
+  });
 }
 
 type LeaseReleaseOutcome = {

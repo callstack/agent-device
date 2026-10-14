@@ -2,6 +2,8 @@ import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import type { Lease } from '@agent-device/contracts/client';
+import type { AppError } from '@agent-device/kernel/errors';
+import type { AgentDeviceClient } from '../agent-device-client.ts';
 import {
   connectionWorkspace,
   createTestClient,
@@ -32,6 +34,15 @@ const IPHONE_SIMULATOR = {
   identifiers: { udid: 'SIM-LOCAL' },
   ios: { udid: 'SIM-LOCAL' },
 } as const;
+
+const LEASED_SIMULATOR = {
+  ...IPHONE_SIMULATOR,
+  id: 'SIM-REMOTE',
+  identifiers: { udid: 'SIM-REMOTE' },
+  ios: { udid: 'SIM-REMOTE' },
+} as const;
+
+type ListedDevices = Awaited<ReturnType<AgentDeviceClient['devices']['list']>>;
 
 function proxyWorkspace(prefix: string, seed: { leaseId?: string; deviceKey?: string } = {}) {
   const workspace = connectionWorkspace(prefix);
@@ -95,10 +106,7 @@ test('proxy open without an exact device allocates by its selectors and keeps th
       listDevices: unexpectedCommandCall,
       allocate: async (request) => {
         requests.push(request);
-        return grantedLease(request, {
-          deviceKey: 'ios:mobile:SIM-REMOTE',
-          device: { platform: 'ios', target: 'mobile', id: 'SIM-REMOTE', name: 'iPhone 17' },
-        });
+        return grantedLease(request, { deviceKey: 'ios:mobile:SIM-REMOTE' });
       },
     }),
   });
@@ -117,6 +125,25 @@ test('proxy open without an exact device allocates by its selectors and keeps th
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+function renewingClient(heartbeats: string[], devices: ListedDevices) {
+  return createTestClient({
+    listDevices: async () => devices,
+    allocate: unexpectedCommandCall,
+    heartbeat: async (request) => {
+      heartbeats.push(request.deviceKey ?? '');
+      return {
+        leaseId: request.leaseId,
+        tenantId: 'proxy',
+        runId: 'proxy-client-1',
+        backend: 'ios-instance',
+        leaseProvider: 'proxy',
+        clientId: 'client-1',
+        deviceKey: 'ios:mobile:SIM-REMOTE',
+      };
+    },
+  });
+}
+
 test('a later open on the live lease uses the device its key names instead of picking again', async () => {
   const { tempRoot, flags } = proxyWorkspace('agent-device-proxy-by-spec-renew-', {
     leaseId: 'lease-1',
@@ -127,28 +154,37 @@ test('a later open on the live lease uses the device its key names instead of pi
   const materialized = await materializeRemoteConnectionForCommand({
     command: 'open',
     flags: { ...flags, device: 'iPhone 17' },
-    client: createTestClient({
-      // Another simulator with the same name must not replace the leased one.
-      listDevices: async () => [IPHONE_SIMULATOR],
-      allocate: unexpectedCommandCall,
-      heartbeat: async (request) => {
-        heartbeats.push(request.deviceKey ?? '');
-        return {
-          leaseId: request.leaseId,
-          tenantId: 'proxy',
-          runId: 'proxy-client-1',
-          backend: 'ios-instance',
-          leaseProvider: 'proxy',
-          clientId: 'client-1',
-          deviceKey: 'ios:mobile:SIM-REMOTE',
-        };
-      },
-    }),
+    // Another simulator with the same name must not replace the leased one.
+    client: renewingClient(heartbeats, [IPHONE_SIMULATOR, LEASED_SIMULATOR]),
   });
 
   assert.deepEqual(heartbeats, ['ios:mobile:SIM-REMOTE']);
   assert.equal(materialized.flags.udid, 'SIM-REMOTE');
   assert.equal(materialized.connection?.deviceKey, 'ios:mobile:SIM-REMOTE');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('a later open naming another device on the live lease is refused instead of running on the leased one', async () => {
+  const { tempRoot, stateDir, flags } = proxyWorkspace('agent-device-proxy-by-spec-conflict-', {
+    leaseId: 'lease-1',
+    deviceKey: 'ios:mobile:SIM-REMOTE',
+  });
+
+  await assert.rejects(
+    materializeRemoteConnectionForCommand({
+      command: 'open',
+      flags: { ...flags, device: 'iPhone 16' },
+      client: renewingClient([], [LEASED_SIMULATOR, { ...IPHONE_SIMULATOR, name: 'iPhone 16' }]),
+    }),
+    (error: AppError) =>
+      error.code === 'INVALID_ARGS' &&
+      error.details?.reason === 'CONNECTION_DEVICE_CONFLICT' &&
+      error.details?.deviceKey === 'ios:mobile:SIM-REMOTE',
+  );
+  assert.equal(
+    readRemoteConnectionState({ stateDir, session: 'adc-proxy' })?.deviceKey,
+    'ios:mobile:SIM-REMOTE',
+  );
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 

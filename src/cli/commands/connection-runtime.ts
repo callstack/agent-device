@@ -9,19 +9,20 @@ import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import { readRemoteConfigFile } from '../../remote/remote-config-core.ts';
 import {
   deviceFieldsFromPublicPlatform,
+  matchesDeviceNameSelector,
   resolveDevice,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
-import { isInactiveLeaseError, parseLeaseDeviceKey } from '@agent-device/contracts/lease-scope';
+import { isInactiveLeaseError } from '@agent-device/contracts/lease-scope';
 import {
   narrowConnectionPlatform,
   buildConnectionDeviceKey,
   buildRemoteConnectionDaemonState,
   buildRemoteConnectionRequestMetadata,
   hashRemoteConfigFile,
-  leaseDeviceConnectionScope,
   mergeRemoteConnectionRequestMetadata,
+  parseConnectionDeviceKey,
   readRemoteConnectionState,
   resolveConnectionDeviceScope,
   writeRemoteConnectionState,
@@ -999,9 +1000,9 @@ async function resolveProxyLeaseStateLocally(options: {
 }
 
 /**
- * Takes the device from a lease allocated by spec: the one the reply names, or for a renewed lease
- * the one its `deviceKey` names. A daemon that predates picking names none, so its lease is released
- * and the device is picked here and allocated by its key, as before.
+ * Takes the device from a lease allocated by spec: the one its `deviceKey` names, whether the daemon
+ * just picked it or the lease is renewed. A daemon that predates picking leaves the key unset, so its
+ * lease is released and the device is picked here and allocated by its key, as before.
  */
 async function bindLeaseNamedDevice(options: {
   client: AgentDeviceClient;
@@ -1014,16 +1015,16 @@ async function bindLeaseNamedDevice(options: {
 }): Promise<{ state: RemoteConnectionState; materialized: { lease: Lease; acquired: boolean } }> {
   const { client, flags, materialized } = options;
   const { lease, acquired } = materialized;
-  const named = lease.device ?? (acquired ? undefined : parseLeaseDeviceKey(lease.deviceKey));
-  if (named) {
-    const scope = leaseDeviceConnectionScope(named);
-    applyDeviceScopeSelector(flags, scope);
+  const leased = parseConnectionDeviceKey(lease.deviceKey);
+  if (leased) {
+    if (!acquired) await assertLeasedDeviceMatchesRequest(client, options.state, flags, leased);
+    applyDeviceScopeSelector(flags, leased);
     return {
       state: {
         ...options.state,
-        deviceKey: lease.deviceKey ?? buildConnectionDeviceKey(scope),
-        platform: scope.platform,
-        target: options.state.target ?? scope.target,
+        deviceKey: buildConnectionDeviceKey(leased),
+        platform: leased.platform,
+        target: options.state.target ?? leased.target,
       },
       materialized,
     };
@@ -1053,6 +1054,42 @@ async function bindLeaseNamedDevice(options: {
         )
       : materialized,
   };
+}
+
+/**
+ * A renewed lease serves a request only when its device matches every selector the request names.
+ * Platform and target are already checked against the connection record; the device name and the
+ * simulator-set and allowlist scopes are checked against the daemon's inventory.
+ */
+async function assertLeasedDeviceMatchesRequest(
+  client: AgentDeviceClient,
+  state: RemoteConnectionState,
+  flags: CliFlags,
+  leased: ConnectionDeviceScope,
+): Promise<void> {
+  const deviceName = flags.device;
+  if (!deviceName && !flags.iosSimulatorDeviceSet && !flags.androidDeviceAllowlist) return;
+  const devices = await client.devices.list({
+    platform: leased.platform,
+    target: leased.target,
+    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
+    androidDeviceAllowlist: flags.androidDeviceAllowlist,
+  });
+  const matches = devices.some(
+    (device) =>
+      device.id === leased.id && (!deviceName || matchesDeviceNameSelector(device, deviceName)),
+  );
+  if (matches) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    'Active remote connection is already bound to a different device. Re-run connect --force to replace it.',
+    {
+      session: state.session,
+      deviceKey: buildConnectionDeviceKey(leased),
+      requestedDevice: deviceName,
+      reason: 'CONNECTION_DEVICE_CONFLICT',
+    },
+  );
 }
 
 function applyDeviceScopeSelector(flags: CliFlags, scope: ConnectionDeviceScope): void {

@@ -4,7 +4,9 @@ import path from 'node:path';
 import { resolveRemoteConfigPath, resolveRemoteConfigProfile } from './remote-config-core.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
+  DEVICE_TARGETS,
   deviceIdentityFlag,
+  isPublicPlatform,
   platformSelectorsConflict,
   publicPlatformString,
   type DeviceIdentityFlag,
@@ -27,7 +29,6 @@ import {
   leaseScopeToCommandFlags,
   leaseScopeToConnectionMetadata,
 } from '@agent-device/contracts/lease-scope';
-import type { LeaseDevice } from '@agent-device/contracts/client';
 
 export type RemoteConnectionState = {
   version: 1;
@@ -96,28 +97,42 @@ export type ConnectionDeviceScope = Readonly<{
 }>;
 
 export function resolveConnectionDeviceScope(device: DeviceInfo): ConnectionDeviceScope {
-  return leaseDeviceConnectionScope({
-    platform: publicPlatformString(device),
-    target: device.target,
-    id: device.id,
-  });
+  return connectionDeviceScope(publicPlatformString(device), device.target, device.id);
 }
 
-/** The same projection for a device a lease reply names, which is already on the public axis. */
-export function leaseDeviceConnectionScope(device: LeaseDevice): ConnectionDeviceScope {
-  const leaseBackend = leaseBackendForPlatform(device.platform);
+function connectionDeviceScope(
+  platform: PublicPlatform,
+  target: DeviceTarget | undefined,
+  id: string,
+): ConnectionDeviceScope {
+  const leaseBackend = leaseBackendForPlatform(platform);
   return {
-    platform: device.platform,
-    target: device.target,
+    platform,
+    target,
     leaseBackend,
-    identityFlag: leaseBackend ? deviceIdentityFlag(device.platform) : undefined,
-    id: device.id,
+    identityFlag: leaseBackend ? deviceIdentityFlag(platform) : undefined,
+    id,
   };
 }
 
 /** The `deviceKey` for a resolved device: its identity on the public platform and target axes. */
 export function buildConnectionDeviceKey(scope: ConnectionDeviceScope): string {
   return leaseDeviceKey(scope);
+}
+
+/** The device scope a {@link buildConnectionDeviceKey} key names, or `undefined` for any other key. */
+export function parseConnectionDeviceKey(
+  deviceKey: string | undefined,
+): ConnectionDeviceScope | undefined {
+  const match = /^([^:]+):([^:]+):(.+)$/.exec(deviceKey ?? '');
+  if (!match) return undefined;
+  const [, platform, target, id] = match;
+  if (!isPublicPlatform(platform) || !isDeviceTarget(target)) return undefined;
+  return connectionDeviceScope(platform, target, id!);
+}
+
+function isDeviceTarget(value: string | undefined): value is DeviceTarget {
+  return (DEVICE_TARGETS as readonly (string | undefined)[]).includes(value);
 }
 
 /**

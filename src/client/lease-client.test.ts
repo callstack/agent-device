@@ -97,32 +97,3 @@ test('allocate reports whether the daemon kept retainOnClose on the lease', asyn
   assert.equal((await allocate(false)).retainOnClose, undefined);
   assert.equal(requests[0]?.meta?.leaseRetainOnClose, true);
 });
-
-test('allocate returns the device the reply names and drops one it cannot read', async () => {
-  const allocateReplying = async (device: unknown) =>
-    await createAgentDeviceClient(
-      {},
-      {
-        transport: async () => ({
-          ok: true,
-          data: {
-            lease: {
-              leaseId: 'abcdef0123456789',
-              tenantId: 't',
-              runId: 'r',
-              backend: 'ios-instance',
-            },
-            device,
-          },
-        }),
-      },
-    ).leases.allocate({ tenant: 't', runId: 'r' });
-
-  assert.deepEqual(
-    (await allocateReplying({ platform: 'ios', target: 'tv', id: 'SIM-1', name: 'Apple TV' }))
-      .device,
-    { platform: 'ios', target: 'tv', id: 'SIM-1', name: 'Apple TV' },
-  );
-  assert.equal((await allocateReplying({ platform: 'apple', id: 'SIM-1' })).device, undefined);
-  assert.equal((await allocateReplying(undefined)).device, undefined);
-});

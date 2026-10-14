@@ -1,7 +1,6 @@
 // The public API vocabulary for device lease allocation and cloud artifacts.
 
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
-import type { DeviceTarget, PublicPlatform } from '@agent-device/kernel/device';
 import type {
   AgentDeviceRequestOverrides,
   AgentDeviceSelectionOptions,
@@ -17,22 +16,9 @@ export type Lease = {
   clientId?: string;
   /** Present when the daemon keeps this lease through session `close`; an older daemon omits it. */
   retainOnClose?: true;
-  /**
-   * The device a proxy allocation picked because the request named none (no `deviceKey`); an
-   * allocation that named its device, and a daemon that predates picking, omit it.
-   */
-  device?: LeaseDevice;
   createdAt?: number;
   heartbeatAt?: number;
   expiresAt?: number;
-};
-
-/** A device as a lease reply names it: its public platform, target, and identity. */
-export type LeaseDevice = {
-  platform: PublicPlatform;
-  target?: DeviceTarget;
-  id: string;
-  name?: string;
 };
 
 export type LeaseOptions = AgentDeviceRequestOverrides &

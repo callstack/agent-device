@@ -1,7 +1,5 @@
 import type { LeaseBackend } from '@agent-device/kernel/contracts';
-import { DEVICE_TARGETS, isPublicPlatform } from '@agent-device/kernel/device';
 import { stripUndefined } from '@agent-device/kernel/record';
-import type { LeaseDevice } from './client-lease.ts';
 import type { CloudProviderProfileFields } from './remote-config-fields.ts';
 import type { CommandFlags } from './command-flags.ts';
 
@@ -305,34 +303,8 @@ export function buildLeaseDiagnosticsContext(
 }
 
 /** The `deviceKey` a proxy lease binds a device under: its public platform, target, and id. */
-export function leaseDeviceKey(device: Pick<LeaseDevice, 'platform' | 'target' | 'id'>): string {
+export function leaseDeviceKey(device: { platform: string; target?: string; id: string }): string {
   return `${device.platform}:${device.target ?? 'mobile'}:${device.id}`;
-}
-
-/** The device a {@link leaseDeviceKey} names, or `undefined` for a key it did not build. */
-export function parseLeaseDeviceKey(deviceKey: string | undefined): LeaseDevice | undefined {
-  const match = /^([^:]+):([^:]+):(.+)$/.exec(deviceKey ?? '');
-  if (!match) return undefined;
-  const [, platform, target, id] = match;
-  if (!isPublicPlatform(platform) || !isDeviceTarget(target)) return undefined;
-  return { platform, target, id: id! };
-}
-
-/** The device a lease reply names, or `undefined` when the reply names none or a malformed one. */
-export function readLeaseDevice(value: unknown): LeaseDevice | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  const { platform, target, id, name } = value as Record<string, unknown>;
-  if (!isPublicPlatform(platform) || typeof id !== 'string' || id.length === 0) return undefined;
-  return stripUndefined({
-    platform,
-    target: isDeviceTarget(target) ? target : undefined,
-    id,
-    name: typeof name === 'string' && name.length > 0 ? name : undefined,
-  });
-}
-
-function isDeviceTarget(value: unknown): value is NonNullable<LeaseDevice['target']> {
-  return (DEVICE_TARGETS as readonly unknown[]).includes(value);
 }
 
 export function isProxyLeaseScope(scope: LeaseScope): boolean {

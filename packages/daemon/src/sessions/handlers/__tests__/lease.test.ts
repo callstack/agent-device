@@ -6,8 +6,8 @@ import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import type { DeviceLease } from '@agent-device/contracts/device';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { withTestDeviceInventory } from '../../../__tests__/test-utils/device-inventory-gateways.ts';
-import { IOS_SIMULATOR, TVOS_SIMULATOR } from '../../../__tests__/test-utils/device-fixtures.ts';
+import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
+import { IOS_SIMULATOR, TVOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   clearRequestCanceled,
@@ -435,7 +435,7 @@ function proxyAllocateRequest(
 async function allocateAgainstInventory(
   request: DaemonRequest,
   devices: readonly DeviceInfo[],
-): Promise<{ device: unknown; lease: DeviceLease; inventoryReads: number }> {
+): Promise<{ lease: DeviceLease; inventoryReads: number }> {
   let inventoryReads = 0;
   const response = await withTestDeviceInventory(
     {
@@ -453,30 +453,22 @@ async function allocateAgainstInventory(
       }),
   );
   assert.ok(response?.ok);
-  const data = response.data ?? {};
-  return { device: data.device, lease: data.lease as DeviceLease, inventoryReads };
+  return { lease: response.data?.lease as DeviceLease, inventoryReads };
 }
 
-test('a proxy allocation that names no device picks one by its selectors and names it in the reply', async () => {
+test('a proxy allocation that names no device picks one by its selectors and binds its deviceKey', async () => {
   const devices = [SECOND_IOS_SIMULATOR, IOS_SIMULATOR, TVOS_SIMULATOR];
 
   const byName = await allocateAgainstInventory(
     proxyAllocateRequest({ platform: 'ios', device: 'iPhone 17 Pro' }),
     devices,
   );
-  assert.deepEqual(byName.device, { platform: 'ios', id: 'sim-1', name: 'iPhone 17 Pro' });
   assert.equal(byName.lease.deviceKey, 'ios:mobile:sim-1');
 
   const byTarget = await allocateAgainstInventory(
     proxyAllocateRequest({ platform: 'ios', target: 'tv' }),
     devices,
   );
-  assert.deepEqual(byTarget.device, {
-    platform: 'ios',
-    target: 'tv',
-    id: 'tv-sim-1',
-    name: 'Apple TV',
-  });
   assert.equal(byTarget.lease.deviceKey, 'ios:tv:tv-sim-1');
 });
 
@@ -494,7 +486,6 @@ test('an allocation that names its device, names no spec, or is not a proxy leas
     proxyAllocateRequest({ platform: 'ios' }, { deviceKey: 'ios:mobile:sim-2' }),
     [IOS_SIMULATOR, SECOND_IOS_SIMULATOR],
   );
-  assert.equal(exact.device, undefined);
   assert.equal(exact.lease.deviceKey, 'ios:mobile:sim-2');
   assert.equal(exact.inventoryReads, 0);
 
@@ -502,12 +493,10 @@ test('an allocation that names its device, names no spec, or is not a proxy leas
     proxyAllocateRequest({ platform: 'ios' }, { leaseProvider: undefined, clientId: undefined }),
     [IOS_SIMULATOR],
   );
-  assert.equal(local.device, undefined);
   assert.equal(local.lease.deviceKey, undefined);
   assert.equal(local.inventoryReads, 0);
 
   const unspecified = await allocateAgainstInventory(proxyAllocateRequest({}), [IOS_SIMULATOR]);
-  assert.equal(unspecified.device, undefined);
   assert.equal(unspecified.lease.deviceKey, undefined);
   assert.equal(unspecified.inventoryReads, 0);
 });
