@@ -192,7 +192,7 @@ export type ReplayBackendActionFailure = Readonly<{
     positionals: readonly string[];
     flags: SessionAction['flags'];
   }>;
-  /** Control-flow steps fail without a post-failure screen read or suggestions. */
+  /** Control-flow steps fail without suggestions; the post-failure screen is still captured. */
   isControl: boolean;
   /** Values scrubbed from every published string. */
   redactions: readonly Readonly<{ name: string; value: string }>[];

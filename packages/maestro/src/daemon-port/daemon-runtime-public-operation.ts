@@ -51,7 +51,16 @@ export type MaestroPublicOperation =
  * each option into its own request-private vocabulary before dispatch. Nothing here names live
  * session state, which is what lets the port live outside the daemon.
  */
-export type MaestroDaemonDispatchOptions = ReplayBackendDispatchOptions;
+export type MaestroDaemonDispatchOptions = Omit<
+  ReplayBackendDispatchOptions,
+  'closeAppOnly' | 'killApp' | 'observationOnly'
+> &
+  Readonly<{
+    /** Presence-only: the daemon treats `false` like omission, so the port never sends it. */
+    closeAppOnly?: true;
+    killApp?: true;
+    observationOnly?: true;
+  }>;
 
 /**
  * One public daemon command the port asks the daemon to run on the replay's behalf. The daemon
