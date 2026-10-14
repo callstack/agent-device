@@ -300,7 +300,11 @@ Use this for React Native performance profiling: slow renders, rerenders and the
 Commands:
   agent-device react-devtools profile start
   agent-device react-devtools profile stop
-  agent-device react-devtools profile stop --limit 10
+  agent-device react-devtools profile report <Component>
+  agent-device react-devtools profile commit <N>
+  agent-device react-devtools profile slow --limit 5
+  agent-device react-devtools profile rerenders --limit 5
+  agent-device react-devtools profile timeline --limit 20 --sort duration
   agent-device react-devtools profile status
   Profiling attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes. It is verified on Android emulators and iOS simulators; remote bridge sessions, which reach the dev server through the remote config's public Metro URL, are not verified yet.
   Add --app <bundle-id> when several apps share the dev server, --metro-device <name> when one app runs on several devices connected to it, and --metro-port/--metro-host when the dev server is neither the session's nor localhost:8081.
@@ -309,7 +313,8 @@ Profiling loop:
   1. Run profile start immediately before the interaction; keep the window narrow.
   2. Drive the interaction with normal agent-device commands. When correlating with logs, run logs clear --restart before the first logs mark.
   3. Run profile stop. It prints the commit count, render time, commits over the 16 ms frame budget, and ranked findings, each naming a component, its evidence, and a fix.
-  4. After a fix, repeat the same start, interaction, and stop, and compare the findings.
+  4. Drill into one finding with profile report <Component> or profile commit <N> before reaching for the slow and rerenders tables.
+  5. After a fix, repeat the same start, interaction, and stop, and compare the findings.
 
 Findings:
   slow-render: the component's own render is expensive. memo-defeated: a memoized component often re-renders because props change identity. parent-cascade: the component often re-renders with unchanged props, state, and context when its owner renders. context-cascade: most of the component's renders come from context changes. effect-chain: the component triggers a follow-up commit right after rendering, likely state set in an effect. render-storm: one component commits many times per second. eager-mount: hundreds of instances mount in one commit. slow-commit: a commit of three frames or more that other findings leave mostly unexplained.
@@ -317,6 +322,7 @@ Findings:
 
 Rules:
   Every profiling command is an agent-device subcommand: agent-device react-devtools profile ...
+  Do not repeatedly raise table limits such as --limit 50 or --limit 200; drill into one component with profile report instead.
   For network evidence, use agent-device network dump --include headers; headers is not a positional argument.
 
 Example:
@@ -326,6 +332,7 @@ Example:
   agent-device fill 'id="catalog-search"' "tart" --delay-ms 80
   agent-device logs mark "after catalog search"
   agent-device react-devtools profile stop
+  agent-device react-devtools profile report CatalogScreen
   agent-device network dump --include headers
 
 Device busy and ownership:

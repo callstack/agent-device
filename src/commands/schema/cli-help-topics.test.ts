@@ -524,7 +524,9 @@ test('usageForCommand resolves react-devtools help topic', async () => {
   if (help === null) throw new Error('Expected react-devtools help text');
   assert.match(help, /React Native performance profiling/);
   assert.match(help, /agent-device react-devtools profile start/);
-  assert.match(help, /agent-device react-devtools profile stop --limit 10/);
+  assert.match(help, /agent-device react-devtools profile report <Component>/);
+  assert.match(help, /agent-device react-devtools profile commit <N>/);
+  assert.match(help, /agent-device react-devtools profile timeline --limit 20 --sort duration/);
   assert.match(help, /React Native 0\.74 or newer, with no app, Metro, or Babel changes/);
   assert.match(help, /verified on Android emulators and iOS simulators/);
   assert.match(help, /remote bridge sessions[^.]*are not verified yet/);
@@ -537,12 +539,13 @@ test('usageForCommand resolves react-devtools help topic', async () => {
   );
   assert.match(help, /compare runs instead of reading absolute numbers/);
   assert.match(help, /logs clear --restart before the first logs mark/);
+  assert.match(help, /Do not repeatedly raise table limits/);
   assert.match(help, /agent-device logs mark "before catalog search"/);
   assert.match(help, /Every profiling command is an agent-device subcommand/);
   assert.match(help, /agent-device network dump --include headers/);
   assert.doesNotMatch(
     help,
-    /agent-react-devtools|wait --connected|get tree|profile export|profile diff/,
+    /agent-react-devtools|wait --connected|get tree|profile export|profile diff|profile report @c/,
   );
 });
 
