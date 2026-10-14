@@ -24,13 +24,16 @@ function withProvenance<P extends SnapshotProvenance>(state: SnapshotState, prov
 const BRIDGE = { backend: 'xctest', producer: 'simulator-ax-bridge' } as const;
 const RUNNER = { backend: 'xctest', producer: 'apple-runner' } as const;
 
+type LoopCapturePath = SnapshotProvenance | undefined | ((capture: number) => SnapshotProvenance);
+
 /**
  * A press whose baseline and whose loop captures come from declared capture paths, so the two can
- * be made to agree or to disagree.
+ * be made to agree or to disagree. The pressed button stays on screen, so no capture is a broad
+ * replacement and the window under test is the one the loop priced, not the confirmation floor.
  */
 function pressWithCapturePaths(params: {
   baseline?: SnapshotProvenance;
-  loop?: SnapshotProvenance;
+  loop?: LoopCapturePath;
   settle?: { quietMs?: number; timeoutMs?: number };
 }) {
   const baseline = params.baseline
@@ -40,12 +43,11 @@ function pressWithCapturePaths(params: {
   const device = createSettleDevice({
     stored: baseline,
     captureSnapshot: () => {
-      captures += 1;
       // A ref press captures nothing before the action, so every call is the loop's own sample.
-      const settled = welcomeSnapshot();
+      captures += 1;
+      const provenance = typeof params.loop === 'function' ? params.loop(captures) : params.loop;
       return {
-        snapshot:
-          captures === 1 ? baseline : params.loop ? withProvenance(settled, params.loop) : settled,
+        snapshot: provenance ? withProvenance(buttonSnapshot(), provenance) : buttonSnapshot(),
       };
     },
   });
@@ -59,6 +61,7 @@ test('a settle the simulator snapshot bridge performs uses the shorter default w
   assert.ok(settle);
   assert.equal(settle.settled, true);
   assert.equal(settle.quietMs, 300);
+  assert.ok(settle.waitedMs < 500, `bridge settle held ${settle.waitedMs}ms`);
 });
 
 test('an explicit --settle-quiet outranks the per-capture default window', async () => {
@@ -85,7 +88,9 @@ for (const [label, provenance] of UNMEASURED_CAPTURES) {
 
     const settle = result.settle;
     assert.ok(settle);
+    assert.equal(settle.settled, true);
     assert.equal(settle.quietMs, 500);
+    assert.ok(settle.waitedMs >= 500, `${label} settled after ${settle.waitedMs}ms`);
   });
 }
 
@@ -97,6 +102,7 @@ test('a bridge read during settle earns the shorter window even from a runner-is
   const settle = result.settle;
   assert.ok(settle);
   assert.equal(settle.quietMs, 300);
+  assert.ok(settle.waitedMs < 500, `bridge settle held ${settle.waitedMs}ms`);
 });
 
 test('a runner read during settle keeps the 500ms window despite a bridge-issued baseline', async () => {
@@ -107,6 +113,41 @@ test('a runner read during settle keeps the 500ms window despite a bridge-issued
   const settle = result.settle;
   assert.ok(settle);
   assert.equal(settle.quietMs, 500);
+  assert.ok(settle.waitedMs >= 500, `runner settle held only ${settle.waitedMs}ms`);
+});
+
+test('the capture that decides the verdict prices the whole quiet span, even after a producer switch', async () => {
+  // The quiet span is elapsed time over which the tree did not change, whichever producer read it.
+  // A run that starts on the runner and continues on the bridge settles on the bridge's window.
+  const result = await pressWithCapturePaths({
+    loop: (capture) => (capture === 1 ? RUNNER : BRIDGE),
+  });
+
+  const settle = result.settle;
+  assert.ok(settle);
+  assert.equal(settle.settled, true);
+  assert.equal(settle.quietMs, 300);
+  assert.ok(settle.waitedMs < 500, `producer switch held ${settle.waitedMs}ms`);
+});
+
+test('a capture that breaks mid-settle reports the window the run had priced', async () => {
+  let captures = 0;
+  const device = createSettleDevice({
+    stored: buttonSnapshot(),
+    captureSnapshot: () => {
+      captures += 1;
+      if (captures === 1) return { snapshot: withProvenance(buttonSnapshot(), BRIDGE) };
+      throw new Error('AX bridge crashed');
+    },
+  });
+
+  const result = await device.interactions.press(ref('@e1'), { session: 'default', settle: {} });
+
+  const settle = result.settle;
+  assert.ok(settle);
+  assert.equal(settle.settled, false);
+  assert.match(settle.hint ?? '', /Settle observation unavailable \(AX bridge crashed\)/);
+  assert.equal(settle.quietMs, 300);
 });
 
 test('the shorter default window never shortens a broad-transition confirmation', async () => {

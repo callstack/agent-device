@@ -327,10 +327,9 @@ test('settle confirms a tiny modal replacement through a partial post-action pro
 });
 
 test('a dismissal confirmation is not dropped by a later empty projection', async () => {
-  // The confirmation is a fact about the transition, so it survives a capture that stops qualifying.
-  // The comparison refuses a node-less side, so re-deciding it per capture hands the loop its short
-  // window again mid-confirmation — and the next empty read matches it, so two empty projections
-  // hold a quiet window on a dismissal the floor still owed (#3470).
+  // A confirmation is a fact about the transition, so once armed it holds the floor for the rest of
+  // the run: later captures that cannot support the comparison (here, empty projections that match
+  // each other) never return the run to the caller's shorter window.
   const { runtime } = transitionRuntime({
     settledAtMs: 0,
     emptyProjectionAtCaptures: [2, 3],
@@ -359,10 +358,10 @@ test('a dismissal confirmation is not dropped by a later empty projection', asyn
 
 // The two arming inputs that belong to the capture, not to the run: the viewport-root completeness
 // and the declared capture backend. A dismissal of anything bigger than an alert or sheet (the
-// `<= TINY_STABLE_TREE_NODE_COUNT` escape hatch) has to meet BOTH before the confirmation may arm, so
-// a mid-animation first read decides nothing — it must leave the question open for the next capture.
-// Ruling it out on that first read settled these on the plain window, which after this layer is
-// 300 ms on the simulator bridge (#3470).
+// `<= TINY_STABLE_TREE_NODE_COUNT` escape hatch) has to meet BOTH before the confirmation may arm,
+// and a mid-animation first read that meets neither leaves the question open for the next capture
+// rather than settling the run on its plain window. These captures declare no producer, so that plain
+// window is the 500 ms default; the 1.5 s floor is what the assertions tell apart.
 const MID_ANIMATION_FIRST_CAPTURES: Array<
   [string, NonNullable<Parameters<typeof transitionRuntime>[0]>]
 > = [
