@@ -157,6 +157,8 @@ export type OpenAndroidAppOptions = {
   activity?: string;
   appBundleId?: string;
   launchArgs?: string[];
+  /** Force-stops the app the launch resolves to before starting it (`am start -S`). */
+  terminateRunningApp?: boolean;
   url?: string;
 };
 
@@ -289,7 +291,15 @@ async function openAndroidIntent(
   if (options.activity) {
     throw new AppError('INVALID_ARGS', 'Activity override requires a package name, not an intent');
   }
-  await runAndroidShell(device, ['am', 'start', '-W', '-a', intent, ...androidLaunchArgs(options)]);
+  await runAndroidShell(device, [
+    'am',
+    'start',
+    '-W',
+    ...(options.terminateRunningApp ? ['-S'] : []),
+    '-a',
+    intent,
+    ...androidLaunchArgs(options),
+  ]);
 }
 
 async function openAndroidPackageActivity(

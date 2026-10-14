@@ -66,6 +66,7 @@ export function createAndroidInteractor(
         activity: options?.activity,
         appBundleId: options?.appBundleId,
         launchArgs: options?.launchArgs,
+        terminateRunningApp: options?.terminateRunningApp,
         url: options?.url,
       }),
     openDevice: () => openAndroidDevice(device),

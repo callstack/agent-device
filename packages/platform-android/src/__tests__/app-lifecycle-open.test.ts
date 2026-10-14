@@ -520,6 +520,15 @@ test('openAndroidApp default launch uses -p package flag', async () => {
   });
 });
 
+test('openAndroidApp has am force-stop the resolved intent handler when terminating a running app', async () => {
+  await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
+    await openAndroidApp(device, 'settings', { terminateRunningApp: true });
+    assert.deepEqual(calls, [
+      ['shell', 'am', 'start', '-W', '-S', '-a', 'android.settings.SETTINGS'],
+    ]);
+  });
+});
+
 test('openAndroidApp appends launchArgs to am start when launching by package', async () => {
   await withFakeAdb(androidOpenFakeAdb, async ({ calls, device }) => {
     await openAndroidApp(device, 'com.example.app', {

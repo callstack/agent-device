@@ -81,11 +81,26 @@ test('inferAndroidPackageAfterOpen keeps an already-known bundle id without read
   expect(getAndroidAppState).not.toHaveBeenCalled();
 });
 
-test('inferAndroidPackageAfterOpen leaves a non-deep-link target unchanged', async () => {
+test('inferAndroidPackageAfterOpen reads the resumed package for an intent alias open', async () => {
+  getAndroidAppState.mockResolvedValue({
+    package: 'com.android.settings',
+    activity: 'com.android.settings.Settings',
+  });
+
+  await expect(inferAndroidPackageAfterOpen(androidDevice, 'settings', undefined)).resolves.toBe(
+    'com.android.settings',
+  );
+});
+
+test('inferAndroidPackageAfterOpen never names the framework chooser as the owner', async () => {
+  getAndroidAppState.mockResolvedValue({
+    package: 'android',
+    activity: 'com.android.internal.app.ResolverActivity',
+  });
+
   await expect(
-    inferAndroidPackageAfterOpen(androidDevice, 'com.example.demo', undefined),
+    inferAndroidPackageAfterOpen(androidDevice, 'settings', undefined),
   ).resolves.toBeUndefined();
-  expect(getAndroidAppState).not.toHaveBeenCalled();
 });
 
 test('inferAndroidPackageAfterOpen swallows a foreground-state read failure', async () => {
