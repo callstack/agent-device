@@ -88,7 +88,7 @@ test('a production import of the daemon request/session-state modules outside th
   const edges = resolveImportEdges(
     new Map([
       [
-        'src/remote/daemon-artifacts.ts',
+        'src/commands/new-importer.ts',
         "import type { SessionState } from '../../packages/daemon/src/core/session-state.ts';",
       ],
       ['packages/daemon/src/core/session-state.ts', 'export type SessionState = { name: string };'],
@@ -97,10 +97,7 @@ test('a production import of the daemon request/session-state modules outside th
 
   const violations = checkDaemonModularityRatchets(edges, REFERENCE, REFERENCE);
   assert.equal(violations.length, 1);
-  assert.match(
-    violations[0]!.message,
-    /src\/remote\/daemon-artifacts\.ts imports a daemon request/,
-  );
+  assert.match(violations[0]!.message, /src\/commands\/new-importer\.ts imports a daemon request/);
 });
 
 test('logical modules reject forbidden imports', () => {
@@ -656,28 +653,36 @@ test('R9 banks a shrink with no edit anywhere', () => {
   );
 });
 
-for (const [kind, source] of [
-  [
-    'type-only',
-    "import type { DaemonRequest } from '../../packages/daemon/src/core/daemon-request.ts';",
-  ],
-  ['value', "import { handle } from '../../packages/daemon/src/server/daemon-stop.ts';"],
-  [
-    'dynamic',
-    "export const load = () => import('../../packages/daemon/src/server/daemon-stop.ts');",
-  ],
-] as const) {
-  test(`the daemon client importing the daemon package is red (${kind})`, () => {
-    const edges = resolveImportEdges(
-      new Map([
-        ['src/daemon-client/daemon-client.ts', source],
-        ['packages/daemon/src/core/daemon-request.ts', 'export type DaemonRequest = object;'],
-        ['packages/daemon/src/server/daemon-stop.ts', 'export const handle = 1;'],
-      ]),
-    );
+for (const file of [
+  'src/cli.ts',
+  'src/cli/commands/daemon.ts',
+  'src/client/client-normalizers.ts',
+  'src/remote/daemon-artifacts.ts',
+  'src/daemon-client/daemon-client.ts',
+]) {
+  for (const [kind, source] of [
+    [
+      'type-only',
+      "import type { DaemonRequest } from '../packages/daemon/src/core/daemon-request.ts';",
+    ],
+    ['value', "import { handle } from '../packages/daemon/src/server/daemon-stop.ts';"],
+    [
+      'dynamic',
+      "export const load = () => import('../packages/daemon/src/server/daemon-stop.ts');",
+    ],
+  ] as const) {
+    test(`client-side ${file} importing the daemon package is red (${kind})`, () => {
+      const edges = resolveImportEdges(
+        new Map([
+          [file, source.replaceAll('../', '../'.repeat(file.split('/').length - 1))],
+          ['packages/daemon/src/core/daemon-request.ts', 'export type DaemonRequest = object;'],
+          ['packages/daemon/src/server/daemon-stop.ts', 'export const handle = 1;'],
+        ]),
+      );
 
-    const violations = checkDaemonModularityRatchets(edges, REFERENCE, REFERENCE);
-    assert.equal(violations.length, 1);
-    assert.match(violations[0]!.message, /daemon-client must not import packages\/daemon\/src/);
-  });
+      const violations = checkDaemonModularityRatchets(edges, REFERENCE, REFERENCE);
+      assert.equal(violations.length, 1);
+      assert.match(violations[0]!.message, /client-side must not import packages\/daemon\/src/);
+    });
+  }
 }

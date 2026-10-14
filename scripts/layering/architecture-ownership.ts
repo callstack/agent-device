@@ -111,10 +111,13 @@ export const SNAPSHOT_EXECUTION_RETIRED_HANDLER_PATHS = [
   'packages/daemon/src/handlers/snapshot-session.ts',
 ] as const;
 
+/** The CLI, typed client, remote transports and daemon client: code that reaches the daemon over the network. */
+export const CLIENT_SIDE_POLICY_NAME = 'client-side';
+
 export const LOGICAL_MODULE_POLICIES = [
   {
-    name: 'daemon-client',
-    roots: ['src/daemon-client/'],
+    name: CLIENT_SIDE_POLICY_NAME,
+    roots: ['src/cli.ts', 'src/cli/', 'src/client/', 'src/remote/', 'src/daemon-client/'],
     forbiddenTargetRoots: [DAEMON_SOURCE_ROOT],
   },
   {

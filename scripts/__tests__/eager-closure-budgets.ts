@@ -132,7 +132,26 @@ export const NEW_ENTRY_CEILINGS: Readonly<Record<EntryCategory, number>> = Objec
  */
 export const APPROVED_OVER_CEILING: Readonly<
   Record<string, { issue: string; reason: string; owner: string }>
-> = Object.freeze({});
+> = Object.freeze({
+  'packages/capture-kit/src/capture-admission/app-log-durable-resource.ts': {
+    issue: '#3616',
+    reason:
+      'Moved verbatim out of the daemon app-log session resource so the claim reconciler no longer imports the daemon; the closure is the durable-capture machinery every capture resource carries, and no consumer gains modules.',
+    owner: 'daemon single-entry stack (L1b)',
+  },
+  'packages/daemon-contracts/src/device-claims.fixtures.ts': {
+    issue: '#3616',
+    reason:
+      'Test-only entry for daemon tests that drive the claim reconciler directly; it loads the same closure as device-claim-recovery.ts and no production module imports it.',
+    owner: 'daemon single-entry stack (L1b)',
+  },
+  'packages/daemon-contracts/src/device-claim-recovery.ts': {
+    issue: '#3616',
+    reason:
+      'Moved verbatim out of the daemon so the CLI release path and the daemon share one reconciler without the CLI importing the daemon; only the daemon and the lazily loaded stale-release path import it.',
+    owner: 'daemon single-entry stack (L1b)',
+  },
+});
 
 /** The category is a function of the path, never a hand-written column. */
 export function entryCategoryOf(entryFile: string): EntryCategory {

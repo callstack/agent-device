@@ -1,4 +1,5 @@
 import type { LayeringViolation, ResolvedImportEdge } from './model.ts';
+import { staleReachModules, walkProcessReach } from './process-reach.ts';
 
 export const DAEMON_PROCESS_REACH_RULE = 'R82 daemon-process-reach';
 
@@ -32,41 +33,19 @@ export function checkDaemonProcessReach(
   entry: string = DAEMON_PROCESS_ENTRY,
   denied: readonly string[] = DAEMON_PROCESS_DENIED_MODULES,
 ): LayeringViolation[] {
-  const tracked = new Set(sourceFiles);
-  const stale = [entry, ...denied].filter((module) => !tracked.has(module));
-  if (stale.length > 0) {
-    return stale.map((module) => ({
-      rule: DAEMON_PROCESS_REACH_RULE,
-      file: 'scripts/layering/daemon-process-reach.ts',
-      line: 1,
-      message:
-        `stale module: ${module} is not a tracked source. Point DAEMON_PROCESS_ENTRY or ` +
-        `DAEMON_PROCESS_DENIED_MODULES at its new path so the reach check keeps a real target.`,
-    }));
-  }
-  const outgoing = new Map<string, ResolvedImportEdge[]>();
-  for (const edge of edges) {
-    if (edge.typeOnly && !edge.dynamic) continue;
-    const list = outgoing.get(edge.file) ?? [];
-    list.push(edge);
-    outgoing.set(edge.file, list);
-  }
-  const cameFrom = new Map<string, ResolvedImportEdge | null>([[entry, null]]);
-  const queue = [entry];
-  for (let head = 0; head < queue.length; head += 1) {
-    const current = queue[head]!;
-    for (const edge of outgoing.get(current) ?? []) {
-      if (cameFrom.has(edge.target)) continue;
-      cameFrom.set(edge.target, edge);
-      queue.push(edge.target);
-    }
-  }
+  const stale = staleReachModules(
+    DAEMON_PROCESS_REACH_RULE,
+    'scripts/layering/daemon-process-reach.ts',
+    [entry, ...denied],
+    sourceFiles,
+    'DAEMON_PROCESS_ENTRY or DAEMON_PROCESS_DENIED_MODULES',
+  );
+  if (stale.length > 0) return stale;
+  const walk = walkProcessReach([entry], edges);
   const violations: LayeringViolation[] = [];
   for (const module of denied) {
-    const via = cameFrom.get(module);
+    const via = walk.loadedBy.get(module);
     if (!via) continue;
-    const chain: string[] = [module];
-    for (let at = via; at; at = cameFrom.get(at.file) ?? null) chain.unshift(at.file);
     violations.push({
       rule: DAEMON_PROCESS_REACH_RULE,
       file: via.file,
@@ -74,7 +53,7 @@ export function checkDaemonProcessReach(
       message:
         `${entry} reaches ${module}, which the daemon process must never load: the daemon ` +
         `receives the client's replay source bundle and does not read caller paths. ` +
-        `Chain: ${chain.join(' -> ')}.`,
+        `Chain: ${[...walk.chainTo(via.file), module].join(' -> ')}.`,
     });
   }
   return violations;

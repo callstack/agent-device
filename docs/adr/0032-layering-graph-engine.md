@@ -85,6 +85,8 @@ finding. Clean tree: custom 0, depcruise 10 (3 R6 survivors, 7 recorded R78 edge
 | R14 non-TS file under `src/utils` | flag | ✓ | ✗ | ✗ |
 | R71 file under `src/replay` | flag | ✓ | ✓ | ✓ generic |
 
+_R78 no longer records edges: the client's direct imports are a flat ban in `LOGICAL_MODULE_POLICIES` (R10), and R78 now walks reachability from the CLI entries, so the "unrecorded" and "stale" rows describe the spike at its date, not the rules as shipped._
+
 Custom prints `file:line`, rule id and hint (`report()` in `scripts/layering/check.ts`); depcruise
 the rule name and an authored comment, without a line. "Generic" means a fallow zone pair
 (`core → cli`) and a docs link, with no rule id or hint; R14 and R71 surface as "matches no zone".
