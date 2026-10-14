@@ -3,10 +3,8 @@ import {
   type InventoryPlatformModule,
   createPlatformModuleRegistry,
 } from '@agent-device/contracts/platform-module';
-import type {
-  DeviceInventoryHost,
-  PlatformRequestScope,
-} from '@agent-device/contracts/platform-runtime-host';
+import type { PlatformRequestScope } from '@agent-device/contracts/platform-runtime-host';
+import { testInventoryHost } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { resolveTargetDeviceSelection } from '@agent-device/device-selection/dispatch-resolve';
 import { withDeviceInventoryContext } from '@agent-device/device-selection/device-inventory-context';
 import { PLATFORMS, type DeviceInfo } from '@agent-device/kernel/device';
@@ -34,28 +32,6 @@ const scope: PlatformRequestScope = Object.freeze({
   signal: new AbortController().signal,
   diagnostics: Object.freeze({ emit: () => {} }),
   progress: Object.freeze({ report: () => {} }),
-});
-
-const host: DeviceInventoryHost = Object.freeze({
-  commands: Object.freeze({
-    which: async () => undefined,
-    run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-  }),
-  appleTools: Object.freeze({
-    isXcrunAvailable: async () => false,
-    run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-  }),
-  toolchains: Object.freeze({ prepare: async () => {} }),
-  files: Object.freeze({
-    isExecutable: async () => false,
-    createTemporaryTextFile: async () => {
-      throw new Error('unused test inventory temporary file');
-    },
-  }),
-  hostOs: 'other',
-  hostName: 'test-host',
-  homeDirectory: '/tmp/test-home',
-  observations: Object.freeze({ deviceBooted: async () => {} }),
 });
 
 function simulator(id: string): DeviceInfo {
@@ -92,7 +68,7 @@ describe('production device inventory composition', () => {
     }));
     const gateways = await attachAppleInstalledAppProbe({
       registry: createPlatformModuleRegistry(modules),
-      loadHost: async () => host,
+      loadHost: async () => testInventoryHost,
     });
 
     const selection = await withDeviceInventoryContext({ ...gateways, requestScope: scope }, () =>

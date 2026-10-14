@@ -30,7 +30,7 @@ const testRequestScope: PlatformRequestScope = Object.freeze({
   progress: Object.freeze({ report: () => {} }),
 });
 
-const testInventoryHost: DeviceInventoryHost = Object.freeze({
+export const testInventoryHost: DeviceInventoryHost = Object.freeze({
   commands: Object.freeze({
     which: async () => undefined,
     run: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
