@@ -124,8 +124,8 @@ worker process, so a case that never returns or kills its process is reported as
 against the exact input. Promote a discovered case with the command the harness prints — never
 hand-copy an unshrunk input.
 
-Mutation scope: `scripts/mutation/modules.ts#KERNEL_MODULES` (weekly), `scripts/mutation/run.ts#LANE_TOOLING`
-(PR canary). Scores are advisory; incomplete sweeps fail. Pilot protocol: `pnpm mutation:run --help`.
+Mutation scope: `scripts/mutation/modules.ts#KERNEL_MODULES` (weekly), `scripts/mutation/run.ts#LANE_SOURCES`
+(PR canary; `LANE_DEPENDENCIES` on dispatch). Scores are advisory; incomplete sweeps fail. Pilot protocol: `pnpm mutation:run --help`.
 
 ## Before editing a shared module
 
@@ -145,8 +145,7 @@ selects gates independently from the diff; it does not consume the depgraph repo
 action with a literal gate id; `pnpm check:gate-manifest` verifies registration, workflow ownership,
 path reachability, and routed device lanes. Raw shell text cannot declare ownership.
 
-New check: update the catalog and its executable model. Changed path ownership: plant a path that
-would previously be misrouted and watch the selector or manifest fail before fixing it.
+New check: update the catalog and its executable model.
 
 ## Concurrency torture lane
 
