@@ -1,7 +1,6 @@
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { AppError, asAppError, normalizeError } from '@agent-device/kernel/errors';
-import type { SessionCloseLeaseOutcome } from '@agent-device/contracts/client';
+import { AppError, normalizeError } from '@agent-device/kernel/errors';
 import type { LeaseLifecycleProvider, TargetShutdownResult } from '@agent-device/contracts/device';
 import type { DaemonRequest, DaemonResponse } from '../../../core/daemon-request.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
@@ -11,6 +10,7 @@ import { resolveCommandDevice } from '../../../resources/session-device-resoluti
 import { expireRefFrame } from '../../../core/ref-frame.ts';
 import type { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import { releaseSessionLease } from '../../lease-lifecycle.ts';
+import { recordEndedLease } from '../../../core/request-ended-leases.ts';
 import {
   hasRepairPlatformCloseReceipt,
   isRepairArmedSession,
@@ -117,15 +117,15 @@ async function prepareRepairClose(params: {
 }
 
 async function releaseProviderLeaseForClose(params: {
+  req: DaemonRequest;
   session: SessionState;
   leaseRegistry: LeaseRegistry;
   leaseLifecycleProvider: LeaseLifecycleProvider | undefined;
-}): Promise<
-  | { lease: SessionCloseLeaseOutcome; providerData?: Record<string, unknown> }
-  | { response: DaemonResponse }
-> {
+}): Promise<{ providerData?: Record<string, unknown>; response?: DaemonResponse }> {
   try {
-    return await releaseSessionLease(params);
+    const { endedLeaseId, providerData } = await releaseSessionLease(params);
+    if (endedLeaseId) recordEndedLease(params.req, endedLeaseId);
+    return { providerData };
   } catch (error) {
     const normalized = normalizeError(error);
     return {
@@ -273,7 +273,6 @@ export async function handleSessionCloseCommands(
     repair,
     requestedSaveScript: Boolean(req.flags?.saveScript),
     shutdownResult: closed.shutdownResult,
-    lease: closed.lease,
     providerData: closed.providerData,
   });
 }
@@ -282,7 +281,6 @@ type SessionCloseFinalization =
   | { kind: 'response'; response: DaemonResponse }
   | {
       kind: 'closed';
-      lease: SessionCloseLeaseOutcome;
       providerData?: Record<string, unknown>;
       shutdownResult?: TargetShutdownResult;
     };
@@ -330,11 +328,12 @@ async function runCloseTeardownAndRelease(params: {
   });
   let session = sessionStore.requireCurrent(ref);
   const leaseRelease = await releaseProviderLeaseForClose({
+    req,
     session,
     leaseRegistry,
     leaseLifecycleProvider,
   });
-  if ('response' in leaseRelease) return { kind: 'response', response: leaseRelease.response };
+  if (leaseRelease.response) return { kind: 'response', response: leaseRelease.response };
   session = sessionStore.resolveCurrent(ref) ?? session;
   const cleanupAggregate = closeCleanupError(sessionName, cleanupFailures);
   const deviceClaimBlockingError = platformCloseError ?? cleanupAggregate;
@@ -353,21 +352,9 @@ async function runCloseTeardownAndRelease(params: {
     await clearDeviceClaim(session.deviceClaim);
   }
   sessionStore.retire(ref);
-  const closeError = deviceClaimBlockingError ?? saveScriptError;
-  if (closeError) throw withCloseLeaseOutcome(closeError, leaseRelease.lease);
-  return {
-    kind: 'closed',
-    lease: leaseRelease.lease,
-    providerData: leaseRelease.providerData,
-    shutdownResult,
-  };
-}
-
-/** A close that fails after its lease was released or retained still reports that outcome. */
-function withCloseLeaseOutcome(error: unknown, lease: SessionCloseLeaseOutcome): unknown {
-  if (lease.outcome === 'none') return error;
-  const appError = asAppError(error);
-  return new AppError(appError.code, appError.message, { ...appError.details, lease }, error);
+  if (deviceClaimBlockingError) throw deviceClaimBlockingError;
+  if (saveScriptError) throw saveScriptError;
+  return { kind: 'closed', providerData: leaseRelease.providerData, shutdownResult };
 }
 
 function buildCloseSuccessResponse(params: {
@@ -375,10 +362,9 @@ function buildCloseSuccessResponse(params: {
   repair: Extract<RepairClosePreparation, { repairArmed: boolean }>;
   requestedSaveScript: boolean;
   shutdownResult: TargetShutdownResult | undefined;
-  lease: SessionCloseLeaseOutcome;
   providerData: Record<string, unknown> | undefined;
 }): DaemonResponse {
-  const { session, repair, requestedSaveScript, shutdownResult, lease, providerData } = params;
+  const { session, repair, requestedSaveScript, shutdownResult, providerData } = params;
   if (repair.aborted && requestedSaveScript) {
     return {
       ok: false,
@@ -386,7 +372,7 @@ function buildCloseSuccessResponse(params: {
         code: 'COMMAND_FAILED',
         message: 'The repair was aborted and no script was written.',
         hint: 'Recovery: replay --from <n> --plan-digest <digest> before closing.',
-        details: { session: session.name, ...(lease.outcome === 'none' ? {} : { lease }) },
+        details: { session: session.name },
       },
     };
   }
@@ -400,14 +386,14 @@ function buildCloseSuccessResponse(params: {
     return {
       ok: true,
       data: withSuccessText(
-        { session: session.name, shutdown: shutdownResult, lease, ...savedScript, ...provider },
+        { session: session.name, shutdown: shutdownResult, ...savedScript, ...provider },
         text,
       ),
     };
   }
   return {
     ok: true,
-    data: { session: session.name, lease, ...successText(text), ...savedScript, ...provider },
+    data: { session: session.name, ...successText(text), ...savedScript, ...provider },
   };
 }
 

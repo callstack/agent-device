@@ -820,15 +820,16 @@ type CliDaemonTransportSetup = {
 };
 
 /**
- * A remote connection reads each daemon reply for a session close that released its stored lease.
+ * A remote connection reads each daemon reply for the leases its request ended, and forgets the
+ * stored lease when the reply names it.
  */
 function createCliDaemonTransport(options: CliDaemonTransportSetup): AgentDeviceDaemonTransport {
   const send = createCliProgressTransport(options);
   if (!options.flags.remoteConfig) return send;
   return async (req, context) => {
     const response = await send(req, context);
-    const { forgetProxyLeaseReleasedByClose } = await import('./cli/connection/closed-lease.ts');
-    forgetProxyLeaseReleasedByClose(options.flags, response);
+    const { forgetEndedProxyLease } = await import('./cli/connection/ended-lease.ts');
+    forgetEndedProxyLease(options.flags, response);
     return response;
   };
 }

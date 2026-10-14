@@ -10,10 +10,11 @@ import { LeaseRegistry } from '../../../../resources/lease-registry.ts';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 import { handleSessionCommands } from '../../../../__tests__/support/handlers/session-command-harness.ts';
 import { dispatchApplicationLifecycleEffect } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
+import type { EndedLeaseLedger } from '../../../../core/request-ended-leases.ts';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({ ok: true, data: {} });
-const SESSION_NAME = 'close-lease-outcome';
+const SESSION_NAME = 'close-ended-lease';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -59,40 +60,47 @@ function unleasedSession(): SessionState {
   };
 }
 
-async function close(
+function close(
   session: SessionState,
   leaseRegistry: LeaseRegistry,
   positionals: string[] = [],
-): Promise<DaemonResponse | null> {
-  const root = mkdtempForTestSync('agent-device-session-close-lease-outcome-');
+): { response: Promise<DaemonResponse | null>; endedLeases: EndedLeaseLedger } {
+  const root = mkdtempForTestSync('agent-device-session-close-ended-lease-');
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   sessionStore.publish(SESSION_NAME, session);
-  return await handleSessionCommands({
+  const endedLeases: EndedLeaseLedger = [];
+  const response = handleSessionCommands({
     createCommandSurface: fakeCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
-    req: { token: 't', session: SESSION_NAME, command: 'close', positionals, flags: {} },
+    req: {
+      token: 't',
+      session: SESSION_NAME,
+      command: 'close',
+      positionals,
+      flags: {},
+      internal: { endedLeases },
+    },
     sessionName: SESSION_NAME,
     logPath: path.join(root, 'daemon.log'),
     sessionStore,
     leaseRegistry,
     invoke: noopInvoke,
   });
+  return { response, endedLeases };
 }
 
-test('close reports the lease it released', async () => {
+test('close records the lease it released on the request ledger', async () => {
   const leaseRegistry = new LeaseRegistry();
   const session = leasedSession(leaseRegistry);
 
-  const response = await close(session, leaseRegistry);
+  const { response, endedLeases } = close(session, leaseRegistry);
 
-  expect(response).toMatchObject({
-    ok: true,
-    data: { lease: { outcome: 'released', leaseId: session.lease?.leaseId } },
-  });
+  expect(await response).toMatchObject({ ok: true });
+  expect(endedLeases).toEqual([{ leaseId: session.lease?.leaseId, outcome: 'released' }]);
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 });
 
-test('close reports a lease released before its lease-end teardown reached the session as released', async () => {
+test('close records a lease released before its lease-end teardown reached the session', async () => {
   const leaseRegistry = new LeaseRegistry();
   const session = leasedSession(leaseRegistry);
   const lease = session.lease!;
@@ -107,52 +115,33 @@ test('close reports a lease released before its lease-end teardown reached the s
   });
   expect(released).toBe(true);
 
-  const response = await close(session, leaseRegistry);
+  const { response, endedLeases } = close(session, leaseRegistry);
 
-  expect(response).toMatchObject({
-    ok: true,
-    data: { lease: { outcome: 'released', leaseId: lease.leaseId } },
-  });
+  expect(await response).toMatchObject({ ok: true });
+  expect(endedLeases).toEqual([{ leaseId: lease.leaseId, outcome: 'released' }]);
 });
 
-test('close reports a retainOnClose lease as retained and keeps it', async () => {
+test('close records no ended lease for a retainOnClose lease or a session without one', async () => {
   const leaseRegistry = new LeaseRegistry();
-  const session = leasedSession(leaseRegistry, true);
+  for (const session of [leasedSession(leaseRegistry, true), unleasedSession()]) {
+    const { response, endedLeases } = close(session, leaseRegistry);
 
-  const response = await close(session, leaseRegistry);
-
-  expect(response).toMatchObject({
-    ok: true,
-    data: { lease: { outcome: 'retained', leaseId: session.lease?.leaseId } },
-  });
+    expect(await response).toMatchObject({ ok: true });
+    expect(endedLeases).toEqual([]);
+  }
   expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
 });
 
-test('close reports no lease for a session without a daemon lease', async () => {
-  const response = await close(unleasedSession(), new LeaseRegistry());
-
-  expect(response).toMatchObject({ ok: true, data: { lease: { outcome: 'none' } } });
-});
-
-test('a close that fails after releasing its lease reports the release in the error', async () => {
+test('a close that fails after releasing its lease still records the release', async () => {
   const leaseRegistry = new LeaseRegistry();
   const session = { ...leasedSession(leaseRegistry), appBundleId: 'com.example.app' };
   mockDispatch.mockRejectedValueOnce(
     new AppError('DEVICE_UNAVAILABLE', 'platform close failed', { reason: 'device_disconnected' }),
   );
 
-  const failure = await close(session, leaseRegistry, ['com.example.app']).then(
-    () => undefined,
-    (error: unknown) => error,
-  );
+  const { response, endedLeases } = close(session, leaseRegistry, ['com.example.app']);
 
-  expect(failure).toBeInstanceOf(AppError);
-  expect(failure).toMatchObject({
-    code: 'DEVICE_UNAVAILABLE',
-    details: {
-      reason: 'device_disconnected',
-      lease: { outcome: 'released', leaseId: session.lease?.leaseId },
-    },
-  });
+  await expect(response).rejects.toMatchObject({ code: 'DEVICE_UNAVAILABLE' });
+  expect(endedLeases).toEqual([{ leaseId: session.lease?.leaseId, outcome: 'released' }]);
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 });

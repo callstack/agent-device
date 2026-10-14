@@ -127,10 +127,7 @@ test('releaseSessionLease releases with the stored session owner scope', async (
   });
 
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
-  expect(released).toEqual({
-    lease: { outcome: 'released', leaseId: lease.leaseId },
-    providerData: { provider: 'proxy' },
-  });
+  expect(released).toEqual({ endedLeaseId: lease.leaseId, providerData: { provider: 'proxy' } });
 });
 
 test('releaseSessionLease leaves a retainOnClose lease and its provider device alone', async () => {
@@ -158,7 +155,7 @@ test('releaseSessionLease leaves a retainOnClose lease and its provider device a
     leaseLifecycleProvider: { release },
   });
 
-  expect(retained).toEqual({ lease: { outcome: 'retained', leaseId: lease.leaseId } });
+  expect(retained).toEqual({});
   expect(release).not.toHaveBeenCalled();
   expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
   expect(vi.mocked(emitDiagnostic)).toHaveBeenCalledWith({
@@ -168,17 +165,16 @@ test('releaseSessionLease leaves a retainOnClose lease and its provider device a
   });
 });
 
-test('releaseSessionLease reports no lease for a session that holds none', async () => {
-  const leaseRegistry = new LeaseRegistry();
+test('releaseSessionLease ends no lease for a session that holds none', async () => {
   const release = vi.fn(async () => ({ released: true }));
 
   const outcome = await releaseSessionLease({
     session: makeIosSession('default'),
-    leaseRegistry,
+    leaseRegistry: new LeaseRegistry(),
     leaseLifecycleProvider: { release },
   });
 
-  expect(outcome).toEqual({ lease: { outcome: 'none' } });
+  expect(outcome).toEqual({});
   expect(release).not.toHaveBeenCalled();
 });
 

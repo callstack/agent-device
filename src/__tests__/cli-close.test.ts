@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError } from '@agent-device/kernel/errors';
 import fs from 'node:fs';
+import path from 'node:path';
 import { runCliCapture, type CapturedCliRun } from './cli-capture.ts';
 import {
   connectionWorkspace,
@@ -95,7 +96,7 @@ test('close --shutdown --json treats daemon startup failure as no-op success', a
 });
 
 const PROXY_LEASE_ID = 'abc123abc123abc1';
-const RELEASED = { outcome: 'released', leaseId: PROXY_LEASE_ID } as const;
+const ENDED_LEASES = [{ leaseId: PROXY_LEASE_ID, outcome: 'released' }];
 
 function seedProxyConnection(overrides: Partial<StoredConnectionSeed> = {}): string {
   const { stateDir, remoteConfigPath } = connectionWorkspace('agent-device-close-proxy-');
@@ -148,11 +149,11 @@ function runProxyCli(
   );
 }
 
-test('proxy close forgets the stored lease the daemon reports released, and sends no release', async () => {
+test('proxy close forgets the stored lease the daemon reports ended, and sends no release', async () => {
   const stateDir = seedProxyConnection();
   const result = await runProxyCli(stateDir, ['close'], () => ({
     ok: true,
-    data: { session: 'adc-proxy', lease: RELEASED },
+    data: { session: 'adc-proxy', endedLeases: ENDED_LEASES },
   }));
   assert.equal(result.code, null);
   assert.deepEqual(
@@ -166,22 +167,22 @@ test('proxy close forgets the stored lease the daemon reports released, and send
   );
 });
 
-test('a failed proxy close forgets the stored lease the daemon already released', async () => {
+test('a failed proxy close forgets the stored lease the daemon already ended', async () => {
   const stateDir = seedProxyConnection();
   const result = await runProxyCli(stateDir, ['close'], () => ({
     ok: false,
     error: {
       code: 'DEVICE_UNAVAILABLE',
       message: 'platform close failed',
-      details: { lease: RELEASED },
+      details: { endedLeases: ENDED_LEASES },
     },
   }));
   assert.equal(result.code, 1);
   assert.equal(storedLeaseId(stateDir), undefined);
 });
 
-test('a proxy batch forgets the stored lease its close step reports released', async () => {
-  const closeStep = { step: 1, command: 'close', ok: true, data: { lease: RELEASED } };
+test('a proxy batch forgets the stored lease its reply reports ended by a close step', async () => {
+  const closeStep = { step: 1, command: 'close', ok: true, data: {}, durationMs: 1 };
   const batchReplies: DaemonResponse[] = [
     {
       ok: true,
@@ -189,7 +190,8 @@ test('a proxy batch forgets the stored lease its close step reports released', a
         total: 1,
         executed: 1,
         totalDurationMs: 1,
-        results: [{ ...closeStep, durationMs: 1 }],
+        results: [closeStep],
+        endedLeases: ENDED_LEASES,
       },
     },
     {
@@ -197,7 +199,7 @@ test('a proxy batch forgets the stored lease its close step reports released', a
       error: {
         code: 'SESSION_NOT_FOUND',
         message: 'Batch failed at step 2 (snapshot): No active session',
-        details: { step: 2, partialResults: [{ ...closeStep, durationMs: 1 }] },
+        details: { step: 2, partialResults: [closeStep], endedLeases: ENDED_LEASES },
       },
     },
   ];
@@ -214,4 +216,20 @@ test('a proxy batch forgets the stored lease its close step reports released', a
     );
     assert.equal(storedLeaseId(stateDir), undefined);
   }
+});
+
+test('a proxy replay forgets the stored lease its reply reports ended by the script close', async () => {
+  const stateDir = seedProxyConnection();
+  const scriptPath = path.join(stateDir, 'open-close.ad');
+  fs.writeFileSync(scriptPath, 'open "com.apple.Preferences"\nclose\n');
+  const result = await runProxyCli(stateDir, ['replay', scriptPath], () => ({
+    ok: true,
+    data: { replayed: 2, healed: 0, session: 'adc-proxy', endedLeases: ENDED_LEASES },
+  }));
+  assert.equal(result.code, null);
+  assert.deepEqual(
+    result.calls.map((call) => call.command).filter((command) => command !== 'lease_heartbeat'),
+    ['replay'],
+  );
+  assert.equal(storedLeaseId(stateDir), undefined);
 });

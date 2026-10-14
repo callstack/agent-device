@@ -1,6 +1,5 @@
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { leaseScopeToReleaseRequest } from '@agent-device/contracts/lease-scope';
-import type { SessionCloseLeaseOutcome } from '@agent-device/contracts/client';
 import { clearDeviceClaim } from '../resources/device/device-claims.ts';
 import type { LeaseRegistry } from '../resources/lease-registry.ts';
 import type {
@@ -154,16 +153,16 @@ export function resolveSessionLeaseForRequest(params: {
 }
 
 /**
- * Releases the lease a closing session holds, unless its owner allocated it with `retainOnClose`,
- * and reports which of the two happened.
+ * Releases the lease a closing session holds, unless its owner allocated it with `retainOnClose`.
+ * `endedLeaseId` names the lease the close ended, including one that was already inactive.
  */
 export async function releaseSessionLease(params: {
   session: SessionState;
   leaseRegistry: LeaseRegistry;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
-}): Promise<{ lease: SessionCloseLeaseOutcome; providerData?: Record<string, unknown> }> {
+}): Promise<{ endedLeaseId?: string; providerData?: Record<string, unknown> }> {
   const lease = params.session.lease;
-  if (!lease) return { lease: { outcome: 'none' } };
+  if (!lease) return {};
   const releaseRequest = leaseScopeToReleaseRequest({
     leaseId: lease.leaseId,
     tenantId: lease.tenantId,
@@ -185,7 +184,7 @@ export async function releaseSessionLease(params: {
         retained: true,
       },
     });
-    return { lease: { outcome: 'retained', leaseId: lease.leaseId } };
+    return {};
   }
   const providerData = activeLease
     ? await params.leaseLifecycleProvider?.release?.(activeLease)
@@ -204,8 +203,5 @@ export async function releaseSessionLease(params: {
       released: result.released,
     },
   });
-  return {
-    lease: { outcome: 'released', leaseId: lease.leaseId },
-    ...(providerData ? { providerData } : {}),
-  };
+  return { endedLeaseId: lease.leaseId, ...(providerData ? { providerData } : {}) };
 }

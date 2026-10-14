@@ -76,7 +76,6 @@ import { asOptionalRecord, readSnapshotKeyboardBandFact } from '@agent-device/ke
 import { readSnapshotViewportSize } from '@agent-device/kernel/rect';
 import { readResponseWarnings } from '@agent-device/kernel/success-text';
 import { createLeaseClient } from './client/lease-client.ts';
-import { readSessionCloseLeaseOutcome } from '@agent-device/contracts/lease-scope';
 import { normalizeScreenshotCaptureResult } from './client/screenshot-result.ts';
 import { createRequestGuard } from './daemon-client/daemon-client-transport.ts';
 
@@ -219,7 +218,6 @@ export function createAgentDeviceClient(
             shutdown: normalizeTargetShutdownResult(data.shutdown),
             provider: asOptionalRecord(data.provider),
             savedScript: readOptionalString(data, 'savedScript'),
-            lease: readSessionCloseLeaseOutcome(data.lease),
             identifiers: { session },
           };
         } finally {
@@ -326,7 +324,6 @@ export function createAgentDeviceClient(
           closedApp: options.app,
           shutdown: normalizeTargetShutdownResult(data.shutdown),
           savedScript: readOptionalString(data, 'savedScript'),
-          lease: readSessionCloseLeaseOutcome(data.lease),
           identifiers: { session },
         };
       },

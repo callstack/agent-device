@@ -67,6 +67,7 @@ export type {
 } from '../client-gesture.ts';
 export type {
   CloudArtifactsOptions,
+  EndedLease,
   HumanControlHold,
   HumanControlHoldOptions,
   HumanControlHoldScope,
@@ -74,7 +75,6 @@ export type {
   LeaseAllocateOptions,
   LeaseOptions,
   LeaseScopedOptions,
-  SessionCloseLeaseOutcome,
 } from '../client-lease.ts';
 export type {
   AudioOptions,

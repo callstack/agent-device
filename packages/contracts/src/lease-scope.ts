@@ -1,8 +1,8 @@
-import type { LeaseBackend } from '@agent-device/kernel/contracts';
+import type { DaemonResponse, LeaseBackend } from '@agent-device/kernel/contracts';
 import { stripUndefined } from '@agent-device/kernel/record';
 import type { CloudProviderProfileFields } from './remote-config-fields.ts';
 import type { CommandFlags } from './command-flags.ts';
-import type { SessionCloseLeaseOutcome } from './client-lease.ts';
+import type { EndedLease } from './client-lease.ts';
 
 const PROXY_LEASE_PROVIDER = 'proxy';
 
@@ -344,15 +344,16 @@ export function isInactiveLeaseError(error: unknown): boolean {
   );
 }
 
-/** Reads the `lease` field of a session close reply; anything else is no outcome. */
-export function readSessionCloseLeaseOutcome(value: unknown): SessionCloseLeaseOutcome | undefined {
-  if (typeof value !== 'object' || value === null) return undefined;
-  const { outcome, leaseId } = value as Readonly<{ outcome?: unknown; leaseId?: unknown }>;
-  if (outcome === 'none') return { outcome };
-  if ((outcome === 'released' || outcome === 'retained') && typeof leaseId === 'string') {
-    return { outcome, leaseId };
-  }
-  return undefined;
+/** The leases a daemon reply says its request ended; a malformed entry is no ended lease. */
+export function readEndedLeases(response: DaemonResponse): EndedLease[] {
+  const body = response.ok ? response.data : response.error.details;
+  const entries = body?.endedLeases;
+  if (!Array.isArray(entries)) return [];
+  return entries.flatMap((entry: unknown) => {
+    if (typeof entry !== 'object' || entry === null) return [];
+    const { leaseId, outcome } = entry as Readonly<{ leaseId?: unknown; outcome?: unknown }>;
+    return typeof leaseId === 'string' && outcome === 'released' ? [{ leaseId, outcome }] : [];
+  });
 }
 
 function leaseScopeToScopedRequest(scope: LeaseScope): LeaseScopedRequestScope {

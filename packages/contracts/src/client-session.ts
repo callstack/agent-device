@@ -3,7 +3,6 @@
 import type { CloudProviderSessionResult } from './cloud-artifacts.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
 import type { AgentDeviceIdentifiers, AgentDeviceRequestOverrides } from './client-connection.ts';
-import type { SessionCloseLeaseOutcome } from './client-lease.ts';
 
 export type SessionCloseResult = {
   session: string;
@@ -15,7 +14,6 @@ export type SessionCloseResult = {
    * — so a client that requested publication learns where the file landed.
    */
   savedScript?: string;
-  lease?: SessionCloseLeaseOutcome;
   identifiers: AgentDeviceIdentifiers;
 };
 

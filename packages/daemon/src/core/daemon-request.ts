@@ -9,6 +9,7 @@ import type {
 } from '@agent-device/kernel/contracts';
 import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { RequestDispatchLedger } from './request-dispatch-ledger.ts';
+import type { EndedLeaseLedger } from './request-ended-leases.ts';
 
 /**
  * The daemon's own request and response vocabulary: the wire shape from `@agent-device/contracts/command` (`DaemonWireRequest`)
@@ -60,6 +61,11 @@ type DaemonRequestInternal = ReplayDispatchOptions & {
    * delegated it so those mutations count toward that request's disclosure too.
    */
   dispatchLedger?: RequestDispatchLedger;
+  /**
+   * The leases the outermost request and its nested requests ended. Only the request that created
+   * it reports it, once, on its reply.
+   */
+  endedLeases?: EndedLeaseLedger;
 };
 
 /**

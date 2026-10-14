@@ -92,6 +92,7 @@ import {
   refusedBeforeDispatch,
 } from '../execution/request-dispatch-disclosure.ts';
 import { recordNestedRequests } from '../core/request-dispatch-ledger.ts';
+import { handDownEndedLeases, reportEndedLeases } from '../core/request-ended-leases.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
@@ -213,6 +214,10 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     : deps.deviceInventoryGateways;
 
   async function handleRequest(req: DaemonRequest): Promise<DaemonResponse> {
+    return await reportEndedLeases(req, handleRequestOnLedger);
+  }
+
+  async function handleRequestOnLedger(req: DaemonRequest): Promise<DaemonResponse> {
     const start = Date.now();
     const debug = Boolean(req.meta?.debug || req.flags?.verbose);
     return await withDiagnosticsScope(
@@ -385,7 +390,10 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       cloudArtifactProvider,
       endSessionsForLease,
       providerAppCatalog,
-      invoke: recordNestedRequests(handleRequest, dispatchLedger),
+      invoke: handDownEndedLeases(
+        recordNestedRequests(handleRequest, dispatchLedger),
+        lockedScope.req,
+      ),
       invokeReplayAction: allowReplayActions
         ? recordNestedRequests(
             createReplayScopedActionInvoker(lockedScope, providerScope),

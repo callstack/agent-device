@@ -27,6 +27,7 @@ import { resolveSessionScope } from '../session-routing.ts';
 import { resolveEffectiveOpenRuntimeHints } from '../session-runtime.ts';
 import { captureSnapshot } from '../../core/snapshot-capture.ts';
 import { handleSessionCloseCommands } from '../session-lifecycle/index.ts';
+import { onDelegatingLedger } from '../../core/request-ended-leases.ts';
 import { createReplayTestVideoOwner } from './session-replay-video-owner.ts';
 import type { SessionCommandHandler } from './session-command-input.ts';
 
@@ -191,14 +192,17 @@ async function closeReplayTestSession(params: ReplayTestSessionCleanupParams): P
   const { req, sessionName, logPath, sessionStore } = params;
   if (!sessionStore.get(sessionName)) return;
   const closeResponse = await handleSessionCloseCommands({
-    req: {
-      token: req.token,
-      session: sessionName,
-      command: 'close',
-      positionals: [],
-      flags: {},
-      meta: req.meta,
-    },
+    req: onDelegatingLedger(
+      {
+        token: req.token,
+        session: sessionName,
+        command: 'close',
+        positionals: [],
+        flags: {},
+        meta: req.meta,
+      },
+      req,
+    ),
     sessionName,
     logPath,
     sessionStore,
