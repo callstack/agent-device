@@ -231,7 +231,7 @@ test("a mutating find's carried node is not second-guessed by position", async (
     stored: carried,
     trees: [carried, slideTree(RESTING_X)],
     ...DISTURBING_HISTORY,
-    preresolvedTarget: { ref: '@e2', node: carried.nodes[1]!, nodes: carried.nodes },
+    preresolvedTarget: { ref: '@e2', node: carried.nodes[1]!, tree: { nodes: carried.nodes } },
   });
 
   assert.deepEqual(await device.press('ref'), [centerOf(MID_FLIGHT_X)]);

@@ -387,7 +387,11 @@ test('#1654: the shared guards still run on the pre-resolved node', async () => 
   };
 
   const response = await runFindInternalClick(sessionStore, sessionName, {
-    findResolvedTarget: { ref: '@e2', node: blocked, nodes: [preresolved.nodes[0]!, blocked] },
+    findResolvedTarget: {
+      ref: '@e2',
+      node: blocked,
+      tree: { nodes: [preresolved.nodes[0]!, blocked] },
+    },
   });
 
   expect(response?.ok).toBe(false);

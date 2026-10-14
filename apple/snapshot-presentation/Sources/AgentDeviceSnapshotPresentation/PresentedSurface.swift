@@ -5,8 +5,7 @@ import Foundation
 /// confirmation on it: a capture whose evidence cannot answer says `unknown` instead of staying silent,
 /// since silence is also what a producer that never classified publishes.
 ///
-/// Mirrors the TypeScript `PresentedSurface` in `@agent-device/kernel/snapshot`. The rule that arrives at
-/// one of these three values is `SnapshotPresentedSurface` beside this type.
+/// Mirrors the TypeScript `PresentedSurface` in `@agent-device/kernel/snapshot`.
 public enum PresentedSurface: String, Codable, Equatable {
   /// A presentation covers the content this capture describes.
   case presented

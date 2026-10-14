@@ -289,16 +289,19 @@ test('the reader forwards each published keyboard band shape unchanged', () => {
 // payload spelling a state this vocabulary never declared reach settle as if a producer had read it.
 test('the reader forwards the presented-surface fact through the kernel reader (#3565)', () => {
   assert.equal(
-    readAppleSnapshotResult({ presentedSurface: 'presented' }).presentedSurface,
+    readAppleSnapshotResult({ presentedSurface: 'presented' }, IOS_SIMULATOR).presentedSurface,
     'presented',
   );
-  assert.equal(readAppleSnapshotResult({ presentedSurface: 'absent' }).presentedSurface, 'absent');
   assert.equal(
-    readAppleSnapshotResult({ presentedSurface: 'unknown' }).presentedSurface,
+    readAppleSnapshotResult({ presentedSurface: 'absent' }, IOS_SIMULATOR).presentedSurface,
+    'absent',
+  );
+  assert.equal(
+    readAppleSnapshotResult({ presentedSurface: 'unknown' }, IOS_SIMULATOR).presentedSurface,
     'unknown',
   );
   assert.equal(
-    readAppleSnapshotResult({ presentedSurface: 'no-sheet' }).presentedSurface,
+    readAppleSnapshotResult({ presentedSurface: 'no-sheet' }, IOS_SIMULATOR).presentedSurface,
     'unknown',
   );
 });
@@ -306,7 +309,7 @@ test('the reader forwards the presented-surface fact through the kernel reader (
 test('a capture the runner classified nothing publishes no presented-surface fact', () => {
   // The terminals (a sparse payload, an AX-unavailable failure) and any older runner answer with no
   // key. The daemon must read that as no evidence, not as a screen the producer proved clear.
-  assert.equal(readAppleSnapshotResult({ nodes: [] }).presentedSurface, undefined);
+  assert.equal(readAppleSnapshotResult({ nodes: [] }, IOS_SIMULATOR).presentedSurface, undefined);
 });
 
 test('a capture from a tier that never reads the keyboard publishes no fact at all', () => {

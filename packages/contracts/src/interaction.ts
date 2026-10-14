@@ -124,21 +124,14 @@ export type PreresolvedInteractionTarget = {
   ref: string;
   /** The node the caller resolved, after the caller's own promotion. */
   node: SnapshotNode;
-  /** The tree `node` came from — the guards read its siblings for occlusion/viewport. */
-  nodes: SnapshotNode[];
   /**
-   * The in-place iOS system surface `nodes` describes (#2438), absent for ordinary app content.
-   * Travels with the tree so the adopting consumer's post-action comparison knows which surface
-   * its baseline came from.
+   * The tree `node` came from, minted by `surfaceScopedNodes` from the caller's capture. The guards
+   * read its siblings for occlusion/viewport, and the adopting leaf's post-action baseline is this
+   * value as-is, so the surface (#2438) and presentation (#3565) facts travel with the nodes.
    */
-  iosSystemSurfaceBundleId?: string;
+  tree: SurfaceScopedNodes;
   /**
-   * Whether the producer that captured `nodes` read a modal presentation over the app (#3565),
-   * carried so the adopting leaf's settle baseline keeps the fact its own capture established.
-   */
-  presentedSurface?: PresentedSurface;
-  /**
-   * The keyboard band the capture of `nodes` measured, carried so the adopting consumer's keyboard
+   * The keyboard band the capture of `tree` measured, carried so the adopting consumer's keyboard
    * guard reads the same band the tree was captured with instead of re-deriving one (#2660).
    */
   keyboard?: SnapshotKeyboardBandFact;

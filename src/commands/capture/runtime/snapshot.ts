@@ -236,7 +236,6 @@ function normalizeBackendSnapshot(
       ...result.snapshot,
       ...(result.keyboard ? { keyboard: result.keyboard } : {}),
       ...(result.viewport ? { viewport: result.viewport } : {}),
-      ...(result.presentedSurface ? { presentedSurface: result.presentedSurface } : {}),
     });
   }
   return {
@@ -246,7 +245,6 @@ function normalizeBackendSnapshot(
     createdAt: now(runtime),
     ...(result.keyboard ? { keyboard: result.keyboard } : {}),
     ...(result.viewport ? { viewport: result.viewport } : {}),
-    ...(result.presentedSurface ? { presentedSurface: result.presentedSurface } : {}),
   };
 }
 

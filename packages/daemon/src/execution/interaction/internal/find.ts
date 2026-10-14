@@ -1,4 +1,8 @@
-import type { PreresolvedInteractionTarget } from '@agent-device/contracts/interaction';
+import type {
+  PreresolvedInteractionTarget,
+  SurfaceScopedNodes,
+} from '@agent-device/contracts/interaction';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import {
   isReadOnlyFindAction,
   checkFindArgs,
@@ -11,7 +15,6 @@ import { coveredInteractionDetails } from '@agent-device/selectors/interaction-e
 import {
   centerOfRect,
   type SnapshotAddressableNode,
-  type PresentedSurface,
   type SnapshotKeyboardBandFact,
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
@@ -66,13 +69,10 @@ type ResolvedMatch = {
   node: SnapshotState['nodes'][number];
   resolvedNode: SnapshotAddressableNode;
   ref: string;
-  nodes: SnapshotState['nodes'];
-  /** The in-place iOS system surface the target capture described (#2438), if any. */
-  iosSystemSurfaceBundleId?: string;
+  /** The target capture's baseline: its nodes with the surface and presentation they describe. */
+  tree: SurfaceScopedNodes;
   /** The keyboard band that capture's producer measured, when it measured one (#2660). */
   keyboard?: SnapshotKeyboardBandFact;
-  /** Whether that capture read a modal presentation over the app (#3565). */
-  presentedSurface?: PresentedSurface;
   actionFlags: Record<string, unknown>;
   /**
    * Set when find's row refuses this match as covered. Only the focus/type
@@ -212,14 +212,8 @@ export async function handleFindCommands(params: FindRouteInput): Promise<Daemon
     node,
     resolvedNode,
     ref,
-    nodes,
-    ...(snapshotResult.iosSystemSurfaceBundleId
-      ? { iosSystemSurfaceBundleId: snapshotResult.iosSystemSurfaceBundleId }
-      : {}),
+    tree: surfaceScopedNodes(snapshotResult),
     ...(snapshotResult.keyboard ? { keyboard: snapshotResult.keyboard } : {}),
-    ...(snapshotResult.presentedSurface
-      ? { presentedSurface: snapshotResult.presentedSurface }
-      : {}),
     actionFlags,
     ...(target.kind === 'occluded' ? { occludedNode: target.node } : {}),
   };
@@ -274,17 +268,9 @@ function preresolvedTarget(match: ResolvedMatch): PreresolvedInteractionTarget {
   return {
     ref: match.ref,
     node: match.resolvedNode,
-    nodes: match.nodes,
-    // #2438: the leaf's post-action verify/settle compares against this tree, so it must know
-    // whether the tree describes the app or an in-place system surface served over it.
-    ...(match.iosSystemSurfaceBundleId
-      ? { iosSystemSurfaceBundleId: match.iosSystemSurfaceBundleId }
-      : {}),
+    tree: match.tree,
     // #2660: the leaf's keyboard guard measures the band this capture measured, not one it re-derives.
     ...(match.keyboard ? { keyboard: match.keyboard } : {}),
-    // #3565: the leaf's settle baseline is armed on the presentation this capture read, not a shape
-    // the leaf reconstructs from nodes it cannot see the projection of.
-    ...(match.presentedSurface ? { presentedSurface: match.presentedSurface } : {}),
   };
 }
 

@@ -23,7 +23,6 @@ import type {
 import type {
   Point,
   Rect,
-  PresentedSurface,
   SnapshotKeyboardBandFact,
   SnapshotNode,
   SnapshotOptions,
@@ -59,12 +58,6 @@ export type BackendSnapshotResult = {
    * the band from `nodes`.
    */
   keyboard?: SnapshotKeyboardBandFact;
-  /**
-   * iOS: whether this capture read a modal presentation over the app (#3565), classified by the
-   * producer on its acquired tree. A backend that publishes nothing classified nothing; a consumer
-   * treats that as `'unknown'`, never as absence.
-   */
-  presentedSurface?: PresentedSurface;
   /**
    * The box these rects are measured in, as the producer measured it (#3182). Absent means the
    * producer measured no box — never a zero — since that absence is the only answer a producer with

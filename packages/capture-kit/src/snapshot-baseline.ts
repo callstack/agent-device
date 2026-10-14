@@ -14,7 +14,11 @@ import type { SurfaceScopedNodes } from '@agent-device/contracts/interaction';
  * One value, never two channels: every boundary that carries a baseline carries the type this returns,
  * so nodes cannot arrive without the surface they describe.
  */
-export function surfaceScopedNodes(snapshot: SnapshotState | undefined): SurfaceScopedNodes {
+export function surfaceScopedNodes(
+  snapshot:
+    | Pick<SnapshotState, 'nodes' | 'iosSystemSurfaceBundleId' | 'presentedSurface'>
+    | undefined,
+): SurfaceScopedNodes {
   return {
     nodes: snapshot?.nodes ?? [],
     ...(snapshot?.iosSystemSurfaceBundleId

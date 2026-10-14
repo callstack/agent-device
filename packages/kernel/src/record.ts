@@ -162,12 +162,6 @@ function readKeyboardFrameFact(
  * The declared states, each keyed by its own name so a payload string is a state only when this table
  * has that exact key. Keyed by `PresentedSurface`, so a state added to the vocabulary without a row
  * here fails to compile instead of silently reading as `unknown`.
- *
- * A local table rather than `PRESENTED_SURFACE_STATES`: this module is the shared wire reader every
- * response seam imports, and a load-time edge to `kernel/snapshot.ts` from here makes that module
- * eager for every consumer of `kernel/record` — which ADR 0019's loading-shape probe measures per
- * entry (`scripts/__tests__/eager-closure-budgets.test.ts`). The type is the tie that keeps the two
- * in agreement, and `presented-surface.test.ts` reads both against the same payloads.
  */
 const PRESENTED_SURFACE_BY_NAME: Readonly<Record<PresentedSurface, PresentedSurface>> = {
   presented: 'presented',

@@ -317,7 +317,7 @@ test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame 
       positionals: ['@e1', 'hello'],
       flags: {},
       internal: {
-        findResolvedTarget: { ref: '@e1', node: findNode, nodes: findNodes },
+        findResolvedTarget: { ref: '@e1', node: findNode, tree: { nodes: findNodes } },
       },
     },
     sessionName,

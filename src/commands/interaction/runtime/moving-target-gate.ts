@@ -22,7 +22,7 @@ import type {
 import { nodeRectByIdentity } from '@agent-device/ad-script';
 import { now, sleep } from '../../runtime-common.ts';
 import { captureInteractionSnapshot } from './interaction-snapshot-capture.ts';
-import { surfaceScopedNodes } from './post-action-surface.ts';
+import { surfaceScopedNodes } from '@agent-device/capture-kit/snapshot-baseline';
 import { resolveInteractionTarget } from './resolution.ts';
 import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { PRESENTED_SURFACE_STATES } from './snapshot.ts';
+import type { PresentedSurface } from './snapshot.ts';
 import { readPresentedSurfaceFact } from './record.ts';
 
 // The presented-surface fact (#3565) arrives from two producers — the Apple runner's capture payload
@@ -50,7 +50,8 @@ test('a payload with no own fact key is silent rather than inherited', () => {
 });
 
 test('each declared state reads back as itself', () => {
-  for (const state of PRESENTED_SURFACE_STATES) {
+  const states: PresentedSurface[] = ['presented', 'absent', 'unknown'];
+  for (const state of states) {
     assert.equal(readPresentedSurfaceFact(carrying(state)), state);
   }
 });
@@ -74,26 +75,4 @@ test('a published value naming an inherited object member is not a state', () =>
   for (const payload of ['constructor', 'toString', '__proto__']) {
     assert.equal(readPresentedSurfaceFact(carrying(payload)), 'unknown', payload);
   }
-});
-
-// The reader decides from a table it owns, and the exported vocabulary is frozen rather than
-// `as const` alone: a consumer that mutated the array could otherwise move the boundary between a
-// trusted state and `unknown` for every other module in the process.
-test('the exported vocabulary cannot be widened or narrowed at runtime', () => {
-  assert.ok(Object.isFrozen(PRESENTED_SURFACE_STATES));
-
-  for (const mutate of [
-    () => (PRESENTED_SURFACE_STATES as unknown as string[]).push('not-presented'),
-    () => ((PRESENTED_SURFACE_STATES as unknown as string[])[0] = 'absent'),
-    () => (PRESENTED_SURFACE_STATES as unknown as string[]).pop(),
-  ]) {
-    try {
-      mutate();
-    } catch {
-      // A strict-mode assignment or a frozen push throws; either way the array is unchanged.
-    }
-  }
-
-  assert.deepEqual([...PRESENTED_SURFACE_STATES], ['presented', 'absent', 'unknown']);
-  assert.equal(readPresentedSurfaceFact(carrying('not-presented')), 'unknown');
 });

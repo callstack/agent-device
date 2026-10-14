@@ -140,7 +140,7 @@ export function findResolvedTarget(
   preresolved: ReturnType<typeof makeFindPreresolvedTree>,
   ref = '@e2',
 ) {
-  return { ref, node: preresolved.node, nodes: preresolved.nodes };
+  return { ref, node: preresolved.node, tree: { nodes: preresolved.nodes } };
 }
 
 /** The coordinates the leaf handed to the bound point-tap operation. */

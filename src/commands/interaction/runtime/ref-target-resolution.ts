@@ -73,7 +73,7 @@ function adoptPreresolvedRefTarget(
     carriedRef !== ref ||
     !hasSnapshotRef(preresolved.node) ||
     normalizeRef(preresolved.node.ref) !== ref ||
-    !preresolved.nodes.includes(preresolved.node)
+    !preresolved.tree.nodes.includes(preresolved.node)
   ) {
     throw new AppError(
       'COMMAND_FAILED',
@@ -81,13 +81,7 @@ function adoptPreresolvedRefTarget(
     );
   }
   return {
-    tree: {
-      nodes: preresolved.nodes,
-      ...(preresolved.iosSystemSurfaceBundleId
-        ? { surfaceBundleId: preresolved.iosSystemSurfaceBundleId }
-        : {}),
-      ...(preresolved.presentedSurface ? { presentedSurface: preresolved.presentedSurface } : {}),
-    },
+    tree: preresolved.tree,
     ...(preresolved.keyboard ? { keyboard: preresolved.keyboard } : {}),
     resolved: buildRefResolution(ref, preresolved.node, 'exact'),
   };
