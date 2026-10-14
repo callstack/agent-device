@@ -131,7 +131,7 @@ function fixtureHost(
           await awaitFixtureReadiness(readyDevice);
           return await discoverReadyAndroidEmulators(readyDevice);
         },
-        launch: () => 1,
+        launch: async () => 1,
         terminate: async () => undefined,
       }),
     }),

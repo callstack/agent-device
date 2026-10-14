@@ -1,28 +1,29 @@
 import type { DeviceReadinessRuntimeHost } from '@agent-device/contracts/device-readiness-runtime';
 import { listLocalDeviceInventory } from '@agent-device/device-selection/device-inventory-context';
-import { runCmdDetached } from '@agent-device/host-kit/command';
+import { runCmd, runCmdDetached } from '@agent-device/host-kit/command';
 import { stopPidsWithEscalation } from '@agent-device/host-kit/process';
 
-const FOCUS_RETURN_WINDOW_MS = 30_000;
+const LSAPPINFO_PID = /"pid"=(\d+)/;
 
 // The macOS emulator has no flag to open its window without activating, so this JXA script waits
 // for the emulator to become frontmost and reactivates the app that was frontmost before it.
+// argv: emulator pid, frontmost pid before launch, watch budget in ms.
 const RETURN_FOCUS_SCRIPT = `ObjC.import('AppKit');
 function run(argv) {
   const emulatorPid = Number(argv[0]);
-  const deadline = Date.now() + Number(argv[1]);
+  let previousPid = Number(argv[1]);
+  const deadline = Date.now() + Number(argv[2]);
   const workspace = $.NSWorkspace.sharedWorkspace;
-  let previousPid = 0;
   while (Date.now() < deadline) {
     $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.05));
     const front = workspace.frontmostApplication;
     const frontPid = front.isNil() ? 0 : front.processIdentifier;
     if (frontPid !== emulatorPid) {
-      previousPid = frontPid;
+      if (frontPid !== 0) previousPid = frontPid;
       continue;
     }
     const previous = $.NSRunningApplication.runningApplicationWithProcessIdentifier(previousPid);
-    if (previousPid !== 0 && !previous.isNil()) previous.activateWithOptions(0);
+    if (!previous.isNil()) previous.activateWithOptions(0);
     return;
   }
 }`;
@@ -37,18 +38,21 @@ export function createAndroidEmulatorHost(
       signal.throwIfAborted();
       return devices;
     },
-    launch: (avdName, headless) => {
+    launch: async (avdName, headless, bootBudgetMs) => {
       const args = ['-avd', avdName];
       if (headless) args.push('-no-window', '-no-audio');
+      const frontmostPid =
+        !headless && hostPlatform === 'darwin' ? await readFrontmostAppPid() : undefined;
       const pid = runCmdDetached('emulator', args);
-      if (!headless && hostPlatform === 'darwin') {
+      if (frontmostPid !== undefined) {
         runCmdDetached('osascript', [
           '-l',
           'JavaScript',
           '-e',
           RETURN_FOCUS_SCRIPT,
           String(pid),
-          String(FOCUS_RETURN_WINDOW_MS),
+          String(frontmostPid),
+          String(bootBudgetMs),
         ]);
       }
       return pid;
@@ -57,4 +61,19 @@ export function createAndroidEmulatorHost(
       await stopPidsWithEscalation({ pids: [pid], termTimeoutMs: 1_500, killTimeoutMs: 1_500 });
     },
   });
+}
+
+async function readFrontmostAppPid(): Promise<number | undefined> {
+  const front = await runCmd('/usr/bin/lsappinfo', ['front'], {
+    allowFailure: true,
+    timeoutMs: 2_000,
+  });
+  const asn = front.stdout.trim();
+  if (!asn) return undefined;
+  const info = await runCmd('/usr/bin/lsappinfo', ['info', '-only', 'pid', asn], {
+    allowFailure: true,
+    timeoutMs: 2_000,
+  });
+  const pid = LSAPPINFO_PID.exec(info.stdout)?.[1];
+  return pid === undefined ? undefined : Number(pid);
 }

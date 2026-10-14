@@ -100,7 +100,11 @@ function deploymentHost(
         markBooted: () => {},
         wasRecentlyObservedBooted: async () => false,
       },
-      androidEmulator: { discover: async () => [], launch: () => 1, terminate: async () => {} },
+      androidEmulator: {
+        discover: async () => [],
+        launch: async () => 1,
+        terminate: async () => {},
+      },
     },
   } as unknown as PlatformRuntimeHost;
 }
