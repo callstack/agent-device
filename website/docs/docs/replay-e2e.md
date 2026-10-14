@@ -98,8 +98,7 @@ agent-device replay ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --s
   For a step recorded with a target annotation (the `# agent-device:target-v1`
   line above it), `error.details.divergence.kind` is `selector-miss` and the step is never sent.
   For a step without an annotation, `error.details.reason` is `selector_not_found`, as for a live
-  command. If the app shows an empty accessibility tree, `error.details.reason` is
-  `capture_sparse` instead; take a snapshot to see where the app is.
+  command.
 - A step whose read names one element (`is` with a predicate other than `exists`/`absent`, or
   `get attrs`) that reaches dispatch with an ambiguous selector fails with `AMBIGUOUS_MATCH` as
   the divergence cause — the same code the live command reports, so an ambiguous recorded
@@ -395,6 +394,5 @@ Passing `--plan-digest` that no longer matches the current script — because yo
   screenshot:
   - A `selector-miss` divergence means the target was absent from the captured accessibility
     tree. Check the selector for this build and whether the app exposes the element to
-    accessibility. A `capture_sparse` cause means the capture had no usable tree; take a fresh
-    snapshot to check the app state. Add a `wait` step for a landmark on a loading screen before
+    accessibility. Add a `wait` step for a landmark on a loading screen before
     the press.

@@ -129,39 +129,3 @@ test('press refuses a selector miss after one interactive and full capture attem
     },
   );
 });
-
-test('press refuses a sparse capture with capture_sparse and never taps', async () => {
-  await withPressSelectorDaemon(
-    [
-      {
-        command: 'ios.runner.snapshot',
-        deviceId: DEVICE_ID,
-        platform: 'apple',
-        repeat: true,
-        result: {
-          nodes: APPLICATION_ONLY_NODES,
-          truncated: false,
-          snapshotQuality: {
-            state: 'sparse',
-            backend: 'tree',
-            reasonCode: 'sparse-tree',
-          },
-        },
-      },
-    ],
-    async (daemon, transcript) => {
-      const callsBeforePress = transcript.calls.length;
-      const press = await daemon.callCommand('press', ['label=Continue']);
-      const error = assertRpcError(press, 'COMMAND_FAILED', /sparse capture/);
-      const details = error.details as {
-        reason: unknown;
-        snapshotQuality: { state: string };
-      };
-      assert.equal(details.reason, 'capture_sparse');
-      assert.equal((error.details as { dispatched?: unknown }).dispatched, 'no');
-      assert.equal(details.snapshotQuality.state, 'sparse');
-      const commands = transcript.calls.slice(callsBeforePress).map((call) => call.command);
-      assert.ok(!commands.includes('ios.runner.tap'), 'no tap on a sparse capture');
-    },
-  );
-});

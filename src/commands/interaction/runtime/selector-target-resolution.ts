@@ -1,11 +1,9 @@
-import { AppError, discloseDispatch } from '@agent-device/kernel/errors';
+import type { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import { inheritPostGestureOutcome } from '@agent-device/kernel/snapshot';
 import type { SelectorResolution } from '@agent-device/selectors';
 import { resolveSelectorPipeline } from '@agent-device/selectors/selector-pipeline';
 import { SELECTOR_PIPELINE_POLICIES } from '@agent-device/selectors/selector-pipeline-policy';
-import { INTERACTION_ERROR_REASONS } from '@agent-device/selectors/interaction-error';
-import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
 import {
   captureInteractionSnapshot,
@@ -75,27 +73,12 @@ async function detectCoveredSelectorTarget(params: {
 
 export async function selectorInteractionFailure(params: {
   runtime: AgentDeviceRuntime;
-  snapshot: SnapshotState;
+  nodes: SnapshotState['nodes'];
   selectorExpression: string;
   action: InteractionAction;
   resolved: SelectorResolution | null;
 }): Promise<AppError> {
-  const { runtime, snapshot, selectorExpression, action, resolved } = params;
-  if (isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) {
-    return discloseDispatch(
-      new AppError(
-        'COMMAND_FAILED',
-        `Selector ${selectorExpression} was not found in a sparse capture; the tree cannot prove it absent`,
-        {
-          reason: INTERACTION_ERROR_REASONS.captureSparse,
-          snapshotQuality: snapshot.snapshotQuality,
-          hint: 'Re-run after the screen settles, or capture a snapshot to inspect the tree.',
-        },
-      ),
-      'no',
-    );
-  }
-  const nodes = snapshot.nodes;
+  const { runtime, nodes, selectorExpression, action, resolved } = params;
   const covered = await detectCoveredSelectorTarget({ runtime, nodes, selectorExpression, action });
   if (covered) return covered;
   return selectorNotFoundFailure(selectorExpression, {

@@ -139,7 +139,7 @@ async function resolveSelectorInteractionTarget(
   if (!resolved || !resolved.node.rect) {
     throw await selectorInteractionFailure({
       runtime,
-      snapshot: capture.snapshot,
+      nodes: capture.snapshot.nodes,
       selectorExpression,
       action: params.action,
       resolved,
