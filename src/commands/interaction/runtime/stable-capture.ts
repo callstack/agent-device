@@ -339,8 +339,17 @@ function createStableCapturePacing(start: number) {
 
 /**
  * The broad-transition confirmation, as one decision the settle loop asks about each capture. It
- * answers the arming question once for the run and then compares each capture against the pre-action
- * tree until one proves the replacement, holding that window for the rest of the run.
+ * compares each capture against the pre-action tree until one proves the replacement, and holds that
+ * window for the rest of the run.
+ *
+ * Arming is split by input lifetime. The pre-action projection is the one arming input that is
+ * constant for the run, and the only one allowed to rule the confirmation out: a caller that passed
+ * none has nothing to confirm against and no later capture can supply one. Whether the capture in
+ * hand proves an iOS XCTest read and carries a complete viewport projection is not constant — the
+ * first read after a dismissal can still show the dismissed surface, arrive rootless or empty
+ * mid-animation, or come from another backend than the next poll will. That half is re-asked on
+ * every capture until one arms; ruling it out on the first capture settled the #1831
+ * transitional-tree case on the short window instead of the floor (#3470).
  *
  * Arming never consults the requested quiet window: the old `requestedQuietMs <
  * DEFAULT_STABLE_QUIET_MS` bar is what made `--settle-quiet 499` behave differently from 500 and left
@@ -353,9 +362,10 @@ function broadTransitionConfirmation(params: {
   platform: AgentDeviceRuntime['backend']['platform'];
   appBundleId: string | undefined;
 }): StableCaptureConfirmation {
-  // undefined until the first capture answers it; null once the transition is ruled out, so an
-  // ordinary local mutation keeps its chrome-free comparison off the cadence.
-  let transitionBaseline: StableCaptureSignal | null | undefined;
+  const { baselineNodes, platform, appBundleId } = params;
+  // Open question, not a ruling: `undefined` is the state a capture that cannot support the
+  // comparison leaves behind, so arming never depends on which capture happens to land first.
+  let transitionBaseline: StableCaptureSignal | undefined;
   // The comparison refuses a node-less side outright, so a mid-animation empty read must not be able
   // to cancel the floor: without the latch it hands the loop its short window back, and the next
   // empty read matches it, settling a dismissal that owed the floor.
@@ -365,23 +375,17 @@ function broadTransitionConfirmation(params: {
     // omits `role`, parent links, and >1px-free geometry, all of which the chrome classifier reads,
     // and one pass costs tens of microseconds against the 300 ms poll cadence.
     requiredQuietMs(snapshot, currentQuietMs) {
-      // Not `??=`: that operator re-runs the right side whenever it resolves to `null`, which is
-      // exactly the ruled-out answer a non-iOS or backend-less run gives, on every single poll.
-      if (transitionBaseline === undefined) {
+      if (transitionBaseline === undefined && baselineNodes) {
         transitionBaseline = broadTransitionBaseline({
-          baselineNodes: params.baselineNodes,
+          baselineNodes,
           capture: snapshot,
-          platform: params.platform,
-          appBundleId: params.appBundleId,
+          platform,
+          appBundleId,
         });
       }
-      if (transitionBaseline === null) return currentQuietMs;
+      if (!transitionBaseline) return currentQuietMs;
       if (confirmedQuietMs === undefined) {
-        const candidate = stableCaptureComparisonSignal(
-          snapshot,
-          snapshot.nodes,
-          params.appBundleId,
-        );
+        const candidate = stableCaptureComparisonSignal(snapshot, snapshot.nodes, appBundleId);
         if (stableCaptureSignalsHaveBroadReplacement(transitionBaseline, candidate)) {
           confirmedQuietMs = Math.max(currentQuietMs, BROAD_TRANSITION_CONFIRMATION_QUIET_MS);
         }
@@ -404,22 +408,21 @@ type StableCaptureConfirmation = {
 };
 
 /**
- * The pre-action tree to confirm against, or `null` when the transition in front of the loop is not
- * one this confirmation exists for: the chrome-free signal for the pre-action tree, when the capture
- * proves an iOS XCTest session (`SnapshotState.backend` is optional at the runtime boundary, so the
- * bound platform stays authoritative when a capture omits that provenance; a declared non-XCTest
- * backend still wins so this confirmation cannot leak onto another capture implementation) and that
- * tree is trustworthy evidence about the screen. Whether the screen was actually replaced stays
- * per-capture — the first capture after a dismissal can still show the dismissed surface.
+ * The pre-action tree to confirm against, or `undefined` when the capture in hand cannot support the
+ * comparison: the capture must prove an iOS XCTest session (`SnapshotState.backend` is optional at
+ * the runtime boundary, so the bound platform stays authoritative when a capture omits that
+ * provenance; a declared non-XCTest backend still wins so this confirmation cannot leak onto another
+ * capture implementation), and it must be trustworthy evidence about the screen. `undefined` asks the
+ * next capture, rather than ruling the transition out for the run.
  */
 function broadTransitionBaseline(params: {
-  baselineNodes: SnapshotNode[] | undefined;
+  baselineNodes: SnapshotNode[];
   capture: Parameters<typeof stableCaptureSignal>[0];
   platform: AgentDeviceRuntime['backend']['platform'];
   appBundleId: string | undefined;
-}): StableCaptureSignal | null {
+}): StableCaptureSignal | undefined {
   const { baselineNodes, capture, platform, appBundleId } = params;
-  if (!baselineNodes || !isBoundIosXCTestCapture(capture.backend, platform)) return null;
+  if (!isBoundIosXCTestCapture(capture.backend, platform)) return undefined;
   // A broad *screen* replacement needs a complete post-action viewport projection. The baseline
   // comes from settle's authoritative pre-action capture, but a presented iOS modal can omit its
   // Application root and still be the complete interaction surface. Requiring the root only from
@@ -430,7 +433,7 @@ function broadTransitionBaseline(params: {
   // the viewport root. Treating that rootless replacement as an arbitrary scoped projection lets
   // a coherent transitional tree win the default 500ms quiet window.
   const hasTinyPresentedBaseline = baselineNodes.length <= TINY_STABLE_TREE_NODE_COUNT;
-  if (!hasCompleteViewportProjection && !hasTinyPresentedBaseline) return null;
+  if (!hasCompleteViewportProjection && !hasTinyPresentedBaseline) return undefined;
   return stableCaptureComparisonSignal(capture, baselineNodes, appBundleId);
 }
 
