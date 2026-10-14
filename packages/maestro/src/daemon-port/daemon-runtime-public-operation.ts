@@ -56,9 +56,15 @@ export type MaestroDaemonDispatchOptions = Omit<
   'closeAppOnly' | 'killApp' | 'observationOnly'
 > &
   Readonly<{
-    /** Presence-only: the daemon treats `false` like omission, so the port never sends it. */
+    /**
+     * Terminate the targeted app without ending the owning daemon session. Presence-only (as are
+     * `killApp` and `observationOnly`): the daemon treats `false` like omission, so the port never
+     * sends it.
+     */
     closeAppOnly?: true;
+    /** With `closeAppOnly`: Maestro `killApp` process death (`am kill` on Android) instead of `stop`. */
     killApp?: true;
+    /** A hierarchy capture used as operational evidence only; it issues no client ref authority. */
     observationOnly?: true;
   }>;
 
