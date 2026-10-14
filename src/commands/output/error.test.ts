@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
+import { withCapturedStderrAsync } from '../../__tests__/test-utils/stream-capture.ts';
 import { printHumanError } from './error.ts';
 
 test('printHumanError renders a structured cause unconditionally', async () => {
@@ -19,20 +20,9 @@ test('printHumanError renders a structured cause unconditionally', async () => {
 });
 
 async function captureStderr(run: () => void | Promise<void>): Promise<string> {
-  const original = process.stderr.write.bind(process.stderr);
-  let output = '';
-  (process.stderr as unknown as { write: typeof process.stderr.write }).write = ((
-    chunk: unknown,
-  ) => {
-    output += String(chunk);
-    return true;
-  }) as typeof process.stderr.write;
-  try {
+  return await withCapturedStderrAsync(async () => {
     await run();
-  } finally {
-    process.stderr.write = original;
-  }
-  return output;
+  });
 }
 
 // --- ADR 0012 migration step 2: replay divergence compact text report ---

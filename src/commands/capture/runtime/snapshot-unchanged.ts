@@ -76,14 +76,12 @@ function areSnapshotPresentationsEquivalent(
   );
 }
 
-// Native text-entry/visibility facts are not rendered; refs and process ids are volatile.
+// Some native text-entry/visibility facts are not rendered; refs and process ids are volatile.
 // Inheritance markers are output-only: this comparison runs before label deduplication.
 type ComparableSnapshotNode = Omit<
   SnapshotNode,
   | 'ref'
   | 'pid'
-  | 'editable'
-  | 'password'
   | 'hintShowing'
   | 'selectionStart'
   | 'selectionEnd'
@@ -91,11 +89,12 @@ type ComparableSnapshotNode = Omit<
   | 'userInteractionEnabled'
   | 'inheritsLabel'
   | 'inheritsIdentifier'
+  | 'iosValueSemantics'
 >;
 
 type ScalarPresentationField = Exclude<
   keyof ComparableSnapshotNode,
-  'rect' | 'presentationHints' | 'actions'
+  'rect' | 'coveredBy' | 'presentationHints' | 'actions'
 >;
 
 const PRESENTATION_SCALAR_FIELDS = {
@@ -113,6 +112,8 @@ const PRESENTATION_SCALAR_FIELDS = {
   contentDescription: true,
   identifier: true,
   enabled: true,
+  editable: true,
+  password: true,
   selected: true,
   checked: true,
   focused: true,
@@ -121,9 +122,11 @@ const PRESENTATION_SCALAR_FIELDS = {
   placeholder: true,
   hittable: true,
   bundleId: true,
+  systemBar: true,
   appName: true,
   windowTitle: true,
   surface: true,
+  keyboardOwned: true,
   hiddenContentAbove: true,
   hiddenContentBelow: true,
   interactionBlocked: true,
@@ -137,8 +140,22 @@ function areSnapshotNodesEquivalent(previous: SnapshotNode, current: SnapshotNod
   return (
     PRESENTATION_SCALAR_KEYS.every((field) => previous[field] === current[field]) &&
     areRectsEquivalent(previous.rect, current.rect) &&
+    areCoveringNodesEquivalent(previous.coveredBy, current.coveredBy) &&
     areStringArraysEquivalent(previous.presentationHints, current.presentationHints) &&
     areStringArraysEquivalent(previous.actions, current.actions)
+  );
+}
+
+/** The occlusion scan's cover description is presentation evidence: two captures agree when every carried component does. */
+function areCoveringNodesEquivalent(
+  previous: SnapshotNode['coveredBy'],
+  current: SnapshotNode['coveredBy'],
+): boolean {
+  if (!previous || !current) return previous === current;
+  return (
+    previous.kind === current.kind &&
+    previous.label === current.label &&
+    areRectsEquivalent(previous.rect, current.rect)
   );
 }
 

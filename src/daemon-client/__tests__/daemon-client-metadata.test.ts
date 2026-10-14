@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { tryAcquireDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { readDaemonInfo, type DaemonInfo } from '../daemon-client-metadata.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';

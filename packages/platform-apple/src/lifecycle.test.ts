@@ -14,6 +14,7 @@ import {
   OBSERVABLE,
   SPAWN_TIMEOUT,
   UNOBSERVABLE,
+  coldSimulatorLifecycleHost,
   device,
   launchUrlInput,
   launchUrlSimulator,
@@ -332,7 +333,7 @@ test('prepare shares one startup budget across the Simulator boot and the runner
     // The boot wait gets what the boot left; the runner gets what the boot wait left.
     expect(calls.find((call) => call.args.includes('bootstatus'))?.timeoutMs).toBe(90_000);
     expect(prepareRunner).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ id: simulator.id }),
+      { ...simulator, booted: true },
       { timeoutMs: 50_000, execution: {} },
       expect.anything(),
     );
@@ -368,36 +369,6 @@ test('open forwards its startup deadline to the Simulator boot wait', async () =
     vi.useRealTimers();
   }
 });
-
-/** A Shutdown Simulator host whose boot and bootstatus calls run the given hooks before succeeding. */
-function coldSimulatorLifecycleHost(hooks: { onBoot?: () => void; onBootstatus?: () => void }) {
-  const calls: Array<{ args: string[]; timeoutMs?: number }> = [];
-  let state = 'Shutdown';
-  const run: PlatformRuntimeHost['appleTools']['run'] = vi.fn(async (request) => {
-    calls.push({ args: [...request.args], timeoutMs: request.timeoutMs });
-    if (request.args.includes('list')) {
-      return {
-        stdout: JSON.stringify({ devices: { ios: [{ udid: simulator.id, state }] } }),
-        stderr: '',
-        exitCode: 0,
-      };
-    }
-    if (request.args.includes('boot')) {
-      hooks.onBoot?.();
-      state = 'Booted';
-    }
-    if (request.args.includes('bootstatus')) hooks.onBootstatus?.();
-    return { stdout: '', stderr: '', exitCode: 0 };
-  });
-  const prepareRunner = vi.fn(async () => ({ runner: {}, connectMs: 0, healthCheckMs: 0 }));
-  const base = platformRuntimeHostFixture();
-  const host = {
-    ...base,
-    appleTools: { isXcrunAvailable: async () => true, run },
-    appleApplications: { ...base.appleApplications, prepareRunner },
-  } as unknown as PlatformRuntimeHost;
-  return { host, calls, prepareRunner };
-}
 
 test('a Simulator open whose plan is observation-only starts no runner, releases a speculative one, and reports demand none', async () => {
   const events: string[] = [];

@@ -6,7 +6,7 @@ import {
   resolveSessionAppBundleIdForTarget,
   validateOpenRelaunchTarget,
 } from './platform-runtime-open-target.ts';
-import type { DaemonPlatformServices } from './daemon/platform-services.ts';
+import type { DaemonPlatformServices } from '@agent-device/daemon/platform-services';
 
 /**
  * Root composition of the daemon's platform-services port (ADR 0019 section 11). Each member is

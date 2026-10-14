@@ -13,6 +13,7 @@ import {
 } from './app-catalog.ts';
 import { createLimrunDeviceSession } from './device-session.ts';
 import type { LimrunRuntimeDependencies } from './runtime-dependencies.ts';
+import { LIMRUN_CLIENT_ID } from './client-options.ts';
 
 type LimrunInstance = {
   metadata: { id: string };
@@ -68,25 +69,30 @@ export async function resolvePreinstalledAppId(
 export async function allocateLimrunIosSession(
   params: SessionAllocationParams,
 ): Promise<LimrunIosSession> {
-  const instance = (await params.limrun.iosInstances.create({
-    wait: true,
-    metadata: params.metadata,
-    spec: {
-      ...(params.region ? { region: params.region } : {}),
-      ...(params.app
-        ? {
-            initialAssets: [
-              {
-                kind: 'App' as const,
-                source: 'AssetID' as const,
-                assetId: params.app.id,
-                launchMode: 'RelaunchIfRunning' as const,
-              },
-            ],
-          }
-        : {}),
+  const instance = (await params.limrun.iosInstances.create(
+    {
+      wait: true,
+      metadata: params.metadata,
+      spec: {
+        ...(params.region ? { region: params.region } : {}),
+        ...(params.app
+          ? {
+              initialAssets: [
+                {
+                  kind: 'App' as const,
+                  source: 'AssetID' as const,
+                  assetId: params.app.id,
+                  launchMode: 'RelaunchIfRunning' as const,
+                },
+              ],
+            }
+          : {}),
+      },
     },
-  })) as LimrunInstance;
+    {
+      headers: { 'User-Agent': `${LIMRUN_CLIENT_ID}/${params.dependencies.clientVersion}` },
+    },
+  )) as LimrunInstance;
   try {
     if (!instance.status.apiUrl) {
       throw new AppError('COMMAND_FAILED', 'Limrun iOS instance did not expose apiUrl');
@@ -111,24 +117,29 @@ export async function allocateLimrunIosSession(
 export async function allocateLimrunAndroidSession(
   params: SessionAllocationParams,
 ): Promise<LimrunAndroidSession> {
-  const instance = (await params.limrun.androidInstances.create({
-    wait: true,
-    metadata: params.metadata,
-    spec: {
-      ...(params.region ? { region: params.region } : {}),
-      ...(params.app
-        ? {
-            initialAssets: [
-              {
-                kind: 'App' as const,
-                source: 'AssetIDs' as const,
-                assetIds: [params.app.id],
-              },
-            ],
-          }
-        : {}),
+  const instance = (await params.limrun.androidInstances.create(
+    {
+      wait: true,
+      metadata: params.metadata,
+      spec: {
+        ...(params.region ? { region: params.region } : {}),
+        ...(params.app
+          ? {
+              initialAssets: [
+                {
+                  kind: 'App' as const,
+                  source: 'AssetIDs' as const,
+                  assetIds: [params.app.id],
+                },
+              ],
+            }
+          : {}),
+      },
     },
-  })) as LimrunInstance;
+    {
+      headers: { 'User-Agent': `${LIMRUN_CLIENT_ID}/${params.dependencies.clientVersion}` },
+    },
+  )) as LimrunInstance;
   try {
     if (!instance.status.apiUrl || !instance.status.adbWebSocketUrl) {
       throw new AppError(

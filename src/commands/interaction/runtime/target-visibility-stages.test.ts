@@ -5,6 +5,7 @@ import { throwIfOffscreenInteractionTarget } from './target-visibility-stages.ts
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { Point } from '@agent-device/kernel/snapshot';
 import {
+  coveredByScanSnapshot,
   coveredByTabBarSnapshot,
   createInteractionDevice,
   duplicateCoveredLabelSnapshot,
@@ -117,6 +118,55 @@ test('runtime click rejects refs covered by floating overlays', async () => {
     /Ref @e2 is covered by another visible element/,
   );
   assert.deepEqual(calls, []);
+});
+
+test('runtime covered refusal names the covering element the occlusion scan found', async () => {
+  const calls: Point[] = [];
+  const device = createInteractionDevice(coveredByScanSnapshot(), {
+    tap: async (_context, point) => {
+      calls.push(point);
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /Ref @e2 is covered by another visible element/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_covered');
+      // The refusal names the culprit and never advertises its ref as actionable.
+      assert.deepEqual(details?.coveredBy, {
+        kind: 'tab-bar',
+        label: 'Media',
+        rect: { x: 0, y: 760, width: 390, height: 84 },
+      });
+      assert.doesNotMatch(String(details?.hint), /@e\d/);
+      assert.match(String(details?.hint), /Covered by the tab-bar "Media" at \(0, 760 390x84\)/);
+      return true;
+    },
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('runtime covered refusal keeps the generic hint when the cover is a policy boolean', async () => {
+  // `coveredByTabBarSnapshot` hand-annotates the covered boolean the way the Android
+  // replacement-surface lane publishes it: no cover identity, so nothing to name.
+  const device = createInteractionDevice(coveredByTabBarSnapshot(), {
+    tap: async () => {},
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /Ref @e2 is covered by another visible element/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.coveredBy, undefined);
+      assert.match(String(details?.hint), /different visible target/i);
+      return true;
+    },
+  );
 });
 
 test('runtime selector interactions skip covered matches when an uncovered duplicate exists', async () => {

@@ -91,11 +91,61 @@ extension RunnerTests {
       let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
         expectedText: testCase.expectedText,
         placeholder: testCase.placeholder,
-        observe: { testCase.expectedText },
+        observe: { .text(testCase.expectedText) },
         waitForNextObservation: {}
       )
       XCTAssertEqual(outcome, .settled, "placeholder: \(testCase.placeholder ?? "nil")")
     }
+  }
+
+  // A masked value is bullets and nothing else. Anything with a real character in it is a value
+  // the runner can verify, and an empty string is "empty", not "masked", so a replacement into
+  // an empty field still skips the clear.
+  func testMaskedTextValueIsBulletsOnly() {
+    let masked = [
+      "\u{2022}",
+      String(repeating: "\u{2022}", count: 8),
+      String(repeating: "\u{25CF}", count: 3),
+      " \u{2022}\u{2022} ",
+    ]
+    for value in masked {
+      XCTAssertTrue(Self.isMaskedTextValue(value), "value: \(value)")
+    }
+    let readable = ["", "   ", "not-a-secret-123", "\u{2022} bullet point", "*****", "Password"]
+    for value in readable {
+      XCTAssertFalse(Self.isMaskedTextValue(value), "value: \(value)")
+    }
+  }
+
+  // One read owns readability for every route: a secure field is unreadable whatever it reports,
+  // a plain field is unreadable only while its value is a mask, and anything that is not a text
+  // input has no text to read.
+  func testTextValueReadOwnsTheUnreadableRule() {
+    let bullets = String(repeating: "\u{2022}", count: 8)
+    XCTAssertEqual(Self.textValueRead(elementType: .secureTextField, value: ""), .unreadable)
+    XCTAssertEqual(Self.textValueRead(elementType: .secureTextField, value: "hunter2"), .unreadable)
+    XCTAssertEqual(Self.textValueRead(elementType: .textField, value: bullets), .unreadable)
+    XCTAssertEqual(Self.textValueRead(elementType: .searchField, value: bullets), .unreadable)
+    XCTAssertEqual(Self.textValueRead(elementType: .textView, value: bullets), .unreadable)
+    XCTAssertEqual(Self.textValueRead(elementType: .textField, value: "hunter2"), .text("hunter2"))
+    XCTAssertEqual(Self.textValueRead(elementType: .textField, value: ""), .text(""))
+    XCTAssertEqual(Self.textValueRead(elementType: .button, value: bullets), .unavailable)
+  }
+
+  // The penalized route's clear reads through the same rule, so a pre-filled masked plain field
+  // gets the unread passes a secure field gets and is then typed into unverified, instead of
+  // ending the clear as a field that could not be read.
+  func testSynthesizedClearLeavesAMaskedFieldUnverified() {
+    var passes = 0
+    let outcome = Self.clearForSynthesizedReplacement(
+      clearOnce: {
+        passes += 1
+        return .posted
+      },
+      read: { Self.textValueRead(elementType: .textField, value: String(repeating: "\u{2022}", count: 5)) }
+    )
+    XCTAssertEqual(outcome, .unverified)
+    XCTAssertEqual(passes, SynthesizedTextPlan.Step.unreadableClearPassCount)
   }
 
   // A value with a hole in the middle is neither a matching prefix nor an exact match, and must
@@ -117,7 +167,7 @@ extension RunnerTests {
         stallBudget: 2,
         ceiling: 10,
         now: clock.read,
-        observe: { corruption.observedAfterDrop },
+        observe: { .text(corruption.observedAfterDrop) },
         waitForNextObservation: {
           polls += 1
           clock.advance(1)
@@ -137,7 +187,7 @@ extension RunnerTests {
       stallBudget: 2,
       ceiling: 10,
       now: clock.read,
-      observe: { "00 062 91 77" },
+      observe: { .text("00 062 91 77") },
       waitForNextObservation: { clock.advance(1) }
     )
     XCTAssertEqual(outcome, .notObserved)
@@ -151,7 +201,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: "ada@example",
       placeholder: nil,
-      observe: { steps[min(index, steps.count - 1)] },
+      observe: { .text(steps[min(index, steps.count - 1)]) },
       waitForNextObservation: { index += 1 }
     )
     XCTAssertEqual(outcome, .settled)
@@ -169,7 +219,7 @@ extension RunnerTests {
       stallBudget: 3,
       ceiling: 10,
       now: clock.read,
-      observe: { polls == 0 ? "ada@exampl" : "ada@example" },
+      observe: { .text(polls == 0 ? "ada@exampl" : "ada@example") },
       waitForNextObservation: {
         polls += 1
         clock.advance(9)
@@ -188,7 +238,7 @@ extension RunnerTests {
       placeholder: "0.00",
       observe: {
         observations += 1
-        return "0.00"
+        return .text("0.00")
       },
       waitForNextObservation: {}
     )
@@ -196,30 +246,60 @@ extension RunnerTests {
     XCTAssertEqual(observations, 0, "no post-dispatch read can resolve this collision")
   }
 
-  // A secure field reads nil on every poll, so the wait could only expire: every penalized-route
-  // password `fill` failed with TEXT_INPUT_COMMIT_NOT_OBSERVED. It is left unverified instead, as
-  // the element route leaves it, also when the text equals its placeholder; an ordinary field
-  // that reads nil, or whose text equals its placeholder, still fails.
-  func testSynthesizedReplacementCommitLeavesASecureFieldUnverified() {
+  // An unreadable field reads nothing usable on every poll, so the wait could only expire: every
+  // penalized-route password `fill` failed with TEXT_INPUT_COMMIT_NOT_OBSERVED. It is left
+  // unverified instead, as the element route leaves it, also when the text equals its
+  // placeholder; an ordinary field that cannot be read, or whose text equals its placeholder,
+  // still fails. Readability comes from the shared read, so a masked plain field (the React
+  // Native `secureTextEntry` shape, tester-army/e2e#872) takes the same branch as a secure one.
+  func testSynthesizedReplacementCommitLeavesAnUnreadableFieldUnverified() {
+    let fields: [(elementType: XCUIElement.ElementType, value: String, unreadable: Bool)] = [
+      (.secureTextField, "", true),
+      (.textField, String(repeating: "\u{2022}", count: 4), true),
+      (.textField, "", false),
+    ]
     for placeholder in [nil, "hunter2"] {
-      for fieldIsSecure in [true, false] {
-        let label = "secure: \(fieldIsSecure), placeholder: \(placeholder ?? "none")"
+      for field in fields {
+        let fieldIsUnreadable = Self.textValueRead(elementType: field.elementType, value: field.value) == .unreadable
+        XCTAssertEqual(fieldIsUnreadable, field.unreadable, "\(field)")
+        let label = "field: \(field), placeholder: \(placeholder ?? "none")"
         var observations = 0
         let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
           expectedText: "hunter2",
           placeholder: placeholder,
-          fieldIsSecure: fieldIsSecure,
+          fieldIsUnreadable: fieldIsUnreadable,
           stallBudget: 0,
           observe: {
             observations += 1
-            return nil
+            return .unavailable
           },
           waitForNextObservation: {}
         )
-        XCTAssertEqual(outcome, fieldIsSecure ? .unobservable : .notObserved, label)
-        XCTAssertEqual(observations, fieldIsSecure || placeholder != nil ? 0 : 1, label)
+        XCTAssertEqual(outcome, fieldIsUnreadable ? .unobservable : .notObserved, label)
+        XCTAssertEqual(observations, fieldIsUnreadable || placeholder != nil ? 0 : 1, label)
       }
     }
+  }
+
+  // The mask appears only once the burst lands, so a field read as empty when the wait starts can
+  // turn unreadable on a later poll. That read ends the wait unverified rather than running out
+  // the stall budget into TEXT_INPUT_COMMIT_NOT_OBSERVED.
+  func testSynthesizedReplacementCommitEndsWhenTheFieldTurnsUnreadableMidWait() {
+    let reads: [TextValueRead] = [
+      Self.textValueRead(elementType: .textField, value: ""),
+      Self.textValueRead(elementType: .textField, value: String(repeating: "\u{2022}", count: 8)),
+    ]
+    var index = 0
+    let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
+      expectedText: "not-a-secret-123",
+      placeholder: nil,
+      fieldIsUnreadable: reads[0] == .unreadable,
+      observe: { reads[min(index, reads.count - 1)] },
+      waitForNextObservation: { index += 1 }
+    )
+    XCTAssertEqual(outcome, .unobservable)
+    XCTAssertEqual(index, 1)
+    XCTAssertNil(Self.textEntryFailure(forCommitOutcome: outcome))
   }
 
   // The mapping the command actually refuses on. `.unobservable` must stay a success: it is the
@@ -350,7 +430,7 @@ extension RunnerTests {
   // until the field reads empty, and types nothing over text it could not remove or could not read.
   // A field that never exposes its value gets the unread passes and is typed into unverified.
   func testSynthesizedClearRepeatsUntilTheFieldReadsEmpty() {
-    let cases: [(reads: [ClearedFieldRead], outcome: SynthesizedClearOutcome, passes: Int)] = [
+    let cases: [(reads: [TextValueRead], outcome: SynthesizedClearOutcome, passes: Int)] = [
       ([.text("")], .cleared, 1),
       ([.text("Clien"), .text("Clie"), .text("")], .cleared, 3),
       ([.text("Clien"), .text("Clie"), .text("Cli"), .text("Cl")], .notCleared, 4),

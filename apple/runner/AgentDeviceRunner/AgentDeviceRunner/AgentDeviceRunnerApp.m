@@ -60,7 +60,31 @@ int main(int argc, const char *argv[]) {
 #import <UserNotifications/UserNotifications.h>
 #endif
 
+#if TARGET_OS_IOS
+// A plain text field whose accessibility value is the masked rendering of its text. This is how
+// a React Native `secureTextEntry` input reaches XCTest: `.textField`, not `.secureTextField`,
+// with a value of bullets (tester-army/e2e#872).
+@interface AgentDeviceMaskedTextField : UITextField
+@end
+
+@implementation AgentDeviceMaskedTextField
+
+- (NSString *)accessibilityValue {
+  NSUInteger length = self.text.length;
+  if (length == 0) {
+    return [super accessibilityValue];
+  }
+  // Half the typed length, as observed in the report: the mask hides the count as well.
+  NSUInteger bullets = MAX((NSUInteger)1, length / 2);
+  return [@"" stringByPaddingToLength:bullets withString:@"\u2022" startingAtIndex:0];
+}
+
+@end
+#endif
+
 @interface AgentDeviceRunnerViewController : UIViewController
+@property(nonatomic, strong) UILabel *maskedToggleStatus;
+@property(nonatomic, assign) NSUInteger maskedTogglePresses;
 @property(nonatomic, strong) UILabel *alertActionStatus;
 @property(nonatomic, strong) UILabel *alertActivationBusyAnswer;
 @property(nonatomic, assign) NSUInteger firstAlertActions;
@@ -480,9 +504,34 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
 // avoidance or a bottom sheet extending above the keyboard does, so the neighbouring field slides
 // into the point the focus tap hit.
 - (void)agentDeviceTextEntryDidBeginEditing:(UITextField *)textField {
+  [self moveTextEntryFieldUp];
+}
+
+// Moves the field once text arrives, the way an iOS 26 bottom search bar rises above the keyboard
+// on the first character: the focus tap and the pre-entry read both find it where it started.
+- (void)agentDeviceTextEntryMovesOnInput:(UITextField *)textField {
+  if (textField.text.length > 0) {
+    [self moveTextEntryFieldUp];
+  }
+}
+
+- (void)moveTextEntryFieldUp {
   self.textEntryFieldTop.constant =
       AgentDeviceTextEntryFieldTopInset - AgentDeviceTextEntryFieldHeight - AgentDeviceTextEntryNeighbourGap;
   [self.view layoutIfNeeded];
+}
+#endif
+
+#if TARGET_OS_IOS
+- (void)agentDeviceMaskedToggleDidPress:(UIButton *)sender {
+  (void)sender;
+  self.maskedTogglePresses += 1;
+  [self updateMaskedToggleStatus];
+}
+
+- (void)updateMaskedToggleStatus {
+  self.maskedToggleStatus.text =
+      [NSString stringWithFormat:@"presses=%lu", (unsigned long)self.maskedTogglePresses];
 }
 #endif
 
@@ -533,6 +582,8 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-currency-value"];
     BOOL submitClears =
         [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-submit-clears"];
+    BOOL maskedValue =
+        [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-masked-value"];
     UITextField *textField;
     if (digitCountValue) {
       textField = [[AgentDeviceDigitCountTextField alloc] init];
@@ -543,6 +594,8 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
       textField.text = @"$0.00";
     } else if (submitClears) {
       textField = [[AgentDeviceSubmitClearingTextField alloc] init];
+    } else if (maskedValue) {
+      textField = [[AgentDeviceMaskedTextField alloc] init];
     } else {
       textField = [[UITextField alloc] init];
     }
@@ -602,6 +655,11 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
                     action:@selector(agentDeviceTextEntryBecomesUnqueryable:)
           forControlEvents:UIControlEventEditingDidBegin];
     }
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-moves-on-input"]) {
+      [textField addTarget:self
+                    action:@selector(agentDeviceTextEntryMovesOnInput:)
+          forControlEvents:UIControlEventEditingChanged];
+    }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-moves-on-focus"]) {
       textField.text = @"stale";
       [textField addTarget:self
@@ -620,6 +678,33 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
         [neighbour.widthAnchor constraintEqualToConstant:240],
         [neighbour.heightAnchor constraintEqualToConstant:AgentDeviceTextEntryFieldHeight],
       ]];
+    }
+    if (maskedValue) {
+      if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-prefilled"]) {
+        textField.text = @"stale-secret";
+      }
+      // The show/hide toggle sits over the field's right edge, where the runner's caret edge-tap
+      // lands. Counting its presses tells the test whether a repair reached for the field again.
+      UIButton *toggle = [UIButton buttonWithType:UIButtonTypeSystem];
+      toggle.accessibilityLabel = @"Show password";
+      toggle.translatesAutoresizingMaskIntoConstraints = NO;
+      [toggle addTarget:self
+                 action:@selector(agentDeviceMaskedToggleDidPress:)
+       forControlEvents:UIControlEventTouchUpInside];
+      [self.view addSubview:toggle];
+      self.maskedToggleStatus = [[UILabel alloc] init];
+      self.maskedToggleStatus.accessibilityIdentifier = @"agent-device-masked-toggle-presses";
+      self.maskedToggleStatus.translatesAutoresizingMaskIntoConstraints = NO;
+      [self.view addSubview:self.maskedToggleStatus];
+      [NSLayoutConstraint activateConstraints:@[
+        [toggle.trailingAnchor constraintEqualToAnchor:textField.trailingAnchor],
+        [toggle.topAnchor constraintEqualToAnchor:textField.topAnchor],
+        [toggle.bottomAnchor constraintEqualToAnchor:textField.bottomAnchor],
+        [toggle.widthAnchor constraintEqualToConstant:48],
+        [self.maskedToggleStatus.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.maskedToggleStatus.topAnchor constraintEqualToAnchor:textField.bottomAnchor constant:12],
+      ]];
+      [self updateMaskedToggleStatus];
     }
     if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-text-entry-app-owned-value"]) {
       self.textEntryAcknowledgeWindowSeconds = AgentDeviceTextEntryAcknowledgeWindow();

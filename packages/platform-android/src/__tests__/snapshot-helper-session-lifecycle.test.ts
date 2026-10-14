@@ -3,7 +3,8 @@ import { afterEach, beforeEach, test } from 'vitest';
 import { captureAndroidSnapshotWithHelperSession } from '../snapshot-helper-session.ts';
 import {
   resetAndroidSnapshotHelperSessions,
-  resolveAndroidSnapshotHelperStartBudgetMs,
+  resolveAndroidSnapshotHelperSessionBudgetMs,
+  resolveAndroidSnapshotHelperSessionCaptureOptions,
   stopAndroidSnapshotHelperSession,
 } from '../snapshot-helper-session-lifecycle.ts';
 import { recoverAndroidSnapshotHelperRetirement } from '../snapshot-helper-retirement.ts';
@@ -124,14 +125,35 @@ test('a session start waits only as long as the caller budgeted for one helper c
   );
 });
 
-test('a generous caller budget buys a slow start, and never more than the caller allowed', () => {
+test('a generous caller budget buys a slow session command, and never more than the caller allowed', () => {
   // A capture-sized guess is what pushed the slow hosts of #2553 off the persistent path even when
-  // `--timeout` left plenty of room for the same start in the one-shot transport.
-  assert.equal(resolveAndroidSnapshotHelperStartBudgetMs(60_000), 30_000);
-  assert.equal(resolveAndroidSnapshotHelperStartBudgetMs(30_000), 15_000);
+  // `--timeout` left plenty of room for the same start in the one-shot transport. The same share
+  // bounds a capture: a 5 s guess retired every slow-but-healthy capture of a screen that repaints
+  // every second (tester-army/e2e#841).
+  assert.equal(resolveAndroidSnapshotHelperSessionBudgetMs(60_000), 30_000);
+  assert.equal(resolveAndroidSnapshotHelperSessionBudgetMs(30_000), 15_000);
   // A short budget buys nothing extra, and a tiny one is not answered with a longer wait.
-  assert.equal(resolveAndroidSnapshotHelperStartBudgetMs(6_000), 5_000);
-  assert.equal(resolveAndroidSnapshotHelperStartBudgetMs(1_000), 1_000);
+  assert.equal(resolveAndroidSnapshotHelperSessionBudgetMs(6_000), 5_000);
+  assert.equal(resolveAndroidSnapshotHelperSessionBudgetMs(1_000), 1_000);
+});
+
+test('a session capture keeps a short connect wait and the full session share of the budget', () => {
+  // The transport deadline is the session share, not the connect wait plus overhead: with the
+  // production budgets a capture may take 15 s before it is retired instead of 5 s
+  // (tester-army/e2e#841). The native wait sent to the helper stays at 2 s, so the session identity
+  // (which keys on it) does not change and no running session is restarted by this rule.
+  const resolved = resolveAndroidSnapshotHelperSessionCaptureOptions({
+    waitForIdleTimeoutMs: 500,
+    waitForIdleQuietMs: 100,
+    timeoutMs: 5_000,
+    commandTimeoutMs: 30_000,
+    maxDepth: 128,
+    maxNodes: 5_000,
+    packageName: 'com.callstack.agentdevice.snapshothelper',
+    runner: 'com.callstack.agentdevice.snapshothelper/.SnapshotInstrumentation',
+  });
+  assert.equal(resolved.timeoutMs, 2_000);
+  assert.equal(resolved.commandTimeoutMs, 15_000);
 });
 
 test('a session that reaches ready settles a release the device could not confirm', async () => {

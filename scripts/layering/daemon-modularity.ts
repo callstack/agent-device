@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
 import {
   INTERACTION_RETIRED_HANDLER_PATHS,
   LOGICAL_MODULE_POLICIES,
@@ -31,8 +32,8 @@ export const DAEMON_MODULARITY_BASELINE = {
 // `@agent-device/contracts/command` as `DaemonWireRequest`). Both are ratcheted
 // together, so moving a symbol between them cannot reopen the boundary to a new outside zone.
 const DAEMON_TYPE_MODULES: readonly string[] = [
-  'src/daemon/daemon-request.ts',
-  'src/daemon/session-state.ts',
+  'packages/daemon/src/core/daemon-request.ts',
+  'packages/daemon/src/core/session-state.ts',
 ];
 
 const ENGINE_FILE_PREFIXES = [
@@ -75,7 +76,7 @@ export function checkRetiredSessionLifecyclePaths(
   return checkRetiredHandlerPaths(
     sourceFiles,
     SESSION_LIFECYCLE_RETIRED_HANDLER_PATHS,
-    /^src\/daemon\/handlers\/session-(?:open|close)(?:-[^/]+)?\.ts$/,
+    /^packages\/daemon\/src\/handlers\/session-(?:open|close)(?:-[^/]+)?\.ts$/,
     'session lifecycle',
   );
 }
@@ -86,7 +87,7 @@ export function checkRetiredSessionObservabilityPaths(
   return checkRetiredHandlerPaths(
     sourceFiles,
     SESSION_OBSERVABILITY_RETIRED_HANDLER_PATHS,
-    /^src\/daemon\/handlers\/session-(?:observability|perf|logs|events|network|audio)(?:-[^/]+)?\.ts$/,
+    /^packages\/daemon\/src\/handlers\/session-(?:observability|perf|logs|events|network|audio)(?:-[^/]+)?\.ts$/,
     'session observability',
   );
 }
@@ -124,9 +125,9 @@ export function checkRetiredInteractionPaths(sourceFiles: readonly string[]): La
   return checkRetiredHandlerPaths(
     sourceFiles,
     INTERACTION_RETIRED_HANDLER_PATHS,
-    /^src\/daemon\/handlers\/(?:find|interaction)(?:-[^/]+)?\.ts$/,
+    /^packages\/daemon\/src\/handlers\/(?:find|interaction)(?:-[^/]+)?\.ts$/,
     'interaction handler',
-    'Keep route implementations behind src/daemon/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
+    'Keep route implementations behind packages/daemon/src/execution/interaction/index.ts instead of rebuilding a handler-owned interaction surface.',
   );
 }
 
@@ -218,7 +219,8 @@ function checkDaemonTypesImporters(edges: readonly ResolvedImportEdge[]): Layeri
   const allowed = new Set<string>(DAEMON_MODULARITY_BASELINE.externalDaemonTypesImporters);
   const importers = new Map<string, ResolvedImportEdge>();
   for (const edge of edges) {
-    if (!DAEMON_TYPE_MODULES.includes(edge.target) || edge.file.startsWith('src/daemon/')) continue;
+    if (!DAEMON_TYPE_MODULES.includes(edge.target) || edge.file.startsWith(DAEMON_SOURCE_ROOT))
+      continue;
     // #2559: the client's daemon-request/session-state reads are owned by the stricter
     // R78 `daemon-client-entry` gate, which also bans runtime imports and names each edge.
     if (edge.file.startsWith('src/daemon-client/')) continue;
@@ -255,8 +257,10 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
     if (
       sourceModule &&
       isInsideInternalTree(edge.file, sourceModule.roots) &&
-      sourceModule.internalForbiddenTargetRoots?.some((root) =>
-        matchesDeclaredRoot(edge.target, root),
+      forbiddenTargetMatches(
+        sourceModule.internalForbiddenTargetRoots,
+        sourceModule.internalForbiddenTargetShapes,
+        edge.target,
       )
     ) {
       violations.push({
@@ -286,7 +290,13 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
     if (!sourceModule) continue;
     // A module's own files are never a forbidden target.
     if (sourceModule.roots.some((root) => matchesDeclaredRoot(edge.target, root))) continue;
-    if (!sourceModule.forbiddenTargetRoots.some((root) => matchesDeclaredRoot(edge.target, root)))
+    if (
+      !forbiddenTargetMatches(
+        sourceModule.forbiddenTargetRoots,
+        sourceModule.forbiddenTargetShapes,
+        edge.target,
+      )
+    )
       continue;
     violations.push({
       rule: 'R10 daemon-modularity',
@@ -301,6 +311,17 @@ function checkLogicalModuleImports(edges: readonly ResolvedImportEdge[]): Layeri
 function moduleForFile(file: string): LogicalModulePolicy | undefined {
   return LOGICAL_MODULE_POLICIES.find((module) =>
     module.roots.some((root) => matchesDeclaredRoot(file, root)),
+  );
+}
+
+function forbiddenTargetMatches(
+  roots: readonly string[] | undefined,
+  shapes: readonly ((file: string) => boolean)[] | undefined,
+  target: string,
+): boolean {
+  return (
+    (roots?.some((root) => matchesDeclaredRoot(target, root)) ?? false) ||
+    (shapes?.some((matches) => matches(target)) ?? false)
   );
 }
 

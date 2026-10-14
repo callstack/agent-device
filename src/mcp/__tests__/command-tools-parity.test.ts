@@ -9,7 +9,7 @@ import type { CommandExecutionResult } from '../../commands/command-surface.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
 import { validateAgainstSchema } from './output-schema-validator.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 afterEach(() => {
   if (temporaryDirectory) {

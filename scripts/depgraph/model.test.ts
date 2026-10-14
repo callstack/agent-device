@@ -38,31 +38,33 @@ function authorityFixture(): Map<string, string> {
       "import type { ReplayShape } from '@agent-device/contracts/replay';",
       "import type { ProgressShape } from '@agent-device/contracts/progress';",
     ].join('\n'),
-    'src/daemon/capability-consumer.ts': [
-      "import { createRequestRuntimeBindings } from './request-runtime-binding.ts';",
-      "import { isSessionRecording } from './session-script-publication-capability.ts';",
+    'packages/daemon/src/capability-consumer.ts': [
+      "import { createRequestRuntimeBindings } from './core/request-runtime-binding.ts';",
+      "import { isSessionRecording } from './core/session-script-publication-capability.ts';",
     ].join('\n'),
-    'src/daemon/state-consumer.ts': [
-      "import type { SessionState } from './session-state.ts';",
-      "import { SessionStore } from './session-store.ts';",
+    'packages/daemon/src/state-consumer.ts': [
+      "import type { SessionState } from './core/session-state.ts';",
+      "import { SessionStore } from './core/session-store.ts';",
     ].join('\n'),
-    'src/daemon/type-consumer.ts': "import type { SessionStore } from './session-store.ts';\n",
+    'packages/daemon/src/type-consumer.ts':
+      "import type { SessionStore } from './core/session-store.ts';\n",
     'packages/capture-kit/src/snapshot/policy-consumer.ts': [
-      "import type { SessionState } from '../../../../src/daemon/session-state.ts';",
-      "import type { SessionRef } from '../../../../src/daemon/session-state.ts';",
+      "import type { SessionState } from '../../../../packages/daemon/src/core/session-state.ts';",
+      "import type { SessionRef } from '../../../../packages/daemon/src/core/session-state.ts';",
       "import './ordinary-target.ts';",
     ].join('\n'),
-    'src/daemon/ordinary-consumer.ts': [
+    'packages/daemon/src/ordinary-consumer.ts': [
       "import { SessionState } from './session-state-store.ts';",
-      "import { createRequestRuntimeBindingsExtra } from './request-runtime-binding.ts';",
+      "import { createRequestRuntimeBindingsExtra } from './core/request-runtime-binding.ts';",
     ].join('\n'),
-    'src/daemon/session-state.ts':
+    'packages/daemon/src/core/session-state.ts':
       'export type SessionState = { name: string };\nexport type SessionRef = unknown;\n',
-    'src/daemon/session-store.ts': 'export class SessionStore {}\n',
-    'src/daemon/request-runtime-binding.ts': 'export function createRequestRuntimeBindings() {}\n',
-    'src/daemon/session-script-publication-capability.ts':
+    'packages/daemon/src/core/session-store.ts': 'export class SessionStore {}\n',
+    'packages/daemon/src/core/request-runtime-binding.ts':
+      'export function createRequestRuntimeBindings() {}\n',
+    'packages/daemon/src/core/session-script-publication-capability.ts':
       'export function isSessionRecording() {}\n',
-    'src/daemon/session-state-store.ts': 'export const SessionState = 1;\n',
+    'packages/daemon/src/session-state-store.ts': 'export const SessionState = 1;\n',
     'packages/capture-kit/src/snapshot/ordinary-target.ts': 'export const ordinary = 1;\n',
     'packages/contracts/src/facades/client.ts': 'export type ClientShape = string;\n',
     'packages/contracts/src/facades/capture.ts': 'export type CaptureShape = string;\n',
@@ -90,24 +92,43 @@ test('authority overlay uses declared roots and symbols, keeps kind separate, an
     { kind: 'type', labels: ['vocabulary'] },
   );
   assert.deepEqual(
-    graphEdge(graph, 'src/daemon/capability-consumer.ts', 'src/daemon/request-runtime-binding.ts'),
+    graphEdge(
+      graph,
+      'packages/daemon/src/capability-consumer.ts',
+      'packages/daemon/src/core/request-runtime-binding.ts',
+    ),
     { kind: 'value', labels: ['capability'] },
   );
   assert.deepEqual(
-    graphEdge(graph, 'src/daemon/state-consumer.ts', 'src/daemon/session-state.ts'),
+    graphEdge(
+      graph,
+      'packages/daemon/src/state-consumer.ts',
+      'packages/daemon/src/core/session-state.ts',
+    ),
     {
       kind: 'type',
       labels: ['live-state-shape'],
     },
   );
   assert.deepEqual(
-    graphEdge(graph, 'src/daemon/state-consumer.ts', 'src/daemon/session-store.ts'),
+    graphEdge(
+      graph,
+      'packages/daemon/src/state-consumer.ts',
+      'packages/daemon/src/core/session-store.ts',
+    ),
     { kind: 'value', labels: ['live-state-authority'] },
   );
-  assert.deepEqual(graphEdge(graph, 'src/daemon/type-consumer.ts', 'src/daemon/session-store.ts'), {
-    kind: 'type',
-    labels: ['live-state-authority'],
-  });
+  assert.deepEqual(
+    graphEdge(
+      graph,
+      'packages/daemon/src/type-consumer.ts',
+      'packages/daemon/src/core/session-store.ts',
+    ),
+    {
+      kind: 'type',
+      labels: ['live-state-authority'],
+    },
+  );
   assert.deepEqual(
     graphEdge(
       graph,
@@ -117,25 +138,33 @@ test('authority overlay uses declared roots and symbols, keeps kind separate, an
     { kind: 'value', labels: ['executable-policy'] },
   );
   assert.deepEqual(
-    graphEdge(graph, 'src/daemon/ordinary-consumer.ts', 'src/daemon/session-state-store.ts'),
+    graphEdge(
+      graph,
+      'packages/daemon/src/ordinary-consumer.ts',
+      'packages/daemon/src/session-state-store.ts',
+    ),
     { kind: 'value', labels: ['ordinary'] },
   );
   assert.deepEqual(
-    graphEdge(graph, 'src/daemon/ordinary-consumer.ts', 'src/daemon/request-runtime-binding.ts'),
+    graphEdge(
+      graph,
+      'packages/daemon/src/ordinary-consumer.ts',
+      'packages/daemon/src/core/request-runtime-binding.ts',
+    ),
     { kind: 'value', labels: ['ordinary'] },
   );
 
   const stateEdges = resolveImportEdges(files, authorityWorkspaceTargets()).filter(
     (edge) =>
       edge.file === 'packages/capture-kit/src/snapshot/policy-consumer.ts' &&
-      edge.target === 'src/daemon/session-state.ts',
+      edge.target === 'packages/daemon/src/core/session-state.ts',
   );
   assert.equal(stateEdges.length, 2, 'the fixture must exercise raw same-pair imports');
   assert.deepEqual(
     graphEdge(
       graph,
       'packages/capture-kit/src/snapshot/policy-consumer.ts',
-      'src/daemon/session-state.ts',
+      'packages/daemon/src/core/session-state.ts',
     ),
     {
       kind: 'type',
@@ -179,7 +208,7 @@ test('live-state labels follow shared declarations and reject lookalike targets'
   assert.deepEqual(
     authorityLabelsForEdge({
       file: 'src/core/live-state-consumer.ts',
-      target: 'src/daemon/session-state-store.ts',
+      target: 'packages/daemon/src/session-state-store.ts',
       spec: './session-state-store.ts',
       dynamic: false,
       typeOnly: true,

@@ -1,4 +1,5 @@
 import type { CapturedSample } from '../help-conformance-sample-outputs.mjs';
+import { withCapturedStderrAsync } from '../../src/__tests__/test-utils/stream-capture.ts';
 import {
   AMBIGUOUS_MATCH_SAMPLE,
   APP_NOT_INSTALLED_SAMPLE,
@@ -19,13 +20,16 @@ import { interactionCliOutputFormatters } from '../../src/commands/interaction/o
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { openCliOutput } from '../../src/commands/management/output.ts';
 import { NEVER_SETTLED_HINT } from '../../src/commands/interaction/runtime/settle.ts';
-import { buildAmbiguousMatchError } from '../../src/daemon/selector-match-errors.ts';
-import { refMutationAdmissionResponse } from '../../src/daemon/interaction/index.ts';
-import { buildDeviceInUseBySessionError } from '../../src/daemon/session-recovery-hints.ts';
-import { buildDeviceClaimConflictError } from '../../src/daemon/device/device-claim-conflict.ts';
-import { activateCompleteRefFrame, readRefMutationFrame } from '../../src/daemon/ref-frame.ts';
-import { resolveRefStalenessWarning } from '../../src/daemon/session-snapshot.ts';
-import type { SessionState } from '../../src/daemon/session-state.ts';
+import { buildAmbiguousMatchError } from '@agent-device/daemon/testing/selector-match-errors';
+import { refMutationAdmissionResponse } from '@agent-device/daemon/testing/interaction/index';
+import { buildDeviceInUseBySessionError } from '@agent-device/daemon/testing/session-recovery-hints';
+import { buildDeviceClaimConflictError } from '@agent-device/daemon/testing/device/device-claim-conflict';
+import {
+  activateCompleteRefFrame,
+  readRefMutationFrame,
+} from '@agent-device/daemon/testing/ref-frame';
+import { resolveRefStalenessWarning } from '@agent-device/daemon/testing/session-snapshot';
+import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { buildAppNotInstalledError } from '@agent-device/platform-apple/app-resolution';
 import {
   presentConnectReadiness,
@@ -66,18 +70,10 @@ const formatFill = (result: Record<string, unknown>) =>
 
 /** The `Error (CODE): …` + `Hint: …` text printHumanError writes to stderr. */
 async function renderHumanError(error: AppError): Promise<string> {
-  const lines: string[] = [];
-  const originalWrite = process.stderr.write;
-  process.stderr.write = ((chunk: string | Uint8Array) => {
-    lines.push(String(chunk));
-    return true;
-  }) as typeof process.stderr.write;
-  try {
+  const stderr = await withCapturedStderrAsync(async () => {
     await printHumanError(normalizeError(error));
-  } finally {
-    process.stderr.write = originalWrite;
-  }
-  return lines.join('').trimEnd();
+  });
+  return stderr.trimEnd();
 }
 
 type ErrorResponse = {

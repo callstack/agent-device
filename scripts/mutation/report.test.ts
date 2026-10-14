@@ -37,6 +37,7 @@ test('the table carries score, killed, survived, total and timeouts per kernel',
     },
     ['kernel-errors'],
   );
+  assert.equal(scores[0]?.noCoverage, 1);
   const markdown = renderReport(scores, PROVENANCE);
   // Timeouts count as killed, so a score propped up by slow mutants rather than
   // assertions is only visible if the column is rendered.
@@ -66,6 +67,7 @@ test('statuses outside the score (Ignored, CompileError, RuntimeError) leave the
     ['kernel-errors'],
   );
   assert.equal(score?.total, 1);
+  assert.equal(score?.errors, 2);
   assert.equal(score?.score, 100);
 });
 

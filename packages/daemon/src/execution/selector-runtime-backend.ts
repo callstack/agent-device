@@ -1,0 +1,264 @@
+import type { DaemonPlatformServices } from '../core/platform-services.ts';
+import type {
+  AgentDeviceBackend,
+  BackendCommandContext,
+  BackendSnapshotResult,
+} from '@agent-device/contracts/backend';
+import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
+import { publicPlatformString } from '@agent-device/kernel/device';
+import type { SnapshotState, SnapshotNode } from '@agent-device/kernel/snapshot';
+import { createDaemonRuntimePolicy } from './runtime-policy.ts';
+import { createDaemonRuntimeSessionStore } from '../core/runtime-session.ts';
+import { contextFromFlags, type BoundContextFromFlags } from '../core/context.ts';
+import { readTextForNode } from './selector-text-runtime.ts';
+import { setSessionSnapshot } from './session-snapshot.ts';
+import { markSessionSnapshotOutdated } from '../core/ref-frame.ts';
+import { SessionStore } from '../core/session-store.ts';
+import type { DaemonRequest, DaemonResponse } from '../core/daemon-request.ts';
+import type { SessionRef, SessionState } from '../core/session-state.ts';
+import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
+import { buildRuntimeCaptureInput } from '../core/snapshot-runtime-capture-input.ts';
+import {
+  resolveBoundSelectorCapture,
+  type BoundSelectorOperations,
+  type SelectorCaptureCommand,
+} from './selector-capture-binding.ts';
+import type {
+  BindDeviceRuntime,
+  InspectDeviceRuntimeFacts,
+} from '../core/request-runtime-binding.ts';
+import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
+import type { PlatformResourceCleanup } from '../core/platform-resource-cleanup.ts';
+import { getRequestSignal } from '@agent-device/host-kit/request';
+import { snapshotOptionsToFlags } from '@agent-device/contracts/backend-snapshot-options';
+import type { RequestCaptureProof } from '../core/capture-disclosure.ts';
+import { checkIsArgs } from '@agent-device/selectors';
+import { noActiveSessionError } from '@agent-device/kernel/contracts';
+
+export type SelectorRuntimeParams = {
+  /** Builds the command surface this request's selector runtime executes through. */
+  createCommandSurface: CreateDaemonCommandSurface;
+  req: DaemonRequest;
+  sessionName: string;
+  logPath?: string;
+  sessionStore: SessionStore;
+  contextFromFlags?: BoundContextFromFlags;
+  // Filled by the capture runtime with the snapshot each selector command actually consumed;
+  // sessionless routes disclose from here because no session record stores the capture.
+  consumedSnapshot?: { state?: SnapshotState };
+  /** The repair this request's own capture reported, when it captured at all (#2682). */
+  captureProof?: RequestCaptureProof;
+  signal?: AbortSignal;
+  inspectFacts?: InspectDeviceRuntimeFacts;
+  platformServices: DaemonPlatformServices;
+  bindDevice?: BindDeviceRuntime;
+  androidObservation?: AndroidObservationAdapter;
+  platformResourceCleanup?: PlatformResourceCleanup;
+};
+
+export type SelectorRuntimeDeviceParams = SelectorRuntimeParams & {
+  ref: SessionRef | undefined;
+  session: SessionState | undefined;
+  device: SessionState['device'];
+  /**
+   * The request-bound operations this runtime executes through. Required to STATE since find
+   * (R35): every selector command admits before it constructs this runtime, and the only
+   * declared absence is the observation-free duration wait (`wait 400`), which never captures —
+   * its runtime carries no capture backend at all, so an accidental capture fails loudly.
+   */
+  bound: BoundSelectorOperations | undefined;
+};
+
+type ResolvedSelectorRuntime =
+  | {
+      ok: true;
+      ref: SessionRef | undefined;
+      runtime: Awaited<ReturnType<typeof createSelectorRuntimeForDevice>>;
+    }
+  | { ok: false; response: DaemonResponse };
+
+type ResolvedSelectorDevice =
+  | {
+      ok: true;
+      ref: SessionRef | undefined;
+      session: SessionState | undefined;
+      device: SessionState['device'];
+    }
+  | { ok: false; response: DaemonResponse };
+
+export async function createSelectorRuntimeForDevice(params: SelectorRuntimeDeviceParams) {
+  return await params.createCommandSurface({
+    backend: createSelectorBackend(params),
+    ...createDaemonRuntimePolicy('selector commands', { plural: true }),
+    sessions: createDaemonRuntimeSessionStore({
+      sessionName: params.sessionName,
+      sessionStore: params.sessionStore,
+      ref: params.ref,
+      recordOptions: { includeSnapshot: true },
+      setRecord: (record, current) => {
+        if (!current || !record.snapshot) return;
+        setSessionSnapshot(current, record.snapshot);
+      },
+    }),
+    signal: params.signal ?? getRequestSignal(params.req.meta?.requestId),
+  });
+}
+
+/** The session/device a selector command runs against, before any admission decides. */
+async function resolveSelectorRuntimeDevice(
+  params: SelectorRuntimeParams,
+  requireSession: boolean,
+): Promise<ResolvedSelectorDevice> {
+  params.consumedSnapshot ??= {};
+  params.captureProof ??= {};
+  const ref = params.sessionStore.lookup(params.sessionName);
+  const session = ref?.session;
+  if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
+  const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
+  return { ok: true, ref, session, device };
+}
+
+/**
+ * THE selector runtime: facts-first admission, exactly one binding, and a backend whose every
+ * capture goes through the bound operation. Since `is` (R37) there is no other one — the legacy
+ * capability-admitted `createSelectorRuntime` and its `requireCommandSupported` call were its
+ * last consumer and retired with it, so a selector command cannot reach the device on a
+ * capability bucket even by mistake.
+ *
+ * ADR 0019 §6: a `device-runtime` command reaches the device only after resolve -> admit ->
+ * bind, so THIS CALL COMES FIRST in its route — ahead of every shortcut, including the
+ * direct-iOS selector query that answers some targets without a capture. That query is a fast
+ * path *within* an admitted request, never a way around exact-owner facts or the one-binding
+ * invariant. `get` (R36) and `is` (R37) both order it this way.
+ */
+export async function createBoundSelectorRuntime(
+  params: SelectorRuntimeParams,
+  options: { requireSession: boolean; command: SelectorCaptureCommand },
+): Promise<ResolvedSelectorRuntime> {
+  const resolved = await resolveSelectorRuntimeDevice(params, options.requireSession);
+  if (!resolved.ok) return resolved;
+  const bound = await resolveBoundSelectorCapture({
+    command: options.command,
+    device: resolved.device,
+    session: resolved.session,
+    inspectFacts: params.inspectFacts,
+    platformServices: params.platformServices,
+    bindDevice: params.bindDevice,
+  });
+  if (!bound.ok) return { ok: false, response: bound.response };
+  return {
+    ok: true,
+    ref: resolved.ref,
+    runtime: await createSelectorRuntimeForDevice({
+      ...params,
+      ref: resolved.ref,
+      session: resolved.session,
+      device: resolved.device,
+      bound: bound.operations,
+    }),
+  };
+}
+
+function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDeviceBackend {
+  // The bound operation is the ONLY element read. Both consumers of the shared backend read —
+  // `get text` and read-only `find … get text` — construct a bound backend, so there is no second
+  // read path to choose between and nothing reaches the retired `read` dispatch.
+  const { req, session, device, logPath, sessionName, sessionStore } = params;
+  const resolveContextFromFlags: BoundContextFromFlags =
+    params.contextFromFlags ??
+    ((flags, appBundleId, traceLogPath) =>
+      contextFromFlags(logPath ?? '', flags, appBundleId, traceLogPath));
+  const readTextAtPoint = params.bound?.readText;
+  const boundFindText = params.bound?.findText;
+  // The native reading must run in the SAME runner context as the capture it short-circuits:
+  // one requestId so diagnostics land in one request file, the session's log/trace paths, and
+  // the XCUITest override + runner-lease context the caller configured. Built through the one
+  // capture-intent builder the capture leg uses, never a second hand-rolled context.
+  const runnerExecution = buildRuntimeCaptureInput({
+    flags: req.flags,
+    logPath: logPath ?? '',
+    meta: req.meta,
+    session,
+    snapshotScope: undefined,
+  }).execution;
+  const boundOperations = params.bound;
+  const captureRuntime =
+    boundOperations === undefined
+      ? undefined
+      : createSelectorCaptureRuntime({
+          ref: params.ref,
+          device,
+          sessionStore,
+          sessionName,
+          req,
+          consumedSnapshot: params.consumedSnapshot,
+          captureProof: params.captureProof,
+          logPath,
+          capture: boundOperations.capture,
+        });
+  return {
+    platform: publicPlatformString(device),
+    captureSnapshot:
+      captureRuntime &&
+      (async (context, options): Promise<BackendSnapshotResult> => {
+        const flags = {
+          ...req.flags,
+          ...snapshotOptionsToFlags(options),
+        };
+        const includeRects = options?.includeRects === true;
+        const snapshotScope = options?.scope ?? req.flags?.snapshotScope;
+        const needsFreshSnapshot =
+          req.command === 'wait' ||
+          req.command === 'find' ||
+          isAbsentPredicateRequest(req) ||
+          (includeRects && device.platform === 'web');
+        return await captureRuntime.capture({
+          flags,
+          signal: context.signal,
+          snapshotScope,
+          includeRects,
+          cache: {
+            forceFresh: needsFreshSnapshot,
+            useSessionSnapshot: true,
+            bypassForPostGestureStabilization: true,
+          },
+        });
+      }),
+    readText: async (_context, node: SnapshotNode) => ({
+      text: await readTextForNode({
+        readTextAtPoint,
+        device,
+        node,
+        flags: req.flags,
+        appBundleId: session?.appBundleId,
+        traceOutPath: session?.trace?.outPath,
+        surface: session?.surface,
+        contextFromFlags: resolveContextFromFlags,
+      }),
+    }),
+    // The owner's native text reading, forwarded only when its facts advertised it. The daemon
+    // makes no family, provider, surface, or session decision here: an owner that cannot answer
+    // reports `found: false` and the poll consults the canonical tree.
+    ...(boundFindText
+      ? {
+          findText: async (context: BackendCommandContext, text: string) => {
+            const { found } = await boundFindText({
+              text,
+              options: { appBundleId: session?.appBundleId, surface: session?.surface },
+              execution: runnerExecution,
+              ...(context.signal ? { signal: context.signal } : {}),
+            });
+            if (session) markSessionSnapshotOutdated(session);
+            return { found };
+          },
+        }
+      : {}),
+  };
+}
+
+function isAbsentPredicateRequest(req: DaemonRequest): boolean {
+  if (req.command !== 'is') return false;
+  const checked = checkIsArgs(req.positionals ?? []);
+  return checked.ok && checked.predicate === 'absent';
+}

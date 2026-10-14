@@ -1,4 +1,4 @@
-import type { DaemonRequest } from '../daemon/daemon-request.ts';
+import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
 import { AppError } from '@agent-device/kernel/errors';
 import { createRequestId, emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';

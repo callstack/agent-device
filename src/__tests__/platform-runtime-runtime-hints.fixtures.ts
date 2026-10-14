@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { mkdtempForTest } from './test-utils/tmp-dir.ts';
+import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
 
 export const LEGACY_PREFS_PATH = 'shared_prefs/ReactNativeDevPrefs.xml';
 

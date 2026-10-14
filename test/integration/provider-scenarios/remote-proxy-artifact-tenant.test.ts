@@ -7,9 +7,9 @@ import { createAgentDeviceClient } from '../../../src/agent-device-client.ts';
 import {
   cleanupDownloadableArtifact,
   trackDownloadableArtifact,
-} from '../../../src/daemon/artifact-tracking.ts';
-import { finalizeDaemonResponse } from '../../../src/daemon/request-finalization.ts';
-import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
+} from '@agent-device/daemon/testing/artifact-tracking';
+import { finalizeDaemonResponse } from '@agent-device/daemon/testing/request-finalization';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { normalizeAgentDeviceError } from '@agent-device/kernel/errors';
 import { downloadRemoteArtifact } from '../../../src/remote/daemon-artifacts.ts';
 import { createDaemonProxyServer } from '@agent-device/proxy';
@@ -17,7 +17,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../../src/__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 
 const TENANT = 'local-proxy-tenant';
 const OTHER_TENANT = 'other-tenant';

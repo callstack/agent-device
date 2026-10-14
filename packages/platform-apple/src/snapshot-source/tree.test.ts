@@ -608,3 +608,25 @@ test('the bridge tree publishes whether a dimming view takes touches', () => {
       error instanceof SnapshotSourceError && error.failureCode === 'user-interaction-invalid',
   );
 });
+
+test('bridge RN class values carry shared semantics while native class evidence survives', () => {
+  const result = decodeSnapshotBridgeTree(
+    {
+      [application]: 'RCTViewComponentView',
+      [automationType]: 1,
+      XC_kAXXCAttributeValue: 'checkbox, mixed, expanded',
+      [children]: [],
+    },
+    { truncated: false },
+    limits,
+  );
+  assert.equal(result.nodes[0]?.role, 'RCTViewComponentView');
+  assert.equal(result.nodes[0]?.checked, undefined);
+  assert.deepEqual(result.nodes[0]?.iosValueSemantics, {
+    source: 'react-native-ios-value-heuristic',
+    encoding: 'en',
+    role: 'checkbox',
+    checked: 'mixed',
+    expanded: true,
+  });
+});

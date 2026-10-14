@@ -215,6 +215,25 @@ test('focused selector matches snapshot focus state', () => {
   assert.equal(resolved.node.ref, 'tv2');
 });
 
+test('editable selector follows a published editable fact and infers from type without one', () => {
+  const nodes: SnapshotState['nodes'] = [
+    { ref: 'e1', index: 0, type: 'com.example.RichEditor', label: 'Custom', editable: true },
+    { ref: 'e2', index: 1, type: 'android.widget.EditText', label: 'ReadOnly', editable: false },
+    { ref: 'e3', index: 2, type: 'android.widget.EditText', label: 'Disabled', enabled: false },
+    { ref: 'e4', index: 3, type: 'android.widget.EditText', label: 'Inferred' },
+    { ref: 'e5', index: 4, type: 'android.widget.TextView', label: 'Plain' },
+  ];
+  const labelsMatching = (selector: string) =>
+    nodes
+      .filter((node) =>
+        resolveSelectorChain([node], parseSelectorChain(selector), { platform: 'android' }),
+      )
+      .map((node) => node.label);
+
+  assert.deepEqual(labelsMatching('editable=true'), ['Custom', 'Inferred']);
+  assert.deepEqual(labelsMatching('editable=false'), ['ReadOnly', 'Disabled', 'Plain']);
+});
+
 // ── appName / windowTitle selectors ──────────────────────────────────────
 
 test('appName selector matches nodes with appName field', () => {

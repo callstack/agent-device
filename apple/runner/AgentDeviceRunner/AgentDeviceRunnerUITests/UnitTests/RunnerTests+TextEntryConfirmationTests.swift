@@ -13,7 +13,7 @@ extension RunnerTests {
     _ value: String,
     identity: TextEntryElementIdentity = otpFieldIdentity
   ) -> TextEntryObservation {
-    TextEntryObservation(value: value, identity: identity)
+    TextEntryObservation(value: value, identity: identity, isFocused: false)
   }
 
   func testReplacementExactAndLiteralLossReadBack() {
@@ -175,6 +175,51 @@ extension RunnerTests {
     XCTAssertFalse(field.isSameElement(as: TextEntryElementIdentity(identifier: nil, elementType: "TextView", frame: frame)))
     XCTAssertFalse(field.isSameElement(as: TextEntryElementIdentity(identifier: nil, elementType: "TextField", frame: frame.offsetBy(dx: 0, dy: 60))))
     XCTAssertFalse(field.isSameElement(as: TextEntryElementIdentity(identifier: "otp-input", elementType: "TextField", frame: frame)))
+  }
+
+  func testReplacementIntoAnUnidentifiedFieldThatMovedVerifiesOnlyAnExactReadBackWhileFocused() {
+    // A bottom search bar measured on an iPhone Air simulator, iOS 26.5: focused and docked before
+    // typing, then raised above the keyboard and widened once the text arrived.
+    let docked = TextEntryElementIdentity(
+      identifier: nil, elementType: "SearchField", frame: CGRect(x: 88, y: 836, width: 244, height: 48)
+    )
+    let raised = TextEntryElementIdentity(
+      identifier: nil, elementType: "SearchField", frame: CGRect(x: 8, y: 548, width: 348, height: 48)
+    )
+    let focusedBaseline = TextEntryObservation(value: "", identity: docked, isFocused: true)
+    let unfocusedBaseline = TextEntryObservation(value: "", identity: docked, isFocused: false)
+    let focusedExact = TextEntryObservation(value: "qxzqxzqxz", identity: raised, isFocused: true)
+    let cases: [(String, TextEntryObservation, TextEntryObservation, Bool)] = [
+      ("exact, focused", focusedBaseline, focusedExact, true),
+      ("partial, focused", focusedBaseline, TextEntryObservation(value: "qxzqxz", identity: raised, isFocused: true), false),
+      ("exact, focus lost", focusedBaseline, TextEntryObservation(value: "qxzqxzqxz", identity: raised, isFocused: false), false),
+      ("exact, unfocused before typing", unfocusedBaseline, focusedExact, false),
+      (
+        "exact, another type",
+        focusedBaseline,
+        TextEntryObservation(
+          value: "qxzqxzqxz",
+          identity: TextEntryElementIdentity(identifier: nil, elementType: "TextField", frame: raised.frame),
+          isFocused: true
+        ),
+        false
+      ),
+      (
+        "exact, identified",
+        focusedBaseline,
+        TextEntryObservation(
+          value: "qxzqxzqxz",
+          identity: TextEntryElementIdentity(identifier: "search", elementType: "SearchField", frame: raised.frame),
+          isFocused: true
+        ),
+        false
+      ),
+    ]
+    for (name, baseline, observed, expected) in cases {
+      let result = Self.replacementTextEntryResult(requested: "qxzqxzqxz", baseline: baseline, observed: observed)
+      XCTAssertEqual(result.verified, expected, name)
+      XCTAssertNil(result.unconfirmed, name)
+    }
   }
 
   func testVerificationTargetEncodesMissingIdentityAsExplicitNulls() throws {

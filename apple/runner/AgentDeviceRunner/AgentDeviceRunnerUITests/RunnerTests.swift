@@ -87,11 +87,11 @@ final class RunnerTests: XCTestCase {
   var lastLoggedFastAppGuardLine: String?
   var lastLoggedGesturePolicyLines: [SynthesizedGesturePolicyKind: String] = [:]
   var runnerMarkerWriter: @MainActor (String) -> Void = { NSLog("%@", $0) }
-  /// When the first interaction after an activation may run, on the monotonic uptime clock.
-  /// The guarantee is a minimum gap *since the activation*, not a pause at the interaction:
-  /// a caller that already spent that gap elsewhere (an agent's round trip is 190-260 ms)
-  /// has satisfied it and waits for nothing. `nil` = no activation is pending stabilization.
-  var firstInteractionReadyUptime: TimeInterval?
+  /// When the first interaction after an activation may run. The guarantee is a minimum gap
+  /// *since the activation*, not a pause at the interaction: a caller that already spent that gap
+  /// elsewhere (an agent's round trip is 190-260 ms) has satisfied it and waits for nothing.
+  /// `nil` = no activation is pending stabilization.
+  var firstInteractionWindow: FirstInteractionWindow?
   var activeRecording: ScreenRecorder?
   let commandJournal = RunnerCommandJournal()
   // Coalesces duplicate transport sends of the same commandId onto the single in-flight

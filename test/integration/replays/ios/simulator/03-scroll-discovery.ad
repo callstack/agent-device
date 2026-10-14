@@ -2,10 +2,11 @@
 context platform=ios target=mobile
 
 open com.apple.Preferences --relaunch
-scroll down 3
-wait 500
-find text "Accessibility" exists
+is visible 'role=button label=General'
+is absent 'role=button label=Apps'
+scroll down --until 'role=button label=Apps'
+is visible 'role=button label=Apps'
 
-scroll up 3
-wait 500
-find text "General" exists
+is absent 'role=button label=General'
+scroll up --until 'role=button label=General'
+is visible 'role=button label=General'

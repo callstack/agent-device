@@ -19,6 +19,7 @@ import { surfaceScopedNodes } from './post-action-surface.ts';
 import type {
   InteractionTarget,
   PreresolvedInteractionTarget,
+  RefObservationSource,
   ResolvedInteractionTarget,
   SurfaceScopedNodes,
 } from '@agent-device/contracts/interaction';
@@ -43,6 +44,11 @@ type RefResolution = {
   resolved: ResolvedRefNode;
   /** The keyboard band the capture of `tree.nodes` measured, when it measured one (#2660). */
   keyboard?: SnapshotKeyboardBandFact;
+  /**
+   * Which tree `resolved.node` was read from, as the reconciliation decided it (ADR 0014 step 5).
+   * Absent for a caller-carried node (#1654), which no reconciliation of this module chose.
+   */
+  adoptedFrom?: RefObservationSource;
 };
 
 /**
@@ -90,6 +96,7 @@ async function readRefResolution(
   return {
     tree: surfaceScopedNodes(capture.snapshot),
     ...(capture.snapshot.keyboard ? { keyboard: capture.snapshot.keyboard } : {}),
+    ...(capture.adoptedFrom ? { adoptedFrom: capture.adoptedFrom } : {}),
     resolved: capture.resolved,
   };
 }
@@ -100,7 +107,7 @@ export async function resolveRefInteractionTarget(
   target: Extract<InteractionTarget, { kind: 'ref' }>,
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
-  const { tree, keyboard, resolved } = params.preresolvedTarget
+  const { tree, keyboard, resolved, adoptedFrom } = params.preresolvedTarget
     ? adoptPreresolvedRefTarget(target, params.preresolvedTarget)
     : await readRefResolution(runtime, options, target);
   const nodes = tree.nodes;
@@ -128,6 +135,7 @@ export async function resolveRefInteractionTarget(
     kind: 'ref',
     point,
     target: { kind: 'ref', ref: `@${resolved.ref}` },
+    ...(adoptedFrom ? { adoptedFrom } : {}),
     ...describeResolvedInteractionNode(
       runtime,
       visibleNode,
@@ -138,11 +146,18 @@ export async function resolveRefInteractionTarget(
   };
 }
 
+/** What the frame model decided for one `@ref`: the node to act on, the tree it came from, and why. */
+type RefObservationReconciliation = InteractionSnapshot & {
+  resolved: ResolvedRefNode;
+  /** Which of the candidate trees `resolved.node` was read from: what the rule chose. */
+  adoptedFrom: RefObservationSource;
+};
+
 async function resolveSnapshotForRef(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   target: Extract<InteractionTarget, { kind: 'ref' }>,
-): Promise<InteractionSnapshot & { resolved: ResolvedRefNode }> {
+): Promise<RefObservationReconciliation> {
   const { session, snapshot: frameTree } = await requireSnapshotSession(runtime, options.session);
 
   const fallbackLabel = target.fallbackLabel ?? '';
@@ -180,11 +195,14 @@ function reconcileFreshObservation(params: {
   target: Extract<InteractionTarget, { kind: 'ref' }>;
   fallbackLabel: string;
   authorized: ResolvedRefNode;
-}): InteractionSnapshot & { resolved: ResolvedRefNode } {
+}): RefObservationReconciliation {
   const { session, frameTree, target, fallbackLabel, authorized } = params;
   const observation = session.snapshot;
-  if (!observation || observation === frameTree) {
-    return { snapshot: frameTree, resolved: authorized };
+  if (!observation) {
+    return { snapshot: frameTree, resolved: authorized, adoptedFrom: 'authorized-frame' };
+  }
+  if (observation === frameTree) {
+    return { snapshot: frameTree, resolved: authorized, adoptedFrom: 'observation' };
   }
   const observed = tryResolveRefNode(observation.nodes, target.ref, { fallbackLabel });
   if (
@@ -194,9 +212,9 @@ function reconcileFreshObservation(params: {
       readNodeLocalIdentity(observed.resolved.node),
     )
   ) {
-    return { snapshot: observation, resolved: observed.resolved };
+    return { snapshot: observation, resolved: observed.resolved, adoptedFrom: 'observation' };
   }
-  return { snapshot: frameTree, resolved: authorized };
+  return { snapshot: frameTree, resolved: authorized, adoptedFrom: 'authorized-frame' };
 }
 
 /** The runtime-ref resolver: `exact` for a resolved `@ref`, `label-fallback` for trailing-label recovery. */

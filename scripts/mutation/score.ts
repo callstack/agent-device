@@ -17,6 +17,7 @@ export type SurvivingMutant = {
   readonly file: string;
   readonly line: number;
   readonly mutator: string;
+  readonly status: string;
 };
 
 export type ModuleScore = {
@@ -28,6 +29,8 @@ export type ModuleScore = {
   /** Timeouts, already counted in `killed` — reported so a score propped up by
    * slow mutants rather than assertions is visible. */
   readonly timeout: number;
+  readonly noCoverage: number;
+  readonly errors: number;
   readonly surviving: readonly SurvivingMutant[];
 };
 
@@ -63,7 +66,14 @@ function compareMutants(a: SurvivingMutant, b: SurvivingMutant): number {
   return a.file.localeCompare(b.file) || a.line - b.line || a.mutator.localeCompare(b.mutator);
 }
 
-type Bucket = { killed: number; survived: number; timeout: number; surviving: SurvivingMutant[] };
+type Bucket = {
+  killed: number;
+  survived: number;
+  timeout: number;
+  noCoverage: number;
+  errors: number;
+  surviving: SurvivingMutant[];
+};
 
 function tally(bucket: Bucket, file: string, mutant: StrykerMutant): void {
   if (KILLED_STATUSES.has(mutant.status)) {
@@ -71,12 +81,15 @@ function tally(bucket: Bucket, file: string, mutant: StrykerMutant): void {
     if (mutant.status === 'Timeout') bucket.timeout += 1;
     return;
   }
+  if (mutant.status === 'CompileError' || mutant.status === 'RuntimeError') bucket.errors += 1;
   if (!SURVIVED_STATUSES.has(mutant.status)) return;
+  if (mutant.status === 'NoCoverage') bucket.noCoverage += 1;
   bucket.survived += 1;
   bucket.surviving.push({
     file: normalizePath(file),
     line: mutant.location?.start?.line ?? 0,
     mutator: mutant.mutatorName ?? 'unknown',
+    status: mutant.status,
   });
 }
 
@@ -85,7 +98,15 @@ export function summarizeReport(
   ids: readonly ModuleId[] = ALL_MODULE_IDS,
 ): ModuleScore[] {
   const buckets = new Map<ModuleId, Bucket>();
-  for (const id of ids) buckets.set(id, { killed: 0, survived: 0, timeout: 0, surviving: [] });
+  for (const id of ids)
+    buckets.set(id, {
+      killed: 0,
+      survived: 0,
+      timeout: 0,
+      noCoverage: 0,
+      errors: 0,
+      surviving: [],
+    });
 
   for (const [file, entry] of Object.entries(report.files)) {
     const id = moduleForFile(file);
@@ -103,6 +124,8 @@ export function summarizeReport(
       survived: bucket.survived,
       total,
       timeout: bucket.timeout,
+      noCoverage: bucket.noCoverage,
+      errors: bucket.errors,
       surviving: bucket.surviving.sort(compareMutants),
     };
   });

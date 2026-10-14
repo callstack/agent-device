@@ -12,9 +12,13 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../../daemon/daemon-request.ts';
-import { createDaemonHttpServer } from '../../daemon/server/http-server.ts';
-import { createSocketServer, listenNetServer } from '../../daemon/server/transport.ts';
+import type {
+  DaemonInvokeFn,
+  DaemonRequest,
+  DaemonResponse,
+} from '@agent-device/daemon/daemon-request';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
+import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
 import { sendRequest } from '../daemon-client-transport.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
@@ -22,8 +26,8 @@ import {
   listenOnLoopback,
   trackLoopbackSockets,
   skipWhenLoopbackUnavailable,
-} from '../../__tests__/test-utils/loopback.ts';
-import { mkdtempForTestSync } from '../../__tests__/test-utils/tmp-dir.ts';
+} from '@agent-device/test-kit/loopback';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 const TOKEN = 'abort-signal-token';
 const STATE_PATHS = resolveDaemonPaths(mkdtempForTestSync('agent-device-client-abort-'));

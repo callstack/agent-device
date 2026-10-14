@@ -61,7 +61,7 @@ describe('platform module metadata composition', () => {
       diagnostics: { emit: () => {} },
       progress: { report: () => {} },
     } as const;
-    const providerGateways = createPlatformDeviceInventoryGateways({
+    const providerGateways = await createPlatformDeviceInventoryGateways({
       discover: async () => ({
         kind: 'inventory',
         devices: [
@@ -81,7 +81,7 @@ describe('platform module metadata composition', () => {
     );
     expect(hostAdapter.evaluations).toBe(0);
 
-    const localGateways = createPlatformDeviceInventoryGateways();
+    const localGateways = await createPlatformDeviceInventoryGateways();
     expect(await localGateways.localOnly.discover({ platform: 'web' }, scope)).toHaveLength(1);
     expect(hostAdapter.evaluations).toBe(0);
 

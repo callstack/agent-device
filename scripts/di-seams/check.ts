@@ -15,7 +15,12 @@ const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
 }).trim();
 
 function listProductionSourceFiles(): string[] {
-  const out = execFileSync('git', ['ls-files', '--', 'src'], { cwd: repoRoot, encoding: 'utf8' });
+  // The daemon server moved to packages/daemon (#3352); its DI seams need the same guard.
+  // Other packages stay out of scope for this guard's current claim.
+  const out = execFileSync('git', ['ls-files', '--', 'src', 'packages/daemon'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
   return out
     .split('\n')
     .filter(Boolean)
@@ -37,7 +42,7 @@ export function main(): number {
 
   if (violations.length === 0) {
     process.stdout.write(
-      `DI-seam guard: OK — ${files.length} production src/ files scanned, ` +
+      `DI-seam guard: OK — ${files.length} production src/ and daemon-package files scanned, ` +
         `${approved.length} approved seam(s) found, no unapproved seams.\n`,
     );
     return 0;

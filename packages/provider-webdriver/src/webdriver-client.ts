@@ -173,12 +173,16 @@ export class WebDriverClient {
    * driver does not implement — or one that answers with a non-boolean — is
    * reported as unsupported; everything else throws.
    */
-  async isKeyboardShown(timeoutMs?: number): Promise<boolean | 'unsupported'> {
+  async isKeyboardShown(
+    timeoutMs?: number,
+    signal?: AbortSignal,
+  ): Promise<boolean | 'unsupported'> {
     let value: unknown;
     try {
       value = await this.sessionRequest('GET', '/appium/device/is_keyboard_shown', undefined, {
         retryAttempts: 0,
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
+        ...(signal === undefined ? {} : { signal }),
       });
     } catch (error) {
       if (isWebDriverRouteUnsupported(error)) return 'unsupported';
@@ -284,8 +288,8 @@ export class WebDriverClient {
     await fs.writeFile(outPath, Buffer.from(value, 'base64'));
   }
 
-  async windowRect(): Promise<WebDriverWindowRect> {
-    return readWindowRect(await this.sessionRequest('GET', '/window/rect'));
+  async windowRect(options?: WebDriverRequestOverrides): Promise<WebDriverWindowRect> {
+    return readWindowRect(await this.sessionRequest('GET', '/window/rect', undefined, options));
   }
 
   /** A script that may change device state; it is sent once. */

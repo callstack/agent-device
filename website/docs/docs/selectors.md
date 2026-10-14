@@ -91,6 +91,10 @@ Text values match the whole field, ignoring case and extra whitespace: `label="s
 Boolean keys: `visible`, `hidden`, `editable`, `selected`, `focused`, `enabled`, `hittable`. Write
 `visible=true` or `visible=false`; a bare `visible` means `visible=true`.
 
+`editable` (and `is editable`) uses the node's native `editable` fact when the snapshot carries one,
+so a custom text view can match and a read-only field cannot. Without the fact it is inferred from
+the element type. A disabled element is never editable.
+
 Quoting and alternatives:
 
 - Quote values that contain spaces, with double or single quotes: `label="Sign in"`. Escape a quote

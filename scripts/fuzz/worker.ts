@@ -7,6 +7,7 @@
 // caught at all: only a separate process keeps that fault off the caller, whose thread may be
 // the unit lane's test runner (#2053).
 
+import { beginStderrCapture } from '../../src/__tests__/test-utils/stream-capture.ts';
 import { checkCase, type FuzzFailure } from './invariant.ts';
 import { getFuzzTarget } from './registry.ts';
 
@@ -23,7 +24,7 @@ const target = getFuzzTarget(process.argv[2] ?? '');
 // those lines and bury the failure report. Only JavaScript writes go through here: a fatal
 // fault writes to the descriptor itself, which is why the runner keeps this process's stderr
 // piped rather than discarded.
-process.stderr.write = (() => true) as typeof process.stderr.write;
+beginStderrCapture({ discard: true });
 
 process.on('message', (request: FuzzWorkerRequest) => {
   const failure = checkCase(target, request.input);

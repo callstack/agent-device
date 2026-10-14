@@ -5,8 +5,8 @@ import type {
   SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { createSnapshotVisibility, isViewportRootNode } from '@agent-device/contracts/snapshot';
+import { areCapturedRectsAtSamePosition } from '@agent-device/kernel/rect-center';
 
-const GEOMETRY_TOLERANCE_PX = 1;
 export type StableCaptureSignal = {
   captureBackend?: SnapshotCaptureBackend;
   nodes: SignalNode[];
@@ -45,13 +45,7 @@ export function stableCaptureSignalsEqual(
     const candidate = right.nodes[index];
     if (!candidate || node.identity !== candidate.identity) return false;
     if (!node.rect || !candidate.rect) return node.rect === candidate.rect;
-    const nodeRect = node.rect;
-    const candidateRect = candidate.rect;
-    return (['x', 'y', 'width', 'height'] as const).every(
-      (coordinate) =>
-        Math.abs(Math.round(nodeRect[coordinate]) - Math.round(candidateRect[coordinate])) <=
-        GEOMETRY_TOLERANCE_PX,
-    );
+    return areCapturedRectsAtSamePosition(node.rect, candidate.rect);
   });
 }
 
@@ -60,8 +54,8 @@ export function stableCaptureSignalsHaveBroadReplacement(
   right: StableCaptureSignal,
 ): boolean {
   // A backend transition must reset the ordinary quiet window, but it must not conceal a broad
-  // semantic replacement. Both signals already carry the same visible XCTest projection, and the
-  // transition baseline is only armed for XCTest sessions.
+  // semantic replacement. Both signals carry the same chrome-free visible projection the settle
+  // diff collapses, and the transition baseline is only armed for XCTest sessions.
   if (!left || left.nodes.length === 0 || right.nodes.length === 0) return false;
   const remainingIdentities = new Map<string, number>();
   for (const node of left.nodes) {
@@ -77,12 +71,23 @@ export function stableCaptureSignalsHaveBroadReplacement(
   return sharedNodes / Math.max(left.nodes.length, right.nodes.length) < 0.5;
 }
 
+/**
+ * Geometry enters the signal quantized to the pixel, which is what the shared capture band
+ * (`areCapturedRectsAtSamePosition`, 1 px) has always effectively been compared against here: the
+ * quiet window restarts on more than one WHOLE pixel of drift. Quantizing at the one place a signal
+ * mints a rect keeps that band while leaving the comparison itself in `@agent-device/kernel`.
+ */
 function stableCaptureNodeSignal(node: SnapshotNode): SignalNode {
   return {
     identity: `${node.type ?? ''}#${stableSemanticIdentity(node)}`,
     ...(node.rect
       ? {
-          rect: { ...node.rect },
+          rect: {
+            x: Math.round(node.rect.x),
+            y: Math.round(node.rect.y),
+            width: Math.round(node.rect.width),
+            height: Math.round(node.rect.height),
+          },
         }
       : {}),
   };

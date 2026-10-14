@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
+import { interactionCliOutputFormatters } from '../../../src/commands/interaction/output.ts';
 import { assertFlatToolCall, assertPngFile } from './assertions.ts';
 import { PROVIDER_SCENARIO_WEB } from './fixtures.ts';
 import { createProviderScenarioTempPath, withProviderScenarioResource } from './harness.ts';
@@ -70,6 +71,52 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
           positionals: ['text', 'Submit order', 'exists'],
           expectData: { found: true },
         },
+        // #2283, the whole reason a web capture mints no refs of its own: this node reached the
+        // stored state through `buildSnapshotState` with agent-browser provenance and carries no
+        // ref, so it must be published, listed and waited on without ever being offered an
+        // address. Delete `snapshotRefMinting(data)` from snapshot-state and this block turns red
+        // on the first step (the node would be minted `e7`, colliding with nothing here and with a
+        // real control on a real page).
+        {
+          name: 'publish the ref-less text with no ref key',
+          command: 'snapshot',
+          flags: { snapshotInteractiveOnly: false },
+          assert: (response) => {
+            const nodes = response.json?.result?.data?.nodes as
+              | Array<Record<string, unknown>>
+              | undefined;
+            const refLess = nodes?.find((node) => node.value === 'Order saved');
+            assert.ok(
+              refLess,
+              `Ref-less text missing from the published tree: ${JSON.stringify(nodes)}`,
+            );
+            assert.equal('ref' in refLess, false, JSON.stringify(refLess));
+          },
+        },
+        {
+          name: 'list the ref-less text without an address',
+          command: 'find',
+          positionals: ['text', 'Order saved', 'list'],
+          assert: async (response) => {
+            const matches = response.json?.result?.data?.matches as
+              | Array<Record<string, unknown>>
+              | undefined;
+            assert.equal(matches?.length, 1, JSON.stringify(response.json?.result?.data));
+            assert.equal('ref' in (matches?.[0] ?? {}), false, JSON.stringify(matches?.[0]));
+            const cli = await interactionCliOutputFormatters.find({
+              input: {},
+              result: response.json?.result?.data,
+            });
+            assert.equal(cli.text, ['1 match:', '= (no ref) [text] "Order saved"'].join('\n'));
+          },
+        },
+        {
+          name: 'wait for the ref-less text',
+          command: 'wait',
+          positionals: ['text', 'Order saved', '100'],
+          expectData: { text: 'Order saved' },
+        },
+
         {
           name: 'assert visible text',
           command: 'is',
@@ -168,6 +215,19 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
           expectData: { recording: 'stopped', outPath: recordingPath },
         },
       ]);
+
+      // This step pins the acting row's `requireRect`, not the minting rule: a ref-less line is one
+      // the backend never measured and never issued a handle for, and a line the backend DID mint a
+      // ref for still carries no rect here, so this refusal would hold either way. The minting rule
+      // itself is pinned by the `snapshot --json` and `find text … list` assertions above. The
+      // refusal has to name no match — an action here would be a blind tap, which is the collision
+      // #2283 is about.
+      const refLessClick = await daemon.callCommand('click', ['text="Order saved"']);
+      assert.equal(
+        refLessClick.json?.error?.data?.details?.reason,
+        'selector_not_found',
+        JSON.stringify(refLessClick.json),
+      );
 
       const actions = daemon.session()?.actions ?? [];
       assert.ok(

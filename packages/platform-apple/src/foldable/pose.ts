@@ -15,7 +15,7 @@ import {
   type AppleDeviceDisplay,
   type AppleDisplayInventory,
 } from '../core/display-inventory.ts';
-import { readAppleHingeAngle } from '../core/hinge-angle.ts';
+import { HINGE_ANGLE_NO_SAMPLE_REASON, readAppleHingeAngle } from '../core/hinge-angle.ts';
 import { requireSimulatorDevice } from '../core/simulator.ts';
 import { sendSimulatorFoldPose } from './simulator-hid.ts';
 
@@ -24,6 +24,9 @@ const FOLDABLE_REQUIRED_HINT =
 
 const INVENTORY_REQUIRED_HINT =
   "fold needs 'devicectl device info displays' to tell a foldable from a single-panel simulator; update Xcode to a version that ships the display-information feature.";
+
+const DISPATCHED_UNVERIFIED_HINT =
+  'The pose request was sent and the device may have followed it, but the first hinge-angle read returned no sample, so fold cannot confirm it. Take a screenshot or snapshot to see which panel is lit; hingeReadFailure names why the read failed.';
 
 const POSE_UNSETTLED_HINT =
   'The hinge reached the requested pose and was still moving when the read budget ended. Retry the fold, then read the angle directly with xcrun devicectl device motion hinge-angle --device <udid> --session-timeout 1 --timeout 5 to see whether the simulator holds the pose.';
@@ -56,6 +59,40 @@ export async function setAppleFoldPose(
     hingeAngleDegrees,
     ...(litPanel ? { screen: screenReport(litPanel) } : {}),
   };
+}
+
+function isHingeNoSample(error: unknown): boolean {
+  return error instanceof AppError && error.details?.reason === HINGE_ANGLE_NO_SAMPLE_REASON;
+}
+
+/**
+ * The toolchain cannot read the hinge, so the pose is neither confirmed nor refuted. The HID
+ * command was delivered, though, so the device may already be in the requested pose; the lit
+ * panel is evidence for the caller to weigh, not a verification (panel power cannot separate
+ * `half-open` from `open`).
+ */
+async function dispatchedUnverifiedPoseError(
+  device: DeviceInfo,
+  pose: FoldPose,
+  signal: AbortSignal | undefined,
+  targetAngle: number | undefined,
+  cause: unknown,
+): Promise<AppError> {
+  const litPanel = await readLitPanel(device, signal);
+  return new AppError(
+    'COMMAND_FAILED',
+    `${device.name} received the ${pose} pose request, but the first hinge-angle read returned no sample to verify it`,
+    {
+      deviceId: device.id,
+      requestedPose: pose,
+      ...(targetAngle === undefined ? {} : { targetAngleDegrees: targetAngle }),
+      reason: 'fold-pose-dispatched-unverified',
+      ...(litPanel ? { screen: screenReport(litPanel) } : {}),
+      ...(cause instanceof AppError ? { hingeReadFailure: cause.details } : {}),
+      hint: DISPATCHED_UNVERIFIED_HINT,
+    },
+    cause,
+  );
 }
 
 function requireFoldableInventory(device: DeviceInfo, inventory: AppleDisplayInventory): void {
@@ -99,7 +136,12 @@ async function awaitHingePose(
   for (let attempt = 1; attempt <= IOS_FOLD_POSE_SETTLE_ATTEMPTS; attempt += 1) {
     signal?.throwIfAborted();
     previous = observed;
-    observed = await readAppleHingeAngle(device, { signal });
+    try {
+      observed = await readAppleHingeAngle(device, { signal });
+    } catch (error) {
+      if (observed !== undefined || !isHingeNoSample(error)) throw error;
+      throw await dispatchedUnverifiedPoseError(device, pose, signal, targetAngle, error);
+    }
     if (isVerifiedHingePose(observed, previous, pose, targetAngle)) return observed;
   }
   throw hingeVerificationError(device, pose, observed, previous, targetAngle);

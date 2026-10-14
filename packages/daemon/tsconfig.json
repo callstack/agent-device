@@ -1,0 +1,69 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationDir": "./dist-types",
+    "rootDir": "./src",
+    "tsBuildInfoFile": "./dist-types/index.tsbuildinfo"
+  },
+  "include": ["src"],
+  "references": [
+    {
+      "path": "../ad-replay"
+    },
+    {
+      "path": "../ad-script"
+    },
+    {
+      "path": "../capture-kit"
+    },
+    {
+      "path": "../command-registry"
+    },
+    {
+      "path": "../contracts"
+    },
+    {
+      "path": "../daemon-contracts"
+    },
+    {
+      "path": "../device-selection"
+    },
+    {
+      "path": "../host-kit"
+    },
+    {
+      "path": "../kernel"
+    },
+    {
+      "path": "../maestro"
+    },
+    {
+      "path": "../platform-android"
+    },
+    {
+      "path": "../platform-apple"
+    },
+    {
+      "path": "../platform-web"
+    },
+    {
+      "path": "../replay-port"
+    },
+    {
+      "path": "../replay-test"
+    },
+    {
+      "path": "../selectors"
+    },
+    {
+      "path": "../session-journal"
+    },
+    {
+      "path": "../test-kit"
+    }
+  ]
+}

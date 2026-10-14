@@ -5,10 +5,10 @@ import { test, vi } from 'vitest';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { runCliCapture } from './cli-capture.ts';
 import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
-  (await import('./test-utils/host-process-mock.ts')).pinOwnProcessStartTime(importOriginal),
+  (await import('@agent-device/test-kit/host-process-mock')).pinOwnProcessStartTime(importOriginal),
 );
 
 test('device status is daemonless and does not send a daemon request', async () => {

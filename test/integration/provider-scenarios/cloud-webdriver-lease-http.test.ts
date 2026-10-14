@@ -3,13 +3,13 @@ import http from 'node:http';
 import { test } from 'vitest';
 import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
-import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
+import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { buildHttpRpcPayload } from '../../../src/daemon-client/daemon-client-rpc.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '../../../src/__tests__/test-utils/loopback.ts';
+} from '@agent-device/test-kit/loopback';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
   CloudWebDriverTestServer,

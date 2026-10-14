@@ -175,6 +175,7 @@ test('fails closed when interactive descendants tile the parent', () => {
 
   assert.deepEqual(resolveInteractionTouchPoint(nodes, nodes[0]!), {
     kind: 'blocked',
+    competitorCount: 2,
     competitorRefs: ['e2', 'e3'],
   });
 });

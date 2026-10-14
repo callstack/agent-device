@@ -10,6 +10,9 @@
 // lcov was dropped by an exclude glob — reported (non-gating) so exclusions
 // cannot silently absorb new logic.
 
+import type { ChangedFileDiff } from '../lib/repo-git.ts';
+import { normalizePath } from '../lib/repo-path.ts';
+
 // Single source of truth for the gate. Changed-line coverage below this
 // percentage fails the Coverage CI job (unless waived).
 export const CHANGED_LINE_COVERAGE_THRESHOLD = 70;
@@ -24,29 +27,6 @@ export type LcovFile = {
 };
 
 export type CoverageIndex = ReadonlyMap<string, LcovFile>;
-
-export type ChangedFileDiff = {
-  readonly path: string;
-  // New-side line numbers of '+' lines, ascending and de-duplicated.
-  readonly added: readonly number[];
-  // `+++ /dev/null`: the file was deleted, so it contributes no changed lines.
-  readonly deleted: boolean;
-};
-
-// Normalize an lcov/diff path to a repo-relative posix path. `rootDir` strips an
-// absolute-path prefix some coverage providers emit; `./` and `b/` prefixes are
-// dropped so lcov and diff paths join on the same key.
-export function normalizePath(raw: string, rootDir?: string): string {
-  let p = raw.trim().replaceAll('\\', '/');
-  if (rootDir) {
-    const root = rootDir.replaceAll('\\', '/').replace(/\/$/, '');
-    if (p === root) return '';
-    if (p.startsWith(`${root}/`)) p = p.slice(root.length + 1);
-  }
-  if (p.startsWith('b/')) p = p.slice(2);
-  if (p.startsWith('./')) p = p.slice(2);
-  return p;
-}
 
 function parseDaRecord(body: string): readonly [number, number] | null {
   const [lineNo, hits] = body.split(',');
@@ -91,63 +71,6 @@ export function parseLcov(text: string, rootDir?: string): CoverageIndex {
     if (file) index.set(file.path, file);
   }
   return index;
-}
-
-type DiffSection = { path: string; added: Set<number>; deleted: boolean; cursor: number };
-
-function newStartOfHunk(line: string): number | null {
-  const match = /@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
-  return match ? Number(match[1]) : null;
-}
-
-function pathFromDiffHeader(line: string): string {
-  const header = /^diff --git a\/.+ b\/(.+)$/.exec(line);
-  return header ? normalizePath(header[1]!) : '';
-}
-
-// Fold one line of a file's diff body into its section. Renames+edits report
-// their added lines under the destination (`+++ b/...`); pure renames and
-// deletions add nothing. `--unified=0` means no context lines in practice.
-function foldDiffBodyLine(section: DiffSection, line: string): void {
-  if (line.startsWith('+++ ')) {
-    const target = line.slice(4).trim();
-    if (target === '/dev/null') section.deleted = true;
-    else section.path = normalizePath(target);
-  } else if (line.startsWith('@@')) {
-    const start = newStartOfHunk(line);
-    if (start !== null) section.cursor = start;
-  } else if (line.startsWith('+') && !line.startsWith('+++')) {
-    section.added.add(section.cursor);
-    section.cursor += 1;
-  } else if (line.startsWith('-') || line.startsWith('\\')) {
-    // Removed line or "\ No newline": occupies no new-side number.
-  } else {
-    section.cursor += 1;
-  }
-}
-
-export function parseUnifiedDiff(diff: string): ChangedFileDiff[] {
-  const files: ChangedFileDiff[] = [];
-  let section: DiffSection | null = null;
-  const flush = (): void => {
-    if (section && section.path) {
-      files.push({
-        path: section.path,
-        added: [...section.added].sort((a, b) => a - b),
-        deleted: section.deleted,
-      });
-    }
-  };
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('diff --git ')) {
-      flush();
-      section = { path: pathFromDiffHeader(line), added: new Set(), deleted: false, cursor: 0 };
-    } else if (section) {
-      foldDiffBodyLine(section, line);
-    }
-  }
-  flush();
-  return files;
 }
 
 // Vitest coverage `include` spans two roots: `src/**/*.ts` and

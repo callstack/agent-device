@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
 import { runCliCapture } from './cli-capture.ts';
-import { mkdtempForTestSync } from './test-utils/tmp-dir.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   installFakeManagedAgentBrowser,
   withNodeRuntime,
   writeFakeManagedAgentBrowserPackage,
-} from './test-utils/web-managed-agent-browser.ts';
+} from '@agent-device/test-kit/web-managed-agent-browser';
 import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 
 type SpawnedCommand = { cmd: string; args: readonly string[] };

@@ -143,10 +143,9 @@ export const findCommand: RuntimeCommand<FindReadCommandOptions, FindReadCommand
   }
 
   if (options.action === 'exists') return { kind: 'found', found: true };
-  const ref = `@${match.ref}`;
-  if (options.action === 'get_attrs') return { kind: 'attrs', ref, node: match };
+  if (options.action === 'get_attrs') return { kind: 'attrs', ...refAddress(match), node: match };
   const text = await readText(runtime, capture, match);
-  return { kind: 'text', ref, text, node: match };
+  return { kind: 'text', ...refAddress(match), text, node: match };
 };
 
 export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = async (
@@ -313,8 +312,18 @@ async function listFindMatches(
     : findBestMatchesByLocator(capture.snapshot.nodes, locator, options.query, {}).matches;
   return {
     kind: 'list',
-    matches: matched.map((node) => ({ ref: `@${node.ref}`, node })),
+    matches: matched.map((node) => ({ ...refAddress(node), node })),
   };
+}
+
+/**
+ * The address an agent acts on, when this node has one. Where the capture's producer mints its own
+ * refs (`backend-issued`, web) a node it left unaddressed carries none, and listing one would offer
+ * an agent something the next command refuses; where refs were minted densely by `attachRefs`
+ * (Apple, Android, Linux) every node has one. Read the field, never the mode.
+ */
+function refAddress(node: SnapshotNode): { ref?: string } {
+  return node.ref === undefined ? {} : { ref: `@${node.ref}` };
 }
 
 async function findFirstLocatorMatch(
@@ -362,7 +371,7 @@ async function resolveSelectorNode(
   options: GetCommandOptions,
   sessionName: string,
   params: { selector: string; policy: GetPipelinePolicy; hooks?: SelectorPipelineHooks },
-): Promise<{ capture: CapturedSnapshot; node: SnapshotNode; selector: string; ref: string }> {
+): Promise<{ capture: CapturedSnapshot; node: SnapshotNode; selector: string; ref?: string }> {
   const capture = await captureSelectorSnapshot(
     runtime,
     { ...options, session: sessionName },
@@ -389,6 +398,6 @@ async function resolveSelectorNode(
     capture,
     node: outcome.node,
     selector: outcome.selector,
-    ref: `@${outcome.node.ref}`,
+    ...refAddress(outcome.node),
   };
 }

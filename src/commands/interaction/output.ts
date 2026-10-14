@@ -57,10 +57,14 @@ function formatFindMatchLines(matches: unknown[], refsGeneration: unknown): stri
   return [heading, ...lines].join('\n');
 }
 
+/** What a listed match prints where a paste-ready ref normally goes. */
+const FIND_NO_REF_ADDRESS = '(no ref)';
+
 function formatFindMatchLine(view: FindMatchView, refsGeneration: unknown): string {
-  const plain = view.ref ?? '';
-  const body = plain.startsWith('@') ? plain.slice(1) : plain;
-  const ref = pinnedRefText(plain, refsGeneration) ?? `@${body}`;
+  const ref =
+    view.ref === undefined
+      ? FIND_NO_REF_ADDRESS
+      : (pinnedRefText(view.ref, refsGeneration) ?? view.ref);
   const role = formatRole(view.node?.type ?? 'Element');
   const label = view.node ? displayLabel(view.node, role) : '';
   return `= ${ref} [${role}]${label ? ` "${label}"` : ''}`;

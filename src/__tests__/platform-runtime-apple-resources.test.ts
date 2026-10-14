@@ -1,7 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { appleSessionObservation } from '../platform-runtime-apple-resources.ts';
-import { withTestDeviceInventory } from './test-utils/device-inventory-gateways.ts';
+import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 
 test('foreground observation uses request-local inventory without consulting a provider', async () => {
   const local = vi.fn(async () => []);

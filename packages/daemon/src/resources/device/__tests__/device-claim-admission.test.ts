@@ -1,0 +1,253 @@
+import { expect, test } from 'vitest';
+import {
+  daemonPlatformServicesFixture,
+  daemonClaimRecoveryGatewayFixture,
+} from '../../../__tests__/support/platform-services-fixture.ts';
+import fs from 'node:fs';
+import path from 'node:path';
+import { localRuntimeOwner, providerRuntimeOwner } from '@agent-device/contracts/platform-runtime';
+import { asAppError } from '@agent-device/kernel/errors';
+import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
+import {
+  isolatedDeviceClaimStores,
+  retainOrphanedDeviceClaims,
+} from '../../../__tests__/support/device-claim-store.ts';
+import { createDeviceClaimAdmission } from '../device-claim-admission.ts';
+import { abandonDeviceClaim, acquireDeviceClaim } from '../device-claims.ts';
+import { inspectDeviceClaims } from '../device-claim-inspection.ts';
+import { canonicalLocalDeviceKey, resolveDeviceClaimPath } from '../device-claim-paths.ts';
+import { createRequestExecutionScope } from '../../../server/request-execution-scope.ts';
+import { LeaseRegistry } from '../../lease-registry.ts';
+import { SessionStore } from '../../../core/session-store.ts';
+import { unavailableDeviceRuntimeGateway } from '../../../__tests__/support/unavailable-device-runtime-gateway.ts';
+import type { DeviceClaimPolicy } from '@agent-device/command-registry/types';
+
+const setup = isolatedDeviceClaimStores('agent-device-claim-admission-');
+const localAndroid = localRuntimeOwner('android');
+
+function makeAdmission(policy: DeviceClaimPolicy, stateDir: string, command = 'made-up-command') {
+  return createDeviceClaimAdmission({
+    policy,
+    command,
+    workspace: '/worktrees/current',
+    stateDir,
+    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+  });
+}
+
+function claimedSessions(): (string | undefined)[] {
+  return inspectDeviceClaims({}).map((entry) => entry.claim?.session);
+}
+
+// Enforcement is a pure function of the declared policy, not of a command name:
+// an unregistered command declared `transient-exclusive` claims, and every other
+// policy stays out of the claim store entirely.
+const POLICY_CLAIMS: [DeviceClaimPolicy, string[]][] = [
+  ['none', []],
+  ['observe', []],
+  ['require-owner', []],
+  ['acquire-session', []],
+  ['release-session', []],
+  ['transient-exclusive', ['transient:made-up-command']],
+];
+
+test.for(POLICY_CLAIMS)(
+  'the %s policy reaches the claim store only when transient-exclusive',
+  async ([policy, held], { expect }) => {
+    const { stateDir, claimsDir } = setup();
+    const admission = makeAdmission(policy, stateDir);
+
+    await admission.admit(ANDROID_EMULATOR, localAndroid);
+    expect(claimedSessions()).toEqual(held);
+
+    await admission[Symbol.asyncDispose]();
+    expect(inspectDeviceClaims({})).toEqual([]);
+    // A claim-free policy never even creates the store.
+    if (held.length === 0) expect(fs.existsSync(claimsDir)).toBe(false);
+  },
+);
+
+test('a foreign live claim refuses the command before it can reach device operations', async () => {
+  const { root, stateDir } = setup();
+  const ownerStateDir = path.join(root, 'foreign');
+  fs.mkdirSync(ownerStateDir, { recursive: true });
+  await acquireDeviceClaim({
+    device: ANDROID_EMULATOR,
+    session: 'owner-session',
+    workspace: '/worktrees/foreign',
+    stateDir: ownerStateDir,
+    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+  });
+
+  const admission = makeAdmission('transient-exclusive', stateDir, 'shutdown');
+  const error = asAppError(
+    await admission.admit(ANDROID_EMULATOR, localAndroid).catch((error: unknown) => error),
+  );
+
+  expect(error.code).toBe('DEVICE_IN_USE');
+  expect(error.details?.reason).toBe('DEVICE_CLAIM_LIVE_OWNER');
+  expect(error.details?.retriable).toBe(false);
+  expect(error.details?.hint).toBe(
+    'Inspect the owner with: agent-device device status --platform android --serial emulator-5554',
+  );
+
+  await admission[Symbol.asyncDispose]();
+  // Disposal never touches a claim this command did not acquire.
+  expect(claimedSessions()).toEqual(['owner-session']);
+});
+
+test('a claim already held by this daemon covers the command instead of colliding with it', async () => {
+  const { stateDir } = setup();
+  await acquireDeviceClaim({
+    device: ANDROID_EMULATOR,
+    session: 'open-session',
+    workspace: '/worktrees/current',
+    stateDir,
+    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+  });
+
+  const admission = makeAdmission('transient-exclusive', stateDir, 'install');
+  await admission.admit(ANDROID_EMULATOR, localAndroid);
+  await admission[Symbol.asyncDispose]();
+
+  // The session claim is untouched: the command neither replaced nor released it.
+  expect(claimedSessions()).toEqual(['open-session']);
+});
+
+test("an abandoned claim becomes this command's own transient claim and is released", async () => {
+  const { stateDir } = setup();
+  const aborted = await acquireDeviceClaim({
+    device: ANDROID_EMULATOR,
+    session: 'aborted-open',
+    workspace: '/worktrees/current',
+    stateDir,
+    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+  });
+  expect(aborted.status).toBe('acquired');
+  if (aborted.status !== 'acquired') return;
+  expect(await abandonDeviceClaim(aborted.ownership)).toBe('abandoned');
+
+  const admission = makeAdmission('transient-exclusive', stateDir, 'install');
+  await admission.admit(ANDROID_EMULATOR, localAndroid);
+
+  // Coverage would have left the abandoned record owning the device with nothing to release it.
+  expect(claimedSessions()).toEqual(['transient:install']);
+  await admission[Symbol.asyncDispose]();
+  expect(inspectDeviceClaims({})).toEqual([]);
+});
+
+test('a provider-owned device takes no host-local claim', async () => {
+  const { stateDir, claimsDir } = setup();
+  const admission = makeAdmission('transient-exclusive', stateDir);
+
+  await admission.admit(ANDROID_EMULATOR, providerRuntimeOwner('limrun', 'instance-1'));
+  await admission[Symbol.asyncDispose]();
+
+  expect(fs.existsSync(claimsDir)).toBe(false);
+});
+
+test.for(POLICY_CLAIMS.map(([policy]) => policy))(
+  'a provider owner never claims under the %s policy',
+  async (policy, { expect }) => {
+    const { stateDir, claimsDir } = setup();
+    const admission = makeAdmission(policy, stateDir);
+
+    await admission.admit(ANDROID_EMULATOR, providerRuntimeOwner('limrun', 'instance-1'));
+    await admission[Symbol.asyncDispose]();
+    expect(fs.existsSync(claimsDir)).toBe(false);
+  },
+);
+
+// A record of a schema version this daemon does not read is not provably free: it refuses
+// ordinary admission rather than being overwritten as if the device were unclaimed.
+test('an ordinary owner is refused for an unknown-schema claim record, not waved through', async () => {
+  const { stateDir, claimsDir } = setup();
+  fs.mkdirSync(claimsDir, { recursive: true });
+  const deviceKey = canonicalLocalDeviceKey(ANDROID_EMULATOR);
+  const claimPath = resolveDeviceClaimPath(deviceKey);
+  const record = JSON.stringify({
+    schemaVersion: 3,
+    deviceKey,
+    device: {
+      family: 'android',
+      id: ANDROID_EMULATOR.id,
+      name: ANDROID_EMULATOR.name,
+      kind: ANDROID_EMULATOR.kind,
+    },
+    session: 'future',
+    workspace: '/worktrees/future',
+    stateDir: '/state/future',
+    ownerPid: 4242,
+    ownerStartTime: 'start',
+    ownerToken: 'token',
+    createdAtMs: 1,
+    updatedAtMs: 2,
+  });
+  fs.writeFileSync(claimPath, record);
+  const admission = makeAdmission('transient-exclusive', stateDir);
+
+  const error = asAppError(
+    await admission.admit(ANDROID_EMULATOR, localAndroid).catch((error: unknown) => error),
+  );
+
+  expect(error.code).toBe('DEVICE_IN_USE');
+  expect(error.details?.reason).toBe('DEVICE_CLAIM_OWNER_UNCERTAIN');
+  expect(error.details?.classification).toBe('inconsistent');
+  await admission[Symbol.asyncDispose]();
+  expect(fs.readFileSync(claimPath, 'utf8')).toBe(record);
+});
+
+test('the none policy still reaches no device state at all', async () => {
+  const { root, stateDir, claimsDir } = setup();
+  const ownerStateDir = path.join(root, 'foreign');
+  fs.mkdirSync(ownerStateDir, { recursive: true });
+  await acquireDeviceClaim({
+    device: ANDROID_EMULATOR,
+    session: 'owner-session',
+    workspace: '/worktrees/foreign',
+    stateDir: ownerStateDir,
+    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
+  });
+  const before = fs.readdirSync(claimsDir);
+
+  const admission = makeAdmission('none', stateDir);
+  await admission.admit(ANDROID_EMULATOR, localAndroid);
+  await admission[Symbol.asyncDispose]();
+
+  expect(fs.readdirSync(claimsDir)).toEqual(before);
+});
+
+/** Claims visible while one command holds a device binding from the real request scope. */
+async function claimsWhileBound(command: string, stateDir: string) {
+  const scope = await createRequestExecutionScope({
+    platformServices: daemonPlatformServicesFixture(),
+    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
+    req: { token: 't', session: 'default', command, positionals: [], flags: {} },
+    sessionStore: new SessionStore(path.join(stateDir, 'sessions')),
+    leaseRegistry: new LeaseRegistry(),
+    deviceRuntimeGateway: unavailableDeviceRuntimeGateway,
+    platformRequestScope: {
+      signal: new AbortController().signal,
+      diagnostics: { emit: () => {} },
+      progress: { report: () => {} },
+    },
+  });
+  try {
+    await scope.bindDevice(ANDROID_EMULATOR, {
+      required: [],
+      preferred: [],
+    });
+    return claimedSessions();
+  } finally {
+    await scope[Symbol.asyncDispose]();
+  }
+}
+
+test('the request scope claims only for commands whose descriptor declares transient-exclusive', async () => {
+  const { stateDir } = setup();
+
+  // Same binding call, same device: the difference is the descriptor policy.
+  expect(await claimsWhileBound('shutdown', stateDir)).toEqual(['transient:shutdown']);
+  expect(await claimsWhileBound('snapshot', stateDir)).toEqual([]);
+  expect(inspectDeviceClaims({})).toEqual([]);
+});

@@ -41,7 +41,7 @@ import { errorResponse, type DaemonResponse } from '@agent-device/kernel/contrac
  * loop returns and never touches the step runtime itself.
  *
  * Coordinator ownership is unchanged by this split: `createReplayCoordinator` is still called
- * here, and only here — see `src/daemon/__tests__/replay-coordinator-ownership.test.ts` — every
+ * here, and only here — see `src/__tests__/daemon-composition/replay-coordinator-ownership.test.ts` — every
  * extracted module receives the already-constructed `ReplayCoordinator` as a parameter instead of
  * constructing its own.
  */

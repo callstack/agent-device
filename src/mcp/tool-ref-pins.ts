@@ -1,6 +1,6 @@
 import type { SettleObservation } from '@agent-device/contracts/interaction';
 import { readElementMatchCandidateRefs } from '@agent-device/kernel/errors';
-import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { snapshotRefBodies, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
 import type { CommandExecutionResult } from '../commands/command-surface.ts';
 import {
@@ -161,7 +161,7 @@ function mergeCommandResult(
  */
 type SnapshotPinView = {
   refsGeneration?: number;
-  refs?: Array<{ ref: string }>;
+  refs?: Array<{ ref?: string }>;
   nodes?: SnapshotNode[];
 };
 
@@ -175,13 +175,12 @@ function mergeSnapshotRefPins(
     refPinsByScope.delete(scopeKey);
     return;
   }
-  const bodies: string[] = [];
-  for (const { ref } of result.refs ?? []) {
-    bodies.push(ref);
-  }
-  for (const node of result.nodes ?? []) {
-    bodies.push(node.ref);
-  }
+  // Ref-less nodes (the web backend's on-screen-but-unaddressable content) mint no pin: there is
+  // no ref to pin, and an empty body would poison the scope's pin map.
+  const bodies = [
+    ...snapshotRefBodies(result.refs ?? []),
+    ...snapshotRefBodies(result.nodes ?? []),
+  ];
   mergeIntoScopedPins(refPinsByScope, scopeKey, bodies, refsGeneration);
 }
 

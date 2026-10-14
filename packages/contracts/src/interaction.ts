@@ -96,7 +96,7 @@ export type RecordingTargetOverride = {
  * captured itself, handed to the interaction leaf so the leaf does not resolve
  * the same `@ref` a second time.
  *
- * The sole producer is a mutating `find` (`src/daemon/interaction/internal/find.ts`): it
+ * The sole producer is a mutating `find` (`packages/daemon/src/execution/interaction/internal/find.ts`): it
  * captures, matches by locator, promotes to a hittable ancestor, and mints
  * `@eN` off the node it chose — then re-enters the interaction leaf. Without
  * this channel the leaf repeated an in-memory `@eN` lookup after find had
@@ -150,6 +150,9 @@ export type SurfaceScopedNodes = {
   surfaceBundleId?: string;
 };
 
+/** Which tree a resolved `@ref`'s node was read from (ADR 0014 step 5). */
+export type RefObservationSource = 'observation' | 'authorized-frame';
+
 export type ResolvedInteractionTarget =
   | {
       kind: 'point';
@@ -168,6 +171,16 @@ export type ResolvedInteractionTarget =
       resolution?: ResolutionDisclosure;
       recordingTarget?: RecordingTargetOverride;
       preAction?: SurfaceScopedNodes;
+      /**
+       * ADR 0014 step 5: which tree the dispatched node was read from, reported by the
+       * reconciliation that chose it. `'observation'` means the session's newest capture, so the
+       * node's rect is a position that capture measured; `'authorized-frame'` means the older tree
+       * the ref was authorized against, whose rect says nothing about where the target sits now.
+       * Reported rather than re-derived downstream from node or rect identity, so no caller can
+       * disagree with the rule after the rule has decided. Absent on a node a caller carried in
+       * (#1654), which no reconciliation chose.
+       */
+      adoptedFrom?: RefObservationSource;
     }
   | {
       kind: 'selector';
@@ -283,10 +296,10 @@ export type SettleParams = {
  */
 export type FindReadResult =
   | { kind: 'found'; found: true; waitedMs?: number }
-  | { kind: 'text'; ref: string; text: string; node: SnapshotNode }
-  | { kind: 'attrs'; ref: string; node: SnapshotNode }
+  | { kind: 'text'; ref?: string; text: string; node: SnapshotNode }
+  | { kind: 'attrs'; ref?: string; node: SnapshotNode }
   /** #1625: the read-only inspection surface — every match, never a tap. */
-  | { kind: 'list'; matches: Array<{ ref: string; node: SnapshotNode }> };
+  | { kind: 'list'; matches: Array<{ ref?: string; node: SnapshotNode }> };
 
 export type SettleObservation = {
   settled: boolean;
@@ -513,8 +526,9 @@ export type FindCommandResponseData = {
   waitedMs?: number;
   text?: string;
   node?: SnapshotNode;
-  /** Every match of the read-only `list` action (#1625), each ref pinnable at `refsGeneration`. */
-  matches?: Array<{ ref: string; node: SnapshotNode }>;
+  /** Every match of the read-only `list` action (#1625), each ref pinnable at `refsGeneration`. A
+   * match on content the capture's producer issued no ref for carries none: readable, not pinnable. */
+  matches?: Array<{ ref?: string; node: SnapshotNode }>;
   locator?: string;
   query?: string;
   x?: number;

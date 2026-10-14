@@ -27,7 +27,7 @@ test('managed agent-browser reports actionable guidance when install is missing'
       (error: unknown) =>
         error instanceof AppError &&
         error.code === 'TOOL_MISSING' &&
-        error.details?.installDir === path.join(stateDir, 'tools', 'agent-browser', '0.27.1') &&
+        error.details?.installDir === path.join(stateDir, 'tools', 'agent-browser', '0.39.0') &&
         error.details?.hint === expectedMissingInstallHint(),
     );
   } finally {
@@ -93,7 +93,7 @@ test('managed agent-browser passes the managed runtime home and socket dir to th
 test('managed agent-browser status ignores a bin shim without the backend package', () => {
   const stateDir = mkdtempForTestSync('agent-device-web-tool-');
   try {
-    const installDir = path.join(stateDir, 'tools', 'agent-browser', '0.27.1');
+    const installDir = path.join(stateDir, 'tools', 'agent-browser', '0.39.0');
     const binDir = path.join(installDir, 'package', 'node_modules', '.bin');
     fs.mkdirSync(binDir, { recursive: true });
     fs.writeFileSync(path.join(binDir, 'agent-browser'), '#!/bin/sh\nexit 0\n');
@@ -201,12 +201,12 @@ for (const scenario of [
       assert.deepEqual(npmSpawn?.args.slice(npmSpawn.args.indexOf('install')), [
         'install',
         '--prefix',
-        path.join(stateDir, 'tools', 'agent-browser', '0.27.1', 'package'),
+        path.join(stateDir, 'tools', 'agent-browser', '0.39.0', 'package'),
         '--no-global',
         '--no-audit',
         '--no-fund',
         '--no-save',
-        'agent-browser@0.27.1',
+        'agent-browser@0.39.0',
       ]);
     } finally {
       fs.rmSync(stateDir, { recursive: true, force: true });

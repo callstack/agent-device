@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Regenerates the checked-in layer-1 and layer-2 fixtures from the pinned
 // upstream Maestro artifacts. This is a manual, toolchain-heavy operation run
-// ONLY when the upstream pin changes — normal CI verifies the checked-in
+// when the upstream pin, corpus, or harness changes — normal CI verifies the checked-in
 // fixtures deterministically (no Java) via `verify.ts`.
 //
 // Steps:

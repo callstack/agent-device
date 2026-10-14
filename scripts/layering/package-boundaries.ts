@@ -8,7 +8,7 @@
 // Evidence: 76453add71 (#1494, #1490 W0) established the workspace split this rule protects;
 //   83322a3f2f (#1574) pinned exact facade symbols for every workspace package; #3279 moved the
 //   type-check onto `tsc -b` project references and retired the checks it now enforces.
-// Cost: 447 LOC (rule) + 978 LOC (test).
+// Cost: 510 LOC (rule) + 998 LOC (test).
 // Kill criterion: retire a remaining branch only when something owns its mechanism, not merely
 //   its symptom. An undeclared `workspace:*` sibling is type-clean and runtime-green INSIDE
 //   this repo because pnpm links every workspace package under the root `node_modules` — the
@@ -25,11 +25,18 @@
 // and via its package specifier instantiates twice in one process — duplicate AppError, broken
 // instanceof), and, for `scripts/` files which sit outside the type graph by design, the
 // root-side unknown-package and exports-map checks that compiled files get from TS2307.
+// On top, `TEST_ONLY_FIXTURE_SUBPATHS` mirrors R13's Android fixture gate for the non-platform
+// packages: a production file importing one of those fixture subpaths is an R11 violation, and
+// `CLIENT_ONLY_SUBPATHS` keeps the caller-side replay source collector out of daemon code.
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseImports } from './model.ts';
-import { listTrackedPackageManifests, listTrackedProductionSources } from './tracked-sources.ts';
+import { parseImports, resolveWorkspaceSpecifier } from './model.ts';
+import {
+  DAEMON_SOURCE_ROOT,
+  listTrackedPackageManifests,
+  listTrackedProductionSources,
+} from './tracked-sources.ts';
 
 export type PackageBoundaryViolation = {
   rule: string;
@@ -63,9 +70,30 @@ export type SpecifierSite = {
  * layering model's own parser, so static/dynamic/side-effect/re-export sites
  * and both quote styles are covered by one scanner instead of a private regex
  * that silently missed double-quoted routes.
+ *
+ * `vi.mock`/`vi.doMock`/`vi.mockActual`/`vi.unmock`/`vi.importActual` join the sweep
+ * by literal scan: they are plain call expressions the AST import parser never
+ * visits, yet the loader resolves their specifier and instantiates that module under
+ * test — the same double-instance route a relative tunnel takes. `importOriginal
+ * <typeof import('...')>` needs no extra branch; the parser already sees it as a
+ * TSImportType.
  */
+const VI_MOCK_CALL_RE =
+  /\bvi\.(?:mock|doMock|mockActual|unmock|importActual)\(\s*(['"])([^'"\n]*)\1/g;
+
 export function specifierSites(file: string, source: string): SpecifierSite[] {
-  return parseImports(source).map((edge) => ({ file, line: edge.line, specifier: edge.spec }));
+  const sites: SpecifierSite[] = parseImports(source).map((edge) => ({
+    file,
+    line: edge.line,
+    specifier: edge.spec,
+  }));
+  for (const match of source.matchAll(VI_MOCK_CALL_RE)) {
+    const line = source.slice(0, match.index).split('\n').length;
+    const specifier = match[2]!;
+    if (!sites.some((site) => site.line === line && site.specifier === specifier))
+      sites.push({ file, line, specifier });
+  }
+  return sites.sort((a, b) => a.line - b.line);
 }
 
 /**
@@ -140,6 +168,57 @@ function packageByName(packages: readonly WorkspacePackage[], name: string) {
   return packages.find((pkg) => pkg.name === name);
 }
 
+/**
+ * A specifier is named by the exports map when it matches a named key or resolves
+ * through a `*` pattern entry. Delegates to `resolveWorkspaceSpecifier` so every
+ * consumer (this rule, the layering edges, the depgraph, mutation ownership, and
+ * the Stryker alias table) applies one Node-exports semantics, not a private scan.
+ */
+function namedByExports(target: WorkspacePackage, specifier: string): boolean {
+  return resolveWorkspaceSpecifier(specifier, target.exportTargets) !== undefined;
+}
+
+const TEST_CONSUMER_RE = /(^|\/)__tests__\/|\.test\.[cm]?[jt]sx?$|(?:^|\/)test\//;
+
+/**
+ * The one file vocabulary for "this file consumes test data": the root `test/` tree, a
+ * package-local `test/` harness tree, `*.test.*` files, and `__tests__/` trees (root or
+ * nested). Both test-data gates call this — the `./testing/` façade check and the
+ * TEST_ONLY_FIXTURE_SUBPATHS predicate — so what counts as a test consumer is one rule,
+ * not two spellings that drift. Pinned by an accept/deny table in
+ * `package-boundaries-facade.test.ts`.
+ */
+export function isTestConsumerFile(file: string): boolean {
+  return TEST_CONSUMER_RE.test(file);
+}
+
+/**
+ * Façade policy (ADR-0033 amendment): a package publishes test data only under its
+ * `./testing/` namespace — named `./testing/<fixture>` entries and per-folder
+ * `./testing/<dir>/*` patterns — and only test files may import it. The gate is the
+ * namespace, not a pattern entry: narrowing the surface to exact keys must not
+ * smuggle a fixture past the test-file rule. Production code that reaches a fixture
+ * through the package boundary is production code depending on a test double — it
+ * must inject the real port instead.
+ */
+function checkTestDataOnlySites(
+  site: SpecifierSite,
+  target: WorkspacePackage,
+): PackageBoundaryViolation | undefined {
+  if (!site.specifier.startsWith(`${target.name}/testing/`)) return undefined;
+  if (!namedByExports(target, site.specifier)) return undefined;
+  if (isTestConsumerFile(site.file)) return undefined;
+  return {
+    rule: 'R11 package-boundaries',
+    file: site.file,
+    line: site.line,
+    message:
+      `'${site.specifier}' resolves through ${target.dir}/package.json#exports './testing/' ` +
+      `namespace, which publishes test data to test files only. '${site.file}' is not a test ` +
+      `file: import a production subpath or inject the port.`,
+  };
+}
+
 function specifierPackageName(specifier: string): string | undefined {
   const match = /^(@[^/]+\/[^/]+)/.exec(specifier);
   return match?.[1];
@@ -167,6 +246,45 @@ function specifierPackageName(specifier: string): string | undefined {
  */
 export function insideCompiledSources(file: string): boolean {
   return /^packages\/[^/]+\/src\//.test(file) || /^src\//.test(file) || /^test\//.test(file);
+}
+
+/**
+ * Workspace fixture subpaths only non-production files may import — the same claim R13's
+ * `ANDROID_TEST_ONLY_SUBPATHS` makes for the platform packages, which R13 cannot express for
+ * non-platform packages. A production file (root or package) importing one is a violation.
+ */
+export const TEST_ONLY_FIXTURE_SUBPATHS: ReadonlySet<string> = new Set([
+  '@agent-device/device-selection/inventory-gateways-fixtures',
+  '@agent-device/replay-port/replay-script-source-fixtures',
+]);
+
+/** Consumer side of `TEST_ONLY_FIXTURE_SUBPATHS`. */
+function importsTestOnlyFixtureFromProduction(file: string, specifier: string): boolean {
+  return TEST_ONLY_FIXTURE_SUBPATHS.has(specifier) && !isTestConsumerFile(file);
+}
+
+/**
+ * Caller-side replay source acquisition: the client reads script files from the caller's
+ * filesystem and ships their contents in the request. Daemon production code receives that
+ * bundle and must never read caller paths itself, so it may not import these subpaths.
+ */
+export const CLIENT_ONLY_SUBPATHS: ReadonlySet<string> = new Set([
+  '@agent-device/replay-port/script-source-bundle',
+  '@agent-device/replay-port/source-discovery',
+]);
+
+// The daemon process also runs its root entry and composition root, outside the daemon package.
+const DAEMON_PROCESS_ROOT_FILES: ReadonlySet<string> = new Set([
+  'src/daemon.ts',
+  'src/daemon-composition.ts',
+]);
+
+function importsClientOnlyFromDaemon(file: string, specifier: string): boolean {
+  return (
+    CLIENT_ONLY_SUBPATHS.has(specifier) &&
+    (file.startsWith(DAEMON_SOURCE_ROOT) || DAEMON_PROCESS_ROOT_FILES.has(file)) &&
+    !isTestConsumerFile(file)
+  );
 }
 
 /**
@@ -217,6 +335,26 @@ export function checkPackageInternalSites(
     }
     const name = specifierPackageName(site.specifier);
     if (!name || !name.startsWith('@agent-device/')) continue;
+    if (importsTestOnlyFixtureFromProduction(site.file, site.specifier)) {
+      violations.push({
+        rule: 'R11 package-boundaries',
+        file: site.file,
+        line: site.line,
+        message:
+          `'${site.specifier}' is a test-only fixture subpath — production code may not ` +
+          `import it; use the package's production subpath instead.`,
+      });
+    }
+    if (importsClientOnlyFromDaemon(site.file, site.specifier)) {
+      violations.push({
+        rule: 'R11 package-boundaries',
+        file: site.file,
+        line: site.line,
+        message:
+          `'${site.specifier}' reads caller-side replay sources — daemon code receives the ` +
+          `client's source bundle and may not read caller paths; take it from the request.`,
+      });
+    }
     const target = packageByName(allPackages, name);
     if (!target) {
       if (!compiled) {
@@ -239,7 +377,12 @@ export function checkPackageInternalSites(
           `in ${pkg.dir}/package.json ${pkg.workspaceDependencyField}.`,
       });
     }
-    if (!compiled && !target.exportTargets.has(site.specifier)) {
+    const testDataOnly = checkTestDataOnlySites(site, target);
+    if (testDataOnly) {
+      violations.push(testDataOnly);
+      continue;
+    }
+    if (!compiled && !namedByExports(target, site.specifier)) {
       violations.push({
         rule: 'R11 package-boundaries',
         file: site.file,
@@ -288,6 +431,26 @@ export function checkRootSites(
     }
     const name = specifierPackageName(site.specifier);
     if (!name || !name.startsWith('@agent-device/')) continue;
+    if (importsTestOnlyFixtureFromProduction(site.file, site.specifier)) {
+      violations.push({
+        rule: 'R11 package-boundaries',
+        file: site.file,
+        line: site.line,
+        message:
+          `'${site.specifier}' is a test-only fixture subpath — production code may not ` +
+          `import it; use the package's production subpath instead.`,
+      });
+    }
+    if (importsClientOnlyFromDaemon(site.file, site.specifier)) {
+      violations.push({
+        rule: 'R11 package-boundaries',
+        file: site.file,
+        line: site.line,
+        message:
+          `'${site.specifier}' reads caller-side replay sources — daemon code receives the ` +
+          `client's source bundle and may not read caller paths; take it from the request.`,
+      });
+    }
     const target = packageByName(packages, name);
     if (!target) {
       if (!compiled) {
@@ -310,7 +473,12 @@ export function checkRootSites(
           `package.json devDependencies.`,
       });
     }
-    if (!compiled && !target.exportTargets.has(site.specifier)) {
+    const testDataOnly = checkTestDataOnlySites(site, target);
+    if (testDataOnly) {
+      violations.push(testDataOnly);
+      continue;
+    }
+    if (!compiled && !namedByExports(target, site.specifier)) {
       violations.push({
         rule: 'R11 package-boundaries',
         file: site.file,

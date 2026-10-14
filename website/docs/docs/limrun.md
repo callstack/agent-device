@@ -18,6 +18,8 @@ agent-device connect limrun --platform android
 
 `--platform android` or `--platform ios` selects the instance type. `connect` checks the credentials for that platform without creating an instance.
 
+When you create an instance through agent-device, the creation request sends `User-Agent: agent-device-cli/<version>` so Limrun can attribute it to agent-device for revenue sharing.
+
 ## Drive an existing instance
 
 An agent in a sandbox can drive an instance that someone else created, such as the instance behind a live preview, without your organization's API key. Create the instance where the API key lives, then give the sandbox that instance's URL and token from its `status`:

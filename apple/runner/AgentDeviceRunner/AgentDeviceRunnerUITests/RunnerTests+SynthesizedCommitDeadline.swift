@@ -67,8 +67,8 @@ extension RunnerTests {
   /// already reported success. The expected value is the
   /// final text itself, and a settled mismatch is always reported: see
   /// `awaitSynthesizedReplacementCommitOutcome`'s doc comment. Text carrying a submit key is
-  /// skipped outright: the app may clear or rewrite the field on submit. So is a secure field,
-  /// whose value is never readable.
+  /// skipped outright: the app may clear or rewrite the field on submit. So is a field whose
+  /// value is unreadable: secure, or masked the way a React Native `secureTextEntry` input is.
   func awaitSynthesizedReplacementCommit(
     app: XCUIApplication,
     target: TextEntryTarget,
@@ -83,7 +83,7 @@ extension RunnerTests {
     let outcome = Self.awaitSynthesizedReplacementCommitOutcome(
       expectedText: expectedText,
       placeholder: ingredients.placeholder,
-      fieldIsSecure: ingredients.fieldIsSecure,
+      fieldIsUnreadable: ingredients.fieldIsUnreadable,
       now: { Date() },
       observe: ingredients.observe,
       waitForNextObservation: ingredients.waitForNextObservation
@@ -134,8 +134,8 @@ extension RunnerTests {
     expectedText: String
   ) -> (
     placeholder: String?,
-    fieldIsSecure: Bool,
-    observe: () -> String?,
+    fieldIsUnreadable: Bool,
+    observe: () -> TextValueRead,
     waitForNextObservation: () -> Void
   ) {
     let field = resolveTextEntryElement(app: app, target: target)
@@ -143,12 +143,16 @@ extension RunnerTests {
     let waitStartedAt = Date()
     return (
       placeholder: placeholder,
-      fieldIsSecure: field?.elementType == .secureTextField,
+      fieldIsUnreadable: textValueRead(for: field) == .unreadable,
       observe: {
-        let observedText = self.editableTextValue(
+        let observed = self.textValueRead(
           for: self.resolveTextEntryElement(app: app, target: target),
           treatingPlaceholderAsEmpty: true
         )
+        var observedText: String?
+        if case .text(let value) = observed {
+          observedText = value
+        }
         // Cadence evidence stays value-free: the polled value is user content typed through
         // `fill` and must never reach runner.log. Lengths and the expected-prefix walk
         // are enough to distinguish throttling (prefix grows slowly) from a wedge (it freezes).
@@ -157,7 +161,7 @@ extension RunnerTests {
           observedLen: observedText?.count ?? -1,
           expectedPrefixLen: observedText.map { Self.commonPrefixLength($0, expectedText) } ?? -1
         )
-        return observedText
+        return observed
       },
       // XCUI resolution shares the automation channel with the in-flight synthesized event.
       // Sparse reads let the target consume that event instead of continuously interrupting it.

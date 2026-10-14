@@ -1,5 +1,9 @@
-import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
-import { centerOfRect } from '@agent-device/kernel/snapshot';
+import type { RawSnapshotNode, Rect, SnapshotCoveringNode } from '@agent-device/kernel/snapshot';
+import {
+  centerOfRect,
+  formatRole,
+  SNAPSHOT_COVERING_LABEL_MAX_LENGTH,
+} from '@agent-device/kernel/snapshot';
 import { areRectsApproximatelyEqual, normalizeRect } from '@agent-device/kernel/rect-center';
 import { containsPoint, rectContains } from '@agent-device/kernel/rect';
 import {
@@ -113,12 +117,42 @@ export function annotateCoveredSnapshotNodes(
     ),
     coverCache: new Map(),
   };
-  const coveredPositions: number[] = [];
+  const coveredPositions: Array<{ position: number; coveredBy?: SnapshotCoveringNode }> = [];
   for (const [position, node] of nodes.entries()) {
     if (!isCandidateTouchNode(node)) continue;
-    if (findCoveringNode(scan, position, node, options)) coveredPositions.push(position);
+    const coveringNode = findCoveringNode(scan, position, node, options);
+    if (!coveringNode) continue;
+    const coveredBy = describeCoveringNode(coveringNode);
+    coveredPositions.push(coveredBy ? { position, coveredBy } : { position });
   }
   return annotateCoveredPositions(nodes, coveredPositions);
+}
+
+/** Presented roles that name a box rather than a surface a reader would recognize and dismiss. */
+const ANONYMOUS_CONTAINER_KINDS = new Set(['element', 'group', 'other']);
+
+/**
+ * The bounded, non-actionable description of the cover the scan found, or nothing when the cover has
+ * no name. No ref is ever carried — see {@link SnapshotCoveringNode}.
+ *
+ * A live iPhone 18 Pro capture pins the boundary: a `UIAlertController`'s container publishes as the
+ * generic `group` kind and is nameable only through the alert's title carried as its accessible
+ * label, so the refusal reads `the group "Confirm catalog refresh" at (41, 327 320x248)` and names
+ * the surface to dismiss. Strip that label and the same node would say `the group at (...)`, which
+ * points at a box nobody would recognize; an anonymous container of that shape therefore publishes
+ * no cover, and the refusal keeps its generic recovery. A named kind (`dialog`, `tab-bar`, `sheet`)
+ * still describes itself with no label to lean on.
+ */
+function describeCoveringNode(node: RawSnapshotNode): SnapshotCoveringNode | null {
+  const label = node.label?.trim();
+  const kind = formatRole(node.type ?? 'Element');
+  if (!label && ANONYMOUS_CONTAINER_KINDS.has(kind)) return null;
+  const rect = positiveRect(node.rect);
+  return {
+    kind,
+    ...(label ? { label: label.slice(0, SNAPSHOT_COVERING_LABEL_MAX_LENGTH) } : {}),
+    ...(rect ? { rect } : {}),
+  };
 }
 
 /** Applies backend-owned covered decisions through the same publication annotation contract. */
@@ -126,25 +160,26 @@ export function annotateSnapshotNodesCoveredByPolicy(
   nodes: RawSnapshotNode[],
   isCovered: (node: RawSnapshotNode) => boolean,
 ): RawSnapshotNode[] {
-  const coveredPositions: number[] = [];
+  const coveredPositions: Array<{ position: number; coveredBy?: undefined }> = [];
   for (const [position, node] of nodes.entries()) {
-    if (isCandidateTouchNode(node) && isCovered(node)) coveredPositions.push(position);
+    if (isCandidateTouchNode(node) && isCovered(node)) coveredPositions.push({ position });
   }
   return annotateCoveredPositions(nodes, coveredPositions);
 }
 
 function annotateCoveredPositions(
   nodes: RawSnapshotNode[],
-  coveredPositions: readonly number[],
+  coveredPositions: ReadonlyArray<{ position: number; coveredBy?: SnapshotCoveringNode }>,
 ): RawSnapshotNode[] {
   if (coveredPositions.length === 0) return nodes;
   const annotated = [...nodes];
-  for (const position of coveredPositions) {
+  for (const { position, coveredBy } of coveredPositions) {
     const node = nodes[position]!;
     annotated[position] = {
       ...node,
       hittable: false,
       interactionBlocked: 'covered' as const,
+      ...(coveredBy ? { coveredBy } : {}),
       presentationHints: mergeCoveredHint(node.presentationHints),
     };
   }
