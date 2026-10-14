@@ -125,7 +125,7 @@ against the exact input. Promote a discovered case with the command the harness 
 hand-copy an unshrunk input.
 
 Mutation scope: `scripts/mutation/modules.ts#KERNEL_MODULES` (weekly), `scripts/mutation/run.ts#LANE_SOURCES`
-(PR canary; `LANE_DEPENDENCIES` on dispatch). Scores are advisory; incomplete sweeps fail. Pilot protocol: `pnpm mutation:run --help`.
+(PR canary; dispatch adds `LANE_DEPENDENCIES`). Scores are advisory; incomplete sweeps fail. Pilot protocol: `pnpm mutation:run --help`.
 
 ## Before editing a shared module
 

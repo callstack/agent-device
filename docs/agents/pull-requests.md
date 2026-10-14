@@ -16,7 +16,7 @@ reported. If a gate fails, diagnose it and rerun after the cause is resolved; re
 failures without claiming validation passed. Rerun a failed CI job once only when its log shows an
 infrastructure fault (runner startup, network, device boot); the same failure twice is a finding.
 
-Push once per review round, not per fix: each push restarts every lane. Drafts skip device lanes.
+Push once per review round, not per fix: each push restarts CI. Drafts skip device lanes.
 
 - **Published**: branch pushed, PR opened, and validation recorded at a named commit.
 - **Merge-ready**: required checks pass on the actual head, with live evidence for device-facing
