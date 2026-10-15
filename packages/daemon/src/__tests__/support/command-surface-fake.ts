@@ -80,7 +80,12 @@ export const forwardingCreateCommandSurface: CreateDaemonCommandSurface = async 
     const session = await config.sessions?.get(name);
     const captured = await config.backend.captureSnapshot?.(
       { session: name, requestId: options.requestId, signal: options.signal ?? config.signal },
-      { interactiveOnly: options.interactiveOnly, depth: options.depth, scope: options.scope },
+      {
+        interactiveOnly: options.interactiveOnly,
+        depth: options.depth,
+        scope: options.scope,
+        raw: options.raw,
+      },
     );
     const stored = captured?.snapshot ?? {
       nodes: captured?.nodes ?? [],

@@ -61,3 +61,17 @@ test('the forwarding surface diff stores the observed tree and reports whether i
   expect(compared.baselineInitialized).toBe(false);
   expect(second.set).toHaveBeenCalledWith(expect.objectContaining({ snapshot }));
 });
+
+test('the forwarding surface hands the backend the capture options of both snapshot and diff', async () => {
+  const snapshot: SnapshotState = { nodes: [node], createdAt: 1, backend: 'android' };
+  const { config } = configReturning({ snapshot });
+  const surface = await forwardingCreateCommandSurface(config);
+  const options = { session: 'default', interactiveOnly: true, depth: 3, scope: '@e1', raw: true };
+
+  await surface.capture.snapshot(options);
+  await surface.capture.diffSnapshot(options);
+
+  const expected = { interactiveOnly: true, depth: 3, scope: '@e1', raw: true };
+  expect(config.backend.captureSnapshot).toHaveBeenNthCalledWith(1, expect.anything(), expected);
+  expect(config.backend.captureSnapshot).toHaveBeenNthCalledWith(2, expect.anything(), expected);
+});
