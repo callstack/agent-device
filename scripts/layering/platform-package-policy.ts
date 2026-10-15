@@ -175,6 +175,13 @@ function isWebPackageTestSelectorImport(file: string, family: string, specifier:
   );
 }
 
+function isTestKitTestImport(file: string, specifier: string): boolean {
+  return (
+    specifier === '@agent-device/test-kit' &&
+    (file.endsWith('.test.ts') || file.includes('/__tests__/') || file.includes('.fixtures.'))
+  );
+}
+
 function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): LayeringViolation[] {
   const violations: LayeringViolation[] = [];
   for (const family of CANONICAL_PLATFORM_FAMILIES) {
@@ -318,7 +325,8 @@ function checkSource(file: string, source: string): LayeringViolation[] {
       site.spec !== '@agent-device/xml' &&
       !isAppleFacadeSubpathImport(site.spec) &&
       !isPackageOwnedFacadeTest(file, ownerFamily, site.spec) &&
-      !isWebPackageTestSelectorImport(file, ownerFamily, site.spec)
+      !isWebPackageTestSelectorImport(file, ownerFamily, site.spec) &&
+      !isTestKitTestImport(file, site.spec)
     ) {
       violations.push(
         violation(

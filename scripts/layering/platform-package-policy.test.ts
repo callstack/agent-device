@@ -518,6 +518,25 @@ test('platform packages may use capture-kit but no unrelated workspace implement
   }
 });
 
+test('platform package tests may import test-kit, production source may not', () => {
+  const tests = validSources();
+  tests.set(
+    'packages/platform-apple/src/probe.test.ts',
+    "import { mkdtempForTest } from '@agent-device/test-kit';",
+  );
+  assert.deepEqual(checkPlatformPackagePolicy(tests, declarations()), []);
+
+  const production = validSources();
+  production.set(
+    'packages/platform-apple/src/probe.ts',
+    "import { mkdtempForTest } from '@agent-device/test-kit';",
+  );
+  assert.match(
+    messages(production).join('\n'),
+    /may import workspace code only from capture-kit, host-kit, provision-kit, contracts, kernel, or xml/,
+  );
+});
+
 test('package-owned tests may import their own public facade', () => {
   const sources = validSources();
   sources.set(
