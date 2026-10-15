@@ -42,6 +42,11 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: >-
+    ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   check:
     name: Prose, internal links, and heading anchors

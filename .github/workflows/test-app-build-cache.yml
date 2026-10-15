@@ -26,6 +26,11 @@ permissions:
   # Look up whether this fingerprint's artifact already exists across runs.
   actions: read
 
+concurrency:
+  group: >-
+    ci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   fingerprint:
     name: Resolve native fingerprint
