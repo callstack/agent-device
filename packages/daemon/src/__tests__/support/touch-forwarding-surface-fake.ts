@@ -91,7 +91,8 @@ export function touchForwardingCreateCommandSurface(
       if (target.kind === 'point') return { point: { x: target.x, y: target.y }, target };
       if (target.kind === 'ref') {
         const record = await config.sessions?.get(context.session ?? 'default');
-        const nodes = record?.snapshot?.nodes ?? [];
+        const tree = record?.refFrameSnapshot ?? record?.snapshot;
+        const nodes = tree?.nodes ?? [];
         const node = nodes.find((candidate) => candidate.ref === refBody(target.ref));
         if (!node?.rect) {
           throw new AppError('COMMAND_FAILED', `Ref ${target.ref} not found`, {
@@ -105,7 +106,7 @@ export function touchForwardingCreateCommandSurface(
           node,
           nodes,
           selectorChain: chainFor(node, nodes),
-          snapshotQuality: record?.snapshot?.snapshotQuality,
+          snapshotQuality: tree?.snapshotQuality,
         };
       }
       const { nodes, snapshotQuality } = await captureAndStoreSnapshot(config, {

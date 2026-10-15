@@ -30,13 +30,24 @@ test('a selector press retries a miss on the full tree and keeps the unsettled g
   const interactive = { ...movingList('Wi-Fi'), postGestureOutcome: UNSETTLED };
   const full = movingList('Wi-Fi');
   const captures = [interactive, full];
+  const taps: unknown[] = [];
   const device = createInteractionDevice(movingList('Wi-Fi'), {
     captureSnapshot: async () => ({ snapshot: captures.shift() ?? full }),
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
   });
 
-  await assert.rejects(() =>
-    device.interactions.press(selector('label="General"'), { session: 'default' }),
+  await assert.rejects(
+    () => device.interactions.press(selector('label="General"'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'selector_not_found');
+      assert.equal(details?.dispatched, 'no');
+      return true;
+    },
   );
-
+  assert.deepEqual(taps, []);
   assert.deepEqual(full.postGestureOutcome, UNSETTLED);
 });

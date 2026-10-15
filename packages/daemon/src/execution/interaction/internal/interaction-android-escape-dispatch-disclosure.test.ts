@@ -53,6 +53,9 @@ for (const row of ROWS) {
     assert.ok(drive, `no driver for ${row.id}`);
     await assert.rejects(drive(), (error: unknown) => {
       assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.expectedPackage, 'com.example.app');
+      assert.equal(error.details?.foregroundPackage, 'com.android.settings');
       assert.equal(error.details?.dispatched, row.dispatched);
       return true;
     });
