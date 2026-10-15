@@ -120,10 +120,6 @@
       "types": "./src/daemon-port/session-test-shard-devices.ts",
       "default": "./src/daemon-port/session-test-shard-devices.ts"
     },
-    "./session-test-source-discovery": {
-      "types": "./src/daemon-port/session-test-source-discovery.ts",
-      "default": "./src/daemon-port/session-test-source-discovery.ts"
-    },
     "./target-classification": {
       "types": "./src/daemon-port/target-classification.ts",
       "default": "./src/daemon-port/target-classification.ts"
