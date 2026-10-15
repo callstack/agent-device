@@ -1881,7 +1881,7 @@ const CLI_COMMAND_NAMES = new Set<string>(
  * claims. Classifications are pinned as literal command-name lists, so reclassifying or
  * renaming a command they name means editing that list in the same diff: the device-claim
  * deviating set in
- * `packages/command-registry/src/__tests__/device-claim-policy.test.ts`; the timeout
+ * `packages/command-registry/src/__tests__/registry-device-claim-policy.test.ts`; the timeout
  * envelopes and budgets in `src/__tests__/command-descriptor-timeout-policy.test.ts` (a
  * declared trait since `b25ef7b024` #1084); and the `targetIdentityVerification` and
  * `'core'` tier sets, plus the tier-iff-public rule, in
