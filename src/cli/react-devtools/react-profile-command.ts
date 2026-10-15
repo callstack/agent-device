@@ -1,24 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseArgs } from 'node:util';
 import { AppError } from '@agent-device/kernel/errors';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
-import type { CliFlags } from '@agent-device/contracts/command';
-import { resolveMetroServerUrl } from '../../metro/metro-reload-endpoints.ts';
-import { readMetroSessionHints } from '../../metro/metro-session-hints.ts';
-import { isRemoteBridgeBackend } from '../commands/remote-bridge.ts';
+import { targetAppId, type InspectorSession } from './metro-inspector.ts';
 import {
-  InspectorSession,
-  listMetroInspectorTargets,
-  selectReactNativeTarget,
-  targetAppId,
-  type MetroInspectorTarget,
-} from './metro-inspector.ts';
-import {
-  REACT_PROFILER_RUNTIME_GLOBAL,
-  REACT_PROFILER_RUNTIME_SOURCE,
-  REACT_PROFILER_RUNTIME_VERSION,
-} from './react-profiler-runtime.ts';
+  callRuntime,
+  emitTo,
+  parseDevtoolsArgs,
+  runtimeFailure,
+  RUNTIME_OPTIONS,
+  withAppRuntime,
+  type CommandForm,
+  type DevtoolsArgs,
+  type Emit,
+  type ReactDevtoolsCommandOptions,
+  type RuntimeFailure,
+} from './react-devtools-connection.ts';
 import {
   analyzeReactProfile,
   isFindingFor,
@@ -47,22 +44,7 @@ const REACT_PROFILE_SUBCOMMANDS = ['start', 'stop', 'report', 'commit'] as const
 
 type ReactProfileSubcommand = (typeof REACT_PROFILE_SUBCOMMANDS)[number];
 
-export type ReactProfileCommandOptions = {
-  flags?: Partial<Pick<CliFlags, 'json' | 'leaseBackend' | 'metroPublicBaseUrl'>>;
-  stateDir: string;
-  session: string;
-};
-
-type ProfileArgs = {
-  subcommand: ReactProfileSubcommand;
-  target?: string;
-  limit?: number;
-  app?: string;
-  metroDevice?: string;
-  metroHost?: string;
-  metroPort?: string;
-  bundleUrl?: string;
-};
+type ProfileArgs = DevtoolsArgs & { subcommand: ReactProfileSubcommand; target?: string };
 
 const SAVED_PROFILE_VERSION = 2;
 
@@ -80,51 +62,25 @@ type SavedReactProfile = {
   notes: string[];
 };
 
-type RuntimeFailure = { ok: false; reason: string; elapsedMs?: number; detail?: string };
 type StartResult = { ok: true; attach: string } | RuntimeFailure;
 type StopResult = ({ ok: true; failures: string[] } & RawReactProfile) | RuntimeFailure;
-
-const SUBCOMMANDS_WITH_TARGET = new Set<ReactProfileSubcommand>(['report', 'commit']);
-const POSITIVE_INTEGER = /^[1-9]\d*$/;
 
 function isReactProfileSubcommand(value: string | undefined): value is ReactProfileSubcommand {
   return REACT_PROFILE_SUBCOMMANDS.includes(value as ReactProfileSubcommand);
 }
 
-const PROFILE_OPTIONS = {
-  limit: { type: 'string' },
-  app: { type: 'string' },
-  'metro-device': { type: 'string' },
-  'metro-host': { type: 'string' },
-  'metro-port': { type: 'string' },
-  'bundle-url': { type: 'string' },
-} as const;
-
-type ProfileOption = keyof typeof PROFILE_OPTIONS;
-
-const RUNTIME_OPTIONS: readonly ProfileOption[] = [
-  'app',
-  'metro-device',
-  'metro-host',
-  'metro-port',
-  'bundle-url',
-];
-
-/** The options each subcommand reads; any other option is refused rather than ignored. */
-function subcommandOptions(
-  subcommand: ReactProfileSubcommand,
-  target: string | undefined,
-): readonly ProfileOption[] {
-  if (subcommand === 'start') return RUNTIME_OPTIONS;
-  if (subcommand === 'stop') return [...RUNTIME_OPTIONS, 'limit'];
-  return subcommand === 'report' && target !== undefined ? [] : ['limit'];
-}
-
-function parseProfileOptions(args: string[]) {
-  try {
-    return parseArgs({ args, allowPositionals: true, strict: true, options: PROFILE_OPTIONS });
-  } catch (error) {
-    throw new AppError('INVALID_ARGS', error instanceof Error ? error.message : String(error));
+function profileForm(subcommand: ReactProfileSubcommand, target: string | undefined): CommandForm {
+  switch (subcommand) {
+    case 'start':
+      return { usage: 'profile start', positionals: 0, options: RUNTIME_OPTIONS };
+    case 'stop':
+      return { usage: 'profile stop', positionals: 0, options: [...RUNTIME_OPTIONS, 'limit'] };
+    case 'report':
+      return target === undefined
+        ? { usage: 'profile report', positionals: 1, options: ['limit'] }
+        : { usage: 'profile report <Component>', positionals: 1, options: [] };
+    case 'commit':
+      return { usage: 'profile commit', positionals: 1, options: ['limit'] };
   }
 }
 
@@ -137,136 +93,16 @@ function parseProfileArgs(args: string[]): ProfileArgs {
       { hint: `Use one of: ${REACT_PROFILE_SUBCOMMANDS.join(', ')}.` },
     );
   }
-  const { values, positionals } = parseProfileOptions(rest);
-  const unread = (Object.keys(values) as ProfileOption[]).find(
-    (option) => !subcommandOptions(subcommand, positionals[0]).includes(option),
-  );
-  if (unread) {
-    const form = subcommand === 'report' && positionals[0] ? 'report <Component>' : subcommand;
-    throw new AppError('INVALID_ARGS', `react-devtools profile ${form} does not take --${unread}.`);
-  }
-  const expected = SUBCOMMANDS_WITH_TARGET.has(subcommand) ? 1 : 0;
-  if (positionals.length > expected) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Unexpected argument for react-devtools profile ${subcommand}: ${positionals[expected]}.`,
-    );
-  }
-  if (values.limit !== undefined && !POSITIVE_INTEGER.test(values.limit)) {
-    throw new AppError('INVALID_ARGS', `Invalid --limit: ${values.limit}. Use a positive integer.`);
-  }
-  const limit = values.limit === undefined ? undefined : Number(values.limit);
-  return {
-    subcommand,
-    target: positionals[0],
-    limit,
-    app: values.app,
-    metroDevice: values['metro-device'],
-    metroHost: values['metro-host'],
-    metroPort: values['metro-port'],
-    bundleUrl: values['bundle-url'],
-  };
+  const parsed = parseDevtoolsArgs(rest, (positionals) => profileForm(subcommand, positionals[0]));
+  return { ...parsed, subcommand, target: parsed.positionals[0] };
 }
 
-/** Explicit flags, then a remote bridge's public dev-server URL, then the session's Metro binding. */
-function resolveDevServerUrl(args: ProfileArgs, options: ReactProfileCommandOptions): URL {
-  const publicBaseUrl = options.flags?.metroPublicBaseUrl?.trim();
-  const explicit =
-    args.metroHost !== undefined || args.metroPort !== undefined || args.bundleUrl !== undefined;
-  if (!explicit && publicBaseUrl && isRemoteBridgeBackend(options.flags?.leaseBackend)) {
-    return resolveMetroServerUrl({ bundleUrl: publicBaseUrl });
-  }
-  const binding = explicit
-    ? undefined
-    : readMetroSessionHints({ stateDir: options.stateDir, session: options.session });
-  return resolveMetroServerUrl({
-    metroHost: args.metroHost,
-    metroPort: args.metroPort,
-    bundleUrl: args.bundleUrl,
-    runtime: binding ? { bundleUrl: binding.controlBaseUrl } : undefined,
-  });
-}
-
-async function withAppRuntime<T>(
-  args: ProfileArgs,
-  options: ReactProfileCommandOptions,
-  action: (session: InspectorSession, target: MetroInspectorTarget) => Promise<T>,
-): Promise<T> {
-  const serverUrl = resolveDevServerUrl(args, options);
-  const target = selectReactNativeTarget(await listMetroInspectorTargets(serverUrl), {
-    appId: args.app,
-    device: args.metroDevice,
-  });
-  const session: InspectorSession = await InspectorSession.connect(target.webSocketDebuggerUrl);
-  try {
-    await session.evaluate(
-      `(${REACT_PROFILER_RUNTIME_SOURCE})(${JSON.stringify(REACT_PROFILER_RUNTIME_VERSION)})`,
-    );
-    return await action(session, target);
-  } finally {
-    session.close();
-  }
-}
-
-async function callRuntime<T>(
-  session: InspectorSession,
-  method: string,
-  argument?: unknown,
-): Promise<T> {
-  const call = `${REACT_PROFILER_RUNTIME_GLOBAL}.${method}(${argument === undefined ? '' : JSON.stringify(argument)})`;
-  const value = await session.evaluate(call);
-  if (typeof value !== 'string') {
-    throw new AppError('COMMAND_FAILED', `The profiler runtime returned no result for ${method}.`);
-  }
-  return JSON.parse(value) as T;
-}
-
-const RUNTIME_FAILURES: Record<string, { message: string; hint: string }> = {
-  'no-devtools-hook': {
-    message: 'The app runtime has no React DevTools hook.',
-    hint: 'Profile a development build; release builds do not include React DevTools.',
-  },
-  'no-react-renderer': {
-    message: 'React has not rendered in this app runtime yet.',
-    hint: 'Wait for the app to finish loading its bundle, then retry.',
-  },
-  'no-devtools-backend': {
-    message: 'This React Native version exposes no React DevTools backend to attach to.',
-    hint: 'React Native 0.74 or newer is required.',
-  },
-  'backend-attach-failed': {
-    message: 'The React DevTools backend did not attach to the app renderer.',
-    hint: 'Reload the app and retry.',
-  },
-  'start-failed': {
-    message: 'The React renderer refused to start profiling.',
-    hint: 'Profile a development build; production renderers do not record render timings.',
-  },
-  'not-profiling': {
-    message: 'No React profile is recording in this app runtime.',
-    hint: 'Run react-devtools profile start first. A reload or app restart discards a recording.',
-  },
-  'collect-failed': {
-    message: 'The React DevTools backend could not export the recorded profile.',
-    hint: 'Run react-devtools profile start and stop again; reload the app if it keeps failing.',
-  },
-};
-
-function runtimeFailure(result: RuntimeFailure): AppError {
-  const known = RUNTIME_FAILURES[result.reason];
-  const message = known?.message ?? `React profiling failed: ${result.reason}.`;
-  return new AppError('COMMAND_FAILED', result.detail ? `${message} ${result.detail}` : message, {
-    reason: result.reason,
-    ...(known ? { hint: known.hint } : {}),
-  });
-}
-
-function savedProfilePath(options: ReactProfileCommandOptions): string {
+function savedProfilePath(options: ReactDevtoolsCommandOptions): string {
   return path.join(options.stateDir, 'react-profiles', `${safeSessionName(options.session)}.json`);
 }
 
 function writeSavedProfile(
-  options: ReactProfileCommandOptions,
+  options: ReactDevtoolsCommandOptions,
   profile: SavedReactProfile,
 ): string {
   const filePath = savedProfilePath(options);
@@ -284,7 +120,7 @@ function isSavedProfile(value: SavedReactProfile | undefined): value is SavedRea
   );
 }
 
-function readSavedAnalysis(options: ReactProfileCommandOptions): ReactProfileAnalysis {
+function readSavedAnalysis(options: ReactDevtoolsCommandOptions): ReactProfileAnalysis {
   let raw: string;
   try {
     raw = fs.readFileSync(savedProfilePath(options), 'utf8');
@@ -311,7 +147,7 @@ const elapsed = (elapsedMs: number) => formatSeconds(Math.max(0, elapsedMs));
 
 async function startProfile(
   args: ProfileArgs,
-  options: ReactProfileCommandOptions,
+  options: ReactDevtoolsCommandOptions,
 ): Promise<{ app: string; message: string }> {
   return await withAppRuntime(args, options, async (session, target) => {
     const result = await callRuntime<StartResult>(session, 'start');
@@ -355,7 +191,7 @@ async function describeChangedProps(
 
 async function stopProfile(
   args: ProfileArgs,
-  options: ReactProfileCommandOptions,
+  options: ReactDevtoolsCommandOptions,
 ): Promise<{ appId: string; analysis: ReactProfileAnalysis }> {
   return await withAppRuntime(args, options, async (session, target) => {
     const result = await callRuntime<StopResult>(session, 'stop');
@@ -380,10 +216,9 @@ async function stopProfile(
   });
 }
 
-type Emit = (text: string, data: unknown) => void;
 type SubcommandHandler = (
   args: ProfileArgs,
-  options: ReactProfileCommandOptions,
+  options: ReactDevtoolsCommandOptions,
   emit: Emit,
 ) => Promise<void>;
 
@@ -465,14 +300,9 @@ const SUBCOMMAND_HANDLERS: Record<ReactProfileSubcommand, SubcommandHandler> = {
 
 export async function runReactProfileCommand(
   args: string[],
-  options: ReactProfileCommandOptions,
+  options: ReactDevtoolsCommandOptions,
 ): Promise<number> {
-  const json = options.flags?.json === true;
   const parsed = parseProfileArgs(args);
-  await SUBCOMMAND_HANDLERS[parsed.subcommand](parsed, options, (text, data) => {
-    process.stdout.write(
-      json ? `${JSON.stringify({ success: true, data }, null, 2)}\n` : `${text}\n`,
-    );
-  });
+  await SUBCOMMAND_HANDLERS[parsed.subcommand](parsed, options, emitTo(options));
   return 0;
 }

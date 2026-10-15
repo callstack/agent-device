@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
 
 /** Global the runtime installs itself on inside the app's JavaScript runtime. */
-export const REACT_PROFILER_RUNTIME_GLOBAL = '__AGENT_DEVICE_REACT_PROFILER__';
+export const REACT_DEVTOOLS_RUNTIME_GLOBAL = '__AGENT_DEVICE_REACT_DEVTOOLS__';
 
 /**
  * Source evaluated inside the app through CDP `Runtime.evaluate`. It installs
- * `globalThis.__AGENT_DEVICE_REACT_PROFILER__` once per JavaScript runtime; every host command is
+ * `globalThis.__AGENT_DEVICE_REACT_DEVTOOLS__` once per JavaScript runtime; every host command is
  * then a one-line call returning a JSON string. Hermes evaluates it unbundled, so it stays ES5.
  *
  * It drives the React DevTools backend that React Native dev builds already ship:
@@ -14,26 +14,35 @@ export const REACT_PROFILER_RUNTIME_GLOBAL = '__AGENT_DEVICE_REACT_PROFILER__';
  *   discarding frontend binding stands in until a real frontend replaces it.
  * - Older versions attach them through `react-devtools-core`'s custom messaging connection.
  *
- * Component names come from the backend's `operations` stream. Without a frontend the backend
- * queues those batches forever, so the runtime flushes the queue once, which replays the tree
- * from app start and switches the backend to emitting each commit's batch. When another DevTools
- * agent already consumes the stream, its frontend owns the queue: the runtime only reads the
- * batches that follow and looks up the names it missed.
+ * Component names, keys, the tree, and per-component error and warning counts come from the
+ * backend's `operations` stream. Without a frontend the backend queues those batches forever, so
+ * the runtime flushes the queue once, which replays the tree from app start and switches the
+ * backend to emitting each commit's batch. When another DevTools agent already consumes the
+ * stream, its frontend owns the queue: the runtime only reads the batches that follow and looks up
+ * the names it missed, and it has no tree to offer.
+ *
+ * Props, state, hooks, and owners come from the backend's `inspectElement`, the call the DevTools
+ * frontend makes when a component is selected.
  */
-export const REACT_PROFILER_RUNTIME_SOURCE = String.raw`
+export const REACT_DEVTOOLS_RUNTIME_SOURCE = String.raw`
 (function (VERSION) {
   var g = globalThis;
-  var previous = g.__AGENT_DEVICE_REACT_PROFILER__;
+  var previous = g.__AGENT_DEVICE_REACT_DEVTOOLS__;
   if (previous && previous.version === VERSION) return 'ready';
   var inherited = previous && previous.elements instanceof Map ? previous.elements : null;
   var inheritedHistory = !!(previous && previous.history);
+  var inheritedOrder = previous && previous.order instanceof Map ? previous.order : null;
+  var inheritedLogs = previous && previous.logs instanceof Map ? previous.logs : null;
   if (previous && typeof previous.dispose === 'function') previous.dispose();
 
   var BINDING = '__CHROME_DEVTOOLS_FRONTEND_BINDING__';
   var ROOT_TYPE = 11;
   var KNOWN_TYPES = { 1: 1, 2: 1, 5: 1, 6: 1, 7: 1, 8: 1, 9: 1, 10: 1, 11: 1, 12: 1, 13: 1, 14: 1, 15: 1, 16: 1, 17: 1 };
   var elements = inherited || new Map();
+  var order = inheritedOrder || new Map();
+  var logs = inheritedLogs || new Map();
   var history = inheritedHistory;
+  var nextRequestID = 1;
   var decodable = true;
   var unsubscribe = null;
   var session = null;
@@ -62,24 +71,36 @@ export const REACT_PROFILER_RUNTIME_SOURCE = String.raw`
         if (KNOWN_TYPES[type] !== 1) return false;
         if (type !== ROOT_TYPE) {
           var nameIndex = ops[i + 5];
-          if (nameIndex >= strings.length) return false;
-          elements.set(id, [strings[nameIndex] || 'Anonymous', type, ops[i + 4], ops[i + 3]]);
+          var keyIndex = ops[i + 6];
+          if (nameIndex >= strings.length || keyIndex >= strings.length) return false;
+          elements.set(id, [strings[nameIndex] || 'Anonymous', type, ops[i + 4], ops[i + 3], strings[keyIndex]]);
         }
         i += 7;
       } else if (op === 2) {
-        for (var r = 0; r < ops[i + 1]; r++) {
-          if (session) session.removed.push(ops[i + 2 + r]);
-          else elements.delete(ops[i + 2 + r]);
-        }
+        for (var r = 0; r < ops[i + 1]; r++) forget(ops[i + 2 + r]);
         i += 2 + ops[i + 1];
-      } else if (op === 3) i += 3 + ops[i + 2];
-      else if (op === 4) i += 3;
-      else if (op === 5) i += 4;
+      } else if (op === 3) {
+        order.set(ops[i + 1], ops.slice(i + 3, i + 3 + ops[i + 2]));
+        i += 3 + ops[i + 2];
+      } else if (op === 4) i += 3;
+      else if (op === 5) {
+        if (ops[i + 2] || ops[i + 3]) logs.set(ops[i + 1], [ops[i + 2], ops[i + 3]]);
+        else logs.delete(ops[i + 1]);
+        i += 4;
+      }
       else if (op === 6) i += 1;
       else if (op === 7) i += 3;
       else return false;
     }
     return true;
+  }
+
+  /** A profile keeps the names of what unmounts while it records; the tree drops them at once. */
+  function forget(id) {
+    order.delete(id);
+    logs.delete(id);
+    if (session) session.removed.push(id);
+    else elements.delete(id);
   }
 
   function naming() { return history && decodable ? 'operations' : 'lookup'; }
@@ -256,13 +277,12 @@ export const REACT_PROFILER_RUNTIME_SOURCE = String.raw`
 
   function describeProps(request) {
     var out = Object.create(null);
-    var requestID = 1;
     Object.keys(request).forEach(function (id) {
       var keys = request[id];
       eachRenderer(function (ri) {
         if (out[id]) return;
         var inspected;
-        try { inspected = ri.inspectElement(requestID++, Number(id), null, true); } catch (e) { return; }
+        try { inspected = ri.inspectElement(nextRequestID++, Number(id), null, true); } catch (e) { return; }
         if (!inspected || inspected.type !== 'full-data' || !inspected.value || !inspected.value.props) return;
         var props = inspected.value.props;
         var data = props.data !== undefined ? props.data : props;
@@ -272,6 +292,61 @@ export const REACT_PROFILER_RUNTIME_SOURCE = String.raw`
       });
     });
     return out;
+  }
+
+  function tree() {
+    var attached = attach();
+    if (!attached.ok) return attached;
+    if (naming() !== 'operations') return { ok: false, reason: 'tree-unavailable' };
+    var unmounted = Object.create(null);
+    if (session) session.removed.forEach(function (id) { unmounted[id] = true; });
+    var nodes = [];
+    elements.forEach(function (element, id) {
+      if (!unmounted[id]) nodes.push([id, element[0], element[1], element[3], element[2], element[4] == null ? null : element[4]]);
+    });
+    var childOrder = Object.create(null);
+    order.forEach(function (children, id) { childOrder[id] = children; });
+    var counts = Object.create(null);
+    logs.forEach(function (count, id) { counts[id] = count; });
+    return { ok: true, nodes: nodes, order: childOrder, logs: counts };
+  }
+
+  function inspectOne(id) {
+    var found = null;
+    eachRenderer(function (ri) {
+      if (found || (ri.hasElementWithId && !ri.hasElementWithId(id))) return;
+      var result;
+      try { result = ri.inspectElement(nextRequestID++, id, null, true); } catch (e) {
+        found = { error: String(e && e.message || e) };
+        return;
+      }
+      if (!result || result.type === 'not-found') return;
+      if (result.type !== 'full-data') { found = { error: result.message || result.type }; return; }
+      var value = result.value;
+      var known = elements.get(id);
+      found = {
+        name: known ? known[0] : lookupName(ri, id),
+        type: value.type,
+        key: value.key == null ? null : value.key,
+        props: value.props,
+        state: value.state,
+        hooks: value.hooks,
+        context: value.context,
+        owners: value.owners,
+        errors: value.errors,
+        warnings: value.warnings,
+        isErrored: !!value.isErrored
+      };
+    });
+    return found || { missing: true };
+  }
+
+  function inspect(ids) {
+    var attached = attach();
+    if (!attached.ok) return attached;
+    var out = Object.create(null);
+    ids.forEach(function (id) { out[id] = inspectOne(id); });
+    return { ok: true, elements: out };
   }
 
   function start() {
@@ -315,13 +390,17 @@ export const REACT_PROFILER_RUNTIME_SOURCE = String.raw`
     session = null;
   }
 
-  g.__AGENT_DEVICE_REACT_PROFILER__ = {
+  g.__AGENT_DEVICE_REACT_DEVTOOLS__ = {
     version: VERSION,
     elements: elements,
+    order: order,
+    logs: logs,
     get history() { return history; },
     start: function () { return JSON.stringify(start()); },
     stop: function () { return JSON.stringify(stop()); },
     describeProps: function (request) { return JSON.stringify(describeProps(request)); },
+    tree: function () { return JSON.stringify(tree()); },
+    inspect: function (ids) { return JSON.stringify(inspect(ids)); },
     dispose: dispose
   };
   return 'installed';
@@ -332,7 +411,7 @@ export const REACT_PROFILER_RUNTIME_SOURCE = String.raw`
  * Identity of this runtime source. An app that holds a runtime with another identity replaces it
  * instead of calling into an incompatible one.
  */
-export const REACT_PROFILER_RUNTIME_VERSION = createHash('sha256')
-  .update(REACT_PROFILER_RUNTIME_SOURCE)
+export const REACT_DEVTOOLS_RUNTIME_VERSION = createHash('sha256')
+  .update(REACT_DEVTOOLS_RUNTIME_SOURCE)
   .digest('hex')
   .slice(0, 16);

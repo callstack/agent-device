@@ -522,7 +522,11 @@ test('usageForCommand resolves macos help topic', async () => {
 test('usageForCommand resolves react-devtools help topic', async () => {
   const help = await usageForCommand('react-devtools');
   if (help === null) throw new Error('Expected react-devtools help text');
-  assert.match(help, /React Native performance profiling/);
+  assert.match(help, /React Native internals the accessibility tree cannot show/);
+  assert.match(help, /agent-device react-devtools tree \[@ref\|Name\]/);
+  assert.match(help, /agent-device react-devtools find <Name> \[--exact\]/);
+  assert.match(help, /agent-device react-devtools inspect <@ref\|Name>/);
+  assert.match(help, /agent-device react-devtools errors/);
   assert.match(help, /agent-device react-devtools profile start/);
   assert.match(help, /agent-device react-devtools profile report \[Component\]/);
   assert.match(help, /agent-device react-devtools profile commit \[N\]/);
@@ -541,7 +545,7 @@ test('usageForCommand resolves react-devtools help topic', async () => {
   assert.match(help, /logs clear --restart before the first logs mark/);
   assert.match(help, /Do not repeatedly raise table limits/);
   assert.match(help, /agent-device logs mark "before catalog search"/);
-  assert.match(help, /Every profiling command is an agent-device subcommand/);
+  assert.match(help, /Every command is an agent-device subcommand/);
   assert.match(help, /agent-device network dump --include headers/);
   assert.doesNotMatch(
     help,
@@ -580,8 +584,11 @@ test('usageForCommand resolves react-native help topic', async () => {
   assert.match(help, /Multiple local worktrees can reuse one native iOS simulator build/);
   assert.match(help, /--metro-host 127\.0\.0\.1 --metro-port 8081/);
   assert.match(help, /One simulator cannot run two copies of the same bundle id/);
-  assert.match(help, /Keep the agent-device react-devtools prefix on every profiling command/);
-  assert.match(help, /Use help react-devtools for render profiles/);
+  assert.match(help, /Keep the agent-device react-devtools prefix on every React DevTools command/);
+  assert.match(
+    help,
+    /Use help react-devtools for component trees, props\/state\/hooks, render profiles/,
+  );
   assert.match(help, /Keep the agent-device cdp prefix/);
   assert.match(help, /Use help cdp for JS heap usage samples/);
   assert.match(help, /logs clear --restart/);
@@ -623,7 +630,7 @@ test('commands topic renders concise commands inline with descriptions', async (
   assert.match(help, / {2}metro\s{2,}Prepare the dev server or reload apps/);
   assert.match(help, / {2}perf\s{2,}Check frames, memory, or native profiles/);
   assert.match(help, / {2}cdp\s{2,}Inspect CDP targets, JS heap, and leaks/);
-  assert.match(help, / {2}react-devtools\s{2,}React Native performance profiling/);
+  assert.match(help, / {2}react-devtools\s{2,}React Native components, props\/state\/hooks/);
   assert.match(help, / {2}proxy\s{2,}Expose a local daemon through an HTTP tunnel/);
   assert.match(help, / {2}batch --steps <json> \| --steps-file <path>\s{2,}Run multiple commands/);
   assert.match(help, / {2}test <path-or-glob>\.\.\.\s{2,}Run replay test suites/);

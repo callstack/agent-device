@@ -78,8 +78,8 @@ export function isFrameworkPrimitive(name: string): boolean {
 const CHANGE_CONTEXT = 1;
 const CHANGE_HOOKS = 2;
 
-/** `[name, elementType, ownerId, parentId]` as recorded from the backend's tree operations. */
-type RawProfileElement = [string, number, number, number];
+/** `[name, elementType, ownerId, parentId, key]` as recorded from the backend's tree operations. */
+type RawProfileElement = [string, number, number, number, (string | null)?];
 /** `1` marks a first mount; otherwise `[bits, propKeyIndexes, stateKeyIndexes, hookIndexes]`. */
 export type RawProfileChange = 1 | [number, number[] | null, number[] | null, number[] | null];
 

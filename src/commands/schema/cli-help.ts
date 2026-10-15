@@ -132,7 +132,7 @@ Escalate:
   help scripting recording, save-script, batch, replay repair
   help gestures multi-touch gesture shapes/quirks
   help tv Android TV, tvOS, Vega VVD remote
-  help react-devtools RN performance profiling
+  help react-devtools RN components, props/state/hooks, render profiling
   help react-native RN hazards, Metro/Re.Pack, routing
   help remote remote/cloud config, lease, tunnels
   help macos desktop, frontmost-app, menu bar
@@ -278,18 +278,33 @@ Focus and visual truth:
   },
   ...debuggingHelpTopics,
   'react-devtools': {
-    summary: 'React Native performance profiling',
+    summary: 'React Native components, props/state/hooks, and render profiling',
     body: `agent-device help react-devtools
 
-Use this for React Native performance profiling: slow renders, rerenders and their causes, and commits that take longer than a 16 ms frame.
+Use this for React Native internals the accessibility tree cannot show: the component tree, a component's props, state, hooks, and owners, errors and warnings components logged while rendering, and render performance (slow renders, rerenders and their causes, commits over a 16 ms frame).
 
-Commands:
+Components:
+  agent-device react-devtools tree [@ref|Name] [--depth 8] [--limit 60]
+  agent-device react-devtools find <Name> [--exact]
+  agent-device react-devtools inspect <@ref|Name>
+  agent-device react-devtools errors
+
+Render profiling:
   agent-device react-devtools profile start
   agent-device react-devtools profile stop
   agent-device react-devtools profile report [Component]
   agent-device react-devtools profile commit [N]
-  Profiling attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes. It is verified on Android emulators and iOS simulators; remote bridge sessions, which reach the dev server through the remote config's public Metro URL, are not verified yet.
+
+Connection:
+  Every command attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes and no start or connect step. It is verified on Android emulators and iOS simulators; remote bridge sessions, which reach the dev server through the remote config's public Metro URL, are not verified yet.
   Add --app <bundle-id> when several apps share the dev server, --metro-device <name> when one app runs on several devices connected to it, and --metro-port/--metro-host (or --bundle-url) when the dev server is neither the session's nor localhost:8081.
+
+Component inspection:
+  Start with find <part of a name> or tree; both print @c refs. Wrapper chains such as providers collapse onto one line, and runs of same-name siblings such as list rows collapse into one line with a count; run tree @ref to open a branch.
+  inspect takes an @c ref, or a name only one mounted component has. It prints the owners that rendered it, its props, state, hooks (custom hooks list the hooks they call), and what it logged while rendering. Deep values print as short previews.
+  errors lists the mounted components that logged console errors or warnings while rendering, with the messages.
+  Refs are DevTools element ids: they change when a component remounts or the app reloads, so find again after either.
+  With a React DevTools window connected to the app, tree, find, errors, and inspect by name fail with tree-unavailable; close it and reload the app.
 
 Profiling loop:
   1. Run profile start immediately before the interaction; keep the window narrow.
@@ -303,7 +318,7 @@ Findings:
   Timings come from development builds and run slower than release builds; compare runs instead of reading absolute numbers.
 
 Rules:
-  Every profiling command is an agent-device subcommand: agent-device react-devtools profile ...
+  Every command is an agent-device subcommand: agent-device react-devtools ...
   Do not repeatedly raise table limits such as --limit 50 or --limit 200; drill into one component with profile report instead.
   For network evidence, use agent-device network dump --include headers; headers is not a positional argument.
 
@@ -322,7 +337,7 @@ Device busy and ownership:
   Inspect ownership without any daemon: agent-device device status (add --stale for proven-dead owners; settle and release those with agent-device device release --stale). devices marks rows that are claimed, so pick an unclaimed device instead of contending.
   A live foreign owner is released by closing its session from its own workspace or stopping its daemon: agent-device daemon stop --state-dir <owner state dir> (the error names the state dir). The device itself can settle a claim: when it rebooted after that claim was taken, its app, runner, and accessibility session were destroyed, so open reconciles the owner's resources, takes the claim, and reports the release in warnings. Never recover by hunting PIDs with ps/kill. boot/install/shutdown take the same claims as open and refuse foreign-claimed devices identically; they do not ask the device about its boot.
 
-Use snapshot, screenshot, logs, network, perf frames, and perf memory for device/app runtime evidence. Use react-devtools when React rendering performance matters.`,
+Use snapshot, screenshot, logs, network, perf frames, and perf memory for device/app runtime evidence. Use react-devtools when component internals or React rendering performance matter.`,
   },
   cdp: {
     summary: 'React Native CDP targets, JS heap snapshots, and leak triage',
@@ -388,7 +403,7 @@ Choose the next help topic:
   Routine QA/dogfood/manual-test flow (open, snapshot -i, press/fill --settle, verify, close): help manual-qa; it has the concrete command shapes, so you should not need generic navigation help for a normal pass.
   Deep exploration of navigation/selector/ref edge cases, or a serial-command question manual-qa does not answer: help workflow (full reference, larger read).
   Logs, network, diagnostics, traces, permission dialogs, or runtime failures: help debugging.
-  Slow renders, rerenders, render causes, or dropped frames in React: help react-devtools.
+  Component tree, props/state/hooks, slow renders, rerenders, render causes, or dropped frames in React: help react-devtools.
   JS heap growth, heap snapshots, allocation hotspots, or retained-object leaks: help cdp.
   Remote/cloud config, leases, and local service tunnels: help remote.
 
@@ -432,10 +447,10 @@ Overlays and busy RN UIs:
     agent-device snapshot -i
   Android runtime permission dialogs and native alerts are handled by alert wait/accept/dismiss. If alert reports no alert, treat the visible surface as app-owned UI and use snapshot -i plus press by label/ref.
 
-Performance profiling routing:
-  Keep the agent-device react-devtools prefix on every profiling command.
-  Use help react-devtools for render profiles, slow renders, rerenders, and their causes.
-  If profiling cannot attach, report the error and continue with logs, network, perf frames, perf memory, screenshot, and trace evidence instead of blocking the whole flow.
+React DevTools routing:
+  Keep the agent-device react-devtools prefix on every React DevTools command.
+  Use help react-devtools for component trees, props/state/hooks, render profiles, slow renders, rerenders, and their causes.
+  If React DevTools cannot attach, report the error and continue with logs, network, perf frames, perf memory, screenshot, and trace evidence instead of blocking the whole flow.
 
 CDP memory routing:
   Keep the agent-device cdp prefix on every CDP command.

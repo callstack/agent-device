@@ -825,6 +825,21 @@ agent-device perf trace stop --kind perfetto --out app.perfetto-trace
 
 For the measurement workflow, data sources, and output examples, see [Performance snapshots](/docs/debugging-profiling#performance-snapshots).
 
+## React Native components
+
+```bash
+agent-device react-devtools tree [@ref|Name] [--depth 8] [--limit 60]
+agent-device react-devtools find <Name> [--exact] [--limit 20]
+agent-device react-devtools inspect <@ref|Name>
+agent-device react-devtools errors [--limit 10]
+```
+
+- `tree` prints the mounted component tree with `@c` refs; wrapper chains collapse onto one line and runs of same-name siblings into one counted line. Pass a ref or a unique name to print one branch.
+- `find` lists components whose name contains the text, ignoring case, or equals it with `--exact`, each with the components that rendered it.
+- `inspect` prints a component's owners, props, state, hooks, and the errors and warnings it logged while rendering. It takes a ref, or a name only one mounted component has.
+- `errors` lists the components that logged console errors or warnings while rendering, with the messages.
+- These commands connect the same way as profiling, below. A connected React DevTools window owns the component tree, so `tree`, `find`, and `errors` fail with `tree-unavailable` until it is closed and the app reloads.
+
 ## React Native performance profiling
 
 ```bash

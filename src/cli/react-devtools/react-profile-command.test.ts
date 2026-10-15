@@ -3,55 +3,18 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import {
-  runReactProfileCommand,
-  type ReactProfileCommandOptions,
-} from './react-profile-command.ts';
+import { runReactProfileCommand } from './react-profile-command.ts';
 import { InspectorSession } from './metro-inspector.ts';
-import { FakeAppRuntime, MEMO_TYPE, encodeOperations } from './react-profiler-runtime.fixtures.ts';
+import { commandHarness, TARGET } from './react-devtools-command.fixtures.ts';
+import { FakeAppRuntime, MEMO_TYPE, encodeOperations } from './react-devtools-runtime.fixtures.ts';
 
-const TARGET = {
-  id: 'device-1',
-  title: 'com.example.app (Pixel)',
-  appId: 'com.example.app',
-  webSocketDebuggerUrl: 'ws://127.0.0.1:8081/inspector/debug?device=1&page=1',
-  reactNative: { logicalDeviceId: 'device' },
-};
+const harness = (app?: FakeAppRuntime, targets?: unknown[]) =>
+  commandHarness(runReactProfileCommand, app, targets);
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-
-/** Serves TARGET from `/json/list` and evaluates debugger calls in `app`'s realm. */
-function harness(app = new FakeAppRuntime(), targets: unknown[] = [TARGET]) {
-  const stateDir = mkdtempForTestSync('react-profile-');
-  const output: string[] = [];
-  const requested: string[] = [];
-  const options: ReactProfileCommandOptions = { stateDir, session: 'qa' };
-  vi.stubGlobal('fetch', async (url: URL) => {
-    requested.push(String(url));
-    return new Response(JSON.stringify(targets), { status: 200 });
-  });
-  vi.spyOn(InspectorSession, 'connect').mockImplementation(
-    async () =>
-      ({
-        evaluate: async (expression: string) => vm.runInContext(expression, app.context),
-        close: () => {},
-      }) as unknown as InspectorSession,
-  );
-  vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
-    output.push(String(chunk));
-    return true;
-  });
-  const run = async (...args: string[]) => {
-    output.length = 0;
-    const code = await runReactProfileCommand(args, options);
-    return { code, text: output.join('') };
-  };
-  return { app, run, options, stateDir, requested };
-}
 
 function recordRowRenders(app: FakeAppRuntime) {
   const rows = Array.from({ length: 12 }, (_, index) => 10 + index);
@@ -249,7 +212,10 @@ test('unknown profile commands and malformed options are invalid arguments', asy
     [['commit', '--limit', '1.5'], /Invalid --limit: 1\.5/],
     [['stop', 'extra'], /Unexpected argument for react-devtools profile stop: extra/],
     [['start', '--limit', '5'], /react-devtools profile start does not take --limit/],
-    [['report', 'Row', 'extra'], /Unexpected argument for react-devtools profile report: extra/],
+    [
+      ['report', 'Row', 'extra'],
+      /Unexpected argument for react-devtools profile report <Component>: extra/,
+    ],
     [
       ['report', 'Row', '--limit', '2'],
       /react-devtools profile report <Component> does not take --limit/,

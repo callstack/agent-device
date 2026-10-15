@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { FakeAppRuntime, MEMO_TYPE, encodeOperations } from './react-profiler-runtime.fixtures.ts';
+import { FakeAppRuntime, MEMO_TYPE, encodeOperations } from './react-devtools-runtime.fixtures.ts';
 import type { RawReactProfile } from './react-profile-renders.ts';
 
 type Started = {
@@ -39,8 +39,12 @@ test('start on a hook-attached backend flushes the queued tree so mounted compon
   const stopped = app.call<Stopped>('stop');
 
   assert.equal(stopped.ok, true);
-  assert.deepEqual(stopped.elements['3'], ['Row', 5, 2, 2]);
-  assert.deepEqual(stopped.elements['2'], ['App', 5, 0, 0], 'owners ride along for attribution');
+  assert.deepEqual(stopped.elements['3'], ['Row', 5, 2, 2, null]);
+  assert.deepEqual(
+    stopped.elements['2'],
+    ['App', 5, 0, 0, null],
+    'owners ride along for attribution',
+  );
   assert.deepEqual(stopped.keys, ['onPress']);
   assert.deepEqual(stopped.commits[0]!.fibers, [3, 4, 3]);
   assert.deepEqual(stopped.commits[0]!.changes, { '3': [0, [0], null, null] });
@@ -59,7 +63,7 @@ test('components that mount and unmount during the profile keep their names', ()
   app.renderer.commit(encodeOperations({ remove: [9] }));
 
   const stopped = app.call<Stopped>('stop');
-  assert.deepEqual(stopped.elements['9'], ['Toast', MEMO_TYPE, 0, 0]);
+  assert.deepEqual(stopped.elements['9'], ['Toast', MEMO_TYPE, 0, 0, null]);
   assert.deepEqual(stopped.commits[0]!.changes, { '9': 1 });
 });
 
@@ -267,4 +271,81 @@ test('a profile read from only some renderers says which ones failed', () => {
   const stopped = app.call<Stopped & { failures: string[] }>('stop');
   assert.equal(stopped.ok, true);
   assert.deepEqual(stopped.failures, ['second root gone']);
+});
+
+type Tree = {
+  ok: true;
+  nodes: Array<[number, string, number, number, number, string | null]>;
+  order: Record<string, number[]>;
+  logs: Record<string, [number, number]>;
+};
+
+test('tree exports every mounted component with its key, child order, and logged problems', () => {
+  const app = new FakeAppRuntime();
+  app.mount([
+    { id: 2, name: 'App', parent: 1 },
+    { id: 3, name: 'Row', parent: 2, owner: 2, key: 'a' },
+    { id: 4, name: 'Row', parent: 2, owner: 2, key: 'b' },
+  ]);
+  app.install();
+  app.renderer.commit(
+    encodeOperations({ reorder: [2, [4, 3]], logs: [[3, 1, 2]], add: [{ id: 5, name: 'Gone' }] }),
+  );
+  app.renderer.commit(encodeOperations({ remove: [5] }));
+
+  const tree = app.call<Tree>('tree');
+  assert.deepEqual(tree.nodes, [
+    [2, 'App', 5, 1, 0, null],
+    [3, 'Row', 5, 2, 2, 'a'],
+    [4, 'Row', 5, 2, 2, 'b'],
+  ]);
+  assert.deepEqual(tree.order, { '2': [4, 3] });
+  assert.deepEqual(tree.logs, { '3': [1, 2] });
+});
+
+test('a component that unmounts while a profile records leaves the tree but keeps its name', () => {
+  const app = new FakeAppRuntime();
+  app.mount([{ id: 2, name: 'App' }]);
+  app.install();
+  app.call('start');
+  app.renderer.commit(encodeOperations({ add: [{ id: 9, name: 'Toast' }] }));
+  app.renderer.commit(encodeOperations({ remove: [9] }));
+  assert.deepEqual(
+    app.call<Tree>('tree').nodes.map((node) => node[1]),
+    ['App'],
+  );
+});
+
+test('without the operations history there is no tree to export', () => {
+  const app = new FakeAppRuntime({ fusebox: false });
+  app.install();
+  assert.deepEqual(app.call('tree'), { ok: false, reason: 'tree-unavailable' });
+});
+
+test('inspect returns props, hooks, owners, and logged problems of mounted components', () => {
+  const app = new FakeAppRuntime();
+  app.mount([{ id: 3, name: 'Row', key: 'a' }]);
+  app.install();
+  app.renderer.inspected.set(3, {
+    type: 5,
+    key: 'a',
+    state: null,
+    hooks: {
+      data: [{ id: 0, name: 'State', value: 2, subHooks: [] }],
+      cleaned: [],
+      unserializable: [],
+    },
+    context: null,
+    owners: [{ id: 2, displayName: 'List', type: 5, key: null }],
+    errors: [['boom', 2]],
+    warnings: [],
+    isErrored: false,
+  });
+  const result = app.call<{ ok: true; elements: Record<string, Record<string, unknown>> }>(
+    'inspect',
+    [3, 99],
+  );
+  assert.equal(result.elements['3']!.name, 'Row');
+  assert.deepEqual(result.elements['3']!.errors, [['boom', 2]]);
+  assert.deepEqual(result.elements['99'], { missing: true });
 });

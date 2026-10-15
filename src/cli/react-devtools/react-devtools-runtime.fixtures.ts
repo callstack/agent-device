@@ -1,13 +1,15 @@
 import vm from 'node:vm';
 import {
-  REACT_PROFILER_RUNTIME_GLOBAL,
-  REACT_PROFILER_RUNTIME_SOURCE,
-  REACT_PROFILER_RUNTIME_VERSION,
-} from './react-profiler-runtime.ts';
+  REACT_DEVTOOLS_RUNTIME_GLOBAL,
+  REACT_DEVTOOLS_RUNTIME_SOURCE,
+  REACT_DEVTOOLS_RUNTIME_VERSION,
+} from './react-devtools-runtime.ts';
 
 const OP_ADD = 1;
 const OP_REMOVE = 2;
+const OP_REORDER_CHILDREN = 3;
 const OP_UPDATE_TREE_BASE_DURATION = 4;
+const OP_UPDATE_ERRORS_OR_WARNINGS = 5;
 const ROOT_TYPE = 11;
 export const FUNCTION_TYPE = 5;
 export const MEMO_TYPE = 8;
@@ -18,6 +20,7 @@ export type FakeElement = {
   type?: number;
   owner?: number;
   parent?: number;
+  key?: string;
 };
 
 export type FakeCommit = {
@@ -28,43 +31,74 @@ export type FakeCommit = {
   updaters?: Array<{ id: number; displayName: string }>;
 };
 
-/**
- * Encodes one backend `operations` batch: renderer id, root id, the string table, then ops. Only
- * the op shapes the runtime reads are produced.
- */
-export function encodeOperations(options: {
+type OperationsBatch = {
   root?: boolean;
   add?: FakeElement[];
   remove?: number[];
   baseDurations?: number[];
+  reorder?: [parent: number, children: number[]];
+  logs?: Array<[id: number, errors: number, warnings: number]>;
   extra?: number[];
-}): number[] {
-  const strings: string[] = [];
-  const stringId = (value: string) => {
-    let index = strings.indexOf(value);
-    if (index === -1) index = strings.push(value) - 1;
+};
+
+/** Interns strings the way the backend's string table does: 1-based ids, 0 for none. */
+class StringTable {
+  readonly #strings: string[] = [];
+
+  id(value: string | undefined): number {
+    if (value === undefined) return 0;
+    let index = this.#strings.indexOf(value);
+    if (index === -1) index = this.#strings.push(value) - 1;
     return index + 1;
-  };
-  const ops: number[] = options.root ? [OP_ADD, 1, ROOT_TYPE, 0, 1, 1, 1] : [];
-  for (const element of options.add ?? []) {
-    ops.push(
-      OP_ADD,
-      element.id,
-      element.type ?? FUNCTION_TYPE,
-      element.parent ?? 0,
-      element.owner ?? 0,
-      stringId(element.name),
-      0,
-    );
   }
-  if (options.remove?.length) ops.push(OP_REMOVE, options.remove.length, ...options.remove);
-  for (const id of options.baseDurations ?? []) ops.push(OP_UPDATE_TREE_BASE_DURATION, id, 1);
-  ops.push(...(options.extra ?? []));
-  const table: number[] = [];
-  for (const value of strings) {
-    const codePoints = [...value].map((char) => char.codePointAt(0)!);
-    table.push(codePoints.length, ...codePoints);
+
+  encode(): number[] {
+    return this.#strings.flatMap((value) => {
+      const codePoints = [...value].map((char) => char.codePointAt(0)!);
+      return [codePoints.length, ...codePoints];
+    });
   }
+}
+
+function addOperations(elements: FakeElement[], strings: StringTable): number[] {
+  return elements.flatMap((element) => [
+    OP_ADD,
+    element.id,
+    element.type ?? FUNCTION_TYPE,
+    element.parent ?? 0,
+    element.owner ?? 0,
+    strings.id(element.name),
+    strings.id(element.key),
+  ]);
+}
+
+function updateOperations(batch: OperationsBatch): number[] {
+  const ops: number[] = [];
+  if (batch.remove?.length) ops.push(OP_REMOVE, batch.remove.length, ...batch.remove);
+  if (batch.reorder) {
+    const [parent, children] = batch.reorder;
+    ops.push(OP_REORDER_CHILDREN, parent, children.length, ...children);
+  }
+  for (const [id, errors, warnings] of batch.logs ?? []) {
+    ops.push(OP_UPDATE_ERRORS_OR_WARNINGS, id, errors, warnings);
+  }
+  for (const id of batch.baseDurations ?? []) ops.push(OP_UPDATE_TREE_BASE_DURATION, id, 1);
+  return ops;
+}
+
+/**
+ * Encodes one backend `operations` batch: renderer id, root id, the string table, then ops. Only
+ * the op shapes the runtime reads are produced.
+ */
+export function encodeOperations(batch: OperationsBatch): number[] {
+  const strings = new StringTable();
+  const ops = [
+    ...(batch.root ? [OP_ADD, 1, ROOT_TYPE, 0, 1, 1, 1] : []),
+    ...addOperations(batch.add ?? [], strings),
+    ...updateOperations(batch),
+    ...(batch.extra ?? []),
+  ];
+  const table = strings.encode();
   return [1, 1, table.length, ...table, ...ops];
 }
 
@@ -78,6 +112,8 @@ export class FakeRendererInterface {
   flushes = 0;
   commits: FakeCommit[] = [];
   props = new Map<number, { data: Record<string, unknown>; cleaned: Array<Array<string>> }>();
+  /** What `inspectElement` reports for an element, beyond the props above. */
+  inspected = new Map<number, Record<string, unknown>>();
   readonly #emit: (event: string, payload: number[]) => void;
 
   constructor(emit: (event: string, payload: number[]) => void) {
@@ -137,7 +173,9 @@ export class FakeRendererInterface {
 
   inspectElement(_requestID: number, id: number): unknown {
     const props = this.props.get(id);
-    return props ? { type: 'full-data', value: { props } } : { type: 'not-found' };
+    const inspected = this.inspected.get(id);
+    if (!props && !inspected) return { type: 'not-found' };
+    return { type: 'full-data', value: { props, ...inspected } };
   }
 }
 
@@ -217,16 +255,16 @@ export class FakeAppRuntime {
     vm.runInContext('globalThis.globalThis = globalThis;', this.context);
   }
 
-  install(version = REACT_PROFILER_RUNTIME_VERSION): unknown {
+  install(version = REACT_DEVTOOLS_RUNTIME_VERSION): unknown {
     return vm.runInContext(
-      `(${REACT_PROFILER_RUNTIME_SOURCE})(${JSON.stringify(version)})`,
+      `(${REACT_DEVTOOLS_RUNTIME_SOURCE})(${JSON.stringify(version)})`,
       this.context,
     );
   }
 
   call<T>(method: string, argument?: unknown): T {
     const value = vm.runInContext(
-      `${REACT_PROFILER_RUNTIME_GLOBAL}.${method}(${argument === undefined ? '' : JSON.stringify(argument)})`,
+      `${REACT_DEVTOOLS_RUNTIME_GLOBAL}.${method}(${argument === undefined ? '' : JSON.stringify(argument)})`,
       this.context,
     );
     return JSON.parse(value as string) as T;

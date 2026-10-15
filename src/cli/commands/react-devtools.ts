@@ -1,17 +1,19 @@
 import { AppError } from '@agent-device/kernel/errors';
+import type { ReactDevtoolsCommandOptions } from '../react-devtools/react-devtools-connection.ts';
 import {
-  runReactProfileCommand,
-  type ReactProfileCommandOptions,
-} from '../react-profiler/react-profile-command.ts';
+  isInspectCommand,
+  runReactInspectCommand,
+} from '../react-devtools/react-devtools-inspect-command.ts';
+import { runReactProfileCommand } from '../react-devtools/react-profile-command.ts';
 
 export async function runReactDevtoolsCommand(
   args: string[],
-  options: ReactProfileCommandOptions,
+  options: ReactDevtoolsCommandOptions,
 ): Promise<number> {
-  if (args[0] !== 'profile') {
-    throw new AppError('INVALID_ARGS', `Unknown react-devtools command: ${args[0] ?? '(none)'}.`, {
-      hint: 'Run react-devtools profile start before the interaction and react-devtools profile stop after it.',
-    });
-  }
-  return await runReactProfileCommand(args.slice(1), options);
+  const [command, ...rest] = args;
+  if (command === 'profile') return await runReactProfileCommand(rest, options);
+  if (isInspectCommand(command)) return await runReactInspectCommand(command, rest, options);
+  throw new AppError('INVALID_ARGS', `Unknown react-devtools command: ${command ?? '(none)'}.`, {
+    hint: 'Use react-devtools tree, find, inspect, errors, or profile.',
+  });
 }

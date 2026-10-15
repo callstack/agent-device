@@ -179,11 +179,12 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
   },
   'react-devtools': {
     text: {
-      summary: 'React Native performance profiling',
+      summary: 'React Native components, props/state/hooks, and render profiling',
       description:
-        'Profile React Native renders through the Metro dev server and report slow renders, rerenders, and their causes',
+        'Inspect React Native components and profile their renders through the Metro dev server',
     },
-    usageOverride: 'react-devtools profile start|stop|report [Component]|commit [N]',
+    usageOverride:
+      'react-devtools tree [@ref|Name]|find <Name>|inspect <@ref|Name>|errors|profile start|stop|report [Component]|commit [N]',
     listUsageOverride: 'react-devtools',
     positionalArgs: ['args?'],
     allowsExtraPositionals: true,

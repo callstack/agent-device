@@ -37,7 +37,7 @@ For a normal app-driving task, start immediately. Do not probe first with `--hel
 For TV, Fire TV, or Vega OS tasks, read `agent-device help tv`.
 For exploratory QA, read `agent-device help dogfood`.
 For logs, network, audio, traces, or runtime failures, read `agent-device help debugging`.
-For React Native performance profiling (slow renders, rerenders, and their causes), read `agent-device help react-devtools`.
+For React Native component internals (tree, props, state, hooks) and performance profiling (slow renders, rerenders, and their causes), read `agent-device help react-devtools`.
 For React Native JavaScript heap growth, heap snapshots, allocation hotspots, or retained-object leaks, read `agent-device help cdp`.
 For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to profiling or debugging evidence, read `agent-device help react-native`.
 

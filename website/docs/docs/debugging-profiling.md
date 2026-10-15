@@ -15,6 +15,33 @@ When UI automation is not enough, use these commands to collect runtime evidence
 - Apple crash symbolication with `debug symbols`
 - Screenshots, recordings, and replayable repro flows
 
+## React Native components
+
+To see what React renders behind a screen, read the component tree and inspect a component:
+
+```bash
+agent-device react-devtools find ContactRow
+agent-device react-devtools inspect @c42
+agent-device react-devtools tree @c40 --depth 3
+agent-device react-devtools errors
+```
+
+`find` and `tree` print `@c` refs. `inspect` shows the owners that rendered a component, its props, state, and hooks, and the errors and warnings it logged while rendering:
+
+```text
+@c42 ContactRow key=3
+rendered by: ContactList @c40 < MemoDefeatedScenario @c38 < PerfLabScreen @c12
+props:
+  contact: {id: 3, name: "Ada Lovelace"}
+  onSelect: ƒ onSelect() {}
+hooks:
+  State: false
+```
+
+`inspect` also takes a component name when only one mounted component has it. `errors` lists the components that logged console errors or warnings while rendering, with the messages. Refs change when a component remounts or the app reloads.
+
+These commands use the same connection as profiling, described below. If a React DevTools window is connected to the app, close it and reload the app first.
+
 ## React Native performance profiling
 
 To find out why an interaction renders slowly, record a React profile around it:
@@ -142,7 +169,7 @@ agent-device debug symbols --artifact crash.ips --search-path ./build --out cras
 
 The command supports Apple `.ips`, `.crash`, and log-style crash artifacts that contain Binary Images or IPS `usedImages`. It matches UUIDs from the crash artifact against `dwarfdump --uuid` output from `.dSYM` bundles, runs `atos`, writes a symbolicated artifact, and prints only the output path plus a compact crash report: app/thread, exception or termination, top symbolicated frames, and the first actionable frame finding. The full symbolicated artifact stays on disk, so agent context stays small.
 
-`debug` covers symbolication only. Use `logs` for app logs, `network` for HTTP evidence, `perf` for performance samples, `record`/`trace` for media and traces, and `react-devtools` for React Native performance profiling. `debug symbols` does not handle Android Java/R8 `mapping.txt` or native `ndk-stack`/`addr2line` symbolication; capture Android crash evidence with `logs` and symbolicate it with other tools.
+`debug` covers symbolication only. Use `logs` for app logs, `network` for HTTP evidence, `perf` for performance samples, `record`/`trace` for media and traces, and `react-devtools` for React Native components and performance profiling. `debug symbols` does not handle Android Java/R8 `mapping.txt` or native `ndk-stack`/`addr2line` symbolication; capture Android crash evidence with `logs` and symbolicate it with other tools.
 
 ## Core commands
 

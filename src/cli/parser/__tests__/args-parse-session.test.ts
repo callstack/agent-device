@@ -302,6 +302,18 @@ test('parseArgs preserves react-devtools profile options as passthrough position
   ]);
 });
 
+test('parseArgs preserves react-devtools inspection options as passthrough positionals', () => {
+  assert.deepEqual(
+    parseArgs(['react-devtools', 'tree', '@c3', '--depth', '3'], { strictFlags: true }).positionals,
+    ['tree', '@c3', '--depth', '3'],
+  );
+  assert.deepEqual(
+    parseArgs(['react-devtools', 'find', 'Row', '--exact', '--limit', '2'], { strictFlags: true })
+      .positionals,
+    ['find', 'Row', '--exact', '--limit', '2'],
+  );
+});
+
 test('parseArgs preserves cdp arguments as passthrough positionals', () => {
   const parsed = parseArgs(
     [
