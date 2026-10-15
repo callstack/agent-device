@@ -1,8 +1,8 @@
-import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
+import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
 import { AppError, type DispatchDisclosure, normalizeError } from '@agent-device/kernel/errors';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import {
@@ -10,44 +10,90 @@ import {
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
 } from '@agent-device/test-kit';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { makeAndroidSession } from '../../../__tests__/support/session-factories.ts';
 import {
   getRuntimeBindings,
   mockFillPoint,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
-import { discloseRequestDispatch } from '@agent-device/daemon/testing/request-dispatch-disclosure';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
+import { legacyDispatchCapture } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
+import { installLegacyCaptureInteractorResolution } from '../../../__tests__/support/legacy-capture-interactor-resolution.ts';
+import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
+import { discloseRequestDispatch } from '../../request-dispatch-disclosure.ts';
 import {
   createRequestDispatchLedger,
   recordBoundMutations,
-} from '@agent-device/daemon/testing/request-dispatch-ledger';
-import type { BindDeviceRuntime } from '@agent-device/daemon/testing/request-runtime-binding';
-import { clearAndroidObservationFixture } from '@agent-device/daemon/testing/__tests__/android-observation-fixture';
-import { activateCompleteRefFrame, expireRefFrame } from '@agent-device/daemon/testing/ref-frame';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
-import type { InteractionRouteInput } from '@agent-device/daemon/testing/interaction/internal/types';
-import { assertAndroidPressStayedInApp } from '@agent-device/daemon/testing/interaction/internal/interaction-android-escape';
-import { gestureRuntimeBindingsFixture } from '@agent-device/daemon/testing/interaction/internal/__tests__/gesture-runtime-bindings.fixtures';
+} from '../../../core/request-dispatch-ledger.ts';
+import type { BindDeviceRuntime } from '../../../core/request-runtime-binding.ts';
+import { clearAndroidObservationFixture } from '../../../__tests__/support/android-observation-fixture.ts';
+import { activateCompleteRefFrame, expireRefFrame } from '../../../core/ref-frame.ts';
+import { handleInteractionCommands } from '../index.ts';
+import type { InteractionRouteInput } from '../../../core/interaction/internal/types.ts';
+import { assertAndroidPressStayedInApp } from './interaction-android-escape.ts';
+import { gestureRuntimeBindingsFixture } from './__tests__/gesture-runtime-bindings.fixtures.ts';
 import {
   contextFromFlags,
   makeSession,
   makeStaleRefSession,
-} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+} from './__tests__/interaction-touch-fixtures.ts';
+import { touchForwardingCreateCommandSurface } from '../../../__tests__/support/touch-forwarding-surface-fake.ts';
 
-// contracts/fixtures/dispatch-disclosure.json, daemon and post-action guard rows: the daemon rows
-// drive a real `press` through the daemon interaction handler, inside the router's dispatch seam,
-// with only the device touch mocked; the guard row drives the guard itself.
+// contracts/fixtures/dispatch-disclosure.json, daemon rows: each drives a `press`, `fill`, `get`,
+// or `swipe` through the daemon interaction handler, inside the router's dispatch seam, over a
+// command surface that forwards the touch to the bound operations (only the device touch is
+// faked). The post-action guard row is driven beside the guard, in
+// interaction-android-escape-dispatch-disclosure.test.ts.
 
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
-  captureSnapshotWithInteractor: vi.fn(),
-}));
+const GESTURE_PLAN: GesturePlan = {
+  topology: 'single',
+  intent: 'fling',
+  executionProfile: 'timed-pan',
+  durationMs: 100,
+  viewport: { x: 0, y: 0, width: 400, height: 800 },
+  pointers: [
+    {
+      pointerId: 0,
+      samples: [
+        { offsetMs: 0, point: { x: 100, y: 600 } },
+        { offsetMs: 100, point: { x: 100, y: 200 } },
+      ],
+    },
+  ],
+};
+
+const createCommandSurface = touchForwardingCreateCommandSurface({
+  members: (config) => ({
+    selectors: {
+      get: async () => {
+        await config.backend.captureSnapshot?.({ session: 'dispatch-disclosure' }, {});
+        throw new AppError('COMMAND_FAILED', 'No element matched label="Missing"', {
+          reason: 'selector_not_found',
+        });
+      },
+    },
+    interactions: {
+      gesture: async (options) => {
+        await config.backend.performGesture?.({ session: options.session }, GESTURE_PLAN);
+        return {
+          kind: 'fling',
+          durationMs: GESTURE_PLAN.durationMs,
+          pointerCount: 1,
+          from: { x: 100, y: 600 },
+          to: { x: 100, y: 200 },
+        };
+      },
+    },
+  }),
+});
+
+installLegacyCaptureInteractorResolution();
 
 beforeEach(() => {
   resetGetRuntimeFixture();
+  legacyDispatchCapture.mockReset();
+  legacyDispatchCapture.mockResolvedValue({});
 });
 
 /**
@@ -96,7 +142,7 @@ async function press({
   };
   sessionStore.publish(session.name, session);
   const response = await routeInteraction({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface,
     req: { token: 't', session: session.name, command, positionals, flags },
     sessionName: session.name,
     sessionStore,
@@ -133,24 +179,6 @@ async function pressAfterUnclassifiedTouchFailure(
   return await press({ positionals: ['@e1'] });
 }
 
-async function pressThatLeftTheApp(): Promise<unknown> {
-  const session = makeAndroidSession('dispatch-disclosure-android', {
-    appBundleId: 'com.example.app',
-  });
-  const observation = {
-    readAppState: async () => ({ package: 'com.android.settings' }),
-    isPermissionPackage: async () => false,
-  } as unknown as AndroidObservationAdapter;
-  return await discloseRequestDispatch(
-    { token: 't', session: session.name, command: 'press', positionals: ['@e1'] },
-    createRequestDispatchLedger(),
-    async () => {
-      await assertAndroidPressStayedInApp(session, '@e1', observation);
-      return null;
-    },
-  );
-}
-
 /** `swipe --count 2` whose first repetition runs and whose second is refused before dispatch. */
 async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
   const gestures = gestureRuntimeBindingsFixture();
@@ -165,8 +193,8 @@ async function swipeRefusedOnSecondRepetition(): Promise<unknown> {
   const session = makeSession('dispatch-disclosure-swipe');
   sessionStore.publish(session.name, session);
   const response = await routeInteraction({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,
@@ -199,8 +227,8 @@ async function gestureDragRefusedBeforeDispatch(): Promise<unknown> {
   expireRefFrame(session);
   sessionStore.publish(session.name, session);
   const response = await routeInteraction({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,
@@ -258,8 +286,8 @@ async function refRefusedAfterAndroidRecovery(command: 'press' | 'gesture'): Pro
     openApp,
   };
   const response = await routeInteraction({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: session.name,
@@ -315,7 +343,7 @@ async function pressThenForegroundReadRefused(): Promise<unknown> {
     },
   };
   const response = await routeInteraction({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface,
     req: { token: 't', session: session.name, command: 'press', positionals: ['50', '40'] },
     sessionName: session.name,
     sessionStore,
@@ -343,7 +371,6 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'daemon.post-dispatch.press-then-foreground-read-refused': pressThenForegroundReadRefused,
   'daemon.read-only-command': () =>
     press({ command: 'get', positionals: ['text', 'label="Missing"'] }),
-  'post-action-guard.android-press-left-app': pressThatLeftTheApp,
 };
 
 const ROWS = dispatchDisclosureRowsOwnedBy(
@@ -351,7 +378,7 @@ const ROWS = dispatchDisclosureRowsOwnedBy(
   fs.readFileSync(DISPATCH_DISCLOSURE_TABLE_PATH, 'utf8'),
 );
 
-test('every daemon and post-action guard dispatch-disclosure row has exactly one driver', () => {
+test('every daemon dispatch-disclosure row has exactly one driver', () => {
   assertDispatchDisclosureDriversMatchRows(ROWS, Object.keys(DRIVERS));
 });
 
@@ -378,9 +405,7 @@ test('the daemon keeps a producer verdict instead of inferring its own', async (
 });
 
 test('a read-only command discloses no over a producer verdict', async () => {
-  const capture = vi.mocked(captureSnapshotWithInteractor);
-  capture.mockClear();
-  capture.mockRejectedValueOnce(
+  legacyDispatchCapture.mockRejectedValueOnce(
     new AppError('COMMAND_FAILED', 'runner capture lost', { dispatched: 'unknown' }),
   );
   await assert.rejects(
@@ -392,7 +417,7 @@ test('a read-only command discloses no over a producer verdict', async () => {
       return true;
     },
   );
-  assert.equal(capture.mock.calls.length, 1);
+  assert.equal(legacyDispatchCapture.mock.calls.length, 1);
 });
 
 test('a read-only command discloses no over a producer verdict it throws', async () => {
@@ -425,7 +450,7 @@ test('a plain Error a backend throws reaches the wire with dispatched unknown', 
   }) as unknown as typeof bindings.bindDevice;
   await assert.rejects(
     routeInteraction({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface,
       req: { token: 't', session: session.name, command: 'press', positionals: ['@e1'], flags: {} },
       sessionName: session.name,
       sessionStore,

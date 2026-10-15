@@ -37,11 +37,12 @@ export const DISPATCH_DISCLOSURE_TABLE_PATH = path.join(
  * followed by `test(\`${row.id}`, which {@link DISPATCH_DISCLOSURE_ROW_LOOP} matches.
  */
 export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>> = {
-  'daemon.': 'src/__tests__/daemon-composition/interaction/interaction-dispatch-disclosure.test.ts',
+  'daemon.':
+    'packages/daemon/src/execution/interaction/internal/interaction-dispatch-disclosure.test.ts',
   'daemon.scroll-no-progress': 'packages/daemon/src/execution/__tests__/scroll-movement.test.ts',
   'daemon.route.': 'src/__tests__/daemon-composition/request-dispatch-disclosure.test.ts',
   'post-action-guard.':
-    'src/__tests__/daemon-composition/interaction/interaction-dispatch-disclosure.test.ts',
+    'packages/daemon/src/execution/interaction/internal/interaction-android-escape-dispatch-disclosure.test.ts',
   'ios-runner.': 'packages/platform-apple/src/runner/__tests__/index-dispatch-disclosure.test.ts',
   'ios-runner.pre-send.':
     'packages/platform-apple/src/runner/__tests__/runner-lifecycle-dispatch-disclosure.test.ts',

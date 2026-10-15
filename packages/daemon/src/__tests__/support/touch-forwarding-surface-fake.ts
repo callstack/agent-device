@@ -10,7 +10,9 @@ import { centerOfRect, type Point, type SnapshotNode } from '@agent-device/kerne
 import {
   captureAndStoreSnapshot,
   commandSurfaceWithMembers,
+  type CommandSurfaceMembers,
 } from './command-surface-override-fake.ts';
+import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
 
 type TouchResolution = {
   point: Point;
@@ -26,6 +28,8 @@ export type TouchForwardingSurfaceOptions = {
    * `id="X"` / `id=X`; a suite that needs another selector shape states its own matcher.
    */
   matchSelector?: (nodes: SnapshotNode[], selector: string) => SnapshotNode | undefined;
+  /** Members the suite answers itself, layered over the touch actions (selector reads, gestures). */
+  members?: (config: AgentDeviceRuntimeConfig) => CommandSurfaceMembers;
 };
 
 function defaultMatchSelector(nodes: SnapshotNode[], selector: string): SnapshotNode | undefined {
@@ -67,6 +71,7 @@ export function touchForwardingCreateCommandSurface(
         if (!node?.rect) {
           throw new AppError('COMMAND_FAILED', `Ref ${target.ref} not found`, {
             reason: 'ref_not_found',
+            dispatched: 'no',
           });
         }
         return {
@@ -94,6 +99,7 @@ export function touchForwardingCreateCommandSurface(
       }
       throw new AppError('COMMAND_FAILED', `Selector did not match: ${target.selector}`, {
         reason: 'selector_not_found',
+        dispatched: 'no',
       });
     };
 
@@ -147,6 +153,11 @@ export function touchForwardingCreateCommandSurface(
       };
     };
 
-    return { interactions: { press, click: press, fill } };
+    const own = options.members?.(config) ?? {};
+    return {
+      capture: own.capture,
+      selectors: own.selectors,
+      interactions: { press, click: press, fill, ...own.interactions },
+    };
   });
 }
