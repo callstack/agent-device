@@ -47,8 +47,8 @@ export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>>
     'packages/platform-apple/src/runner/__tests__/runner-lifecycle-dispatch-disclosure.test.ts',
   'ios-runner.transport.':
     'packages/platform-apple/src/runner/__tests__/runner-lifecycle-dispatch-disclosure.test.ts',
-  'android-adb.': 'packages/platform-android/src/__tests__/dispatch-disclosure.test.ts',
-  'android-helper.': 'packages/platform-android/src/__tests__/dispatch-disclosure.test.ts',
+  'android-adb.': 'packages/platform-android/src/__tests__/index-dispatch-disclosure.test.ts',
+  'android-helper.': 'packages/platform-android/src/__tests__/index-dispatch-disclosure.test.ts',
   'android-helper.gesture-session.':
     'packages/platform-android/src/__tests__/touch-helper-session.test.ts',
   'webdriver.': 'packages/provider-webdriver/src/webdriver-transport.test.ts',
