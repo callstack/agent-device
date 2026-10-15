@@ -5,9 +5,9 @@ const INSTALLED_PACKAGE_REQUIRED = (target: string) =>
   `Android runtime hints require an installed package name, not "${target}". Install or reinstall the app first, then relaunch by package.`;
 
 test('open --relaunch refuses URL targets', async () => {
-  expect(await validateOpenRelaunchTarget({ target: 'https://example.com/path', platform: undefined })).toMatch(
-    /does not support URL targets/i,
-  );
+  expect(
+    await validateOpenRelaunchTarget({ target: 'https://example.com/path', platform: undefined }),
+  ).toMatch(/does not support URL targets/i);
 });
 
 test.each(['/tmp/app-debug.apk', 'app-debug.apk'])(

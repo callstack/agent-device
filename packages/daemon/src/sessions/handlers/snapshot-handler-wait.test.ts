@@ -146,9 +146,7 @@ test('wait text on Android captures through the freshness-aware daemon capture',
   const { response, sessionStore } = await runWaitCommand({
     sessionName,
     session: makeAndroidFreshnessSession(sessionName, 'press', inboxBaselineNodes(18)),
-    createCommandSurface: waitSurface(
-      async (backend) => await captureOnce(backend, sessionName),
-    ),
+    createCommandSurface: waitSurface(async (backend) => await captureOnce(backend, sessionName)),
     positionals: ['Create document', '500'],
   });
 
@@ -174,9 +172,7 @@ test('wait bypasses a fresh matching session snapshot and captures the device', 
   const { response } = await runWaitCommand({
     sessionName,
     session,
-    createCommandSurface: waitSurface(
-      async (backend) => await captureOnce(backend, sessionName),
-    ),
+    createCommandSurface: waitSurface(async (backend) => await captureOnce(backend, sessionName)),
     positionals: ['label="Ready"', '5000'],
   });
 

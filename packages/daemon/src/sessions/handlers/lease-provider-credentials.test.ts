@@ -85,16 +85,19 @@ test.for(PROVIDERS)(
   },
 );
 
-test.for(PROVIDERS)('a daemon holding the %s credentials of the shell allocates', async (provider) => {
-  const env = { KEY: 'key-1' };
-  const outcome = await allocateWithDaemonCredentials(
-    allocateRequest(provider, shellFingerprint(env)),
-    providerCredentialsFixture(env, STATE_DIR),
-  );
+test.for(PROVIDERS)(
+  'a daemon holding the %s credentials of the shell allocates',
+  async (provider) => {
+    const env = { KEY: 'key-1' };
+    const outcome = await allocateWithDaemonCredentials(
+      allocateRequest(provider, shellFingerprint(env)),
+      providerCredentialsFixture(env, STATE_DIR),
+    );
 
-  assert.equal(outcome.error, undefined);
-  assert.equal(outcome.allocations, 1);
-});
+    assert.equal(outcome.error, undefined);
+    assert.equal(outcome.allocations, 1);
+  },
+);
 
 test.for(PROVIDERS)(
   'a daemon holding %s credentials allocates for a shell with none',

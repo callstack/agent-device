@@ -188,23 +188,26 @@ test.each([
   { name: 'a physical iOS device', selected: device, stopsRunner: true },
   { name: 'a macOS host', selected: MACOS_DEVICE, stopsRunner: true },
   { name: 'an iOS Simulator', selected: simulator, stopsRunner: false },
-])('closing an app on $name stops the runner first: $stopsRunner', async ({ selected, stopsRunner }) => {
-  const events: string[] = [];
-  const { host } = lifecycleHost({ events });
+])(
+  'closing an app on $name stops the runner first: $stopsRunner',
+  async ({ selected, stopsRunner }) => {
+    const events: string[] = [];
+    const { host } = lifecycleHost({ events });
 
-  await bind(host, selected).closeApplication({
-    appBundleId: 'com.example.app',
-    positionals: ['com.example.app'],
-    surface: 'app',
-    execution: {},
-  });
+    await bind(host, selected).closeApplication({
+      appBundleId: 'com.example.app',
+      positionals: ['com.example.app'],
+      surface: 'app',
+      execution: {},
+    });
 
-  expect(events).toEqual(
-    stopsRunner
-      ? [`stop-runner:${selected.id}`, 'close:com.example.app']
-      : ['close:com.example.app'],
-  );
-});
+    expect(events).toEqual(
+      stopsRunner
+        ? [`stop-runner:${selected.id}`, 'close:com.example.app']
+        : ['close:com.example.app'],
+    );
+  },
+);
 
 test('close finalization releases the runner before it dismisses close alerts', async () => {
   const events: string[] = [];

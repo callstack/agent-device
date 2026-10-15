@@ -1,5 +1,8 @@
 import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
-import { fakeCreateCommandSurface, forwardingCreateCommandSurface } from './command-surface-fake.ts';
+import {
+  fakeCreateCommandSurface,
+  forwardingCreateCommandSurface,
+} from './command-surface-fake.ts';
 
 /**
  * `forwardingCreateCommandSurface` plus a `diffSnapshot` that stores the tree it observed the way

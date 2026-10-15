@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type {
-  AgentDeviceBackend,
-  BackendSnapshotResult,
-} from '@agent-device/contracts/backend';
+import type { AgentDeviceBackend, BackendSnapshotResult } from '@agent-device/contracts/backend';
 import { localCommandPolicy } from '@agent-device/contracts/command-policy';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';

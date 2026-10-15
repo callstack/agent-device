@@ -115,31 +115,34 @@ test.each([
     name: 'an iOS simulator in a scoped simulator set',
     device: { ...IOS_SIMULATOR, simulatorSetPath: '/tmp/tenant-a/simulator-set' },
   },
-])('close on $name finalizes with the runner retention the platform decided', async ({ device }) => {
-  for (const retainExecutionHost of [true, false]) {
-    const sessionStore = makeSessionStore();
-    const sessionName = `retention-${retainExecutionHost}`;
-    publishSession(sessionStore, sessionName, device);
+])(
+  'close on $name finalizes with the runner retention the platform decided',
+  async ({ device }) => {
+    for (const retainExecutionHost of [true, false]) {
+      const sessionStore = makeSessionStore();
+      const sessionName = `retention-${retainExecutionHost}`;
+      publishSession(sessionStore, sessionName, device);
 
-    const { response, finalizations, platformResourceCleanup } = await closeSession({
-      sessionStore,
-      sessionName,
-      retainExecutionHost,
-    });
+      const { response, finalizations, platformResourceCleanup } = await closeSession({
+        sessionStore,
+        sessionName,
+        retainExecutionHost,
+      });
 
-    expect(response?.ok).toBe(true);
-    expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledWith({
-      device,
-      shutdownRequested: false,
-      hasScreenRecording: false,
-      hasLease: false,
-    });
-    expect(finalizations).toEqual([
-      expect.objectContaining({ retainRunner: retainExecutionHost, shutdownTarget: false }),
-    ]);
-    expect(sessionStore.get(sessionName)).toBeUndefined();
-  }
-});
+      expect(response?.ok).toBe(true);
+      expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledWith({
+        device,
+        shutdownRequested: false,
+        hasScreenRecording: false,
+        hasLease: false,
+      });
+      expect(finalizations).toEqual([
+        expect.objectContaining({ retainRunner: retainExecutionHost, shutdownTarget: false }),
+      ]);
+      expect(sessionStore.get(sessionName)).toBeUndefined();
+    }
+  },
+);
 
 test('close <app> terminates the app before finalizing with the platform retention decision', async () => {
   const sessionStore = makeSessionStore();

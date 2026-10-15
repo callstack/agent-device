@@ -187,9 +187,7 @@ test('open --relaunch does not let an ambient provider claim suppress the relaun
   });
 
   expect(response?.ok).toBe(true);
-  expect(opened).toEqual([
-    expect.objectContaining({ relaunch: true, hasExistingSession: false }),
-  ]);
+  expect(opened).toEqual([expect.objectContaining({ relaunch: true, hasExistingSession: false })]);
 });
 
 test('open --relaunch without a session relaunches the requested app on the resolved device', async () => {

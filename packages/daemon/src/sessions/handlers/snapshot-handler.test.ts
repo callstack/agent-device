@@ -29,12 +29,7 @@ vi.mock('../../core/ios-app-session-hint.ts', () => ({
 }));
 
 import { buildIosOpenCommandHint } from '../../core/ios-app-session-hint.ts';
-import {
-  expireRefFrame,
-  refFrame,
-  refFrameState,
-  refFrameTree,
-} from '../../core/ref-frame.ts';
+import { expireRefFrame, refFrame, refFrameState, refFrameTree } from '../../core/ref-frame.ts';
 
 const mockBuildIosOpenCommandHint = vi.mocked(buildIosOpenCommandHint);
 const providerAdmission = providerDeviceAdmissionFixture();
@@ -284,7 +279,10 @@ async function runVersionedRefsCommand(params: {
   command: 'snapshot' | 'diff';
 }): Promise<Record<string, unknown> | undefined> {
   const response = await handleSnapshotCommands({
-    createCommandSurface: params.command === 'diff' ? diffForwardingCreateCommandSurface : forwardingCreateCommandSurface,
+    createCommandSurface:
+      params.command === 'diff'
+        ? diffForwardingCreateCommandSurface
+        : forwardingCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(params.sessionName, params.command, {
       positionals: params.command === 'diff' ? ['snapshot'] : [],

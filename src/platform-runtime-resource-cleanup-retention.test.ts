@@ -1,6 +1,10 @@
 import { expect, test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { ANDROID_EMULATOR, IOS_DEVICE, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import {
+  ANDROID_EMULATOR,
+  IOS_DEVICE,
+  IOS_SIMULATOR,
+} from '@agent-device/test-kit/device-fixtures';
 import { platformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
 
 const PLAIN_CLOSE = { shutdownRequested: false, hasScreenRecording: false, hasLease: false };
@@ -15,9 +19,7 @@ function retains(device: DeviceInfo, overrides: Partial<typeof PLAIN_CLOSE> = {}
 
 test('a plain close keeps the runner host of an iOS simulator', () => {
   expect(retains(IOS_SIMULATOR)).toBe(true);
-  expect(retains({ ...IOS_SIMULATOR, simulatorSetPath: '/tmp/tenant-a/simulator-set' })).toBe(
-    true,
-  );
+  expect(retains({ ...IOS_SIMULATOR, simulatorSetPath: '/tmp/tenant-a/simulator-set' })).toBe(true);
 });
 
 test.each([

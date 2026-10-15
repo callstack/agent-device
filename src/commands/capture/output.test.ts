@@ -128,9 +128,7 @@ test('JSON output keeps snapshot quality and warnings and drops capture analysis
   const snapshotQuality = { state: 'healthy', backend: 'tree' };
   const output = await snapshotCliOutput({
     result: {
-      nodes: attachRefs([
-        { index: 0, depth: 0, type: 'android.widget.TextView', label: 'Albums' },
-      ]),
+      nodes: attachRefs([{ index: 0, depth: 0, type: 'android.widget.TextView', label: 'Albums' }]),
       truncated: false,
       identifiers: { session: 'qa' },
       snapshotQuality,
@@ -140,7 +138,10 @@ test('JSON output keeps snapshot quality and warnings and drops capture analysis
     } as unknown as CaptureSnapshotResult,
   });
 
-  assert.deepEqual((output.jsonData as { snapshotQuality?: unknown }).snapshotQuality, snapshotQuality);
+  assert.deepEqual(
+    (output.jsonData as { snapshotQuality?: unknown }).snapshotQuality,
+    snapshotQuality,
+  );
   assert.deepEqual((output.jsonData as { warnings?: unknown }).warnings, [
     'backend warning from interaction capture',
   ]);
