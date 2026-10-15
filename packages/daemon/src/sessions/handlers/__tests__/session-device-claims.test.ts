@@ -331,7 +331,9 @@ test('cancellation after local device setup retains the device claim for recover
 
     assert.equal(response.ok, false);
     assert.equal(mockDispatch.mock.calls.length, 1);
-    assert.equal(inspectDeviceClaims({ serial: android.id })[0]?.classification, 'live');
+    const retainedClaim = inspectDeviceClaims({ serial: android.id })[0];
+    assert.equal(retainedClaim?.classification, 'live');
+    assert.equal(typeof retainedClaim?.claim?.abandonedAtMs, 'number');
     assert.equal(store.get('claim-canceled-after-dispatch'), undefined);
   } finally {
     clearRequestCanceled(requestId);

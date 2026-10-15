@@ -5,7 +5,6 @@ import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-c
 import { resetSnapshotRuntimeFixture } from '../../__tests__/support/snapshot-runtime-fixture.ts';
 import { forwardingCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import { providerDeviceAdmissionFixture } from '../../__tests__/support/provider-device-admission-fixture.ts';
-import { diffForwardingCreateCommandSurface } from '../../__tests__/support/snapshot-command-surface-fakes.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import {
   androidCapture,
@@ -279,10 +278,7 @@ async function runVersionedRefsCommand(params: {
   command: 'snapshot' | 'diff';
 }): Promise<Record<string, unknown> | undefined> {
   const response = await handleSnapshotCommands({
-    createCommandSurface:
-      params.command === 'diff'
-        ? diffForwardingCreateCommandSurface
-        : forwardingCreateCommandSurface,
+    createCommandSurface: forwardingCreateCommandSurface,
     platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(params.sessionName, params.command, {
       positionals: params.command === 'diff' ? ['snapshot'] : [],

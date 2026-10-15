@@ -22,6 +22,9 @@ afterEach(() => {
 
 type OpenCall = Readonly<{ app: string; options?: Record<string, unknown> }>;
 
+/** Completes after the caller has had a chance to run ahead, so only an awaited step is recorded first. */
+const settleLater = async () => await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
 function lifecycleHost(params: {
   events: string[];
   hasLiveRunnerSession?: boolean;
@@ -42,6 +45,7 @@ function lifecycleHost(params: {
   const appleApplications = {
     ...baseHost.appleApplications,
     stopRunnerSession: vi.fn(async (deviceId: string) => {
+      await settleLater();
       params.events.push(`stop-runner:${deviceId}`);
     }),
     prewarmRunnerSession: vi.fn(
@@ -55,6 +59,7 @@ function lifecycleHost(params: {
     }),
     hasLiveRunnerSession: vi.fn(async () => params.hasLiveRunnerSession ?? false),
     releaseRunnerOnClose: vi.fn(async (deviceId: string, options: { retain: boolean }) => {
+      await settleLater();
       params.events.push(`release-runner:${deviceId}:${options.retain ? 'retain' : 'stop'}`);
     }),
     dismissCloseAlerts: vi.fn(async () => {

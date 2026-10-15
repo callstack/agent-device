@@ -12,16 +12,25 @@ afterEach(() => {
 });
 
 test('sessionless cleanup releases the local execution host after the task', async () => {
-  const platformCleanup = platformResourceCleanupFixture();
+  const events: string[] = [];
+  const platformCleanup = platformResourceCleanupFixture({
+    cleanupSessionlessExecutionHost: async () => {
+      events.push('cleanup');
+    },
+  });
 
   const result = await withSessionlessRunnerCleanup(
     undefined,
     IOS_SIMULATOR,
-    returnOk,
+    async () => {
+      events.push('task');
+      return 'ok';
+    },
     platformCleanup,
   );
 
   expect(result).toBe('ok');
+  expect(events).toEqual(['task', 'cleanup']);
   expect(platformCleanup.cleanupSessionlessExecutionHost).toHaveBeenCalledWith(IOS_SIMULATOR);
 });
 

@@ -6,7 +6,7 @@ import { makeAndroidSession } from '../../__tests__/support/session-factories.ts
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';
 import { snapshotRuntimeFixture } from '../../__tests__/support/snapshot-runtime-fixture.ts';
-import { storingCreateCommandSurface } from '../../__tests__/support/snapshot-command-surface-fakes.ts';
+import { forwardingCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 const ANDROID_SCRIPT_ERROR = 'Unable to load script. Make sure you are running Metro.';
 
@@ -98,7 +98,7 @@ function requestScopedSnapshot(
 ) {
   const runtime = snapshotRuntimeFixture();
   return handleProductionSnapshotCommands({
-    createCommandSurface: storingCreateCommandSurface,
+    createCommandSurface: forwardingCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,

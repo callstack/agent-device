@@ -95,10 +95,12 @@ async function openRelaunch(params: {
   onOpenApplication?: (input: OpenApplicationInput) => Promise<void> | void;
 }) {
   const opened: OpenApplicationInput[] = [];
+  const boundDevices: DeviceInfo[] = [];
   const bindDevice: Parameters<typeof handleSessionCommands>[0]['bindDevice'] = async (
     device,
     use,
   ) => {
+    boundDevices.push(device);
     const binding = await mockBindDeviceRuntime(device, use);
     return {
       ...binding,
@@ -128,7 +130,7 @@ async function openRelaunch(params: {
     invoke: noopInvoke,
     bindDevice,
   });
-  return { response, opened };
+  return { response, opened, boundDevices };
 }
 
 test('open --relaunch asks the lifecycle to relaunch the active session app', async () => {
@@ -179,7 +181,7 @@ test('open --relaunch does not let an ambient provider claim suppress the relaun
   installProviderDeviceAdmission({ isActive: (device) => device.id === ANDROID_EMULATOR.id });
   mockResolveTargetDevice.mockResolvedValue(ANDROID_EMULATOR);
 
-  const { response, opened } = await openRelaunch({
+  const { response, opened, boundDevices } = await openRelaunch({
     sessionStore,
     sessionName: 'provider-android-session',
     positionals: ['com.example.app'],
@@ -187,6 +189,7 @@ test('open --relaunch does not let an ambient provider claim suppress the relaun
   });
 
   expect(response?.ok).toBe(true);
+  expect(boundDevices).toEqual([ANDROID_EMULATOR]);
   expect(opened).toEqual([expect.objectContaining({ relaunch: true, hasExistingSession: false })]);
 });
 
@@ -194,7 +197,7 @@ test('open --relaunch without a session relaunches the requested app on the reso
   const sessionStore = makeSessionStore();
   mockResolveTargetDevice.mockResolvedValue(IOS_DEVICE);
 
-  const { response, opened } = await openRelaunch({
+  const { response, opened, boundDevices } = await openRelaunch({
     sessionStore,
     sessionName: 'ios-new-session',
     positionals: ['com.example.app'],
@@ -202,6 +205,7 @@ test('open --relaunch without a session relaunches the requested app on the reso
   });
 
   expect(response?.ok).toBe(true);
+  expect(boundDevices).toEqual([IOS_DEVICE]);
   expect(opened).toEqual([
     expect.objectContaining({
       relaunch: true,

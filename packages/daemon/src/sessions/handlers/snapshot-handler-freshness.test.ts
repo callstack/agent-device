@@ -4,7 +4,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { forwardingCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
-import { diffForwardingCreateCommandSurface } from '../../__tests__/support/snapshot-command-surface-fakes.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import {
   fixtureScreenshotCaptures,
@@ -159,8 +158,7 @@ test.each([
     );
 
     const response = await handleSnapshotCommands({
-      createCommandSurface:
-        route === 'diff' ? diffForwardingCreateCommandSurface : forwardingCreateCommandSurface,
+      createCommandSurface: forwardingCreateCommandSurface,
       platformServices: daemonPlatformServicesFixture(),
       req: snapshotRequest(sessionName, route, {
         ...(route === 'diff' ? { positionals: ['snapshot'] } : {}),
