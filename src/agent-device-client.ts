@@ -29,11 +29,7 @@ import type {
 } from '@agent-device/contracts/client';
 import type { AgentArtifactsResult } from '@agent-device/contracts/observability';
 import type { MetroPrepareOptions } from '@agent-device/contracts/remote';
-import {
-  isNonDefaultResponseLevel,
-  type ResponseLevel,
-  type SessionRuntimeHints,
-} from '@agent-device/kernel/contracts';
+import { isNonDefaultResponseLevel, type ResponseLevel } from '@agent-device/kernel/contracts';
 import { AppError, throwDaemonError } from '@agent-device/kernel/errors';
 import { createRequestId } from '@agent-device/host-kit/diagnostics';
 import {
@@ -54,7 +50,7 @@ import {
   readSnapshotNodes,
   resolveSessionName,
 } from './client/client-normalizers.ts';
-import type { AgentDeviceClient, MetroPrepareResult } from './client/client-types.ts';
+import type { AgentDeviceClient } from './client/client-types.ts';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
 import { buildRequestFlags } from './commands/command-flags.ts';
 import {
@@ -64,13 +60,12 @@ import {
 import type { CommandResult } from '@agent-device/command-registry/command-result';
 import { sendToDaemon } from './daemon-client/daemon-client.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { resolveMetroServerUrl } from './metro/metro-reload-endpoints.ts';
 import { prepareMetroRuntime, reloadMetro } from './metro/client-metro.ts';
 import {
-  clearMetroSessionHints,
-  readMetroSessionHints,
-  writeMetroSessionHints,
-  type MetroSessionHints,
+  clearMetroSessionHintsQuietly,
+  recordPreparedMetroSession,
+  recordOpenedMetroSession,
+  readMetroSessionRuntime,
 } from './metro/metro-session-hints.ts';
 import {
   asOptionalRecord,
@@ -226,7 +221,7 @@ export function createAgentDeviceClient(
           };
         } finally {
           // Close is teardown intent: drop the dev-server binding even if the daemon call fails.
-          clearMetroSessionHintsQuietly(config, options);
+          clearMetroSessionHintsQuietly(metroSessionHintsScope(config, options));
         }
       },
       saveScript: async (
@@ -281,9 +276,8 @@ export function createAgentDeviceClient(
       open: async (options: AppOpenOptions) => {
         const session = resolveRequestSession(options);
         const data = await executeCommand<Record<string, unknown>>('open', options);
-        recordMetroSessionHintsAfterOpen({
-          config,
-          options,
+        recordOpenedMetroSession(metroSessionHintsScope(config, options), {
+          explicitRuntime: options.runtime !== undefined,
           runtime: mergeClientOptions(config, options).runtime,
           sessionReused: data.sessionReused === true,
         });
@@ -367,16 +361,13 @@ export function createAgentDeviceClient(
           runtimeFilePath: options.runtimeFilePath,
           logPath: options.logPath,
         });
-        persistMetroSessionHints(config, result);
+        recordPreparedMetroSession(metroSessionHintsScope(config), result);
         return result;
       },
       reload: async (options = {}) =>
         await reloadMetro({
-          metroHost: options.metroHost,
-          metroPort: options.metroPort,
-          bundleUrl: options.bundleUrl,
-          runtime: resolveMetroSessionHints(config) ?? config.runtime,
-          timeoutMs: options.timeoutMs,
+          ...options,
+          runtime: readMetroSessionRuntime(metroSessionHintsScope(config)) ?? config.runtime,
         }),
     },
     capture: {
@@ -595,92 +586,6 @@ function metroSessionHintsScope(
     stateDir: resolveDaemonPaths(merged.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR).baseDir,
     session: resolveSessionName(merged.session),
   };
-}
-
-// The metro-sessions file is the session's dev-server binding; see MetroSessionHints.
-function persistMetroSessionHints(
-  config: AgentDeviceClientConfig,
-  result: Pick<MetroPrepareResult, 'statusUrl' | 'iosRuntime' | 'androidRuntime'>,
-): void {
-  try {
-    const deviceBaseUrls = new Set<string>();
-    for (const runtime of [result.iosRuntime, result.androidRuntime]) {
-      try {
-        const hints = metroHintsFromRuntime(runtime);
-        if (hints) deviceBaseUrls.add(hints.controlBaseUrl);
-      } catch {}
-    }
-    writeMetroSessionHints({
-      ...metroSessionHintsScope(config),
-      hints: {
-        controlBaseUrl: new URL('.', result.statusUrl).toString(),
-        deviceBaseUrls: [...deviceBaseUrls],
-      },
-    });
-  } catch {
-    // Session-hint persistence is best-effort; reload still works with explicit flags.
-  }
-}
-
-function resolveMetroSessionHints(
-  config: AgentDeviceClientConfig,
-): SessionRuntimeHints | undefined {
-  try {
-    const binding = readMetroSessionHints(metroSessionHintsScope(config));
-    return binding ? { bundleUrl: binding.controlBaseUrl } : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function metroHintsFromRuntime(
-  runtime: SessionRuntimeHints | undefined,
-): MetroSessionHints | undefined {
-  const { metroHost, metroPort, bundleUrl } = runtime ?? {};
-  if (metroHost === undefined && metroPort === undefined && bundleUrl === undefined)
-    return undefined;
-  return { controlBaseUrl: resolveMetroServerUrl({ runtime }).toString() };
-}
-
-// Hint flags rebind the session's dev server; a hintless open that created the session clears
-// any leftover binding from a previous same-name session.
-function recordMetroSessionHintsAfterOpen(params: {
-  config: AgentDeviceClientConfig;
-  options: InternalRequestOptions;
-  runtime: SessionRuntimeHints | undefined;
-  sessionReused: boolean;
-}): void {
-  try {
-    const scope = metroSessionHintsScope(params.config, params.options);
-    const hints = metroHintsFromRuntime(params.runtime);
-    if (hints) {
-      const binding =
-        params.options.runtime === undefined ? readMetroSessionHints(scope) : undefined;
-      if (
-        binding &&
-        (params.sessionReused || binding.deviceBaseUrls?.includes(hints.controlBaseUrl))
-      )
-        return;
-      writeMetroSessionHints({ ...scope, hints });
-      return;
-    }
-    if (!params.sessionReused) {
-      clearMetroSessionHints(scope);
-    }
-  } catch {
-    // Session-hint sync is best-effort; reload still works with explicit flags.
-  }
-}
-
-function clearMetroSessionHintsQuietly(
-  config: AgentDeviceClientConfig,
-  options: InternalRequestOptions,
-): void {
-  try {
-    clearMetroSessionHints(metroSessionHintsScope(config, options));
-  } catch {
-    // Session-hint cleanup is best-effort; close must not fail on local file state.
-  }
 }
 
 export type * from './client/client-types.ts';

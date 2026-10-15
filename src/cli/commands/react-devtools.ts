@@ -1,3 +1,5 @@
+import type { CliFlags } from '@agent-device/contracts/command';
+import { writeCliOutput } from './shared.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ReactDevtoolsCommandOptions } from '../react-devtools/react-devtools-connection.ts';
 import {
@@ -8,12 +10,19 @@ import { runReactProfileCommand } from '../react-devtools/react-profile-command.
 
 export async function runReactDevtoolsCommand(
   args: string[],
-  options: ReactDevtoolsCommandOptions,
+  options: ReactDevtoolsCommandOptions & { flags?: Partial<Pick<CliFlags, 'json'>> },
 ): Promise<number> {
   const [command, ...rest] = args;
-  if (command === 'profile') return await runReactProfileCommand(rest, options);
-  if (isInspectCommand(command)) return await runReactInspectCommand(command, rest, options);
-  throw new AppError('INVALID_ARGS', `Unknown react-devtools command: ${command ?? '(none)'}.`, {
-    hint: 'Use react-devtools tree, find, inspect, errors, or profile.',
-  });
+  const output =
+    command === 'profile'
+      ? await runReactProfileCommand(rest, options)
+      : isInspectCommand(command)
+        ? await runReactInspectCommand(command, rest, options)
+        : undefined;
+  if (!output)
+    throw new AppError('INVALID_ARGS', `Unknown react-devtools command: ${command ?? '(none)'}.`, {
+      hint: 'Use react-devtools tree, find, inspect, errors, or profile.',
+    });
+  await writeCliOutput(options.flags ?? {}, output);
+  return 0;
 }

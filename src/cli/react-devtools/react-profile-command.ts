@@ -1,18 +1,18 @@
+import type { CliOutput } from '../../commands/command-contract.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { safeSessionName } from '@agent-device/host-kit/session-paths';
+import { publishFileSync } from '@agent-device/host-kit/file';
 import { targetAppId, type InspectorSession } from './metro-inspector.ts';
 import {
   callRuntime,
-  emitTo,
   parseDevtoolsArgs,
   runtimeFailure,
   RUNTIME_OPTIONS,
   withAppRuntime,
   type CommandForm,
   type DevtoolsArgs,
-  type Emit,
   type ReactDevtoolsCommandOptions,
   type RuntimeFailure,
 } from './react-devtools-connection.ts';
@@ -107,7 +107,7 @@ function writeSavedProfile(
 ): string {
   const filePath = savedProfilePath(options);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(profile)}\n`, 'utf8');
+  publishFileSync({ destination: filePath, contents: `${JSON.stringify(profile)}\n` });
   return filePath;
 }
 
@@ -197,30 +197,29 @@ async function stopProfile(
     const result = await callRuntime<StopResult>(session, 'stop');
     if (!result.ok) throw runtimeFailure(result);
     const { ok: _ok, failures, ...profile } = result;
-    const described = await describeChangedProps(session, profile);
-    const notes = [
-      ...failures.map((failure) => `A React renderer's profile could not be read: ${failure}`),
-      ...described.notes,
-    ];
     const appId = targetAppId(target);
-    writeSavedProfile(options, {
+    const saved: SavedReactProfile = {
       version: SAVED_PROFILE_VERSION,
       savedAt: new Date().toISOString(),
       appId,
       deviceName: target.deviceName,
       profile,
-      propKinds: described.propKinds,
-      notes,
-    });
-    return { appId, analysis: analyzeReactProfile(profile, described.propKinds, notes) };
+      propKinds: {},
+      notes: failures.map((failure) => `A React renderer's profile could not be read: ${failure}`),
+    };
+    writeSavedProfile(options, saved);
+    const described = await describeChangedProps(session, profile);
+    saved.propKinds = described.propKinds;
+    saved.notes.push(...described.notes);
+    writeSavedProfile(options, saved);
+    return { appId, analysis: analyzeReactProfile(profile, saved.propKinds, saved.notes) };
   });
 }
 
 type SubcommandHandler = (
   args: ProfileArgs,
   options: ReactDevtoolsCommandOptions,
-  emit: Emit,
-) => Promise<void>;
+) => Promise<CliOutput>;
 
 function requireComponents(analysis: ReactProfileAnalysis, name: string): ComponentProfile[] {
   const components = findComponents(analysis, name);
@@ -247,62 +246,74 @@ const COMPONENT_LIMIT = 10;
 const COMMIT_LIMIT = 20;
 
 const SUBCOMMAND_HANDLERS: Record<ReactProfileSubcommand, SubcommandHandler> = {
-  start: async (args, options, emit) => {
+  start: async (args, options) => {
     const started = await startProfile(args, options);
-    emit(started.message, started);
+    return { text: started.message, data: started };
   },
-  stop: async (args, options, emit) => {
+  stop: async (args, options) => {
     const { appId, analysis } = await stopProfile(args, options);
-    emit(formatProfileSummary(analysis, args.limit ?? DEFAULT_FINDING_LIMIT), {
-      appId,
-      wallMs: analysis.wallMs,
-      commitCount: analysis.commitCount,
-      renderMs: analysis.renderMs,
-      slowCommitCount: analysis.slowCommitCount,
-      worstCommit: analysis.worstCommit,
-      findings: analysis.findings.slice(0, args.limit ?? analysis.findings.length),
-      notes: analysis.notes,
-      savedTo: savedProfilePath(options),
-    });
+    return {
+      text: formatProfileSummary(analysis, args.limit ?? DEFAULT_FINDING_LIMIT),
+      data: {
+        appId,
+        wallMs: analysis.wallMs,
+        commitCount: analysis.commitCount,
+        renderMs: analysis.renderMs,
+        slowCommitCount: analysis.slowCommitCount,
+        worstCommit: analysis.worstCommit,
+        findings: analysis.findings.slice(0, args.limit ?? analysis.findings.length),
+        notes: analysis.notes,
+        savedTo: savedProfilePath(options),
+      },
+    };
   },
-  report: async (args, options, emit) => {
+  report: async (args, options) => {
     const analysis = readSavedAnalysis(options);
     if (args.target === undefined) {
       const limit = args.limit ?? COMPONENT_LIMIT;
-      emit(formatComponents(analysis, limit), {
-        components: analysis.components.slice(0, limit),
-      });
-      return;
+      return {
+        text: formatComponents(analysis, limit),
+        data: {
+          components: analysis.components.slice(0, limit),
+        },
+      };
     }
     const components = requireComponents(analysis, args.target);
-    emit(formatComponentReport(analysis, components), {
-      components,
-      findings: analysis.findings.filter((finding) =>
-        components.some((component) => isFindingFor(finding, component)),
-      ),
-    });
+    return {
+      text: formatComponentReport(analysis, components),
+      data: {
+        components,
+        findings: analysis.findings.filter((finding) =>
+          components.some((component) => isFindingFor(finding, component)),
+        ),
+      },
+    };
   },
-  commit: async (args, options, emit) => {
+  commit: async (args, options) => {
     const analysis = readSavedAnalysis(options);
     if (args.target === undefined) {
       const limit = args.limit ?? COMMIT_LIMIT;
-      emit(formatCommits(analysis, limit), { commits: listedCommits(analysis, limit) });
-      return;
+      return {
+        text: formatCommits(analysis, limit),
+        data: { commits: listedCommits(analysis, limit) },
+      };
     }
     const commit = requireCommit(analysis, args.target);
     const limit = args.limit ?? COMPONENT_LIMIT;
-    emit(formatCommit(commit, limit), {
-      ...commit,
-      components: commit.components.slice(0, limit),
-    });
+    return {
+      text: formatCommit(commit, limit),
+      data: {
+        ...commit,
+        components: commit.components.slice(0, limit),
+      },
+    };
   },
 };
 
 export async function runReactProfileCommand(
   args: string[],
   options: ReactDevtoolsCommandOptions,
-): Promise<number> {
+): Promise<CliOutput> {
   const parsed = parseProfileArgs(args);
-  await SUBCOMMAND_HANDLERS[parsed.subcommand](parsed, options, emitTo(options));
-  return 0;
+  return await SUBCOMMAND_HANDLERS[parsed.subcommand](parsed, options);
 }

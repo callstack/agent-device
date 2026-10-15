@@ -52,7 +52,7 @@ agent-device fill 'id="catalog-search"' "tart" --delay-ms 80
 agent-device react-devtools profile stop
 ```
 
-`profile stop` prints a short diagnosis: how many commits React made, how long they took, how many went over the 16 ms frame budget (when any did), and the problems it found, worst first. Each finding names a component, shows the evidence, and suggests a fix:
+`profile stop` saves the recording and prints a short diagnosis: how many commits React made, how long they took, how many went over the 16 ms frame budget (when any did), and the problems it found, worst first. If changed-prop inspection is interrupted after collection, you can still read the saved recording with `profile report` and `profile commit`. Each finding names a component, shows the evidence, and suggests a fix:
 
 ```text
 React profile 8.3s: 8 commits, 1303ms rendering, 8 over 16ms (worst #6 188ms)

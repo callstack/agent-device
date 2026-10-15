@@ -263,6 +263,29 @@ test('drill-down views read the saved recording, not a trimmed analysis', async 
   assert.match((await run('report', 'Row')).text, /changed props: onPress 36 \(function\)/);
 });
 
+test('stop saves the raw recording before optional prop inspection', async () => {
+  const { app, run, stateDir } = harness();
+  await run('start');
+  recordRowRenders(app);
+  let checkpoint: { profile: { commits: unknown[] }; propKinds: unknown } | undefined;
+  vi.mocked(InspectorSession.connect).mockResolvedValue({
+    evaluate: async (expression: string) => {
+      if (expression.includes('.describeProps(')) {
+        const file = path.join(stateDir, 'react-profiles', 'qa.json');
+        if (fs.existsSync(file)) checkpoint = JSON.parse(fs.readFileSync(file, 'utf8'));
+        throw new Error('inspection unavailable');
+      }
+      return vm.runInContext(expression, app.context);
+    },
+    close: () => {},
+  } as unknown as InspectorSession);
+  const stopped = await run('stop');
+  assert.equal(checkpoint?.profile.commits.length, 3);
+  assert.deepEqual(checkpoint?.propKinds, {});
+  assert.match(stopped.text, /Changed prop values could not be inspected: inspection unavailable/);
+  assert.match((await run('report', 'Row')).text, /renders 36/);
+});
+
 test('a renderer that fails while another records nothing is named in the empty summary', async () => {
   const { app, run } = harness();
   const broken = Object.assign(Object.create(app.renderer), {

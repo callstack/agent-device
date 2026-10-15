@@ -3,18 +3,9 @@ import assert from 'node:assert/strict';
 import {
   chronological,
   selectPropKindRequests,
-  splitDisplayName,
   summarizeRenders,
 } from './react-profile-renders.ts';
 import { MEMO, rawProfile, repeat, type Render } from './react-profile-renders.fixtures.ts';
-
-test('splitDisplayName separates DevTools wrapper names from the component', () => {
-  assert.deepEqual(splitDisplayName('Memo(ForwardRef(Row))'), {
-    name: 'Row',
-    wrappers: ['Memo', 'ForwardRef'],
-  });
-  assert.deepEqual(splitDisplayName('Row'), { name: 'Row', wrappers: [] });
-});
 
 test('commits from several roots are read as one timeline', () => {
   const raw = rawProfile({ 1: ['A'], 2: ['B'] }, [

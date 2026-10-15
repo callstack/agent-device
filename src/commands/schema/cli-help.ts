@@ -309,7 +309,7 @@ Component inspection:
 Profiling loop:
   1. Run profile start immediately before the interaction; keep the window narrow.
   2. Drive the interaction with normal agent-device commands. When correlating with logs, run logs clear --restart before the first logs mark.
-  3. Run profile stop. It prints the commit count, render time, commits over the 16 ms frame budget, and ranked findings, each naming a component, its evidence, and a fix.
+  3. Run profile stop. It saves the recording, then prints the commit count, render time, commits over the 16 ms frame budget, and ranked findings, each naming a component, its evidence, and a fix. If changed-prop inspection is interrupted after collection, profile report and profile commit can still read the saved recording.
   4. Drill into one finding with profile report <Component> or profile commit <N>. Without an argument, report lists components by self time with why they rendered, and commit lists commits in order (the slowest when capped).
   5. After a fix, repeat the same start, interaction, and stop, and compare the findings.
 

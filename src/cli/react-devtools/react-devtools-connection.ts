@@ -1,8 +1,6 @@
 import { parseArgs } from 'node:util';
 import { AppError } from '@agent-device/kernel/errors';
-import type { CliFlags } from '@agent-device/contracts/command';
-import { resolveMetroServerUrl } from '../../metro/metro-reload-endpoints.ts';
-import { readMetroSessionHints } from '../../metro/metro-session-hints.ts';
+import { resolveSessionMetroServerUrl } from '../../metro/metro-session-hints.ts';
 import {
   debuggerUrlOn,
   InspectorSession,
@@ -17,7 +15,6 @@ import {
 } from './react-devtools-runtime.ts';
 
 export type ReactDevtoolsCommandOptions = {
-  flags?: Partial<Pick<CliFlags, 'json'>>;
   stateDir: string;
   session: string;
 };
@@ -114,32 +111,13 @@ export function parseDevtoolsArgs(
   };
 }
 
-/**
- * Explicit flags, then the session's Metro binding, then localhost:8081. A host or port flag on its
- * own overrides that part of the binding and keeps the rest. The debugger socket is only accepted
- * from the machine that runs Metro, so a device-facing URL such as a remote bridge's is never used.
- */
-function resolveDevServerUrl(args: RuntimeArgs, options: ReactDevtoolsCommandOptions): URL {
-  const complete =
-    args.bundleUrl !== undefined || (args.metroHost !== undefined && args.metroPort !== undefined);
-  const binding = complete
-    ? undefined
-    : readMetroSessionHints({ stateDir: options.stateDir, session: options.session });
-  return resolveMetroServerUrl({
-    metroHost: args.metroHost,
-    metroPort: args.metroPort,
-    bundleUrl: args.bundleUrl,
-    runtime: binding ? { bundleUrl: binding.controlBaseUrl } : undefined,
-  });
-}
-
 /** Connects to the app's JavaScript runtime, installs the DevTools runtime there, and runs `action`. */
 export async function withAppRuntime<T>(
   args: RuntimeArgs,
   options: ReactDevtoolsCommandOptions,
   action: (session: InspectorSession, target: MetroInspectorTarget) => Promise<T>,
 ): Promise<T> {
-  const serverUrl = resolveDevServerUrl(args, options);
+  const serverUrl = resolveSessionMetroServerUrl(options, args);
   const target = selectReactNativeTarget(await listMetroInspectorTargets(serverUrl), {
     appId: args.app,
     device: args.metroDevice,
@@ -225,15 +203,4 @@ export function runtimeFailure(result: RuntimeFailure): AppError {
     reason: result.reason,
     ...(known ? { hint: known.hint } : {}),
   });
-}
-
-export type Emit = (text: string, data: unknown) => void;
-
-export function emitTo(options: ReactDevtoolsCommandOptions): Emit {
-  const json = options.flags?.json === true;
-  return (text, data) => {
-    process.stdout.write(
-      json ? `${JSON.stringify({ success: true, data }, null, 2)}\n` : `${text}\n`,
-    );
-  };
 }

@@ -1,3 +1,4 @@
+import { componentName, componentRef, kindLabel } from './react-component.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { printable } from './react-devtools-text.ts';
 
@@ -36,21 +37,6 @@ export type ComponentTree = {
   logsTracked: boolean;
 };
 
-const ELEMENT_CLASS = 1;
-const ELEMENT_FORWARD_REF = 6;
-const ELEMENT_MEMO = 8;
-
-const TYPE_WRAPPER = /^(?:Memo|ForwardRef)\((.+)\)$/;
-
-/** `Memo(Row)` reads as `Row`: the element type already says it is memoized. */
-export function componentName(displayName: string): string {
-  let name = displayName;
-  for (let match = TYPE_WRAPPER.exec(name); match; match = TYPE_WRAPPER.exec(name)) {
-    name = match[1]!;
-  }
-  return name;
-}
-
 export function buildComponentTree(raw: RawComponentTree): ComponentTree {
   const byId = new Map<number, TreeNode>();
   for (const [id, displayName, elementType, , ownerId, key] of raw.nodes) {
@@ -87,17 +73,6 @@ export function buildComponentTree(raw: RawComponentTree): ComponentTree {
     );
   }
   return { roots, byId, logsTracked: raw.logsTracked };
-}
-
-export function componentRef(node: { id: number }): string {
-  return `@c${node.id}`;
-}
-
-export function kindLabel(elementType: number): string {
-  if (elementType === ELEMENT_MEMO) return ' [memo]';
-  if (elementType === ELEMENT_CLASS) return ' [class]';
-  if (elementType === ELEMENT_FORWARD_REF) return ' [forwardRef]';
-  return '';
 }
 
 function plural(count: number, noun: string): string {

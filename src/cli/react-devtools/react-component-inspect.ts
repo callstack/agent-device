@@ -1,4 +1,4 @@
-import { componentName, componentRef, kindLabel } from './react-component-tree.ts';
+import { componentName, componentRef, kindLabel } from './react-component.ts';
 import { printable, printableLines } from './react-devtools-text.ts';
 
 type ValuePath = Array<string | number>;

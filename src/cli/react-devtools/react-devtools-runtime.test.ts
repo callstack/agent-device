@@ -249,6 +249,25 @@ test('describeProps classifies changed prop values on a mounted instance', () =>
   );
 });
 
+test('prop sampling and inspection use the renderer that owns the element', () => {
+  const app = new FakeAppRuntime();
+  app.install();
+  app.renderer.props.set(3, { data: { label: 'owned' }, cleaned: [] });
+  const foreign = Object.assign(Object.create(app.renderer), {
+    hasElementWithId: () => false,
+    inspectElement: () => ({ type: 'full-data', value: { props: { data: { label: 1 } } } }),
+  });
+  app.hook.rendererInterfaces.clear();
+  app.hook.rendererInterfaces.set(1, foreign);
+  app.hook.rendererInterfaces.set(2, app.renderer);
+  assert.deepEqual(app.call('describeProps', { '3': ['label'] }), { '3': { label: 'string' } });
+  const inspected = app.call<{ ok: boolean; elements: Record<string, { props: unknown }> }>(
+    'inspect',
+    [3],
+  );
+  assert.deepEqual(inspected.elements['3']?.props, { data: { label: 'owned' }, cleaned: [] });
+});
+
 test('a renderer whose profiling data cannot be read fails the stop instead of returning no commits', () => {
   const app = new FakeAppRuntime();
   app.install();

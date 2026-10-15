@@ -1,7 +1,8 @@
+import type { CliOutput } from '../../commands/command-contract.ts';
 import type { CliFlags } from '@agent-device/contracts/command';
 
 export async function writeCommandOutput(
-  flags: CliFlags,
+  flags: Partial<Pick<CliFlags, 'json'>>,
   data: unknown,
   renderHuman?: () => string | null | undefined,
 ): Promise<void> {
@@ -16,4 +17,16 @@ export async function writeCommandOutput(
 
 function writeLine(text: string): void {
   process.stdout.write(text.endsWith('\n') ? text : `${text}\n`);
+}
+
+export async function writeCliOutput(
+  flags: Partial<Pick<CliFlags, 'json'>>,
+  output: CliOutput,
+): Promise<void> {
+  if (!flags.json && output.stderr) process.stderr.write(output.stderr);
+  await writeCommandOutput(
+    flags,
+    flags.json ? (output.jsonData ?? output.data) : output.data,
+    () => output.text,
+  );
 }

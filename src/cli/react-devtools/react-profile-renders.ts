@@ -1,21 +1,12 @@
+import {
+  COMPONENT_KINDS,
+  componentKind,
+  splitDisplayName,
+  type ComponentKind,
+} from './react-component.ts';
+
 /** Frame budget at 60 Hz; a commit slower than this drops at least one frame. */
 export const FRAME_BUDGET_MS = 16;
-
-const ELEMENT_CLASS = 1;
-const ELEMENT_FUNCTION = 5;
-const ELEMENT_FORWARD_REF = 6;
-const ELEMENT_MEMO = 8;
-const ELEMENT_VIRTUAL = 15;
-/** Name resolved by lookup, so the backend element type is unknown. */
-const ELEMENT_UNKNOWN = 0;
-const COMPONENT_TYPES = new Set([
-  ELEMENT_CLASS,
-  ELEMENT_FUNCTION,
-  ELEMENT_FORWARD_REF,
-  ELEMENT_MEMO,
-  ELEMENT_VIRTUAL,
-  ELEMENT_UNKNOWN,
-]);
 
 /**
  * React Native building blocks whose renders follow from the app component that renders them.
@@ -47,19 +38,6 @@ const FRAMEWORK_PRIMITIVES = new Set([
   'VirtualizedListCellContextProvider',
   'VirtualizedSectionList',
 ]);
-
-const HOC_PATTERN = /^([A-Za-z0-9_$]+)\((.+)\)$/;
-
-/** Splits `Memo(ForwardRef(Row))` into the component name and its wrappers, as DevTools shows it. */
-export function splitDisplayName(displayName: string): { name: string; wrappers: string[] } {
-  const wrappers: string[] = [];
-  let name = displayName;
-  for (let match = HOC_PATTERN.exec(name); match; match = HOC_PATTERN.exec(name)) {
-    wrappers.push(match[1]!);
-    name = match[2]!;
-  }
-  return { name, wrappers };
-}
 
 /**
  * The name findings and tables use. An `Animated(...)` wrapper keeps its full name: it is a separate
@@ -102,8 +80,6 @@ export type RawReactProfile = {
   keys: string[];
   commits: RawProfileCommit[];
 };
-
-export type ComponentKind = 'class' | 'function' | 'forwardRef' | 'memo' | 'unknown';
 
 /** A component as the profile can tell it apart: `Row` and memo-wrapped `Row` are two components. */
 export type ComponentId = { name: string; kind: ComponentKind };
@@ -185,22 +161,6 @@ type ParsedRender = ComponentId & {
   causes: string[];
 };
 
-function componentKind(type: number): ComponentKind {
-  switch (type) {
-    case ELEMENT_CLASS:
-      return 'class';
-    case ELEMENT_FUNCTION:
-    case ELEMENT_VIRTUAL:
-      return 'function';
-    case ELEMENT_FORWARD_REF:
-      return 'forwardRef';
-    case ELEMENT_MEMO:
-      return 'memo';
-    default:
-      return 'unknown';
-  }
-}
-
 /** Undefined when the profile could not name the element; such renders stay out of the analysis. */
 function elementOf(profile: RawReactProfile, id: number): RawProfileElement | undefined {
   return profile.elements[String(id)];
@@ -208,7 +168,7 @@ function elementOf(profile: RawReactProfile, id: number): RawProfileElement | un
 
 function componentOf(element: RawProfileElement): ComponentId {
   const { name, wrappers } = renderName(element[0]);
-  return { name, kind: componentKind(wrappers.includes('Memo') ? ELEMENT_MEMO : element[1]) };
+  return { name, kind: wrappers.includes('Memo') ? 'memo' : componentKind(element[1]) };
 }
 
 /** The distinct components behind these elements, leaving out any the profile could not name. */
@@ -243,7 +203,7 @@ export function* commitRenders(
   for (let offset = 0; offset + 2 < commit.fibers.length; offset += 3) {
     const id = commit.fibers[offset]!;
     const element = elementOf(profile, id);
-    if (!element || !COMPONENT_TYPES.has(element[1])) continue;
+    if (!element || !(element[1] in COMPONENT_KINDS)) continue;
     yield {
       ...componentOf(element),
       id,

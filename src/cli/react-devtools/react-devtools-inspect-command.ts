@@ -1,3 +1,5 @@
+import { componentRef } from './react-component.ts';
+import type { CliOutput } from '../../commands/command-contract.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { targetAppId, type InspectorSession } from './metro-inspector.ts';
 import {
@@ -7,7 +9,6 @@ import {
 } from './react-component-inspect.ts';
 import {
   buildComponentTree,
-  componentRef,
   findNodes,
   logSummary,
   matchLine,
@@ -20,14 +21,12 @@ import {
 } from './react-component-tree.ts';
 import {
   callRuntime,
-  emitTo,
   parseDevtoolsArgs,
   runtimeFailure,
   RUNTIME_OPTIONS,
   withAppRuntime,
   type CommandForm,
   type DevtoolsArgs,
-  type Emit,
   type ReactDevtoolsCommandOptions,
   type RuntimeFailure,
 } from './react-devtools-connection.ts';
@@ -90,14 +89,10 @@ function requireTarget(args: DevtoolsArgs, usage: string): string {
   return target;
 }
 
-type Handler = (
-  args: DevtoolsArgs,
-  options: ReactDevtoolsCommandOptions,
-  emit: Emit,
-) => Promise<void>;
+type Handler = (args: DevtoolsArgs, options: ReactDevtoolsCommandOptions) => Promise<CliOutput>;
 
 const HANDLERS: Record<InspectCommand, Handler> = {
-  tree: async (args, options, emit) => {
+  tree: async (args, options) => {
     const { app, tree, root } = await withAppRuntime(args, options, async (session, target) => {
       const tree = await readTree(session);
       const root = args.positionals[0] ? resolveNode(tree, args.positionals[0]) : undefined;
@@ -117,15 +112,18 @@ const HANDLERS: Record<InspectCommand, Handler> = {
             `+${hidden} components not shown (raise --depth or --limit, or run tree <@ref> on a branch)`,
           ]
         : [];
-    emit([header, ...view.lines, ...footer].join('\n'), {
-      app,
-      root: root ? componentRef(root) : null,
-      total: view.total,
-      shown: view.shown,
-      lines: view.lines,
-    });
+    return {
+      text: [header, ...view.lines, ...footer].join('\n'),
+      data: {
+        app,
+        root: root ? componentRef(root) : null,
+        total: view.total,
+        shown: view.shown,
+        lines: view.lines,
+      },
+    };
   },
-  find: async (args, options, emit) => {
+  find: async (args, options) => {
     const query = requireTarget(args, 'find <Name>');
     const tree = await withAppRuntime(args, options, async (session) => await readTree(session));
     const matches = findNodes(tree, query, args.exact);
@@ -139,21 +137,27 @@ const HANDLERS: Record<InspectCommand, Handler> = {
       matches.length > shown.length
         ? [`  +${matches.length - shown.length} more (--limit ${matches.length})`]
         : [];
-    emit([header, ...shown.map((node) => `  ${matchLine(tree, node)}`), ...more].join('\n'), {
-      total: matches.length,
-      matches: shown.map((node) => matchData(node)),
-    });
+    return {
+      text: [header, ...shown.map((node) => `  ${matchLine(tree, node)}`), ...more].join('\n'),
+      data: {
+        total: matches.length,
+        matches: shown.map((node) => matchData(node)),
+      },
+    };
   },
-  inspect: async (args, options, emit) => {
+  inspect: async (args, options) => {
     const target = requireTarget(args, 'inspect <@ref|Name>');
     const { id, component } = await withAppRuntime(args, options, async (session) => {
       const id = parseRef(target) ?? resolveNode(await readTree(session), target).id;
       const elements = await inspectIds(session, [id]);
       return { id, component: requireInspected(elements[String(id)]) };
     });
-    emit(formatInspectedComponent(id, component), { ref: componentRef({ id }), ...component });
+    return {
+      text: formatInspectedComponent(id, component),
+      data: { ref: componentRef({ id }), ...component },
+    };
   },
-  errors: async (args, options, emit) => {
+  errors: async (args, options) => {
     const limit = args.limit ?? ERRORS_LIMIT;
     const { logged, inspected, logsTracked } = await withAppRuntime(
       args,
@@ -173,13 +177,13 @@ const HANDLERS: Record<InspectCommand, Handler> = {
     );
     const untracked = logsTracked ? [] : [UNTRACKED_LOGS_NOTE];
     if (logged.length === 0) {
-      emit(
-        ['No mounted component logged an error or warning while rendering.', ...untracked].join(
-          '\n',
-        ),
-        { total: 0, logsTracked, components: [] },
-      );
-      return;
+      return {
+        text: [
+          'No mounted component logged an error or warning while rendering.',
+          ...untracked,
+        ].join('\n'),
+        data: { total: 0, logsTracked, components: [] },
+      };
     }
     const shown = logged.slice(0, limit);
     const lines = [
@@ -195,20 +199,23 @@ const HANDLERS: Record<InspectCommand, Handler> = {
     if (logged.length > shown.length)
       lines.push(`  +${logged.length - shown.length} more (--limit ${logged.length})`);
     lines.push(...untracked);
-    emit(lines.join('\n'), {
-      total: logged.length,
-      logsTracked,
-      components: shown.map((node) => {
-        const messages = loggedMessages(inspected[String(node.id)]);
-        return 'unavailable' in messages
-          ? { ...matchData(node), messagesUnavailable: messages.unavailable }
-          : {
-              ...matchData(node),
-              errors: messages.component.errors,
-              warnings: messages.component.warnings,
-            };
-      }),
-    });
+    return {
+      text: lines.join('\n'),
+      data: {
+        total: logged.length,
+        logsTracked,
+        components: shown.map((node) => {
+          const messages = loggedMessages(inspected[String(node.id)]);
+          return 'unavailable' in messages
+            ? { ...matchData(node), messagesUnavailable: messages.unavailable }
+            : {
+                ...matchData(node),
+                errors: messages.component.errors,
+                warnings: messages.component.warnings,
+              };
+        }),
+      },
+    };
   },
 };
 
@@ -235,8 +242,7 @@ export async function runReactInspectCommand(
   command: InspectCommand,
   args: string[],
   options: ReactDevtoolsCommandOptions,
-): Promise<number> {
+): Promise<CliOutput> {
   const parsed = parseDevtoolsArgs(args, () => FORMS[command]);
-  await HANDLERS[command](parsed, options, emitTo(options));
-  return 0;
+  return await HANDLERS[command](parsed, options);
 }

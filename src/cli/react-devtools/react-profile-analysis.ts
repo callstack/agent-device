@@ -1,3 +1,4 @@
+import type { ComponentKind } from './react-component.ts';
 import {
   bump,
   chronological,
@@ -13,7 +14,6 @@ import {
   type CommitComponent,
   type CommitProfile,
   type ComponentId,
-  type ComponentKind,
   type ComponentProfile,
   type PropKindsById,
   type RawProfileCommit,

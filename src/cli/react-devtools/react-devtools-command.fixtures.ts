@@ -1,3 +1,6 @@
+import type { CliOutput } from '../../commands/command-contract.ts';
+import type { CliFlags } from '@agent-device/contracts/command';
+import { writeCliOutput } from '../commands/shared.ts';
 import { vi } from 'vitest';
 import vm from 'node:vm';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -18,14 +21,17 @@ export const TARGET = {
  * `command` prints. Callers restore the stubbed globals and spies after each test.
  */
 export function commandHarness(
-  command: (args: string[], options: ReactDevtoolsCommandOptions) => Promise<number>,
+  command: (args: string[], options: ReactDevtoolsCommandOptions) => Promise<CliOutput>,
   app = new FakeAppRuntime(),
   targets: unknown[] = [TARGET],
 ) {
   const stateDir = mkdtempForTestSync('react-profile-');
   const output: string[] = [];
   const requested: string[] = [];
-  const options: ReactDevtoolsCommandOptions = { stateDir, session: 'qa' };
+  const options: ReactDevtoolsCommandOptions & { flags?: Partial<Pick<CliFlags, 'json'>> } = {
+    stateDir,
+    session: 'qa',
+  };
   vi.stubGlobal('fetch', async (url: URL) => {
     requested.push(String(url));
     return new Response(JSON.stringify(targets), { status: 200 });
@@ -43,8 +49,9 @@ export function commandHarness(
   });
   const run = async (...args: string[]) => {
     output.length = 0;
-    const code = await command(args, options);
-    return { code, text: output.join('') };
+    const result = await command(args, options);
+    await writeCliOutput(options.flags ?? {}, result);
+    return { code: 0, text: output.join('') };
   };
   return { app, run, options, stateDir, requested };
 }
