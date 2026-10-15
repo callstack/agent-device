@@ -148,7 +148,7 @@ describe('settings usage and error strings', () => {
     expect(getUnsupportedMacOsSettingMessage('wifi')).toBe(
       'Unsupported macOS setting: wifi. macOS supports only settings appearance <light|dark|toggle> ' +
         'and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>. ' +
-        'wifi|airplane|location|animations|text-size remain unsupported on macOS.',
+        'wifi|airplane|mobile-data|location|animations|text-size remain unsupported on macOS.',
     );
   });
 
@@ -353,6 +353,14 @@ describe('settingsAppScope', () => {
     expect(settingsAppScope('apple', 'location', 'off')).toBe('app-scoped');
     expect(settingsAppScope('mobile', 'location', 'on')).toBe('device-level');
     expect(settingsAppScope('mobile', 'location', 'off')).toBe('device-level');
+  });
+
+  test('mobile-data switches the whole device wherever it is served', () => {
+    expect(settingsAppScope('mobile', 'mobile-data', 'on')).toBe('device-level');
+    expect(settingsAppScope('mobile', 'mobile-data', 'off')).toBe('device-level');
+    // No Apple target serves it; its refusal belongs to the leaf, not to the app.
+    expect(settingsAppScope('apple', 'mobile-data', 'on')).toBe('unknown');
+    expect(settingsAppScope('macos-host', 'mobile-data', 'on')).toBe('unknown');
   });
 
   test('every state parseSettingState accepts classifies like its on/off spelling', () => {

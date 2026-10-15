@@ -1,4 +1,4 @@
-import type { SettingOptions } from '@agent-device/contracts/settings';
+import { mobileDataUnsupportedError, type SettingOptions } from '@agent-device/contracts/settings';
 import { AppError, sessionAppRequiredDetails } from '@agent-device/kernel/errors';
 import type { LimrunIosSession } from './ios.ts';
 
@@ -31,6 +31,8 @@ export async function setLimrunIosSetting(
       });
     case 'clear-app-state':
       return await clearAppState(session, state, appId);
+    case 'mobile-data':
+      throw mobileDataUnsupportedError(session.device.id);
     default:
       throw new AppError(
         'UNSUPPORTED_OPERATION',

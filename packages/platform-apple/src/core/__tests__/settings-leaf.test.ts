@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   APPLE_BIOMETRIC_LEAF_REFUSAL,
   APPLE_TEXT_SIZE_LEAF_REFUSAL,
-  type AppleSettingLeafRefusal,
+  type SettingLeafRefusal,
 } from '@agent-device/contracts/settings';
 import { AppError } from '@agent-device/kernel/errors';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
@@ -50,11 +50,7 @@ for (const device of ADMITTED) {
  * no prose of its own, which is what keeps two settings' hints distinct — beside the leaf that was
  * refused, so a machine consumer can tell a physical-device read failure from a tvOS one.
  */
-function assertRefused(
-  device: DeviceInfo,
-  appleOs: AppleOS,
-  refusal: AppleSettingLeafRefusal,
-): void {
+function assertRefused(device: DeviceInfo, appleOs: AppleOS, refusal: SettingLeafRefusal): void {
   assert.throws(
     () => requireHandheldAppleSimulatorLeaf(device, refusal),
     (error: unknown) => {

@@ -208,7 +208,8 @@ export type SettingsTargetFamily = 'apple' | 'mobile' | 'macos-host';
  * `clear-app-state` is app-scoped wherever it is served (`isMacOsSettingSupported` keeps macOS out
  * of that claim), `permission` is app-scoped on every non-Apple mobile target and on Apple and
  * host-level on macOS, and on/off `location` is app-scoped only on Apple, where it maps to a
- * privacy grant — while `location set` moves the device's own location for everyone.
+ * privacy grant — while `location set` moves the device's own location for everyone. `mobile-data`
+ * switches the whole device's data connection wherever it is served, which is only the mobile family.
  */
 export function settingsAppScope(
   family: SettingsTargetFamily,
@@ -223,6 +224,7 @@ export function settingsAppScope(
     return family === 'macos-host' ? 'device-level' : 'app-scoped';
   }
   if (normalizedSetting === 'location') return locationAppScope(family, state);
+  if (normalizedSetting === 'mobile-data') return family === 'mobile' ? 'device-level' : 'unknown';
   return 'unknown';
 }
 
@@ -338,7 +340,7 @@ const SETTINGS_PERMISSION_USAGE = `permission <${PERMISSION_ACTIONS.join('|')}> 
  * refused there), so it stays a literal while the accepted names come from the vocabulary.
  */
 export const SETTINGS_MACOS_PERMISSION_USAGE = `permission <grant|reset> <${MACOS_PERMISSION_TARGETS.join('|')}>`;
-const SETTINGS_MACOS_SUPPORTED_MESSAGE = `macOS supports only settings ${SETTINGS_APPEARANCE_USAGE} and settings ${SETTINGS_MACOS_PERMISSION_USAGE}. wifi|airplane|location|animations|text-size remain unsupported on macOS.`;
+const SETTINGS_MACOS_SUPPORTED_MESSAGE = `macOS supports only settings ${SETTINGS_APPEARANCE_USAGE} and settings ${SETTINGS_MACOS_PERMISSION_USAGE}. wifi|airplane|mobile-data|location|animations|text-size remain unsupported on macOS.`;
 
 export const SETTINGS_USAGE_OVERRIDE = [
   `settings ${SETTINGS_WIFI_USAGE}`,
@@ -390,10 +392,10 @@ export function readTextSizeCategory(value: string | undefined): TextSizeCategor
 /**
  * What a setting declares to refuse a leaf it was never verified on: the sentence, the next command
  * to run, and the reason both legs of that setting answer with. The shape is declared here so every
- * setting's refusal is checked against it at its declaration, and the Apple leaf guard can name it
+ * setting's refusal is checked against it at its declaration, and every leaf guard can name it
  * without inventing a second vocabulary.
  */
-export type AppleSettingLeafRefusal = Readonly<{
+export type SettingLeafRefusal = Readonly<{
   message: string;
   hint: string;
   reason: 'setting-unsupported-on-leaf';
@@ -412,7 +414,7 @@ export const APPLE_TEXT_SIZE_LEAF_REFUSAL = Object.freeze({
   message: 'Reading or setting a text size is supported on iOS and iPadOS simulators.',
   hint: 'Run `xcrun simctl ui <device> content_size` on a booted iPhone or iPad simulator.',
   reason: 'setting-unsupported-on-leaf',
-} as const) satisfies AppleSettingLeafRefusal;
+} as const) satisfies SettingLeafRefusal;
 
 /**
  * Simulator biometrics are driven through BiometricKit_Sim notifications, which only the iPhone and
@@ -423,19 +425,37 @@ export const APPLE_BIOMETRIC_LEAF_REFUSAL = Object.freeze({
   message: 'Face ID and Touch ID simulation is supported on iOS and iPadOS simulators.',
   hint: 'Select a booted iPhone or iPad simulator, then run `settings faceid <state>` or `settings touchid <state>`.',
   reason: 'setting-unsupported-on-leaf',
-} as const) satisfies AppleSettingLeafRefusal;
+} as const) satisfies SettingLeafRefusal;
 
 /**
- * Mobile data is switched through adb's `svc data`, which no Apple target has an equivalent of:
- * simulators have no cellular radio and `simctl` offers no data toggle, so every Apple leaf refuses it
- * before binding.
+ * agent-device switches mobile data only through adb's `svc data`, so every target without it —
+ * iOS simulators and devices, the macOS host, HarmonyOS, Vega, Linux, and web — refuses the setting:
+ * the daemon before it binds, and an Apple owner reached by any other path with the same refusal.
  */
-export const APPLE_MOBILE_DATA_LEAF_REFUSAL = Object.freeze({
+export const MOBILE_DATA_LEAF_REFUSAL = Object.freeze({
   message:
-    'settings mobile-data is supported only on adb-backed Android targets; agent-device has no mobile-data control for Apple targets, whose simulators have no cellular radio.',
+    "settings mobile-data is supported only on adb-backed Android targets: agent-device switches mobile data through adb's svc data, which this target does not offer.",
   hint: 'Run `settings mobile-data <on|off>` on an adb-backed Android device or emulator.',
   reason: 'setting-unsupported-on-leaf',
-} as const) satisfies AppleSettingLeafRefusal;
+} as const) satisfies SettingLeafRefusal;
+
+/** The owner-side form of {@link MOBILE_DATA_LEAF_REFUSAL}, thrown before anything reaches the device. */
+export function mobileDataUnsupportedError(deviceId: string): AppError {
+  return discloseDispatch(
+    new AppError('UNSUPPORTED_OPERATION', MOBILE_DATA_LEAF_REFUSAL.message, {
+      deviceId,
+      reason: MOBILE_DATA_LEAF_REFUSAL.reason,
+      hint: MOBILE_DATA_LEAF_REFUSAL.hint,
+    }),
+    'no',
+  );
+}
+
+/** `details.reason` of a mobile-data switch whose stored value never matched the request. */
+export const MOBILE_DATA_NOT_APPLIED_REASON = 'mobile-data-not-applied';
+
+/** `details.reason` of a mobile-data switch whose stored value never read as on or off. */
+export const MOBILE_DATA_UNREADABLE_REASON = 'mobile-data-unreadable';
 
 /** The one membership rule every settings-vocabulary parser shares: a name matches itself, any casing. */
 function findVocabularyName<const TNames extends readonly string[]>(

@@ -89,6 +89,16 @@ describe('settings CLI', () => {
     }
   });
 
+  test('forwards --app on mobile-data so the daemon refuses it instead of dropping it', () => {
+    const input = settingsCliReader(['mobile-data', 'off'], {
+      targetApp: 'com.example.app',
+    } as CliFlags);
+    expect(settingsDaemonWriter(input)).toMatchObject({
+      positionals: ['mobile-data', 'off'],
+      input: { app: 'com.example.app' },
+    });
+  });
+
   test('keeps the documented macOS permission form in the command detail', () => {
     expect(settingsCommandFacet.text.cliDetail).toContain(
       'settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>',

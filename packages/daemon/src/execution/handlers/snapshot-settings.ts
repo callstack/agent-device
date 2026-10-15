@@ -6,18 +6,19 @@ import {
   resolveDeviceAppleOs,
 } from '@agent-device/kernel/device';
 import {
-  APPLE_MOBILE_DATA_LEAF_REFUSAL,
   APPLE_TEXT_SIZE_LEAF_REFUSAL,
   describeSettingRead,
   describeSettingWrite,
   getUnsupportedMacOsSettingMessage,
   isMacOsSettingSupported,
+  MOBILE_DATA_LEAF_REFUSAL,
   invalidTextSizeMessage,
   readTextSizeCategory,
   settingsAppNotConsumedRefusal,
   settingsAppScope,
   SETTINGS_INVALID_ARGS_MESSAGE,
   type ReadableSetting,
+  type SettingLeafRefusal,
   type SettingsTargetFamily,
   type SettingOptions,
 } from '@agent-device/contracts/settings';
@@ -321,9 +322,9 @@ async function executeSettingsWrite(
  * The refusals both legs make before a device is touched, so one target answers a read and a write of
  * the same setting with the same code. They key on the requested setting, which an operation fact
  * cannot express: macOS serves `settings` and still refuses `wifi`, the Apple ladder needs a
- * narrower leaf than the simulator-family write fact admits, and no Apple leaf has a mobile-data
- * switch. All are daemon-side stops ahead of admission — the mutation leg expires the session ref
- * frame as soon as it is admitted, and a request this surface refuses must not expire it.
+ * narrower leaf than the simulator-family write fact admits, and only an Android target has a
+ * mobile-data switch. All are daemon-side stops ahead of admission — the mutation leg expires the
+ * session ref frame as soon as it is admitted, and a request this surface refuses must not expire it.
  */
 function settingsRequestRefusal(
   device: SessionState['device'],
@@ -341,30 +342,33 @@ function settingsRequestRefusal(
     isApplePlatform(device.platform) &&
     !isHandheldAppleSimulator(device)
   ) {
-    return errorResponse(
-      'UNSUPPORTED_OPERATION',
-      APPLE_TEXT_SIZE_LEAF_REFUSAL.message,
-      {
-        deviceKind: device.kind,
-        appleOs: resolveDeviceAppleOs(device),
-        reason: APPLE_TEXT_SIZE_LEAF_REFUSAL.reason,
-      },
-      { hint: APPLE_TEXT_SIZE_LEAF_REFUSAL.hint },
-    );
+    return settingLeafRefusalResponse(device, APPLE_TEXT_SIZE_LEAF_REFUSAL);
   }
-  if (setting === 'mobile-data' && isApplePlatform(device.platform)) {
-    return errorResponse(
-      'UNSUPPORTED_OPERATION',
-      APPLE_MOBILE_DATA_LEAF_REFUSAL.message,
-      {
-        deviceKind: device.kind,
-        appleOs: resolveDeviceAppleOs(device),
-        reason: APPLE_MOBILE_DATA_LEAF_REFUSAL.reason,
-      },
-      { hint: APPLE_MOBILE_DATA_LEAF_REFUSAL.hint },
-    );
+  // Every non-Android owner admits `settings` for some other setting, so admission alone would
+  // expire the frame before the owner refused mobile data.
+  if (setting === 'mobile-data' && device.platform !== 'android') {
+    return settingLeafRefusalResponse(device, MOBILE_DATA_LEAF_REFUSAL);
   }
   return undefined;
+}
+
+/** The one response shape a setting refused on its leaf answers with, whichever setting refused. */
+function settingLeafRefusalResponse(
+  device: SessionState['device'],
+  refusal: SettingLeafRefusal,
+): DaemonResponse {
+  return errorResponse(
+    'UNSUPPORTED_OPERATION',
+    refusal.message,
+    {
+      platform: device.platform,
+      deviceKind: device.kind,
+      ...(isApplePlatform(device.platform) ? { appleOs: resolveDeviceAppleOs(device) } : {}),
+      reason: refusal.reason,
+      dispatched: 'no',
+    },
+    { hint: refusal.hint },
+  );
 }
 
 /**

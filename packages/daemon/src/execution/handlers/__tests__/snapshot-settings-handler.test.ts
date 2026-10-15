@@ -20,11 +20,13 @@ import {
   iosSimulatorDevice,
   macOsDevice,
   makeSession,
+  providerIosDevice,
   makeSessionStore,
   snapshotRequest,
   tvOsSimulatorDevice,
 } from '../../../__tests__/support/handlers/snapshot-handler.fixtures.ts';
 import { activateCompleteRefFrame, refFrameState } from '../../../core/ref-frame.ts';
+import type { SessionState } from '../../../core/session-state.ts';
 import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 
 vi.mock('../../../core/snapshot-interactor-capture.ts', async () => {
@@ -390,8 +392,27 @@ test('settings mobile-data reaches the Android owner as an on/off mutation', asy
   expect(fixtureSettingsMutations.at(-1)).toMatchObject({ setting: 'mobile-data', state: 'off' });
 });
 
-test('settings mobile-data refuses Apple simulators before it expires the frame', async () => {
-  for (const device of [iosSimulatorDevice, tvOsSimulatorDevice]) {
+// agent-device switches mobile data only through adb, so every other target refuses before
+// admission: each of these owners admits `settings` for some other setting, and admission would
+// expire the frame before the owner refused.
+const MOBILE_DATA_REFUSING_DEVICES: SessionState['device'][] = [
+  iosSimulatorDevice,
+  { platform: 'apple', id: 'ios-device-1', name: 'My iPhone', kind: 'device', booted: true },
+  providerIosDevice,
+  tvOsSimulatorDevice,
+  { ...tvOsSimulatorDevice, appleOs: 'visionos', id: 'sim-vision-1', target: undefined },
+  {
+    platform: 'harmonyos',
+    id: 'harmony-1',
+    name: 'HarmonyOS Emulator',
+    kind: 'emulator',
+    booted: true,
+  },
+  { platform: 'linux', id: 'linux-host', name: 'Linux Desktop', kind: 'device', booted: true },
+];
+
+test('settings mobile-data refuses every non-Android target before it expires the frame', async () => {
+  for (const device of MOBILE_DATA_REFUSING_DEVICES) {
     const sessionStore = makeSessionStore();
     const sessionName = `${device.id}-mobile-data`;
     const session = makeSession(sessionName, device);
@@ -407,15 +428,66 @@ test('settings mobile-data refuses Apple simulators before it expires the frame'
         logPath: '/tmp/daemon.log',
         sessionStore,
       });
-      expect(response?.ok).toBe(false);
+      expect(response?.ok, device.id).toBe(false);
       if (response && !response.ok) {
-        expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
-        expect(response.error.details?.reason).toBe('setting-unsupported-on-leaf');
+        expect(response.error.code, device.id).toBe('UNSUPPORTED_OPERATION');
+        expect(response.error.details?.reason, device.id).toBe('setting-unsupported-on-leaf');
+        expect(response.error.details?.dispatched, device.id).toBe('no');
+        expect(response.error.details?.platform, device.id).toBe(device.platform);
       }
     }
-    expect(refFrameState(session)).toBe('active');
+    expect(refFrameState(session), device.id).toBe('active');
   }
   expect(fixtureSettingsMutations).toHaveLength(0);
+});
+
+test('settings mobile-data on macOS refuses like its other unsupported settings', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'macos-mobile-data';
+  sessionStore.publish(sessionName, makeSession(sessionName, macOsDevice));
+
+  const response = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest(sessionName, 'settings', { positionals: ['mobile-data', 'off'] }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  expect(fixtureSettingsMutations).toHaveLength(0);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.message).toMatch(/Unsupported macOS setting: mobile-data/);
+    expect(response.error.message).toMatch(/wifi\|airplane\|mobile-data\|location/);
+  }
+});
+
+test('settings Android mobile-data refuses a named app before reaching the owner', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-mobile-data-app-refused';
+  sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
+
+  const response = await handleSnapshotCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    req: snapshotRequest(sessionName, 'settings', {
+      positionals: ['mobile-data', 'off'],
+      input: { app: 'com.example.app' },
+    }),
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  expect(response?.ok).toBe(false);
+  expect(fixtureSettingsMutations).toHaveLength(0);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.details?.reason).toBe('setting_app_not_consumed');
+    expect(response.error.details?.dispatched).toBe('no');
+  }
 });
 
 test('settings on macOS rejects wifi before dispatch with explicit subset guidance', async () => {
@@ -443,7 +515,7 @@ test('settings on macOS rejects wifi before dispatch with explicit subset guidan
       /permission <grant\|reset> <accessibility\|screen-recording\|input-monitoring>/,
     );
     expect(response.error.message).toMatch(
-      /wifi\|airplane\|location\|animations\|text-size remain unsupported on macOS/i,
+      /wifi\|airplane\|mobile-data\|location\|animations\|text-size remain unsupported on macOS/i,
     );
   }
 });
