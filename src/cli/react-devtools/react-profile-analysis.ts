@@ -7,6 +7,7 @@ import {
   formatMs,
   FRAME_BUDGET_MS,
   isFrameworkPrimitive,
+  parentOf,
   sameComponent,
   summarizeRenders,
   type CommitComponent,
@@ -314,13 +315,50 @@ const SUBTREE_SHARE = 0.8;
 /** Findings whose cost lives in the component's own render, versus in the subtree it re-renders. */
 const SELF_COST_FINDINGS = new Set<FindingKind>(['slow-render', 'effect-chain', 'render-storm']);
 
-/** Render time in a commit that earlier findings already account for. */
-function explainedMs(commit: CommitProfile, earlier: Finding[]): number {
+type Explanation = 'self' | 'subtree';
+
+/** What each component's findings account for, by component key: its own render or its subtree. */
+function explanations(earlier: Finding[]): Map<string, Explanation> {
+  const byComponent = new Map<string, Explanation>();
+  for (const finding of earlier) {
+    if (finding.componentKind === undefined) continue;
+    const key = componentKey({ name: finding.component, kind: finding.componentKind });
+    if (!SELF_COST_FINDINGS.has(finding.kind)) byComponent.set(key, 'subtree');
+    else if (!byComponent.has(key)) byComponent.set(key, 'self');
+  }
+  return byComponent;
+}
+
+/**
+ * Render time in a commit that earlier findings already account for. A subtree finding's time
+ * includes every render below it, so renders inside an accounted subtree are not counted again.
+ */
+function explainedMs(
+  profile: RawReactProfile,
+  commit: RawProfileCommit,
+  explained: Map<string, Explanation>,
+): number {
+  const renders = [...commitRenders(profile, commit)];
+  const accountedSubtrees = new Set(
+    renders.filter((render) => explained.get(componentKey(render)) === 'subtree').map((r) => r.id),
+  );
+  const insideAccounted = (id: number): boolean => {
+    const visited = new Set<number>();
+    for (
+      let parent = parentOf(profile, id);
+      parent && !visited.has(parent);
+      parent = parentOf(profile, parent)
+    ) {
+      if (accountedSubtrees.has(parent)) return true;
+      visited.add(parent);
+    }
+    return false;
+  };
   let total = 0;
-  for (const entry of commit.components) {
-    const findings = earlier.filter((finding) => isFindingFor(finding, entry));
-    if (findings.some((finding) => !SELF_COST_FINDINGS.has(finding.kind))) total += entry.actualMs;
-    else if (findings.length > 0) total += entry.selfMs;
+  for (const render of renders) {
+    const explanation = explained.get(componentKey(render));
+    if (!explanation || insideAccounted(render.id)) continue;
+    total += explanation === 'subtree' ? render.actualMs : render.selfMs;
   }
   return total;
 }
@@ -364,10 +402,19 @@ function slowCommitFinding(commit: CommitProfile): Finding {
   };
 }
 
-function slowCommitFindings(commits: CommitProfile[], earlier: Finding[]): Finding[] {
+function slowCommitFindings(
+  profile: RawReactProfile,
+  commits: CommitProfile[],
+  earlier: Finding[],
+): Finding[] {
+  const explained = explanations(earlier);
   return commits
     .filter((commit) => commit.durationMs >= SLOW_COMMIT_MS)
-    .filter((commit) => explainedMs(commit, earlier) < commit.durationMs * EXPLAINED_SHARE)
+    .filter(
+      (commit) =>
+        explainedMs(profile, profile.commits[commit.index]!, explained) <
+        commit.durationMs * EXPLAINED_SHARE,
+    )
     .sort((a, b) => b.durationMs - a.durationMs)
     .slice(0, SLOW_COMMIT_FINDING_LIMIT)
     .map(slowCommitFinding);
@@ -419,7 +466,7 @@ export function analyzeReactProfile(
   findings.push(...eagerMountFindings(profile, commits));
   findings.push(...effectChainFindings(profile));
   findings.push(...renderStormFindings(profile));
-  findings.push(...slowCommitFindings(commits, findings));
+  findings.push(...slowCommitFindings(profile, commits, findings));
   const renderMs = commits.reduce((sum, commit) => sum + commit.durationMs, 0);
   const costFloorMs = Math.max(MIN_FINDING_COST_MS, renderMs * MIN_FINDING_COST_SHARE);
   const significant = findings

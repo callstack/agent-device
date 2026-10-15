@@ -110,11 +110,39 @@ test('errors lists the components that logged while rendering, with their messag
 });
 
 test('a runtime whose tree another DevTools frontend owns fails with a typed reason', async () => {
-  const { run } = harness(new FakeAppRuntime({ fusebox: false }));
+  const app = new FakeAppRuntime();
+  app.mount([{ id: 2, name: 'App' }]);
+  app.renderer.queue = null;
+  app.hook.sub('operations', () => {});
+  const { run } = harness(app);
   await assert.rejects(
     run('tree'),
     (error: { details: { reason: string } }) => error.details.reason === 'tree-unavailable',
   );
+});
+
+test('errors says when the messages of a component could not be read instead of listing none', async () => {
+  const app = listApp();
+  app.renderer.inspectElement = () => ({ type: 'error', message: 'hooks threw' });
+  const { run, options } = harness(app);
+  assert.match(
+    (await run('errors')).text,
+    /\n {2}@c5 Row: 1 error\n {4}messages unavailable: hooks threw\n$/,
+  );
+  options.flags = { json: true };
+  const parsed = JSON.parse((await run('errors')).text) as {
+    data: { components: Array<{ messagesUnavailable?: string; errors?: unknown }> };
+  };
+  assert.deepEqual(parsed.data.components[0]?.messagesUnavailable, 'hooks threw');
+  assert.equal(parsed.data.components[0]?.errors, undefined);
+});
+
+test('errors returns the same shape when nothing logged', async () => {
+  const app = new FakeAppRuntime();
+  app.mount([{ id: 2, name: 'App' }]);
+  const { run, options } = harness(app);
+  options.flags = { json: true };
+  assert.deepEqual(JSON.parse((await run('errors')).text).data, { total: 0, components: [] });
 });
 
 test('each command refuses options it does not read', async () => {

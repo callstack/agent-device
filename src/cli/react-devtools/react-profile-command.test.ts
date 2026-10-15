@@ -166,33 +166,6 @@ test('drill-down views need a saved profile', async () => {
   await assert.rejects(harness().run('report'), /No React profile saved for session qa/);
 });
 
-test('explicit dev-server flags override the session binding', async () => {
-  const { run, requested } = harness();
-  await run('start', '--metro-port', '8082');
-  assert.deepEqual(requested, ['http://localhost:8082/json/list']);
-});
-
-test('the session Metro binding picks the dev server', async () => {
-  const { run, requested, stateDir } = harness();
-  fs.mkdirSync(path.join(stateDir, 'metro-sessions'), { recursive: true });
-  fs.writeFileSync(
-    path.join(stateDir, 'metro-sessions', 'qa.json'),
-    JSON.stringify({ controlBaseUrl: 'http://127.0.0.1:19000/' }),
-  );
-  await run('start');
-  assert.deepEqual(requested, ['http://127.0.0.1:19000/json/list']);
-});
-
-test('a remote bridge profiles through the public dev-server URL without its bundle path', async () => {
-  const { run, requested, options } = harness();
-  options.flags = {
-    leaseBackend: 'android-instance',
-    metroPublicBaseUrl: 'https://metro.example.test/index.bundle?platform=android',
-  };
-  await run('start');
-  assert.deepEqual(requested, ['https://metro.example.test/json/list']);
-});
-
 test('a corrupt saved profile asks for a new recording', async () => {
   const { run, stateDir } = harness();
   fs.mkdirSync(path.join(stateDir, 'react-profiles'), { recursive: true });

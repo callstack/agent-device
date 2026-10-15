@@ -62,7 +62,7 @@ test('react-devtools uses active remote connection session after defaults are me
   const sendToDaemon = async (): Promise<DaemonResponse> => ({ ok: true, data: {} });
 
   try {
-    await runCli(['react-devtools', 'profile', 'status', '--state-dir', stateDir], {
+    await runCli(['react-devtools', 'profile', 'start', '--state-dir', stateDir], {
       sendToDaemon,
     });
   } finally {
@@ -73,5 +73,6 @@ test('react-devtools uses active remote connection session after defaults are me
 
   assert.equal(exitCode, 0);
   assert.equal(vi.mocked(runReactDevtoolsCommand).mock.calls.length, 1);
+  assert.deepEqual(vi.mocked(runReactDevtoolsCommand).mock.calls[0]?.[0], ['profile', 'start']);
   assert.equal(vi.mocked(runReactDevtoolsCommand).mock.calls[0]?.[1]?.session, 'adc-android');
 });

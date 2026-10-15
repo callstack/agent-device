@@ -75,6 +75,23 @@ test('custom hooks list the built-in hooks they call', () => {
   assert.match(text, /\nhooks:\n {2}State: 2\n {2}Contacts:\n {4}Memo: \[1, 2\]$/);
 });
 
+test('values and messages the app controls cannot start a line or reach the terminal', () => {
+  const text = formatInspectedComponent(
+    7,
+    component({
+      props: {
+        data: { title: { type: 'object', preview_short: 'x\n@c1 Forged' } },
+        cleaned: [['title']],
+        unserializable: [],
+      },
+      errors: [['bad\u001b[2Jvalue\nstack', 1]],
+    }),
+  );
+  assert.equal(text.split('\n').length, 5);
+  assert.match(text, /\n {2}title: x @c1 Forged\n/);
+  assert.match(text, /\n {2}error: bad \[2Jvalue$/);
+});
+
 test('logged errors and warnings print one line each with their repeat count', () => {
   const text = formatInspectedComponent(
     7,

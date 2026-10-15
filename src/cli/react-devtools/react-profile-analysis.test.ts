@@ -382,6 +382,51 @@ test('a finding about memo Row does not explain a slow commit spent in plain Row
   assert.match(slowCommit!.evidence, /^commit #3 took 100ms/);
 });
 
+test('time inside a subtree a finding accounts for is not counted twice', () => {
+  const elements: Record<number, [string, number?, number?, number?]> = {
+    1: ['Screen'],
+    2: ['Panel', FUNCTION, 1, 1],
+    3: ['Box', FUNCTION, 2, 2],
+    4: ['View', FUNCTION, 1, 1],
+  };
+  const raw = rawProfile(elements, [
+    ...repeat(12, (i): [number, number, number[], Render[]] => [
+      i * 200,
+      10,
+      [1],
+      [
+        [1, 1, [0, null, [0], null], 10],
+        [2, 1, 'parent', 2],
+        [3, 1, 'parent'],
+      ],
+    ]),
+    [
+      3_000,
+      100,
+      [1],
+      [
+        [1, 2, [0, null, [0], null], 100],
+        [4, 55, 'parent'],
+        [2, 5, 'parent', 40],
+        [3, 35, 'parent'],
+      ],
+    ],
+  ]);
+
+  const findings = analyzeReactProfile(raw).findings;
+  assert.ok(
+    findings.some((finding) => finding.kind === 'parent-cascade' && finding.component === 'Panel'),
+  );
+  assert.ok(
+    findings.some((finding) => finding.kind === 'parent-cascade' && finding.component === 'Box'),
+  );
+  assert.match(
+    findings.find((finding) => finding.kind === 'slow-commit')?.evidence ?? '',
+    /^commit #12 took 100ms/,
+    'Panel accounts for 40ms including Box, which leaves most of the commit unexplained',
+  );
+});
+
 test('a prop whose inspected instances disagree on its kind claims no new identity', () => {
   const rows = repeat(12, (i) => 10 + i);
   const elements: Record<number, [string, number?, number?]> = { 1: ['List'] };

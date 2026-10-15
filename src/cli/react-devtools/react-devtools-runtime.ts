@@ -210,15 +210,14 @@ export const REACT_DEVTOOLS_RUNTIME_SOURCE = String.raw`
     return [bits, props, state, hooks];
   }
 
-  function exportProfile() {
+  /** Reads back only the renderers this session started; another renderer has no recording. */
+  function exportProfile(renderers) {
     var commits = [];
     var refs = Object.create(null);
     var keyTable = { keys: [], index: Object.create(null) };
-    var renderers = 0;
     var failures = [];
-    eachRenderer(function (ri) {
+    renderers.forEach(function (ri) {
       var data;
-      renderers++;
       try { ri.stopProfiling(); data = ri.getProfilingData(); } catch (e) {
         failures.push(String(e && e.message || e));
         return;
@@ -263,7 +262,12 @@ export const REACT_DEVTOOLS_RUNTIME_SOURCE = String.raw`
       if (owner && !refs[owner] && !owners[owner] && elements.get(owner)) owners[owner] = elements.get(owner);
     });
     Object.keys(owners).forEach(function (id) { refs[id] = owners[id]; });
-    return { elements: refs, keys: keyTable.keys, commits: commits, renderers: renderers, failures: failures };
+    Object.keys(refs).forEach(function (id) {
+      for (var parent = refs[id][3]; parent && !refs[parent] && elements.get(parent); parent = refs[parent][3]) {
+        refs[parent] = elements.get(parent);
+      }
+    });
+    return { elements: refs, keys: keyTable.keys, commits: commits, failures: failures };
   }
 
   function propKind(value, path, cleaned) {
@@ -353,22 +357,23 @@ export const REACT_DEVTOOLS_RUNTIME_SOURCE = String.raw`
     var attached = attach();
     if (!attached.ok) return attached;
     if (session) return { ok: false, reason: 'already-profiling', elapsedMs: Date.now() - session.startedAt };
-    var started = 0;
+    var started = [];
     eachRenderer(function (ri) {
-      try { ri.startProfiling(true, false); started++; } catch (e) {}
+      try { ri.startProfiling(true, false); started.push(ri); } catch (e) {}
     });
-    if (started === 0) return { ok: false, reason: 'start-failed' };
-    session = { startedAt: Date.now(), removed: [] };
+    if (started.length === 0) return { ok: false, reason: 'start-failed' };
+    session = { startedAt: Date.now(), renderers: started, removed: [] };
     return { ok: true, attach: attached.attach, naming: attached.naming };
   }
 
   function stop() {
     if (!session) return { ok: false, reason: 'not-profiling' };
     var startedAt = session.startedAt;
-    var profile = exportProfile();
+    var renderers = session.renderers;
+    var profile = exportProfile(renderers);
     session.removed.forEach(function (id) { elements.delete(id); });
     session = null;
-    if (profile.failures.length > 0 && profile.failures.length === profile.renderers) {
+    if (profile.failures.length === renderers.length) {
       return { ok: false, reason: 'collect-failed', detail: profile.failures[0] };
     }
     return {
@@ -386,7 +391,7 @@ export const REACT_DEVTOOLS_RUNTIME_SOURCE = String.raw`
   function dispose() {
     if (unsubscribe) unsubscribe();
     unsubscribe = null;
-    if (session) eachRenderer(function (ri) { try { ri.stopProfiling(); } catch (e) {} });
+    if (session) session.renderers.forEach(function (ri) { try { ri.stopProfiling(); } catch (e) {} });
     session = null;
   }
 

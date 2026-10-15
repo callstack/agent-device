@@ -31,6 +31,7 @@ import {
   type ReactDevtoolsCommandOptions,
   type RuntimeFailure,
 } from './react-devtools-connection.ts';
+import { printable } from './react-devtools-text.ts';
 
 const INSPECT_COMMANDS = ['tree', 'find', 'inspect', 'errors'] as const;
 
@@ -160,7 +161,10 @@ const HANDLERS: Record<InspectCommand, Handler> = {
       return { logged, inspected: ids.length > 0 ? await inspectIds(session, ids) : {} };
     });
     if (logged.length === 0) {
-      emit('No mounted component logged an error or warning while rendering.', { components: [] });
+      emit('No mounted component logged an error or warning while rendering.', {
+        total: 0,
+        components: [],
+      });
       return;
     }
     const shown = logged.slice(0, limit);
@@ -169,28 +173,37 @@ const HANDLERS: Record<InspectCommand, Handler> = {
     ];
     for (const node of shown) {
       lines.push(`  ${componentRef(node)} ${node.name}: ${logSummary(node)}`);
-      const result = inspected[String(node.id)];
-      if (result && !('missing' in result) && !('error' in result)) {
-        lines.push(...formatComponentLogs(result).map((line) => `  ${line}`));
-      }
+      const messages = loggedMessages(inspected[String(node.id)]);
+      if ('unavailable' in messages)
+        lines.push(`    messages unavailable: ${messages.unavailable}`);
+      else lines.push(...formatComponentLogs(messages.component).map((line) => `  ${line}`));
     }
     if (logged.length > shown.length)
       lines.push(`  +${logged.length - shown.length} more (--limit ${logged.length})`);
     emit(lines.join('\n'), {
       total: logged.length,
       components: shown.map((node) => {
-        const result = inspected[String(node.id)];
-        const messages =
-          result && !('missing' in result) && !('error' in result) ? result : undefined;
-        return {
-          ...matchData(node),
-          errors: messages?.errors ?? [],
-          warnings: messages?.warnings ?? [],
-        };
+        const messages = loggedMessages(inspected[String(node.id)]);
+        return 'unavailable' in messages
+          ? { ...matchData(node), messagesUnavailable: messages.unavailable }
+          : {
+              ...matchData(node),
+              errors: messages.component.errors,
+              warnings: messages.component.warnings,
+            };
       }),
     });
   },
 };
+
+/** The inspected component behind a log count, or why its messages could not be read. */
+function loggedMessages(
+  result: InspectedResult | undefined,
+): { component: InspectedComponent } | { unavailable: string } {
+  if (!result || 'missing' in result) return { unavailable: 'the component unmounted' };
+  if ('error' in result) return { unavailable: printable(result.error) };
+  return { component: result };
+}
 
 function matchData(node: TreeNode) {
   return {

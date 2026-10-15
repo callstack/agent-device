@@ -1,4 +1,5 @@
 import { AppError } from '@agent-device/kernel/errors';
+import { printable } from './react-devtools-text.ts';
 
 /** `[id, name, elementType, parentId, ownerId, key]` for every mounted component. */
 type RawTreeNode = [number, string, number, number, number, string | null];
@@ -45,8 +46,17 @@ export function buildComponentTree(raw: RawComponentTree): ComponentTree {
   const byId = new Map<number, TreeNode>();
   for (const [id, displayName, elementType, , ownerId, key] of raw.nodes) {
     const [errors, warnings] = raw.logs[String(id)] ?? [0, 0];
-    const name = componentName(displayName);
-    byId.set(id, { id, name, elementType, key, ownerId, children: [], errors, warnings });
+    const name = componentName(printable(displayName));
+    byId.set(id, {
+      id,
+      name,
+      elementType,
+      key: key === null ? null : printable(key),
+      ownerId,
+      children: [],
+      errors,
+      warnings,
+    });
   }
   const roots: TreeNode[] = [];
   for (const [id, , , parentId] of raw.nodes) {
@@ -124,21 +134,49 @@ function chainLabel(chain: TreeNode[]): string {
   ].join(' > ');
 }
 
-/** Siblings that collapse into one line: this many or more, of one name and one subtree size. */
+/** Siblings that collapse into one line: this many or more, all of one shape. */
 const MIN_COLLAPSED_RUN = 3;
 
 /**
- * Consecutive siblings of one name and shape, such as list rows, read as one line. Screens of one
- * navigator share a name but not a shape, so the focused one stays open.
+ * Numbers each subtree by its shape: names, element types, and logged problems, all the way down.
+ * Two subtrees with one number print the same, apart from refs and keys.
  */
-function siblingRuns(children: TreeNode[]): TreeNode[][] {
+class SubtreeShapes {
+  readonly #ids = new Map<string, number>();
+  readonly #byNode = new Map<TreeNode, number>();
+
+  of(node: TreeNode): number {
+    const known = this.#byNode.get(node);
+    if (known !== undefined) return known;
+    const signature = [
+      node.name,
+      node.elementType,
+      node.errors,
+      node.warnings,
+      ...node.children.map((child) => this.of(child)),
+    ].join('\0');
+    let id = this.#ids.get(signature);
+    if (id === undefined) {
+      id = this.#ids.size;
+      this.#ids.set(signature, id);
+    }
+    this.#byNode.set(node, id);
+    return id;
+  }
+}
+
+/**
+ * Consecutive siblings of one shape, such as list rows, read as one line. Screens of one navigator
+ * share a name but not a shape, so the focused one stays open, and a row that logged a problem
+ * its neighbours did not stays on its own line.
+ */
+function siblingRuns(children: TreeNode[], shapes: SubtreeShapes): TreeNode[][] {
   const runs: TreeNode[][] = [];
   for (const child of children) {
     const run = runs.at(-1);
     const first = run?.[0];
-    if (first && first.name === child.name && descendantCount(first) === descendantCount(child)) {
-      run.push(child);
-    } else runs.push([child]);
+    if (first && shapes.of(first) === shapes.of(child)) run.push(child);
+    else runs.push([child]);
   }
   return runs.flatMap((run) =>
     run.length >= MIN_COLLAPSED_RUN ? [run] : run.map((child) => [child]),
@@ -153,6 +191,7 @@ export type TreeView = { lines: string[]; shown: number; total: number };
  */
 export function renderTree(roots: TreeNode[], depth: number, limit: number): TreeView {
   const lines: string[] = [];
+  const shapes = new SubtreeShapes();
   let shown = 0;
   const total = roots.reduce((sum, root) => sum + 1 + descendantCount(root), 0);
   const visit = (node: TreeNode, level: number): void => {
@@ -166,7 +205,7 @@ export function renderTree(roots: TreeNode[], depth: number, limit: number): Tre
       return;
     }
     lines.push(`${indent}${chainLabel(chain)}`);
-    for (const run of siblingRuns(tail.children)) {
+    for (const run of siblingRuns(tail.children, shapes)) {
       if (lines.length >= limit) return;
       if (run.length === 1) {
         visit(run[0]!, level + 1);

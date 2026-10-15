@@ -326,17 +326,21 @@ test('inspect returns props, hooks, owners, and logged problems of mounted compo
   const app = new FakeAppRuntime();
   app.mount([{ id: 3, name: 'Row', key: 'a' }]);
   app.install();
+  const props = { data: { label: 'First' }, cleaned: [], unserializable: [] };
+  const hooks = {
+    data: [{ id: 0, name: 'State', value: 2, subHooks: [] }],
+    cleaned: [],
+    unserializable: [],
+  };
+  const owners = [{ id: 2, displayName: 'List', type: 5, key: null }];
   app.renderer.inspected.set(3, {
     type: 5,
     key: 'a',
+    props,
     state: null,
-    hooks: {
-      data: [{ id: 0, name: 'State', value: 2, subHooks: [] }],
-      cleaned: [],
-      unserializable: [],
-    },
+    hooks,
     context: null,
-    owners: [{ id: 2, displayName: 'List', type: 5, key: null }],
+    owners,
     errors: [['boom', 2]],
     warnings: [],
     isErrored: false,
@@ -345,7 +349,39 @@ test('inspect returns props, hooks, owners, and logged problems of mounted compo
     'inspect',
     [3, 99],
   );
-  assert.equal(result.elements['3']!.name, 'Row');
-  assert.deepEqual(result.elements['3']!.errors, [['boom', 2]]);
+  assert.deepEqual(result.elements['3'], {
+    name: 'Row',
+    type: 5,
+    key: 'a',
+    props,
+    state: null,
+    hooks,
+    context: null,
+    owners,
+    errors: [['boom', 2]],
+    warnings: [],
+    isErrored: false,
+  });
   assert.deepEqual(result.elements['99'], { missing: true });
+});
+
+test('stop reads only the renderers that started, so a failed export of the one recording fails', () => {
+  const app = new FakeAppRuntime();
+  app.install();
+  const unstarted = Object.assign(Object.create(app.renderer), {
+    startProfiling: () => {
+      throw new Error('profiling unsupported');
+    },
+    getProfilingData: () => ({ dataForRoots: [] }),
+  });
+  app.hook.rendererInterfaces.set(2, unstarted);
+  app.call('start');
+  app.renderer.getProfilingData = () => {
+    throw new Error('profiling data unavailable');
+  };
+  assert.deepEqual(app.call('stop'), {
+    ok: false,
+    reason: 'collect-failed',
+    detail: 'profiling data unavailable',
+  });
 });

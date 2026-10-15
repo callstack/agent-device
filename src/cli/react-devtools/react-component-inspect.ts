@@ -1,4 +1,5 @@
 import { componentName, componentRef, kindLabel } from './react-component-tree.ts';
+import { printable } from './react-devtools-text.ts';
 
 type ValuePath = Array<string | number>;
 
@@ -132,7 +133,7 @@ function hookLines(value: DehydratedValue | null): string[] {
 function logLines(label: string, entries: Array<[string, number]>): string[] {
   return entries.map(
     ([message, count]) =>
-      `  ${label}: ${clip(message.split('\n')[0] ?? '', VALUE_WIDTH)}${count > 1 ? ` (x${count})` : ''}`,
+      `  ${label}: ${clip(printable(message.split('\n')[0] ?? ''), VALUE_WIDTH)}${count > 1 ? ` (x${count})` : ''}`,
   );
 }
 
@@ -161,5 +162,5 @@ export function formatInspectedComponent(id: number, component: InspectedCompone
   );
   const logs = formatComponentLogs(component);
   if (logs.length > 0) lines.push('logged while rendering:', ...logs);
-  return lines.join('\n');
+  return lines.map(printable).join('\n');
 }

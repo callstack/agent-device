@@ -30,9 +30,10 @@ function appTree(rows = 3): RawComponentTree {
   return { nodes, order: {}, logs: { '21': [1, 0] } };
 }
 
-test('wrapper chains and runs of sibling rows each read as one line', () => {
-  const tree = buildComponentTree(appTree());
-  const view = renderTree(tree.roots, 8, 60);
+test('wrapper chains and runs of same-shape sibling rows each read as one line', () => {
+  const raw = appTree();
+  raw.logs = {};
+  const view = renderTree(buildComponentTree(raw).roots, 8, 60);
   assert.deepEqual(view.lines, [
     '@c1 ThemeProvider > @c2 StoreProvider > (2 wrappers) > @c5 Screen > @c6 App',
     '  @c7 Header',
@@ -41,6 +42,42 @@ test('wrapper chains and runs of sibling rows each read as one line', () => {
   ]);
   assert.equal(view.total, 14);
   assert.equal(view.shown, 11, 'the rows under a collapsed run are counted as not shown');
+});
+
+test('a row that logged a problem its neighbours did not keeps its own line', () => {
+  const tree = buildComponentTree(appTree());
+  assert.deepEqual(renderTree([tree.byId.get(8)!], 8, 60).lines, [
+    '@c8 List',
+    '  @c20 Row [memo] key=0 > @c40 Text',
+    '  @c21 Row [memo] key=1 (1 error) > @c41 Text',
+    '  @c22 Row [memo] key=2 > @c42 Text',
+  ]);
+});
+
+test('siblings with equal subtree sizes but different children stay open', () => {
+  const raw = appTree(0);
+  raw.nodes.push(
+    [30, 'Scene', FUNCTION, 8, 8, 'a'],
+    [31, 'Header', FUNCTION, 30, 30, null],
+    [32, 'Scene', FUNCTION, 8, 8, 'b'],
+    [33, 'Form', FUNCTION, 32, 32, null],
+    [34, 'Scene', FUNCTION, 8, 8, 'c'],
+    [35, 'Header', FUNCTION, 34, 34, null],
+  );
+  assert.deepEqual(renderTree([buildComponentTree(raw).byId.get(8)!], 8, 60).lines, [
+    '@c8 List',
+    '  @c30 Scene key=a > @c31 Header',
+    '  @c32 Scene key=b > @c33 Form',
+    '  @c34 Scene key=c > @c35 Header',
+  ]);
+});
+
+test('names and keys the app controls cannot start a line or reach the terminal', () => {
+  const raw = appTree(0);
+  raw.nodes.push([30, 'Evil\n@c1 Forged', FUNCTION, 8, 8, 'k\u001b[2J']);
+  assert.deepEqual(renderTree([buildComponentTree(raw).byId.get(30)!], 8, 60).lines, [
+    '@c30 Evil @c1 Forged key=k [2J',
+  ]);
 });
 
 test('depth and line limits cut the tree and count what they leave out', () => {

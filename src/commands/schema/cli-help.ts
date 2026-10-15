@@ -296,11 +296,11 @@ Render profiling:
   agent-device react-devtools profile commit [N]
 
 Connection:
-  Every command attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes and no start or connect step. It is verified on Android emulators and iOS simulators; remote bridge sessions, which reach the dev server through the remote config's public Metro URL, are not verified yet.
+  Every command except profile report and profile commit, which read the saved profile, attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes and no start or connect step. It is verified on Android emulators and iOS simulators; remote bridge sessions, which reach the dev server through the remote config's public Metro URL, are not verified yet.
   Add --app <bundle-id> when several apps share the dev server, --metro-device <name> when one app runs on several devices connected to it, and --metro-port/--metro-host (or --bundle-url) when the dev server is neither the session's nor localhost:8081.
 
 Component inspection:
-  Start with find <part of a name> or tree; both print @c refs. Wrapper chains such as providers collapse onto one line, and runs of same-name siblings such as list rows collapse into one line with a count; run tree @ref to open a branch.
+  Start with find <part of a name> or tree; both print @c refs. Wrapper chains such as providers collapse onto one line, and three or more consecutive siblings with identical subtrees, such as list rows, collapse into one line with a count; run tree @ref to open a branch.
   inspect takes an @c ref, or a name only one mounted component has. It prints the owners that rendered it, its props, state, hooks (custom hooks list the hooks they call), and what it logged while rendering. Deep values print as short previews.
   errors lists the mounted components that logged console errors or warnings while rendering, with the messages.
   Refs are DevTools element ids: they change when a component remounts or the app reloads, so find again after either.

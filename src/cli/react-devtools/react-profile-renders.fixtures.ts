@@ -12,7 +12,7 @@ export type Render = [
 
 /** Builds a raw profile: `elements` by id, then commits as `[timestamp, duration, updaterIds, renders]`. */
 export function rawProfile(
-  elements: Record<number, [name: string, type?: number, owner?: number]>,
+  elements: Record<number, [name: string, type?: number, owner?: number, parent?: number]>,
   commits: Array<[timestamp: number, duration: number, updaters: number[], renders: Render[]]>,
   keys: string[] = [],
 ): RawReactProfile {
@@ -22,9 +22,9 @@ export function rawProfile(
     naming: 'operations',
     keys,
     elements: Object.fromEntries(
-      Object.entries(elements).map(([id, [name, type = FUNCTION, owner = 0]]) => [
+      Object.entries(elements).map(([id, [name, type = FUNCTION, owner = 0, parent = 0]]) => [
         id,
-        [name, type, owner, 0],
+        [name, type, owner, parent],
       ]),
     ),
     commits: commits.map(([timestamp, duration, updaters, renders]) => ({

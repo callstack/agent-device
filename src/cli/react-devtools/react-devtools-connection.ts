@@ -114,7 +114,10 @@ export function parseDevtoolsArgs(
   };
 }
 
-/** Explicit flags, then a remote bridge's public dev-server URL, then the session's Metro binding. */
+/**
+ * Explicit flags, then a remote bridge's public dev-server URL, then the session's Metro binding.
+ * A host or port flag on its own overrides that part of the binding and keeps the rest.
+ */
 function resolveDevServerUrl(args: RuntimeArgs, options: ReactDevtoolsCommandOptions): URL {
   const publicBaseUrl = options.flags?.metroPublicBaseUrl?.trim();
   const explicit =
@@ -122,7 +125,9 @@ function resolveDevServerUrl(args: RuntimeArgs, options: ReactDevtoolsCommandOpt
   if (!explicit && publicBaseUrl && isRemoteBridgeBackend(options.flags?.leaseBackend)) {
     return resolveMetroServerUrl({ bundleUrl: publicBaseUrl });
   }
-  const binding = explicit
+  const complete =
+    args.bundleUrl !== undefined || (args.metroHost !== undefined && args.metroPort !== undefined);
+  const binding = complete
     ? undefined
     : readMetroSessionHints({ stateDir: options.stateDir, session: options.session });
   return resolveMetroServerUrl({
