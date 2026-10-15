@@ -736,9 +736,6 @@ importers:
       '@agent-device/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@agent-device/daemon-contracts':
-        specifier: workspace:*
-        version: link:../daemon-contracts
       '@agent-device/host-kit':
         specifier: workspace:*
         version: link:../host-kit

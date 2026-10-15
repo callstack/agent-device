@@ -50,10 +50,10 @@ export function spawnLegacyDaemonFixture(paths: DaemonPaths, acquisitionBarrier?
   fs.mkdirSync(path.dirname(entry), { recursive: true });
   fs.writeFileSync(path.join(codeDir, 'package.json'), '{"type":"module"}');
   const processUrl = new URL(
-    '../../../packages/daemon-contracts/src/daemon-process.ts',
+    '../../packages/daemon-contracts/src/daemon-process.ts',
     import.meta.url,
   ).href;
-  const hostProcessUrl = new URL('../../../packages/host-kit/src/process.ts', import.meta.url).href;
+  const hostProcessUrl = new URL('../../packages/host-kit/src/process.ts', import.meta.url).href;
   fs.writeFileSync(
     entry,
     `

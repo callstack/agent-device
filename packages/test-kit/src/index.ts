@@ -44,7 +44,6 @@ export {
   withMockedPlatform,
 } from './host-execution.ts';
 export { pinOwnProcessStartTime } from './host-process-mock.ts';
-export { spawnLegacyDaemonFixture } from './legacy-daemon-fixture.ts';
 export {
   closeLoopbackServer,
   listenOnLoopback,

@@ -20,7 +20,8 @@ import {
 } from '@agent-device/daemon-contracts/daemon-resolution';
 import { readRegisteredDaemonOwnership } from '@agent-device/daemon-contracts/daemon-registration';
 import { readDaemonShutdownReport } from '@agent-device/daemon-contracts/daemon-shutdown-report';
-import { mkdtempForTestSync, spawnLegacyDaemonFixture } from '@agent-device/test-kit';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { spawnLegacyDaemonFixture } from './daemon-registration-owner.fixtures.ts';
 import {
   registeredDaemonFixtureArgs,
   spawnRegisteredDaemonFixture,

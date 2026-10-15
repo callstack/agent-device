@@ -14,7 +14,6 @@
     { "path": "../capture-kit" },
     { "path": "../command-registry" },
     { "path": "../contracts" },
-    { "path": "../daemon-contracts" },
     { "path": "../host-kit" },
     { "path": "../kernel" }
   ]
