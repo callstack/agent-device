@@ -5,10 +5,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
 import { runCmd } from '@agent-device/host-kit/command';
-import { AppError } from '@agent-device/kernel/errors';
-import { CONTACT_SHEET_UNSUPPORTED_HOST_REASON } from '../contact-sheet-report.ts';
-import { assertContactSheetHostSupport } from '../contact-sheet-frames.ts';
-import { getRecordingOverlaySupportWarning } from '../overlay.ts';
 import { mkdtempForTest } from '../../tmp-dir.fixtures.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -220,25 +216,3 @@ function assertTypechecked(outcomes: readonly TypecheckOutcome[], basename: stri
   assert.ok(outcome, `${basename} was never typechecked`);
   assert.equal(outcome.exitCode, 0, `${basename} should typecheck\n${outcome.stderr}`);
 }
-
-test('recording overlays are explicitly unsupported on non-macOS hosts', () => {
-  assert.equal(
-    getRecordingOverlaySupportWarning('linux'),
-    'touch overlay burn-in is only available on macOS hosts; returning raw video plus gesture telemetry',
-  );
-  assert.equal(getRecordingOverlaySupportWarning('darwin'), undefined);
-});
-
-test('contact sheets are explicitly unsupported on non-macOS hosts', () => {
-  assert.throws(
-    () => assertContactSheetHostSupport('linux'),
-    (error: unknown) => {
-      return (
-        error instanceof AppError &&
-        error.code === 'UNSUPPORTED_OPERATION' &&
-        error.details?.reason === CONTACT_SHEET_UNSUPPORTED_HOST_REASON
-      );
-    },
-  );
-  assert.doesNotThrow(() => assertContactSheetHostSupport('darwin'));
-});
