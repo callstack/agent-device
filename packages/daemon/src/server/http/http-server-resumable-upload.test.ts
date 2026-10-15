@@ -8,7 +8,7 @@ import {
   cleanupUploadedArtifact,
   prepareUploadedArtifact,
 } from '../../resources/artifact-tracking.ts';
-import { createDaemonHttpServer } from '../http/http-server.ts';
+import { createDaemonHttpServer } from './http-server.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,

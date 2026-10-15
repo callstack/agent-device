@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { test } from 'vitest';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import { createDaemonHttpServer } from '../http/http-server.ts';
+import { createDaemonHttpServer } from './http-server.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,

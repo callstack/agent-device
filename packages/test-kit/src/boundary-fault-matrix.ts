@@ -78,22 +78,22 @@ export const BOUNDARY_FAULT_MATRIX = {
   cancellation: {
     mutation: {
       kind: 'covered',
-      evidence: ['packages/daemon/src/server/__tests__/daemon-http-boundary-cancellation.test.ts'],
+      evidence: ['packages/daemon/src/server/http/http-server-boundary-cancellation.test.ts'],
       invariants: ['request-scoped-cancellation', 'request-signal-cleanup'],
     },
     read: {
       kind: 'covered',
-      evidence: ['packages/daemon/src/server/__tests__/daemon-http-boundary-cancellation.test.ts'],
+      evidence: ['packages/daemon/src/server/http/http-server-boundary-cancellation.test.ts'],
       invariants: ['request-scoped-cancellation', 'request-signal-cleanup'],
     },
     'artifact-producing': {
       kind: 'covered',
-      evidence: ['packages/daemon/src/server/__tests__/daemon-http-boundary-cancellation.test.ts'],
+      evidence: ['packages/daemon/src/server/http/http-server-boundary-cancellation.test.ts'],
       invariants: ['request-scoped-cancellation', 'request-signal-cleanup'],
     },
     'session-lifecycle': {
       kind: 'covered',
-      evidence: ['packages/daemon/src/server/__tests__/daemon-http-boundary-cancellation.test.ts'],
+      evidence: ['packages/daemon/src/server/http/http-server-boundary-cancellation.test.ts'],
       invariants: ['request-scoped-cancellation', 'request-signal-cleanup'],
     },
   },

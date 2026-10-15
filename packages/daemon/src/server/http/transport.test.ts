@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
 import { test } from 'vitest';
-import { createSocketServer, listenHttpServer, listenNetServer } from '../http/transport.ts';
+import { createSocketServer, listenHttpServer, listenNetServer } from './transport.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
 

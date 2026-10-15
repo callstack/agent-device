@@ -12,7 +12,7 @@ const TOKEN = 'lifetime-token';
 // the rerun below would be refused as `duplicate_request_id`. The token gate refuses a call that
 // already registered — admission order is pinned in `http-server-rpc-admission.test.ts` — so
 // this is where that release is pinned. Disconnect and streaming releases live in
-// `daemon-http-server.test.ts` and `daemon-http-boundary-cancellation.test.ts`.
+// `daemon-http-server.test.ts` and `http-server-boundary-cancellation.test.ts`.
 test('an rpc request registers its tracking id while in flight and releases it once answered', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
   const { port, server } = await startRpcServer(TOKEN, async (request) => {
