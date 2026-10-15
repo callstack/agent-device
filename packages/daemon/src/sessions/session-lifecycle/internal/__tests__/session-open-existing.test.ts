@@ -167,6 +167,18 @@ test.each([
     resolved: { appBundleId: 'com.apple.mobilesafari', appName: 'https://example.com/path' },
   },
   {
+    label: 'a web URL on an iOS simulator session with a stale app bundle id',
+    device: {
+      platform: 'apple',
+      id: 'ios-simulator-1',
+      name: 'iPhone Simulator',
+      kind: 'simulator',
+    },
+    existing: { appBundleId: 'com.example.old', appName: 'Old App' },
+    target: 'https://example.com/path',
+    resolved: { appBundleId: 'com.apple.mobilesafari', appName: 'https://example.com/path' },
+  },
+  {
     label: 'an app name on a macOS session',
     device: {
       platform: 'apple',

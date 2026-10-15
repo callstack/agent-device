@@ -92,6 +92,13 @@ test.each([
   expect(mockResolveIosApp).not.toHaveBeenCalled();
 });
 
+test('a web URL on an iOS simulator targets Safari whatever the active app is', async () => {
+  await expect(
+    resolveSessionAppBundleIdForTarget(iosSimulator, 'https://example.com/path', 'com.example.old'),
+  ).resolves.toBe('com.apple.mobilesafari');
+  expect(mockResolveIosApp).not.toHaveBeenCalled();
+});
+
 test('a web URL on an iOS device keeps the active app context', async () => {
   await expect(
     resolveSessionAppBundleIdForTarget(iosDevice, 'https://example.com/path', 'com.example.app'),
