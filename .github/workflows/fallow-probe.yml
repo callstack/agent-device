@@ -1,0 +1,48 @@
+name: Fallow probe (temporary)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/fallow-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      BASE: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-node-pnpm
+      - name: Host
+        run: |
+          nproc; free -g; df -h .; uname -a
+          FALLOW_VERIFY_LOG=1 pnpm exec fallow --version
+          ls node_modules/.pnpm | grep -i fallow
+      - name: dead-code (cold)
+        run: rm -rf .fallow; time pnpm exec fallow dead-code --performance --summary || true
+      - name: dead-code (warm)
+        run: time pnpm exec fallow dead-code --performance --summary || true
+      - name: dead-code threads 4 (cold)
+        run: rm -rf .fallow; time pnpm exec fallow dead-code --performance --summary --threads 4 || true
+      - name: dupes (cold)
+        run: rm -rf .fallow; time pnpm exec fallow dupes --performance --summary || true
+      - name: health (cold)
+        run: rm -rf .fallow; time pnpm exec fallow health --performance --summary || true
+      - name: audit (cold, current gate)
+        run: rm -rf .fallow; time pnpm exec fallow audit --base "$BASE" --performance || true
+      - name: audit gate all (cold)
+        run: rm -rf .fallow; time pnpm exec fallow audit --base "$BASE" --gate all --performance || true
+      - name: production-exports (cold)
+        run: rm -rf .fallow; time pnpm check:production-exports --performance || true
+      - name: strace summary of dead-code
+        run: |
+          rm -rf .fallow
+          sudo apt-get install -y strace >/dev/null 2>&1 || true
+          timeout 600 strace -f -c -o /tmp/strace.txt pnpm exec fallow dead-code --summary >/dev/null 2>&1 || true
+          head -30 /tmp/strace.txt
