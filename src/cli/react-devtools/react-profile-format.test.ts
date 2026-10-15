@@ -103,6 +103,18 @@ test('the summary reports clean profiles and empty recordings in one line', () =
   );
 });
 
+test('an empty recording still reports why part of it could not be read', () => {
+  assert.equal(
+    formatProfileSummary(
+      analysis({ commitCount: 0, notes: ["A React renderer's profile could not be read: gone"] }),
+    ),
+    [
+      'React profile: no commits recorded. Start profiling, then perform the interaction before stopping.',
+      "Note: A React renderer's profile could not be read: gone",
+    ].join('\n'),
+  );
+});
+
 test('lookup naming warns that unmounted components may be unnamed', () => {
   assert.match(
     formatProfileSummary(analysis({ naming: 'lookup' })),

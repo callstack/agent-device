@@ -29,8 +29,12 @@ export function formatProfileSummary(
   analysis: ReactProfileAnalysis,
   limit = DEFAULT_FINDING_LIMIT,
 ): string {
+  const notes = analysis.notes.map((note) => `Note: ${note}`);
   if (analysis.commitCount === 0) {
-    return 'React profile: no commits recorded. Start profiling, then perform the interaction before stopping.';
+    return [
+      'React profile: no commits recorded. Start profiling, then perform the interaction before stopping.',
+      ...notes,
+    ].join('\n');
   }
   const lines = [headline(analysis)];
   const findings = analysis.findings.slice(0, limit);
@@ -45,7 +49,7 @@ export function formatProfileSummary(
     const hidden = analysis.findings.length - findings.length;
     if (hidden > 0) lines.push(`+${hidden} smaller findings (--limit ${analysis.findings.length})`);
   }
-  for (const note of analysis.notes) lines.push(`Note: ${note}`);
+  lines.push(...notes);
   if (analysis.naming === 'lookup') {
     lines.push(
       'Note: component names came from mounted elements; components unmounted during the profile are left out.',

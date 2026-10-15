@@ -289,3 +289,22 @@ test('drill-down views read the saved recording, not a trimmed analysis', async 
   assert.equal(saved.profile.commits.length, 3);
   assert.match((await run('report', 'Row')).text, /changed props: onPress 36 \(function\)/);
 });
+
+test('a renderer that fails while another records nothing is named in the empty summary', async () => {
+  const { app, run } = harness();
+  const broken = Object.assign(Object.create(app.renderer), {
+    getProfilingData: () => {
+      throw new Error('second root gone');
+    },
+  });
+  app.hook.rendererInterfaces.set(2, broken);
+  await run('start');
+  assert.equal(
+    (await run('stop')).text,
+    [
+      'React profile: no commits recorded. Start profiling, then perform the interaction before stopping.',
+      "Note: A React renderer's profile could not be read: second root gone",
+      '',
+    ].join('\n'),
+  );
+});
