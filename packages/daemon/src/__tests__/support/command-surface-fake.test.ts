@@ -5,11 +5,17 @@ import { forwardingCreateCommandSurface } from './command-surface-fake.ts';
 
 const node = { index: 0, ref: 'e1', type: 'Button', label: 'Go' } as SnapshotNode;
 
-function configReturning(captured: Record<string, unknown>) {
+function configReturning(
+  captured: Record<string, unknown>,
+  existing?: { snapshot: SnapshotState },
+) {
   const set = vi.fn(async () => {});
   const config = {
     backend: { captureSnapshot: vi.fn(async () => captured) },
-    sessions: { get: vi.fn(async () => undefined), set },
+    sessions: {
+      get: vi.fn(async () => (existing ? { name: 'default', ...existing } : undefined)),
+      set,
+    },
   } as unknown as AgentDeviceRuntimeConfig;
   return { config, set };
 }
@@ -35,4 +41,23 @@ test('the forwarding surface falls back to a flat node list from a backend that 
   expect(set).toHaveBeenCalledWith(
     expect.objectContaining({ snapshot: expect.objectContaining({ nodes: [node] }) }),
   );
+});
+
+test('the forwarding surface diff stores the observed tree and reports whether it initialized the baseline', async () => {
+  const snapshot: SnapshotState = { nodes: [node], createdAt: 1, backend: 'android' };
+  const first = configReturning({ snapshot });
+  const initialized = await (
+    await forwardingCreateCommandSurface(first.config)
+  ).capture.diffSnapshot({ session: 'default' });
+
+  expect(initialized.baselineInitialized).toBe(true);
+  expect(first.set).toHaveBeenCalledWith(expect.objectContaining({ snapshot }));
+
+  const second = configReturning({ snapshot }, { snapshot: { ...snapshot, createdAt: 0 } });
+  const compared = await (
+    await forwardingCreateCommandSurface(second.config)
+  ).capture.diffSnapshot({ session: 'default' });
+
+  expect(compared.baselineInitialized).toBe(false);
+  expect(second.set).toHaveBeenCalledWith(expect.objectContaining({ snapshot }));
 });

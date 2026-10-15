@@ -2,6 +2,7 @@ import { vi } from 'vitest';
 import type {
   CreateDaemonCommandSurface,
   DaemonCommandSurface,
+  DaemonSnapshotOptions,
 } from '@agent-device/contracts/daemon-command-surface';
 
 /**
@@ -65,36 +66,52 @@ const fakeCommandSurface: DaemonCommandSurface = {
 export const fakeCreateCommandSurface: CreateDaemonCommandSurface = async () => fakeCommandSurface;
 
 /**
- * A command surface whose snapshot capture does what the real command family does at the two
- * seams the daemon owns: it reaches the runtime config's backend, and it writes the session back
- * through the config's session store. Suites that pin what the daemon does around a capture in
- * flight (shutdown, cancellation, session lifetime) need both, because the daemon's refusals land
- * on those seams; everything else the real command family does with the result stays out of the
- * daemon suites, so the result is the backend's snapshot tree and nothing else.
+ * A command surface whose snapshot and diff captures do what the real command family does at the
+ * two seams the daemon owns: they reach the runtime config's backend, and they write the session
+ * back through the config's session store. Suites that pin what the daemon does around a capture
+ * (shutdown, cancellation, session lifetime, ref-frame state) need both, because the daemon's
+ * refusals and frame rules land on those seams. Everything else the real command family does with
+ * the result stays out of the daemon suites: a snapshot returns the backend's tree, and a diff
+ * returns an empty comparison whose only informative field is whether it initialized the baseline.
  */
-export const forwardingCreateCommandSurface: CreateDaemonCommandSurface = async (config) => ({
-  ...fakeCommandSurface,
-  signal: config.signal,
-  capture: {
-    ...fakeCommandSurface.capture,
-    snapshot: async (options) => {
-      const name = options.session ?? 'default';
-      const session = await config.sessions?.get(name);
-      const captured = await config.backend.captureSnapshot?.(
-        { session: name, requestId: options.requestId, signal: options.signal ?? config.signal },
-        { interactiveOnly: options.interactiveOnly, depth: options.depth, scope: options.scope },
-      );
-      const stored = captured?.snapshot ?? {
-        nodes: captured?.nodes ?? [],
-        createdAt: Date.now(),
-        backend: 'android' as const,
-      };
-      await config.sessions?.set({
-        ...(session ?? { name }),
-        name: session?.name ?? name,
-        snapshot: stored,
-      });
-      return { nodes: stored.nodes as never };
+export const forwardingCreateCommandSurface: CreateDaemonCommandSurface = async (config) => {
+  const captureIntoSession = async (options: DaemonSnapshotOptions) => {
+    const name = options.session ?? 'default';
+    const session = await config.sessions?.get(name);
+    const captured = await config.backend.captureSnapshot?.(
+      { session: name, requestId: options.requestId, signal: options.signal ?? config.signal },
+      { interactiveOnly: options.interactiveOnly, depth: options.depth, scope: options.scope },
+    );
+    const stored = captured?.snapshot ?? {
+      nodes: captured?.nodes ?? [],
+      createdAt: Date.now(),
+      backend: 'android' as const,
+    };
+    await config.sessions?.set({
+      ...(session ?? { name }),
+      name: session?.name ?? name,
+      snapshot: stored,
+    });
+    return { nodes: stored.nodes as never, hadBaseline: session?.snapshot !== undefined };
+  };
+  return {
+    ...fakeCommandSurface,
+    signal: config.signal,
+    capture: {
+      ...fakeCommandSurface.capture,
+      snapshot: async (options) => {
+        const { nodes } = await captureIntoSession(options);
+        return { nodes };
+      },
+      diffSnapshot: async (options) => {
+        const { hadBaseline } = await captureIntoSession(options);
+        return {
+          mode: 'snapshot',
+          baselineInitialized: !hadBaseline,
+          summary: { additions: 0, removals: 0, unchanged: 0 },
+          lines: [],
+        };
+      },
     },
-  },
-});
+  };
+};
