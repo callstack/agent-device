@@ -200,3 +200,16 @@ test('a commit entry without recorded changes says its cause is unrecorded', () 
   );
   assert.equal(text, '#3 +1.2s 20ms 2 rendered\n  Row [function] x2 self 12ms unrecorded');
 });
+
+test('app-provided names and keys print without control characters, one line each', () => {
+  const text = formatComponents(
+    analysis({
+      components: [component('Row\u001b[2J\nFake', { changedProps: { 'id\r': 2 } })],
+    }),
+    5,
+  );
+  assert.deepEqual(text.split('\n'), [
+    'Components by self time:',
+    '  Row [2J Fake [function] self 40ms avg 10ms max 12ms renders 4: props 3, mount 1; changed props id  2',
+  ]);
+});

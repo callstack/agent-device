@@ -3,7 +3,6 @@ import { AppError } from '@agent-device/kernel/errors';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { resolveMetroServerUrl } from '../../metro/metro-reload-endpoints.ts';
 import { readMetroSessionHints } from '../../metro/metro-session-hints.ts';
-import { isRemoteBridgeBackend } from '../commands/remote-bridge.ts';
 import {
   debuggerUrlOn,
   InspectorSession,
@@ -18,7 +17,7 @@ import {
 } from './react-devtools-runtime.ts';
 
 export type ReactDevtoolsCommandOptions = {
-  flags?: Partial<Pick<CliFlags, 'json' | 'leaseBackend' | 'metroPublicBaseUrl'>>;
+  flags?: Partial<Pick<CliFlags, 'json'>>;
   stateDir: string;
   session: string;
 };
@@ -116,28 +115,16 @@ export function parseDevtoolsArgs(
 }
 
 /**
- * Explicit flags, then the session's Metro binding, then a remote bridge's public dev-server URL.
- * A host or port flag on its own overrides that part of the binding and keeps the rest. A bridged
- * session's binding is the Metro server next to the agent, which the app reaches through the
- * bridge; the public URL is the fallback when no binding was recorded.
+ * Explicit flags, then the session's Metro binding, then localhost:8081. A host or port flag on its
+ * own overrides that part of the binding and keeps the rest. The debugger socket is only accepted
+ * from the machine that runs Metro, so a device-facing URL such as a remote bridge's is never used.
  */
 function resolveDevServerUrl(args: RuntimeArgs, options: ReactDevtoolsCommandOptions): URL {
-  const explicit =
-    args.metroHost !== undefined || args.metroPort !== undefined || args.bundleUrl !== undefined;
   const complete =
     args.bundleUrl !== undefined || (args.metroHost !== undefined && args.metroPort !== undefined);
   const binding = complete
     ? undefined
     : readMetroSessionHints({ stateDir: options.stateDir, session: options.session });
-  const publicBaseUrl = options.flags?.metroPublicBaseUrl?.trim();
-  if (
-    !explicit &&
-    !binding &&
-    publicBaseUrl &&
-    isRemoteBridgeBackend(options.flags?.leaseBackend)
-  ) {
-    return resolveMetroServerUrl({ bundleUrl: publicBaseUrl });
-  }
   return resolveMetroServerUrl({
     metroHost: args.metroHost,
     metroPort: args.metroPort,

@@ -1,5 +1,5 @@
 import { componentName, componentRef, kindLabel } from './react-component-tree.ts';
-import { printable } from './react-devtools-text.ts';
+import { printable, printableLines } from './react-devtools-text.ts';
 
 type ValuePath = Array<string | number>;
 
@@ -162,5 +162,5 @@ export function formatInspectedComponent(id: number, component: InspectedCompone
   );
   const logs = formatComponentLogs(component);
   if (logs.length > 0) lines.push('logged while rendering:', ...logs);
-  return lines.map(printable).join('\n');
+  return printableLines(lines);
 }

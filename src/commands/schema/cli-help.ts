@@ -296,7 +296,7 @@ Render profiling:
   agent-device react-devtools profile commit [N]
 
 Connection:
-  Every command except profile report and profile commit, which read the saved profile, attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes and no start or connect step. It is verified on Android emulators and iOS simulators, through agent-device proxy, and on remote bridge sessions, where it uses the session's Metro server next to the agent (or the remote config's public Metro URL when the session recorded none).
+  Every command except profile report and profile commit, which read the saved profile, attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes and no start or connect step. It is verified on Android emulators and iOS simulators, through agent-device proxy, and on remote bridge sessions, where it uses the Metro server next to the agent: the session's binding from metro prepare, or --metro-host/--metro-port. A device-facing Metro URL, such as the bridge's, refuses the debugger connection.
   Add --app <bundle-id> when several apps share the dev server, --metro-device <name> when one app runs on several devices connected to it, and --metro-port/--metro-host (or --bundle-url) when the dev server is neither the session's nor localhost:8081.
 
 Component inspection:

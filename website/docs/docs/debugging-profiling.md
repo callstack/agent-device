@@ -85,7 +85,7 @@ Profiling works with development builds of React Native 0.74 and later, includin
 
 Development builds render slower than release builds. Compare profiles of the same interaction before and after a change rather than reading the numbers as absolute.
 
-Component inspection and profiling also work through `agent-device proxy` and on remote bridge sessions, where they use the Metro server next to the agent.
+Component inspection and profiling also work through `agent-device proxy` and on remote bridge sessions, where they use the Metro server next to the agent: the session's binding from `metro prepare`, or `--metro-host`/`--metro-port`. Metro accepts the debugger connection only from its own machine, so the bridge or `metroPublicBaseUrl` cannot carry it.
 
 For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to profiling or debugging evidence, start with `agent-device help react-native`. For slow-flow investigations, combine `help react-devtools` for the React profile with `help debugging` for log markers, network/audio evidence, traces, and perf samples.
 

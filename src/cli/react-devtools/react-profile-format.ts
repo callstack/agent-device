@@ -6,6 +6,7 @@ import {
   type ComponentProfile,
   type RenderCauses,
 } from './react-profile-renders.ts';
+import { printableLines } from './react-devtools-text.ts';
 
 export const DEFAULT_FINDING_LIMIT = 5;
 
@@ -31,10 +32,10 @@ export function formatProfileSummary(
 ): string {
   const notes = analysis.notes.map((note) => `Note: ${note}`);
   if (analysis.commitCount === 0) {
-    return [
+    return printableLines([
       'React profile: no commits recorded. Start profiling, then perform the interaction before stopping.',
       ...notes,
-    ].join('\n');
+    ]);
   }
   const lines = [headline(analysis)];
   const findings = analysis.findings.slice(0, limit);
@@ -56,7 +57,7 @@ export function formatProfileSummary(
     );
   }
   lines.push('More: profile report [Component] | profile commit [N]');
-  return lines.join('\n');
+  return printableLines(lines);
 }
 
 function causeSummary(causes: RenderCauses): string {
@@ -91,14 +92,14 @@ function componentLine(component: ComponentProfile): string {
 export function formatComponents(analysis: ReactProfileAnalysis, limit: number): string {
   if (analysis.components.length === 0) return 'No component renders recorded.';
   const shown = analysis.components.slice(0, limit);
-  return [
+  return printableLines([
     'Components by self time:',
     ...shown.map((c) => {
       const props = keyCounts(c.changedProps);
       return `  ${componentLine(c)}: ${causeSummary(c.causes)}${props ? `; changed props ${props}` : ''}`;
     }),
     ...omittedRows(shown.length, analysis.components.length),
-  ].join('\n');
+  ]);
 }
 
 export function findComponents(analysis: ReactProfileAnalysis, name: string): ComponentProfile[] {
@@ -137,14 +138,14 @@ export function formatComponentReport(
   analysis: ReactProfileAnalysis,
   components: ComponentProfile[],
 ): string {
-  return components
-    .flatMap((component) => [
+  return printableLines(
+    components.flatMap((component) => [
       ...componentDetail(analysis, component),
       ...analysis.findings
         .filter((finding) => isFindingFor(finding, component))
         .map((finding) => `finding ${finding.kind}: ${finding.evidence} -> ${finding.fix}`),
-    ])
-    .join('\n');
+    ]),
+  );
 }
 
 function commitLine(commit: CommitProfile): string {
@@ -172,7 +173,7 @@ export function formatCommits(analysis: ReactProfileAnalysis, limit: number): st
     shown.length < analysis.commits.length
       ? `Commits (${shown.length} slowest of ${analysis.commits.length}, --limit ${analysis.commits.length} for all):`
       : 'Commits:';
-  return [header, ...shown.map((commit) => `  ${commitLine(commit)}`)].join('\n');
+  return printableLines([header, ...shown.map((commit) => `  ${commitLine(commit)}`)]);
 }
 
 export function formatCommit(commit: CommitProfile, limit: number): string {
@@ -185,5 +186,5 @@ export function formatCommit(commit: CommitProfile, limit: number): string {
     );
   }
   lines.push(...omittedRows(shown.length, commit.components.length));
-  return lines.join('\n');
+  return printableLines(lines);
 }

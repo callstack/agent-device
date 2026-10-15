@@ -81,3 +81,28 @@ test('a commit keeps every component that rendered in it', () => {
   const raw = rawProfile(elements, [[0, 40, [], ids.map((id): Render => [id, 1, 'parent'])]]);
   assert.equal(summarizeRenders(raw).commits[0]?.components.length, 20);
 });
+
+test('names and prop keys that differ only by control characters stay apart', () => {
+  const raw = rawProfile(
+    { 1: ['Row'], 2: ['Row\u0007'] },
+    [
+      [
+        0,
+        10,
+        [],
+        [
+          [1, 1, [0, [0], null, null]],
+          [2, 1, [0, [1], null, null]],
+        ],
+      ],
+    ],
+    ['id', 'id\u001b'],
+  );
+  assert.deepEqual(
+    summarizeRenders(raw).components.map((entry) => [entry.name, entry.changedProps]),
+    [
+      ['Row', { id: 1 }],
+      ['Row\u0007', { 'id\u001b': 1 }],
+    ],
+  );
+});

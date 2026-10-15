@@ -2,6 +2,7 @@ import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { CliFlags } from '@agent-device/contracts/command';
 import { runReactProfileCommand } from './react-profile-command.ts';
 import { commandHarness } from './react-devtools-command.fixtures.ts';
 
@@ -37,25 +38,15 @@ test('the session Metro binding picks the dev server', async () => {
   assert.deepEqual(requested, ['http://127.0.0.1:19000/json/list']);
 });
 
-test('a remote bridge without a Metro binding profiles through the public dev-server URL without its bundle path', async () => {
+test('a remote bridge without a Metro binding stays on the local dev server, not the public URL', async () => {
   const { run, requested, options } = harness();
-  options.flags = {
+  const flags: Partial<CliFlags> = {
     leaseBackend: 'android-instance',
     metroPublicBaseUrl: 'https://metro.example.test/index.bundle?platform=android',
   };
+  options.flags = flags;
   await run('start');
-  assert.deepEqual(requested, ['https://metro.example.test/json/list']);
-});
-
-test('a remote bridge prefers the Metro server next to the agent over the public URL', async () => {
-  const { run, requested, options, stateDir } = harness();
-  bindSession(stateDir, 'http://127.0.0.1:8081/');
-  options.flags = {
-    leaseBackend: 'android-instance',
-    metroPublicBaseUrl: 'https://metro.example.test',
-  };
-  await run('start');
-  assert.deepEqual(requested, ['http://127.0.0.1:8081/json/list']);
+  assert.deepEqual(requested, ['http://localhost:8081/json/list']);
 });
 
 test('a host flag on its own keeps the port of the session binding', async () => {

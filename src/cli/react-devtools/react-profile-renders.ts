@@ -1,5 +1,3 @@
-import { printable } from './react-devtools-text.ts';
-
 /** Frame budget at 60 Hz; a commit slower than this drops at least one frame. */
 export const FRAME_BUDGET_MS = 16;
 
@@ -68,9 +66,8 @@ export function splitDisplayName(displayName: string): { name: string; wrappers:
  * framework component that renders the inner one, and `isFrameworkPrimitive` recognizes it by it.
  */
 function renderName(displayName: string): { name: string; wrappers: string[] } {
-  const printableName = printable(displayName);
-  const split = splitDisplayName(printableName);
-  return split.wrappers.includes('Animated') ? { ...split, name: printableName } : split;
+  const split = splitDisplayName(displayName);
+  return split.wrappers.includes('Animated') ? { ...split, name: displayName } : split;
 }
 
 export function isFrameworkPrimitive(name: string): boolean {
@@ -232,7 +229,7 @@ export function parentOf(profile: RawReactProfile, id: number): number | undefin
 }
 
 function keysAt(profile: RawReactProfile, indexes: number[] | null): string[] {
-  return (indexes ?? []).map((index) => printable(profile.keys[index] ?? `#${index}`));
+  return (indexes ?? []).map((index) => profile.keys[index] ?? `#${index}`);
 }
 
 export function bump(record: Record<string, number>, key: string, by = 1): void {
