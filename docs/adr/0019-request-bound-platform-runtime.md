@@ -283,6 +283,13 @@ typed reason and a hint, at the point the shape is requested. Absence of a whole
 operation's member remains an ownership bug and fails closed with its own typed reason; it is never
 the mechanism that expresses an unsupported shape.
 
+**A subject of an operation may carry its own fact.** When one operation serves a closed vocabulary
+that owners serve unevenly — `setSetting` over the settings catalog — its available fact may name a
+fact per subject and an `unlisted` refusal for every other subject. Admission takes the subject the
+request names and refuses an unavailable one exactly as it refuses an unavailable operation, before
+binding. A subject is the thing the request names (which setting); a shape of the request (a
+coordinate form, a permission target) still belongs to the owning leaf mechanic, as above.
+
 `RequestExecutionScope.bindDevice(device, use)` is the trust choke point. It:
 
 1. resolves the exact local or provider runtime owner;

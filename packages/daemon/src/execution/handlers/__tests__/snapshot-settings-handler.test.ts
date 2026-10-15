@@ -104,7 +104,7 @@ test('settings rejects unsupported iOS physical devices', async () => {
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
-    expect(response.error.message).toMatch(/settings is not supported/i);
+    expect(response.error.message).toBe('settings wifi is not supported on this device');
   }
 });
 
@@ -227,35 +227,32 @@ test('settings text-size reads the category the owner holds without mutating any
   expect(fixtureSettingsMutations).toHaveLength(0);
 });
 
-test('settings text-size refuses the macOS host on both legs with the same code', async () => {
+test('settings on the macOS host refuses a setting it does not serve, read and write alike', async () => {
   const sessionStore = makeSessionStore();
-  const sessionName = 'macos-text-size-read';
-  sessionStore.publish(sessionName, makeSession(sessionName, macOsDevice));
+  const sessionName = 'macos-settings';
+  const session = makeSession(sessionName, macOsDevice);
+  activateCompleteRefFrame(session);
+  sessionStore.publish(sessionName, session);
 
-  const read = await handleSnapshotCommands({
-    createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
-    req: snapshotRequest(sessionName, 'settings', { positionals: ['text-size'] }),
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-  const write = await handleSnapshotCommands({
-    createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
-    req: snapshotRequest(sessionName, 'settings', { positionals: ['text-size', 'large'] }),
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-
-  for (const response of [read, write]) {
+  for (const positionals of [['text-size'], ['text-size', 'large'], ['wifi', 'on']]) {
+    const response = await handleSnapshotCommands({
+      createCommandSurface: fakeCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      req: snapshotRequest(sessionName, 'settings', { positionals }),
+      sessionName,
+      logPath: '/tmp/daemon.log',
+      sessionStore,
+    });
     expect(response?.ok).toBe(false);
     if (response && !response.ok) {
-      expect(response.error.code).toBe('INVALID_ARGS');
-      expect(response.error.message).toMatch(/Unsupported macOS setting: text-size/i);
+      expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
+      expect(response.error.message).toBe(
+        `settings ${positionals[0]} is not supported on this device`,
+      );
+      expect(response.error.details?.reason).toBe('unsupported-platform-leaf');
     }
   }
+  expect(refFrameState(session)).toBe('active');
   expect(fixtureSettingsReads).toHaveLength(0);
   expect(fixtureSettingsMutations).toHaveLength(0);
 });
@@ -312,12 +309,10 @@ test('settings text-size refuses an Apple leaf with no content size before it ex
     expect(response?.ok).toBe(false);
     if (response && !response.ok) {
       expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
-      expect(response.error.message).toMatch(/iOS and iPadOS simulators/i);
+      expect(response.error.message).toBe('settings text-size is not supported on this device');
     }
   }
-  // The refusal is the point of checking before admission: the write leg expires the frame the
-  // moment it binds, so a request that never reached a device would otherwise have taken down a
-  // frame no mutation invalidated.
+  // Admission refuses before the write leg binds, so the frame survives.
   expect(refFrameState(session)).toBe('active');
   expect(fixtureSettingsReads).toHaveLength(0);
   expect(fixtureSettingsMutations).toHaveLength(0);
@@ -340,7 +335,7 @@ test('settings text-size refuses an off-ladder category with the whole ladder', 
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('INVALID_ARGS');
-    expect(response.error.message).toMatch(/Invalid text size: gigantic/);
+    expect(response.error.message).toMatch(/Invalid text-size state: gigantic/);
     expect(response.error.message).toMatch(/extra-small\|small\|medium\|large/);
     expect(response.error.message).toMatch(/accessibility-extra-extra-extra-large/);
   }
@@ -369,36 +364,6 @@ test('settings usage hint documents canonical faceid states', async () => {
     expect(response.error.message).toMatch(/match\|nonmatch\|enroll\|unenroll/);
     expect(response.error.message).toMatch(/grant\|deny\|reset/);
     expect(response.error.message).not.toMatch(/validate\|unvalidate/);
-  }
-});
-
-test('settings on macOS rejects wifi before dispatch with explicit subset guidance', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'macos-settings-wifi';
-  sessionStore.publish(sessionName, makeSession(sessionName, macOsDevice));
-
-  const response = await handleSnapshotCommands({
-    createCommandSurface: fakeCreateCommandSurface,
-    platformServices: daemonPlatformServicesFixture(),
-    req: snapshotRequest(sessionName, 'settings', { positionals: ['wifi', 'on'] }),
-    sessionName,
-    logPath: '/tmp/daemon.log',
-    sessionStore,
-  });
-
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(false);
-  expect(fixtureSettingsMutations).toHaveLength(0);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('INVALID_ARGS');
-    expect(response.error.message).toMatch(/Unsupported macOS setting: wifi/i);
-    expect(response.error.message).toMatch(/appearance <light\|dark\|toggle>/);
-    expect(response.error.message).toMatch(
-      /permission <grant\|reset> <accessibility\|screen-recording\|input-monitoring>/,
-    );
-    expect(response.error.message).toMatch(
-      /wifi\|airplane\|location\|animations\|text-size remain unsupported on macOS/i,
-    );
   }
 });
 
@@ -587,7 +552,7 @@ test('settings iOS location 1 targets an explicit app over the session app', asy
   expect(response?.ok).toBe(true);
   expect(fixtureSettingsMutations.at(-1)).toMatchObject({
     setting: 'location',
-    state: '1',
+    state: 'on',
     appBundleId: 'com.example.app',
   });
 });

@@ -484,6 +484,10 @@
       "types": "./src/settings.ts",
       "default": "./src/settings.ts"
     },
+    "./settings-catalog": {
+      "types": "./src/settings-catalog.ts",
+      "default": "./src/settings-catalog.ts"
+    },
     "./settings-runtime": {
       "types": "./src/settings-runtime.ts",
       "default": "./src/settings-runtime.ts"

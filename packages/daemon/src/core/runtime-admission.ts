@@ -1,8 +1,9 @@
-import type {
-  BoundDeviceRuntime,
-  RuntimeOperationKey,
-  RuntimeOperationUnavailability,
-  RuntimeUse,
+import {
+  runtimeSubjectFact,
+  type BoundDeviceRuntime,
+  type RuntimeOperationKey,
+  type RuntimeOperationUnavailability,
+  type RuntimeUse,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -36,6 +37,8 @@ export type RuntimeAdmissionRequest = RuntimeAdmissionBindings &
     command: string;
     device: DeviceInfo;
     required: readonly RuntimeOperationKey<PlatformRuntimeOperations>[];
+    /** The subject every required operation must serve, such as the setting `settings` names. */
+    subject?: string;
     unavailableResponse?: UnavailableRuntimeResponse;
     readiness?: boolean;
   }>;
@@ -71,7 +74,11 @@ export async function admitRuntimeOperations(
 ): Promise<AdmittedRuntimeGateway> {
   const facts = await requireFactsInspection(request.inspectFacts)(request.device);
   for (const operation of request.required) {
-    const fact = facts.operations[operation];
+    const operationFact = facts.operations[operation];
+    const fact =
+      request.subject === undefined
+        ? operationFact
+        : runtimeSubjectFact(operationFact, request.subject);
     if (fact.available) continue;
     const response = request.unavailableResponse
       ? request.unavailableResponse(fact)

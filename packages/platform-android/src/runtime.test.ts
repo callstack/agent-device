@@ -1,12 +1,13 @@
 import { expect, test, vi } from 'vitest';
 import type { AndroidClipboardShellSupport } from '@agent-device/contracts/android-clipboard-support';
-import type { DeviceBinding } from '@agent-device/contracts/platform-runtime';
+import { runtimeSubjectFact, type DeviceBinding } from '@agent-device/contracts/platform-runtime';
 import type {
   PlatformRuntimeHost,
   PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createAndroidPlatformRuntime } from './runtime.ts';
+import { ANDROID_SETTINGS } from './settings.ts';
 import type { AndroidAdbExecutorOptions, AndroidAdbInvocation } from './adb-transport.ts';
 import { bindAndroidAdbHostStub } from './adb-host.fixtures.ts';
 import {
@@ -268,9 +269,16 @@ test('admits both clipboard halves and the app switcher on every real Android ki
     expect(binding.operations.triggerAppEvent).toBeTypeOf('function');
     // R58: settings run over adb (`appops`, `settings put`, `pm clear`, …) on that cell too, and
     // so does the read leg (`settings get system font_scale`), which every Android kind can answer.
-    expect(binding.facts.operations.setSetting).toEqual({ available: true });
+    const { setSetting, readSetting } = binding.facts.operations;
+    for (const setting of ANDROID_SETTINGS) {
+      expect(runtimeSubjectFact(setSetting, setting)).toEqual({ available: true });
+    }
+    expect(runtimeSubjectFact(setSetting, 'reset-keychain')).toMatchObject({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+    });
     expect(binding.operations.setSetting).toBeTypeOf('function');
-    expect(binding.facts.operations.readSetting).toEqual({ available: true });
+    expect(runtimeSubjectFact(readSetting, 'text-size')).toEqual({ available: true });
     expect(binding.operations.readSetting).toBeTypeOf('function');
     // R59: all four alert legs read the same dump and tap with the same `input tap`.
     for (const operation of ['readAlert', 'awaitAlert', 'acceptAlert', 'dismissAlert'] as const) {

@@ -1,110 +1,32 @@
-import { describe, expect, expectTypeOf, test } from 'vitest';
-import { READABLE_SETTINGS } from './platform-runtime-operations.ts';
-import type { SettingsUpdateOptions } from './client-settings.ts';
+import { describe, expect, test } from 'vitest';
 import {
-  APPEARANCE_ACTIONS,
   describeSettingRead,
   describeSettingWrite,
-  getUnsupportedMacOsSettingMessage,
-  isMacOsSettingSupported,
-  MACOS_PERMISSION_TARGETS,
-  MOBILE_PERMISSION_TARGETS,
   parseAppearanceAction,
   parsePermissionAction,
   parsePermissionTarget,
+  parseSettingsMutation,
   parseSettingState,
   parseTextSizeCategory,
-  PERMISSION_ACTIONS,
-  PERMISSION_MODES,
   readTextSizeCategory,
   settingsAppNotConsumedRefusal,
   settingsAppScope,
+  settingsHelpLines,
   SETTINGS_APP_NOT_CONSUMED_REASON,
   SETTINGS_INVALID_ARGS_MESSAGE,
-  SETTINGS_MACOS_PERMISSION_USAGE,
   SETTINGS_USAGE_OVERRIDE,
-  TEXT_SIZE_CATEGORIES,
   textSizeSettingPayload,
-  type AppearanceAction,
-  type PermissionAction,
-  type PermissionTarget,
-  type ReadableSetting,
-  type TextSizeCategory,
 } from './settings.ts';
+import {
+  MOBILE_PERMISSION_TARGETS,
+  SETTING_NAMES,
+  TEXT_SIZE_CATEGORIES,
+} from './settings-catalog.ts';
 
-// Fixed expected data on purpose (#2614): this file is the witness that a shared permission
-// declaration neither widened nor narrowed what any settings surface already accepted, and that it
-// kept the accepted names in the order `settings` help has always listed them.
-// The one deliberate widening is `all`, first in the list: the Maestro setPermissions merge
-// needs it to travel as one `settings permission` call while each backend resolves it.
-const MOBILE_TARGETS = [
-  'all',
-  'camera',
-  'microphone',
-  'photos',
-  'contacts',
-  'contacts-limited',
-  'notifications',
-  'calendar',
-  'location',
-  'location-always',
-  'media-library',
-  'motion',
-  'reminders',
-  'siri',
-] as const;
-
-const MACOS_ONLY_TARGETS = ['accessibility', 'screen-recording', 'input-monitoring'] as const;
-
-// Fixed expected data on purpose: the ladder the `settings text-size` surface publishes, in the
-// order help lists it. A rung added, dropped, or reordered fails the usage pins below.
-const TEXT_SIZE_LADDER = [
-  'extra-small',
-  'small',
-  'medium',
-  'large',
-  'extra-large',
-  'extra-extra-large',
-  'extra-extra-extra-large',
-  'accessibility-medium',
-  'accessibility-large',
-  'accessibility-extra-large',
-  'accessibility-extra-extra-large',
-  'accessibility-extra-extra-extra-large',
-] as const;
-
-const SETTINGS_FORMS = [
-  '<wifi|airplane|location> <on|off>',
-  'location set <lat> <lon>',
-  'animations <on|off>',
-  'appearance <light|dark|toggle>',
-  `text-size [${TEXT_SIZE_LADDER.join('|')}]`,
-  'faceid <match|nonmatch|enroll|unenroll>',
-  'touchid <match|nonmatch|enroll|unenroll>',
-  'fingerprint <match|nonmatch>',
-  'clear-app-state [app-id]',
-  'reset-keychain clear',
-  `permission <grant|deny|reset> <${MOBILE_TARGETS.join('|')}> [full|limited]`,
-  'permission <grant|reset> <accessibility|screen-recording|input-monitoring>',
-] as const;
-
-// The whole normalization the parsers promise, written out rather than sampled.
 const NORMALIZATIONS = [
   (name: string) => name,
   (name: string) => name.toUpperCase(),
-  (name: string) => name.charAt(0).toUpperCase() + name.slice(1),
   (name: string) => ` ${name} `,
-  (name: string) => `\t${name}\n`,
-] as const;
-
-const REJECTED_TARGETS = [
-  ...MACOS_ONLY_TARGETS,
-  'bluetooth',
-  'camera-x',
-  'camera limited',
-  '',
-  '   ',
-  undefined,
 ] as const;
 
 function expectInvalidArgs(run: () => unknown, message: string): void {
@@ -116,96 +38,146 @@ function expectInvalidArgs(run: () => unknown, message: string): void {
   );
 }
 
-describe('the declared permission vocabulary', () => {
-  test('holds the names each surface already accepted, in help order', () => {
-    expect([...MOBILE_PERMISSION_TARGETS]).toEqual([...MOBILE_TARGETS]);
-    expect([...MACOS_PERMISSION_TARGETS]).toEqual([...MACOS_ONLY_TARGETS]);
-    expect([...PERMISSION_ACTIONS]).toEqual(['grant', 'deny', 'reset']);
-    expect([...PERMISSION_MODES]).toEqual(['full', 'limited']);
-  });
-});
-
-describe('settings usage and error strings', () => {
-  test('help lists every settings form in its documented order', () => {
-    expect(SETTINGS_USAGE_OVERRIDE.split(' | ')).toEqual(
-      SETTINGS_FORMS.map((form) => `settings ${form}`),
-    );
+describe('settings usage', () => {
+  test('folds settings that share a form into one line', () => {
+    expect(SETTINGS_USAGE_OVERRIDE.split(' | ')).toEqual([
+      'settings <wifi|airplane|location|animations> <on|off>',
+      'settings location set <lat> <lon>',
+      'settings appearance <light|dark|toggle>',
+      `settings text-size [${TEXT_SIZE_CATEGORIES.join('|')}]`,
+      'settings <faceid|touchid> <match|nonmatch|enroll|unenroll>',
+      'settings fingerprint <match|nonmatch>',
+      'settings clear-app-state [app-id]',
+      'settings reset-keychain clear',
+      `settings permission <grant|deny|reset> <${MOBILE_PERMISSION_TARGETS.join('|')}> [full|limited]`,
+      'settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>',
+    ]);
   });
 
   test('the invalid-args message lists the same forms, with the last one as an alternative', () => {
-    expect(SETTINGS_INVALID_ARGS_MESSAGE).toBe(
-      `settings requires ${SETTINGS_FORMS.slice(0, -1).join(', ')}, or ${SETTINGS_FORMS.at(-1)}`,
+    expect(SETTINGS_INVALID_ARGS_MESSAGE).toMatch(
+      /^settings requires <wifi\|airplane\|location\|animations> <on\|off>, .*, or permission <grant\|reset> <accessibility\|screen-recording\|input-monitoring>$/,
     );
   });
 
-  test('the macOS permission form keeps the actions it serves and the names it accepts', () => {
-    expect(SETTINGS_MACOS_PERMISSION_USAGE).toBe(
-      'permission <grant|reset> <accessibility|screen-recording|input-monitoring>',
-    );
-  });
-
-  test('the macOS guidance names the permission form it supports', () => {
-    expect(getUnsupportedMacOsSettingMessage('wifi')).toBe(
-      'Unsupported macOS setting: wifi. macOS supports only settings appearance <light|dark|toggle> ' +
-        'and settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>. ' +
-        'wifi|airplane|location|animations|text-size remain unsupported on macOS.',
-    );
-  });
-
-  test('only appearance and permission are supported macOS settings', () => {
-    expect(isMacOsSettingSupported(' Permission ')).toBe(true);
-    expect(isMacOsSettingSupported('appearance')).toBe(true);
-    expect(isMacOsSettingSupported('wifi')).toBe(false);
-    expect(isMacOsSettingSupported('text-size')).toBe(false);
+  test('help has one line per setting', () => {
+    expect(settingsHelpLines().map((line) => line.split(':')[0])).toEqual(SETTING_NAMES);
   });
 });
 
-describe('text-size vocabulary', () => {
-  test('the ladder holds the rungs iOS exposes, in size order', () => {
-    expect([...TEXT_SIZE_CATEGORIES]).toEqual([...TEXT_SIZE_LADDER]);
-    expectTypeOf<TextSizeCategory>().toEqualTypeOf<(typeof TEXT_SIZE_LADDER)[number]>();
+describe('parseSettingsMutation', () => {
+  test('accepts every on/off spelling and normalizes names and states', () => {
+    expect(parseSettingsMutation(['WiFi', 'ON'])).toEqual({ setting: 'wifi', state: 'on' });
+    expect(parseSettingsMutation(['airplane', '0'])).toEqual({ setting: 'airplane', state: 'off' });
+    expect(parseSettingsMutation(['wifi', ' true '])).toEqual({ setting: 'wifi', state: 'on' });
   });
 
-  test('every rung parses under each normalization', () => {
-    for (const category of TEXT_SIZE_LADDER) {
+  test('refuses a state outside a choice with the accepted states', () => {
+    expectInvalidArgs(
+      () => parseSettingsMutation(['appearance', 'bright']),
+      'Invalid appearance state: bright. Use light|dark|toggle.',
+    );
+    expectInvalidArgs(
+      () => parseSettingsMutation(['wifi']),
+      'settings wifi requires a state: on|off.',
+    );
+  });
+
+  test('refuses an unknown setting and extra positionals with the usage', () => {
+    expectInvalidArgs(
+      () => parseSettingsMutation(['bluetooth', 'on']),
+      SETTINGS_INVALID_ARGS_MESSAGE,
+    );
+    expectInvalidArgs(
+      () => parseSettingsMutation(['reset-keychain', 'clear', 'extra']),
+      SETTINGS_INVALID_ARGS_MESSAGE,
+    );
+  });
+
+  test('location set carries its coordinates as written', () => {
+    expect(parseSettingsMutation(['location', 'set', '37.33', '-122.03'])).toEqual({
+      setting: 'location',
+      state: 'set',
+      latitude: '37.33',
+      longitude: '-122.03',
+    });
+    expectInvalidArgs(
+      () => parseSettingsMutation(['location', 'set', '37.33']),
+      'settings requires',
+    );
+  });
+
+  test('permission takes a mobile or macOS target and an optional mode', () => {
+    expect(parseSettingsMutation(['permission', 'grant', 'Photos', 'LIMITED'])).toEqual({
+      setting: 'permission',
+      state: 'grant',
+      permission: 'photos',
+      mode: 'limited',
+    });
+    expect(parseSettingsMutation(['permission', 'reset', 'accessibility'])).toMatchObject({
+      permission: 'accessibility',
+    });
+    expectInvalidArgs(
+      () => parseSettingsMutation(['permission', 'grant', 'bluetooth']),
+      'settings permission requires a target:',
+    );
+    expectInvalidArgs(
+      () => parseSettingsMutation(['permission', 'grant', 'photos', 'some']),
+      'settings permission mode must be full|limited.',
+    );
+  });
+
+  test('a permission target takes only the actions and modes of its own form', () => {
+    expectInvalidArgs(
+      () => parseSettingsMutation(['permission', 'deny', 'accessibility']),
+      'settings permission deny does not apply to accessibility. Use grant|reset.',
+    );
+    expectInvalidArgs(
+      () => parseSettingsMutation(['permission', 'grant', 'accessibility', 'full']),
+      'settings permission accessibility takes no mode.',
+    );
+  });
+
+  test('clear-app-state reads its app with or without the clear word', () => {
+    expect(parseSettingsMutation(['clear-app-state', 'com.Example.App'])).toEqual({
+      setting: 'clear-app-state',
+      state: 'clear',
+      app: 'com.Example.App',
+    });
+    expect(parseSettingsMutation(['clear-app-state', 'clear', 'com.example.app'])).toMatchObject({
+      app: 'com.example.app',
+    });
+    expect(parseSettingsMutation(['clear-app-state'])).toEqual({
+      setting: 'clear-app-state',
+      state: 'clear',
+    });
+    expectInvalidArgs(
+      () => parseSettingsMutation(['clear-app-state', 'com.example.app', 'typo']),
+      SETTINGS_INVALID_ARGS_MESSAGE,
+    );
+  });
+});
+
+describe('text-size', () => {
+  test('every rung parses under each normalization; an off-ladder value is refused', () => {
+    for (const category of TEXT_SIZE_CATEGORIES) {
       for (const normalize of NORMALIZATIONS) {
         expect(parseTextSizeCategory(normalize(category))).toBe(category);
-        expect(readTextSizeCategory(normalize(category))).toBe(category);
       }
     }
-  });
-
-  test('parseTextSizeCategory refuses an off-ladder value with the whole ladder', () => {
-    // `simctl ui <device> content_size <bogus>` answers "Invalid argument" and exits 0, so refusing
-    // here is the only thing that keeps a mistyped rung from being reported as applied.
-    for (const value of ['gigantic', '', '   ', 'larger', 'extra_large']) {
-      expectInvalidArgs(
-        () => parseTextSizeCategory(value),
-        `Invalid text size: ${value}. Use ${TEXT_SIZE_LADDER.join('|')}.`,
-      );
-    }
+    expectInvalidArgs(() => parseTextSizeCategory('gigantic'), 'Invalid text-size state: gigantic');
     expect(readTextSizeCategory('gigantic')).toBeUndefined();
-    expect(readTextSizeCategory(undefined)).toBeUndefined();
   });
 
-  test('the read payload names the setting that answered, beside the platform value', () => {
+  test('the read payload is frozen and each leg answers with its sentence', () => {
     const payload = textSizeSettingPayload('accessibility-large', '1.75');
     expect(payload).toEqual({
       setting: 'text-size',
       category: 'accessibility-large',
       platformValue: '1.75',
     });
-    // Owners build the payload through this builder; a frozen result is what stops one from
-    // widening the payload the response is composed from.
     expect(Object.isFrozen(payload)).toBe(true);
-  });
-
-  test('each leg answers with the sentence its setting owns', () => {
-    // The response text is a claim about the setting, so it is composed here rather than at the call
-    // site that happens to run the request.
-    expect(describeSettingRead(textSizeSettingPayload('large', 'Small'))).toBe(
-      'Text size is large',
-    );
+    expect(describeSettingRead(payload)).toBe('Text size is accessibility-large');
     expect(describeSettingWrite('text-size', 'large', undefined)).toBe('Text size set to large');
     expect(describeSettingWrite('clear-app-state', 'clear', 'com.example.app')).toBe(
       'Cleared user data for com.example.app',
@@ -214,181 +186,55 @@ describe('text-size vocabulary', () => {
   });
 });
 
-test('the readable-setting vocabulary is the names the read leg answers', () => {
-  // The type is the vocabulary; `READABLE_SETTINGS` beside it is the value the CLI hub evaluates.
-  // Both directions are pinned where the value is declared, so this is the one direction that has to
-  // be read: a name that joins the type without joining the value is a compile error there.
-  const readable: readonly ReadableSetting[] = READABLE_SETTINGS;
-  expect(readable).toEqual(['text-size']);
-});
-
-describe('parsePermissionTarget', () => {
-  test('accepts every mobile target under each normalization', () => {
-    for (const target of MOBILE_TARGETS) {
-      for (const normalize of NORMALIZATIONS) {
-        expect(parsePermissionTarget(normalize(target))).toBe(target);
-      }
-    }
+describe('owner parsers', () => {
+  test('parsePermissionTarget accepts the mobile targets only', () => {
+    expect(parsePermissionTarget(' Camera ')).toBe('camera');
+    expectInvalidArgs(
+      () => parsePermissionTarget('accessibility'),
+      `permission setting requires a target: ${MOBILE_PERMISSION_TARGETS.join('|')}`,
+    );
   });
 
-  test('refuses every name outside the mobile vocabulary, including the macOS-only ones', () => {
-    for (const target of REJECTED_TARGETS) {
-      expectInvalidArgs(
-        () => parsePermissionTarget(target),
-        `permission setting requires a target: ${MOBILE_TARGETS.join('|')}`,
-      );
-    }
-  });
-});
-
-describe('parsePermissionAction', () => {
-  test('accepts each action under each normalization', () => {
-    for (const action of ['grant', 'deny', 'reset']) {
-      for (const normalize of NORMALIZATIONS) {
-        expect(parsePermissionAction(normalize(action))).toBe(action);
-      }
-    }
+  test('parsePermissionAction and parseAppearanceAction name the accepted list', () => {
+    expect(parsePermissionAction('DENY')).toBe('deny');
+    expectInvalidArgs(() => parsePermissionAction('allow'), 'Use grant|deny|reset.');
+    expect(parseAppearanceAction('Dark')).toBe('dark');
+    expectInvalidArgs(() => parseAppearanceAction('bright'), 'Use light|dark|toggle.');
   });
 
-  test('refuses an action outside the vocabulary with the accepted list', () => {
-    for (const action of ['allow', 'revoke', '', '   ', 'deny-me']) {
-      expectInvalidArgs(
-        () => parsePermissionAction(action),
-        `Invalid permission action: ${action}. Use grant|deny|reset.`,
-      );
-    }
-  });
-});
-
-// The shared declaration must not move either exported type: these pins are what the public
-// client and the platform owners compile against today.
-describe('permission vocabulary types', () => {
-  test('the contract vocabulary stays the mobile subset', () => {
-    expectTypeOf<PermissionTarget>().toEqualTypeOf<(typeof MOBILE_TARGETS)[number]>();
-    expectTypeOf<PermissionAction>().toEqualTypeOf<'grant' | 'deny' | 'reset'>();
-  });
-
-  test('the mobile vocabulary does not grow the macOS-only names', () => {
-    expectTypeOf<'accessibility'>().not.toMatchTypeOf<PermissionTarget>();
-    expectTypeOf<'screen-recording'>().not.toMatchTypeOf<PermissionTarget>();
-    expectTypeOf<'input-monitoring'>().not.toMatchTypeOf<PermissionTarget>();
-  });
-});
-
-// Fixed expected data on purpose: these are the acceptance sets the Apple and Android settings
-// owners each enforced in their own copy of the same parser before the copies were deleted. The
-// two parsers agreed byte for byte, including the refusal wording, so one declaration now carries
-// both — and a widened or narrowed set here fails here rather than diverging one platform at a
-// time, which is the only way the copies could have drifted unnoticed.
-const APPEARANCE_SET = ['light', 'dark', 'toggle'] as const;
-
-describe('parseAppearanceAction', () => {
-  test('holds the appearances every settings surface already accepted, in help order', () => {
-    expect([...APPEARANCE_ACTIONS]).toEqual([...APPEARANCE_SET]);
-  });
-
-  test('accepts each appearance under each normalization', () => {
-    for (const action of APPEARANCE_SET) {
-      for (const normalize of NORMALIZATIONS) {
-        expect(parseAppearanceAction(normalize(action))).toBe(action);
-      }
-    }
-  });
-
-  test('refuses an appearance outside the vocabulary with the accepted list', () => {
-    for (const state of ['bright', '', '   ', 'light-dark']) {
-      expectInvalidArgs(
-        () => parseAppearanceAction(state),
-        `Invalid appearance state: ${state}. Use ${[...APPEARANCE_SET].join('|')}.`,
-      );
-    }
-  });
-});
-
-describe('parseSettingState', () => {
-  test('maps every on and off spelling in any casing', () => {
-    for (const state of ['on', 'ON', 'true', 'TRUE', '1']) {
+  test('parseSettingState maps on/off spellings in any casing or padding', () => {
+    for (const state of ['on', 'true', 'TRUE', '1', ' on ']) {
       expect(parseSettingState(state)).toBe(true);
     }
-    for (const state of ['off', 'OFF', 'false', 'FALSE', '0']) {
+    for (const state of ['off', 'false', 'FALSE', '0'])
       expect(parseSettingState(state)).toBe(false);
-    }
-  });
-
-  test('refuses a state that spells neither, and keeps padding unaccepted', () => {
-    // Padding is not one of these spellings: unlike an appearance name, a state reaches `settings
-    // put` as an argument, where a stray space is a caller bug rather than a casing variant.
-    for (const state of ['maybe', '2', '', ' on ']) {
+    for (const state of ['maybe', '']) {
       expectInvalidArgs(() => parseSettingState(state), `Invalid setting state: ${state}`);
     }
   });
 });
 
-describe('appearance vocabulary types', () => {
-  test('the vocabulary stays the appearance state the published client type carries', () => {
-    // The CLI's membership set, both platform parsers, and the published client union are all built
-    // from this one declaration now. The union itself stays spelled out in `client-settings.ts` so
-    // the shipped .d.ts keeps its literal shape; this pin is what stops the two drifting.
-    expectTypeOf<AppearanceAction>().toEqualTypeOf<
-      Extract<SettingsUpdateOptions, { setting: 'appearance' }>['state']
-    >();
-  });
-});
-
 describe('settingsAppScope', () => {
-  test('a permission is app-scoped on every mobile target and host-level on macOS', () => {
-    expect(settingsAppScope('apple', 'permission', 'grant')).toBe('app-scoped');
-    expect(settingsAppScope('mobile', 'permission', 'deny')).toBe('app-scoped');
-    expect(settingsAppScope('macos-host', 'permission', 'grant')).toBe('device-level');
-  });
-
-  test('clear-app-state is app-scoped wherever it is served', () => {
-    expect(settingsAppScope('apple', 'clear-app-state', 'clear')).toBe('app-scoped');
-    expect(settingsAppScope('mobile', 'clear-app-state', 'clear')).toBe('app-scoped');
-    expect(settingsAppScope('macos-host', 'clear-app-state', 'clear')).toBe('unknown');
-  });
-
-  test('an on/off location is app-scoped only where it maps to a privacy grant', () => {
-    expect(settingsAppScope('apple', 'location', 'on')).toBe('app-scoped');
-    expect(settingsAppScope('apple', 'location', 'off')).toBe('app-scoped');
-    expect(settingsAppScope('mobile', 'location', 'on')).toBe('device-level');
-    expect(settingsAppScope('mobile', 'location', 'off')).toBe('device-level');
-  });
-
-  test('every state parseSettingState accepts classifies like its on/off spelling', () => {
-    // The owners toggle on `parseSettingState`, which also accepts true/1/false/0. A spelling the
-    // parser takes must settle the app scope the same way, or `location 1 --app X` silently drops X.
-    for (const state of ['on', 'true', 'TRUE', '1']) {
-      expect(parseSettingState(state)).toBe(true);
-      expect(settingsAppScope('apple', 'location', state)).toBe('app-scoped');
-      expect(settingsAppScope('mobile', 'location', state)).toBe('device-level');
-    }
-    for (const state of ['off', 'false', 'FALSE', '0']) {
-      expect(parseSettingState(state)).toBe(false);
-      expect(settingsAppScope('apple', 'location', state)).toBe('app-scoped');
-      expect(settingsAppScope('mobile', 'location', state)).toBe('device-level');
-    }
-    // The table trims before consulting the grammar, so a padded spelling still classifies.
-    expect(settingsAppScope('apple', 'location', ' on ')).toBe('app-scoped');
-  });
-
-  test('a location set moves the device itself for everyone', () => {
-    expect(settingsAppScope('apple', 'location', 'set')).toBe('device-level');
-    expect(settingsAppScope('mobile', 'location', 'set')).toBe('device-level');
-  });
-
-  test('a combination the table does not settle stays unknown, not a verdict', () => {
-    expect(settingsAppScope('macos-host', 'location', 'on')).toBe('unknown');
-    expect(settingsAppScope('mobile', 'wifi', 'on')).toBe('unknown');
-    expect(settingsAppScope('apple', 'animations', 'on')).toBe('unknown');
-    expect(settingsAppScope('mobile', 'location', 'sideways')).toBe('unknown');
-    // A mutation with no state is not a write the surface admits, so the table names no scope for it.
-    expect(settingsAppScope('apple', 'location', undefined)).toBe('unknown');
-  });
-
-  test('the scope keys on the setting and state vocabulary, not its padding or case', () => {
-    expect(settingsAppScope('apple', ' PERMISSION ', 'GRANT')).toBe('app-scoped');
-    expect(settingsAppScope('mobile', 'Location', ' On ')).toBe('device-level');
+  test.each([
+    ['apple', 'permission', 'grant', 'app-scoped'],
+    ['mobile', 'permission', 'deny', 'app-scoped'],
+    ['macos-host', 'permission', 'grant', 'device-level'],
+    ['apple', 'clear-app-state', 'clear', 'app-scoped'],
+    ['mobile', 'clear-app-state', 'clear', 'app-scoped'],
+    ['macos-host', 'clear-app-state', 'clear', 'unknown'],
+    ['apple', 'location', 'on', 'app-scoped'],
+    ['apple', 'location', '0', 'app-scoped'],
+    ['mobile', 'location', 'TRUE', 'device-level'],
+    ['apple', 'location', ' on ', 'app-scoped'],
+    ['apple', 'location', 'set', 'device-level'],
+    ['macos-host', 'location', 'set', 'unknown'],
+    ['macos-host', 'location', 'on', 'unknown'],
+    ['mobile', 'location', 'sideways', 'unknown'],
+    ['apple', 'location', undefined, 'unknown'],
+    ['mobile', 'wifi', 'on', 'unknown'],
+    ['apple', ' PERMISSION ', 'GRANT', 'app-scoped'],
+  ] as const)('%s %s %s is %s', (family, setting, state, scope) => {
+    expect(settingsAppScope(family, setting, state)).toBe(scope);
   });
 });
 

@@ -112,7 +112,31 @@ export type RuntimeOperationUnavailability = Readonly<{
   hint?: string;
 }>;
 
-export type RuntimeOperationFact = Readonly<{ available: true }> | RuntimeOperationUnavailability;
+type RuntimeSubjectFact = Readonly<{ available: true }> | RuntimeOperationUnavailability;
+
+/**
+ * `subjects` names, for an operation an owner serves for only some of its subjects (the settings
+ * `setSetting` changes), each subject's own fact; `unlisted` answers for every other subject.
+ * Admission checks the requested subject's fact; a bound runtime keeps only `available`.
+ */
+export type RuntimeOperationFact =
+  | Readonly<{
+      available: true;
+      subjects?: Readonly<Record<string, RuntimeSubjectFact>>;
+      unlisted?: RuntimeOperationUnavailability;
+    }>
+  | RuntimeOperationUnavailability;
+
+const UNLISTED_SUBJECT = unavailableFact('unsupported-platform-leaf');
+
+export function runtimeSubjectFact(
+  fact: RuntimeOperationFact,
+  subject: string,
+): RuntimeSubjectFact {
+  if (!fact.available || fact.subjects === undefined) return fact;
+  if (Object.hasOwn(fact.subjects, subject)) return fact.subjects[subject]!;
+  return fact.unlisted ?? UNLISTED_SUBJECT;
+}
 
 /** One frozen unavailable cell; owners list their refusals as calls instead of literals. */
 export function unavailableFact(

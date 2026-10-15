@@ -156,31 +156,77 @@ export function snapshotRuntimeFixture(requestId?: string): Readonly<{
   return { inspectFacts, bindDevice, platformServices: daemonPlatformServicesFixture() };
 }
 
-/** A physical Apple device that is not the macOS host: the one settings refusal these suites use. */
-function appleHostOrSimulatorOnly(device: DeviceInfo): boolean {
-  return device.platform === 'apple' && device.kind === 'device' && !isMacOs(device);
-}
-
-/**
- * The narrower read refusal, stated through the same predicate the Apple owner and the Apple runtime
- * fact use: only an iPhone/iPad simulator has a content size `simctl ui` reports.
- */
-function appleSettingsReadRefused(device: DeviceInfo): boolean {
-  if (!isApplePlatform(device.platform)) return true;
-  return !isHandheldAppleSimulator(device);
-}
-
 const settingsUnavailable = {
   available: false,
   reason: 'unsupported-platform-leaf',
   hint: 'settings is supported on Apple simulators and the macOS host, not on physical devices of this OS.',
 } as const;
 
-const settingsReadUnavailable = {
+const settingUnavailable = {
   available: false,
   reason: 'unsupported-platform-leaf',
-  hint: 'Reading a setting back is supported on iPhone and iPad simulators, where `simctl ui` reports the value the device holds.',
+  hint: 'This fixture target does not serve the setting.',
 } as const;
+
+/** A condensed model of the owners' settings facts; each owner pins its own in its runtime test. */
+function settingsFacts(device: DeviceInfo) {
+  const available = { available: true } as const;
+  const unsupported = settingUnavailable;
+  switch (device.platform) {
+    case 'android':
+      return settingsRuntimeOperationFacts({
+        target: available,
+        unsupported,
+        write: {
+          wifi: available,
+          airplane: available,
+          location: available,
+          animations: available,
+          appearance: available,
+          'text-size': available,
+          fingerprint: available,
+          'clear-app-state': available,
+          permission: available,
+        },
+        read: { 'text-size': available },
+      });
+    case 'harmonyos':
+      return settingsRuntimeOperationFacts({
+        target: available,
+        unsupported,
+        write: { 'clear-app-state': available },
+      });
+    case 'apple':
+      break;
+    default:
+      return settingsRuntimeOperationFacts({ target: settingUnavailable, unsupported, write: {} });
+  }
+  if (isMacOs(device)) {
+    return settingsRuntimeOperationFacts({
+      target: available,
+      unsupported,
+      write: { appearance: available, permission: available },
+    });
+  }
+  const handheld = isHandheldAppleSimulator(device) ? available : settingUnavailable;
+  return settingsRuntimeOperationFacts({
+    target: device.kind === 'device' ? settingsUnavailable : available,
+    unsupported,
+    write: {
+      wifi: available,
+      airplane: available,
+      location: available,
+      appearance: available,
+      'clear-app-state': available,
+      'reset-keychain': available,
+      permission: available,
+      'text-size': handheld,
+      faceid: handheld,
+      touchid: handheld,
+    },
+    read: { 'text-size': handheld },
+  });
+}
 
 const alertUnavailable = {
   available: false,
@@ -220,14 +266,7 @@ async function snapshotFacts(device: DeviceInfo): Promise<RuntimeFacts<PlatformR
           isIosFamily(device) && device.kind === 'simulator' ? available : customActionsUnavailable,
         withoutActiveApp: providerOwned || !isIosFamily(device) ? available : activeAppRequired,
       }),
-      // R58: `settings` runs on the snapshot route, so this fixture states its cell too. It
-      // restates only the one refusal these suites exercise — a physical non-macOS Apple device
-      // has no settings surface — and the full Apple cell table is pinned where it belongs, in
-      // `platform-apple/src/system/runtime.test.ts`.
-      ...settingsRuntimeOperationFacts({
-        setSetting: appleHostOrSimulatorOnly(device) ? settingsUnavailable : available,
-        readSetting: appleSettingsReadRefused(device) ? settingsReadUnavailable : available,
-      }),
+      ...settingsFacts(device),
       // R59: `alert` runs on the snapshot route too. Only the Apple legs are modeled — every
       // alert suite that reaches this fixture drives an Apple session — and the full per-owner
       // cell tables are pinned where they belong, in each platform package's runtime test.

@@ -28,7 +28,7 @@ import type { KeyboardRuntimeOperations } from './keyboard-runtime.ts';
 import type { ClipboardRuntimeOperations } from './clipboard-runtime.ts';
 import type { SystemButtonRuntimeOperations } from './system-button-runtime.ts';
 import type { AppEventRuntimeOperations } from './app-event-runtime.ts';
-import type { ReadableSetting } from './settings.ts';
+import type { ReadableSetting } from './settings-catalog.ts';
 import type { SettingsRuntimeOperations } from './settings-runtime.ts';
 import type { AlertRuntimeOperations } from './alert-runtime.ts';
 import type { AudioProbeRuntimeOperations } from './audio-probe-runtime.ts';
@@ -761,20 +761,12 @@ export const clipboardRuntimePlanUses = Object.freeze([
 export const settingsRuntimePlanUses = Object.freeze([settingsRuntimeUse, settingReadUse] as const);
 
 /**
- * The settings that answer a bare `settings <setting>` with the value the target holds, in the order
- * `settings` help lists them. A setting joins the list only when at least one owner can read it back,
- * which is what makes the read a second operation rather than a stateless write.
- *
- * The NAME lives in `settings.ts`, where every settings type and the settings owners already read it
- * from; this is its VALUE, because the CLI's eager command-registry closure must evaluate the leg
- * rule below and `contracts/settings.ts` is not in that closure — importing it here would add it
- * (`scripts/__tests__/eager-closure-budgets.test.ts` ratchets the hub against growth) and importing
- * this module from `settings.ts` would close a contracts type cycle the layering scan forbids. The
- * two lines after this declaration pin the pair equal in both directions, so no test has to.
+ * The catalog's readable settings (`readable: true` in `settings-catalog.ts`). Restated as a value
+ * because the CLI's eager command-registry closure evaluates this module and not the catalog; the
+ * `Record` key type makes a readable setting missing here, or an extra one, a compile error.
  */
-export const READABLE_SETTINGS: readonly ReadableSetting[] = ['text-size'];
-const readableSettingsAreTheVocabulary: Record<ReadableSetting, true> = { 'text-size': true };
-void readableSettingsAreTheVocabulary;
+const READABLE_SETTING_SET: Record<ReadableSetting, true> = { 'text-size': true };
+export const READABLE_SETTINGS = Object.keys(READABLE_SETTING_SET) as readonly ReadableSetting[];
 
 /** The leg one `settings` request is on, and the owner fact that leg admits. */
 export type SettingsRuntimePlan =
@@ -787,14 +779,9 @@ const WRITE_SETTINGS_RUNTIME_PLAN: SettingsRuntimePlan = Object.freeze({
 });
 
 /**
- * The ONE leg rule `settings` has, and the only place its readable-setting list is read. A request
- * reads when it names a readable setting and nothing else; anything with a state is a mutation,
- * including `settings text-size large`, which names the same word and changes the device. Both
- * consumers resolve through here: the command descriptor turns `kind` into the recording and
- * ref-frame effect, and the daemon admits `use` and reads the setting named — so the classification
- * and the operation admitted cannot disagree. It sits beside the two uses rather than in the settings
- * vocabulary because both consumers already evaluate this module, while the CLI's eager command-
- * registry closure is ratcheted against growth by `scripts/__tests__/eager-closure-budgets.test.ts`.
+ * A request reads when it names a readable setting and nothing else; `settings text-size large`
+ * names the same word and is a mutation. The command descriptor's effects and the daemon's admitted
+ * use both resolve through here, so they cannot disagree.
  */
 export function resolveSettingsRuntimePlan(
   positionals: readonly string[] | undefined,

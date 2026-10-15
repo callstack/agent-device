@@ -1,9 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import {
-  SETTINGS_APP_NOT_PACKAGE_REASON,
-  TEXT_SIZE_CATEGORIES,
-} from '@agent-device/contracts/settings';
+import { SETTINGS_APP_NOT_PACKAGE_REASON } from '@agent-device/contracts/settings';
+import { TEXT_SIZE_CATEGORIES } from '@agent-device/contracts/settings-catalog';
 import { PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import { readAndroidSetting, setAndroidSetting } from '../settings.ts';
 import { ANDROID_EMULATOR } from './test-utils/device-fixtures.ts';
@@ -382,7 +380,7 @@ test('setAndroidSetting text-size refuses an off-ladder category without touchin
   await withFakeAdb(store.script, async ({ calls, device }) => {
     await assertRejectsAppError(() => setAndroidSetting(device, 'text-size', 'gigantic'), {
       code: 'INVALID_ARGS',
-      message: /Invalid text size: gigantic/,
+      message: /Invalid text-size state: gigantic/,
     });
     assert.deepEqual(calls, []);
     assert.equal(store.held(), '1.0');

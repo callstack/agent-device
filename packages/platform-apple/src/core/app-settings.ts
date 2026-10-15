@@ -1,13 +1,15 @@
 import {
-  APPLE_BIOMETRIC_LEAF_REFUSAL,
-  getUnsupportedMacOsSettingMessage,
   parsePermissionAction,
   parseSettingState,
   resolveSettingsApp,
-  type ReadableSetting,
   type ReadSettingResult,
   type SettingOptions,
 } from '@agent-device/contracts/settings';
+import {
+  MACOS_PERMISSION_TARGETS,
+  type ReadableSetting,
+  type SettingName,
+} from '@agent-device/contracts/settings-catalog';
 import { isIosFamily, isMacOs, type DeviceInfo } from '@agent-device/kernel/device';
 import {
   AppError,
@@ -27,7 +29,6 @@ import { runMacOsPermissionAction, type MacOsPermissionTarget } from '../os/maco
 import { closeIosApp } from './app-launch.ts';
 import { applySimctlSetting } from './simctl-settings.ts';
 import { readIosTextSize, setIosTextSize } from './settings-text-size.ts';
-import { requireHandheldAppleSimulatorLeaf } from './settings-leaf.ts';
 import { resolveIosApp } from './app-resolution.ts';
 import { buildSimctlArgsForDevice, readSimctlContainerPath, runSimctlForDevice } from './simctl.ts';
 import {
@@ -37,6 +38,25 @@ import {
 import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
 import { runXcrun } from './tool-provider.ts';
 
+const MACOS_HOST_SETTINGS = ['appearance', 'permission'] as const satisfies readonly SettingName[];
+
+export type MacOsHostSetting = (typeof MACOS_HOST_SETTINGS)[number];
+
+const APPLE_SIMULATOR_SETTINGS = [
+  'wifi',
+  'airplane',
+  'location',
+  'appearance',
+  'clear-app-state',
+  'reset-keychain',
+  'permission',
+  'text-size',
+  'faceid',
+  'touchid',
+] as const satisfies readonly SettingName[];
+
+export type AppleSimulatorSetting = (typeof APPLE_SIMULATOR_SETTINGS)[number];
+
 // fallow-ignore-next-line complexity
 export async function setIosSetting(
   device: DeviceInfo,
@@ -45,25 +65,12 @@ export async function setIosSetting(
   appBundleId?: string,
   options?: SettingOptions,
 ): Promise<Record<string, unknown> | void> {
-  if (isMacOs(device)) {
-    const normalizedSetting = setting.toLowerCase();
-    if (normalizedSetting === 'appearance') {
-      await setMacOsAppearance(state);
-      return;
-    }
-    if (normalizedSetting === 'permission') {
-      const action = parsePermissionAction(state);
-      if (action === 'deny') {
-        throw new AppError('INVALID_ARGS', getUnsupportedMacOsSettingMessage('permission'));
-      }
-      const permissionTarget = parseMacOsPermissionTarget(options?.permissionTarget);
-      return await runMacOsPermissionAction(action, permissionTarget);
-    }
-    throw new AppError('INVALID_ARGS', getUnsupportedMacOsSettingMessage(setting));
-  }
+  if (isMacOs(device)) return await setMacOsHostSetting(setting, state, options);
   requireSimulatorDevice(device, 'settings');
+  const normalized = APPLE_SIMULATOR_SETTINGS.find((name) => name === setting.toLowerCase());
+  if (normalized === undefined)
+    throw new AppError('INVALID_ARGS', `Unsupported setting: ${setting}`);
   await ensureBootedSimulator(device);
-  const normalized = setting.toLowerCase();
 
   switch (normalized) {
     case 'clear-app-state': {
@@ -128,7 +135,6 @@ export async function setIosSetting(
     }
     case 'faceid':
     case 'touchid': {
-      requireHandheldAppleSimulatorLeaf(device, APPLE_BIOMETRIC_LEAF_REFUSAL);
       const biometricSetting = normalized as IosBiometricSetting;
       const biometric = IOS_BIOMETRIC_SETTINGS[biometricSetting];
       const action = parseBiometricAction(state, biometricSetting);
@@ -155,7 +161,35 @@ export async function setIosSetting(
         options,
       });
     default:
-      throw new AppError('INVALID_ARGS', `Unsupported setting: ${setting}`);
+      return normalized satisfies never;
+  }
+}
+
+async function setMacOsHostSetting(
+  setting: string,
+  state: string,
+  options: SettingOptions | undefined,
+): Promise<Record<string, unknown> | void> {
+  const normalized = MACOS_HOST_SETTINGS.find((name) => name === setting.toLowerCase());
+  switch (normalized) {
+    case 'appearance':
+      await setMacOsAppearance(state);
+      return;
+    case 'permission': {
+      const action = parsePermissionAction(state);
+      if (action === 'deny') {
+        throw new AppError(
+          'INVALID_ARGS',
+          'The macOS host supports settings permission grant|reset, not deny.',
+        );
+      }
+      const permissionTarget = parseMacOsPermissionTarget(options?.permissionTarget);
+      return await runMacOsPermissionAction(action, permissionTarget);
+    }
+    case undefined:
+      throw new AppError('UNSUPPORTED_OPERATION', `Unsupported macOS setting: ${setting}`);
+    default:
+      return normalized satisfies never;
   }
 }
 
@@ -272,16 +306,11 @@ async function clearIosSimulatorAppState(
 
 function parseMacOsPermissionTarget(value: string | undefined): MacOsPermissionTarget {
   const normalized = value?.trim().toLowerCase();
-  if (
-    normalized === 'accessibility' ||
-    normalized === 'screen-recording' ||
-    normalized === 'input-monitoring'
-  ) {
-    return normalized;
-  }
+  const target = MACOS_PERMISSION_TARGETS.find((name) => name === normalized);
+  if (target !== undefined) return target;
   throw new AppError(
     'INVALID_ARGS',
-    'Unsupported macOS permission target. Use accessibility|screen-recording|input-monitoring.',
+    `Unsupported macOS permission target. Use ${MACOS_PERMISSION_TARGETS.join('|')}.`,
   );
 }
 

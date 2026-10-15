@@ -49,6 +49,7 @@ import { keyboardRuntimeOperationFacts } from '@agent-device/contracts/keyboard-
 import { orientationRuntimeOperationFacts } from '@agent-device/contracts/orientation-runtime';
 import { tvRemoteRuntimeOperationFacts } from '@agent-device/contracts/tv-remote-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import type { AndroidSetting } from './settings.ts';
 import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
 import { androidFoldableFacts, createAndroidFoldableOperations } from './foldable/runtime.ts';
 import { androidAudioProbeCaptureFact } from './audio-runtime.ts';
@@ -69,6 +70,10 @@ import {
 const owner = localRuntimeOwner('android');
 const available = Object.freeze({ available: true } as const);
 const elementTextKindUnavailable = unavailableFact('unsupported-device-kind');
+const androidSettingUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'Run `agent-device settings --help` for the settings each target serves.',
+);
 /**
  * Parity with the retired `focus` capability bucket (`{ emulator, device, unknown }`): every
  * Android kind drives touch through adb except the synthetic `simulator` row, which has no device.
@@ -346,12 +351,21 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
         // The deep link opens through `am start`, admitted wherever the retired `ANDROID_ALL`
         // bucket admitted it.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: androidTouchFact(device) }),
-        // Settings run over adb (`appops`, `settings put`, `pm clear`, …) on every real kind, so
-        // both cells are the retired `ANDROID_ALL` bucket verbatim: the same `settings get`/`put`
-        // pair that writes a value reads it back.
         ...settingsRuntimeOperationFacts({
-          setSetting: androidTouchFact(device),
-          readSetting: androidTouchFact(device),
+          target: androidTouchFact(device),
+          unsupported: androidSettingUnavailable,
+          write: {
+            wifi: available,
+            airplane: available,
+            location: available,
+            animations: available,
+            appearance: available,
+            'text-size': available,
+            fingerprint: available,
+            'clear-app-state': available,
+            permission: available,
+          } satisfies Record<AndroidSetting, RuntimeOperationFact>,
+          read: { 'text-size': available },
         }),
         // R59: Android reads alerts out of the same accessibility dump every interaction cell
         // depends on and presses their buttons with the same `input tap`, so all four legs take

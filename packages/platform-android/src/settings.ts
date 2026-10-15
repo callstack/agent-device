@@ -14,12 +14,15 @@ import {
   resolveSettingsApp,
   SETTINGS_APP_NOT_PACKAGE_REASON,
   textSizeSettingPayload,
-  TEXT_SIZE_CATEGORIES,
-  type ReadableSetting,
   type ReadSettingResult,
   type SettingOptions,
   type TextSizeSettingPayload,
 } from '@agent-device/contracts/settings';
+import {
+  TEXT_SIZE_CATEGORIES,
+  type ReadableSetting,
+  type SettingName,
+} from '@agent-device/contracts/settings-catalog';
 import { runAndroidAdb, runAndroidShell } from './adb.ts';
 import { setAndroidAirplaneMode } from './settings-airplane.ts';
 import { androidAdbResultError } from './adb-executor.ts';
@@ -30,6 +33,21 @@ import {
   setAndroidPermission,
 } from './settings-permission.ts';
 
+/** The settings {@link setAndroidSetting} applies over adb, wherever an owner runs it. */
+export const ANDROID_SETTINGS = [
+  'wifi',
+  'airplane',
+  'location',
+  'animations',
+  'appearance',
+  'text-size',
+  'fingerprint',
+  'clear-app-state',
+  'permission',
+] as const satisfies readonly SettingName[];
+
+export type AndroidSetting = (typeof ANDROID_SETTINGS)[number];
+
 const ANDROID_ANIMATION_SCALE_SETTINGS = [
   'window_animation_scale',
   'transition_animation_scale',
@@ -37,21 +55,10 @@ const ANDROID_ANIMATION_SCALE_SETTINGS = [
 ] as const;
 
 /**
- * The Android half of `settings text-size`. Android has no content-size category: its preferred text
- * size is one `system font_scale` multiplier that every app scales its own fonts from. The shared
- * ladder is therefore expressed here as multipliers, and only here — the command surface, the CLI,
- * and the read payload all speak the ladder.
- *
- * The seven standard rungs are the Dynamic Type body ratios against the default size, rounded to two
- * decimals: 14/17, 15/17, 16/17, 17/17, 19/17, 21/17, 23/17. The five accessibility rungs are
- * Android's own larger range rather than an Apple ratio: Android has no accessibility tier below
- * 1.4x, and 3.2 is the largest multiplier its own tooling documents. Every rung must stay strictly
- * increasing and distinct, because a read names the nearest rung to whatever the device holds.
- *
- * This table lives beside the dispatcher that selects it rather than in its own module because
- * `mechanics.ts` is a CLI-eager entry whose import closure is ratcheted by
- * `scripts/__tests__/eager-closure-budgets.test.ts`: a new static module on this path is a growth
- * the gate refuses.
+ * The text-size ladder as Android `system font_scale` multipliers. The seven standard rungs are the
+ * Dynamic Type body ratios against the default size (14/17 … 23/17); the five accessibility rungs
+ * are Android's own range up to 3.2, the largest multiplier its tooling documents. Rungs must stay
+ * strictly increasing, because a read names the nearest rung to whatever the device holds.
  */
 const TEXT_SIZE_FONT_SCALES = {
   'extra-small': '0.82',
@@ -79,7 +86,9 @@ export async function setAndroidSetting(
   appPackage?: string,
   options?: SettingOptions,
 ): Promise<Record<string, unknown> | void> {
-  const normalized = setting.toLowerCase();
+  const normalized = ANDROID_SETTINGS.find((name) => name === setting.toLowerCase());
+  if (normalized === undefined)
+    throw new AppError('INVALID_ARGS', `Unsupported setting: ${setting}`);
   switch (normalized) {
     case 'wifi': {
       const enabled = parseSettingState(state);
@@ -183,7 +192,7 @@ export async function setAndroidSetting(
       return await setAndroidTextSize(device, state);
     }
     default:
-      throw new AppError('INVALID_ARGS', `Unsupported setting: ${setting}`);
+      return normalized satisfies never;
   }
 }
 
@@ -212,16 +221,7 @@ async function resolveAndroidSettingsPackage(
   return resolved.value;
 }
 
-/**
- * The ONE place an Android target answers `settings <setting>` with the value it holds. The command
- * surface only sends a setting its own vocabulary declares readable, so a name outside this switch
- * is a leaf mismatch rather than a user typo, and says so.
- */
-/**
- * The Android read leg, exhaustive over the readable list: a setting joins `READABLE_SETTINGS` only
- * with an answer here, so a new readable name is a compile error on this map rather than a runtime
- * refusal hidden in a default case.
- */
+/** Exhaustive over the readable settings, so a new one is a compile error here. */
 const ANDROID_READABLE_SETTINGS = {
   'text-size': readAndroidTextSize,
 } as const satisfies Record<ReadableSetting, (device: DeviceInfo) => Promise<ReadSettingResult>>;

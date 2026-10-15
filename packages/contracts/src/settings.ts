@@ -1,99 +1,22 @@
 import { AppError, appNotInstalledDetails, discloseDispatch } from '@agent-device/kernel/errors';
-
-/**
- * The `settings permission` vocabulary, declared once. These collections are what the parsers
- * below, the public client permission types, the CLI's membership sets, and the permission-name
- * fragments of `settings` help and its invalid-args message are built from, and their order is
- * the order `settings` help lists the names in.
- *
- * Acceptance is not support: each backend keeps its own target mapping and its own support check,
- * so a name accepted here never promises that the selected platform serves it.
- */
-export const PERMISSION_ACTIONS = ['grant', 'deny', 'reset'] as const;
-export const PERMISSION_MODES = ['full', 'limited'] as const;
-
-/** The app-scoped targets, the only ones `parsePermissionTarget` accepts. */
-export const MOBILE_PERMISSION_TARGETS = [
-  'all',
-  'camera',
-  'microphone',
-  'photos',
-  'contacts',
-  'contacts-limited',
-  'notifications',
-  'calendar',
-  'location',
-  'location-always',
-  'media-library',
-  'motion',
-  'reminders',
-  'siri',
-] as const;
-
-/** The desktop targets the CLI and the public client accept; `parsePermissionTarget` refuses them. */
-export const MACOS_PERMISSION_TARGETS = [
-  'accessibility',
-  'screen-recording',
-  'input-monitoring',
-] as const;
-
-export type PermissionAction = (typeof PERMISSION_ACTIONS)[number];
-export type PermissionMode = (typeof PERMISSION_MODES)[number];
-export type MobilePermissionTarget = (typeof MOBILE_PERMISSION_TARGETS)[number];
-/**
- * The app-scoped vocabulary `parsePermissionTarget` returns. The public client's `PermissionTarget`
- * in `client-settings.ts` is wider: it also names the macOS targets.
- */
-export type PermissionTarget = MobilePermissionTarget;
-
-/**
- * The preferred-text-size ladder `settings text-size` accepts, in the order `settings` help lists
- * it. Apple serves it natively — `simctl ui <device> content_size` reads and writes exactly these
- * names — and Android serves it through its `system font_scale` multiplier, so this ladder is the
- * cross-platform vocabulary and each owner maps it in its own native terms. Acceptance is not
- * support: an owner that cannot serve the ladder refuses at admission, on its own fact.
- */
-export const TEXT_SIZE_CATEGORIES = [
-  'extra-small',
-  'small',
-  'medium',
-  'large',
-  'extra-large',
-  'extra-extra-large',
-  'extra-extra-extra-large',
-  'accessibility-medium',
-  'accessibility-large',
-  'accessibility-extra-large',
-  'accessibility-extra-extra-large',
-  'accessibility-extra-extra-extra-large',
-] as const;
-
-export type TextSizeCategory = (typeof TEXT_SIZE_CATEGORIES)[number];
-
-/**
- * The appearances `settings appearance` accepts, in the order `settings` help lists them. Apple
- * applies them natively; Android maps them onto `ui_night_mode`. Acceptance is not support.
- */
-export const APPEARANCE_ACTIONS = ['light', 'dark', 'toggle'] as const;
-
-export type AppearanceAction = (typeof APPEARANCE_ACTIONS)[number];
-
-/**
- * The state spellings `settings <setting> <state>` accepts. Unlike the appearance and permission
- * vocabularies these are aliases onto a boolean rather than a name the device echoes back, so
- * membership — not {@link findVocabularyName} — decides, and padding stays rejected: an
- * `adb shell settings put` argument with a stray space in it is a caller bug, not a spelling.
- */
-const SETTING_STATE_ON = ['on', 'true', '1'];
-const SETTING_STATE_OFF = ['off', 'false', '0'];
-
-/**
- * The settings that answer a bare `settings <setting>` with the value the target holds. This is the
- * vocabulary every settings type and every settings owner reads it from; the matching value is
- * `READABLE_SETTINGS` in `platform-runtime-operations.ts`, where the CLI hub can evaluate it, and
- * that module pins the two equal in both directions at compile time.
- */
-export type ReadableSetting = 'text-size';
+import {
+  APPEARANCE_ACTIONS,
+  MOBILE_PERMISSION_TARGETS,
+  PERMISSION_ACTIONS,
+  SETTINGS,
+  settingDefinition,
+  SETTING_NAMES,
+  TEXT_SIZE_CATEGORIES,
+  type AppearanceAction,
+  type MobilePermissionTarget,
+  type PermissionAction,
+  type SettingDefinition,
+  type SettingForm,
+  type SettingName,
+  type SettingsAppScope,
+  type SettingsTargetFamily,
+  type TextSizeCategory,
+} from './settings-catalog.ts';
 
 /**
  * What `text-size` answers with. The ladder is shared across platforms, so a read names the
@@ -178,71 +101,22 @@ export type SimctlSettingRequest = {
 };
 
 /**
- * Whether naming an app for one mutation can mean anything on one target.
- *
- * `app-scoped` is the shape the public `app` field exists for: the change lands on that bundle id
- * or package (`simctl privacy`, Android's `pm`). `device-level` is a mutation the same command
- * serves for the whole device: Android's on/off `location` writes the global `location_mode`, and
- * the macOS host's permissions are TCC grants to the host process, so neither can consume an app.
- * `unknown` covers every combination this table does not settle — a setting with no app shape and no
- * device-wide write of its own (`wifi` on the macOS host) among them — and is deliberately not a
- * verdict: support belongs to the owner's runtime fact, which answers a setting it does not serve
- * (`permission` on HarmonyOS) with its own refusal rather than with a complaint about an argument it
- * never read.
- */
-export type SettingsAppScope = 'app-scoped' | 'device-level' | 'unknown';
-
-/**
- * What kind of target a `settings` mutation runs on, as far as consuming an app is concerned:
- * the Apple family, the macOS host, or the non-Apple targets that share the mobile app shape
- * (Android, HarmonyOS, Vega, Linux, web). The daemon derives it from a device with the kernel's
- * own predicates; being app-scoped here is a claim about the shape of the change, never about
- * support — an owner that serves no such setting answers with its own refusal.
- */
-export type SettingsTargetFamily = 'apple' | 'mobile' | 'macos-host';
-
-/**
- * The one table deciding whether an app named on a `settings` request is consumed. It is keyed on
- * the target family, a fact the daemon derives from the device before binding a runtime, and it
- * stays honest by settling only the combinations whose owner behavior is already fixed elsewhere:
- * `clear-app-state` is app-scoped wherever it is served (`isMacOsSettingSupported` keeps macOS out
- * of that claim), `permission` is app-scoped on every non-Apple mobile target and on Apple and
- * host-level on macOS, and on/off `location` is app-scoped only on Apple, where it maps to a
- * privacy grant — while `location set` moves the device's own location for everyone.
+ * Whether naming an app on one mutation can mean anything on one target family, read from the
+ * matched form's `appScope`, then the setting's own.
  */
 export function settingsAppScope(
   family: SettingsTargetFamily,
   setting: string,
   state: string | undefined,
 ): SettingsAppScope {
-  const normalizedSetting = setting.trim().toLowerCase();
-  if (normalizedSetting === 'clear-app-state') {
-    return family === 'macos-host' ? 'unknown' : 'app-scoped';
-  }
-  if (normalizedSetting === 'permission') {
-    return family === 'macos-host' ? 'device-level' : 'app-scoped';
-  }
-  if (normalizedSetting === 'location') return locationAppScope(family, state);
-  return 'unknown';
-}
-
-/**
- * One on/off `location` is a privacy grant only on Apple, where it maps to `simctl privacy`; on
- * the other mobile targets it writes the global `location_mode`, and `set` moves the device's own
- * location for everyone. A state this ladder does not name settles nothing, and the macOS host,
- * whose location surface `isMacOsSettingSupported` keeps out of the settings vocabulary, is no
- * verdict either.
- */
-function locationAppScope(
-  family: SettingsTargetFamily,
-  state: string | undefined,
-): SettingsAppScope {
-  const normalizedState = state?.trim().toLowerCase();
-  if (normalizedState === 'set') return 'device-level';
-  if (readSettingState(normalizedState) === undefined) return 'unknown';
-  if (family === 'apple') return 'app-scoped';
-  if (family === 'mobile') return 'device-level';
-  return 'unknown';
+  const definition = settingDefinition(setting);
+  if (definition === undefined) return 'unknown';
+  const form =
+    definition.forms.length === 1
+      ? definition.forms[0]
+      : definition.forms.find((candidate) => formAcceptsState(candidate, state));
+  const scope = (form && 'appScope' in form ? form.appScope : undefined) ?? definition.appScope;
+  return scope?.[family] ?? 'unknown';
 }
 
 /**
@@ -318,68 +192,197 @@ export async function resolveSettingsApp<Resolved>(
   }
 }
 
-const SETTINGS_WIFI_USAGE = '<wifi|airplane|location> <on|off>';
-const SETTINGS_LOCATION_SET_USAGE = 'location set <lat> <lon>';
-const SETTINGS_ANIMATIONS_USAGE = 'animations <on|off>';
-const SETTINGS_APPEARANCE_USAGE = `appearance <${APPEARANCE_ACTIONS.join('|')}>`;
-const SETTINGS_FACEID_USAGE = 'faceid <match|nonmatch|enroll|unenroll>';
-const SETTINGS_TOUCHID_USAGE = 'touchid <match|nonmatch|enroll|unenroll>';
-const SETTINGS_FINGERPRINT_USAGE = 'fingerprint <match|nonmatch>';
-const SETTINGS_CLEAR_APP_STATE_USAGE = 'clear-app-state [app-id]';
-const SETTINGS_RESET_KEYCHAIN_USAGE = 'reset-keychain clear';
-/**
- * The bracket is what makes `settings text-size` a read: the ladder is the write form, and the bare
- * setting asks the owner for the category it currently holds.
- */
-const SETTINGS_TEXT_SIZE_USAGE = `text-size [${TEXT_SIZE_CATEGORIES.join('|')}]`;
-const SETTINGS_PERMISSION_USAGE = `permission <${PERMISSION_ACTIONS.join('|')}> <${MOBILE_PERMISSION_TARGETS.join('|')}> [${PERMISSION_MODES.join('|')}]`;
-/**
- * The macOS permission form. Its action list is the subset the macOS owner serves (`deny` is
- * refused there), so it stays a literal while the accepted names come from the vocabulary.
- */
-export const SETTINGS_MACOS_PERMISSION_USAGE = `permission <grant|reset> <${MACOS_PERMISSION_TARGETS.join('|')}>`;
-const SETTINGS_MACOS_SUPPORTED_MESSAGE = `macOS supports only settings ${SETTINGS_APPEARANCE_USAGE} and settings ${SETTINGS_MACOS_PERMISSION_USAGE}. wifi|airplane|location|animations|text-size remain unsupported on macOS.`;
-
-export const SETTINGS_USAGE_OVERRIDE = [
-  `settings ${SETTINGS_WIFI_USAGE}`,
-  `settings ${SETTINGS_LOCATION_SET_USAGE}`,
-  `settings ${SETTINGS_ANIMATIONS_USAGE}`,
-  `settings ${SETTINGS_APPEARANCE_USAGE}`,
-  `settings ${SETTINGS_TEXT_SIZE_USAGE}`,
-  `settings ${SETTINGS_FACEID_USAGE}`,
-  `settings ${SETTINGS_TOUCHID_USAGE}`,
-  `settings ${SETTINGS_FINGERPRINT_USAGE}`,
-  `settings ${SETTINGS_CLEAR_APP_STATE_USAGE}`,
-  `settings ${SETTINGS_RESET_KEYCHAIN_USAGE}`,
-  `settings ${SETTINGS_PERMISSION_USAGE}`,
-  `settings ${SETTINGS_MACOS_PERMISSION_USAGE}`,
-].join(' | ');
-
-export const SETTINGS_INVALID_ARGS_MESSAGE = `settings requires ${SETTINGS_WIFI_USAGE}, ${SETTINGS_LOCATION_SET_USAGE}, ${SETTINGS_ANIMATIONS_USAGE}, ${SETTINGS_APPEARANCE_USAGE}, ${SETTINGS_TEXT_SIZE_USAGE}, ${SETTINGS_FACEID_USAGE}, ${SETTINGS_TOUCHID_USAGE}, ${SETTINGS_FINGERPRINT_USAGE}, ${SETTINGS_CLEAR_APP_STATE_USAGE}, ${SETTINGS_RESET_KEYCHAIN_USAGE}, ${SETTINGS_PERMISSION_USAGE}, or ${SETTINGS_MACOS_PERMISSION_USAGE}`;
-
-export function isMacOsSettingSupported(setting: string): boolean {
-  const normalized = setting.trim().toLowerCase();
-  return normalized === 'appearance' || normalized === 'permission';
+/** The positionals after `settings` one form accepts, as help prints them. */
+function formUsage(form: SettingForm, readable: boolean): string {
+  switch (form.kind) {
+    case 'on-off':
+      return '<on|off>';
+    case 'choice': {
+      const states = form.states.join('|');
+      if (readable) return `[${states}]`;
+      return form.states.length === 1 ? states : `<${states}>`;
+    }
+    case 'coordinates':
+      return 'set <lat> <lon>';
+    case 'permission': {
+      const modes = form.modes ? ` [${form.modes.join('|')}]` : '';
+      return `<${form.actions.join('|')}> <${form.targets.join('|')}>${modes}`;
+    }
+    case 'app-id':
+      return '[app-id]';
+  }
 }
 
-export function getUnsupportedMacOsSettingMessage(setting: string): string {
-  return `Unsupported macOS setting: ${setting}. ${SETTINGS_MACOS_SUPPORTED_MESSAGE}`;
+/** Every settings form, with settings that share a form folded into one `<a|b> <form>` line. */
+function settingsUsageForms(): string[] {
+  const namesByForm = new Map<string, string[]>();
+  for (const name of SETTING_NAMES) {
+    const definition: SettingDefinition = SETTINGS[name];
+    for (const form of definition.forms) {
+      const usage = formUsage(form, definition.readable === true);
+      namesByForm.set(usage, [...(namesByForm.get(usage) ?? []), name]);
+    }
+  }
+  return [...namesByForm].map(([usage, names]) =>
+    names.length === 1 ? `${names[0]} ${usage}` : `<${names.join('|')}> ${usage}`,
+  );
+}
+
+export const SETTINGS_USAGE_OVERRIDE = settingsUsageForms()
+  .map((form) => `settings ${form}`)
+  .join(' | ');
+
+export const SETTINGS_INVALID_ARGS_MESSAGE = `settings requires ${settingsUsageForms()
+  .join(', ')
+  .replace(/, (?!.*, )/, ', or ')}`;
+
+/** One line per setting: its name and its help. */
+export function settingsHelpLines(): string[] {
+  return SETTING_NAMES.map((name) => `${name}: ${SETTINGS[name].help}`);
+}
+
+/**
+ * One validated mutation. Names and states are normalized; the app, mode, and coordinates are kept
+ * as written, because the app is an id and coordinates are typed where the caller needs them.
+ */
+export type SettingsMutation = Readonly<{
+  setting: SettingName;
+  state: string;
+  app?: string;
+  permission?: string;
+  mode?: string;
+  latitude?: string;
+  longitude?: string;
+}>;
+
+/**
+ * Parses `settings <setting> <state> …` against the catalog. A lone readable setting is the read
+ * leg, which `resolveSettingsRuntimePlan` decides before this runs.
+ */
+export function parseSettingsMutation(positionals: readonly string[]): SettingsMutation {
+  const definition = settingDefinition(positionals[0]);
+  if (definition === undefined) throw invalidSettingsArgs();
+  const setting = normalizeName(positionals[0]) as SettingName;
+  const state = normalizeName(positionals[1]);
+  if (definition.forms.some((form) => form.kind === 'app-id')) {
+    const explicitClear = state === 'clear';
+    if (positionals.length > (explicitClear ? 3 : 2)) throw invalidSettingsArgs();
+    const app = explicitClear ? positionals[2] : positionals[1];
+    return { setting, state: 'clear', ...(app === undefined ? {} : { app }) };
+  }
+  const form = definition.forms.find((candidate) => formAcceptsState(candidate, state));
+  if (form === undefined || state === undefined)
+    throw invalidSettingState(setting, definition, state);
+  return parseFormPositionals(setting, state, form, definition, positionals);
+}
+
+function parseFormPositionals(
+  setting: SettingName,
+  state: string,
+  form: SettingForm,
+  definition: SettingDefinition,
+  positionals: readonly string[],
+): SettingsMutation {
+  switch (form.kind) {
+    case 'coordinates':
+      if (positionals.length !== 4) throw invalidSettingsArgs();
+      return { setting, state, latitude: positionals[2], longitude: positionals[3] };
+    case 'permission':
+      return { setting, state, ...parsePermissionPositionals(definition, state, positionals) };
+    case 'on-off':
+      if (positionals.length !== 2) throw invalidSettingsArgs();
+      return { setting, state: readSettingState(state) ? 'on' : 'off' };
+    default:
+      if (positionals.length !== 2) throw invalidSettingsArgs();
+      return { setting, state };
+  }
+}
+
+/** The target picks its form; the action and mode must then belong to that same form. */
+function parsePermissionPositionals(
+  definition: SettingDefinition,
+  action: string,
+  positionals: readonly string[],
+): { permission: string; mode?: string } {
+  const forms = definition.forms.filter(
+    (form): form is Extract<SettingForm, { kind: 'permission' }> => form.kind === 'permission',
+  );
+  const targets = forms.flatMap((form) => form.targets);
+  const permission = findVocabularyName(targets, positionals[2]);
+  const form = forms.find((candidate) => candidate.targets.includes(permission ?? ''));
+  if (permission === undefined || form === undefined) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `settings permission requires a target: ${targets.join('|')}`,
+    );
+  }
+  if (findVocabularyName(form.actions, action) === undefined) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `settings permission ${action} does not apply to ${permission}. Use ${form.actions.join('|')}.`,
+    );
+  }
+  if (positionals.length === 3) return { permission };
+  const mode = findVocabularyName(form.modes ?? [], positionals[3]);
+  if (mode === undefined || positionals.length > 4) {
+    throw new AppError(
+      'INVALID_ARGS',
+      form.modes === undefined
+        ? `settings permission ${permission} takes no mode.`
+        : `settings permission mode must be ${form.modes.join('|')}.`,
+    );
+  }
+  return { permission, mode };
+}
+
+function invalidSettingsArgs(): AppError {
+  return new AppError('INVALID_ARGS', SETTINGS_INVALID_ARGS_MESSAGE);
+}
+
+function invalidSettingState(
+  setting: SettingName,
+  definition: SettingDefinition,
+  state: string | undefined,
+): AppError {
+  const accepted = definition.forms
+    .map((form) => (form.kind === 'choice' ? form.states.join('|') : formUsage(form, false)))
+    .join(' | ')
+    .replace('<on|off>', 'on|off');
+  return new AppError(
+    'INVALID_ARGS',
+    state === undefined
+      ? `settings ${setting} requires a state: ${accepted}.`
+      : `Invalid ${setting} state: ${state}. Use ${accepted}.`,
+  );
+}
+
+function formAcceptsState(form: SettingForm, state: string | undefined): boolean {
+  switch (form.kind) {
+    case 'on-off':
+      return readSettingState(normalizeName(state)) !== undefined;
+    case 'choice':
+      return findVocabularyName(form.states, state) !== undefined;
+    case 'coordinates':
+      return normalizeName(state) === 'set';
+    case 'permission':
+      return findVocabularyName(form.actions, state) !== undefined;
+    case 'app-id':
+      return true;
+  }
+}
+
+function normalizeName(value: string | undefined): string | undefined {
+  return value?.trim().toLowerCase();
 }
 
 /**
  * The category a caller asked for. `simctl` exits 0 with `Invalid argument` for a category it does
- * not know, so a write must never delegate validation to the tool: every surface parses here
- * first, and the refusal names the whole ladder.
+ * not know, so a write never hands validation to the tool.
  */
 export function parseTextSizeCategory(value: string | undefined): TextSizeCategory {
   const parsed = readTextSizeCategory(value);
   if (parsed !== undefined) return parsed;
-  throw new AppError('INVALID_ARGS', invalidTextSizeMessage(value));
-}
-
-/** The refusal every surface that rejects an off-ladder category answers with. */
-export function invalidTextSizeMessage(value: string | undefined): string {
-  return `Invalid text size: ${value ?? ''}. Use ${TEXT_SIZE_CATEGORIES.join('|')}.`;
+  throw invalidSettingState('text-size', SETTINGS['text-size'], value);
 }
 
 /** The category an owner reads back, or `undefined` for a value the ladder does not name. */
@@ -387,50 +390,11 @@ export function readTextSizeCategory(value: string | undefined): TextSizeCategor
   return findVocabularyName(TEXT_SIZE_CATEGORIES, value);
 }
 
-/**
- * What a setting declares to refuse a leaf it was never verified on: the sentence, the next command
- * to run, and the reason both legs of that setting answer with. The shape is declared here so every
- * setting's refusal is checked against it at its declaration, and the Apple leaf guard can name it
- * without inventing a second vocabulary.
- */
-export type AppleSettingLeafRefusal = Readonly<{
-  message: string;
-  hint: string;
-  reason: 'setting-unsupported-on-leaf';
-}>;
-
-/**
- * The one refusal an Apple target gives for a text-size request its leaf does not serve, shared by
- * the three surfaces that can answer it: the daemon (before it binds, so a request that never touched
- * a device also never expires the session ref frame), the Apple runtime's read fact, and the Apple
- * owner's own guard. The Apple write fact is one claim for the whole simulator family and
- * `simctl ui <device> content_size` is narrower than that, which is why a per-setting refusal has to
- * exist at all; a per-setting runtime fact is where it belongs once the fact model carries one, and
- * until then this is the single declaration rather than three copies of the prose.
- */
-export const APPLE_TEXT_SIZE_LEAF_REFUSAL = Object.freeze({
-  message: 'Reading or setting a text size is supported on iOS and iPadOS simulators.',
-  hint: 'Run `xcrun simctl ui <device> content_size` on a booted iPhone or iPad simulator.',
-  reason: 'setting-unsupported-on-leaf',
-} as const) satisfies AppleSettingLeafRefusal;
-
-/**
- * Simulator biometrics are driven through BiometricKit_Sim notifications, which only the iPhone and
- * iPad simulator runtimes observe; a post on an Apple TV or Vision Pro simulator exits 0 and changes
- * nothing, so the leaf is refused before anything is posted.
- */
-export const APPLE_BIOMETRIC_LEAF_REFUSAL = Object.freeze({
-  message: 'Face ID and Touch ID simulation is supported on iOS and iPadOS simulators.',
-  hint: 'Select a booted iPhone or iPad simulator, then run `settings faceid <state>` or `settings touchid <state>`.',
-  reason: 'setting-unsupported-on-leaf',
-} as const) satisfies AppleSettingLeafRefusal;
-
-/** The one membership rule every settings-vocabulary parser shares: a name matches itself, any casing. */
 function findVocabularyName<const TNames extends readonly string[]>(
   names: TNames,
   value: string | undefined,
 ): TNames[number] | undefined {
-  const normalized = value?.trim().toLowerCase();
+  const normalized = normalizeName(value);
   return normalized === undefined ? undefined : names.find((name) => name === normalized);
 }
 
@@ -443,7 +407,7 @@ export function parsePermissionAction(action: string): PermissionAction {
   );
 }
 
-export function parsePermissionTarget(value: string | undefined): PermissionTarget {
+export function parsePermissionTarget(value: string | undefined): MobilePermissionTarget {
   const parsed = findVocabularyName(MOBILE_PERMISSION_TARGETS, value);
   if (parsed !== undefined) return parsed;
   throw new AppError(
@@ -453,9 +417,8 @@ export function parsePermissionTarget(value: string | undefined): PermissionTarg
 }
 
 /**
- * The appearance a caller asked for. Every surface that sets one parses here first: `simctl` and
- * `adb` both answer a bad token with a tool-specific error or a silent no-op, so the refusal has to
- * name the accepted set before a device is touched.
+ * `simctl` and `adb` answer a bad appearance with a tool-specific error or a silent no-op, so an
+ * owner parses here before a device is touched.
  */
 export function parseAppearanceAction(state: string): AppearanceAction {
   const parsed = findVocabularyName(APPEARANCE_ACTIONS, state);
@@ -466,20 +429,14 @@ export function parseAppearanceAction(state: string): AppearanceAction {
   );
 }
 
-/**
- * The boolean a `settings <setting> <state>` positional spells, or `undefined` when it spells none.
- * This is the grammar `parseSettingState` refuses on and the app-scope table classifies with, so a
- * state the owners accept can never settle differently about an app than it settles about the toggle.
- */
 function readSettingState(state: string | undefined): boolean | undefined {
-  if (state === undefined) return undefined;
-  const normalized = state.toLowerCase();
-  if (SETTING_STATE_ON.includes(normalized)) return true;
-  if (SETTING_STATE_OFF.includes(normalized)) return false;
+  const normalized = normalizeName(state);
+  if (normalized === 'on' || normalized === 'true' || normalized === '1') return true;
+  if (normalized === 'off' || normalized === 'false' || normalized === '0') return false;
   return undefined;
 }
 
-/** The boolean a `settings <setting> <state>` positional spells, in any casing. */
+/** The boolean a `settings <setting> <state>` positional spells, in any casing or padding. */
 export function parseSettingState(state: string): boolean {
   const parsed = readSettingState(state);
   if (parsed !== undefined) return parsed;

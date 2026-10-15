@@ -18,6 +18,8 @@ import {
 } from '@agent-device/contracts/scroll-runtime';
 import { appEventRuntimeOperationFacts } from '@agent-device/contracts/app-event-runtime';
 import { settingsRuntimeOperationFacts } from '@agent-device/contracts/settings-runtime';
+import type { AndroidSetting } from '@agent-device/platform-android/mechanics';
+import type { LimrunIosSetting } from './ios-settings.ts';
 import { alertRuntimeOperationFacts } from '@agent-device/contracts/alert-runtime';
 import { systemButtonRuntimeOperationFacts } from '@agent-device/contracts/system-button-runtime';
 import { clipboardRuntimeOperationFacts } from '@agent-device/contracts/clipboard-runtime';
@@ -39,6 +41,7 @@ import {
 } from '@agent-device/contracts/touch-runtime';
 import type { Interactor, RunnerContext } from '@agent-device/contracts/interactor-types';
 import {
+  type RuntimeOperationFact,
   type RuntimeOperationUnavailability,
   unavailableFact,
 } from '@agent-device/contracts/platform-runtime';
@@ -111,6 +114,14 @@ const tvRemoteUnavailableAndroid = unavailableFact(
 const keyboardUnavailableIos = unavailableFact(
   'unsupported-provider-mode',
   'Limrun iOS direct sessions do not expose keyboard actions.',
+);
+const settingUnavailableIos = unavailableFact(
+  'unsupported-provider-mode',
+  'Limrun iOS direct sessions support settings appearance, permission, location, and clear-app-state.',
+);
+const settingUnavailableAndroid = unavailableFact(
+  'unsupported-platform-leaf',
+  'Run `agent-device settings --help` for the settings each target serves.',
 );
 const settingsReadUnavailableIos = unavailableFact(
   'unsupported-provider-mode',
@@ -333,21 +344,44 @@ export function limrunAppEventOperationFacts(
   });
 }
 
-/**
- * `settings` splits the same way `app-switcher` does: the Android leg rides the local family's
- * own interactor factory, while the iOS leg writes through simctl and reads nothing back.
- */
+/** The Android leg runs the local Android interactor; the iOS leg runs the simctl plan. */
 export function limrunSettingsOperationFacts(
   device: DeviceInfo,
   liveSessionUnavailable?: RuntimeOperationUnavailability,
 ) {
-  const write = liveSessionUnavailable ?? available;
-  const read =
-    liveSessionUnavailable ??
-    (device.platform === 'android' ? available : settingsReadUnavailableIos);
-  return Object.freeze({
-    ...settingsRuntimeOperationFacts({ setSetting: write, readSetting: read }),
-  });
+  const target = liveSessionUnavailable ?? available;
+  return Object.freeze(
+    settingsRuntimeOperationFacts(
+      device.platform === 'android'
+        ? {
+            target,
+            unsupported: settingUnavailableAndroid,
+            write: {
+              wifi: available,
+              airplane: available,
+              location: available,
+              animations: available,
+              appearance: available,
+              'text-size': available,
+              fingerprint: available,
+              'clear-app-state': available,
+              permission: available,
+            } satisfies Record<AndroidSetting, RuntimeOperationFact>,
+            read: { 'text-size': available },
+          }
+        : {
+            target,
+            unsupported: settingUnavailableIos,
+            write: {
+              appearance: available,
+              permission: available,
+              location: available,
+              'clear-app-state': available,
+            } satisfies Record<LimrunIosSetting, RuntimeOperationFact>,
+            read: { 'text-size': settingsReadUnavailableIos },
+          },
+    ),
+  );
 }
 
 /**

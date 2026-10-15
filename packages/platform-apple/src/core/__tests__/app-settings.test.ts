@@ -37,11 +37,7 @@ import { runCmd } from '@agent-device/host-kit/command';
 import { retryWithPolicy } from '@agent-device/host-kit/retry';
 import { assertRejectsAppError } from '../../__tests__/app-error.ts';
 import { withFakeAppleTool, type FakeAppleToolResponse } from '../../__tests__/fake-apple-tool.ts';
-import {
-  IOS_TEST_SIMULATOR,
-  MACOS_TEST_DEVICE,
-  TVOS_TEST_SIMULATOR,
-} from './apple-core-stub-helpers.ts';
+import { IOS_TEST_SIMULATOR, MACOS_TEST_DEVICE } from './apple-core-stub-helpers.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockRetryWithPolicy = vi.mocked(retryWithPolicy);
@@ -166,29 +162,6 @@ test('setIosSetting biometric enroll fails when the read-back state did not chan
   );
 });
 
-test('setIosSetting biometric refuses an Apple TV simulator before posting anything', async () => {
-  await withFakeAppleTool(
-    (args) => {
-      if (isSimctlListDevices(args)) {
-        return JSON.stringify({
-          devices: {
-            'com.apple.CoreSimulator.SimRuntime.tvOS-18-0': [
-              { udid: 'tvos-sim-1', state: 'Booted' },
-            ],
-          },
-        });
-      }
-      return unexpectedArgs(args);
-    },
-    async () => {
-      await assertRejectsAppError(() => setIosSetting(TVOS_TEST_SIMULATOR, 'faceid', 'match'), {
-        code: 'UNSUPPORTED_OPERATION',
-        message: /supported on iOS and iPadOS simulators/,
-      });
-    },
-  );
-});
-
 test('setIosSetting biometric rejects an unknown state before spawning anything', async () => {
   await withFakeAppleTool(
     (args) => {
@@ -296,23 +269,7 @@ test('setIosSetting rejects unsupported macOS permission deny action', async () 
       setIosSetting(MACOS_TEST_DEVICE, 'permission', 'deny', undefined, {
         permissionTarget: 'accessibility',
       }),
-    { code: 'INVALID_ARGS', message: /Unsupported macOS setting: permission/i },
-  );
-});
-
-test('setIosSetting rejects unsupported macOS wifi setting with explicit subset guidance', async () => {
-  await assert.rejects(
-    () => setIosSetting(MACOS_TEST_DEVICE, 'wifi', 'on'),
-    (error: unknown) => {
-      assert.equal(error instanceof AppError, true);
-      assert.equal((error as AppError).code, 'INVALID_ARGS');
-      assert.match((error as AppError).message, /Unsupported macOS setting: wifi/i);
-      assert.match(
-        (error as AppError).message,
-        /wifi\|airplane\|location\|animations\|text-size remain unsupported on macOS/i,
-      );
-      return true;
-    },
+    { code: 'INVALID_ARGS', message: /grant\|reset, not deny/ },
   );
 });
 
