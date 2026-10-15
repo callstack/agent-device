@@ -32,6 +32,7 @@ import {
   resolveBoundSystemButtonRuntime,
   type SystemButtonCommand,
 } from '../../execution/system-button-runtime.ts';
+import { resolveBoundTelephonyRuntime } from '../../execution/telephony-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from '../../execution/tv-remote-runtime.ts';
 import { resolveBoundTypeTextRuntime } from '../../execution/type-text-runtime.ts';
 import { resolveBoundViewportRuntime } from '../../execution/viewport-runtime.ts';
@@ -106,6 +107,16 @@ export const conformedRuntimeBindings = {
   fold: {
     resolve: async (device, bindings) =>
       refusable(await resolveBoundFoldRuntime({ device, positionals: ['open'], ...bindings })),
+  },
+  telephony: {
+    resolve: async (device, bindings) =>
+      refusable(
+        await resolveBoundTelephonyRuntime({
+          device,
+          positionals: ['call', '5551234'],
+          ...bindings,
+        }),
+      ),
   },
   focus: {
     resolve: async (device, bindings) =>

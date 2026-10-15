@@ -129,6 +129,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.appSwitcher]: () => one(),
   [PUBLIC_COMMANDS.actionButton]: () => one(),
   [PUBLIC_COMMANDS.fold]: () => one(['open']),
+  [PUBLIC_COMMANDS.telephony]: () => one(['call', '5551234']),
 
   // -- orchestration (drive to an error response; still scanned) --
   [PUBLIC_COMMANDS.artifacts]: () => one(),

@@ -125,6 +125,7 @@
   "@agent-device/contracts/startup-recovery-fence",
   "@agent-device/contracts/system-button-runtime",
   "@agent-device/contracts/tap-keyboard-occlusion",
+  "@agent-device/contracts/telephony-runtime",
   "@agent-device/contracts/touch-runtime",
   "@agent-device/contracts/tv-remote",
   "@agent-device/contracts/tv-remote-runtime",

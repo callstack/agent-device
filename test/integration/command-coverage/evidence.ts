@@ -55,6 +55,12 @@ export const ANDROID_UNINSTALL_CONTRACT_EVIDENCE: AndroidContractEvidence =
     [C.uninstall],
     'Provider-backed integration Android uninstall removes an installed package and no-ops on a missing one',
   );
+export const ANDROID_TELEPHONY_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'packages/platform-android/src/runtime.test.ts',
+    [C.telephony],
+    'Android admits the telephony fact on emulators and refuses every other kind',
+  );
 export const ANDROID_VIEWPORT_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
     'packages/daemon/src/execution/__tests__/viewport-runtime.test.ts',
