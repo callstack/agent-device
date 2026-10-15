@@ -1,70 +1,32 @@
-import { test, expect, vi, beforeEach } from 'vitest';
+import { test, expect, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import {
+  installInteractorSnapshotResolution,
+  mockInteractorSnapshot,
+} from '../../../__tests__/support/interactor-resolution-fixture.ts';
+import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 import {
   getRuntimeBindings,
   mockFillPoint,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
 import {
   contextFromFlags,
   installTestScreenRecording,
   makeSession,
-} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+} from './__tests__/interaction-touch-fixtures.ts';
+import { handleInteractionCommands } from '../index.ts';
 
 // The identity extras the one response site composes: --verify evidence rides
 // the interactionResultExtra allowlist on every branch, and no branch invents
 // an evidence field without it.
 
-const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
-  mockRunAppleRunnerCommand: vi.fn(),
-}));
-
-vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
-  return {
-    ...actual,
-    getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })),
-    getAndroidAppState: vi.fn(async () => ({})),
-    getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
-  };
-});
-
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
-  captureSnapshotWithInteractor: vi.fn(),
-}));
-
-vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
-});
-
-import {
-  getAndroidAppState,
-  getAndroidBlockingDialogObservation,
-  getAndroidScreenSize,
-} from '@agent-device/platform-android/mechanics';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
-const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
-const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
-const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
-const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
-
 beforeEach(() => {
   resetGetRuntimeFixture();
-  mockGetAndroidAppState.mockReset();
-  mockGetAndroidAppState.mockResolvedValue({});
-  mockGetAndroidBlockingDialogObservation.mockReset();
-  mockGetAndroidBlockingDialogObservation.mockResolvedValue({ status: 'clear' });
-  mockGetAndroidScreenSize.mockReset();
-  mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
-  mockCaptureSnapshotForSession.mockReset();
-  mockRunAppleRunnerCommand.mockReset();
-  mockRunAppleRunnerCommand.mockResolvedValue({});
+  installInteractorSnapshotResolution();
+  mockInteractorSnapshot.mockReset();
 });
 
 test('press @ref --verify surfaces evidence through the interactionResultExtra allowlist', async () => {
@@ -89,7 +51,7 @@ test('press @ref --verify surfaces evidence through the interactionResultExtra a
 
   // Post-action capture reports an extra node, so changedFromBefore should
   // read true against the pre-action (stored) snapshot's single node.
-  mockCaptureSnapshotForSession.mockResolvedValue({
+  mockInteractorSnapshot.mockResolvedValue({
     nodes: [
       {
         index: 0,
@@ -113,7 +75,7 @@ test('press @ref --verify surfaces evidence through the interactionResultExtra a
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -147,7 +109,7 @@ test('press @ref --verify surfaces evidence through the interactionResultExtra a
   // without a fresh pre-action capture (zero extra cost, per #1047's design) —
   // only the post-action verify capture issues a 'snapshot' dispatch, after 'press'.
   expect(mockTapPoint).toHaveBeenCalledOnce();
-  expect(mockCaptureSnapshotForSession).toHaveBeenCalledOnce();
+  expect(mockInteractorSnapshot).toHaveBeenCalledOnce();
 });
 
 test('press @ref without --verify never includes an evidence field', async () => {
@@ -172,7 +134,7 @@ test('press @ref without --verify never includes an evidence field', async () =>
   mockTapPoint.mockResolvedValue({ pressed: true });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -192,7 +154,7 @@ test('press @ref without --verify never includes an evidence field', async () =>
   }
   // No verify flag means no post-action snapshot capture at all.
   expect(mockTapPoint).toHaveBeenCalledOnce();
-  expect(mockCaptureSnapshotForSession).not.toHaveBeenCalled();
+  expect(mockInteractorSnapshot).not.toHaveBeenCalled();
 });
 
 test('fill selector --verify surfaces evidence through the interactionResultExtra allowlist', async () => {
@@ -215,7 +177,7 @@ test('fill selector --verify surfaces evidence through the interactionResultExtr
   };
   sessionStore.publish(sessionName, session);
 
-  mockCaptureSnapshotForSession.mockResolvedValue({
+  mockInteractorSnapshot.mockResolvedValue({
     nodes: [
       {
         index: 0,
@@ -231,7 +193,7 @@ test('fill selector --verify surfaces evidence through the interactionResultExtr
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -277,7 +239,7 @@ test('fill @ref --verify surfaces evidence in the ref response branch', async ()
   };
   sessionStore.publish(sessionName, session);
 
-  mockCaptureSnapshotForSession.mockResolvedValue({
+  mockInteractorSnapshot.mockResolvedValue({
     nodes: [
       {
         index: 0,
@@ -301,7 +263,7 @@ test('fill @ref --verify surfaces evidence in the ref response branch', async ()
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -348,7 +310,7 @@ test('fill @ref without --verify never includes an evidence field', async () => 
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -367,7 +329,7 @@ test('fill @ref without --verify never includes an evidence field', async () => 
     expect(response.data?.evidence).toBeUndefined();
   }
   // No verify flag means no post-action snapshot capture at all.
-  expect(mockCaptureSnapshotForSession).not.toHaveBeenCalled();
+  expect(mockInteractorSnapshot).not.toHaveBeenCalled();
 });
 
 test('fill @ref preserves fallback coordinates for recording when platform result is sparse', async () => {
@@ -399,7 +361,7 @@ test('fill @ref preserves fallback coordinates for recording when platform resul
 
   mockFillPoint.mockResolvedValue({ filled: true });
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,

@@ -1,27 +1,27 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import {
+  installInteractorSnapshotResolution,
+  mockInteractorSnapshot,
+} from '../../../__tests__/support/interactor-resolution-fixture.ts';
+import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 import {
   getRuntimeBindings,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
 import {
   contextFromFlags,
   installTestScreenRecording,
   makeAndroidSession,
   makeSession,
-} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+} from './__tests__/interaction-touch-fixtures.ts';
+import { handleInteractionCommands } from '../index.ts';
 
 // What a built touch payload carries: the recorded action entry and touch
 // visualization, the coordinates and reference frame each platform resolves,
 // and the native timing the recorded result preserves.
-
-const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
-  mockRunAppleRunnerCommand: vi.fn(),
-}));
 
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
@@ -33,26 +33,14 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
-  captureSnapshotWithInteractor: vi.fn(),
-}));
-
-vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
-});
-
 import {
   getAndroidAppState,
   getAndroidBlockingDialogObservation,
   getAndroidScreenSize,
 } from '@agent-device/platform-android/mechanics';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
-const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
   resetGetRuntimeFixture();
@@ -62,9 +50,8 @@ beforeEach(() => {
   mockGetAndroidBlockingDialogObservation.mockResolvedValue({ status: 'clear' });
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
-  mockCaptureSnapshotForSession.mockReset();
-  mockRunAppleRunnerCommand.mockReset();
-  mockRunAppleRunnerCommand.mockResolvedValue({});
+  installInteractorSnapshotResolution();
+  mockInteractorSnapshot.mockReset();
 });
 
 // fallow-ignore-next-line complexity
@@ -98,7 +85,7 @@ test('press coordinates appends touch-visualization events while recording', asy
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -146,7 +133,7 @@ test('press coordinates on iOS recording captures a full snapshot for the touch 
   mockTapPoint.mockResolvedValue({ x: 220, y: 600 });
   // Regression: a filtered snapshot has no Application/Window node, so viewport inference would
   // return a leaf-element bounding box and the recording overlay would misplace tap markers.
-  mockCaptureSnapshotForSession.mockResolvedValueOnce({
+  mockInteractorSnapshot.mockResolvedValueOnce({
     nodes: attachRefs([
       {
         index: 0,
@@ -165,7 +152,7 @@ test('press coordinates on iOS recording captures a full snapshot for the touch 
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -180,8 +167,8 @@ test('press coordinates on iOS recording captures a full snapshot for the touch 
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockCaptureSnapshotForSession).toHaveBeenCalledTimes(1);
-  expect(mockCaptureSnapshotForSession.mock.calls[0]?.[0].options).toMatchObject({
+  expect(mockInteractorSnapshot).toHaveBeenCalledTimes(1);
+  expect(mockInteractorSnapshot.mock.calls[0]?.[0].options).toMatchObject({
     interactiveOnly: true,
   });
   const event = sessionStore.get(sessionName)?.screenRecording?.handle.inspect().gestureEvents[0];
@@ -206,7 +193,7 @@ test('press coordinates on Android recording uses physical screen size when no s
   mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -243,7 +230,7 @@ test('press coordinates on Android recording caches physical screen size across 
   mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
 
   await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -260,7 +247,7 @@ test('press coordinates on Android recording caches physical screen size across 
   mockTapPoint.mockResolvedValue({ x: 320, y: 2200 });
 
   await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -292,7 +279,7 @@ test('press coordinates without recording skips Android screen-size lookup', asy
   mockTapPoint.mockResolvedValue({ x: 300, y: 2300 });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -327,7 +314,7 @@ test('press coordinates during recording still dispatches when Android screen-si
   mockGetAndroidScreenSize.mockRejectedValue(new Error('adb unavailable'));
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -392,7 +379,7 @@ test('press @ref preserves native timing in recorded result and touch visualizat
     });
 
     const response = await handleInteractionCommands({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: touchCreateCommandSurface,
       req: {
         token: 't',
         session: sessionName,

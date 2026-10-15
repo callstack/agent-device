@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeEach, expect, test } from 'vitest';
 import type { CommandFlags } from '@agent-device/contracts/command';
 import {
   type DeviceBinding,
@@ -16,16 +16,20 @@ import {
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
-import { makeIosAppSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { makeIosAppSession } from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
-} from '@agent-device/daemon/testing/request-runtime-binding';
-import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
-import type { SessionStore } from '@agent-device/daemon/testing/session-store';
+} from '../../../core/request-runtime-binding.ts';
+import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
+import {
+  installInteractorSnapshotResolution,
+  mockInteractorSnapshot,
+} from '../../../__tests__/support/interactor-resolution-fixture.ts';
+import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
+import type { SessionStore } from '../../../core/session-store.ts';
+import { handleInteractionCommands } from '../index.ts';
 
 // #3510: the capture an interaction's post-action observation polls. A coordinate-targeted press or
 // fill acts through a use that declares no capture, so before this its settle loop read the screen
@@ -54,11 +58,6 @@ const BRIDGE_PRODUCED = Object.freeze({
   backend: 'xctest' as const,
   producer: 'simulator-ax-bridge' as const,
 });
-
-const mockInteractorCapture = vi.hoisted(() => vi.fn());
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
-  captureSnapshotWithInteractor: mockInteractorCapture,
-}));
 
 const contextFromFlags = (_flags: CommandFlags | undefined) => ({});
 
@@ -141,12 +140,12 @@ async function runCommand(
   inspectFacts: InspectDeviceRuntimeFacts = bindings.inspectFacts,
 ) {
   return await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: { token: 't', session: sessionName, command, positionals, flags: { ...flags } },
     sessionName,
     sessionStore,
     contextFromFlags,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     inspectFacts,
     bindDevice: bindings.bindDevice,
   });
@@ -157,7 +156,8 @@ function settled(response: unknown) {
 }
 
 beforeEach(() => {
-  mockInteractorCapture.mockReset();
+  installInteractorSnapshotResolution();
+  mockInteractorSnapshot.mockReset();
 });
 
 // The observation's bind is a second, capture-only use beside the action's exact one — taken once
@@ -190,7 +190,7 @@ test.each([
     // issued resolve against the tree the caller's next `snapshot` reads.
     expect(session.snapshot?.producer).toBe('simulator-ax-bridge');
     expect(bindings.captureCount()).toBeGreaterThan(1);
-    expect(mockInteractorCapture).not.toHaveBeenCalled();
+    expect(mockInteractorSnapshot).not.toHaveBeenCalled();
   },
 );
 
@@ -214,7 +214,7 @@ test('an observation capture the owner cannot admit still lets the coordinate pr
   const sessionName = 'point-press-probe-failure';
   publishSession(sessionStore, sessionName);
   const bindings = settleFixture();
-  mockInteractorCapture.mockResolvedValue(BRIDGE_PRODUCED);
+  mockInteractorSnapshot.mockResolvedValue(BRIDGE_PRODUCED);
   let inspections = 0;
 
   const response = await runCommand(
@@ -235,7 +235,7 @@ test('an observation capture the owner cannot admit still lets the coordinate pr
 
   expect(response?.ok).toBe(true);
   expect(settled(response)).toMatchObject({ settled: true });
-  expect(mockInteractorCapture).toHaveBeenCalled();
+  expect(mockInteractorSnapshot).toHaveBeenCalled();
 });
 
 test('a tree-resolved press reuses the capture its action binding already carries', async () => {
