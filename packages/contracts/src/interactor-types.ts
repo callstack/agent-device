@@ -107,7 +107,7 @@ export const MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE = 'tapped via non-hittable co
  * its only producer and the boundary that narrows it
  * (readTypeTextBackendResult, packages/platform-apple/src/interactions.ts) drops a
  * route it cannot name — so a Swift-side addition would silently vanish. The
- * route-parity test in packages/platform-apple/src/core/__tests__/interactions.test.ts
+ * route-parity test in packages/platform-apple/src/interactions.test.ts
  * reads the Swift sources and fails instead.
  */
 export const TEXT_ENTRY_ROUTES = [

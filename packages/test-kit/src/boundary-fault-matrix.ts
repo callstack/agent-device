@@ -144,7 +144,9 @@ export const BOUNDARY_FAULT_MATRIX = {
   'lost-response-after-mutation': {
     mutation: {
       kind: 'covered',
-      evidence: ['packages/platform-apple/src/runner/__tests__/runner-recovery-wiring.test.ts'],
+      evidence: [
+        'packages/platform-apple/src/runner/__tests__/runner-client-recovery-wiring.test.ts',
+      ],
       invariants: ['no-mutation-replay', 'typed-error-identity'],
     },
     read: {

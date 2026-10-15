@@ -221,7 +221,7 @@ test('an abort while a second caller waits on the fold-helper lock reports a can
 //
 // The compile runs in beforeAll, not in the test body: it is a real clang invocation (see the
 // unit slow-test budget in docs/agents/testing.md), and the snapshot-bridge sibling gate in
-// native-runtime.test.ts keeps its compile out of test-case wall time the same way.
+// cache-native-runtime.test.ts keeps its compile out of test-case wall time the same way.
 describe.skipIf(process.platform !== 'darwin')('fold helper warning gate', () => {
   let compiled: { exitCode: number; stderr: string };
   beforeAll(async () => {

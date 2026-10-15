@@ -1052,7 +1052,7 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'fixture gesture counters prove pan/fling/pinch/rotate',
     ),
     macos: macos.contract(
-      'packages/platform-apple/src/core/__tests__/interactions.test.ts',
+      'packages/platform-apple/src/interactions.test.ts',
       'performGestureApple composes macOS one-contact plans with the drag executor',
       'macOS gesture dispatch preserves the one-contact drag plan',
     ),

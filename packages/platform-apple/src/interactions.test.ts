@@ -6,15 +6,15 @@ import {
   iosRunnerOverrides,
   performGestureApple,
   resolveAppleBackRunnerCommand,
-} from '../../interactions.ts';
-import { runAppleRunnerCommand } from '../runner-client.ts';
+} from './interactions.ts';
+import { runAppleRunnerCommand } from './core/runner-client.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   gestureRefusalMessage,
   PHYSICAL_IOS_MULTI_TOUCH_UNSUPPORTED_HINT,
 } from '@agent-device/contracts/gesture-admission';
 import type { GesturePlan } from '@agent-device/contracts/gesture-plan-types';
-import type { RunnerCommand } from '../../runner/index.ts';
+import type { RunnerCommand } from './runner/index.ts';
 import { TEXT_ENTRY_ROUTES } from '@agent-device/contracts/interactor-types';
 import {
   IOS_TEST_DEVICE,
@@ -22,15 +22,15 @@ import {
   MACOS_TEST_DEVICE,
   TVOS_TEST_SIMULATOR,
   VISIONOS_TEST_SIMULATOR,
-} from './apple-core-stub-helpers.ts';
+} from './core/__tests__/apple-core-stub-helpers.ts';
 
-vi.mock('../runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../runner-client.ts')>();
+vi.mock('./core/runner-client.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./core/runner-client.ts')>();
   return { ...actual, runAppleRunnerCommand: vi.fn(actual.runAppleRunnerCommand) };
 });
 
 const runnerActual =
-  await vi.importActual<typeof import('../runner-client.ts')>('../runner-client.ts');
+  await vi.importActual<typeof import('./core/runner-client.ts')>('./core/runner-client.ts');
 
 const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
 
@@ -630,7 +630,7 @@ test('iosRunnerOverrides reports no route when the runner names one it does not 
 test('TEXT_ENTRY_ROUTES names every route the Swift runner assigns', () => {
   const runnerTestsDir = path.resolve(
     import.meta.dirname,
-    '../../../../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests',
+    '../../../apple/runner/AgentDeviceRunner/AgentDeviceRunnerUITests',
   );
   const swiftRoutes = new Set<string>();
   for (const entry of fs.readdirSync(runnerTestsDir)) {

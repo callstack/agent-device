@@ -268,7 +268,7 @@ diagnostic a row keys on.
   `runner-startup-failure-fixtures.ts` so the rows read as host-gated, not unexamined.
 
 #2680 §4 needs a build that fails for an unrelated reason while naming no signing fact; the
-classifier's behaviour there is pinned by `runner-startup-failure-reasons.test.ts` and needs no
+classifier's behaviour there is pinned by `runner-xctestrun-startup-failure-reasons.test.ts` and needs no
 device claim to hold.
 
 ### #2683 — what the phone actually reported
