@@ -116,6 +116,12 @@ async function resolveSelectorRuntimeDevice(
   const ref = params.sessionStore.lookup(params.sessionName);
   const session = ref?.session;
   if (!session && requireSession) return { ok: false, response: noActiveSessionError() };
+  const { requireNamedSessionHoldsDevice } = await import('../core/explicit-session-resolution.ts');
+  requireNamedSessionHoldsDevice({
+    req: params.req,
+    sessionAddress: params.sessionName,
+    session,
+  });
   const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
   return { ok: true, ref, session, device };
 }

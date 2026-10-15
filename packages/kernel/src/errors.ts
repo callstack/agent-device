@@ -275,6 +275,15 @@ export const PRE_DISPATCH_REFUSAL_REASONS = {
    */
   sessionOrDeviceSelectorRequired: 'session_or_device_selector_required',
   /**
+   * The caller named a session by hand and this daemon holds no session under that address, so the
+   * command stopped before its device was chosen. Recovery: `open` that session again, or drop
+   * `--session` and name a device selector to keep using the daemon sessionlessly. Unlike
+   * `sessionOrDeviceSelectorRequired`, the caller *did* supply a target — a session address — and it
+   * is that address which is gone, which is what a caller retries on after its daemon was replaced
+   * or restarted mid-run (#3674).
+   */
+  namedSessionNotFound: 'named_session_not_found',
+  /**
    * An app-scoped setting named an app that resolves to no installed app on the target, so nothing
    * was granted, revoked, or cleared under that name. Recovery: run `apps` for the exact bundle id
    * or package, or install the app, then retry.

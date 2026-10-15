@@ -1,8 +1,7 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { isApplePlatform, type PlatformSelector } from '@agent-device/kernel/device';
-import { errorResponse } from '@agent-device/kernel/contracts';
+import { errorResponse, namesSessionExplicitly } from '@agent-device/kernel/contracts';
 import {
-  hasExplicitSessionFlag,
   requireSessionOrExplicitSelector,
   resolveCommandDevice,
   selectorTargetsSessionDevice,
@@ -55,7 +54,7 @@ function admitAppStateTarget(params: RuntimeCommandHandlerParams): AppStateTarge
   const flags = req.flags ?? {};
   const normalizedPlatform = flags.platform;
 
-  if (!session && hasExplicitSessionFlag(flags)) {
+  if (!session && namesSessionExplicitly(req)) {
     return { refusal: appStateSessionNotFoundResponse(sessionName, normalizedPlatform) };
   }
 

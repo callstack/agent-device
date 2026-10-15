@@ -9,12 +9,14 @@ import { SessionStore } from './session-store.ts';
 export async function resolveSessionDevice(
   sessionStore: SessionStore,
   sessionName: string,
-  flags: DaemonRequest['flags'],
+  req: DaemonRequest,
   boundRef?: SessionRef,
 ) {
   const ref = boundRef ?? sessionStore.lookup(sessionName);
   const session = ref ? sessionStore.requireCurrent(ref) : undefined;
-  const device = session?.device ?? (await resolveTargetDevice(flags ?? {}));
+  const { requireNamedSessionHoldsDevice } = await import('./explicit-session-resolution.ts');
+  requireNamedSessionHoldsDevice({ req, sessionAddress: sessionName, session });
+  const device = session?.device ?? (await resolveTargetDevice(req.flags ?? {}));
   return { ref, session, device };
 }
 

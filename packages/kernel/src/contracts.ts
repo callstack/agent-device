@@ -257,6 +257,22 @@ export function errorResponse(
 export const NO_ACTIVE_SESSION_MESSAGE = 'No active session. Run open first.';
 
 /**
+ * Whether the caller named the session it wants, traced from what the request carries rather than
+ * from the session string. Every request has a session *name*, because an unnamed one inherits the
+ * workspace's own session address, so comparing names cannot answer this. Both carriers count:
+ * every client sets `meta.sessionExplicit`, and the commands whose own input schema declares
+ * `--session` also deliver the value in `flags.session`.
+ */
+export function namesSessionExplicitly(request: {
+  flags?: { session?: unknown } | undefined;
+  meta?: { sessionExplicit?: boolean } | undefined;
+}): boolean {
+  if (request.meta?.sessionExplicit === true) return true;
+  const value = request.flags?.session;
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
  * Shared "No active session. Run open first." failure used by handlers that require
  * an open session before dispatching.
  */

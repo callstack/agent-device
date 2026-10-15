@@ -140,6 +140,13 @@ async function resolveRecordingSession(
   params: RecordRuntimeHandlerParams,
   ref: SessionRef | undefined,
 ): Promise<Readonly<{ session: SessionState; ref?: SessionRef; needsReadiness: boolean }>> {
+  const { requireNamedSessionHoldsDevice } =
+    await import('../../core/explicit-session-resolution.ts');
+  requireNamedSessionHoldsDevice({
+    req: params.req,
+    sessionAddress: params.sessionName,
+    session: ref?.session,
+  });
   const device = ref?.session.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
   await params.retainDeviceExecutionLock(device.id);
   if (ref) return { session: params.sessionStore.requireCurrent(ref), ref, needsReadiness: false };

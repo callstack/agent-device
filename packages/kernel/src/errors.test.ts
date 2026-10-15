@@ -20,6 +20,7 @@ test('the pre-dispatch refusal reasons are the values consumers branch on', () =
   assert.deepEqual(PRE_DISPATCH_REFUSAL_REASONS, {
     sessionAppRequired: 'session_app_required',
     sessionOrDeviceSelectorRequired: 'session_or_device_selector_required',
+    namedSessionNotFound: 'named_session_not_found',
     appNotInstalled: 'app_not_installed',
   });
 });

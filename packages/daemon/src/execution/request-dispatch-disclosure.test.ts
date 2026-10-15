@@ -273,6 +273,21 @@ async function sessionOrSelectorRefusedBeforeRouting(): Promise<unknown> {
   assert.fail(`expected the routing refusal, got ${String(failure)}`);
 }
 
+/**
+ * The store holds `SESSION` and the request names another address, which is what a run against a
+ * replaced daemon looks like. The row is about the refusal ordering: `snapshot` would otherwise
+ * have chosen a device from the host inventory and answered with that.
+ */
+async function namedSessionRefusedBeforeDeviceSelection(): Promise<unknown> {
+  const failure = await route(makeSession(SESSION), {
+    command: 'snapshot',
+    positionals: [],
+    session: 'session-never-opened',
+    meta: { requestId: 'named-session-refusal', sessionExplicit: true },
+  });
+  assert.fail(`expected the named-session refusal, got ${String(failure)}`);
+}
+
 function captureNodes(nodes: readonly unknown[]): void {
   gestureRuntimeSpies.captureSnapshot.mockResolvedValue({
     backend: 'xctest',
@@ -354,6 +369,7 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'daemon.route.scroll-then-dialog-read-refused': androidScrollThenDialogReadRefused,
   'daemon.route.read-only-get': readOnlyGet,
   'daemon.route.session-or-selector-refusal': sessionOrSelectorRefusedBeforeRouting,
+  'daemon.route.named-session-refusal': namedSessionRefusedBeforeDeviceSelection,
 };
 
 const ROWS = dispatchDisclosureRowsOwnedBy(
