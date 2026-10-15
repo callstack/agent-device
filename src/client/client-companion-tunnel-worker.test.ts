@@ -10,11 +10,11 @@ import {
   buildCompanionPayload,
   runCompanionTunnelProcessFromEnv,
   runCompanionTunnelWorker,
-} from '../client/client-companion-tunnel-worker.ts';
+} from './client-companion-tunnel-worker.ts';
 import {
   METRO_COMPANION_RUN_ARG,
   MissingCompanionEnvError,
-} from '../client/client-companion-tunnel-contract.ts';
+} from './client-companion-tunnel-contract.ts';
 import {
   acceptWebSocketUpgrade,
   attachWebSocketFrameParser,

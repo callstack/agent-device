@@ -5,7 +5,7 @@ import {
   normalizeDeviceSelection,
   normalizeOpenDevice,
   normalizeSession,
-} from '../client/client-normalizers.ts';
+} from './client-normalizers.ts';
 import { PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 
 test('normalizeOpenDevice accepts exactly the canonical leaf platforms', () => {

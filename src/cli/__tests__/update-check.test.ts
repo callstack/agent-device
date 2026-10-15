@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { withCapturedStderr, withStreamTty } from './test-utils/stream-capture.ts';
+import { withCapturedStderr, withStreamTty } from '../../__tests__/test-utils/stream-capture.ts';
 
 vi.mock('@agent-device/host-kit/command', () => ({
   runCmdDetached: vi.fn(),
 }));
 
 import { runCmdDetached } from '@agent-device/host-kit/command';
-import { maybeRunUpgradeNotifier, runUpdateCheckWorker } from '../cli/update-check.ts';
+import { maybeRunUpgradeNotifier, runUpdateCheckWorker } from '../update-check.ts';
 
 function makeTempStateDir(): string {
   return mkdtempForTestSync('agent-device-update-check-');
