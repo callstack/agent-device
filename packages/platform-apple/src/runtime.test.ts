@@ -351,6 +351,29 @@ test.each(Object.entries(leaves))(
 );
 
 test.each(Object.entries(leaves))(
+  'refuses the hardware-key fact for the %s leaf',
+  async (_name, device) => {
+    const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({
+      device,
+      intent: { kind: 'ordinary' },
+      scope: {
+        signal: new AbortController().signal,
+        diagnostics: { emit: () => {} },
+        progress: { report: () => {} },
+      },
+    });
+    // The runner presses only the home and Action Button controls, so no Apple leaf admits a
+    // volume, power, or media key: the system-button family denial answers for it.
+    expect(binding.facts.operations.hardwareKey).toEqual({
+      available: false,
+      reason: 'unsupported-platform-leaf',
+      hint: 'No Apple leaf carries this system button.',
+    });
+    expect(binding.operations.hardwareKey).toBeUndefined();
+  },
+);
+
+test.each(Object.entries(leaves))(
   'classifies the fold fact for the %s leaf',
   async (_name, device) => {
     const binding = await createApplePlatformRuntime(platformRuntimeHostFixture()).bind({

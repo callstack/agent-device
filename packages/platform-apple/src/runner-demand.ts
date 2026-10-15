@@ -55,6 +55,8 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
   setFoldPose: 'simulator',
   // Refused on every Apple leaf at admission, so nothing waits on the runner.
   sendTelephonyEvent: 'simulator',
+  // No Apple owner admits a hardware key press, so it never waits for the runner.
+  hardwareKey: 'simulator',
   // Observation: the AX bridge presents regular and raw trees; custom actions need XCTest.
   captureSnapshot: 'simulator',
   captureSnapshotWithoutActiveApp: 'simulator',

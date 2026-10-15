@@ -268,6 +268,7 @@ Buttons:
 
 Android TV:
   Android TV uses ADB keyevents behind agent-device tv-remote. Keep command plans on agent-device; do not switch to raw adb keyevent.
+  For playback and volume keys, use hardware-key media-play-pause|media-next|media-previous|media-rewind|media-fast-forward|volume-up|volume-down|mute.
   Use --target tv when a host has both phone/tablet and TV emulators/devices.
 
 tvOS:

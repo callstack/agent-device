@@ -131,7 +131,7 @@ function appleKeyboardEnterFact(device: DeviceInfo): RuntimeOperationFact {
   return appleMobileInputEligible(device) ? available : keyboardCellUnavailable;
 }
 
-/** Every system button this owner knows is named below; the family denial covers none today. */
+/** The family denial covers `hardwareKey`: the runner presses no volume, power, or media key. */
 const systemButtonUnavailable = Object.freeze({
   available: false,
   reason: 'unsupported-platform-leaf',

@@ -228,6 +228,23 @@ test('structural action events preserve navigation, viewport, keyboard, and gest
   });
 });
 
+test('hardware-key action events name only a known key', () => {
+  const pressed = action('hardware-key', {
+    action: 'hardware-key',
+    key: 'media-play-pause',
+    message: 'Pressed hardware key media-play-pause',
+  });
+  const unknown = action('hardware-key', { action: 'hardware-key', key: 'eject' });
+
+  assert.equal(buildActionSummary(pressed), 'Pressed hardware key media-play-pause');
+  assert.deepEqual(buildActionDetails(pressed), {
+    command: 'hardware-key',
+    key: 'media-play-pause',
+  });
+  assert.equal(buildActionSummary(unknown), 'Pressed hardware key');
+  assert.deepEqual(buildActionDetails(unknown), { command: 'hardware-key' });
+});
+
 // #1598: the keyboard-dismiss mechanism must show up in both the human
 // summary and the structured details, so a transcript reader can tell a
 // vouched-for dismiss-key tap; unrecognized mechanisms are dropped (#1606).

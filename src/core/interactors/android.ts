@@ -17,6 +17,7 @@ import {
   doubleTapAndroid,
   pressAndroid,
   pressAndroidEnter,
+  pressAndroidHardwareKey,
   pressAndroidTvRemote,
   readAndroidClipboardText,
   readAndroidGestureViewport,
@@ -123,6 +124,7 @@ export function createAndroidInteractor(
     setOrientation: (orientation) => setAndroidOrientation(device, orientation),
     appSwitcher: () => appSwitcherAndroid(device),
     tvRemote: (button, durationMs) => pressAndroidTvRemote(device, button, durationMs),
+    hardwareKey: (key) => pressAndroidHardwareKey(device, key),
     keyboardStatus: async () => ({ kind: 'ime-probe', ...(await getAndroidKeyboardState(device)) }),
     keyboardDismiss: async () => ({ kind: 'ime-probe', ...(await dismissAndroidKeyboard(device)) }),
     keyboardEnter: async () => {

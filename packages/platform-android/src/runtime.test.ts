@@ -199,6 +199,23 @@ test('admits Android tv-remote only for a real TV target', async () => {
   expect(binding.operations.tvRemote).toBeTypeOf('function');
 });
 
+test.each([
+  ['emulator', ANDROID_EMULATOR],
+  ['device', { ...ANDROID_EMULATOR, kind: 'device' as const }],
+  ['unknown', UNKNOWN_KIND_DEVICE],
+])(
+  'admits the Android %s hardware-key fact through the shared touch gate',
+  async (_name, device) => {
+    const binding = await bindOrdinary(
+      createAndroidPlatformRuntime(androidNavigationHost()),
+      device,
+    );
+
+    expect(binding.facts.operations.hardwareKey).toEqual({ available: true });
+    expect(binding.operations.hardwareKey).toBeTypeOf('function');
+  },
+);
+
 test('Android refuses the action-button fact on every kind', async () => {
   for (const runtimeDevice of [
     ANDROID_EMULATOR,
@@ -330,6 +347,7 @@ test('the synthetic Android simulator cell refuses back/home/orientation/keyboar
     'home',
     'setOrientation',
     'tvRemote',
+    'hardwareKey',
     'keyboardStatus',
     'keyboardDismiss',
     'keyboardEnter',

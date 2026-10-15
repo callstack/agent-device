@@ -90,9 +90,9 @@ const keyboardKindUnavailable = unavailableFact(
 );
 const hoverUnavailable = unavailableFact('unsupported-platform-leaf');
 /**
- * `home` and `app-switcher` are the system buttons `input keyevent` can press. Any other (the
- * iPhone Action Button today) is hardware with no Android key event behind it, so there is no adb
- * path to admit even on the kinds every other Android cell admits.
+ * `home`, `app-switcher`, and the hardware keys are the system controls `input keyevent` can
+ * press. Any other (the iPhone Action Button today) is hardware with no Android key event behind
+ * it, so there is no adb path to admit even on the kinds every other Android cell admits.
  */
 const systemButtonUnavailable = unavailableFact(
   'unsupported-platform-leaf',
@@ -341,12 +341,13 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           readTextAtPoint: device.kind === 'simulator' ? elementTextKindUnavailable : available,
         }),
         ...backRuntimeOperationFacts({ back: androidTouchFact(device) }),
-        // `home` and `app-switcher` are one `input keyevent` each, admitted wherever the retired
-        // `ANDROID_ALL` bucket admitted them.
+        // `home`, `app-switcher`, and every hardware key are one `input keyevent` each, admitted
+        // wherever the retired `ANDROID_ALL` bucket admitted `home`.
         ...systemButtonRuntimeOperationFacts({
           unsupported: systemButtonUnavailable,
           home: androidTouchFact(device),
           appSwitcher: androidTouchFact(device),
+          hardwareKey: androidTouchFact(device),
         }),
         ...androidFoldableFacts(device),
         ...androidTelephonyFacts(device),

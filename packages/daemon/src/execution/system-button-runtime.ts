@@ -1,6 +1,7 @@
 import {
   actionButtonRuntimeUse,
   appSwitcherRuntimeUse,
+  hardwareKeyRuntimeUse,
   homeRuntimeUse,
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
@@ -9,7 +10,9 @@ import type {
   SystemButton,
   SystemButtonInput,
 } from '@agent-device/contracts/system-button-runtime';
+import { parseHardwareKey, type HardwareKey } from '@agent-device/contracts/tv-remote';
 import type { DeviceInfo } from '@agent-device/kernel/device';
+import { AppError } from '@agent-device/kernel/errors';
 import { successText } from '@agent-device/kernel/success-text';
 import type { DaemonCommandContext } from '../core/context.ts';
 import type { ResolvedGenericExecution } from '../core/generic-leaf-execution.ts';
@@ -82,6 +85,37 @@ export async function resolveBoundSystemButtonRuntime(
       const [button] = row.use.required;
       await runtime.operations[button](systemButtonInput(context));
       return { action: command, ...successText(row.message) };
+    },
+  );
+}
+
+function readHardwareKey(positionals: readonly string[]): HardwareKey {
+  if (positionals.length !== 1) {
+    throw new AppError('INVALID_ARGS', 'hardware-key requires exactly one key');
+  }
+  return parseHardwareKey(positionals[0]);
+}
+
+/**
+ * `hardware-key <key>`: the family's one control with an argument. The key is parsed before
+ * admission, so a malformed request never inspects or binds a device.
+ */
+export async function resolveBoundHardwareKeyRuntime(
+  params: { device: DeviceInfo; positionals: readonly string[] } & RuntimeAdmissionBindings,
+): Promise<ResolvedGenericExecution> {
+  const key = readHardwareKey(params.positionals);
+  return await resolveBoundGenericRuntime(
+    {
+      command: 'hardware-key',
+      device: params.device,
+      use: hardwareKeyRuntimeUse,
+      inspectFacts: params.inspectFacts,
+      platformServices: params.platformServices,
+      bindDevice: params.bindDevice,
+    },
+    async (runtime: BoundDeviceRuntime<typeof hardwareKeyRuntimeUse>, context) => {
+      await runtime.operations.hardwareKey({ ...systemButtonInput(context), key });
+      return { action: 'hardware-key', key, ...successText(`Pressed hardware key ${key}`) };
     },
   );
 }

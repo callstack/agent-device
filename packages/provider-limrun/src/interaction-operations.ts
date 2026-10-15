@@ -131,7 +131,7 @@ const appSwitcherUnavailableIos = unavailableFact(
   'unsupported-provider-mode',
   'Limrun iOS direct sessions do not expose app switcher yet.',
 );
-/** No Limrun session exposes the action button; only `appSwitcher` still splits by leg. */
+/** No Limrun session exposes the action button; `appSwitcher` and `hardwareKey` split by leg. */
 const systemButtonUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'No Limrun session exposes this system button.',
@@ -286,9 +286,9 @@ export function limrunAlertOperationFacts(
 }
 
 /**
- * The Android leg rides the local family's own interactor factory for `home` and `appSwitcher`.
- * The iOS direct session presses `home` through Limrun's button actions and refuses
- * `appSwitcher`. No Limrun session exposes the action button.
+ * The Android leg rides the local family's own interactor factory for `home`, `appSwitcher`, and
+ * `hardwareKey`, the same `input keyevent` channel. The iOS direct session presses `home` through
+ * Limrun's button actions and refuses the rest. No Limrun session exposes the action button.
  */
 export function limrunSystemButtonOperationFacts(
   device: DeviceInfo,
@@ -302,6 +302,7 @@ export function limrunSystemButtonOperationFacts(
       unsupported: systemButtonUnavailable,
       home: available,
       appSwitcher: available,
+      hardwareKey: available,
     });
   }
   return systemButtonRuntimeOperationFacts({

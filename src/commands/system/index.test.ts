@@ -5,6 +5,7 @@ import type {
   AppSwitcherCommandOptions,
   BackCommandOptions,
   FoldCommandOptions,
+  HardwareKeyCommandOptions,
   HomeCommandOptions,
   OrientationCommandOptions,
   TelephonyCommandOptions,
@@ -21,6 +22,8 @@ import {
   clipboardDaemonWriter,
   foldCliReader,
   foldDaemonWriter,
+  hardwareKeyCliReader,
+  hardwareKeyDaemonWriter,
   keyboardCliReader,
   keyboardDaemonWriter,
   orientationCliReader,
@@ -68,6 +71,9 @@ describe('system command interface', () => {
     >();
     expectTypeOf<AgentDeviceCommandClient['tvRemote']>().toEqualTypeOf<
       (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>
+    >();
+    expectTypeOf<AgentDeviceCommandClient['hardwareKey']>().toEqualTypeOf<
+      (options: HardwareKeyCommandOptions) => Promise<CommandResult<'hardware-key'>>
     >();
   });
 
@@ -379,6 +385,26 @@ describe('system command interface', () => {
       'tv-remote requires exactly one button',
     );
     expectInvalidArgs(() => tvRemoteCliReader(['blue'], flags()), 'button must be one of');
+  });
+
+  test('hardware-key reader parses one key and the writer forwards it', () => {
+    expect(hardwareKeyCliReader(['volume-down'], flags())).toMatchObject({ key: 'volume-down' });
+    expect(hardwareKeyCliReader(['Media-Next'], flags())).toMatchObject({ key: 'media-next' });
+    expect(hardwareKeyDaemonWriter({ key: 'wake' } as Record<string, unknown>).positionals).toEqual(
+      ['wake'],
+    );
+  });
+
+  test('hardware-key reader rejects a missing, extra, or unknown key', () => {
+    expectInvalidArgs(
+      () => hardwareKeyCliReader([], flags()),
+      'hardware-key requires exactly one key',
+    );
+    expectInvalidArgs(
+      () => hardwareKeyCliReader(['mute', 'power'], flags()),
+      'hardware-key requires exactly one key',
+    );
+    expectInvalidArgs(() => hardwareKeyCliReader(['camera'], flags()), 'key must be one of');
   });
 });
 

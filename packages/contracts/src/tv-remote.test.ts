@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
+  HARDWARE_KEYS,
+  parseHardwareKey,
   parseTvRemoteButton,
   TV_REMOTE_BUTTONS,
+  toAndroidHardwareKeycode,
   toVegaTvRemoteKey,
   tvRemoteDurationMode,
 } from './tv-remote.ts';
@@ -37,3 +40,37 @@ test('shared select aliases normalize before reaching a platform adapter', () =>
     'select',
   ]);
 });
+
+test('every hardware key maps to its Android KeyEvent keycode', () => {
+  assert.deepEqual(
+    Object.fromEntries(HARDWARE_KEYS.map((key) => [key, toAndroidHardwareKeycode(key)])),
+    {
+      'volume-up': 24,
+      'volume-down': 25,
+      mute: 164,
+      power: 26,
+      sleep: 223,
+      wake: 224,
+      'media-play-pause': 85,
+      'media-next': 87,
+      'media-previous': 88,
+      'media-rewind': 89,
+      'media-fast-forward': 90,
+    },
+  );
+});
+
+test('hardware key names parse case-insensitively', () => {
+  assert.equal(parseHardwareKey('Volume-Up'), 'volume-up');
+  assert.equal(parseHardwareKey('MEDIA-PLAY-PAUSE'), 'media-play-pause');
+});
+
+test.each([undefined, '', 'volume', 'home', 'toString', 'KEYCODE_VOLUME_UP', '24'])(
+  'an unknown hardware key %j is INVALID_ARGS naming every key',
+  (value) => {
+    assert.throws(() => parseHardwareKey(value), {
+      code: 'INVALID_ARGS',
+      message: `hardware-key key must be one of: ${HARDWARE_KEYS.join(', ')}.`,
+    });
+  },
+);

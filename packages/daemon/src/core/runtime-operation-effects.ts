@@ -48,6 +48,7 @@ export const RUNTIME_OPERATION_EFFECTS: Readonly<
   findText: 'repeatable',
   focusPoint: 'mutates',
   gestureViewport: 'repeatable',
+  hardwareKey: 'mutates',
   home: 'mutates',
   hoverPoint: 'mutates',
   hoverRef: 'mutates',

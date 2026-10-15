@@ -242,6 +242,7 @@ await client.command.tvRemote({
 
 await client.command.appSwitcher();
 await client.command.actionButton();
+await client.command.hardwareKey({ key: 'media-play-pause' });
 await client.command.fold({ pose: 'open' });
 await client.command.telephony({ action: 'call', number: '5551234' });
 await client.command.telephony({ action: 'sms', number: '5551234', text: 'Your code is 1234' });
@@ -283,6 +284,7 @@ Supported command methods:
 - `keyboard`
 - `clipboard`
 - `tvRemote`
+- `hardwareKey`
 - `reactNative`
 - `doctor`
 - `prepare`

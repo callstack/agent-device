@@ -13,6 +13,7 @@ import type {
 import type {
   AppSwitcherCommandResult,
   BackCommandResult,
+  HardwareKeyCommandResult,
   HomeCommandResult,
   OrientationCommandResult,
   TvRemoteCommandResult,
@@ -62,6 +63,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
   const keyboard: Equal<CommandResult<'keyboard'>, KeyboardCommandResult> = true;
   const tvRemote: Equal<CommandResult<'tv-remote'>, TvRemoteCommandResult> = true;
   const telephony: Equal<CommandResult<'telephony'>, TelephonyCommandResult> = true;
+  const hardwareKey: Equal<CommandResult<'hardware-key'>, HardwareKeyCommandResult> = true;
   const wait: Equal<CommandResult<'wait'>, WaitCommandResult> = true;
   const prepare: Equal<CommandResult<'prepare'>, PrepareCommandResult> = true;
   const push: Equal<CommandResult<'push'>, PushCommandResult> = true;
@@ -93,6 +95,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     keyboard,
     tvRemote,
     telephony,
+    hardwareKey,
     wait,
     prepare,
     push,
@@ -136,6 +139,7 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'keyboard'
     | 'tv-remote'
     | 'telephony'
+    | 'hardware-key'
     | 'wait'
     | 'scroll'
     | 'prepare'

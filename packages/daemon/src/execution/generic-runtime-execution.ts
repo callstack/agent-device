@@ -8,7 +8,11 @@ import type { DaemonRequest } from '../core/daemon-request.ts';
 import type { SessionState } from '../core/session-state.ts';
 import { resolveBoundViewportRuntime } from './viewport-runtime.ts';
 import { resolveBoundBackRuntime } from './back-runtime.ts';
-import { isSystemButtonCommand, resolveBoundSystemButtonRuntime } from './system-button-runtime.ts';
+import {
+  isSystemButtonCommand,
+  resolveBoundHardwareKeyRuntime,
+  resolveBoundSystemButtonRuntime,
+} from './system-button-runtime.ts';
 import { resolveBoundOrientationRuntime } from './orientation-runtime.ts';
 import { resolveBoundFoldRuntime } from './fold-runtime.ts';
 import { resolveBoundTvRemoteRuntime } from './tv-remote-runtime.ts';
@@ -121,6 +125,14 @@ export async function resolveGenericRuntimeExecution(
         device: params.session.device,
         positionals: params.req.positionals ?? [],
         durationMs: params.req.flags?.durationMs,
+        inspectFacts: params.inspectFacts,
+        platformServices: params.platformServices,
+        bindDevice: params.bindDevice,
+      });
+    case 'hardware-key':
+      return await resolveBoundHardwareKeyRuntime({
+        device: params.session.device,
+        positionals: params.req.positionals ?? [],
         inspectFacts: params.inspectFacts,
         platformServices: params.platformServices,
         bindDevice: params.bindDevice,

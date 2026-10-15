@@ -21,8 +21,11 @@ import {
 } from '@agent-device/contracts/device';
 import { type BackMode, BACK_MODES } from '@agent-device/contracts/back-mode';
 import {
+  HARDWARE_KEYS,
+  HARDWARE_KEY_USAGE,
   TV_REMOTE_BUTTONS,
   TV_REMOTE_BUTTON_USAGE,
+  parseHardwareKey,
   parseTvRemoteButton,
   tvRemoteDurationMode,
 } from '@agent-device/contracts/tv-remote';
@@ -78,6 +81,7 @@ const CLIPBOARD_COMMAND_NAME = 'clipboard';
 const TV_REMOTE_COMMAND_NAME = 'tv-remote';
 const TELEPHONY_COMMAND_NAME = 'telephony';
 const TV_REMOTE_LONGPRESS_PRESET_MS = 500;
+const HARDWARE_KEY_COMMAND_NAME = 'hardware-key';
 
 const CLIPBOARD_ACTION_VALUES = ['read', 'write'] as const;
 const KEYBOARD_METADATA_ACTION_VALUES = ['status', 'dismiss', 'enter', 'return'] as const;
@@ -175,6 +179,14 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
       ),
     ],
   },
+  'hardware-key': objectSchema(
+    {
+      action: constSchema('hardware-key'),
+      key: enumSchema(HARDWARE_KEYS),
+      message: stringSchema(),
+    },
+    ['action', 'key', 'message'],
+  ),
   // packages/contracts/src/clipboard.ts — discriminated union on `action`.
   clipboard: {
     type: 'object',
@@ -251,6 +263,7 @@ export const SYSTEM_COMMAND_OUTPUT_SCHEMAS = {
   | 'action-button'
   | 'tv-remote'
   | 'telephony'
+  | 'hardware-key'
   | 'clipboard'
   | 'appstate'
   | 'keyboard'
@@ -303,6 +316,8 @@ const actionButtonCommandDescription =
   'Press the iPhone or iPad Action Button once. The press is dispatched without activating the session app and nothing is re-observed afterwards, so the app keeps the state the press found. What the system does with the press is not observed by this command: Simulators run no Shortcuts or App Intents, so delivery to an assigned Shortcut is verifiable only on a physical iPhone.';
 const tvRemoteCommandDescription =
   'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
+const hardwareKeyCommandDescription =
+  'Press one hardware key: volume-up, volume-down, mute, power, sleep, wake, or a media key (media-play-pause, media-next, media-previous, media-rewind, media-fast-forward). Use it to check volume and mute handling, standby and wake during playback, and media-key handling. power toggles the screen; sleep and wake set it to off or on. The key goes to the system and the foreground media session, and nothing is re-observed afterwards. Supported on Android emulators and devices through ADB key events, including Limrun Android sessions; other platforms and the WebDriver (Appium) backend report UNSUPPORTED_OPERATION.';
 
 const telephonyCommandDescription =
   'Simulate an incoming phone call or SMS on an Android emulator through its console over adb: call rings from the number, accept answers, cancel ends the call, and sms delivers a text message. The call screen or notification can cover the app, so re-snapshot afterwards.';
@@ -434,6 +449,19 @@ const telephonyCommandMetadata = {
   },
 };
 
+const hardwareKeyCommandMetadata = defineFieldCommandMetadata(
+  HARDWARE_KEY_COMMAND_NAME,
+  hardwareKeyCommandDescription,
+  {
+    key: requiredField(
+      enumField(
+        HARDWARE_KEYS,
+        'Key to press. power toggles the screen; sleep and wake turn it off or on.',
+      ),
+    ),
+  },
+);
+
 const backCliSchema = {
   usageOverride: 'back [--in-app|--system] [--settle]',
   usageFlags: [],
@@ -477,6 +505,12 @@ const telephonyCliSchema = {
   allowsExtraPositionals: true,
 } as const satisfies CommandSchemaOverride;
 
+const hardwareKeyCliSchema = {
+  usageOverride: `hardware-key ${HARDWARE_KEY_USAGE}`,
+  listUsageOverride: 'hardware-key <key>',
+  positionalArgs: ['key'],
+} as const satisfies CommandSchemaOverride;
+
 export const backCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
   mode: flags.backMode,
@@ -515,6 +549,11 @@ export const telephonyCliReader: CliReader = (positionals, flags) => ({
   ...parseTelephonyPositionals(positionals),
 });
 
+export const hardwareKeyCliReader: CliReader = (positionals, flags) => ({
+  ...commonInputFromFlags(flags),
+  key: readHardwareKeyPositional(positionals),
+});
+
 export const backDaemonWriter: DaemonWriter = (input) =>
   request(BACK_COMMAND_NAME, [], {
     ...input,
@@ -548,6 +587,10 @@ export const tvRemoteDaemonWriter: DaemonWriter = direct(TV_REMOTE_COMMAND_NAME,
 export const telephonyDaemonWriter: DaemonWriter = direct(TELEPHONY_COMMAND_NAME, (input) =>
   telephonyPositionals(parseTelephonyEventInput(input)),
 );
+
+export const hardwareKeyDaemonWriter: DaemonWriter = direct(HARDWARE_KEY_COMMAND_NAME, (input) => [
+  requiredDaemonString(input.key, 'hardware-key requires key'),
+]);
 
 const appStateCommandFacet = defineParameterlessCommandFacet({
   name: APPSTATE_COMMAND_NAME,
@@ -686,6 +729,20 @@ const telephonyCommandFacet = defineCommandFacet({
   cliOutputFormatter: systemCliOutputFormatters.telephony,
 });
 
+const hardwareKeyCommandFacet = defineCommandFacet({
+  name: HARDWARE_KEY_COMMAND_NAME,
+  text: {
+    summary: 'Press a volume, power, or media hardware key',
+    cliDetail: 'Android only (ADB key events, local or Limrun).',
+  },
+  metadata: hardwareKeyCommandMetadata,
+  run: (client, input) => client.command.hardwareKey(input),
+  cliSchema: hardwareKeyCliSchema,
+  cliReader: hardwareKeyCliReader,
+  daemonWriter: hardwareKeyDaemonWriter,
+  cliOutputFormatter: systemCliOutputFormatters['hardware-key'],
+});
+
 export const systemCommandFamily = defineCommandFamilyFromFacets({
   name: 'system',
   commands: [
@@ -700,6 +757,7 @@ export const systemCommandFamily = defineCommandFamilyFromFacets({
     clipboardCommandFacet,
     tvRemoteCommandFacet,
     telephonyCommandFacet,
+    hardwareKeyCommandFacet,
   ],
 });
 
@@ -754,6 +812,16 @@ function readTvRemoteInput(
     button: parseTvRemoteButton(args[0]),
     durationMs: effectiveDurationMs,
   });
+}
+
+function readHardwareKeyPositional(positionals: string[]) {
+  if (positionals.length !== 1) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `hardware-key requires exactly one key: ${HARDWARE_KEYS.join(', ')}.`,
+    );
+  }
+  return parseHardwareKey(positionals[0]);
 }
 
 function readKeyboardAction(

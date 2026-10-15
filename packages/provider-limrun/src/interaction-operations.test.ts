@@ -66,10 +66,11 @@ test('a live session reads and writes the clipboard on both legs', () => {
   expect(stale.writeClipboard).toEqual(liveSessionUnavailable);
 });
 
-test('home is admitted on both legs, app-switcher only on Android, the action button on neither', () => {
+test('home is admitted on both legs, app-switcher and hardware keys only on Android, the action button on neither', () => {
   const android = limrunSystemButtonOperationFacts(androidMobileDevice);
   expect(android.home).toEqual({ available: true });
   expect(android.appSwitcher).toEqual({ available: true });
+  expect(android.hardwareKey).toEqual({ available: true });
   expect(android.actionButton).toMatchObject({
     available: false,
     reason: 'unsupported-provider-mode',
@@ -83,11 +84,13 @@ test('home is admitted on both legs, app-switcher only on Android, the action bu
     hint: 'Limrun iOS direct sessions do not expose app switcher yet.',
   });
   expect(ios.actionButton).toMatchObject({ available: false, reason: 'unsupported-provider-mode' });
+  expect(ios.hardwareKey).toMatchObject({ available: false, reason: 'unsupported-provider-mode' });
 
   const stale = limrunSystemButtonOperationFacts(androidMobileDevice, liveSessionUnavailable);
   expect(stale.home).toEqual(liveSessionUnavailable);
   expect(stale.appSwitcher).toEqual(liveSessionUnavailable);
   expect(stale.actionButton).toEqual(liveSessionUnavailable);
+  expect(stale.hardwareKey).toEqual(liveSessionUnavailable);
 });
 
 // R57: app-event delivery is the one system leaf BOTH direct-session legs serve, because each

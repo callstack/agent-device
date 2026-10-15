@@ -6,6 +6,7 @@ import {
   longPressAndroid,
   pressAndroid,
   pressAndroidEnter,
+  pressAndroidHardwareKey,
   pressAndroidTvRemote,
   probeAndroidDisplayRotation,
   scrollAndroid,
@@ -409,6 +410,22 @@ test('pressAndroidTvRemote sends D-pad keyevents, and --longpress for a positive
       assert.deepEqual(calls, [
         ['shell', 'input', 'keyevent', 'KEYCODE_DPAD_RIGHT'],
         ['shell', 'input', 'keyevent', '--longpress', 'KEYCODE_DPAD_CENTER'],
+      ]);
+    },
+  );
+});
+
+test('pressAndroidHardwareKey sends the numeric keyevent for volume, power, and media keys', async () => {
+  await withFakeAdb(
+    () => undefined,
+    async ({ calls, device }) => {
+      await pressAndroidHardwareKey(device, 'volume-down');
+      await pressAndroidHardwareKey(device, 'sleep');
+      await pressAndroidHardwareKey(device, 'media-fast-forward');
+      assert.deepEqual(calls, [
+        ['shell', 'input', 'keyevent', '25'],
+        ['shell', 'input', 'keyevent', '223'],
+        ['shell', 'input', 'keyevent', '90'],
       ]);
     },
   );

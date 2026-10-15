@@ -214,6 +214,11 @@ const systemButtonUnavailable = unavailableFact(
   'unsupported-provider-mode',
   'No WebDriver backend presses this system button.',
 );
+/** Appium's Android `mobile: pressKey` could send these keys; this runtime does not wire it yet. */
+const hardwareKeyUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'WebDriver provider runtimes do not expose hardware-key yet.',
+);
 
 /** No WebDriver `mobile:` script poses a foldable hinge; the refusal is unconditional like the Action Button's. */
 const foldUnavailable = unavailableFact(
@@ -623,6 +628,7 @@ function webDriverFacts(
         unsupported: systemButtonUnavailable,
         home: declared('home', homeUnavailable),
         appSwitcher: declared('appSwitcher', appSwitcherUnavailable),
+        hardwareKey: hardwareKeyUnavailable,
       }),
       setFoldPose: foldUnavailable,
       sendTelephonyEvent: telephonyUnavailable,

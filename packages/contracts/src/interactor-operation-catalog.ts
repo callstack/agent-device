@@ -20,7 +20,12 @@ import {
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import type { PlatformRuntimeOperations } from './platform-runtime-operations.ts';
 import type { RuntimeOperationFact } from './platform-runtime.ts';
-import { bindSystemButton, SYSTEM_BUTTON_LABELS } from './system-button-runtime.ts';
+import {
+  bindHardwareKey,
+  bindSystemButton,
+  HARDWARE_KEY_LABEL,
+  SYSTEM_BUTTON_LABELS,
+} from './system-button-runtime.ts';
 
 /**
  * How a facet turns one resolved interactor into its own typed operations. Every catalog member
@@ -63,6 +68,7 @@ export const INTERACTOR_OPERATIONS = [
   },
   { operation: 'setOrientation', label: 'orientation', bind: bindOrientation },
   { operation: 'tvRemote', label: TV_REMOTE_LABEL, bind: bindTvRemote },
+  { operation: 'hardwareKey', label: HARDWARE_KEY_LABEL, bind: bindHardwareKey },
   {
     operation: 'keyboardStatus',
     label: KEYBOARD_ACTION_LABELS.keyboardStatus,

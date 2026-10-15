@@ -69,6 +69,7 @@ import type {
   AppPushOptions,
   ActionButtonCommandOptions,
   FoldCommandOptions,
+  HardwareKeyCommandOptions,
   AppStateCommandOptions,
   AppSwitcherCommandOptions,
   AppTriggerEventOptions,
@@ -173,6 +174,7 @@ export type AgentDeviceCommandClient = {
   actionButton: (options?: ActionButtonCommandOptions) => Promise<CommandResult<'action-button'>>;
   tvRemote: (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>;
   telephony: (options: TelephonyCommandOptions) => Promise<CommandResult<'telephony'>>;
+  hardwareKey: (options: HardwareKeyCommandOptions) => Promise<CommandResult<'hardware-key'>>;
   wait: (options: WaitCommandOptions) => Promise<CommandResult<'wait'>>;
   alert: (options?: AlertCommandOptions) => Promise<CommandRequestResult>;
   appState: (options?: AppStateCommandOptions) => Promise<CommandResult<'appstate'>>;

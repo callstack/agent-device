@@ -1,7 +1,7 @@
 import type { SessionAction } from '@agent-device/contracts/session';
 import { DEVICE_ROTATIONS, FOLD_POSES, TELEPHONY_ACTIONS } from '@agent-device/contracts/device';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
-import { TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
+import { HARDWARE_KEYS, TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { isKeyboardAction } from './keyboard-actions.ts';
 import {
@@ -53,6 +53,8 @@ export function buildStructuredActionSummary(action: SessionAction): string | un
       return buildKeyboardActionSummary(result);
     case PUBLIC_COMMANDS.tvRemote:
       return buildTvRemoteActionSummary(result);
+    case PUBLIC_COMMANDS.hardwareKey:
+      return buildHardwareKeyActionSummary(result);
     case PUBLIC_COMMANDS.gesture:
       return buildGestureActionSummary(result);
     case PUBLIC_COMMANDS.swipe:
@@ -108,6 +110,8 @@ export function buildStructuredActionDetails(action: SessionAction): Record<stri
         button: readEnum(result.button, TV_REMOTE_BUTTONS),
         durationMs: readSessionEventNumber(result.durationMs),
       });
+    case PUBLIC_COMMANDS.hardwareKey:
+      return compactDetails({ key: readEnum(result.key, HARDWARE_KEYS) });
     case PUBLIC_COMMANDS.gesture:
     case PUBLIC_COMMANDS.swipe:
       return buildGestureActionDetails(result);
@@ -259,6 +263,11 @@ function buildKeyboardActionDetails(result: Record<string, unknown>): Record<str
 function buildTvRemoteActionSummary(result: Record<string, unknown>): string {
   const button = readEnum(result.button, TV_REMOTE_BUTTONS);
   return button ? `Pressed TV remote ${button}` : 'Used TV remote';
+}
+
+function buildHardwareKeyActionSummary(result: Record<string, unknown>): string {
+  const key = readEnum(result.key, HARDWARE_KEYS);
+  return key ? `Pressed hardware key ${key}` : 'Pressed hardware key';
 }
 
 function buildGestureActionSummary(result: Record<string, unknown>): string {

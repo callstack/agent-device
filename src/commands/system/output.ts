@@ -53,6 +53,7 @@ export const systemCliOutputFormatters = withSettleCapableNotes({
   clipboard: resultOutput(clipboardCliOutput),
   'tv-remote': messageOutput,
   telephony: messageOutput,
+  'hardware-key': messageOutput,
 } satisfies Record<string, CliOutputFormatter>);
 
 function formatAppState(data: AppStateCommandResult): string {

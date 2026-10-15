@@ -117,6 +117,7 @@ export const orientationRuntimeUse = defineUse({ required: ['setOrientation'] })
 export const foldRuntimeUse = defineUse({ required: ['setFoldPose'] });
 export const telephonyRuntimeUse = defineUse({ required: ['sendTelephonyEvent'] });
 export const tvRemoteRuntimeUse = defineUse({ required: ['tvRemote'] });
+export const hardwareKeyRuntimeUse = defineUse({ required: ['hardwareKey'] });
 export const keyboardStatusUse = defineUse({ required: ['keyboardStatus'] });
 export const keyboardDismissUse = defineUse({ required: ['keyboardDismiss'] });
 export const keyboardEnterUse = defineUse({ required: ['keyboardEnter'] });

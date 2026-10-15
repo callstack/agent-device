@@ -117,3 +117,47 @@ const TV_REMOTE_BUTTON_ALIAS_MAP = new Map<string, TvRemoteButton>(
     TV_REMOTE_BUTTON_DEFINITIONS[button].aliases.map((alias) => [alias, button] as const),
   ),
 );
+
+/**
+ * Volume, power, and media keys: named presses that, like the remote buttons above, each map to
+ * one platform key event. Only Android sends them; no other owner carries a key-event channel.
+ */
+const HARDWARE_KEY_DEFINITIONS = {
+  'volume-up': { androidKeycode: 24 },
+  'volume-down': { androidKeycode: 25 },
+  mute: { androidKeycode: 164 },
+  power: { androidKeycode: 26 },
+  sleep: { androidKeycode: 223 },
+  wake: { androidKeycode: 224 },
+  'media-play-pause': { androidKeycode: 85 },
+  'media-next': { androidKeycode: 87 },
+  'media-previous': { androidKeycode: 88 },
+  'media-rewind': { androidKeycode: 89 },
+  'media-fast-forward': { androidKeycode: 90 },
+} as const satisfies Record<string, { androidKeycode: number }>;
+
+export const HARDWARE_KEYS = Object.keys(
+  HARDWARE_KEY_DEFINITIONS,
+) as (keyof typeof HARDWARE_KEY_DEFINITIONS)[];
+
+export const HARDWARE_KEY_USAGE = `<${HARDWARE_KEYS.join('|')}>`;
+
+export type HardwareKey = (typeof HARDWARE_KEYS)[number];
+
+export function parseHardwareKey(value: string | undefined): HardwareKey {
+  const normalized = value?.toLowerCase();
+  if (isHardwareKey(normalized)) return normalized;
+  throw new AppError(
+    'INVALID_ARGS',
+    `hardware-key key must be one of: ${HARDWARE_KEYS.join(', ')}.`,
+  );
+}
+
+function isHardwareKey(value: string | undefined): value is HardwareKey {
+  return value !== undefined && Object.hasOwn(HARDWARE_KEY_DEFINITIONS, value);
+}
+
+/** The `KeyEvent` keycode `adb shell input keyevent` sends for the key. */
+export function toAndroidHardwareKeycode(key: HardwareKey): number {
+  return HARDWARE_KEY_DEFINITIONS[key].androidKeycode;
+}
