@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { classifySlowTest, reportSlowTests } from '../../scripts/vitest-slow-test-reporter.ts';
+import { classifySlowTest, reportSlowTests } from '../vitest-slow-test-reporter.ts';
 
 const base = {
   root: '/repo',

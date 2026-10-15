@@ -21,7 +21,7 @@ import { test } from 'vitest';
 // above the `new AppError(` — the reason doubles as documentation.
 // ---------------------------------------------------------------------------
 
-const SRC_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SRC_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'src');
 const ALLOW_MARKER = 'exec-guard-allow:';
 // Longhand `stdout: x.stdout` and shorthand `stdout,` property forms alike.
 const TRIO_KEYS = [/\bstdout\s*[:,}]/, /\bstderr\s*[:,}]/, /\bexitCode\s*[:,}]/] as const;

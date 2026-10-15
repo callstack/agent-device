@@ -132,6 +132,10 @@ export default defineConfig({
             'scripts/fuzz/validation-arbitraries-maestro.test.ts',
             'scripts/fuzz/validation-case.test.ts',
             'scripts/fuzz/envelope.test.ts',
+            'scripts/__tests__/vitest-slow-test-reporter.test.ts',
+            // Artifact guards assert on Swift sources, package.json, workflows, docs and examples rather
+            // than on a module under src.
+            'test/repo-guards/*.test.ts',
             'scripts/__tests__/help-conformance-bench.test.ts',
             'scripts/__tests__/help-conformance-error-recovery-coverage.test.ts',
             'scripts/__tests__/help-conformance-expectation-falsification.test.ts',
