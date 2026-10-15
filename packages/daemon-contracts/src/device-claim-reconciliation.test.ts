@@ -1,4 +1,4 @@
-import { createDeviceClaimReconciler } from '@agent-device/daemon-contracts/device-claims-fixtures';
+import { createDeviceClaimReconciler } from './device-claim-reconciliation.ts';
 import { appLogResourceStore } from '@agent-device/capture-kit/app-log-durable-resource';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,7 +15,7 @@ import {
   mkdtempForTestSync,
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
 } from '@agent-device/test-kit';
-import type { DeviceClaim } from '@agent-device/daemon-contracts/device-claims';
+import type { DeviceClaim } from './device-claims.ts';
 
 const scope = {
   signal: new AbortController().signal,

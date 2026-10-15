@@ -5,8 +5,11 @@ import { test } from 'vitest';
 import * as hostProcess from '@agent-device/host-kit/process';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { runCliCapture } from './cli-capture.ts';
-import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
-import { mkdtempForTestSync, pinOwnProcessStartTime } from '@agent-device/test-kit';
+import {
+  mkdtempForTestSync,
+  pinOwnProcessStartTime,
+  publishDaemonRegistration,
+} from '@agent-device/test-kit';
 
 pinOwnProcessStartTime(hostProcess);
 

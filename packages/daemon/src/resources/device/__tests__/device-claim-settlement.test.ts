@@ -11,8 +11,11 @@ import {
 } from '@agent-device/daemon-contracts/device-claims';
 import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { mkdtempForTestSync, pinOwnProcessStartTime } from '@agent-device/test-kit';
-import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
+import {
+  mkdtempForTestSync,
+  pinOwnProcessStartTime,
+  publishDaemonRegistration,
+} from '@agent-device/test-kit';
 pinOwnProcessStartTime(hostProcess);
 
 const device: DeviceInfo = {

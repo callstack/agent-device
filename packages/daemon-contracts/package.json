@@ -80,5 +80,8 @@
       "types": "./src/session-repair-tombstone.ts",
       "default": "./src/session-repair-tombstone.ts"
     }
+  },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
   }
 }

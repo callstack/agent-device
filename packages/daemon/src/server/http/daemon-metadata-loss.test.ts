@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
+import { mkdtempForTestSync, publishDaemonRegistration } from '@agent-device/test-kit';
 import {
   readDaemonMetadataLoss,
   watchDaemonMetadataLoss,

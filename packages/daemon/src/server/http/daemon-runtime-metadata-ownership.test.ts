@@ -1,8 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
+import { mkdtempForTestSync, publishDaemonRegistration } from '@agent-device/test-kit';
 
 const lifecycleEvents = vi.hoisted(() => [] as string[]);
 const startupFailure = vi.hoisted(() => ({ active: false }));

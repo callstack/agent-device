@@ -1,6 +1,5 @@
-import { resolveDeviceClaimPath } from '@agent-device/daemon-contracts/device-claims-fixtures';
+import { ANDROID_EMULATOR, deviceClaimFilePath } from '@agent-device/test-kit';
 import { afterEach, expect, test, vi } from 'vitest';
-import { ANDROID_EMULATOR } from '@agent-device/test-kit';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
@@ -83,7 +82,7 @@ test('a claim replaced by a successor owner is reported superseded, never releas
   // from under it, and another owner claims the same device before this daemon
   // reaches teardown. `clearDeviceClaim` finds a claim it does not own and
   // deliberately leaves it alone, so "the call resolved" cannot mean "released".
-  fs.rmSync(resolveDeviceClaimPath(deviceKey));
+  fs.rmSync(deviceClaimFilePath(deviceKey));
   const successor = await acquireDeviceClaim({
     device: ANDROID_EMULATOR,
     session: 'successor',
@@ -112,7 +111,7 @@ test('an undecodable record is reported unattributable, never orphaned or supers
   // `superseded`; and it is not `orphaned` either, because that bucket's remedy is
   // `device release --stale`, which proves staleness from the recorded owner this record does not
   // have. Claiming the bucket would send the operator to a command that refuses this record.
-  fs.writeFileSync(resolveDeviceClaimPath(deviceKey), '{bad json');
+  fs.writeFileSync(deviceClaimFilePath(deviceKey), '{bad json');
 
   const ledger = createDaemonShutdownClaimLedger();
   await ledger.releaseClaim(session);

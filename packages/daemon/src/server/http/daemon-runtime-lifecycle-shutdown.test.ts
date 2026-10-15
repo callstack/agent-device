@@ -1,8 +1,7 @@
-import { resolveDeviceClaimPath } from '@agent-device/daemon-contracts/device-claims-fixtures';
+import { ANDROID_EMULATOR, deviceClaimFilePath, mkdtempForTestSync } from '@agent-device/test-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { ANDROID_EMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 const lifecycleEvents = vi.hoisted(() => [] as string[]);
@@ -292,7 +291,7 @@ test('shutdown includes drain publications, releases their claims and refuses po
     expect(refusal).toMatchObject({ details: { reason: 'daemon_shutting_down' } });
     expect(store.lookup('draining')).toBeUndefined();
     expect(store.lookup('late')).toBeUndefined();
-    expect(fs.existsSync(resolveDeviceClaimPath(acquired.ownership.deviceKey))).toBe(false);
+    expect(fs.existsSync(deviceClaimFilePath(acquired.ownership.deviceKey))).toBe(false);
   } finally {
     await runtime?.shutdown();
   }
@@ -410,7 +409,7 @@ test('shutdown joins dispatch completion after force-closing the client before t
     expect(publicationError).toBeUndefined();
     expect(shutdownProbe.finalize).toHaveBeenCalledOnce();
     expect(store.lookup('dispatching')).toBeUndefined();
-    expect(fs.existsSync(resolveDeviceClaimPath(acquired.ownership.deviceKey))).toBe(false);
+    expect(fs.existsSync(deviceClaimFilePath(acquired.ownership.deviceKey))).toBe(false);
   } finally {
     release();
     await request;

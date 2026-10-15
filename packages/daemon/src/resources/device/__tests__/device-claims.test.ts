@@ -13,8 +13,11 @@ import {
   inspectDeviceClaims,
 } from '@agent-device/daemon-contracts/device-claims';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { mkdtempForTestSync, pinOwnProcessStartTime } from '@agent-device/test-kit';
-import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
+import {
+  mkdtempForTestSync,
+  pinOwnProcessStartTime,
+  publishDaemonRegistration,
+} from '@agent-device/test-kit';
 import * as hostProcess from '@agent-device/host-kit/process';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { acquireProcessLock } from '@agent-device/host-kit/file';

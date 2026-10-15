@@ -15,6 +15,8 @@ export {
   type BoundaryInvariant,
 } from './boundary-fault-matrix.ts';
 export { withNoColor, withNoColorAsync } from './color.ts';
+export { publishDaemonRegistration } from './daemon-registration-fixtures.ts';
+export { deviceClaimFilePath } from './device-claim-fixtures.ts';
 export {
   ANDROID_DEVICE,
   ANDROID_EMULATOR,

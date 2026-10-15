@@ -1,8 +1,7 @@
-import { resolveDeviceClaimPath } from '@agent-device/daemon-contracts/device-claims-fixtures';
+import { deviceClaimFilePath, mkdtempForTestSync } from '@agent-device/test-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { authoringPublication, makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import {
@@ -41,7 +40,7 @@ async function publishLeasedSession(
   });
   if (acquired.status !== 'acquired') throw new Error('expected an acquired claim');
   sessionStore.publish(name, { ...session, deviceClaim: acquired.ownership });
-  return resolveDeviceClaimPath(acquired.ownership.deviceKey);
+  return deviceClaimFilePath(acquired.ownership.deviceKey);
 }
 
 function holdSessionLocks(
