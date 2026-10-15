@@ -176,10 +176,7 @@ function isWebPackageTestSelectorImport(file: string, family: string, specifier:
 }
 
 function isTestKitTestImport(file: string, specifier: string): boolean {
-  return (
-    specifier === '@agent-device/test-kit' &&
-    (file.endsWith('.test.ts') || file.includes('/__tests__/') || file.includes('.fixtures.'))
-  );
+  return specifier === '@agent-device/test-kit' && !isProductionSourceFile(file);
 }
 
 function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): LayeringViolation[] {
