@@ -94,8 +94,8 @@ under `contracts/fixtures/`.
 - A test sits beside the module it is named for: `<module>.test.ts` or `<module>-<aspect>.test.ts`
   (R84). Cross-module package tests are `index-<aspect>.test.ts` beside `index.ts`; repo-level guards on
   Swift sources, manifests, docs or scripts live in `test/repo-guards/`.
-- No package `exports` entry points at test support (R83). A fixture one package uses stays inside
-  it, imported relatively; helpers shared across packages live only in `@agent-device/test-kit`, a
+- Add no package `exports` entry that points at test support; R83 only lets the legacy count fall. A
+  fixture one package uses stays inside it, imported relatively; helpers shared across packages live only in `@agent-device/test-kit`, a
   `devDependency` production source never imports and that never depends on `platform-*`,
   `provider-*`, the daemon or root.
 

@@ -71,8 +71,10 @@ Before creating fixtures, look in `@agent-device/test-kit` and
 runtime-fact, and mocked-binary values belong in a sibling fixture module, not in repeated test
 literals; a fixture one package uses is a `*.fixtures.ts` beside its module. The packages test-kit
 builds on (kernel, contracts, capture-kit, host-kit, command-registry, daemon-contracts) cannot
-declare it; their tests keep helpers local. Never import test-kit in a `vi.mock` factory: it loads
-the module being mocked; spy it in place, as `pinOwnProcessStartTime` does.
+declare it; their tests keep helpers local. Never import test-kit in the `vi.mock` factory of a
+module its entry loads (`host-kit/process`, `command`, `file`): spy it in place, as
+`pinOwnProcessStartTime` does. Fixtures a package still exports (R83's legacy count) stay
+importable until moved.
 
 Use `mkdtempForTest` or `mkdtempForTestSync`. Global setup redirects `TMPDIR` for the run and
 removes it after every worker exits — skip per-test cleanup. An interrupted run may leave a
@@ -118,9 +120,7 @@ another example. Keep examples for a real past bug or a named decision. Reuse `P
 budgets so property files stay inside the unit slow-test gate.
 
 Parser fuzz targets live in `scripts/fuzz/targets.ts`. Validation generators carry the invalid
-outcome they planted, so silent acceptance and wrong error codes are failures. Cases run in a
-worker process, so a case that never returns or kills its process is reported as `hang` or `crash`
-against the exact input. Promote a discovered case with the command the harness prints — never
+outcome they planted, so silent acceptance and wrong error codes are failures. Promote a discovered case with the command the harness prints — never
 hand-copy an unshrunk input.
 
 Mutation scope: `scripts/mutation/modules.ts#KERNEL_MODULES` (weekly), `scripts/mutation/run.ts#LANE_SOURCES`
