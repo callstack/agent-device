@@ -112,10 +112,6 @@
       "types": "./src/daemon-port/session-replay-video-recording.ts",
       "default": "./src/daemon-port/session-replay-video-recording.ts"
     },
-    "./session-test-infrastructure": {
-      "types": "./src/daemon-port/session-test-infrastructure.ts",
-      "default": "./src/daemon-port/session-test-infrastructure.ts"
-    },
     "./session-test-outcome": {
       "types": "./src/daemon-port/session-test-outcome.ts",
       "default": "./src/daemon-port/session-test-outcome.ts"
