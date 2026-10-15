@@ -115,9 +115,9 @@ function pointInViewportArb(viewport: Rect): fc.Arbitrary<Point> {
 }
 
 /**
- * One payload arbitrary per canonical gesture kind. Keyed by `GESTURE_KINDS`,
- * so a new kind fails to typecheck here instead of silently escaping the
- * geometry property.
+ * One payload arbitrary per coordinate gesture kind. Keyed by `COORDINATE_GESTURE_KINDS`,
+ * so a new coordinate kind fails to typecheck here instead of silently escaping the
+ * geometry property. `drag` is not a coordinate kind and is covered by the plan tests.
  */
 function gesturePayloadArbByKind(
   viewport: Rect,
@@ -168,7 +168,7 @@ function gesturePayloadArbByKind(
   };
 }
 
-/** A viewport with a gesture payload of every supported kind planned against it. */
+/** A viewport with a gesture payload of every coordinate kind planned against it. */
 export const gestureInViewportArb: fc.Arbitrary<{ viewport: Rect; gesture: GesturePayload }> =
   viewportRectArb.chain((viewport) => {
     const byKind = gesturePayloadArbByKind(viewport);
