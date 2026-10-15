@@ -841,7 +841,7 @@ therefore structurally enforced rather than periodically measured.
 Some request-path work asks the host machine something without ever taking a device runtime:
 concrete local readiness, boot-time and runner-session observation, and open-target
 classification. Those asks now cross the daemon boundary as one required dependency,
-`DaemonPlatformServices` (`packages/daemon/src/core/platform-services.ts`), assembled by the daemon runtime's
+`DaemonPlatformServices` (`packages/daemon/src/core/platform-services.ts`, exported from the package entry `@agent-device/daemon`), assembled by the daemon runtime's
 root-composition module in `src/daemon-composition.ts` — which reaches the concrete adapters
 through `src/platform-runtime-daemon-services.ts` behind a function-scoped `await import` — and
 threaded composition → `startDaemonRuntime` deps → `RequestRouterDeps` → the request execution

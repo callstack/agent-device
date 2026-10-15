@@ -192,20 +192,25 @@ files have no seam (published facade, public-type collision, root dependency fac
 
 ## The daemon package's export surface
 
-`@agent-device/daemon` publishes a façade, not importer reach: one named subpath per
-production/script consumer — a subpath that only tests import is not production surface.
-Everything else a root test reaches lives under the `./testing/` namespace: named
-`./testing/<module>` entries for production modules tests drive, named `./testing/<fixture>`
-entries, and, per fixture folder, a `./testing/<dir>/*` pattern whose target template
-reconstructs the source path. Never a wildcard that also exposes production modules. R11
-refuses any `./testing/` import from a non-test file, so root production code cannot import
-a module the package publishes for tests (a package test double reached through the
-boundary is production code depending on a fake), and root production imports are limited
-to the named production surface. The exports keys stay exact except the per-folder fixture
-patterns; `resolveWorkspaceSpecifier` (layering model) owns Node's exports semantics — the
-layering edges, the depgraph, mutation ownership, and R11's named-surface check call it, and
-the Stryker alias table orders its Vite first-match list to resolve in exactly its order —
-so every lane gives a specifier the module id Node's exports resolution gives it.
+`@agent-device/daemon` has one entry, `.`, which is `packages/daemon/src/index.ts`: explicit named
+re-exports of what the daemon process root uses (`startDaemonRuntime` and the types its
+composition and platform-runtime modules name), no `export *`. It is the package boundary, the
+one place a barrel is allowed; the layer folders hold no barrel. A value import of the package
+evaluates the daemon server graph, so root code that needs only command metadata reads it from
+its owner: the route owner-file claims sit beside the per-command claims in
+`@agent-device/command-registry/owner-files`, and the wire request and response types come from
+`@agent-device/contracts/command` and `@agent-device/kernel/contracts`.
+
+Root tests that still drive daemon internals reach them through transitional `./testing/`
+entries: named `./testing/<module>` entries for production modules, named `./testing/<fixture>`
+entries, and per fixture folder a `./testing/<dir>/*` pattern. Each batch of tests that moves into
+`packages/daemon/src`, where they import their subject relatively, deletes the entries it frees.
+R11 refuses any `./testing/` import from a non-test file, so root production code cannot import
+a module the package publishes for tests (a package test double reached through the boundary is
+production code depending on a fake). `resolveWorkspaceSpecifier` (layering model) owns Node's
+exports semantics — the layering edges, the depgraph, mutation ownership, and R11's named-surface
+check call it, and the Stryker alias table orders its Vite first-match list to resolve in exactly
+its order — so every lane gives a specifier the module id Node's exports resolution gives it.
 
 ## Refuted alternatives
 
