@@ -16,20 +16,25 @@ test('visible text targets the provider label field, which is where the tree exp
 });
 
 test('variant scalar attributes become the text every snapshot producer publishes', () => {
-  // The system photo picker's segmented tabs report the numbers 1/0 as AXValue.
-  const [selected, unselected, boolean, text, empty, missing, fallback] = flattenIosTree([
-    { type: 'RadioButton', AXLabel: 'Photos', AXValue: 1 },
-    { type: 'RadioButton', AXLabel: 'Collections', AXValue: 0 },
-    { type: 'Switch', value: true },
-    { type: 'TextField', AXValue: 'qa@example.com' },
-    { type: 'TextField', value: '' },
-    { type: 'TextField', AXValue: null },
-    { type: 'TextField', value: '', AXValue: 1 },
-  ]);
+  // The system photo picker's segmented tabs report the numbers 1/0 as AXValue, and the
+  // provider's JSON can carry a variant scalar in any text attribute.
+  const [selected, unselected, boolean, text, empty, missing, fallback, label, identifier] =
+    flattenIosTree([
+      { type: 'RadioButton', AXLabel: 'Photos', AXValue: 1 },
+      { type: 'RadioButton', AXLabel: 'Collections', AXValue: 0 },
+      { type: 'Switch', value: true },
+      { type: 'TextField', AXValue: 'qa@example.com' },
+      { type: 'TextField', value: '' },
+      { type: 'TextField', AXValue: null },
+      { type: 'TextField', value: '', AXValue: 1 },
+      { type: 'Other', label: 42, AXLabel: 'fallback' },
+      { type: 'Other', identifier: true, AXUniqueId: 'fallback' },
+    ]);
   expect([selected?.value, unselected?.value, boolean?.value]).toEqual(['1', '0', 'true']);
   expect(text?.value).toBe('qa@example.com');
   expect([empty?.value, missing?.value]).toEqual([undefined, undefined]);
   expect(fallback?.value).toBe('1');
+  expect([label?.label, identifier?.identifier]).toEqual(['42', 'true']);
 });
 
 test('the Selected trait publishes selection in the shape the Apple tree uses', () => {

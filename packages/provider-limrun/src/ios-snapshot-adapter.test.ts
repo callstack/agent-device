@@ -178,14 +178,19 @@ test('Limrun acquires a system photo picker whose tabs report numeric values', a
       children: [
         { elementType: 'RadioButton', AXLabel: 'Photos', AXValue: 1 },
         { elementType: 'RadioButton', AXLabel: 'Collections', AXValue: 0 },
-        { elementType: 'Image', AXLabel: 'Photo', traits: ['Scrollable', 'Selected', 'Image'] },
+        {
+          elementType: 'Image',
+          AXLabel: 'Photo',
+          AXUniqueId: 12,
+          traits: ['Scrollable', 'Selected', 'Image'],
+        },
       ],
     }),
   );
   const [photos, collections, photo] = result.acquisition.nodes.slice(1);
   expect(photos).toMatchObject({ value: '1', checked: true });
   expect(collections).toMatchObject({ value: '0', checked: false });
-  expect(photo).toMatchObject({ selected: true });
+  expect(photo).toMatchObject({ selected: true, label: 'Photo', identifier: '12' });
 });
 
 test('limrun acquisition shares RN interpretation and preserves native values', async () => {

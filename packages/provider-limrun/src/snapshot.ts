@@ -93,16 +93,18 @@ function readIosNodeLabel(node: IosTreeNode): string | undefined {
   return scalarText(node.label) ?? scalarText(node.AXLabel);
 }
 
-/**
- * iOS `AXValue` is a variant attribute; the instance reports `1`/`0` numbers for controls
- * like the photo picker's segmented tabs. Snapshot nodes carry values as text on every
- * producer, so this is the one place the provider's scalar JSON becomes that text —
- * the same normalization the Apple tree applies to its guest scalars.
- */
 function readIosNodeValue(node: IosTreeNode): string | undefined {
   return scalarText(node.value) ?? scalarText(node.AXValue);
 }
 
+/**
+ * One scalar text attribute of the snapshot-node contract. iOS `AXValue` is a variant
+ * attribute — the photo picker's segmented tabs report the numbers `1`/`0` — and every
+ * attribute arrives over the same untyped JSON channel, so each is read through here
+ * before it reaches a node. This mirrors what the Apple tree's scalar reader publishes;
+ * unlike that trusted-guest reader, an unexpected type here stringifies rather than
+ * throwing, because failing one picker screen is not worth failing the whole snapshot.
+ */
 function scalarText(value: string | number | boolean | null | undefined): string | undefined {
   if (value === undefined || value === null || value === '') return undefined;
   return typeof value === 'string' ? value : String(value);
