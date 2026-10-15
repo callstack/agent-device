@@ -144,6 +144,19 @@ export function checkTestKitIsolation(
     }
   }
 
+  const entrySource = sources.get(`${TEST_KIT_DIR}/src/index.ts`);
+  const starExport = entrySource === undefined ? null : /^[ \t]*export\s*\*/m.exec(entrySource);
+  if (entrySource !== undefined && starExport) {
+    const line = entrySource.slice(0, starExport.index).split('\n').length;
+    violations.push(
+      violation(
+        `${TEST_KIT_DIR}/src/index.ts`,
+        `${TEST_KIT_PACKAGE} names every export explicitly: \`export *\` would publish a module's whole surface.`,
+        line,
+      ),
+    );
+  }
+
   for (const [file, source] of sources) {
     if (!file.startsWith(`${TEST_KIT_DIR}/`)) continue;
     for (const site of specifierSites(file, source)) {
