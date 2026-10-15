@@ -43,6 +43,12 @@ export const ANDROID_ACTION_BUTTON_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvi
     [C.actionButton],
     'Android refuses the action-button fact on every kind',
   );
+export const ANDROID_HARDWARE_KEY_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
+  defineAndroidContractEvidence(
+    'packages/platform-android/src/runtime.test.ts',
+    [C.hardwareKey],
+    'admits the Android %s hardware-key fact through the shared touch gate',
+  );
 export const ANDROID_FOLD_RUNTIME_CONTRACT_EVIDENCE: AndroidContractEvidence =
   defineAndroidContractEvidence(
     'packages/platform-android/src/runtime.test.ts',
@@ -92,6 +98,10 @@ export const APPLE_NAVIGATION_FACTS_EVIDENCE: RepositoryEvidence = {
 export const APPLE_ACTION_BUTTON_FACT_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-apple/src/runtime.test.ts',
   test: 'classifies the action-button fact for the %s leaf',
+};
+export const APPLE_HARDWARE_KEY_DENIAL_EVIDENCE: RepositoryEvidence = {
+  path: 'packages/platform-apple/src/runtime.test.ts',
+  test: 'refuses the hardware-key fact for the %s leaf',
 };
 export const APPLE_HOVER_DENIAL_EVIDENCE: RepositoryEvidence = {
   path: 'packages/platform-apple/src/runtime.test.ts',

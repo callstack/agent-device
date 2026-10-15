@@ -29,6 +29,7 @@ import type {
 import { dispatchSnapshotDiffViaRuntime } from '../../sessions/snapshot-diff-runtime.ts';
 import {
   isSystemButtonCommand,
+  resolveBoundHardwareKeyRuntime,
   resolveBoundSystemButtonRuntime,
   type SystemButtonCommand,
 } from '../../execution/system-button-runtime.ts';
@@ -141,6 +142,12 @@ export const conformedRuntimeBindings = {
   'tv-remote': {
     resolve: async (device, bindings) =>
       refusable(await resolveBoundTvRemoteRuntime({ device, positionals: ['down'], ...bindings })),
+  },
+  'hardware-key': {
+    resolve: async (device, bindings) =>
+      refusable(
+        await resolveBoundHardwareKeyRuntime({ device, positionals: ['volume-up'], ...bindings }),
+      ),
   },
   type: {
     resolve: (device, bindings) => resolveBoundTypeTextRuntime({ device, ...bindings }),
