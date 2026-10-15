@@ -49,7 +49,7 @@ export type LaunchConfirmationTarget = Readonly<{ url: string; appBundleId: stri
 /** The device reads and the answer one launch confirmation needs, bound to the session app. */
 export type LaunchConfirmationPort = Readonly<{
   appBundleId: string;
-  /** The alert on screen, or `undefined` when there is none. */
+  /** The alert after its bounded presentation wait, or `undefined` when none appears. */
   readAlert(): Promise<Record<string, unknown> | undefined>;
   acceptAlert(): Promise<unknown>;
   /** The installed app that owns the launch URL's scheme, when exactly one does. */
@@ -188,18 +188,18 @@ export async function answerSimulatorLaunchConfirmation(
 export function createLaunchConfirmationPort(
   device: DeviceInfo,
   { url, appBundleId }: LaunchConfirmationTarget,
-  interactor: Interactor,
+  interactor: Pick<Interactor, 'awaitAlert' | 'acceptAlert'>,
   signal: AbortSignal,
 ): LaunchConfirmationPort {
-  const readAlert = interactor.readAlert?.bind(interactor);
+  const awaitAlert = interactor.awaitAlert?.bind(interactor);
   const acceptAlert = interactor.acceptAlert?.bind(interactor);
-  if (!readAlert || !acceptAlert) {
-    throw invalidRuntimeContract('Apple interactor has no alert read or accept leg');
+  if (!awaitAlert || !acceptAlert) {
+    throw invalidRuntimeContract('Apple interactor has no alert wait or accept leg');
   }
   const target = { appBundleId, surface: 'app' } as const;
   return Object.freeze({
     appBundleId,
-    readAlert: async () => await alertIfPresent(readAlert(target)),
+    readAlert: async () => await alertIfPresent(awaitAlert(target)),
     acceptAlert: async () => await acceptAlert(target),
     resolveUrlOwner: async () =>
       await resolveIosSimulatorDeepLinkBundleId(device, url, {

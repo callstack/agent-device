@@ -148,8 +148,8 @@ export function launchUrlSimulator(
     open: vi.fn(async (_app: string, options?: { url?: string }) => {
       events.push(options?.url ? `open ${options.url}` : 'open');
     }),
-    readAlert: vi.fn(async () => {
-      events.push('alert get');
+    awaitAlert: vi.fn(async () => {
+      events.push('alert wait');
       return await readAlert();
     }),
     acceptAlert: vi.fn(async () => {
