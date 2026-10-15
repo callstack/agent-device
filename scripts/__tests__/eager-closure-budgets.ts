@@ -132,14 +132,7 @@ export const NEW_ENTRY_CEILINGS: Readonly<Record<EntryCategory, number>> = Objec
  */
 export const APPROVED_OVER_CEILING: Readonly<
   Record<string, { issue: string; reason: string; owner: string }>
-> = Object.freeze({
-  'packages/maestro/src/replay-backend/replay-maestro-backend.ts': {
-    issue: '#3377',
-    reason:
-      'The Maestro replay backend plugin IS the engine behind `replay --maestro`; the registry reaches it only through a function-scoped import(), and no startup hub evaluates it (cli-startup-import-closure pins that).',
-    owner: 'thymikee',
-  },
-});
+> = Object.freeze({});
 
 /** The category is a function of the path, never a hand-written column. */
 export function entryCategoryOf(entryFile: string): EntryCategory {
