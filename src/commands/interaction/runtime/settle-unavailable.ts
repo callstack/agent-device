@@ -1,5 +1,4 @@
 import type { SettleObservation } from '@agent-device/contracts/interaction';
-import type { SettleOutcome } from './settle.ts';
 import type { StableCaptureLoopResult } from './stable-capture.ts';
 
 /** Report observation failure without failing the completed action. */
@@ -7,7 +6,7 @@ export function settleUnavailable(
   base: SettleObservation,
   outcome: Pick<StableCaptureLoopResult, 'captures' | 'waitedMs' | 'quietMs'> | undefined,
   error: unknown,
-): SettleOutcome {
+): { observation: SettleObservation } {
   return {
     observation: {
       ...base,
