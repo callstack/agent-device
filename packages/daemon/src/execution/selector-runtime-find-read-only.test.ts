@@ -130,7 +130,7 @@ test('handleFindCommands wait bypasses snapshot cache while Android freshness re
   expect(mockDispatch).toHaveBeenCalledTimes(2);
 });
 
-test('handleFindCommands wait stores no tree from a sparse capture and reports the surface verdict', async () => {
+test('handleFindCommands wait over a sparse capture answers the surface refusal and leaves the stored tree alone', async () => {
   const session = makeSession('default');
   session.snapshot = {
     nodes: [
@@ -173,11 +173,7 @@ test('handleFindCommands wait stores no tree from a sparse capture and reports t
 
   expect(response.ok).toBe(false);
   expect(session.snapshot).toBe(previousSnapshot);
-  expect(!response.ok && response.error).toMatchObject({
-    code: 'COMMAND_FAILED',
-    message: 'find could not read the current accessibility tree',
-    details: { reason: 'sparse tree' },
-  });
+  expect(!response.ok && response.error).toMatchObject({ code: 'COMMAND_FAILED' });
 });
 
 test('handleFindCommands wait captures fresh snapshots while polling', async () => {

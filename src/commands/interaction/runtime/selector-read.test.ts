@@ -280,10 +280,14 @@ test('runtime find wait reports sparse snapshot verdicts on the selector-read ro
         action: 'wait',
         timeoutMs: 100,
       }),
-    (error: unknown) =>
-      error instanceof Error &&
-      error.message === 'find could not read the current accessibility tree' &&
-      (error as { details?: { reason?: string } }).details?.reason === 'sparse tree',
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, 'find could not read the current accessibility tree');
+      const details = (error as { details?: { reason?: string; hint?: string } }).details;
+      assert.equal(details?.reason, 'sparse tree');
+      assert.match(details?.hint ?? '', /snapshot quality verdict is sparse/);
+      return true;
+    },
   );
   assert.equal(session.snapshot, initialSnapshot);
 });
