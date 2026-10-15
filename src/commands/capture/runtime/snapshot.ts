@@ -214,7 +214,7 @@ async function captureRuntimeSnapshot(
       snapshot,
       options,
       session,
-      capturedAt: snapshot.createdAt ?? warningTime,
+      capturedAt: snapshot.createdAt,
       runtimeNow: warningTime,
     }),
   };

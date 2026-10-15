@@ -617,7 +617,7 @@ test('runtime snapshot stale-drop warning uses the runtime clock', async () => {
       snapshot: makeSnapshotState([{ index: 0, depth: 0, type: 'Text', label: 'After' }], {
         truncated: false,
         backend: 'android',
-        createdAt: 1_500,
+        createdAt: 3_500,
       }),
     })),
     artifacts: createLocalArtifactAdapter(),
