@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { createDaemonProxyServer } from '@agent-device/proxy';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
+import { createDaemonHttpServer } from '../http/http-server.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { readHostCpuArch } from '@agent-device/host-kit/process';
 import { executeRunScriptHttpRequest } from '@agent-device/maestro/run-script-http';

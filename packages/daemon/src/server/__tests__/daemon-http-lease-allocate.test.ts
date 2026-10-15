@@ -2,7 +2,7 @@ import type { DaemonWireRequest } from '@agent-device/contracts/command';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
+import { createDaemonHttpServer } from '../http/http-server.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,

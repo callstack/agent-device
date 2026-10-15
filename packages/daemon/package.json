@@ -25,6 +25,7 @@
     "@agent-device/test-kit": "workspace:*"
   },
   "devDependencies": {
+    "@agent-device/proxy": "workspace:*",
     "fast-check": "^4.9.0",
     "oxc-parser": "^0.146.0",
     "vitest": "5.0.4",
@@ -350,10 +351,6 @@
     "./testing/server/http-server": {
       "types": "./src/server/http/http-server.ts",
       "default": "./src/server/http/http-server.ts"
-    },
-    "./testing/server/server-lifecycle": {
-      "types": "./src/server/http/server-lifecycle.ts",
-      "default": "./src/server/http/server-lifecycle.ts"
     },
     "./testing/server/server-shutdown": {
       "types": "./src/server/http/server-shutdown.ts",

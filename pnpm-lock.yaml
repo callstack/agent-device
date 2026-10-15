@@ -340,6 +340,9 @@ importers:
         specifier: workspace:*
         version: link:../test-kit
     devDependencies:
+      '@agent-device/proxy':
+        specifier: workspace:*
+        version: link:../proxy
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0

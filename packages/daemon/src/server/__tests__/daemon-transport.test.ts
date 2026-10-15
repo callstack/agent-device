@@ -1,14 +1,10 @@
-import type { DaemonRequest } from '@agent-device/daemon';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
 import { test } from 'vitest';
-import {
-  createSocketServer,
-  listenHttpServer,
-  listenNetServer,
-} from '@agent-device/daemon/testing/server/transport';
+import { createSocketServer, listenHttpServer, listenNetServer } from '../http/transport.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
 import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
 

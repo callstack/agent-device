@@ -7,8 +7,8 @@ import { test } from 'vitest';
 import {
   cleanupUploadedArtifact,
   prepareUploadedArtifact,
-} from '@agent-device/daemon/testing/artifact-tracking';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
+} from '../../resources/artifact-tracking.ts';
+import { createDaemonHttpServer } from '../http/http-server.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
