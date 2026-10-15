@@ -1,9 +1,5 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import {
-  daemonPlatformServicesFixture,
-  daemonClaimRecoveryGatewayFixture,
-  observeBootTimeMsFixture,
-} from '../../__tests__/support/platform-services-fixture.ts';
+import { observeBootTimeMsFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
@@ -67,8 +63,6 @@ import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
 } from '../../__tests__/support/test-device-runtime-gateway.ts';
-import { createRequestHandler as createProductionRequestHandler } from '../request-router.ts';
-import { providerCredentialsFixture } from '../../__tests__/support/provider-credentials-fixture.ts';
 import { resolveRequestExecutionLockPlan } from '../request-binding.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { ensureDeviceReady } from '../../core/device/device-ready.ts';
@@ -452,47 +446,6 @@ test.each([
       clientId: 'client-a',
     }).leaseId,
   ).toBe(lease.leaseId);
-});
-
-test('close fails synchronously when root composition omits platform resource cleanup', async () => {
-  const sessionStore = makeSessionStore('agent-device-router-open-');
-  sessionStore.publish('default', {
-    name: 'default',
-    device: makeIosDevice('SIM-CLOSE-MISSING-CLEANUP'),
-    createdAt: Date.now(),
-    actions: [],
-  });
-  const handler = createProductionRequestHandler({
-    createCommandSurface: fakeCreateCommandSurface,
-    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
-    platformServices: daemonPlatformServicesFixture(),
-    claimRecoveryGateway: daemonClaimRecoveryGatewayFixture(),
-    token: 'test-token',
-    sessionStore,
-    leaseRegistry: new LeaseRegistry(),
-    providerCredentials: providerCredentialsFixture({}, '/tmp'),
-    deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
-    deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    trackDownloadableArtifact: () => 'artifact-id',
-  });
-
-  const response = await handler({
-    token: 'test-token',
-    session: 'default',
-    command: 'close',
-    positionals: [],
-    meta: { requestId: 'req-close-missing-cleanup' },
-  });
-
-  expect(response.ok).toBe(false);
-  if (!response.ok) {
-    expect(response.error).toMatchObject({
-      code: 'INTERNAL_ERROR',
-      message: 'Platform resource cleanup was not supplied by root runtime composition',
-    });
-  }
-  expect(sessionStore.get('default')).toBeDefined();
-  expect(legacyDispatchCapture).not.toHaveBeenCalled();
 });
 
 test('close rejects a different client before cleanup', async () => {

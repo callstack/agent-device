@@ -210,12 +210,22 @@ async function gestureBinding(device: DeviceInfo) {
 export function createRequestHandler(
   deps: Omit<
     RequestRouterDeps,
-    'deviceRuntimeGateway' | 'providerCredentials' | 'platformServices' | 'claimRecoveryGateway'
+    | 'deviceRuntimeGateway'
+    | 'providerCredentials'
+    | 'platformServices'
+    | 'claimRecoveryGateway'
+    | 'androidObservation'
+    | 'platformResourceCleanup'
   > &
     Partial<
       Pick<
         RequestRouterDeps,
-        'deviceRuntimeGateway' | 'providerCredentials' | 'platformServices' | 'claimRecoveryGateway'
+        | 'deviceRuntimeGateway'
+        | 'providerCredentials'
+        | 'platformServices'
+        | 'claimRecoveryGateway'
+        | 'androidObservation'
+        | 'platformResourceCleanup'
       >
     >,
 ) {

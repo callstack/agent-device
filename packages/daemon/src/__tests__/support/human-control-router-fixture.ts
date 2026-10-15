@@ -13,6 +13,8 @@ import { tenantScopedSessionName } from '../../core/session-tenant-scope.ts';
 import { lifecycleDeviceRuntimeGateway } from './test-device-runtime-gateway.ts';
 import { HUMAN_CONTROL_LEASE_REQUEST, humanControlRequest } from './human-control-fixtures.ts';
 import { fakeCreateCommandSurface } from './command-surface-fake.ts';
+import { clearAndroidObservationFixture } from './android-observation-fixture.ts';
+import { platformResourceCleanupFixture } from './platform-resource-cleanup-fixture.ts';
 
 export function createHumanControlHarness() {
   const registry = new LeaseRegistry();
@@ -36,6 +38,8 @@ export function createHumanControlHarness() {
     providerCredentials: providerCredentialsFixture({}, '/tmp'),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
+    androidObservation: clearAndroidObservationFixture,
+    platformResourceCleanup: platformResourceCleanupFixture(),
     trackDownloadableArtifact: () => 'artifact-1',
   });
   return { registry, lease, sessionStore, sessionName, handleRequest };

@@ -145,7 +145,7 @@ export type DaemonRuntimeDeps = Readonly<{
   /** The runtime gateway every lifecycle and recovery step in this server runs through. */
   deviceRuntimeGateway: RequestRouterDeps['deviceRuntimeGateway'];
   /** The resource-cleanup surface the session teardowns run through. */
-  platformResourceCleanup: NonNullable<RequestRouterDeps['platformResourceCleanup']>;
+  platformResourceCleanup: RequestRouterDeps['platformResourceCleanup'];
   /** The owner-scoped gateway factory the startup claim reconciliation composes. */
   claimRecoveryGateway: ClaimRecoveryGatewayFactory;
   /**
