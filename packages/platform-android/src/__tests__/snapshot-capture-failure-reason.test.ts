@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, test, vi } from 'vitest';
+import { beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
@@ -21,11 +21,6 @@ import './test-utils/android-host-test-setup.ts';
  * value it publishes. Split out of `snapshot.test.ts`, which is over the file-size tripwire.
  */
 
-vi.mock('@agent-device/host-kit/command', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@agent-device/host-kit/command')>()),
-  runCmd: vi.fn(),
-}));
-
 const device: DeviceInfo = {
   platform: 'android',
   id: 'emulator-5554',
@@ -39,10 +34,6 @@ const helperArtifact = ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT;
 beforeEach(() => {
   resetAndroidSnapshotHelperInstallCache();
   resetAndroidSnapshotHelperSessions();
-});
-
-afterEach(() => {
-  vi.clearAllMocks();
 });
 
 function snapshotAndroidWithHelper(helperAdb: AndroidAdbExecutor) {
