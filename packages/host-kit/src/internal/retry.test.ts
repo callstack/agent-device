@@ -1,8 +1,8 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { AppError } from '@agent-device/kernel/errors';
-import { retryWithPolicy } from './retry.ts';
+import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
+import { Deadline, pollUntilSettled, retryWithPolicy } from './retry.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from './diagnostics.ts';
 import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
@@ -126,4 +126,84 @@ test('retryWithPolicy publishes retry diagnostics events', async () => {
   } finally {
     process.env.HOME = previousHome;
   }
+});
+
+test('pollUntilSettled answers on the first sample that settles', async () => {
+  const values = ['pending', 'pending', 'done'];
+  let probes = 0;
+  const outcome = await pollUntilSettled({
+    probe: async () => {
+      probes += 1;
+      return values.shift() ?? 'unexpected';
+    },
+    settled: (value) => value === 'done',
+    deadline: Deadline.fromTimeoutMs(1_000),
+    intervalMs: 1,
+  });
+  assert.deepEqual(outcome, { settled: true, value: 'done' });
+  assert.equal(probes, 3);
+});
+
+test('pollUntilSettled hands the previous sample to a quiet-pair check', async () => {
+  const values = [1, 2, 2];
+  const outcome = await pollUntilSettled({
+    probe: async () => values.shift() ?? 2,
+    settled: (value, previous) => value === previous,
+    deadline: Deadline.fromTimeoutMs(1_000),
+    intervalMs: 1,
+  });
+  assert.deepEqual(outcome, { settled: true, value: 2 });
+});
+
+test('pollUntilSettled takes its final sample at the deadline and returns it unsettled', async () => {
+  vi.useFakeTimers();
+  try {
+    const sampledAt: number[] = [];
+    const startedAt = Date.now();
+    const outcome = pollUntilSettled({
+      probe: async () => {
+        sampledAt.push(Date.now() - startedAt);
+        return 'pending';
+      },
+      settled: () => false,
+      deadline: Deadline.fromTimeoutMs(250),
+      intervalMs: 100,
+    });
+    await vi.runAllTimersAsync();
+    assert.deepEqual(await outcome, { settled: false, value: 'pending' });
+    assert.deepEqual(sampledAt, [0, 100, 200, 250]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('pollUntilSettled samples once under a spent deadline', async () => {
+  const outcome = await pollUntilSettled({
+    probe: async () => 'pending',
+    settled: () => false,
+    deadline: Deadline.fromTimeoutMs(0),
+    intervalMs: 100,
+  });
+  assert.deepEqual(outcome, { settled: false, value: 'pending' });
+});
+
+test('pollUntilSettled stops sampling once the request is canceled', async () => {
+  const controller = new AbortController();
+  let samples = 0;
+  const outcome = pollUntilSettled({
+    probe: async () => {
+      samples += 1;
+      controller.abort();
+      return 'pending';
+    },
+    settled: () => false,
+    deadline: Deadline.fromTimeoutMs(10_000),
+    intervalMs: 5_000,
+    signal: controller.signal,
+  });
+  await assert.rejects(outcome, (error: unknown) => {
+    assert.ok(isRequestCanceledError(error));
+    return true;
+  });
+  assert.equal(samples, 1);
 });
