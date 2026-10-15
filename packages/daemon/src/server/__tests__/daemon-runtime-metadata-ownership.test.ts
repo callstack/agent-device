@@ -10,54 +10,13 @@ const providerComposition = vi.hoisted(() => ({
   skipped: [] as Array<{ provider: string; error: Error & { code: string } }>,
 }));
 
-vi.mock('../../../platform-runtime.ts', () => ({
-  androidObservation: {},
-  createRequestPlatformProviders: () => ({
-    run: async (_context: unknown, task: () => Promise<unknown>) => await task(),
-  }),
-  createPlatformRuntimeGateway: () => ({
-    applicationLifecycle: {
-      recoverStartupResources: async () => {},
-      detachForDaemonShutdown: async () => {},
-      finalizeDaemonShutdown: async () => {},
-    },
-    inspectFacts: async () => {
-      throw new Error('unused');
-    },
-    bind: async () => {
-      throw new Error('unused');
-    },
-    shutdown: async () => {
-      lifecycleEvents.push('gateway-shutdown');
-    },
-  }),
-  createPlatformDeviceInventoryGateways: () => ({}),
-}));
-
-vi.mock('../../../provider-device-runtimes.ts', () => ({
-  DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: [],
-  createDaemonProviderRuntimeComposition: async () => ({
-    runtimes: [],
-    platformModules: [],
-    skipped: providerComposition.skipped,
-  }),
-}));
-
-// The post-lock, pre-publication step the runtime awaits first. Making it throw lands the runtime in
-// the startup-failure branch that also removes `daemon.json`, which is otherwise unreachable from a
-// test because every later step needs a real device toolchain.
-vi.mock('../../../platform-runtime-daemon-lifecycle.ts', () => ({
-  platformDaemonLifecycleOwners: {
-    configureForDaemonLock: async () => {
-      if (startupFailure.active) throw new Error('startup step failed');
-    },
-    recoverLegacyAppLogMarkers: async () => ({ recovered: [], retained: [] }),
-    clearDaemonLockConfiguration: async () => {},
-    resetAndroidSnapshotHelper: async () => {},
-  },
-}));
-
-import { startDaemonRuntimeFixture } from '../daemon-runtime-fixture.ts';
+import {
+  applicationLifecycleResourceFixture,
+  daemonRuntimeDepsFixture,
+  platformOwnerLifecycleFixture,
+} from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
+import { lifecycleDeviceRuntimeGateway } from '../../__tests__/support/test-device-runtime-gateway.ts';
+import { startDaemonRuntime } from '../http/daemon-runtime.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
 type DaemonPaths = ReturnType<typeof resolveDaemonPaths>;
@@ -67,7 +26,25 @@ type DaemonPaths = ReturnType<typeof resolveDaemonPaths>;
 const SUCCESSOR_PID = 999_999_999;
 
 function startRuntime(stateDir: string, exit: (code: number) => void) {
-  return startDaemonRuntimeFixture({
+  return startDaemonRuntime({
+    composeDeps: daemonRuntimeDepsFixture(() => ({
+      // The post-lock, pre-publication step the runtime awaits first. Making it throw lands the
+      // runtime in the startup-failure branch that also removes `daemon.json`, which is otherwise
+      // unreachable from a test because every later step needs a real device toolchain.
+      ownerLifecycle: platformOwnerLifecycleFixture({
+        configureForDaemonLock: async () => {
+          if (startupFailure.active) throw new Error('startup step failed');
+        },
+      }),
+      deviceRuntimeGateway: Object.freeze({
+        ...lifecycleDeviceRuntimeGateway,
+        applicationLifecycle: applicationLifecycleResourceFixture(),
+        shutdown: async () => {
+          lifecycleEvents.push('gateway-shutdown');
+        },
+      }),
+      skippedProviderRuntimes: providerComposition.skipped,
+    })),
     env: {
       ...process.env,
       AGENT_DEVICE_STATE_DIR: stateDir,
@@ -255,10 +232,7 @@ test('a successor published during this daemon lifetime is recorded at detection
 test('the loss watch is armed only after this daemon publishes its own record', () => {
   // Arming before publication would report a predecessor's record as a takeover of something this
   // daemon never owned. Ordering is the invariant, the same way the startup-ordering guards read it.
-  const source = fs.readFileSync(
-    new URL('../../../../packages/daemon/src/server/http/daemon-runtime.ts', import.meta.url),
-    'utf8',
-  );
+  const source = fs.readFileSync(new URL('../http/daemon-runtime.ts', import.meta.url), 'utf8');
   const published = source.indexOf('publishDaemonInfo(socketPort, httpPort);');
   const armed = source.indexOf('stopMetadataLossWatch = armDaemonMetadataLossWatch(');
 
@@ -271,10 +245,7 @@ test('both exits tear the watch down before they touch daemon.json', () => {
   // deleted. The startup-failure half of this is unreachable from a test — everything after
   // publication needs a real toolchain — so the invariant is read off the source, the same way the
   // arming order above is.
-  const source = fs.readFileSync(
-    new URL('../../../../packages/daemon/src/server/http/daemon-runtime.ts', import.meta.url),
-    'utf8',
-  );
+  const source = fs.readFileSync(new URL('../http/daemon-runtime.ts', import.meta.url), 'utf8');
   const stops = [...source.matchAll(/stopMetadataLossWatch\(\);/g)].map((m) => m.index);
   const finishes = [...source.matchAll(/await finishDaemonRegistration\(/g)].map((m) => m.index);
   expect(stops).toHaveLength(2);

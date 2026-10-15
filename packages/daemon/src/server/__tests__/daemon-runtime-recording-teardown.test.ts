@@ -2,10 +2,10 @@ import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ScreenRecordingCompletion } from '@agent-device/contracts/screen-recording-runtime';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
-import { SessionStore } from '@agent-device/daemon/testing/session-store';
-import { makeRecordingSession } from '@agent-device/daemon/testing/__tests__/session-teardown.fixtures';
-import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/testing/server/daemon-runtime';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { SessionStore } from '../../core/session-store.ts';
+import { makeRecordingSession } from '../../__tests__/support/session-teardown.fixtures.ts';
+import { teardownDaemonSessionForShutdown } from '../http/daemon-runtime.ts';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -39,7 +39,7 @@ test('daemon shutdown awaits durable recording finalization inside its extended 
     ref: sessionStore.lookup(session.name)!,
     sessionStore,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
-    platformCleanup: platformResourceCleanup,
+    platformCleanup: platformResourceCleanupFixture(),
   });
   await vi.advanceTimersByTimeAsync(10_000);
   await teardown;
@@ -77,7 +77,7 @@ test('daemon shutdown resolves durable recording resources through the effective
     ref: sessionStore.lookup(effectiveSessionName)!,
     sessionStore,
     stderr: { write: (chunk) => stderrChunks.push(chunk) },
-    platformCleanup: platformResourceCleanup,
+    platformCleanup: platformResourceCleanupFixture(),
   });
 
   expect(stderrChunks.join('')).not.toMatch(/resource record is missing/);

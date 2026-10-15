@@ -14,9 +14,8 @@ const requestProbe = vi.hoisted(() => ({
   failuresRemaining: 0,
 }));
 
-vi.mock('@agent-device/daemon/testing/request-router', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/request-router')>();
+vi.mock('../request-router.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../request-router.ts')>();
   return {
     ...actual,
     createRequestHandler: (...args: Parameters<typeof actual.createRequestHandler>) => {
@@ -32,12 +31,8 @@ vi.mock('@agent-device/daemon/testing/request-router', async (importOriginal) =>
   };
 });
 
-vi.mock('../../../provider-device-runtimes.ts', () => ({
-  DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: [],
-  createDaemonProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
-}));
-
-import { startDaemonRuntimeFixture } from '../daemon-runtime-fixture.ts';
+import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
+import { startDaemonRuntime } from '../http/daemon-runtime.ts';
 
 afterEach(() => {
   requestProbe.failuresRemaining = 0;
@@ -100,9 +95,10 @@ async function driveFlowFailure(options: { stderrThrows?: boolean }): Promise<Fl
     rejections.push(reason);
   };
   let exitCode: number | undefined;
-  let runtime: Awaited<ReturnType<typeof startDaemonRuntimeFixture>> = null;
+  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> = null;
   try {
-    runtime = await startDaemonRuntimeFixture({
+    runtime = await startDaemonRuntime({
+      composeDeps: daemonRuntimeDepsFixture(),
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,

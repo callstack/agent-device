@@ -5,30 +5,21 @@ import {
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
 import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
-import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
-import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
-import { DAEMON_SESSION_TEARDOWN_TIMEOUT_MS } from '@agent-device/daemon/testing/session-teardown-budget';
-import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
-import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/testing/server/daemon-runtime';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+import { makeAndroidSession } from '../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
+import { snapshotRuntimeFixture } from '../../__tests__/support/snapshot-runtime-fixture.ts';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { DAEMON_SESSION_TEARDOWN_TIMEOUT_MS } from '../../sessions/session-teardown-budget.ts';
+import { dispatchSnapshotViaRuntime } from '../../sessions/snapshot-runtime.ts';
+import { teardownDaemonSessionForShutdown } from '../http/daemon-runtime.ts';
+import { forwardingCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({
   resolveTargetDevice: vi.fn(async () => ANDROID_EMULATOR),
 }));
-vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
-  ensureDeviceReady: vi.fn(async () => {}),
-}));
-vi.mock('../../../platform-runtime-resource-cleanup.ts', () => ({
-  platformResourceCleanup: {
-    stopSnapshotHelper: vi.fn(),
-    closeManagedBrowser: vi.fn(async () => {}),
-    cleanupSessionlessExecutionHost: vi.fn(async () => {}),
-    retainExecutionHostAfterClose: vi.fn(() => false),
-  },
-}));
+
+const platformResourceCleanup = platformResourceCleanupFixture();
 
 function deferred() {
   let resolve!: () => void;
@@ -67,7 +58,7 @@ for (const initialSession of ['published', 'draft'] as const) {
       await releaseCleanup.promise;
     });
     const running = dispatchSnapshotViaRuntime({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: forwardingCreateCommandSurface,
       req: {
         command: 'snapshot',
         positionals: [],

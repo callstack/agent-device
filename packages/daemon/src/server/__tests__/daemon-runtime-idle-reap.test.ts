@@ -3,11 +3,10 @@ import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
 
 const leaseProbe = vi.hoisted(() => ({
-  registries: [] as import('@agent-device/daemon/testing/lease-registry').LeaseRegistry[],
+  registries: [] as import('../../resources/lease-registry.ts').LeaseRegistry[],
 }));
-vi.mock('@agent-device/daemon/testing/lease-registry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/lease-registry')>();
+vi.mock('../../resources/lease-registry.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../resources/lease-registry.ts')>();
   class RecordedLeaseRegistry extends actual.LeaseRegistry {
     constructor(...args: ConstructorParameters<typeof actual.LeaseRegistry>) {
       super(...args);
@@ -18,7 +17,8 @@ vi.mock('@agent-device/daemon/testing/lease-registry', async (importOriginal) =>
 });
 
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { startDaemonRuntimeFixture } from '../daemon-runtime-fixture.ts';
+import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
+import { startDaemonRuntime } from '../http/daemon-runtime.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 afterEach(() => {
@@ -37,7 +37,8 @@ test('daemon runtime self-reaps after the idle window when nothing ever uses it'
   });
 
   try {
-    const runtime = await startDaemonRuntimeFixture({
+    const runtime = await startDaemonRuntime({
+      composeDeps: daemonRuntimeDepsFixture(),
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -76,7 +77,8 @@ test('daemon runtime never self-reaps when AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS i
   let exitCode: number | undefined;
 
   try {
-    const runtime = await startDaemonRuntimeFixture({
+    const runtime = await startDaemonRuntime({
+      composeDeps: daemonRuntimeDepsFixture(),
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -113,7 +115,8 @@ test('only a retained lease keeps the daemon runtime from self-reaping', async (
   });
 
   try {
-    const runtime = await startDaemonRuntimeFixture({
+    const runtime = await startDaemonRuntime({
+      composeDeps: daemonRuntimeDepsFixture(),
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,

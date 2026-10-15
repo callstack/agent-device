@@ -3,13 +3,12 @@ import fs from 'node:fs';
 import { afterEach, test, vi } from 'vitest';
 
 const leaseProbe = vi.hoisted(() => ({
-  registries: [] as import('@agent-device/daemon/testing/lease-registry').LeaseRegistry[],
+  registries: [] as import('../../resources/lease-registry.ts').LeaseRegistry[],
   ended: [] as Array<[string, string]>,
   shutdownSteps: [] as string[],
 }));
-vi.mock('@agent-device/daemon/testing/lease-registry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/lease-registry')>();
+vi.mock('../../resources/lease-registry.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../resources/lease-registry.ts')>();
   class RecordedLeaseRegistry extends actual.LeaseRegistry {
     constructor(...args: ConstructorParameters<typeof actual.LeaseRegistry>) {
       super(...args);
@@ -18,9 +17,8 @@ vi.mock('@agent-device/daemon/testing/lease-registry', async (importOriginal) =>
   }
   return { ...actual, LeaseRegistry: RecordedLeaseRegistry };
 });
-vi.mock('@agent-device/daemon/testing/request-execution-scope', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/request-execution-scope')>();
+vi.mock('../request-execution-scope.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../request-execution-scope.ts')>();
   return {
     ...actual,
     createLeaseSessionEnd: () => ({
@@ -37,8 +35,9 @@ vi.mock('@agent-device/daemon/testing/request-execution-scope', async (importOri
   };
 });
 
-import { SessionStore } from '@agent-device/daemon/testing/session-store';
-import { startDaemonRuntimeFixture } from '../daemon-runtime-fixture.ts';
+import { SessionStore } from '../../core/session-store.ts';
+import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
+import { startDaemonRuntime } from '../http/daemon-runtime.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 afterEach(() => {
@@ -53,7 +52,8 @@ test('an expired lease ends its session without any further request', async () =
   vi.useFakeTimers();
   const stateDir = mkdtempForTestSync('agent-device-daemon-lease-expiry-');
   try {
-    const runtime = await startDaemonRuntimeFixture({
+    const runtime = await startDaemonRuntime({
+      composeDeps: daemonRuntimeDepsFixture(),
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -94,7 +94,8 @@ test('shutdown cancels and drains lease ends before it tears sessions down', asy
   );
   const stateDir = mkdtempForTestSync('agent-device-daemon-lease-shutdown-');
   try {
-    const runtime = await startDaemonRuntimeFixture({
+    const runtime = await startDaemonRuntime({
+      composeDeps: daemonRuntimeDepsFixture(),
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,

@@ -15,34 +15,8 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../platform-runtime.ts', () => ({
-  androidObservation: {},
-  createRequestPlatformProviders: () => ({
-    run: async (_context: unknown, task: () => Promise<unknown>) => await task(),
-  }),
-  createPlatformRuntimeGateway: () => ({
-    applicationLifecycle: {
-      recoverStartupResources: async () => {},
-      detachForDaemonShutdown: async () => {},
-      finalizeDaemonShutdown: async () => {},
-    },
-    inspectFacts: async () => {
-      throw new Error('unused');
-    },
-    bind: async () => {
-      throw new Error('unused');
-    },
-    shutdown: async () => {},
-  }),
-  createPlatformDeviceInventoryGateways: () => ({}),
-}));
-
-vi.mock('../../../provider-device-runtimes.ts', () => ({
-  DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: [],
-  createDaemonProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
-}));
-
-import { startDaemonRuntimeFixture } from '../daemon-runtime-fixture.ts';
+import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
+import { startDaemonRuntime } from '../http/daemon-runtime.ts';
 
 afterEach(() => {
   reapCalls.length = 0;
@@ -51,7 +25,8 @@ afterEach(() => {
 test('daemon startup reaps orphaned simctl recorders with a graceful finalize window', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-recording-reaper-');
   try {
-    const runtime = await startDaemonRuntimeFixture({
+    const runtime = await startDaemonRuntime({
+      composeDeps: daemonRuntimeDepsFixture(),
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,

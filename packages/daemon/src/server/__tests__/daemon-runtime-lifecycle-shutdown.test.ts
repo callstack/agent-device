@@ -3,61 +3,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
+import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 
 const lifecycleEvents = vi.hoisted(() => [] as string[]);
 
-vi.mock('../../../platform-runtime.ts', () => ({
-  androidObservation: {},
-  createRequestPlatformProviders: () => ({
-    run: async (_context: unknown, task: () => Promise<unknown>) => await task(),
-  }),
-  createPlatformRuntimeGateway: () => ({
-    applicationLifecycle: {
-      recoverStartupResources: async () => {},
-      detachForDaemonShutdown: async () => {
-        lifecycleEvents.push('detach');
-        // The real diagnostics module, unmocked: what this records is whether a diagnostic raised by
-        // the handoff reaches disk at all, which only the shutdown's own scope can decide (#2681).
-        const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
-        emitDiagnostic({
-          level: 'debug',
-          phase: 'detach_scope_probe',
-          data: { lane: 'physical_coredevice' },
-        });
-      },
-      finalizeDaemonShutdown: async () => {
-        lifecycleEvents.push('finalize');
-      },
-    },
-    inspectFacts: async () => {
-      throw new Error('unused');
-    },
-    bind: async () => {
-      throw new Error('unused');
-    },
-    shutdown: async () => {
-      lifecycleEvents.push('gateway-shutdown');
-    },
-  }),
-  createPlatformDeviceInventoryGateways: () => ({}),
-}));
-
-vi.mock('../../../provider-device-runtimes.ts', () => ({
-  DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: [],
-  createDaemonProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
-}));
-
 const shutdownProbe = vi.hoisted(() => ({
-  store: undefined as import('@agent-device/daemon/testing/session-store').SessionStore | undefined,
+  store: undefined as import('../../core/session-store.ts').SessionStore | undefined,
   drain: undefined as (() => Promise<void>) | undefined,
   finalize: vi.fn(async () => {}),
   dispatch: undefined as import('@agent-device/daemon').DaemonInvokeFn | undefined,
   closeTimeout: undefined as number | undefined,
 }));
-vi.mock('@agent-device/daemon/testing/session-store', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/session-store')>();
+vi.mock('../../core/session-store.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../core/session-store.ts')>();
   return {
     ...actual,
     SessionStore: class extends actual.SessionStore {
@@ -68,9 +26,8 @@ vi.mock('@agent-device/daemon/testing/session-store', async (importOriginal) => 
     },
   };
 });
-vi.mock('@agent-device/daemon/testing/server/server-shutdown', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/server/server-shutdown')>();
+vi.mock('../http/server-shutdown.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../http/server-shutdown.ts')>();
   return {
     ...actual,
     closeDaemonServers: async (...args: Parameters<typeof actual.closeDaemonServers>) => {
@@ -79,9 +36,8 @@ vi.mock('@agent-device/daemon/testing/server/server-shutdown', async (importOrig
     },
   };
 });
-vi.mock('@agent-device/daemon/testing/request-router', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/request-router')>();
+vi.mock('../request-router.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../request-router.ts')>();
   return {
     ...actual,
     createRequestHandler: (...args: Parameters<typeof actual.createRequestHandler>) => {
@@ -91,20 +47,17 @@ vi.mock('@agent-device/daemon/testing/request-router', async (importOriginal) =>
     },
   };
 });
-vi.mock('@agent-device/daemon/testing/application-lifecycle-recovery', async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import('@agent-device/daemon/testing/application-lifecycle-recovery')
-  >()),
+vi.mock('../application-lifecycle-recovery.ts', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../application-lifecycle-recovery.ts')>()),
   finalizeDaemonSessionApplicationLifecycle: shutdownProbe.finalize,
 }));
 const leaseProbe = vi.hoisted(() => ({
-  registries: [] as import('@agent-device/daemon/testing/lease-registry').LeaseRegistry[],
+  registries: [] as import('../../resources/lease-registry.ts').LeaseRegistry[],
   released: [] as import('@agent-device/contracts/device').DeviceLease[],
 }));
 
-vi.mock('@agent-device/daemon/testing/lease-registry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/lease-registry')>();
+vi.mock('../../resources/lease-registry.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../resources/lease-registry.ts')>();
   class RecordedLeaseRegistry extends actual.LeaseRegistry {
     constructor(...args: ConstructorParameters<typeof actual.LeaseRegistry>) {
       super(...args);
@@ -114,9 +67,8 @@ vi.mock('@agent-device/daemon/testing/lease-registry', async (importOriginal) =>
   return { ...actual, LeaseRegistry: RecordedLeaseRegistry };
 });
 
-vi.mock('@agent-device/daemon/testing/provider-lease-expiry', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/provider-lease-expiry')>();
+vi.mock('../provider-lease-expiry.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../provider-lease-expiry.ts')>();
   return {
     ...actual,
     createExpiredProviderLeaseReleaser: (
@@ -139,13 +91,15 @@ import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
-} from '@agent-device/daemon/testing/__tests__/support/device-claim-store';
-import { sendRequest } from '../../../daemon-client/daemon-client-transport.ts';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/testing/server/daemon-runtime';
-import { startDaemonRuntimeFixture } from '../daemon-runtime-fixture.ts';
-import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+} from '../../__tests__/support/device-claim-store.ts';
+import {
+  applicationLifecycleResourceFixture,
+  daemonRuntimeDepsFixture,
+} from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
+import { lifecycleDeviceRuntimeGateway } from '../../__tests__/support/test-device-runtime-gateway.ts';
+import { startDaemonRuntime, teardownDaemonSessionForShutdown } from '../http/daemon-runtime.ts';
+import { makeIosSession } from '../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 
 afterEach(() => {
   lifecycleEvents.length = 0;
@@ -162,7 +116,32 @@ test('daemon shutdown detaches before session teardown and force-finalizes only 
   const exits: number[] = [];
   const startupErrors: string[] = [];
   try {
-    const runtime = await startDaemonRuntimeFixture({
+    const runtime = await startDaemonRuntime({
+      composeDeps: daemonRuntimeDepsFixture({
+        deviceRuntimeGateway: Object.freeze({
+          ...lifecycleDeviceRuntimeGateway,
+          applicationLifecycle: applicationLifecycleResourceFixture({
+            detachForDaemonShutdown: async () => {
+              lifecycleEvents.push('detach');
+              // The real diagnostics module, unmocked: what this records is whether a diagnostic
+              // raised by the handoff reaches disk at all, which only the shutdown's own scope can
+              // decide (#2681).
+              const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
+              emitDiagnostic({
+                level: 'debug',
+                phase: 'detach_scope_probe',
+                data: { lane: 'physical_coredevice' },
+              });
+            },
+            finalizeDaemonShutdown: async () => {
+              lifecycleEvents.push('finalize');
+            },
+          }),
+          shutdown: async () => {
+            lifecycleEvents.push('gateway-shutdown');
+          },
+        }),
+      }),
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -190,7 +169,32 @@ test('a SIGTERM shutdown gives the handoff a diagnostics scope to write its reas
   // including "why did this runner get killed instead of handed off" — disappears with the daemon.
   const stateDir = mkdtempForTestSync('agent-device-daemon-detach-diagnostics-');
   try {
-    const runtime = await startDaemonRuntimeFixture({
+    const runtime = await startDaemonRuntime({
+      composeDeps: daemonRuntimeDepsFixture({
+        deviceRuntimeGateway: Object.freeze({
+          ...lifecycleDeviceRuntimeGateway,
+          applicationLifecycle: applicationLifecycleResourceFixture({
+            detachForDaemonShutdown: async () => {
+              lifecycleEvents.push('detach');
+              // The real diagnostics module, unmocked: what this records is whether a diagnostic
+              // raised by the handoff reaches disk at all, which only the shutdown's own scope can
+              // decide (#2681).
+              const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
+              emitDiagnostic({
+                level: 'debug',
+                phase: 'detach_scope_probe',
+                data: { lane: 'physical_coredevice' },
+              });
+            },
+            finalizeDaemonShutdown: async () => {
+              lifecycleEvents.push('finalize');
+            },
+          }),
+          shutdown: async () => {
+            lifecycleEvents.push('gateway-shutdown');
+          },
+        }),
+      }),
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -218,7 +222,32 @@ const claimStores = isolatedDeviceClaimStores('daemon-drain-admission-');
 
 test('shutdown includes drain publications, releases their claims and refuses post-snapshot publication', async () => {
   const { stateDir } = claimStores();
-  const runtime = await startDaemonRuntimeFixture({
+  const runtime = await startDaemonRuntime({
+    composeDeps: daemonRuntimeDepsFixture({
+      deviceRuntimeGateway: Object.freeze({
+        ...lifecycleDeviceRuntimeGateway,
+        applicationLifecycle: applicationLifecycleResourceFixture({
+          detachForDaemonShutdown: async () => {
+            lifecycleEvents.push('detach');
+            // The real diagnostics module, unmocked: what this records is whether a diagnostic
+            // raised by the handoff reaches disk at all, which only the shutdown's own scope can
+            // decide (#2681).
+            const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
+            emitDiagnostic({
+              level: 'debug',
+              phase: 'detach_scope_probe',
+              data: { lane: 'physical_coredevice' },
+            });
+          },
+          finalizeDaemonShutdown: async () => {
+            lifecycleEvents.push('finalize');
+          },
+        }),
+        shutdown: async () => {
+          lifecycleEvents.push('gateway-shutdown');
+        },
+      }),
+    }),
     env: {
       ...process.env,
       AGENT_DEVICE_STATE_DIR: stateDir,
@@ -272,7 +301,32 @@ test('shutdown includes drain publications, releases their claims and refuses po
 
 test('shutdown joins dispatch completion after force-closing the client before taking its snapshot', async () => {
   const { stateDir } = claimStores();
-  const runtime = await startDaemonRuntimeFixture({
+  const runtime = await startDaemonRuntime({
+    composeDeps: daemonRuntimeDepsFixture({
+      deviceRuntimeGateway: Object.freeze({
+        ...lifecycleDeviceRuntimeGateway,
+        applicationLifecycle: applicationLifecycleResourceFixture({
+          detachForDaemonShutdown: async () => {
+            lifecycleEvents.push('detach');
+            // The real diagnostics module, unmocked: what this records is whether a diagnostic
+            // raised by the handoff reaches disk at all, which only the shutdown's own scope can
+            // decide (#2681).
+            const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
+            emitDiagnostic({
+              level: 'debug',
+              phase: 'detach_scope_probe',
+              data: { lane: 'physical_coredevice' },
+            });
+          },
+          finalizeDaemonShutdown: async () => {
+            lifecycleEvents.push('finalize');
+          },
+        }),
+        shutdown: async () => {
+          lifecycleEvents.push('gateway-shutdown');
+        },
+      }),
+    }),
     env: {
       ...process.env,
       AGENT_DEVICE_STATE_DIR: stateDir,
@@ -326,19 +380,21 @@ test('shutdown joins dispatch completion after force-closing the client before t
       }
       return { ok: true };
     };
-    request = sendRequest(
-      { httpPort: runtime!.httpPort, pid: process.pid, token: runtime!.token },
-      {
-        token: runtime!.token,
-        session: 'dispatching',
-        command: 'open',
-        positionals: [],
-        flags: {},
+    request = fetch(`http://127.0.0.1:${runtime!.httpPort}/rpc`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${runtime!.token}`,
       },
-      'http',
-      resolveDaemonPaths(stateDir),
-      10_000,
-    ).catch((error: unknown) => error);
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 'dispatching-open',
+        method: 'agent_device.command',
+        params: { session: 'dispatching', command: 'open', positionals: [], flags: {} },
+      }),
+    })
+      .then(async (response) => await response.text())
+      .catch((error: unknown) => error);
     await started;
     shutdownProbe.closeTimeout = 1;
     shutdownProbe.drain = async () => {
@@ -385,7 +441,7 @@ test.each([false, true])(
       sessionStore,
       stderr: { write: () => {} },
       finalizeApplicationLifecycle,
-      platformCleanup: platformResourceCleanup,
+      platformCleanup: platformResourceCleanupFixture(),
     });
 
     expect(finalizeApplicationLifecycle).toHaveBeenCalledWith(
@@ -411,7 +467,32 @@ test.each([false, true])(
 
 test('daemon shutdown releases a session lease whose session teardown rejects', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-session-lease-shutdown-');
-  const runtime = await startDaemonRuntimeFixture({
+  const runtime = await startDaemonRuntime({
+    composeDeps: daemonRuntimeDepsFixture({
+      deviceRuntimeGateway: Object.freeze({
+        ...lifecycleDeviceRuntimeGateway,
+        applicationLifecycle: applicationLifecycleResourceFixture({
+          detachForDaemonShutdown: async () => {
+            lifecycleEvents.push('detach');
+            // The real diagnostics module, unmocked: what this records is whether a diagnostic
+            // raised by the handoff reaches disk at all, which only the shutdown's own scope can
+            // decide (#2681).
+            const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
+            emitDiagnostic({
+              level: 'debug',
+              phase: 'detach_scope_probe',
+              data: { lane: 'physical_coredevice' },
+            });
+          },
+          finalizeDaemonShutdown: async () => {
+            lifecycleEvents.push('finalize');
+          },
+        }),
+        shutdown: async () => {
+          lifecycleEvents.push('gateway-shutdown');
+        },
+      }),
+    }),
     env: {
       ...process.env,
       AGENT_DEVICE_STATE_DIR: stateDir,
@@ -445,7 +526,32 @@ test('daemon shutdown releases a session lease whose session teardown rejects', 
 test('daemon shutdown releases a retainOnClose lease that no session holds', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-retained-lease-shutdown-');
   try {
-    const runtime = await startDaemonRuntimeFixture({
+    const runtime = await startDaemonRuntime({
+      composeDeps: daemonRuntimeDepsFixture({
+        deviceRuntimeGateway: Object.freeze({
+          ...lifecycleDeviceRuntimeGateway,
+          applicationLifecycle: applicationLifecycleResourceFixture({
+            detachForDaemonShutdown: async () => {
+              lifecycleEvents.push('detach');
+              // The real diagnostics module, unmocked: what this records is whether a diagnostic
+              // raised by the handoff reaches disk at all, which only the shutdown's own scope can
+              // decide (#2681).
+              const { emitDiagnostic } = await import('@agent-device/host-kit/diagnostics');
+              emitDiagnostic({
+                level: 'debug',
+                phase: 'detach_scope_probe',
+                data: { lane: 'physical_coredevice' },
+              });
+            },
+            finalizeDaemonShutdown: async () => {
+              lifecycleEvents.push('finalize');
+            },
+          }),
+          shutdown: async () => {
+            lifecycleEvents.push('gateway-shutdown');
+          },
+        }),
+      }),
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
