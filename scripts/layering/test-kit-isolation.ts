@@ -21,6 +21,7 @@ import { specifierSites } from './package-boundaries.ts';
 import { PACKAGE_EXPORT_SURFACE_RULE, TEST_KIT_PACKAGE } from './package-export-surface.ts';
 
 const TEST_KIT_DIR = 'packages/test-kit';
+const TEST_KIT_ENTRY = './src/index.ts';
 const ROOT_PACKAGE = 'agent-device';
 const FORBIDDEN_PACKAGE_DIR = /^packages\/(?:platform-[^/]+|provider-[^/]+|daemon)\/package\.json$/;
 
@@ -41,6 +42,12 @@ function declaredNames(manifest: DependencyManifest): string[] {
     ...Object.keys(manifest.optionalDependencies ?? {}),
     ...Object.keys(manifest.peerDependencies ?? {}),
   ];
+}
+
+function stringLeaves(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (value && typeof value === 'object') return Object.values(value).flatMap(stringLeaves);
+  return [];
 }
 
 function violation(file: string, message: string, line = 1): LayeringViolation {
@@ -79,12 +86,20 @@ export function checkTestKitIsolation(
   const testKit = parsed.get(testKitFile);
   if (!testKit) return violations;
 
-  const exportKeys = Object.keys((testKit.exports as Record<string, unknown> | undefined) ?? {});
-  if (exportKeys.length !== 1 || exportKeys[0] !== '.') {
+  const exported = (testKit.exports as Record<string, unknown> | undefined) ?? {};
+  const exportKeys = Object.keys(exported);
+  const entryTargets = stringLeaves(exported['.']);
+  if (
+    exportKeys.length !== 1 ||
+    exportKeys[0] !== '.' ||
+    entryTargets.length === 0 ||
+    entryTargets.some((target) => target !== TEST_KIT_ENTRY)
+  ) {
     violations.push(
       violation(
         testKitFile,
-        `${TEST_KIT_PACKAGE} exports exactly "." (found ${exportKeys.join(', ') || 'none'}): a ` +
+        `${TEST_KIT_PACKAGE} exports exactly "." and every condition of it is ${TEST_KIT_ENTRY} ` +
+          `(found ${exportKeys.join(', ') || 'none'} -> ${entryTargets.join(', ') || 'nothing'}): a ` +
           `shared helper is a named export of src/index.ts, not a subpath.`,
       ),
     );

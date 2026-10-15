@@ -63,6 +63,22 @@ test('test-kit exports exactly "." and nothing else', () => {
   assert.equal(check({ 'test-kit': { exports: { './tmp-dir': entry('./x.ts') } } }).length, 1);
 });
 
+test('every condition of the "." entry must point at src/index.ts', () => {
+  for (const exports of [
+    { '.': entry('./src/other.ts') },
+    { '.': { types: './src/index.ts', default: './src/other.ts' } },
+    { '.': { types: './src/other.ts', default: './src/index.ts' } },
+    { '.': { node: { import: './src/other.ts' }, default: './src/index.ts' } },
+    { '.': './src/other.ts' },
+    { '.': {} },
+  ]) {
+    const found = check({ 'test-kit': { exports } });
+    assert.equal(found.length, 1, JSON.stringify(exports));
+    assert.match(found[0]!.message, /every condition of it is \.\/src\/index\.ts/);
+  }
+  assert.deepEqual(check({ 'test-kit': { exports: { '.': './src/index.ts' } } }), []);
+});
+
 test('test-kit may not depend on a platform, provider, daemon or root package, in any field', () => {
   for (const name of [
     '@agent-device/platform-apple',
