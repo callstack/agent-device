@@ -31,18 +31,6 @@ test('the forwarding surface returns and stores the snapshot tree the daemon bac
   expect(set).toHaveBeenCalledWith(expect.objectContaining({ name: 'default', snapshot }));
 });
 
-test('the forwarding surface falls back to a flat node list from a backend that returns no snapshot', async () => {
-  const { config, set } = configReturning({ nodes: [node] });
-  const surface = await forwardingCreateCommandSurface(config);
-
-  const result = await surface.capture.snapshot({ session: 'default' });
-
-  expect(result.nodes).toEqual([node]);
-  expect(set).toHaveBeenCalledWith(
-    expect.objectContaining({ snapshot: expect.objectContaining({ nodes: [node] }) }),
-  );
-});
-
 test('the forwarding surface diff stores the observed tree and reports whether it initialized the baseline', async () => {
   const snapshot: SnapshotState = { nodes: [node], createdAt: 1, backend: 'android' };
   const first = configReturning({ snapshot });

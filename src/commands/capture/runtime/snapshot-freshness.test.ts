@@ -37,9 +37,7 @@ const ANDROID_ROWS = Array.from({ length: 24 }, (_, index) => ({
 
 test('runtime snapshot warns when Android freshness retries still return the previous route', async () => {
   const device = snapshotDevice({
-    nodes: ANDROID_ROWS,
-    truncated: false,
-    backend: 'android',
+    snapshot: makeSnapshotState(ANDROID_ROWS, { truncated: false, backend: 'android' }),
     freshness: {
       action: 'press',
       retryCount: 3,
@@ -58,9 +56,7 @@ test('runtime diff snapshot carries the stale-route warning for recent Android p
   baseline.createdAt = 1_000;
   const device = snapshotDevice(
     {
-      nodes: ANDROID_ROWS,
-      truncated: false,
-      backend: 'android',
+      snapshot: makeSnapshotState(ANDROID_ROWS, { truncated: false, backend: 'android' }),
       freshness: {
         action: 'press',
         retryCount: 3,
@@ -78,9 +74,7 @@ test('runtime diff snapshot carries the stale-route warning for recent Android p
 
 test('runtime snapshot raises no stale-route warning once the freshness retries succeeded', async () => {
   const device = snapshotDevice({
-    nodes: ANDROID_ROWS,
-    truncated: false,
-    backend: 'android',
+    snapshot: makeSnapshotState(ANDROID_ROWS, { truncated: false, backend: 'android' }),
     freshness: { action: 'press', retryCount: 1, staleAfterRetries: false },
   });
 
@@ -106,16 +100,17 @@ test.each([
   previous.presentationKey = buildSnapshotPresentationKey({ interactiveOnly: interactive });
   const device = snapshotDevice(
     {
-      nodes: Array.from({ length: 8 }, (_, index) => ({
-        ref: `e${index + 1}`,
-        index,
-        depth: 0,
-        type: 'android.widget.Button',
-        label: `Action ${index + 1}`,
-        hittable: true,
-      })),
-      truncated: false,
-      backend: 'android',
+      snapshot: makeSnapshotState(
+        Array.from({ length: 8 }, (_, index) => ({
+          ref: `e${index + 1}`,
+          index,
+          depth: 0,
+          type: 'android.widget.Button',
+          label: `Action ${index + 1}`,
+          hittable: true,
+        })),
+        { truncated: false, backend: 'android' },
+      ),
     },
     { name: 'default', snapshot: previous },
   );
@@ -130,29 +125,28 @@ test.each([
 
 test('runtime snapshot reports normalized visibility metadata for scroll-hidden content', async () => {
   const device = snapshotDevice({
-    nodes: [
-      {
-        ref: 'e1',
-        index: 0,
-        depth: 0,
-        type: 'android.widget.ScrollView',
-        label: 'Messages',
-        rect: { x: 0, y: 100, width: 390, height: 500 },
-        hiddenContentBelow: true,
-      },
-      {
-        ref: 'e2',
-        index: 1,
-        depth: 1,
-        parentIndex: 0,
-        type: 'android.widget.Button',
-        label: 'Visible message',
-        rect: { x: 0, y: 140, width: 390, height: 48 },
-        hittable: true,
-      },
-    ],
-    truncated: false,
-    backend: 'android',
+    snapshot: makeSnapshotState(
+      [
+        {
+          index: 0,
+          depth: 0,
+          type: 'android.widget.ScrollView',
+          label: 'Messages',
+          rect: { x: 0, y: 100, width: 390, height: 500 },
+          hiddenContentBelow: true,
+        },
+        {
+          index: 1,
+          depth: 1,
+          parentIndex: 0,
+          type: 'android.widget.Button',
+          label: 'Visible message',
+          rect: { x: 0, y: 140, width: 390, height: 48 },
+          hittable: true,
+        },
+      ],
+      { truncated: false, backend: 'android' },
+    ),
     analysis: { rawNodeCount: 2, maxDepth: 1 },
   });
 

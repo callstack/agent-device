@@ -88,7 +88,7 @@ export const forwardingCreateCommandSurface: CreateDaemonCommandSurface = async 
       },
     );
     const stored = captured?.snapshot ?? {
-      nodes: captured?.nodes ?? [],
+      nodes: [],
       createdAt: Date.now(),
       backend: 'android' as const,
     };

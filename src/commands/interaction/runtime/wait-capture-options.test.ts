@@ -21,12 +21,11 @@ const BATTERY = makeSnapshotState(
 );
 
 function pollingDevice(captureOptions: Array<BackendSnapshotOptions | undefined>) {
-  const captures = [LOCATION_REQUIRED, BATTERY];
   const backend: AgentDeviceBackend = {
     platform: 'android',
     captureSnapshot: async (_context, options) => {
       captureOptions.push(options);
-      return { snapshot: captures[Math.min(captureOptions.length, captures.length) - 1] };
+      return { snapshot: captureOptions.length === 1 ? LOCATION_REQUIRED : BATTERY };
     },
   };
   return createAgentDevice({
