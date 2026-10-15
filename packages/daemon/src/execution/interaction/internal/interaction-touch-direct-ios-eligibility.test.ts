@@ -1,67 +1,29 @@
-import { test, expect, vi, beforeEach } from 'vitest';
+import { test, expect, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import {
+  installInteractorSnapshotResolution,
+  mockInteractorSnapshot,
+} from '../../../__tests__/support/interactor-resolution-fixture.ts';
+import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 import {
   getRuntimeBindings,
   mockFillPoint,
   mockTapElementSelector,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
-import { contextFromFlags } from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
+import { contextFromFlags } from './__tests__/interaction-touch-fixtures.ts';
+import { handleInteractionCommands } from '../index.ts';
 
 // Ordinary selectors stay capture-backed. Only the explicit Maestro
 // non-hittable fallback may use the direct iOS selector route.
 
-const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
-  mockRunAppleRunnerCommand: vi.fn(),
-}));
-
-vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
-  return {
-    ...actual,
-    getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })),
-    getAndroidAppState: vi.fn(async () => ({})),
-    getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
-  };
-});
-
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
-  captureSnapshotWithInteractor: vi.fn(),
-}));
-
-vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
-});
-
-import {
-  getAndroidAppState,
-  getAndroidBlockingDialogObservation,
-  getAndroidScreenSize,
-} from '@agent-device/platform-android/mechanics';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
-const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
-const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
-const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
-const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
-
 beforeEach(() => {
   resetGetRuntimeFixture();
-  mockGetAndroidAppState.mockReset();
-  mockGetAndroidAppState.mockResolvedValue({});
-  mockGetAndroidBlockingDialogObservation.mockReset();
-  mockGetAndroidBlockingDialogObservation.mockResolvedValue({ status: 'clear' });
-  mockGetAndroidScreenSize.mockReset();
-  mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
-  mockCaptureSnapshotForSession.mockReset();
-  mockRunAppleRunnerCommand.mockReset();
-  mockRunAppleRunnerCommand.mockResolvedValue({});
+  installInteractorSnapshotResolution();
+  mockInteractorSnapshot.mockReset();
 });
 
 test('ordinary click uses canonical capture even when the owner binds selector tap', async () => {
@@ -71,7 +33,7 @@ test('ordinary click uses canonical capture even when the owner binds selector t
     sessionName,
     makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
   );
-  mockCaptureSnapshotForSession.mockResolvedValueOnce({
+  mockInteractorSnapshot.mockResolvedValueOnce({
     nodes: attachRefs([
       {
         index: 0,
@@ -93,7 +55,7 @@ test('ordinary click uses canonical capture even when the owner binds selector t
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -109,7 +71,7 @@ test('ordinary click uses canonical capture even when the owner binds selector t
 
   expect(response?.ok).toBe(true);
   expect(mockTapElementSelector).not.toHaveBeenCalled();
-  expect(mockCaptureSnapshotForSession).toHaveBeenCalledTimes(1);
+  expect(mockInteractorSnapshot).toHaveBeenCalledTimes(1);
   expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 90, y: 100 } }));
 });
 
@@ -121,7 +83,7 @@ test('fill simple iOS id selector resolves runtime text input evidence before co
     makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
   );
 
-  mockCaptureSnapshotForSession.mockResolvedValueOnce({
+  mockInteractorSnapshot.mockResolvedValueOnce({
     nodes: attachRefs([
       {
         index: 0,
@@ -151,7 +113,7 @@ test('fill simple iOS id selector resolves runtime text input evidence before co
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -166,7 +128,7 @@ test('fill simple iOS id selector resolves runtime text input evidence before co
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockCaptureSnapshotForSession).toHaveBeenCalledTimes(1);
+  expect(mockInteractorSnapshot).toHaveBeenCalledTimes(1);
   expect(mockFillPoint).toHaveBeenCalledWith(
     expect.objectContaining({
       point: { x: 190, y: 102 },
@@ -199,7 +161,7 @@ test('click simple iOS selector forwards Maestro non-hittable coordinate fallbac
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -243,7 +205,7 @@ test('click simple iOS id selector waits for snapshot path after pending gesture
   };
   sessionStore.publish(sessionName, session);
 
-  mockCaptureSnapshotForSession.mockResolvedValue({
+  mockInteractorSnapshot.mockResolvedValue({
     nodes: attachRefs([
       {
         index: 0,
@@ -265,7 +227,7 @@ test('click simple iOS id selector waits for snapshot path after pending gesture
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,

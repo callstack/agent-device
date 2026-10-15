@@ -6,43 +6,33 @@ import {
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
 } from '@agent-device/contracts/dispatch-disclosure-fixtures';
-import { beforeEach, expect, test, vi } from 'vitest';
-import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { beforeEach, expect, test } from 'vitest';
+import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import {
+  installInteractorSnapshotResolution,
+  mockInteractorSnapshot,
+} from '../../../__tests__/support/interactor-resolution-fixture.ts';
+import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
+import { runInteraction } from '../../../__tests__/support/touch-interaction-runner.ts';
+import { refFrameState } from '../../../core/ref-frame.ts';
 import {
   getRuntimeBindings,
   mockTapElementSelector,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
 import {
   contextFromFlags,
   makeStaleRefSession,
   makeTwoButtonNodes,
-} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
-import { runInteraction } from './interaction-touch-runner.ts';
-import { refFrameState } from '@agent-device/daemon/testing/ref-frame';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
-
-vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
-  return {
-    ...actual,
-    getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })),
-    getAndroidAppState: vi.fn(async () => ({})),
-    getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
-  };
-});
-
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
-  captureSnapshotWithInteractor: vi.fn(),
-}));
+} from './__tests__/interaction-touch-fixtures.ts';
+import { handleInteractionCommands } from '../index.ts';
 
 beforeEach(() => {
   resetGetRuntimeFixture();
-  vi.mocked(captureSnapshotWithInteractor).mockReset();
+  installInteractorSnapshotResolution();
+  mockInteractorSnapshot.mockReset();
 });
 
 test.each([
@@ -60,7 +50,7 @@ test.each([
     mockTapElementSelector.mockRejectedValue(new AppError(code, message));
 
     const response = await handleInteractionCommands({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: touchCreateCommandSurface,
       req: {
         token: 't',
         session: sessionName,
@@ -128,7 +118,7 @@ for (const row of ROWS) {
     const sessionName = `maestro-direct-${row.id}`;
     sessionStore.publish(sessionName, makeStaleRefSession(sessionName));
     mockTapElementSelector.mockRejectedValueOnce(failure());
-    vi.mocked(captureSnapshotWithInteractor).mockResolvedValue({
+    mockInteractorSnapshot.mockResolvedValue({
       nodes: makeTwoButtonNodes(),
       backend: 'xctest',
       producer: 'apple-runner',

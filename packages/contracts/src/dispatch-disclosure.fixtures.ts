@@ -56,7 +56,7 @@ export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>>
   'web-agent-browser.':
     'packages/platform-web/src/__tests__/agent-browser-provider-dispatch-disclosure.test.ts',
   'maestro-direct.':
-    'src/__tests__/daemon-composition/interaction/interaction-touch-direct-ios.test.ts',
+    'packages/daemon/src/execution/interaction/internal/interaction-touch-direct-ios.test.ts',
 };
 
 /** The per-row driving loop every driver file carries. */

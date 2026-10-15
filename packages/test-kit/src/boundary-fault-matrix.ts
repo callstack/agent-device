@@ -196,7 +196,7 @@ export const BOUNDARY_FAULT_MATRIX = {
     mutation: {
       kind: 'covered',
       evidence: [
-        'src/__tests__/daemon-composition/interaction/interaction-touch-direct-ios.test.ts',
+        'packages/daemon/src/execution/interaction/internal/interaction-touch-direct-ios.test.ts',
       ],
       invariants: ['best-effort-degradation'],
     },
