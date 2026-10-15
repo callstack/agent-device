@@ -247,41 +247,13 @@ extension RunnerTests {
   private static let dismissPopupMarkerText = NSPredicate(format: "SELF MATCHES[c] %@", dismissPopupMarkerPattern)
 
   private func chooseAlertButton(_ buttons: [XCUIElement], action: String) -> XCUIElement? {
-    if action == "accept" {
-      if let accept = buttons.first(where: { isAcceptButton($0.label) }) {
-        return accept
-      }
-      return buttons.count == 1 && !isDismissButton(buttons[0].label) ? buttons[0] : nil
+    guard let index = RunnerAlertButtonChoice.buttonIndex(
+      for: buttons.map(\.label),
+      action: action
+    ) else {
+      return nil
     }
-
-    return buttons.first(where: { isDismissButton($0.label) }) ?? buttons.last
-  }
-
-  func isAcceptButton(_ label: String) -> Bool {
-    let normalized = label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return [
-      "ok",
-      "allow",
-      "yes",
-      "continue",
-      "done",
-      "open",
-      "open settings"
-    ].contains(normalized) || normalized.hasPrefix("confirm")
-  }
-
-  private func isDismissButton(_ label: String) -> Bool {
-    [
-      "cancel",
-      "close",
-      "dismiss",
-      "don't allow",
-      "don’t allow",
-      "not now",
-      "no",
-      "keep browsing",
-      "later"
-    ].contains(label.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    return buttons[index]
   }
 
   private func preferredAlertTitle(_ element: XCUIElement, buttons: [XCUIElement]) -> String {

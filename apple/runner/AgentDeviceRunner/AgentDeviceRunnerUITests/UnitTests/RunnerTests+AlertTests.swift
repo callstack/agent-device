@@ -8,13 +8,8 @@ extension RunnerTests {
     XCTAssertEqual(app.state, .notRunning)
     XCTAssertNil(resolveAlert(app: app, deadline: Date().addingTimeInterval(1)))
   }
-
-  func testAlertAcceptTreatsOpenAsAffirmative() {
-    XCTAssertTrue(isAcceptButton("Open"))
-  }
 }
 #endif
-
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
 extension RunnerTests {
   @MainActor

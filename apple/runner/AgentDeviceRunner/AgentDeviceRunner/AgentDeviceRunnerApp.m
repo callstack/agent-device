@@ -87,6 +87,7 @@ int main(int argc, const char *argv[]) {
 @property(nonatomic, assign) NSUInteger maskedTogglePresses;
 @property(nonatomic, strong) UILabel *alertActionStatus;
 @property(nonatomic, strong) UILabel *alertActivationBusyAnswer;
+@property(nonatomic, strong) UILabel *alertDeclineAnswer;
 @property(nonatomic, assign) NSUInteger firstAlertActions;
 @property(nonatomic, assign) NSUInteger replacementAlertActions;
 @property(nonatomic, strong) UILabel *textEntryWriteBackStatus;
@@ -392,8 +393,34 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
   [self presentViewController:alert animated:NO completion:nil];
 }
 
+// The App Tracking Transparency prompt's button order, which is what `alert dismiss` got wrong:
+// the affirmative button is last, so a fallback to it answers "Allow" (#3627). The answer label
+// says which button the app really took, so a test does not trust the command's own report.
+- (void)presentAlertDeclineChoiceFixture {
+  UIAlertController *alert = [UIAlertController
+    alertControllerWithTitle:@"“Runner” Would Like to Track Your Activity"
+                     message:@"Track your activity across other companies' apps and websites."
+              preferredStyle:UIAlertControllerStyleAlert];
+  NSArray<NSArray *> *buttons = @[
+    @[@"Ask App Not to Track", @"Declined"],
+    @[@"Allow", @"Authorized"],
+  ];
+  for (NSArray *button in buttons) {
+    [alert addAction:[UIAlertAction actionWithTitle:button[0]
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+                                              (void)action;
+                                              self.alertDeclineAnswer.text = button[1];
+                                            }]];
+  }
+  [self presentViewController:alert animated:NO completion:nil];
+}
+
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-decline-choice"]) {
+    [self presentAlertDeclineChoiceFixture];
+  }
   if (!self.alertFixtureStarted &&
       [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-replacement-regression"]) {
     self.alertFixtureStarted = YES;
@@ -573,6 +600,19 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     self.alertActionStatus = label;
     label.accessibilityIdentifier = @"agent-device-alert-actions";
     [self updateAlertActionStatus];
+  }
+
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-decline-choice"]) {
+    UILabel *declineAnswer = [[UILabel alloc] init];
+    declineAnswer.text = @"Unanswered";
+    declineAnswer.accessibilityIdentifier = @"agent-device-alert-decline-answer";
+    declineAnswer.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:declineAnswer];
+    [NSLayoutConstraint activateConstraints:@[
+      [declineAnswer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [declineAnswer.topAnchor constraintEqualToAnchor:label.bottomAnchor constant:24],
+    ]];
+    self.alertDeclineAnswer = declineAnswer;
   }
 
   if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-activation-busy"]) {
