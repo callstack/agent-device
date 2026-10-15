@@ -4,9 +4,9 @@ import XCTest
 extension RunnerTests {
   @MainActor
   func testAlertResolutionDoesNotQueryATerminatedApp() {
-    let stoppedApp = XCUIApplication(bundleIdentifier: "com.callstack.agentdevice.not-installed")
-    XCTAssertEqual(stoppedApp.state, .notRunning)
-    XCTAssertNil(resolveAlert(app: stoppedApp, deadline: Date().addingTimeInterval(1)))
+    app.terminate()
+    XCTAssertEqual(app.state, .notRunning)
+    XCTAssertNil(resolveAlert(app: app, deadline: Date().addingTimeInterval(1)))
   }
 
   func testAlertAcceptTreatsOpenAsAffirmative() {
