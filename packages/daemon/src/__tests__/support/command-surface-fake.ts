@@ -63,3 +63,34 @@ const fakeCommandSurface: DaemonCommandSurface = {
 
 /** The port value the daemon-policy suites inject; see {@link fakeCommandSurface}. */
 export const fakeCreateCommandSurface: CreateDaemonCommandSurface = async () => fakeCommandSurface;
+
+/**
+ * A command surface whose snapshot capture does what the real command family does at the two
+ * seams the daemon owns: it reaches the runtime config's backend, and it writes the session back
+ * through the config's session store. Suites that pin what the daemon does around a capture in
+ * flight (shutdown, cancellation, session lifetime) need both, because the daemon's refusals land
+ * on those seams; everything else the real command family does with the result stays out of the
+ * daemon suites, so the result is the backend's nodes and nothing else.
+ */
+export const forwardingCreateCommandSurface: CreateDaemonCommandSurface = async (config) => ({
+  ...fakeCommandSurface,
+  signal: config.signal,
+  capture: {
+    ...fakeCommandSurface.capture,
+    snapshot: async (options) => {
+      const name = options.session ?? 'default';
+      const session = await config.sessions?.get(name);
+      const captured = await config.backend.captureSnapshot?.(
+        { session: name, requestId: options.requestId, signal: options.signal ?? config.signal },
+        { interactiveOnly: options.interactiveOnly, depth: options.depth, scope: options.scope },
+      );
+      const nodes = (captured?.nodes ?? []) as never;
+      await config.sessions?.set({
+        ...(session ?? { name }),
+        name: session?.name ?? name,
+        snapshot: { nodes, createdAt: Date.now(), backend: 'android' },
+      });
+      return { nodes };
+    },
+  },
+});
