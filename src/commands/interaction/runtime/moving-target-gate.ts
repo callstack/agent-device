@@ -22,11 +22,12 @@ import { resolveInteractionTarget } from './resolution.ts';
 import type { ResolveInteractionTargetParams } from './interaction-resolution-request.ts';
 
 /**
- * The moving-target gate (#3471): a press must not dispatch at a point an in-flight transition has
- * already vacated. A capture is one instant's photograph of a surface that may still be rearranging
- * itself, and the ADB-backed Android helper is measured reporting frames in flight — so a press
- * issued right after an action that moved the UI can resolve a point the target has already left and
- * report success on the vacancy. The exposure is the runtime path's own capture-to-dispatch
+ * The moving-target gate (#3471): a press or click resolved from a selector or `@ref` must not
+ * dispatch at a point an in-flight transition has already vacated. A raw-coordinate target has no
+ * resolved element to re-observe, so the gate passes it through. A capture is one instant's
+ * photograph of a surface that may still be rearranging itself, and the ADB-backed Android helper is
+ * measured reporting frames in flight — so an interaction issued right after an action that moved
+ * the UI can resolve a point the target has already left and report success on the vacancy. The exposure is the runtime path's own capture-to-dispatch
  * distance, so the gate is backend-neutral.
  *
  * Two judgements decide when it is real: {@link movingTargetGateDecision} asks whether this position
@@ -37,12 +38,13 @@ import type { ResolveInteractionTargetParams } from './interaction-resolution-re
  * anchored on the mutation's END, so the gate waits out only what is LEFT of it — which is also why
  * the refusal's hint names `--settle` as the caller-opted superset.
  *
- * This is the seam that spends the window, in front of the tap and behind every pre-dispatch guard
- * that already judged the target (occlusion, off-screen, keyboard), so it re-decides none of them:
- * it takes the second and third observations, and puts the tap at the position two of them agree on.
+ * This is the seam that spends the window, in front of the dispatch and behind every pre-dispatch
+ * guard that already judged the target (occlusion, off-screen, keyboard), so it re-decides none of
+ * them: it takes the second and third observations, and dispatches the requested interaction at the
+ * position two of them agree on.
  *
- * Agreement dispatches rather than refuses: a control that settled inside the window is the tap the
- * caller asked for, at where it ended up. The refusal is reserved for a target the window could not
+ * Agreement dispatches rather than refuses: a control that settled inside the window is the target
+ * the caller asked for, at where it ended up. The refusal is reserved for a target the window could not
  * settle, where a coordinate would be a guess.
  *
  * Re-resolving rather than re-pointing is deliberate: the recheck spends the whole resolution path,
