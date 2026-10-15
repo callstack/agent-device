@@ -59,9 +59,23 @@ test('measureRatchets reports all ratchets from one tree', () => {
     largestTypeCycle: ['src/client/client.ts', 'src/commands/loop.ts'],
     sessionState: { writerOwnedFields: 2, ownerFileClaims: 3 },
     sessionAuthority: { shapeFiles: [], authorityFiles: [] },
+    testOnlyExports: [],
   });
+  const withExports = measureRatchets(sources, resolveImportEdges(sources), {
+    manifests: new Map([
+      [
+        'packages/p/package.json',
+        JSON.stringify({ name: '@agent-device/p', exports: { './x-fixtures': './src/x.ts' } }),
+      ],
+    ]),
+    packageFiles: [],
+  });
+  assert.deepEqual(
+    withExports.testOnlyExports.map(({ id }) => id),
+    ['@agent-device/p ./x-fixtures'],
+  );
   const withAuthority = tree({
-    'packages/daemon/src/sessions/handlers/fixture.ts':
+    'packages/daemon/src/sessions/handlers/subject.ts':
       "import type { SessionState } from '../../core/session-state.ts';\n" +
       "import { SessionStore } from '../../core/session-store.ts';",
     'packages/daemon/src/core/session-store.ts': 'export class SessionStore {}',
@@ -69,8 +83,8 @@ test('measureRatchets reports all ratchets from one tree', () => {
   assert.deepEqual(
     measureRatchets(withAuthority, resolveImportEdges(withAuthority)).sessionAuthority,
     {
-      shapeFiles: ['packages/daemon/src/sessions/handlers/fixture.ts'],
-      authorityFiles: ['packages/daemon/src/sessions/handlers/fixture.ts'],
+      shapeFiles: ['packages/daemon/src/sessions/handlers/subject.ts'],
+      authorityFiles: ['packages/daemon/src/sessions/handlers/subject.ts'],
     },
   );
 });

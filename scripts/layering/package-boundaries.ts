@@ -32,7 +32,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseImports, resolveWorkspaceSpecifier } from './model.ts';
-import { PACKAGE_EXPORT_SURFACE_RULE, testOnlyImportMessage } from './package-export-surface.ts';
+import {
+  PACKAGE_EXPORT_SURFACE_RULE,
+  readExportManifests,
+  resolveAllConditionTargets,
+  testOnlyImportMessage,
+} from './package-export-surface.ts';
 import { listTrackedPackageManifests, listTrackedProductionSources } from './tracked-sources.ts';
 
 export type PackageBoundaryViolation = {
@@ -48,6 +53,8 @@ export type WorkspacePackage = {
   name: string;
   /** Full import specifier -> repo-relative source target, from `exports`. */
   exportTargets: ReadonlyMap<string, string>;
+  /** Export key -> every condition target (`types`, `import`, `default`, ...), repo-relative. */
+  exportConditionTargets?: ReadonlyMap<string, readonly string[]>;
   /** Declared `workspace:*` dependencies on sibling internal packages. */
   workspaceDependencies: ReadonlySet<string>;
   /** Where siblings are declared: a published package bundles them, so it lists them as dev-only. */
@@ -141,6 +148,20 @@ export function workspacePackagesFromManifests(
         path.posix.join('packages', entry, path.posix.normalize(targetFile)),
       );
     }
+    const conditionTargets = new Map(
+      readExportManifests(new Map([[manifestFile, manifests.get(manifestFile)!]])).flatMap(
+        (declared) =>
+          declared.exports.map(
+            ({ key, targets }) =>
+              [
+                path.posix.join(manifest.name!, key),
+                targets.map((target) =>
+                  path.posix.join('packages', entry, path.posix.normalize(target)),
+                ),
+              ] as const,
+          ),
+      ),
+    );
     const workspaceDependencyField = manifest.private === true ? 'dependencies' : 'devDependencies';
     const workspaceDependencies = new Set(
       Object.entries(manifest[workspaceDependencyField] ?? {})
@@ -156,6 +177,7 @@ export function workspacePackagesFromManifests(
       dir: `packages/${entry}`,
       name: manifest.name,
       exportTargets,
+      exportConditionTargets: conditionTargets,
       workspaceDependencies,
       workspaceDependencyField,
       externalDependencies,
@@ -187,14 +209,16 @@ function checkTestOnlyImportSite(
   site: SpecifierSite,
   target: WorkspacePackage,
 ): PackageBoundaryViolation | undefined {
-  const resolvedTarget = resolveWorkspaceSpecifier(site.specifier, target.exportTargets);
+  const resolvedTargets = resolveAllConditionTargets(
+    site.specifier,
+    target.exportConditionTargets ??
+      new Map([...target.exportTargets].map(([key, file]) => [key, [file]])),
+  );
   const message = testOnlyImportMessage(
     site.file,
     site.specifier,
     target.name,
-    resolvedTarget === undefined
-      ? undefined
-      : { key: `.${site.specifier.slice(target.name.length)}`, targets: [resolvedTarget] },
+    resolvedTargets.length > 0 ? resolvedTargets : undefined,
   );
   if (message === undefined) return undefined;
   return { rule: PACKAGE_EXPORT_SURFACE_RULE, file: site.file, line: site.line, message };

@@ -22,6 +22,7 @@ import {
   type ResolvedImportEdge,
 } from './model.ts';
 import { workspaceSpecifierTargetsFromManifests } from './package-boundaries.ts';
+import { measureTestOnlyExports, type TestOnlyExport } from './package-export-surface.ts';
 import {
   measureSessionAuthorityOverlay,
   type SessionAuthorityOverlay,
@@ -37,6 +38,14 @@ export type LayeringRatchets = Readonly<{
   sessionState: SessionStateWritePressure;
   /** R75: SessionState-shape / SessionStore-authority overlay, full production scope. */
   sessionAuthority: SessionAuthorityOverlay;
+  /** R83: the test-only package exports published, whole tree, test-kit excluded. */
+  testOnlyExports: readonly TestOnlyExport[];
+}>;
+
+/** What R83 measures a tree from: its package manifests and its tracked package paths. */
+export type PackageExportSurfaceInput = Readonly<{
+  manifests: ReadonlyMap<string, string>;
+  packageFiles: readonly string[];
 }>;
 
 export type MergeBaseRatchets = LayeringRatchets & Readonly<{ ref: string }>;
@@ -44,12 +53,14 @@ export type MergeBaseRatchets = LayeringRatchets & Readonly<{ ref: string }>;
 export function measureRatchets(
   sources: ReadonlyMap<string, string>,
   edges: readonly ResolvedImportEdge[],
+  exportSurface: PackageExportSurfaceInput = { manifests: new Map(), packageFiles: [] },
 ): LayeringRatchets {
   return {
     typeInversions: typeInversionCounts(edges),
     largestTypeCycle: largestTypeCycleMembers(edges),
     sessionState: sessionStateWritePressure(sources),
     sessionAuthority: measureSessionAuthorityOverlay(sources, edges),
+    testOnlyExports: measureTestOnlyExports(exportSurface.manifests, exportSurface.packageFiles),
   };
 }
 
@@ -66,7 +77,7 @@ export function mergeBaseRatchets(
   baseRef?: string,
 ): MergeBaseRatchets {
   const ref = baseRef ?? mergeBaseWithMain(repoRoot);
-  const { sources, manifests } = readCommittedSources(repoRoot, ref);
+  const { sources, manifests, files } = readCommittedSources(repoRoot, ref);
   // Measure the base tree in the working tree's coordinates: a `git mv` since the merge-base
   // (the daemon's move to packages/daemon, 11b) would otherwise make rules keyed on current
   // paths read the base as empty and accept any growth above a zero reference. Edges are
@@ -90,5 +101,11 @@ export function mergeBaseRatchets(
       : { ...edge, file, target, fromZone: targetDagZone(file), toZone: targetDagZone(target) };
   });
   const canonical = new Map([...sources].map(([file, text]) => [toHead(file), text]));
-  return { ref, ...measureRatchets(canonical, edges) };
+  return {
+    ref,
+    ...measureRatchets(canonical, edges, {
+      manifests,
+      packageFiles: files.filter((file) => file.startsWith('packages/')),
+    }),
+  };
 }

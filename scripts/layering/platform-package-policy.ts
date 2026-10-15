@@ -15,7 +15,7 @@
 //   into a sibling's src still compiles; project references are a build cache, not a boundary.
 
 import path from 'node:path';
-import { DAEMON_SOURCE_ROOT } from './tracked-sources.ts';
+import { DAEMON_SOURCE_ROOT, isProductionSourceFile } from './tracked-sources.ts';
 import { PLATFORMS } from '@agent-device/kernel/device';
 import { parseImports, type LayeringViolation } from './model.ts';
 import { checkPlatformComposition } from './platform-composition-policy.ts';
@@ -104,7 +104,7 @@ function isAndroidFacetSubpathImport(file: string, specifier: string): boolean {
   // The named facets are the implementation seam for root/core/SDK consumers. Daemon production
   // code still reaches platform behavior through the request-bound runtime gateway; tests may
   // import a facet to exercise the package-owned mechanics directly.
-  return !file.startsWith(DAEMON_SOURCE_ROOT) || !isProductionSource(file);
+  return !file.startsWith(DAEMON_SOURCE_ROOT) || !isProductionSourceFile(file);
 }
 
 // Test-only subpaths (fixtures, the runner test host) are R83's: it holds the export list and
@@ -134,14 +134,6 @@ function packageDir(family: PlatformFamily): string {
 
 function familyForPackageFile(file: string): string | undefined {
   return /^packages\/platform-([^/]+)\//.exec(file)?.[1];
-}
-
-function isProductionSource(file: string): boolean {
-  return !file.endsWith('.test.ts') && !file.includes('/__tests__/');
-}
-
-function isNonProductionConsumer(file: string): boolean {
-  return !isProductionSource(file) || file.startsWith('test/');
 }
 
 function concretePlatformFamily(specifier: string): string | undefined {
@@ -252,7 +244,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
   // of the facet's definition, so the ambient-host rules do not apply to it.
   // Raw process primitives stay banned below and host tooling still enters
   // through the AppleRunnerHost port.
-  if (ownerFamily && isProductionSource(file) && !file.startsWith(APPLE_RUNNER_SUBTREE)) {
+  if (ownerFamily && isProductionSourceFile(file) && !file.startsWith(APPLE_RUNNER_SUBTREE)) {
     violations.push(...checkPlatformPackageSourcePolicy(file, source, ownerFamily));
   }
   for (const site of parseImports(source)) {
@@ -353,7 +345,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
     // (they intercept, not spawn), and the runner host port names ChildProcess
     // as a type. The spawn ban is about mechanics bypassing the host-command
     // port at runtime.
-    if (RAW_PROCESS_SPECIFIERS.has(site.spec) && isProductionSource(file) && !site.typeOnly) {
+    if (RAW_PROCESS_SPECIFIERS.has(site.spec) && isProductionSourceFile(file) && !site.typeOnly) {
       violations.push(
         violation(
           file,
@@ -386,7 +378,7 @@ function isAllowedPlatformRootImport(
 ): boolean {
   if (site.spec !== `@agent-device/platform-${family}`) return false;
   return (
-    isNonProductionConsumer(file) ||
+    !isProductionSourceFile(file) ||
     file.startsWith('src/core/interactors/') ||
     (PLATFORM_RUNTIME_HOST_FILES.has(file) && (site.dynamic || site.typeOnly))
   );

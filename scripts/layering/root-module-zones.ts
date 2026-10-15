@@ -42,7 +42,6 @@ export const ROOT_MODULE_ZONES: Readonly<Record<string, readonly string[]>> = {
     'src/platform-runtime-device-boot.ts',
     'src/platform-runtime-device-inventory.ts',
     'src/platform-runtime-device-ready.ts',
-    'src/platform-runtime-gateway.fixtures.ts',
     'src/platform-runtime-gateway.ts',
     'src/platform-runtime-host-diagnostics.ts',
     'src/platform-runtime-managed-web-backend.ts',

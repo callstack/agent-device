@@ -61,8 +61,8 @@
 //     server (R81). The global spine
 //     ranks all five layers at daemon-server's rank, so R5/R6/R80 are blind inside the zone.
 //   - Over WORKSPACE PACKAGE EXPORTS: no package but test-kit publishes test support (fixtures,
-//     fakes, mocks, harnesses, `__tests__/`, `./testing/*`); a shrink-only burn-down list holds
-//     today's offenders, and production code may not import them or test-kit (R83).
+//     fakes, mocks, harnesses, `__tests__/`, `./testing/*`); the offender set is a merge-base
+//     ratchet, and production code may not import those exports or test-kit (R83).
 //   - Over CONTRACTS PRODUCTION SOURCE: contracts owns vocabulary only — host, process, and timer
 //     mechanics belong in capture-kit or an adapter (R18).
 // R6, R9, and the R10 R7 counts are ratchets with no written-down reference: each is the same
@@ -138,14 +138,17 @@ import { checkDaemonPlatformBoundary } from './daemon-platform-boundary.ts';
 import { checkDaemonPlatformRuntimeInventory } from './daemon-platform-runtime-inventory.ts';
 import { checkDaemonClientEntry } from './daemon-client-entry.ts';
 import { checkDaemonProcessReach } from './daemon-process-reach.ts';
-import { checkPackageExportSurface } from './package-export-surface.ts';
-import { TEST_ONLY_EXPORT_BURN_DOWN } from './package-export-surface-burn-down.ts';
+import {
+  checkPackageExportSurface,
+  packageExportSurfaceSummary,
+} from './package-export-surface.ts';
 import { checkDaemonLayers, DAEMON_ROOT } from './daemon-layers.ts';
 import { checkSessionAuthorityOverlay, handlerOwnedOverlay } from './session-authority-overlay.ts';
 import {
   DAEMON_SOURCE_ROOT,
   listTrackedPlatformZoneFiles,
   listTrackedProductionSources,
+  listTrackedPackageFiles,
   listTrackedSrcUtilsFiles,
   listTrackedTypeScriptFiles,
 } from './tracked-sources.ts';
@@ -441,8 +444,9 @@ function report(
         `concrete platform imports in every executable and type-only form; ` +
         `no production daemon file reaches the root platform-runtime family or a hub that ` +
         `does (R76); the daemon process reaches no caller-side replay source module over ` +
-        `static or dynamic edges (R82); package exports publish no new test support, with ` +
-        `${TEST_ONLY_EXPORT_BURN_DOWN.length} burn-down entries left (R83); and the handler-owned SessionState/SessionStore ` +
+        `static or dynamic edges (R82); ` +
+        `${packageExportSurfaceSummary(ratchets.testOnlyExports, reference.testOnlyExports)}; and ` +
+        `the handler-owned SessionState/SessionStore ` +
         `authority overlay holds at or under the merge-base (R75, ` +
         `${handlerOwnedShapeFiles} shape / ${handlerOwnedAuthorityFiles} authority files); and ` +
         `every production daemon file lives under a layer folder with no upward static edges ` +
@@ -603,7 +607,8 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       context.sourceFiles.filter((file) => file.startsWith(DAEMON_SOURCE_ROOT)),
       context.edges,
     ),
-  'package-export-surface': () => checkPackageExportSurface(readTrackedPackageManifests(repoRoot)),
+  'package-export-surface': (context) =>
+    checkPackageExportSurface(context.ratchets.testOnlyExports, context.reference.testOnlyExports),
 };
 
 export function main(): number {
@@ -616,7 +621,10 @@ export function main(): number {
   const parse = memoizedImportParser();
   const edges = resolveImportEdges(sources, workspaceSpecifierTargets(repoRoot), parse);
   // Measured once and threaded: the rules and the success line must report the same numbers.
-  const ratchets = measureRatchets(sources, edges);
+  const ratchets = measureRatchets(sources, edges, {
+    manifests: readTrackedPackageManifests(repoRoot),
+    packageFiles: listTrackedPackageFiles(repoRoot),
+  });
   const reference = mergeBaseRatchets(repoRoot, parse);
   const context: LayeringContext = {
     sourceFiles,

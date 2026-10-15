@@ -75,9 +75,29 @@ function listTrackedFiles(repoRoot: string, pathspecs: readonly string[]): strin
  */
 export const DAEMON_SOURCE_ROOT = 'packages/daemon/src/';
 
-/** Production sources only: test files and `__tests__/` trees are not layering subjects. */
+const PRODUCTION_SOURCE_ROOT = /^(?:src|packages\/[^/]+\/src)\//;
+
+/**
+ * Test support, by path: `__tests__/` and package-local `test/` trees, `*.test.*` and
+ * `*.spec.*` files, `*.fixtures.*` files (also `fixtures.ts` and `*-fixtures.ts`), and the
+ * test-kit package.
+ */
+const TEST_SUPPORT_PATH =
+  /(?:^|\/)(?:__tests__|test)\/|\.(?:test|spec)\.[cm]?[jt]sx?$|(?:^|[/.-])fixtures?\.[cm]?[jt]sx?$|^packages\/test-kit\//;
+
+/**
+ * The one answer to "is this production source": a TypeScript file under root `src/` or a
+ * package's `src/` that is not test support. Layering scans, the eager-closure walker, R11's
+ * test-only import ban and R13 all call it; the root `test/` tree and `scripts/` are not
+ * production sources, so tooling and vitest setup there may import test support.
+ */
 export function isProductionSourceFile(file: string): boolean {
-  return file.endsWith('.ts') && !/(?:^|\/)__tests__\//.test(file) && !/\.test\.ts$/.test(file);
+  return file.endsWith('.ts') && PRODUCTION_SOURCE_ROOT.test(file) && !TEST_SUPPORT_PATH.test(file);
+}
+
+/** Every tracked file under `packages/`, repo-root-relative. */
+export function listTrackedPackageFiles(repoRoot: string): string[] {
+  return listTrackedFiles(repoRoot, ['packages']);
 }
 
 /** The canonical layering scan input: tracked, production, repo-root-relative. */

@@ -1,35 +1,36 @@
 // R83 package-export-surface: the manifest scan (every shape of test support is caught, by key or
-// by target), the shrink-only burn-down list, and the consumer-side ban at the R11 import sites.
+// by any condition target, wildcards included), the merge-base ratchet, and the consumer-side ban
+// at the R11 import sites.
 
 import assert from 'node:assert/strict';
-import path from 'node:path';
 import { test } from 'node:test';
 import {
   checkPackageInternalSites,
   checkRootSites,
-  readTrackedPackageManifests,
   specifierSites,
   workspacePackagesFromManifests,
 } from './package-boundaries.ts';
 import {
   checkPackageExportSurface,
-  isProductionSource,
+  expandExportTarget,
   isTestOnlyExport,
   isTestOnlyExportSpecifier,
-  isTestSupportFile,
+  measureTestOnlyExports,
   PACKAGE_EXPORT_SURFACE_RULE,
+  packageExportSurfaceSummary,
 } from './package-export-surface.ts';
-import { TEST_ONLY_EXPORT_BURN_DOWN } from './package-export-surface-burn-down.ts';
 
-const repoRoot = path.resolve(import.meta.dirname, '../..');
-
-function manifest(name: string, exports: Record<string, unknown>): Map<string, string> {
+function manifest(name: string, exports: unknown): Map<string, string> {
   const dir = name.replace('@agent-device/', '');
   return new Map([[`packages/${dir}/package.json`, JSON.stringify({ name, exports })]]);
 }
 
 function entry(target: string) {
   return { types: target, default: target };
+}
+
+function measure(name: string, exports: unknown, packageFiles: readonly string[] = []) {
+  return measureTestOnlyExports(manifest(name, exports), packageFiles);
 }
 
 // Every shape the rule must catch: [description, export key, export target].
@@ -40,7 +41,6 @@ const TEST_SUPPORT_SHAPES: ReadonlyArray<readonly [string, string, string]> = [
   ['a *-fixtures key', './thing-fixtures', './src/thing.ts'],
   ['a fixtures.ts target', './thing', './src/recording/fixtures.ts'],
   ['a target under __tests__/', './thing', './src/__tests__/support/thing.ts'],
-  ['a pattern target under __tests__/', './things/*', './src/things/__tests__/*.ts'],
   ['a ./testing/ key', './testing/thing', './src/thing.ts'],
   ['a testing/ target directory', './thing', './src/testing/thing.ts'],
   ['a test-support key', './test-support', './src/thing.ts'],
@@ -55,6 +55,7 @@ const TEST_SUPPORT_SHAPES: ReadonlyArray<readonly [string, string, string]> = [
   ['a harness key', './thing-harness', './src/thing.ts'],
   ['a harness target', './thing', './src/thing-harness.ts'],
   ['a *.test.ts target', './thing', './src/thing.test.ts'],
+  ['a *.spec.ts target', './thing', './src/thing.spec.ts'],
   ['a test/ target directory', './thing', './test/thing.ts'],
 ];
 
@@ -71,95 +72,142 @@ const PRODUCTION_SHAPES: ReadonlyArray<readonly [string, string]> = [
 
 test('every shape of test support is caught, by key or by target', () => {
   for (const [description, key, target] of TEST_SUPPORT_SHAPES) {
-    const violations = checkPackageExportSurface(
-      manifest('@agent-device/planted', { [key]: entry(target) }),
-      [],
-    );
-    assert.equal(violations.length, 1, description);
-    assert.equal(violations[0]!.rule, PACKAGE_EXPORT_SURFACE_RULE, description);
-    assert.match(violations[0]!.message, /exports test support|exports '/, description);
+    const offenders = measure('@agent-device/planted', { [key]: entry(target) });
+    assert.equal(offenders.length, 1, description);
+    assert.equal(offenders[0]!.id, `@agent-device/planted ${key}`, description);
   }
 });
 
 test('production exports that merely mention test or support are not flagged', () => {
   for (const [key, target] of PRODUCTION_SHAPES) {
-    assert.deepEqual(
-      checkPackageExportSurface(manifest('@agent-device/planted', { [key]: entry(target) }), []),
-      [],
-      key,
-    );
+    assert.deepEqual(measure('@agent-device/planted', { [key]: entry(target) }), [], key);
   }
 });
 
-test('every export condition is judged, not only the default', () => {
-  const violations = checkPackageExportSurface(
-    manifest('@agent-device/planted', {
+test('every export condition is judged, not only the selected one', () => {
+  assert.equal(
+    measure('@agent-device/planted', {
+      './thing': { types: './src/thing.fixtures.ts', default: './src/thing.ts' },
+    }).length,
+    1,
+    'a fixture in types only',
+  );
+  assert.equal(
+    measure('@agent-device/planted', {
       './thing': { types: './src/thing.ts', default: './src/thing.fixtures.ts' },
+    }).length,
+    1,
+    'a fixture in default only',
+  );
+  assert.equal(
+    measure('@agent-device/planted', {
+      './thing': { node: { import: './src/thing.fixtures.ts' }, default: './src/thing.ts' },
+    }).length,
+    1,
+    'a fixture in a nested condition',
+  );
+  assert.deepEqual(
+    measure('@agent-device/planted', {
+      './thing': { types: './src/thing.ts', default: './src/thing.ts' },
     }),
     [],
   );
-  assert.equal(violations.length, 1);
 });
 
 test('a string exports map and a missing one are both read', () => {
-  const dir = (value: unknown) =>
-    new Map([
-      ['packages/p/package.json', JSON.stringify({ name: '@agent-device/p', exports: value })],
-    ]);
-  assert.deepEqual(checkPackageExportSurface(dir('./src/index.ts'), []), []);
-  assert.deepEqual(checkPackageExportSurface(dir(undefined), []), []);
+  const fixture = measure('@agent-device/p', './src/index.fixtures.ts');
+  assert.equal(fixture.length, 1);
+  assert.equal(fixture[0]!.id, '@agent-device/p .');
+  assert.deepEqual(measure('@agent-device/p', './src/index.ts'), []);
+  assert.deepEqual(measure('@agent-device/p', undefined), []);
+});
+
+test('a wildcard export is judged by the tracked files it publishes', () => {
+  const files = [
+    'packages/planted/src/index.ts',
+    'packages/planted/src/things/a.ts',
+    'packages/planted/src/things/b.fixtures.ts',
+  ];
+  const catchAll = measure('@agent-device/planted', { './*': entry('./src/*.ts') }, files);
+  assert.equal(catchAll.length, 1);
+  assert.ok(catchAll[0]!.targets.includes('./src/things/b.fixtures.ts'));
+  assert.deepEqual(
+    measure(
+      '@agent-device/planted',
+      { './*': entry('./src/*.ts') },
+      files.filter((file) => !file.includes('fixtures')),
+    ),
+    [],
+  );
+  // A pattern with no match stands for its own text, so one aimed at __tests__/ is caught
+  // before any file exists.
+  assert.equal(
+    measure('@agent-device/planted', { './things/*': entry('./src/__tests__/*.ts') }, []).length,
+    1,
+  );
+});
+
+test('expandExportTarget matches a star across directories and leaves literals alone', () => {
+  const files = ['packages/p/src/a.ts', 'packages/p/src/dir/b.ts', 'packages/p/src/dir/b.js'];
+  assert.deepEqual(expandExportTarget('packages/p', './src/*.ts', files), [
+    './src/a.ts',
+    './src/dir/b.ts',
+  ]);
+  assert.deepEqual(expandExportTarget('packages/p', './src/index.ts', files), ['./src/index.ts']);
 });
 
 test('test-kit is the one package allowed to export test support', () => {
   assert.deepEqual(
-    checkPackageExportSurface(
-      manifest('@agent-device/test-kit', {
-        './device-fixtures': entry('./src/device-fixtures.ts'),
-      }),
-      [],
-    ),
+    measure('@agent-device/test-kit', { './device-fixtures': entry('./src/device-fixtures.ts') }),
     [],
   );
 });
 
-test('the burn-down list is shrink-only: a new offender fails and so does a stale entry', () => {
-  const planted = manifest('@agent-device/planted', {
+test('growth against the merge-base fails; a cleanup or an unchanged set passes', () => {
+  const base = measure('@agent-device/planted', {
+    './listed-fixtures': entry('./src/listed.fixtures.ts'),
+    './gone-fixtures': entry('./src/gone.fixtures.ts'),
+  });
+  const head = measure('@agent-device/planted', {
     './listed-fixtures': entry('./src/listed.fixtures.ts'),
     './new-fixtures': entry('./src/new.fixtures.ts'),
   });
-  const violations = checkPackageExportSurface(planted, [
-    '@agent-device/planted ./listed-fixtures',
-    '@agent-device/planted ./gone-fixtures',
-  ]);
-  assert.equal(violations.length, 2);
-  assert.match(violations[0]!.message, /exports '\.\/new-fixtures'/);
-  assert.equal(violations[0]!.file, 'packages/planted/package.json');
-  assert.match(violations[1]!.message, /'@agent-device\/planted \.\/gone-fixtures' no longer/);
-  assert.equal(violations[1]!.file, 'scripts/layering/package-export-surface-burn-down.ts');
-});
-
-test('a burn-down entry whose package is gone is stale', () => {
-  const violations = checkPackageExportSurface(
-    manifest('@agent-device/other', { '.': entry('./src/index.ts') }),
-    ['@agent-device/missing ./thing-fixtures'],
-  );
+  const violations = checkPackageExportSurface(head, base);
   assert.equal(violations.length, 1);
-  assert.match(violations[0]!.message, /delete it from TEST_ONLY_EXPORT_BURN_DOWN/);
+  assert.equal(violations[0]!.rule, PACKAGE_EXPORT_SURFACE_RULE);
+  assert.equal(violations[0]!.file, 'packages/planted/package.json');
+  assert.match(violations[0]!.message, /exports '\.\/new-fixtures'.*new\.fixtures\.ts/);
+  // Removing an export needs no edit, and an unchanged set is clean.
+  assert.deepEqual(checkPackageExportSurface([], base), []);
+  assert.deepEqual(checkPackageExportSurface(base, base), []);
 });
 
-test('the committed manifests offend exactly where the burn-down list says', () => {
-  assert.deepEqual(
-    checkPackageExportSurface(readTrackedPackageManifests(repoRoot), TEST_ONLY_EXPORT_BURN_DOWN),
-    [],
+test('a moved fixture file under an unchanged export key is not growth; a renamed key is', () => {
+  const base = measure('@agent-device/planted', { './x-fixtures': entry('./src/x.fixtures.ts') });
+  const moved = measure('@agent-device/planted', {
+    './x-fixtures': entry('./src/deeper/x.fixtures.ts'),
+  });
+  const renamed = measure('@agent-device/planted', {
+    './y-fixtures': entry('./src/x.fixtures.ts'),
+  });
+  assert.deepEqual(checkPackageExportSurface(moved, base), []);
+  assert.equal(checkPackageExportSurface(renamed, base).length, 1);
+});
+
+test('a package new at head cannot bring test support with it', () => {
+  const head = measure('@agent-device/brand-new', { './mocks': entry('./src/mocks.ts') });
+  assert.equal(checkPackageExportSurface(head, []).length, 1);
+});
+
+test('the summary reports the remaining count against the merge-base', () => {
+  const base = measure('@agent-device/planted', {
+    './a-fixtures': entry('./src/a.ts'),
+    './b-fixtures': entry('./src/b.ts'),
+  });
+  assert.match(
+    packageExportSurfaceSummary(base.slice(0, 1), base),
+    /1 test-only export\(s\) remain against 2 at the merge-base \(R83\)/,
   );
-});
-
-test('the burn-down list is unique and names a package and an export key per entry', () => {
-  assert.equal(new Set(TEST_ONLY_EXPORT_BURN_DOWN).size, TEST_ONLY_EXPORT_BURN_DOWN.length);
-  for (const line of TEST_ONLY_EXPORT_BURN_DOWN) {
-    assert.match(line, /^@agent-device\/[a-z-]+ \.(?:\/\S+)?$/, line);
-    assert.ok(!line.startsWith('@agent-device/test-kit '), 'test-kit is exempt, never listed');
-  }
 });
 
 test('the key predicate works on specifiers too, for rules that hold only the specifier', () => {
@@ -174,37 +222,6 @@ test('the key predicate works on specifiers too, for rules that hold only the sp
   assert.equal(isTestOnlyExport('./thing', ['./src/thing.fixtures.ts']), true);
 });
 
-test('isTestSupportFile and isProductionSource split the tree', () => {
-  for (const file of [
-    'test/integration/consumer.ts',
-    'packages/daemon-side/test/harness.ts',
-    'src/daemon/__tests__/consumer.ts',
-    '__tests__/root-consumer.ts',
-    'scripts/layering/daemon-layers.test.tsx',
-    'src/daemon/session-store.test.mts',
-    'src/foo.test.js',
-    'src/foo.test.cjs',
-    'src/platform-runtime-gateway.fixtures.ts',
-    'packages/platform-android/src/recording/fixtures.ts',
-    'packages/test-kit/src/loopback.ts',
-  ]) {
-    assert.equal(isTestSupportFile(file), true, file);
-    assert.equal(isProductionSource(file), false, file);
-  }
-  for (const file of [
-    'src/commands/inventory.ts',
-    'packages/kernel/src/errors.ts',
-    'packages/daemon/src/sessions/session-store.ts',
-  ]) {
-    assert.equal(isTestSupportFile(file), false, file);
-    assert.equal(isProductionSource(file), true, file);
-  }
-  // Tooling and vitest setup are not production sources, so they may import test support.
-  for (const file of ['scripts/vitest-apple-runner-host-setup.ts', 'scripts/fuzz/arbitraries.ts']) {
-    assert.equal(isProductionSource(file), false, file);
-  }
-});
-
 const packages = workspacePackagesFromManifests(
   new Map([
     [
@@ -216,7 +233,9 @@ const packages = workspacePackagesFromManifests(
           '.': entry('./src/index.ts'),
           './thing': entry('./src/thing.ts'),
           './thing-fixtures': entry('./src/thing.fixtures.ts'),
+          './types-only': { types: './src/types-only.fixtures.ts', default: './src/types-only.ts' },
           './testing/*': entry('./src/__tests__/*.ts'),
+          './wild/*': entry('./src/wild/*.ts'),
         },
       }),
     ],
@@ -258,6 +277,7 @@ function refusals(file: string, specifier: string) {
 const TEST_ONLY_SPECIFIERS = [
   '@agent-device/owner/thing-fixtures',
   '@agent-device/owner/testing/anything',
+  '@agent-device/owner/types-only',
 ];
 
 test('production source importing a test-only export is refused, at root and in packages', () => {
@@ -268,6 +288,12 @@ test('production source importing a test-only export is refused, at root and in 
       assert.match(violations[0]!.message, /test-only export/);
     }
   }
+});
+
+test('an export whose types condition is test support is refused whatever default says', () => {
+  // The selected (default) target is production; only the `types` leaf is a fixture.
+  assert.equal(refusals('src/commands/inventory.ts', '@agent-device/owner/types-only').length, 1);
+  assert.deepEqual(refusals('src/commands/inventory.ts', '@agent-device/owner/wild/a'), []);
 });
 
 test('the vi.mock scan refuses a planted test-only export in production source too', () => {
@@ -281,11 +307,12 @@ test('the vi.mock scan refuses a planted test-only export in production source t
   assert.equal(violations.filter((v) => v.rule === PACKAGE_EXPORT_SURFACE_RULE).length, 1);
 });
 
-test('tests, fixtures, the test/ tree and scripts/ may import test-only exports and test-kit', () => {
+test('tests, specs, fixtures, test trees and scripts/ may import test-only exports and test-kit', () => {
   for (const specifier of [...TEST_ONLY_SPECIFIERS, '@agent-device/test-kit/tmp-dir']) {
     for (const file of [
       'src/__tests__/consumer.test.ts',
       'src/commands/thing.test.ts',
+      'src/commands/thing.spec.ts',
       'src/commands/thing.fixtures.ts',
       'test/integration/consumer.ts',
       'scripts/vitest-setup.ts',

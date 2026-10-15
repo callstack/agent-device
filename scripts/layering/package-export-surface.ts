@@ -3,23 +3,25 @@
 //   production file importing one of those entries or the private `@agent-device/test-kit`
 //   package. Tests belong beside the module they test and import it relatively; fixtures one
 //   package uses stay inside it; fixtures shared across packages live in `@agent-device/test-kit`,
-//   the one designated home. A production package's `exports` is its production surface.
-//   The offender list only shrinks: a new offender fails, and so does a list entry that no longer
-//   offends, so each cleanup deletes the entries it frees.
+//   the one designated home. A package's `exports` is its production surface.
+//   Today's offenders only shrink: the set is measured at the merge-base with origin/main by the
+//   same function that measures the working tree (`ratchet-reference.ts`), so growth fails, a
+//   cleanup needs no edit, and no allowlist exists to append to.
 // Evidence: 122 exports across 10 packages existed only to feed tests (daemon `./testing/*`,
 //   `*-fixtures` on capture-kit, selectors, device-selection, ...), each a production-looking
-//   subpath nothing but a test imports. TEST_ONLY_FIXTURE_SUBPATHS (R11) and R13's Android list
-//   named two and four of them by hand; neither stopped the next one.
-// Cost: one manifest scan plus one specifier check at the R11 import sites.
+//   subpath nothing but a test imports. Hand-kept lists of two and four of them (R11, R13) did
+//   not stop the next one.
+// Cost: one manifest scan per tree plus one specifier check at the R11 import sites.
 // Kill criterion: a maintainer decision that packages may publish test support in `exports`.
 //
-// R83 package-export-surface. Classification looks at the export key AND its target file, so
-// renaming the key cannot hide a fixture, and naming a fixture `./thing` cannot either.
-// `@agent-device/test-kit` is the one package exempt from the export check. `test/` (integration,
-// e2e, wire-compat) and `scripts/` are not production sources.
+// R83 package-export-surface. Classification looks at the export key AND every file the entry
+// resolves to under every condition (`types`, `import`, `default`, ...), expanding `*` patterns
+// against the tracked package files, so neither a key rename nor a catch-all pattern hides a
+// fixture. `@agent-device/test-kit` is the one package exempt from the export check. "Production
+// source" is `isProductionSourceFile` in `tracked-sources.ts`.
 
-import type { LayeringViolation } from './model.ts';
-import { TEST_ONLY_EXPORT_BURN_DOWN } from './package-export-surface-burn-down.ts';
+import { resolveWorkspaceSpecifier, type LayeringViolation } from './model.ts';
+import { isProductionSourceFile } from './tracked-sources.ts';
 
 export const PACKAGE_EXPORT_SURFACE_RULE = 'R83 package-export-surface';
 
@@ -86,36 +88,31 @@ export function isTestOnlyExport(key: string, targets: readonly string[]): boole
   return isTestOnlyExportKey(key) || targets.some(isTestOnlyExportTarget);
 }
 
-const TEST_FILE_TREE =
-  /(^|\/)__tests__\/|\.test\.[cm]?[jt]sx?$|(?:^|\/)test\/|^packages\/test-kit\//;
-
 /**
- * A file that is itself test support, so importing other test support is allowed there: the root
- * `test/` tree, a package-local `test/` tree, `*.test.*` files, `__tests__/` trees, `*.fixtures.*`
- * files and the test-kit package.
+ * Whether a full workspace specifier such as `@agent-device/platform-apple/runner/test-host`
+ * names a test-only export, judged by its key alone. For rules that hold only the specifier;
+ * R83's manifest scan also judges the target files.
  */
-export function isTestSupportFile(file: string): boolean {
-  return TEST_FILE_TREE.test(file) || hasTestOnlyTokens(file.slice(file.lastIndexOf('/') + 1));
-}
-
-/**
- * Production source: root `src/` and `packages/<pkg>/src/`, minus the test-support files. The
- * root `test/` tree and `scripts/` are not production sources, so tooling and vitest setup there
- * may import test support.
- */
-export function isProductionSource(file: string): boolean {
-  return /^(?:src|packages\/[^/]+\/src)\//.test(file) && !isTestSupportFile(file);
+export function isTestOnlyExportSpecifier(specifier: string): boolean {
+  const match = /^@[^/]+\/[^/]+(\/.*)?$/.exec(specifier);
+  if (!match) return false;
+  return isTestOnlyExportKey(`.${match[1] ?? ''}`);
 }
 
 function stripPackageDir(target: string): string {
   return target.replace(/^packages\/[^/]+\//, './');
 }
 
+/** One export of one package: its key and every string leaf of its conditions map. */
+export type ExportEntry = {
+  key: string;
+  targets: readonly string[];
+};
+
 export type ExportManifest = {
   file: string;
   name: string;
-  /** Export key -> every string the entry resolves to (all conditions). */
-  exports: ReadonlyMap<string, readonly string[]>;
+  exports: readonly ExportEntry[];
 };
 
 function stringLeaves(value: unknown, out: string[] = []): string[] {
@@ -138,87 +135,152 @@ export function readExportManifests(manifests: ReadonlyMap<string, string>): Exp
     parsed.push({
       file,
       name: manifest.name,
-      exports: new Map(Object.entries(exported).map(([key, value]) => [key, stringLeaves(value)])),
+      exports: Object.entries(exported).map(([key, value]) => ({
+        key,
+        targets: stringLeaves(value),
+      })),
     });
   }
   return parsed;
 }
 
-function violation(file: string, message: string): LayeringViolation {
-  return { rule: PACKAGE_EXPORT_SURFACE_RULE, file, line: 1, message };
+/**
+ * The files a `*` pattern target covers among the tracked package files. A pattern with no
+ * match stands for its own text, so a pattern aimed at `__tests__/` is judged before any file
+ * exists. A literal target is its own single file.
+ */
+export function expandExportTarget(
+  packageDir: string,
+  target: string,
+  packageFiles: readonly string[],
+): string[] {
+  const star = target.indexOf('*');
+  if (star === -1) return [target];
+  const prefix = `${packageDir}/${target.slice(0, star).replace(/^\.\//, '')}`;
+  const suffix = target.slice(star + 1);
+  const matches = packageFiles.filter(
+    (file) =>
+      file.startsWith(prefix) &&
+      file.length > prefix.length + suffix.length &&
+      file.endsWith(suffix),
+  );
+  return matches.length > 0
+    ? matches.map((file) => `./${file.slice(packageDir.length + 1)}`)
+    : [target];
+}
+
+/** A test-only export of a package, with the files that made it one. */
+export type TestOnlyExport = {
+  /** `<package> <export key>`: the identity the merge-base comparison keys on. */
+  id: string;
+  manifestFile: string;
+  key: string;
+  targets: readonly string[];
+};
+
+/**
+ * Every test-only export of every package except test-kit in one tree. `packageFiles` is that
+ * tree's tracked paths, so wildcard exports are judged by the files they publish.
+ */
+export function measureTestOnlyExports(
+  manifests: ReadonlyMap<string, string>,
+  packageFiles: readonly string[],
+): TestOnlyExport[] {
+  const offenders: TestOnlyExport[] = [];
+  for (const pkg of readExportManifests(manifests)) {
+    if (pkg.name === TEST_KIT_PACKAGE) continue;
+    const packageDir = pkg.file.replace(/\/package\.json$/, '');
+    for (const { key, targets } of pkg.exports) {
+      const files = targets.flatMap((target) =>
+        expandExportTarget(packageDir, target, packageFiles),
+      );
+      if (!isTestOnlyExport(key, files)) continue;
+      offenders.push({ id: `${pkg.name} ${key}`, manifestFile: pkg.file, key, targets: files });
+    }
+  }
+  return offenders;
 }
 
 /**
- * Every test-only export of every package except test-kit must be in the burn-down list, and
- * every list entry must still offend. `burnDown` entries read `<package> <export key>`.
+ * Growth fails: a test-only export at head that the merge-base did not already publish. A
+ * cleanup that removes exports needs no edit, and nothing sits above what main actually holds.
  */
 export function checkPackageExportSurface(
-  manifests: ReadonlyMap<string, string>,
-  burnDown: readonly string[] = TEST_ONLY_EXPORT_BURN_DOWN,
+  head: readonly TestOnlyExport[],
+  base: readonly TestOnlyExport[],
 ): LayeringViolation[] {
-  const listed = new Set(burnDown);
-  const offending = new Set<string>();
-  const violations: LayeringViolation[] = [];
-  for (const pkg of readExportManifests(manifests)) {
-    if (pkg.name === TEST_KIT_PACKAGE) continue;
-    for (const [key, targets] of pkg.exports) {
-      if (!isTestOnlyExport(key, targets.map(stripPackageDir))) continue;
-      const entry = `${pkg.name} ${key}`;
-      offending.add(entry);
-      if (listed.has(entry)) continue;
-      violations.push(
-        violation(
-          pkg.file,
-          `'${pkg.name}' exports '${key}', which is test support (${targets.join(', ')}). ` +
-            `A package's exports are its production surface: keep the file inside the package ` +
-            `and import it relatively, or move a genuinely shared helper to ${TEST_KIT_PACKAGE}.`,
-        ),
-      );
+  const published = new Set(base.map(({ id }) => id));
+  return head
+    .filter(({ id }) => !published.has(id))
+    .map(({ id, manifestFile, key, targets }) => {
+      const support = targets.filter(isTestOnlyExportTarget);
+      return {
+        rule: PACKAGE_EXPORT_SURFACE_RULE,
+        file: manifestFile,
+        line: 1,
+        message:
+          `'${id.slice(0, id.indexOf(' '))}' exports '${key}', which is test support ` +
+          `(${[...new Set(support.length > 0 ? support : targets)].slice(0, 3).join(', ')}). ` +
+          `A package's exports are its production surface: keep the file inside the package ` +
+          `and import it relatively, or move a genuinely shared helper to ${TEST_KIT_PACKAGE}.`,
+      };
+    });
+}
+
+/** The `R83` success-line fragment: how many test-only exports remain, against the merge-base. */
+export function packageExportSurfaceSummary(
+  head: readonly TestOnlyExport[],
+  base: readonly TestOnlyExport[],
+): string {
+  return (
+    `package exports publish no new test support: ${head.length} test-only export(s) remain ` +
+    `against ${base.length} at the merge-base (R83)`
+  );
+}
+
+/**
+ * Every condition target an import specifier resolves to, repo-relative, through the same
+ * exports semantics as `resolveWorkspaceSpecifier`. `conditionTargets` maps each export key to
+ * all of its condition leaves, in declaration order.
+ */
+export function resolveAllConditionTargets(
+  specifier: string,
+  conditionTargets: ReadonlyMap<string, readonly string[]>,
+): string[] {
+  const width = Math.max(0, ...[...conditionTargets.values()].map((targets) => targets.length));
+  const resolved = new Set<string>();
+  for (let slot = 0; slot < width; slot += 1) {
+    const slotTargets = new Map<string, string>();
+    for (const [key, targets] of conditionTargets) {
+      const target = targets[slot];
+      if (target !== undefined) slotTargets.set(key, target);
     }
+    const target = resolveWorkspaceSpecifier(specifier, slotTargets);
+    if (target !== undefined) resolved.add(target);
   }
-  for (const entry of burnDown) {
-    if (offending.has(entry)) continue;
-    violations.push(
-      violation(
-        'scripts/layering/package-export-surface-burn-down.ts',
-        `'${entry}' no longer exports test support; delete it from TEST_ONLY_EXPORT_BURN_DOWN.`,
-      ),
-    );
-  }
-  return violations;
+  return [...resolved];
 }
 
 /**
  * The consumer-side half: production code never imports test-only exports or test-kit. The caller
- * has already resolved `specifier` to `packageName` and, when the package names it, the
- * `exportKey` and file `targets` it resolves through.
+ * has already resolved `specifier` to `packageName` and, when the package names it, every
+ * condition target it resolves through.
  */
 export function testOnlyImportMessage(
   file: string,
   specifier: string,
   packageName: string,
-  resolved: { key: string; targets: readonly string[] } | undefined,
+  resolvedTargets: readonly string[] | undefined,
 ): string | undefined {
-  if (!isProductionSource(file)) return undefined;
+  if (!isProductionSourceFile(file)) return undefined;
   if (packageName === TEST_KIT_PACKAGE) {
     return `'${specifier}' is the private test-only package; production source may not import it.`;
   }
-  if (!resolved || !isTestOnlyExport(resolved.key, resolved.targets.map(stripPackageDir))) {
-    return undefined;
-  }
+  if (resolvedTargets === undefined) return undefined;
+  const key = `.${specifier.slice(packageName.length)}`;
+  if (!isTestOnlyExport(key, resolvedTargets.map(stripPackageDir))) return undefined;
   return (
     `'${specifier}' is a test-only export — production code may not import it; use the ` +
     `package's production subpath or inject the port.`
   );
-}
-
-/**
- * Whether a full workspace specifier such as `@agent-device/platform-apple/runner/test-host`
- * names a test-only export, judged by its key alone. For rules that hold only the specifier;
- * R83's manifest scan also judges the target file.
- */
-export function isTestOnlyExportSpecifier(specifier: string): boolean {
-  const match = /^@[^/]+\/[^/]+(\/.*)?$/.exec(specifier);
-  if (!match) return false;
-  return isTestOnlyExportKey(`.${match[1] ?? ''}`);
 }
