@@ -1,76 +1,82 @@
 /**
  * #1349 (ADR 0012 decision 3 extension): the wait dispatch seam.
  *
- * Record time: a selector wait that succeeds while the session is recording
- * attaches landmark-mode `target-v1` evidence to the recorded action, and the
- * resolution payload (`node`/`preActionNodes`) reaches neither the public
- * response nor session history.
+ * Record time: a selector wait that succeeds while the session is recording attaches
+ * landmark-mode `target-v1` evidence to the recorded action, and the resolution payload
+ * (`node`/`preActionNodes`) reaches neither the public response nor session history.
  *
- * Replay time: `internal.replayLandmarkGuard` threads the recorded landmark
- * into the real polling loop — success requires an identity-carrying match,
- * and a timeout with only impostor matches surfaces the
- * `WAIT_LANDMARK_MISMATCH_REASON` refusal.
+ * Replay time: `internal.replayLandmarkGuard` is handed to the wait as its recorded landmark, and
+ * the refusal the wait reports for impostor-only matches reaches the response with its details.
+ * The polling loop that applies the guard belongs to the command family
+ * (`runtime/wait-selector.test.ts`).
  */
-import { test, expect, vi, beforeEach } from 'vitest';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
-import { dispatchWaitViaRuntime } from '@agent-device/daemon/testing/wait-runtime';
-import type { DaemonRequest } from '@agent-device/daemon';
+import { test, expect, beforeEach } from 'vitest';
+import type { CreateDaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
 import { WAIT_LANDMARK_MISMATCH_REASON } from '@agent-device/contracts/replay';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { AppError } from '@agent-device/kernel/errors';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
+import { fakeCreateCommandSurface } from '../__tests__/support/command-surface-fake.ts';
+import { snapshotRuntimeFixture } from '../__tests__/support/snapshot-runtime-fixture.ts';
+import { makeSessionStore } from '../__tests__/support/store-factory.ts';
+import { legacyDispatchCapture } from '../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import {
   makeAndroidSession,
   authoringPublication,
-} from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+} from '../__tests__/support/session-factories.ts';
+import type { DaemonRequest } from '../core/daemon-request.ts';
+import { dispatchWaitViaRuntime } from './wait-runtime.ts';
 
-vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/device-selection/dispatch-resolve')>();
+type WaitOptions = Parameters<
+  Awaited<ReturnType<CreateDaemonCommandSurface>>['selectors']['wait']
+>[0];
+
+const waitCalls: WaitOptions[] = [];
+let waitOutcome: () => Promise<Record<string, unknown>>;
+
+const waitCreateCommandSurface: CreateDaemonCommandSurface = async (config) => {
+  const surface = await fakeCreateCommandSurface(config);
   return {
-    ...actual,
-    resolveTargetDevice: vi.fn(actual.resolveTargetDevice),
-  };
-});
-
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
-  const fixture =
-    await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
-  return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
-});
-
-vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
-  ensureDeviceReady: vi.fn(async () => {}),
-}));
-
-function screenSnapshot(parentLabel: string) {
-  return {
-    backend: 'android',
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'FrameLayout',
-        label: parentLabel,
-        rect: { x: 0, y: 0, width: 390, height: 844 },
+    ...surface,
+    selectors: {
+      ...surface.selectors,
+      wait: async (options) => {
+        waitCalls.push(options);
+        return (await waitOutcome()) as never;
       },
-      {
-        index: 1,
-        depth: 1,
-        parentIndex: 0,
-        type: 'TextView',
-        label: 'Screen X',
-        rect: { x: 0, y: 100, width: 390, height: 40 },
-      },
-    ],
+    },
   };
-}
+};
+
+const detailScreenNodes: SnapshotNode[] = [
+  {
+    ref: 'e1',
+    index: 0,
+    depth: 0,
+    type: 'FrameLayout',
+    label: 'Detail Screen',
+    rect: { x: 0, y: 0, width: 390, height: 844 },
+  },
+  {
+    ref: 'e2',
+    index: 1,
+    depth: 1,
+    parentIndex: 0,
+    type: 'TextView',
+    label: 'Screen X',
+    rect: { x: 0, y: 100, width: 390, height: 40 },
+  },
+];
 
 beforeEach(() => {
+  waitCalls.length = 0;
   legacyDispatchCapture.mockReset();
-  legacyDispatchCapture.mockImplementation(async (_device: unknown, command: string) => {
-    return command === 'snapshot' ? screenSnapshot('Detail Screen') : {};
+  waitOutcome = async () => ({
+    kind: 'selector',
+    selector: 'label="Screen X"',
+    waitedMs: 0,
+    node: detailScreenNodes[1],
+    preActionNodes: detailScreenNodes,
   });
 });
 
@@ -93,7 +99,7 @@ async function runWait(options: { recording?: boolean; req?: DaemonRequest } = {
   );
   sessionStore.publish('default', session);
   const response = await dispatchWaitViaRuntime({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: waitCreateCommandSurface,
     req: options.req ?? waitReq(),
     sessionName: 'default',
     logPath: '/tmp/test.log',
@@ -144,18 +150,35 @@ function recordedLandmark(): TargetAnnotationV1 {
   };
 }
 
-test('a replayed wait with a landmark guard succeeds when a match carries the recorded identity', async () => {
+test('a replayed wait hands its recorded landmark to the selector wait', async () => {
+  const landmark = recordedLandmark();
+
   const { response } = await runWait({
-    req: waitReq({ internal: { replayLandmarkGuard: recordedLandmark() } }),
+    req: waitReq({ internal: { replayLandmarkGuard: landmark } }),
   });
 
   expect(response.ok).toBe(true);
+  expect(waitCalls).toHaveLength(1);
+  expect(waitCalls[0]?.target).toMatchObject({
+    kind: 'selector',
+    selector: 'label="Screen X"',
+    recordedLandmark: landmark,
+  });
 });
 
-test('a replayed wait with a landmark guard refuses at the deadline when only impostors matched', async () => {
-  legacyDispatchCapture.mockImplementation(async (_device: unknown, command: string) => {
-    return command === 'snapshot' ? screenSnapshot('List Screen') : {};
-  });
+test('a live wait hands the selector wait no recorded landmark', async () => {
+  await runWait();
+
+  expect(waitCalls[0]?.target).not.toHaveProperty('recordedLandmark');
+});
+
+test('a landmark refusal from the wait reaches the response with its details', async () => {
+  waitOutcome = async () => {
+    throw new AppError('COMMAND_FAILED', 'wait found only impostors of the recorded landmark', {
+      reason: WAIT_LANDMARK_MISMATCH_REASON,
+      matchCount: 1,
+    });
+  };
 
   const { response } = await runWait({
     req: waitReq({
@@ -182,5 +205,6 @@ test('a selector-shaped positional list that fails to parse as a selector is rej
   if (response.ok) return;
   expect(response.error.code).toBe('INVALID_ARGS');
   expect(response.error.message).toContain('label="Open"');
+  expect(waitCalls).toEqual([]);
   expect(legacyDispatchCapture).not.toHaveBeenCalled();
 });
