@@ -9,10 +9,7 @@ import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-targe
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { handleInteractionCommands } from '../index.ts';
 import { getRuntimeBindings } from '../../__tests__/interaction-get-runtime-fixture.ts';
-import {
-  contextFromFlags,
-  makeSession,
-} from './__tests__/interaction-touch-fixtures.ts';
+import { contextFromFlags, makeSession } from './__tests__/interaction-touch-fixtures.ts';
 import { legacyDispatchCapture } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { markDeferredInteractionOutcome } from '../../../core/deferred-interaction-outcome.ts';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';

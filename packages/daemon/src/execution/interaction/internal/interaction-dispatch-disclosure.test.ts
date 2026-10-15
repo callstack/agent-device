@@ -31,7 +31,6 @@ import { clearAndroidObservationFixture } from '../../../__tests__/support/andro
 import { activateCompleteRefFrame, expireRefFrame } from '../../../core/ref-frame.ts';
 import { handleInteractionCommands } from '../index.ts';
 import type { InteractionRouteInput } from '../../../core/interaction/internal/types.ts';
-import { assertAndroidPressStayedInApp } from './interaction-android-escape.ts';
 import { gestureRuntimeBindingsFixture } from './__tests__/gesture-runtime-bindings.fixtures.ts';
 import {
   contextFromFlags,

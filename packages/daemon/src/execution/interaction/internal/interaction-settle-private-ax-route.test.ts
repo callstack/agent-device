@@ -1,7 +1,10 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { Interactor, SnapshotResult } from '@agent-device/contracts/interactor-types';
+import type {
+  Interactor,
+  SnapshotOptions,
+  SnapshotResult,
+} from '@agent-device/contracts/interactor-types';
 import type { SettleObservation } from '@agent-device/contracts/interaction';
-import type { SnapshotOptions } from '@agent-device/contracts/interactor-types';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';

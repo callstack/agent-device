@@ -1,10 +1,7 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
 import { legacyDispatchCapture } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
-import {
-  createInteractionRuntime,
-  handleInteractionCommands,
-} from '../index.ts';
+import { createInteractionRuntime, handleInteractionCommands } from '../index.ts';
 import type { SessionStore } from '../../../core/session-store.ts';
 import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
@@ -125,7 +122,10 @@ function settledDiff(baseline: SnapshotNode[] | undefined, settled: SnapshotNode
     diff: {
       summary: { additions: added.length, removals: removed.length, unchanged: unchanged.length },
       lines: [
-        ...removed.map((node) => ({ kind: 'removed' as const, text: `${node.type} "${node.label}"` })),
+        ...removed.map((node) => ({
+          kind: 'removed' as const,
+          text: `${node.type} "${node.label}"`,
+        })),
         ...added.map((node) => ({
           kind: 'added' as const,
           text: `${node.type} "${node.label}"`,
@@ -135,13 +135,11 @@ function settledDiff(baseline: SnapshotNode[] | undefined, settled: SnapshotNode
     },
     tail:
       added.length === 0
-        ? unchanged
-            .filter((node) => node.hittable && node.label)
-            .map((node) => ({
-              ref: node.ref,
-              role: node.type.toLowerCase(),
-              label: node.label,
-            }))
+        ? unchanged.flatMap((node) =>
+            node.hittable && node.label && node.ref
+              ? [{ ref: node.ref, role: (node.type ?? '').toLowerCase(), label: node.label }]
+              : [],
+          )
         : undefined,
   };
 }
