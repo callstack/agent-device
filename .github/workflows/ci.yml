@@ -148,15 +148,9 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      # The two slowest gates run in the background beside the light guards below. A cold fallow
-      # run costs several minutes on a hosted runner: since fallow 3.20 every import re-walks the
-      # root tsconfig's project references.
-      - name: Check numeric ranges
-        id: freerange
-        background: true
-        uses: ./.github/actions/run-gate
-        with: { gate: freerange }
-
+      # The fallow audit runs in the background beside the guards below. A cold fallow run costs
+      # several minutes on a hosted runner: since fallow 3.20 every import re-walks the root
+      # tsconfig's project references.
       - name: Run Fallow audit
         id: fallow-audit
         background: true
@@ -257,6 +251,10 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: daemon-wire-compat }
 
+      - name: Check numeric ranges
+        uses: ./.github/actions/run-gate
+        with: { gate: freerange }
+
       # Shares fallow's `.fallow` cache directory with the audit, so it starts once the audit ends.
       - name: Wait for the Fallow audit
         wait: fallow-audit
@@ -264,9 +262,6 @@ jobs:
       - name: Check for production-unused exports
         uses: ./.github/actions/run-gate
         with: { gate: production-exports }
-
-      - name: Wait for numeric ranges
-        wait: freerange
 
   # Runs the full unit + provider-integration suites under coverage with
   # thresholds, so a separate unit-tests job would rerun the same tests.
