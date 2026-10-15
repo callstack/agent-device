@@ -1,17 +1,10 @@
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
 import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runtime-operations';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { bindAppleApplicationLifecycle } from './lifecycle.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
-import { device, openInput, resetUrlOwner, simulator } from './lifecycle.fixtures.ts';
-
-vi.mock('./core/app-resolution.ts', async () => {
-  const fixtures = await import('./lifecycle.fixtures.ts');
-  return {
-    resolveIosSimulatorDeepLinkBundleId: async () => await fixtures.urlOwner.resolve(),
-  };
-});
+import { device, openInput, simulator } from './lifecycle.fixtures.ts';
 
 const MACOS_DEVICE: DeviceInfo = {
   platform: 'apple',
@@ -22,10 +15,6 @@ const MACOS_DEVICE: DeviceInfo = {
   target: 'desktop',
   booted: true,
 };
-
-beforeEach(() => {
-  resetUrlOwner();
-});
 
 afterEach(() => {
   vi.useRealTimers();
