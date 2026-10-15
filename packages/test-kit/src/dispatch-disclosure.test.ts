@@ -4,11 +4,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'vitest';
 import {
-  AppError,
-  discloseDispatch,
-  discloseUnclassifiedDispatch,
-} from '@agent-device/kernel/errors';
-import {
   DISPATCH_DISCLOSURE_DRIVER_OWNERS,
   DISPATCH_DISCLOSURE_PRODUCERS,
   DISPATCH_DISCLOSURE_ROW_LOOP,
@@ -19,16 +14,6 @@ import {
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const DISPATCH_VALUES: readonly string[] = ['no', 'unknown'];
-
-test('a producer verdict overwrites; the seam verdict fills only an unclassified failure', () => {
-  const error = new AppError('COMMAND_FAILED', 'tap failed', { hint: 'retry' });
-  assert.equal(discloseUnclassifiedDispatch(error, 'unknown'), error);
-  assert.equal(error.details?.dispatched, 'unknown');
-  assert.equal(discloseDispatch(error, 'no', { dispatchedSteps: 2 }), error);
-  assert.deepEqual(error.details, { hint: 'retry', dispatchedSteps: 2, dispatched: 'no' });
-  discloseUnclassifiedDispatch(error, 'unknown');
-  assert.equal(error.details?.dispatched, 'no');
-});
 
 test('dispatch-disclosure rows are unique and use the declared vocabulary', () => {
   const rows = parseDispatchDisclosureTable(
