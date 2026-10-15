@@ -179,7 +179,7 @@
     "check:unit": "pnpm test:unit && pnpm check:tmpdir-leaks && pnpm test:smoke",
     "check": "pnpm check:tooling && pnpm check:fallow && pnpm check:unit",
     "prepack": "npm_config_dry_run=false pnpm release:prepare",
-    "typecheck": "tsc -b tsconfig.json examples/sdk/tsconfig.json",
+    "typecheck": "tsc -b tsconfig.typecheck.json examples/sdk/tsconfig.json",
     "test-app:install": "pnpm install --dir examples/test-app",
     "test-app:start": "pnpm --dir examples/test-app start",
     "test-app:ios": "pnpm --dir examples/test-app ios",

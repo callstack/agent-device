@@ -1,8 +1,9 @@
 // The TypeScript project graph is three hand-written views of one fact: the workspace package
-// set, the root manifest's `workspace:*` declarations, and the `references` lists in the root,
-// examples/sdk, and per-package tsconfigs. `tsc -b` fails loudly on a MISSING reference it
-// needs but silently tolerates EXTRA ones (#3289 review), so a package added to the workspace
-// while a references list goes un-updated keeps building a stale graph that still exits 0.
+// set, the root manifest's `workspace:*` declarations, and the `references` lists in the root
+// build node (tsconfig.typecheck.json), examples/sdk, and per-package tsconfigs. `tsc -b` fails
+// loudly on a MISSING reference it needs but silently tolerates EXTRA ones (#3289 review), so a
+// package added to the workspace while a references list goes un-updated keeps building a stale
+// graph that still exits 0.
 // These tests read the committed declarations against each other so the four views cannot
 // drift: an added, renamed, or removed workspace package must edit every list or fail here.
 
@@ -53,8 +54,33 @@ test('root and examples/sdk reference exactly the workspace package set', () => 
   const expected = workspacePackageDirs();
   assert.ok(expected.length >= 25, 'expected the 25+ workspace packages to be enumerable');
 
-  assert.deepEqual(referencedPackageDirs('tsconfig.json', '.'), expected);
+  assert.deepEqual(referencedPackageDirs('tsconfig.typecheck.json', '.'), expected);
   assert.deepEqual(referencedPackageDirs('examples/sdk/tsconfig.json', 'examples/sdk'), expected);
+});
+
+test('the root build node is tsconfig.json plus references, and tsconfig.json has none', () => {
+  // fallow >=3.20 walks the references of the tsconfig that owns each file on every import, which
+  // made its resolve stage ~14x slower here; `extends` does not inherit references, so the
+  // typecheck node carries them without fallow, editors, or tsdown ever seeing them.
+  const rootConfig = readTsconfig('tsconfig.json');
+  assert.equal(
+    rootConfig.references,
+    undefined,
+    'references on tsconfig.json slow every fallow gate',
+  );
+  const typecheckConfig = readTsconfig('tsconfig.typecheck.json');
+  assert.equal(typecheckConfig.extends, './tsconfig.json');
+  assert.equal(
+    typecheckConfig.include,
+    undefined,
+    'the build node must not narrow the root program',
+  );
+  assert.equal(
+    typecheckConfig.exclude,
+    undefined,
+    'the build node must not narrow the root program',
+  );
+  assert.deepEqual(Object.keys(typecheckConfig.compilerOptions ?? {}), ['tsBuildInfoFile']);
 });
 
 test('the compiled-set predicate is licensed by the tsconfig include/exclude shape it mirrors', () => {

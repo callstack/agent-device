@@ -133,6 +133,7 @@ const ROOT_TOOLING = new Set([
   'pnpm-workspace.yaml',
   'tsconfig.json',
   'tsconfig.lib.json',
+  'tsconfig.typecheck.json',
   'tsdown.config.ts',
   'vitest.config.ts',
   '.fallowrc.json',
