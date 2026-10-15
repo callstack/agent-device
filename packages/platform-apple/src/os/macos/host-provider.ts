@@ -18,6 +18,12 @@ export function createLocalAppleMacOsHostProvider(
 ): AppleMacOsHostProvider {
   return {
     openBundle: async (bundleId, url) => {
+      // Loaded on the first bundle open, not when this provider is constructed: the probe's host-kit
+      // reads stay off the Apple façades' eager closure (ADR 0019), and an open of an already-listed
+      // app is the common path that never needs them until `open` actually runs.
+      const { waitForLaunchServicesRegistration } =
+        await import('./launch-services-registration.ts');
+      await waitForLaunchServicesRegistration(runCommand, bundleId);
       await runCommand('open', buildMacOpenArgs(bundleId, url));
     },
     openTarget: async (target) => {
