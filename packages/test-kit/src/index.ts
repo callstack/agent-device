@@ -64,10 +64,8 @@ export {
   writePlugin,
 } from './plugin.fixtures.ts';
 export {
-  COMPACT_VIEWPORTS,
   formatRef,
   type GeneratedRef,
-  gestureInViewportArb,
   PROPERTY_RUNS_SMALL,
   rawSnapshotNodesArb,
   refArb,
