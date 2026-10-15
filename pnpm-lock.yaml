@@ -328,9 +328,6 @@ importers:
       '@agent-device/platform-web':
         specifier: workspace:*
         version: link:../platform-web
-      '@agent-device/proxy':
-        specifier: workspace:*
-        version: link:../proxy
       '@agent-device/replay-port':
         specifier: workspace:*
         version: link:../replay-port
@@ -344,6 +341,9 @@ importers:
         specifier: workspace:*
         version: link:../session-journal
     devDependencies:
+      '@agent-device/proxy':
+        specifier: workspace:*
+        version: link:../proxy
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
