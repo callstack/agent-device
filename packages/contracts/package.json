@@ -316,10 +316,6 @@
       "types": "./src/managed-web-backend.ts",
       "default": "./src/managed-web-backend.ts"
     },
-    "./moving-target-gate": {
-      "types": "./src/moving-target-gate.ts",
-      "default": "./src/moving-target-gate.ts"
-    },
     "./navigation": {
       "types": "./src/navigation.ts",
       "default": "./src/navigation.ts"
