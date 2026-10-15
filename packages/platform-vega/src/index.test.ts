@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { vegaPlugin } from '@agent-device/platform-vega';
+import { vegaPlugin } from './index.ts';
 
 const VEGA_VVD = {
   platform: 'vega',
