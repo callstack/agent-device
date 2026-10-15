@@ -32,10 +32,6 @@
       "types": "./src/daemon-registration.ts",
       "default": "./src/daemon-registration.ts"
     },
-    "./daemon-registration-fixtures": {
-      "types": "./src/daemon-registration.fixtures.ts",
-      "default": "./src/daemon-registration.fixtures.ts"
-    },
     "./daemon-registration-owner": {
       "types": "./src/daemon-registration-owner.ts",
       "default": "./src/daemon-registration-owner.ts"
@@ -59,10 +55,6 @@
     "./device-claims": {
       "types": "./src/device-claims.ts",
       "default": "./src/device-claims.ts"
-    },
-    "./device-claims-fixtures": {
-      "types": "./src/device-claims.fixtures.ts",
-      "default": "./src/device-claims.fixtures.ts"
     },
     "./provider-credentials": {
       "types": "./src/provider-credentials.ts",
