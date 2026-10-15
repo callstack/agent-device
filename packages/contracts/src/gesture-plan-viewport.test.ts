@@ -6,12 +6,10 @@ import fc from 'fast-check';
 import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 import {
+  assertAllSamplesInViewport,
   COMPACT_VIEWPORTS,
   gestureInViewportArb,
   PROPERTY_RUNS_SMALL,
-} from '@agent-device/test-kit/property-arbitraries';
-import {
-  assertAllSamplesInViewport,
   isErrorWithReason,
   LANDSCAPE,
   PORTRAIT,
