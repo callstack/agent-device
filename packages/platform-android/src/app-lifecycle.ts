@@ -591,8 +591,10 @@ async function killAndroidPackage(device: DeviceInfo, packageName: string): Prom
     );
   }
   await runAndroidShell(device, ['am', 'kill', packageName]);
-  // Kill classifies a survivor itself below, so an expired fence is not its refusal.
-  await waitForAndroidPackageStopped(device, packageName);
+  // Both fences run as on close, but a survivor is classified below rather than refused as a
+  // close timeout.
+  await waitForAndroidPackageNotForeground(device, packageName);
+  await waitForAndroidPackageProcessGone(device, packageName);
   const process = await readAndroidPackageProcessState(device, packageName);
   if (process === 'running') {
     throw new AppError('COMMAND_FAILED', `am kill did not stop ${packageName}`, {
