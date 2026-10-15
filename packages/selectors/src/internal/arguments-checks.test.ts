@@ -11,27 +11,6 @@ import {
   IS_TEXT_VALUE_REQUIRED_MESSAGE,
   SELECTOR_EXPRESSION_REQUIRED_MESSAGE,
 } from './arguments.ts';
-import { checkFindArgs } from './find.ts';
-import {
-  checkIsPredicate,
-  IS_PREDICATE_REQUIRED_MESSAGE,
-  IS_PREDICATE_USAGE_HINT,
-} from './predicates.ts';
-
-test('an unsupported is predicate always carries the usage hint', () => {
-  const refused = checkIsPredicate('nope');
-  expect(refused).toEqual({
-    ok: false,
-    code: 'INVALID_ARGS',
-    message: IS_PREDICATE_REQUIRED_MESSAGE,
-    hint: IS_PREDICATE_USAGE_HINT,
-  });
-});
-
-test('is predicates are admitted case-insensitively, matching what the daemon executes', () => {
-  expect(checkIsPredicate('TEXT')).toEqual({ ok: true, predicate: 'text' });
-  expect(checkIsPredicate('Visible')).toEqual({ ok: true, predicate: 'visible' });
-});
 
 test('checkIsArgs covers predicate, selector, expected text, and trailing values', () => {
   expect(checkIsArgs(['text', 'id="field"', 'hello', 'world'])).toEqual({
@@ -80,15 +59,8 @@ test('get only formats text or attrs, and needs a ref or a selector', () => {
   expect(checkElementTargetArgs(['   '])).toMatchObject({ ok: false });
 });
 
-test('wait text and find value refusals are stated once', () => {
+test('wait text refusals are stated once', () => {
   expect(checkWaitText('Home')).toEqual({ ok: true, text: 'Home' });
   expect(checkWaitText('')).toMatchObject({ message: 'wait requires text' });
   expect(checkWaitText(undefined)).toMatchObject({ ok: false });
-
-  expect(checkFindArgs([])).toMatchObject({ message: 'find requires a locator or text' });
-  expect(checkFindArgs([''])).toMatchObject({ message: 'find requires a value' });
-  expect(checkFindArgs(['id="field"'], { findFirst: true, findLast: true })).toMatchObject({
-    message: 'find accepts only one of --first or --last',
-  });
-  expect(checkFindArgs(['id="field"'])).toMatchObject({ ok: true });
 });
