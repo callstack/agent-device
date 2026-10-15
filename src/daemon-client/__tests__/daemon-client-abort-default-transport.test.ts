@@ -1,7 +1,7 @@
 /**
  * #3178: the real client route, through the default transport.
  *
- * `daemon-client-abort.test.ts` drives `sendRequest` directly, and `client-abort-signal.test.ts`
+ * `daemon-client-abort.test.ts` drives `sendRequest` directly, and `agent-device-client-abort-signal.test.ts`
  * injects a fake transport, so neither proves that the caller's signal actually reaches the
  * transport from `createAgentDeviceClient`. That property lives at one line — the signal handed to
  * `sendRequest` in `daemon-client.ts` — and a test that skips that wiring cannot see it disappear:
