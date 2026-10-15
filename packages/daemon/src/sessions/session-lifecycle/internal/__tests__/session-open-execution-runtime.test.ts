@@ -6,7 +6,10 @@ import fs from 'node:fs';
 import type {
   ApplicationLifecycleRuntimeOperations,
   OpenApplicationInput,
+  PostOpenObservation,
 } from '@agent-device/contracts/application-lifecycle-runtime';
+import { pendingSurfaceStabilization } from '../../../../core/deferred-interaction-outcome.ts';
+import { lifecycleOperationsSpy } from '../../../../__tests__/support/lifecycle-operations-spy.ts';
 import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import {
   registerRequestAbort,
@@ -58,14 +61,17 @@ import {
   mockInspectDeviceRuntimeFacts,
 } from '../../../../__tests__/support/handlers/session-command-harness.ts';
 import {
+  applicationLifecycleRuntimeFixture,
   applyRuntimeHintsFixture,
   clearRuntimeHintsFixture,
   dispatchApplicationLifecycleEffect,
   resolveOpenTargetFixture,
+  type LifecycleOperationsLoader,
 } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
 import { resolveAndroidPackageForOpen } from '@agent-device/platform-android/mechanics';
 import {
   makeAndroidEmulator,
+  makeAppleSimulator,
   makeSession,
   makeSessionStore,
   noopInvoke,
@@ -663,3 +669,188 @@ for (const transition of ['rebuild', 'retire'] as const) {
     }
   });
 }
+
+async function openIosApp(params: {
+  sessionName: string;
+  flags?: Record<string, unknown>;
+  openApplication: ApplicationLifecycleRuntimeOperations['openApplication'];
+}) {
+  mockResolveTargetDevice.mockResolvedValue(makeAppleSimulator());
+  const { loader } = lifecycleOperationsSpy({ openApplication: params.openApplication });
+  return await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    lifecycleOperationsLoader: loader,
+    req: {
+      token: 't',
+      session: params.sessionName,
+      command: 'open',
+      positionals: ['com.example.app', 'rne://screen-layout'],
+      flags: { platform: 'ios', ...params.flags },
+    },
+    sessionName: params.sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore: makeSessionStore(),
+    invoke: noopInvoke,
+  });
+}
+
+test.each([
+  { flags: { maestro: { prewarmRunnerBeforeOpen: true } }, expected: true },
+  { flags: {}, expected: false },
+])(
+  'open hands the lifecycle prewarmRunnerBeforeOpen=$expected for flags $flags',
+  async ({ flags, expected }) => {
+    const openApplication = vi.fn<ApplicationLifecycleRuntimeOperations['openApplication']>(
+      async () => ({ timing: {} }),
+    );
+
+    const response = await openIosApp({ sessionName: 'maestro-open-link', flags, openApplication });
+
+    expect(response?.ok).toBe(true);
+    expect(openApplication).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ prewarmRunnerBeforeOpen: expected }),
+    );
+  },
+);
+
+test('open reports the runner prewarm timing the lifecycle measured', async () => {
+  const response = await openIosApp({
+    sessionName: 'prewarm-timing-open',
+    flags: { maestro: { prewarmRunnerBeforeOpen: true } },
+    openApplication: async () => ({
+      timing: {
+        runnerPrewarmKind: 'session',
+        runnerPrewarmScheduled: true,
+        runnerPrewarmWaited: true,
+      },
+    }),
+  });
+
+  expect(response?.ok).toBe(true);
+  expect((response as { data?: Record<string, unknown> }).data?.timing).toMatchObject({
+    runnerPrewarmKind: 'session',
+    runnerPrewarmScheduled: true,
+    runnerPrewarmWaited: true,
+  });
+});
+
+test('open rethrows a lifecycle open failure with its typed code, message, and hint', async () => {
+  const prewarmFailure = new AppError(
+    'COMMAND_FAILED',
+    'Developer mode is disabled for Apple development tools',
+    { hint: 'Run `sudo DevToolsSecurity -enable`.' },
+  );
+
+  await expect(
+    openIosApp({
+      sessionName: 'prewarm-failed-open',
+      flags: { maestro: { prewarmRunnerBeforeOpen: true } },
+      openApplication: async () => {
+        throw prewarmFailure;
+      },
+    }),
+  ).rejects.toBe(prewarmFailure);
+
+  expect(prewarmFailure).toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'Developer mode is disabled for Apple development tools',
+    details: { hint: expect.stringContaining('DevToolsSecurity -enable') },
+  });
+  expect(mockDispatch).not.toHaveBeenCalled();
+});
+
+test.each([
+  { target: 'Demo', expected: true },
+  { target: 'myapp://screen/to', expected: false },
+])(
+  'open asks the lifecycle to warm the runner cache on cold boot only for an app target: $target',
+  async ({ target, expected }) => {
+    mockResolveTargetDevice.mockResolvedValue(makeAppleSimulator());
+    const prepareApplicationOpen = vi.fn<
+      ApplicationLifecycleRuntimeOperations['prepareApplicationOpen']
+    >(async () => {});
+    const { loader } = lifecycleOperationsSpy({ prepareApplicationOpen });
+
+    const response = await handleSessionCommands({
+      createCommandSurface: fakeCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      lifecycleOperationsLoader: loader,
+      req: {
+        token: 't',
+        session: 'cold-boot-prewarm-open',
+        command: 'open',
+        positionals: [target],
+        flags: { platform: 'ios' },
+        meta: { requestId: 'open-request' },
+      },
+      sessionName: 'cold-boot-prewarm-open',
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      sessionStore: makeSessionStore(),
+      invoke: noopInvoke,
+    });
+
+    expect(response?.ok).toBe(true);
+    expect(prepareApplicationOpen).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        prewarmRunnerOnColdBoot: expected,
+        execution: expect.objectContaining({ requestId: 'open-request' }),
+      }),
+    );
+  },
+);
+
+async function openReportingObservation(
+  sessionName: string,
+  postOpenObservation: PostOpenObservation,
+) {
+  const sessionStore = makeSessionStore();
+  mockResolveTargetDevice.mockResolvedValue(makeAppleSimulator());
+  const loader: LifecycleOperationsLoader = async (device, signal, shutdownTarget) => {
+    const base = await applicationLifecycleRuntimeFixture(device, signal, shutdownTarget);
+    return Object.freeze({
+      ...base,
+      openApplication: async (input: OpenApplicationInput) => {
+        const outcome = await base.openApplication(input);
+        return { ...outcome, timing: { ...outcome.timing, postOpenObservation } };
+      },
+    });
+  };
+
+  const response = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    lifecycleOperationsLoader: loader,
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'open',
+      positionals: ['Demo'],
+      flags: { platform: 'ios' },
+    },
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  expect(response?.ok).toBe(true);
+  return sessionStore.get(sessionName);
+}
+
+test('a fresh iOS open that could not observe its app leaves the next capture to settle', async () => {
+  const session = await openReportingObservation('unobserved-open', 'unobservable');
+
+  expect(pendingSurfaceStabilization(session)?.action).toBe('open');
+});
+
+test('a fresh iOS open whose observation probe failed leaves the next capture to settle', async () => {
+  const session = await openReportingObservation('probe-failed-open', 'probe-failed');
+
+  expect(pendingSurfaceStabilization(session)?.action).toBe('open');
+});
+
+test('a fresh iOS open that observed its app leaves nothing pending', async () => {
+  const session = await openReportingObservation('observed-open', 'observable');
+
+  expect(pendingSurfaceStabilization(session)).toBeUndefined();
+});
