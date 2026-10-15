@@ -1,4 +1,8 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import {
+  OVERLAY_BUDGET_MS,
+  type overlayRecordingTouches,
+} from '@agent-device/capture-kit/recording-overlay';
 import { createScreenRecordingFinalizer } from './platform-runtime-screen-recording-finalizer-host.ts';
 
 const video = vi.hoisted(() => ({
@@ -8,7 +12,7 @@ const video = vi.hoisted(() => ({
   container: vi.fn(async () => true),
 }));
 const telemetry = vi.hoisted(() => vi.fn(() => '/tmp/capture.telemetry.json'));
-const overlay = vi.hoisted(() => vi.fn(async () => {}));
+const overlay = vi.hoisted(() => vi.fn<typeof overlayRecordingTouches>(async () => {}));
 vi.mock('@agent-device/capture-kit/recording-video', () => ({
   waitForStableFile: video.stable,
   waitForPlayableVideo: video.playable,
@@ -18,7 +22,8 @@ vi.mock('@agent-device/capture-kit/recording-video', () => ({
 vi.mock('@agent-device/capture-kit/recording-telemetry', () => ({
   persistRecordingTelemetry: telemetry,
 }));
-vi.mock('@agent-device/capture-kit/recording-overlay', () => ({
+vi.mock('@agent-device/capture-kit/recording-overlay', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/capture-kit/recording-overlay')>()),
   getRecordingOverlaySupportWarning: () => undefined,
   overlayRecordingTouches: overlay,
 }));
@@ -90,6 +95,31 @@ test('hands the caller fps to the touch overlay', async () => {
   });
 
   expect(overlay).toHaveBeenCalledWith(expect.objectContaining({ fps: 15 }));
+});
+
+test('the overlay budget covers the playability checks that run before the overlay', async () => {
+  // A cold host compiles the playability validator before the overlay starts; that time comes out
+  // of the overlay budget rather than being added to it.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    const playabilityMs = 25_000;
+    video.stable.mockImplementationOnce(async () => {
+      vi.setSystemTime(Date.now() + playabilityMs);
+    });
+
+    await createScreenRecordingFinalizer().complete({
+      outputPath: '/tmp/capture.mp4',
+      showTouches: true,
+      gestureEvents: [{ kind: 'tap', tMs: 500, x: 10, y: 20 }],
+      targetLabel: 'test recording',
+    });
+
+    expect(overlay.mock.calls[0]![0].deadline.remainingMs()).toBe(
+      OVERLAY_BUDGET_MS - playabilityMs,
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('#2707 reports a dropped overlay and keeps the raw when compositing throws', async () => {
