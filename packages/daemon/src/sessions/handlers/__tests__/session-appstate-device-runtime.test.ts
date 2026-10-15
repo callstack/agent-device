@@ -71,6 +71,7 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
             clipboard: { available: false, reason: 'unsupported-platform-leaf' },
             systemButton: { available: false, reason: 'unsupported-platform-leaf' },
             fold: { available: false, reason: 'unsupported-platform-leaf' },
+            telephony: { available: false, reason: 'unsupported-platform-leaf' },
             triggerAppEvent: { available: false, reason: 'unsupported-platform-leaf' },
             settings: { available: false, reason: 'unsupported-platform-leaf' },
             readAlert: { available: false, reason: 'unsupported-platform-leaf' },

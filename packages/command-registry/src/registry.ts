@@ -43,6 +43,7 @@ import {
   alertRuntimePlanUses,
   actionButtonRuntimeUse,
   foldRuntimeUse,
+  telephonyRuntimeUse,
   appEventRuntimeUse,
   appStateRuntimeUses,
   appSwitcherRuntimeUse,
@@ -1513,6 +1514,22 @@ export const RAW_COMMAND_DESCRIPTORS = [
     ...GENERIC_MUTATING_COMMAND_TRAITS,
     timeoutPolicy: FOLD_TIMEOUT_POLICY,
     platformExecution: { kind: 'device-runtime', uses: [foldRuntimeUse] },
+  },
+  {
+    name: 'telephony',
+    ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
+    catalog: { group: 'public' },
+    frameworkTier: 'extended',
+    // Admission is the owner's `sendTelephonyEvent` fact. The event goes to the emulator console
+    // rather than the screen, so no blocking-dialog guard applies; the call screen or message
+    // notification it raises can still cover the app, so refs may be invalidated.
+    recordsSessionAction: true,
+    recordingEffect: 'mutates-app',
+    deviceClaimPolicy: 'require-owner',
+    daemon: { route: 'generic', refFrameEffect: 'may-invalidate' },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: true,
+    platformExecution: { kind: 'device-runtime', uses: [telephonyRuntimeUse] },
   },
   {
     name: 'scroll',

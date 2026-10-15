@@ -273,6 +273,8 @@ function providerScenarioRuntimeFacts(
       // A provider session has no host simulator for the fold HID helper, so no fixture leg poses
       // a hinge.
       setFoldPose: fakeProviderUnavailable,
+      // A provider device exposes no emulator console on the daemon host.
+      sendTelephonyEvent: fakeProviderUnavailable,
       // Provider-owned iOS keyboard actions ride the same runner transport the shared interactor
       // does (#1297): a fixture scenario that can drive the interactor at all can drive these.
       ...keyboardRuntimeOperationFacts({

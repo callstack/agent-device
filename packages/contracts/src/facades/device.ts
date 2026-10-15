@@ -45,6 +45,12 @@ export {
   isDeviceRotation,
   parseDeviceRotation,
   parseFoldPose,
+  TELEPHONY_ACTIONS,
+  TELEPHONY_CALL_ACTIONS,
+  TELEPHONY_USAGE,
+  parseTelephonyEventInput,
+  parseTelephonyPositionals,
+  telephonyPositionals,
 } from '../device-rotation.ts';
 export type {
   DeviceRotation,
@@ -52,6 +58,9 @@ export type {
   FoldKeyframe,
   FoldScreenCoordinateSpace,
   SetFoldPoseInput,
+  TelephonyAction,
+  TelephonyCommandResult,
+  TelephonyEventInput,
 } from '../device-rotation.ts';
 export type { BootCommandResult, ShutdownCommandResult } from '../device.ts';
 export type {

@@ -58,6 +58,9 @@ agent-device action-button
 agent-device fold closed
 agent-device fold half-open
 agent-device fold open
+agent-device telephony call 5551234
+agent-device telephony cancel 5551234
+agent-device telephony sms 5551234 "Your code is 1234"
 agent-device device status --platform android --serial emulator-5554
 agent-device device release --stale
 agent-device daemon stop --clean
@@ -119,6 +122,14 @@ Fold a foldable device:
 - `COMMAND_FAILED` with `reason: fold-pose-unverified` means the hinge reports another pose; `fold-pose-unsettled` means it reached `half-open` but never came to rest; `fold-pose-dispatched-unverified` means the pose was sent but the first hinge-angle read returned no sample, so check the lit panel with a screenshot; `hingeReadFailure` holds the read's own failure.
 - `UNSUPPORTED_OPERATION` covers single-panel devices (`single-panel-device` on Android) and simulators in a non-default `--ios-simulator-device-set` (`unsupported-device-scope`; use the default set). Physical devices are refused.
 - On Android, `fold` confirms the pose from the device state the emulator commits and reports `hingeAngleDegrees` as the hinge sensor reads it: the angle the AVD profile defines for the posture, such as 0°, 90°, and 180° on the Pixel folds or 15°, 90°, and 165° on the generic 7.6in Foldable. It also dismisses the lock screen that folding to the cover display can raise. For panels, poses, and timings, see `agent-device help foldable`.
+
+Simulate an incoming call or SMS:
+
+- `telephony call <number>` starts an incoming call from `<number>` on an Android emulator; `telephony accept <number>` answers it and `telephony cancel <number>` ends it. `telephony sms <number> <text>` delivers a text message from `<number>`. Use it to check how an app reacts when a call or message arrives, for example whether video playback pauses and resumes.
+- The events go through the emulator console (`adb emu gsm call|accept|cancel`, `adb emu sms send`), so only local Android emulators driven through adb support them. Physical Android devices refuse with `UNSUPPORTED_OPERATION` and `reason: unsupported-device-kind`; iOS, macOS, tvOS, web, Linux, HarmonyOS, Vega, and Limrun or WebDriver (Appium) sessions refuse with `UNSUPPORTED_OPERATION` too.
+- `<number>` is digits with an optional leading `+`, up to 20 digits. Quote the SMS text, or pass it as the remaining words; quotes, backslashes, and line breaks (LF, or CRLF sent as LF) arrive as written. Tabs, lone carriage returns, and other control characters are refused.
+- The emulator console answers some events with an error, such as `accept` or `cancel` for a number with no call. That fails with `COMMAND_FAILED`, `reason: telephony-console-refused`, and the console's own `consoleReason`.
+- The call screen or message notification can cover the app. Re-snapshot before using refs from before the event.
 
 Remote daemons and tenants:
 

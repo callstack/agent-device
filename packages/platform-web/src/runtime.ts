@@ -415,6 +415,7 @@ function webRuntimeFacts(
       }),
       ...systemButtonRuntimeOperationFacts({ unsupported: navigationUnavailable }),
       setFoldPose: navigationUnavailable,
+      sendTelephonyEvent: navigationUnavailable,
       ...appEventRuntimeOperationFacts({ triggerAppEvent: navigationUnavailable }),
       ...settingsRuntimeOperationFacts({
         target: navigationUnavailable,

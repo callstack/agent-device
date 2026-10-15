@@ -1,5 +1,5 @@
 import type { SessionAction } from '@agent-device/contracts/session';
-import { DEVICE_ROTATIONS, FOLD_POSES } from '@agent-device/contracts/device';
+import { DEVICE_ROTATIONS, FOLD_POSES, TELEPHONY_ACTIONS } from '@agent-device/contracts/device';
 import { BACK_MODES } from '@agent-device/contracts/back-mode';
 import { TV_REMOTE_BUTTONS } from '@agent-device/contracts/tv-remote';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
@@ -43,6 +43,8 @@ export function buildStructuredActionSummary(action: SessionAction): string | un
       return buildOrientationActionSummary(result);
     case PUBLIC_COMMANDS.fold:
       return buildFoldActionSummary(result);
+    case PUBLIC_COMMANDS.telephony:
+      return buildTelephonyActionSummary(result);
     case PUBLIC_COMMANDS.viewport:
       return buildViewportActionSummary(result);
     case PUBLIC_COMMANDS.clipboard:
@@ -90,6 +92,8 @@ export function buildStructuredActionDetails(action: SessionAction): Record<stri
       return compactDetails({ orientation: readEnum(result.orientation, DEVICE_ROTATIONS) });
     case PUBLIC_COMMANDS.fold:
       return compactDetails({ pose: readEnum(result.pose, FOLD_POSES) });
+    case PUBLIC_COMMANDS.telephony:
+      return compactDetails({ action: readEnum(result.action, TELEPHONY_ACTIONS) });
     case PUBLIC_COMMANDS.viewport:
       return compactDetails({
         width: readSessionEventNumber(result.width),
@@ -181,6 +185,21 @@ function buildBackActionSummary(result: Record<string, unknown>): string {
 function buildFoldActionSummary(result: Record<string, unknown>): string {
   const pose = readEnum(result.pose, FOLD_POSES);
   return pose ? `Folded to ${pose}` : 'Changed fold pose';
+}
+
+function buildTelephonyActionSummary(result: Record<string, unknown>): string {
+  switch (readEnum(result.action, TELEPHONY_ACTIONS)) {
+    case 'call':
+      return 'Simulated an incoming call';
+    case 'accept':
+      return 'Accepted the simulated call';
+    case 'cancel':
+      return 'Ended the simulated call';
+    case 'sms':
+      return 'Simulated an incoming SMS';
+    case undefined:
+      return 'Simulated a telephony event';
+  }
 }
 
 function buildOrientationActionSummary(result: Record<string, unknown>): string {

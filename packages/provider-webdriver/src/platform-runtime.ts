@@ -222,6 +222,12 @@ const foldUnavailable = unavailableFact(
   'fold runs a HID helper through simctl spawn inside a foldable iPhone simulator on the daemon host; a WebDriver backend has no such simulator.',
 );
 
+/** No WebDriver backend reaches an emulator console, so no call or text message is simulated. */
+const telephonyUnavailable = unavailableFact(
+  'unsupported-provider-mode',
+  'telephony simulates calls and SMS through the console of an Android emulator on the daemon host; a WebDriver backend exposes no emulator console.',
+);
+
 /**
  * The WebDriver interactor supplies no alert members at all: ADR 0019 keeps a stub that throws
  * `unsupported` out of an interactor, and the provider's capability map declares
@@ -486,6 +492,7 @@ function webDriverFacts(
     return createUnavailablePlatformRuntimeFacts(device, options.owner, {
       ...createFullyUnavailablePlatformRuntimeFacts(inactiveSession),
       fold: foldUnavailable,
+      telephony: telephonyUnavailable,
     });
   }
   const deployment = options.deployment?.fact(device) ?? deploymentUnavailable;
@@ -509,6 +516,7 @@ function webDriverFacts(
     clipboard: clipboardUnavailable,
     systemButton: systemButtonUnavailable,
     fold: foldUnavailable,
+    telephony: telephonyUnavailable,
     triggerAppEvent: appEventUnavailable,
     settings: settingsUnavailable,
     readAlert: alertUnavailable,
@@ -620,6 +628,7 @@ function webDriverFacts(
         appSwitcher: declared('appSwitcher', appSwitcherUnavailable),
       }),
       setFoldPose: foldUnavailable,
+      sendTelephonyEvent: telephonyUnavailable,
       // The deep link opens through the same reachable interactor `open` every lifecycle command
       // drives on this provider.
       ...appEventRuntimeOperationFacts({

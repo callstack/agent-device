@@ -217,6 +217,8 @@ test('clipboard, the app switcher, app events, settings and alerts carry no web 
     // A foldable hinge is posed through the host's iOS simulator HID helper; the web target has
     // none.
     'setFoldPose',
+    // Telephony events go through an Android emulator console, which a browser has no analogue of.
+    'sendTelephonyEvent',
     'triggerAppEvent',
     // R58/R59: the retired `settings` and `alert` descriptors declared no web leaf either.
     'setSetting',

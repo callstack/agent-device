@@ -172,6 +172,8 @@ export function createAgentDeviceClient(
         await executeCommand<CommandResult<'clipboard'>>('clipboard', options),
       tvRemote: async (options) =>
         await executeCommand<CommandResult<'tv-remote'>>('tv-remote', options),
+      telephony: async (options) =>
+        await executeCommand<CommandResult<'telephony'>>('telephony', options),
       reactNative: async (options) => await executeCommand('react-native', options),
       doctor: async (options = {}) =>
         await executeCommand<CommandResult<'doctor'>>('doctor', options),

@@ -53,6 +53,8 @@ const APPLE_SIMULATOR_OPERATION_HOSTS: Readonly<
   setSetting: 'simulator',
   readSetting: 'simulator',
   setFoldPose: 'simulator',
+  // Refused on every Apple leaf at admission, so nothing waits on the runner.
+  sendTelephonyEvent: 'simulator',
   // Observation: the AX bridge presents regular and raw trees; custom actions need XCTest.
   captureSnapshot: 'simulator',
   captureSnapshotWithoutActiveApp: 'simulator',

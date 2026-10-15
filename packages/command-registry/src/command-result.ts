@@ -7,6 +7,7 @@ import type {
   AppStateCommandResult,
   BootCommandResult,
   ShutdownCommandResult,
+  TelephonyCommandResult,
   TriggerAppEventCommandResult,
 } from '@agent-device/contracts/device';
 import type {
@@ -82,6 +83,7 @@ export interface CommandResultMap {
   replay: ReplayCommandResult;
   scroll: ScrollCommandResult;
   shutdown: ShutdownCommandResult;
+  telephony: TelephonyCommandResult;
   test: ReplaySuiteResult;
   trace: TraceCommandResult;
   'trigger-app-event': TriggerAppEventCommandResult;

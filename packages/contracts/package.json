@@ -512,6 +512,10 @@
       "types": "./src/tap-keyboard-occlusion.ts",
       "default": "./src/tap-keyboard-occlusion.ts"
     },
+    "./telephony-runtime": {
+      "types": "./src/telephony-runtime.ts",
+      "default": "./src/telephony-runtime.ts"
+    },
     "./touch-runtime": {
       "types": "./src/touch-runtime.ts",
       "default": "./src/touch-runtime.ts"

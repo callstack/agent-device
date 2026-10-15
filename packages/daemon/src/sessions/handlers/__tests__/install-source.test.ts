@@ -465,6 +465,7 @@ function sourceRuntimeFacts(
       ...clipboardRuntimeOperationFacts({ unsupported: unavailable }),
       ...systemButtonRuntimeOperationFacts({ unsupported: unavailable }),
       setFoldPose: unavailable,
+      sendTelephonyEvent: unavailable,
       triggerAppEvent: unavailable,
       setSetting: unavailable,
       readSetting: unavailable,

@@ -133,6 +133,7 @@ const REPLAY_SCRIPT_LINE_PLANS = {
   'app-switcher': GENERIC_REPLAY_LINE,
   'action-button': GENERIC_REPLAY_LINE,
   fold: GENERIC_REPLAY_LINE,
+  telephony: GENERIC_REPLAY_LINE,
   apps: GENERIC_REPLAY_LINE,
   appstate: GENERIC_REPLAY_LINE,
   artifacts: GENERIC_REPLAY_LINE,

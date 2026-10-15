@@ -23,6 +23,7 @@ import type { ElementTextRuntimeOperations } from './element-text-runtime.ts';
 import type { BackRuntimeOperations } from './back-runtime.ts';
 import type { OrientationRuntimeOperations } from './orientation-runtime.ts';
 import type { FoldRuntimeOperations } from './fold-runtime.ts';
+import type { TelephonyRuntimeOperations } from './telephony-runtime.ts';
 import type { TvRemoteRuntimeOperations } from './tv-remote-runtime.ts';
 import type { KeyboardRuntimeOperations } from './keyboard-runtime.ts';
 import type { ClipboardRuntimeOperations } from './clipboard-runtime.ts';
@@ -77,6 +78,7 @@ export type PlatformRuntimeOperations = AppLogRuntimeOperations &
   BackRuntimeOperations &
   OrientationRuntimeOperations &
   FoldRuntimeOperations &
+  TelephonyRuntimeOperations &
   TvRemoteRuntimeOperations &
   KeyboardRuntimeOperations &
   ClipboardRuntimeOperations &
@@ -112,6 +114,7 @@ export const backRuntimeUse = defineUse({ required: ['back'] });
 export const homeRuntimeUse = defineUse({ required: ['home'] });
 export const orientationRuntimeUse = defineUse({ required: ['setOrientation'] });
 export const foldRuntimeUse = defineUse({ required: ['setFoldPose'] });
+export const telephonyRuntimeUse = defineUse({ required: ['sendTelephonyEvent'] });
 export const tvRemoteRuntimeUse = defineUse({ required: ['tvRemote'] });
 export const keyboardStatusUse = defineUse({ required: ['keyboardStatus'] });
 export const keyboardDismissUse = defineUse({ required: ['keyboardDismiss'] });

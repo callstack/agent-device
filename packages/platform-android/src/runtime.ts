@@ -52,6 +52,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { AndroidSetting } from './settings.ts';
 import { createHostAudioProbeCaptureOperations } from '@agent-device/capture-kit';
 import { androidFoldableFacts, createAndroidFoldableOperations } from './foldable/runtime.ts';
+import { androidTelephonyFacts, createAndroidTelephonyOperations } from './telephony/runtime.ts';
 import { androidAudioProbeCaptureFact } from './audio-runtime.ts';
 import { ANDROID_CLIPBOARD_SHELL_COMMAND_UNAVAILABLE_HINT } from './clipboard-shell-response.ts';
 import { createAndroidPerfOperations } from './perf/runtime.ts';
@@ -348,6 +349,7 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           appSwitcher: androidTouchFact(device),
         }),
         ...androidFoldableFacts(device),
+        ...androidTelephonyFacts(device),
         // The deep link opens through `am start`, admitted wherever the retired `ANDROID_ALL`
         // bucket admitted it.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: androidTouchFact(device) }),
@@ -473,6 +475,10 @@ export function createAndroidPlatformRuntime(host: PlatformRuntimeHost): Platfor
           ),
           ...androidInteractionOperations(host, request, facts),
           ...createAndroidFoldableOperations({
+            device: request.device,
+            signal: request.scope.signal,
+          }),
+          ...createAndroidTelephonyOperations({
             device: request.device,
             signal: request.scope.signal,
           }),

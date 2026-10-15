@@ -104,6 +104,11 @@ const focusKindUnavailable = unavailableFact(
   'unsupported-device-kind',
   'focus is supported on Apple simulators and physical devices.',
 );
+/** Neither simctl nor CoreDevice injects a call or text message into an Apple target. */
+const telephonyUnavailable = unavailableFact(
+  'unsupported-platform-leaf',
+  'telephony simulates calls and SMS through the Android emulator console; Apple simulators and devices expose no host control that injects a call or text message.',
+);
 const appStateUnavailable = unavailableFact(
   'unsupported-platform-leaf',
   "Apple appstate is unavailable here: the runner reads the session app's XCUIApplication state on iOS-family simulators and physical devices only, and the Apple target answers no sessionless foreground probe. The per-command answer is the targetActivation disclosure, which a capture carries when its command had to re-activate the session app (#2682).",
@@ -309,6 +314,7 @@ export function createApplePlatformRuntime(host: PlatformRuntimeHost): PlatformR
         ...elementTextRuntimeOperationFacts({ readTextAtPoint: appleElementTextFact(device) }),
         ...appleNavigationFacts(device),
         ...appleFoldableFacts(device),
+        sendTelephonyEvent: telephonyUnavailable,
         ...appleSystemFacts(device),
         ...audioProbeRuntimeOperationFacts({
           capture: appleAudioProbeCaptureFact(device),

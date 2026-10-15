@@ -199,6 +199,8 @@ await client.command.tvRemote({
 await client.command.appSwitcher();
 await client.command.actionButton();
 await client.command.fold({ pose: 'open' });
+await client.command.telephony({ action: 'call', number: '5551234' });
+await client.command.telephony({ action: 'sms', number: '5551234', text: 'Your code is 1234' });
 await client.command.fold({
   keyframes: [
     { atMs: 0, angle: 0 },
@@ -233,6 +235,7 @@ Supported command methods:
 - `appSwitcher`
 - `actionButton`
 - `fold`
+- `telephony`
 - `keyboard`
 - `clipboard`
 - `tvRemote`

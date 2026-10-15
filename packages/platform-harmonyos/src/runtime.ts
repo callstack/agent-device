@@ -248,6 +248,8 @@ export function createHarmonyPlatformRuntime(host: PlatformRuntimeHost): Platfor
         }),
         // HarmonyOS devices have no foldable hinge control for HDC to pose.
         setFoldPose: harmonyPlatformLeafUnavailable,
+        // HDC has no telephony control to simulate a call or text message.
+        sendTelephonyEvent: harmonyPlatformLeafUnavailable,
         // HarmonyOS has no trigger-app-event implementation.
         ...appEventRuntimeOperationFacts({ triggerAppEvent: harmonyPlatformLeafUnavailable }),
         ...settingsRuntimeOperationFacts({
