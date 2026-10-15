@@ -42,7 +42,8 @@ import { fakeCreateCommandSurface } from './command-surface-fake.ts';
  * `--verify` evidence are command-family behavior and are asserted beside that code.
  *
  * Values the fake supplies itself rather than reading from a backend: an `is` read always passes
- * (`pass: true`, `matches: 1`); reads capture with `READ_CAPTURE_OPTIONS`; `--verify` evidence is a
+ * (`pass: true`, `matches: 1`); selector reads (`get`, `is`) capture once with
+ * `READ_CAPTURE_OPTIONS`, while a point or `@ref` read captures nothing; `--verify` evidence is a
  * placeholder digest (`fake-digest-<n>`). Daemon suites assert how the daemon passes, records and
  * discloses these values, never their content; the real predicate, capture and evidence values are
  * asserted against the real command surface in `src/commands/interaction/runtime/`.
