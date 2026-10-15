@@ -780,7 +780,7 @@ test('an accept that dies with the runner session hands the URL over again and r
     'observe unobservable',
     'alert wait',
     'alert accept',
-    'alert wait',
+    'alert get',
     'observe unobservable',
     'open',
     'alert wait',
@@ -813,7 +813,8 @@ test.each([
       details: { reason: 'launch_confirmation_unanswered', appBundleId: 'com.example.app' },
     });
     expect(interactor.acceptAlert).toHaveBeenCalledOnce();
-    expect(interactor.awaitAlert).toHaveBeenCalledTimes(2);
+    expect(interactor.awaitAlert).toHaveBeenCalledOnce();
+    expect(interactor.readAlert).toHaveBeenCalledOnce();
     expect(events.filter((event) => event === 'open' || event === `open ${LAUNCH_URL}`)).toEqual([
       `open ${LAUNCH_URL}`,
     ]);
@@ -860,7 +861,8 @@ test.each([
     expect(outcome.launchConfirmation).toBeUndefined();
     expect(outcome.timing.postOpenObservation).toBe('unobservable');
     expect(interactor.acceptAlert).toHaveBeenCalledOnce();
-    expect(interactor.awaitAlert).toHaveBeenCalledTimes(2);
+    expect(interactor.awaitAlert).toHaveBeenCalledOnce();
+    expect(interactor.readAlert).toHaveBeenCalledOnce();
     expect(events.filter((event) => event === 'open' || event === `open ${LAUNCH_URL}`)).toEqual([
       `open ${LAUNCH_URL}`,
     ]);

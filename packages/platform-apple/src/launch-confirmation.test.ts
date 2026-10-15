@@ -15,6 +15,7 @@ import {
   createLaunchConfirmationPort,
   LAUNCH_CONFIRMATION_FOREIGN_APP_REASON,
   type LaunchConfirmationPort,
+  type LaunchConfirmationAttempt,
   URL_OWNER_LOOKUP_TIMEOUT_MS,
 } from './launch-confirmation.ts';
 import { alertNotFound, CONFIRMATION } from './launch-confirmation.fixtures.ts';
@@ -60,6 +61,7 @@ function port(
   const resolveUrlOwner = vi.fn(legs.resolveUrlOwner ?? (async () => 'com.example.app'));
   const value: LaunchConfirmationPort = {
     appBundleId: 'com.example.app',
+    awaitAlert: vi.fn(readAlert),
     readAlert: vi.fn(readAlert),
     acceptAlert,
     resolveUrlOwner,
@@ -80,7 +82,7 @@ test.each([
     }));
 
     await expect(answerLaunchConfirmation(device)).resolves.toEqual({ outcome: 'accepted' });
-    expect(device.readAlert).toHaveBeenCalledOnce();
+    expect(device.awaitAlert).toHaveBeenCalledOnce();
     expect(acceptAlert).toHaveBeenCalledOnce();
   },
 );
@@ -106,7 +108,7 @@ test('no alert costs one read and answers nothing', async () => {
   const { port: device, acceptAlert, resolveUrlOwner } = port(async () => undefined);
 
   await expect(answerLaunchConfirmation(device)).resolves.toEqual({ outcome: 'absent' });
-  expect(device.readAlert).toHaveBeenCalledOnce();
+  expect(device.awaitAlert).toHaveBeenCalledOnce();
   expect(resolveUrlOwner).not.toHaveBeenCalled();
   expect(acceptAlert).not.toHaveBeenCalled();
 });
@@ -305,7 +307,11 @@ test.each([
 
 function confirmationRunner() {
   const acceptAlert = vi.fn(async () => ({}));
-  const interactor = { awaitAlert: async () => CONFIRMATION, acceptAlert } as unknown as Interactor;
+  const interactor = {
+    awaitAlert: async () => CONFIRMATION,
+    readAlert: async () => CONFIRMATION,
+    acceptAlert,
+  } as unknown as Interactor;
   return { interactor, acceptAlert };
 }
 
@@ -373,7 +379,7 @@ test('the launch confirmation waits for a system prompt that is still appearing'
       interactor,
       new AbortController().signal,
     );
-    const pending = device.readAlert();
+    const pending = device.awaitAlert();
     await vi.advanceTimersByTimeAsync(500);
     await expect(pending).resolves.toEqual(CONFIRMATION);
     expect(runner).toHaveBeenCalledTimes(2);
@@ -393,6 +399,7 @@ test('an expired confirmation wait retains typed absence instead of an unreadabl
       { url: 'example://automation', appBundleId: 'com.example.app' },
       {
         awaitAlert: (options) => awaitAppleAlert(simulator, {}, options),
+        readAlert: (options) => readAppleAlert(simulator, {}, options),
         acceptAlert: vi.fn(),
       },
       new AbortController().signal,
@@ -406,10 +413,84 @@ test('an expired confirmation wait retains typed absence instead of an unreadabl
   }
 });
 
+test('a failed accept checks presence once without waiting for the dismissed prompt', async () => {
+  vi.useFakeTimers();
+  const runner = vi.mocked(runAppleRunnerCommand);
+  runner.mockResolvedValueOnce(CONFIRMATION).mockRejectedValue(alertNotFound());
+  vi.mocked(resolveIosSimulatorDeepLinkBundleId).mockResolvedValueOnce('com.example.app');
+  try {
+    const readAlert = vi.fn<NonNullable<Interactor['readAlert']>>((options) =>
+      readAppleAlert(simulator, {}, options),
+    );
+    const awaitAlert = vi.fn<NonNullable<Interactor['awaitAlert']>>((options) =>
+      awaitAppleAlert(simulator, {}, options),
+    );
+    const interactor = {
+      readAlert,
+      awaitAlert,
+      acceptAlert: vi.fn(async () => {
+        throw spawnTimeout();
+      }),
+    } satisfies Pick<Interactor, 'readAlert' | 'awaitAlert' | 'acceptAlert'>;
+    const device = createLaunchConfirmationPort(
+      simulator,
+      { url: 'example://automation', appBundleId: 'com.example.app' },
+      interactor,
+      new AbortController().signal,
+    );
+    let settled: LaunchConfirmationAttempt | undefined;
+    const pending = answerLaunchConfirmation(device).then((value) => {
+      settled = value;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toEqual({ outcome: 'unreadable', step: 'alert-accept' });
+    expect(awaitAlert).toHaveBeenCalledOnce();
+    expect(readAlert).toHaveBeenCalledOnce();
+    expect(runner).toHaveBeenCalledTimes(2);
+    await pending;
+  } finally {
+    await vi.advanceTimersByTimeAsync(11_000);
+    runner.mockReset();
+    vi.useRealTimers();
+  }
+});
+
+test('a no-prompt presentation probe completes within a few seconds', async () => {
+  vi.useFakeTimers();
+  const runner = vi.mocked(runAppleRunnerCommand);
+  runner.mockRejectedValue(alertNotFound());
+  try {
+    const interactor = {
+      readAlert: (options) => readAppleAlert(simulator, {}, options),
+      awaitAlert: (options) => awaitAppleAlert(simulator, {}, options),
+      acceptAlert: vi.fn(),
+    } satisfies Pick<Interactor, 'readAlert' | 'awaitAlert' | 'acceptAlert'>;
+    const device = createLaunchConfirmationPort(
+      simulator,
+      { url: 'example://automation', appBundleId: 'com.example.app' },
+      interactor,
+      new AbortController().signal,
+    );
+    let settled: LaunchConfirmationAttempt | undefined;
+    const pending = answerLaunchConfirmation(device).then((value) => {
+      settled = value;
+    });
+    await vi.advanceTimersByTimeAsync(3_500);
+    expect(settled).toEqual({ outcome: 'absent' });
+    expect(runner.mock.calls[0]?.[1]).toMatchObject({ timeoutMs: 3_000 });
+    await pending;
+  } finally {
+    await vi.advanceTimersByTimeAsync(11_000);
+    runner.mockReset();
+    vi.useRealTimers();
+  }
+});
+
 test('the port reads and accepts the alert for the session app and asks the scheme owner', async () => {
   const awaitAlert = vi.fn(async () => CONFIRMATION);
   const acceptAlert = vi.fn(async () => ({}));
-  const interactor = { awaitAlert, acceptAlert };
+  const readAlert = vi.fn(async () => CONFIRMATION);
+  const interactor = { awaitAlert, readAlert, acceptAlert };
 
   const signal = new AbortController().signal;
   vi.mocked(resolveIosSimulatorDeepLinkBundleId).mockResolvedValueOnce('com.example.app');
@@ -420,11 +501,13 @@ test('the port reads and accepts the alert for the session app and asks the sche
     interactor,
     signal,
   );
+  await device.awaitAlert();
   await device.readAlert();
   await device.acceptAlert();
 
   const target = { appBundleId: 'com.example.app', surface: 'app' };
-  expect(awaitAlert).toHaveBeenCalledWith(target);
+  expect(awaitAlert).toHaveBeenCalledWith({ ...target, timeoutMs: 3_000 });
+  expect(readAlert).toHaveBeenCalledWith(target);
   expect(acceptAlert).toHaveBeenCalledWith(target);
   await expect(device.resolveUrlOwner()).resolves.toBe('com.example.app');
   expect(resolveIosSimulatorDeepLinkBundleId).toHaveBeenCalledWith(
@@ -442,7 +525,7 @@ test('the port reads a typed absence as no alert and keeps any other failure', a
     .fn<() => Promise<Record<string, unknown>>>()
     .mockRejectedValueOnce(alertNotFound())
     .mockRejectedValueOnce(runnerDown);
-  const interactor = { awaitAlert, acceptAlert: vi.fn() };
+  const interactor = { awaitAlert, readAlert: vi.fn(), acceptAlert: vi.fn() };
 
   const device = createLaunchConfirmationPort(
     simulator,
@@ -451,8 +534,8 @@ test('the port reads a typed absence as no alert and keeps any other failure', a
     new AbortController().signal,
   );
 
-  await expect(device.readAlert()).resolves.toBeUndefined();
-  await expect(device.readAlert()).rejects.toBe(runnerDown);
+  await expect(device.awaitAlert()).resolves.toBeUndefined();
+  await expect(device.awaitAlert()).rejects.toBe(runnerDown);
 });
 
 test('a runner that cannot be resolved reports an unreadable attempt', async () => {
@@ -493,6 +576,6 @@ test('a matching launch title with other buttons is left unanswered on the first
     outcome: 'unanswered',
     reason: 'alert-unrecognized',
   });
-  expect(device.readAlert).toHaveBeenCalledOnce();
+  expect(device.awaitAlert).toHaveBeenCalledOnce();
   expect(acceptAlert).not.toHaveBeenCalled();
 });
