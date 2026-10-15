@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { test } from 'vitest';
-import { IosSnapshotEngineError, presentIosSnapshot, publishIosSnapshot } from './index.ts';
+import { presentIosSnapshot, publishIosSnapshot } from './engine.ts';
+import { IosSnapshotEngineError } from './types.ts';
 import {
   canonicalNodes,
   runTypeScriptCase,

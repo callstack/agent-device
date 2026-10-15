@@ -2,11 +2,8 @@ import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import type { SnapshotCaptureAnnotations } from '@agent-device/contracts/capture';
 import { makeSnapshotState } from '../../snapshot-state.fixtures.ts';
-import { captureFreshnessRecoveredAttempt } from '../snapshot-freshness/recovery.ts';
-import type {
-  SnapshotFreshnessReason,
-  SnapshotFreshnessWindow,
-} from '../snapshot-freshness/types.ts';
+import { captureFreshnessRecoveredAttempt } from './recovery.ts';
+import type { SnapshotFreshnessReason, SnapshotFreshnessWindow } from './types.ts';
 
 type Attempt = {
   snapshot: ReturnType<typeof makeSnapshotState>;

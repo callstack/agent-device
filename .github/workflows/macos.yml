@@ -171,7 +171,7 @@ jobs:
             packages/platform-apple/src/snapshot-source/native-runtime.test.ts \
             packages/platform-apple/src/foldable/fold-helper-cache.test.ts \
             packages/platform-apple/src/foldable/simulator-hid-native.test.ts \
-            packages/capture-kit/src/recording/__tests__/recording-scripts.test.ts
+            packages/capture-kit/src/recording/__tests__/swift-cache-recording-scripts.test.ts
           pnpm check:package -- --verify-snapshot-bridge-preparation
 
       - name: Upload macOS artifacts

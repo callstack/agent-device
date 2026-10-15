@@ -16,7 +16,8 @@ import {
 import { canonicalNodes, runTypeScriptCase } from './conformance-harness.ts';
 import { differentialBatchArbitrary } from './conformance-generator.ts';
 import { acquisitionForGoldenCase, readIosSnapshotEngineFixture } from './conformance-fixture.ts';
-import { IosSnapshotEngineError, presentIosSnapshot, publishIosSnapshot } from './index.ts';
+import { presentIosSnapshot, publishIosSnapshot } from './engine.ts';
+import { IosSnapshotEngineError } from './types.ts';
 
 test('property: regular effective geometry stays within the viewport and actionability fails closed', () => {
   fc.assert(fc.property(differentialBatchArbitrary, assertRegularCases), {

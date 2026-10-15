@@ -104,7 +104,7 @@ ledger is the shape to extend; a second parallel ledger would be a second source
   compaction — the Settings tree legitimately drops rows under the chrome — or sit loose enough to wave
   through a 74 → 20 collapse. The differential already asserts interactive ⊆ regular ⊆ raw; what it lacks
   is coverage of the runner stage, since `assertProjectionSubsets`
-  (`ios-snapshot-engine/properties.test.ts`) builds acquired inputs only and the Swift differential drops
+  (`ios-snapshot-engine/engine-properties.test.ts`) builds acquired inputs only and the Swift differential drops
   interactive cases. Extending it to `stage: 'presented'` is what makes any future shrinkage visible.
 
 ## Consequences and open evidence

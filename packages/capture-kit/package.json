@@ -303,8 +303,8 @@
       "default": "./src/snapshot/snapshot-presentation/android/helper.ts"
     },
     "./snapshot-presentation-ios-transitions-fixtures": {
-      "types": "./src/snapshot/snapshot-presentation/ios/transitions.fixtures.ts",
-      "default": "./src/snapshot/snapshot-presentation/ios/transitions.fixtures.ts"
+      "types": "./src/ios-snapshot-engine/transitions.fixtures.ts",
+      "default": "./src/ios-snapshot-engine/transitions.fixtures.ts"
     },
     "./snapshot-quality-backend-capabilities": {
       "types": "./src/snapshot-quality-backend-capabilities.ts",

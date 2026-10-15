@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { buildIosInteractiveSnapshotPresentation } from '@agent-device/capture-kit/ios-snapshot-engine';
+import { buildIosInteractiveSnapshotPresentation } from './semantic-index.ts';
 
 function buildSnapshotState(data: { nodes?: RawSnapshotNode[]; backend?: 'xctest' }) {
   return {

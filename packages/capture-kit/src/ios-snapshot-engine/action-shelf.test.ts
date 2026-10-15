@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { buildIosInteractiveSnapshotPresentation } from '../../../ios-snapshot-engine/index.ts';
+import { buildIosInteractiveSnapshotPresentation } from './semantic-index.ts';
 import {
   closedComposerWithRetainedActionShelfNodes,
   closedComposerWithRetainedRegularTreeActionNodes,

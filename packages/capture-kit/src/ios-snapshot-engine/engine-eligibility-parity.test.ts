@@ -12,7 +12,7 @@ import {
   deriveIosCaptureHint,
 } from '@agent-device/capture-kit/ios-snapshot-planning';
 import type { RawSnapshotNode, Rect } from '@agent-device/kernel/snapshot';
-import { presentIosSnapshot } from './index.ts';
+import { presentIosSnapshot } from './engine.ts';
 
 // ADR 0026: `REGULAR_ELIGIBLE_TYPES` (TypeScript) and `eligibleInteractiveTypes` (Swift) are one
 // fact in two languages — the set that lets a scroll host survive regular projection so the

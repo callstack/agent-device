@@ -7,8 +7,8 @@ import {
   buildSnapshotSignatures,
   isLikelySnapshotStuckOnPreviousRoute,
   isLikelyStaleSnapshotDrop,
-} from '../snapshot-freshness/android.ts';
-import type { SnapshotFreshnessWindow } from '../snapshot-freshness/index.ts';
+} from './android.ts';
+import type { SnapshotFreshnessWindow } from './index.ts';
 
 function labeledNodes(count: number, prefix = 'item'): RawSnapshotNode[] {
   return Array.from({ length: count }, (_, index) => ({
