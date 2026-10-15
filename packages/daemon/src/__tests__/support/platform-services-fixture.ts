@@ -82,7 +82,7 @@ const validateOpenRelaunchTargetFixture = vi.fn(
 /**
  * The canned open-target answer: target resolution changes no identity — the session keeps its
  * current app. Suites asserting a resolved bundle id answer per case; the resolution rules live
- * in the composition lane (`session-open-target.test.ts` and siblings).
+ * in `src/platform-runtime-open-target.test.ts`.
  */
 export const resolveSessionAppBundleIdForTargetFixture = vi.fn(
   async (

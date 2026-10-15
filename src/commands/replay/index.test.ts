@@ -3,7 +3,9 @@ import path from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '@agent-device/replay-port/session-replay-test-policy';
 import {
+  replayCommandFamily,
   replayCliReader,
   replayCommandFacet,
   replayCommandMetadata,
@@ -343,5 +345,21 @@ describe('replay --save-script arming (ADR 0012 decision 6, R1/R6)', () => {
     expect(testCliReader(['./suite.ad'], flags({ saveScript: true } as never))).not.toHaveProperty(
       'saveScript',
     );
+  });
+});
+
+describe('replay-only flags on the raw test request (ADR 0012 decision 4)', () => {
+  test('raw test-request guards enumerate every daemon-visible replay-only CLI flag', () => {
+    const replayFlags = replayCommandFamily.cliSchemas.replay?.allowedFlags ?? [];
+    const testFlags = new Set(replayCommandFamily.cliSchemas.test?.allowedFlags ?? []);
+    const clientOnlyReplayFlags = new Set(['out']);
+    const expectedDaemonFlags = replayFlags
+      .filter((flag) => !testFlags.has(flag) && !clientOnlyReplayFlags.has(flag))
+      .sort();
+
+    const guardedDaemonFlags = REPLAY_ONLY_TEST_FLAG_REJECTIONS.flatMap(
+      (rejection) => rejection.keys,
+    ).sort();
+    expect(guardedDaemonFlags).toEqual(expectedDaemonFlags);
   });
 });

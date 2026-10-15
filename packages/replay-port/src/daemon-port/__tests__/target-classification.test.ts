@@ -5,6 +5,8 @@ import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
 import { computeTargetEvidence } from '@agent-device/selectors/target-evidence';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { resolvePressRecordingTarget } from '@agent-device/selectors/press-retarget';
+import { readNodeLocalIdentity } from '@agent-device/ad-script';
+import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import { classifyReplayTarget } from '../target-classification.ts';
 import { resolveElementReportedTwice } from '@agent-device/selectors/interaction-targeting';
 import {
@@ -701,4 +703,91 @@ test('#2498 e2e: matches in distinct subtrees stay a refusal, not a collapse to 
   if (result.verified) throw new Error('unreachable');
   assert.equal(result.kind, 'identity-mismatch');
   assert.equal(result.matchCount, 4);
+});
+
+// Split resolver: dispatch resolution runs occlusion/visibility filters verification does not
+// replicate, so dispatch can resolve a different member than the one verified. These fixtures pin
+// the verification side; the post-resolution guard that refuses the split pre-action is pinned
+// beside `src/commands/interaction/runtime/replay-target-guard.ts`.
+
+/** Two "Save" buttons; A (deeper) is covered, B is the visible sibling. */
+function coveredDeeperSaveButtons(identifiers: { a: string; b: string }): SnapshotNode[] {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      label: 'Example',
+      rect: { x: 0, y: 0, width: 390, height: 844 },
+    },
+    {
+      index: 1,
+      depth: 3,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: identifiers.a,
+      label: 'Save',
+      rect: { x: 16, y: 120, width: 140, height: 44 },
+      interactionBlocked: 'covered',
+    },
+    {
+      index: 2,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      identifier: identifiers.b,
+      label: 'Save',
+      rect: { x: 16, y: 790, width: 140, height: 44 },
+      hittable: true,
+    },
+  ]).nodes;
+}
+
+function classifySaveButton(nodes: SnapshotNode[], recorded: TargetAnnotationV1) {
+  return classifyReplayTarget({
+    recorded,
+    token: 'label="Save"',
+    nodes,
+    platform: 'ios',
+    refLabel: undefined,
+    requireRect: true,
+    allowDisambiguation: true,
+  });
+}
+
+test('split resolver: verification verifies the covered deeper node while dispatch would resolve its visible sibling', () => {
+  const nodes = coveredDeeperSaveButtons({ a: 'save-a', b: 'save-b' });
+  const nodeA = nodes.find((node) => node.identifier === 'save-a');
+  assert.ok(nodeA);
+  const result = classifySaveButton(nodes, {
+    id: 'save-a',
+    role: 'button',
+    label: 'Save',
+    ancestry: [{ role: 'application', label: 'Example' }],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'verified',
+  });
+  // Verification's unfiltered domain: both buttons match; the identity set isolates A; the
+  // unfiltered disambiguation winner is also A (deepest) — path 4 verified.
+  assertVerified(result, { winnerRef: nodeA.ref!, matchCount: 2 });
+});
+
+test('same-identity duplicates: verification denotes the covered member A among two identical id/role/label buttons', () => {
+  const nodes = coveredDeeperSaveButtons({ a: 'save', b: 'save' });
+  const nodeA = nodes[1]!;
+  const nodeB = nodes[2]!;
+  assert.deepEqual(readNodeLocalIdentity(nodeA), readNodeLocalIdentity(nodeB));
+  const result = classifySaveButton(nodes, {
+    id: 'save',
+    role: 'button',
+    label: 'Save',
+    ancestry: [{ role: 'application', label: 'Example' }],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'verified',
+  });
+  // matchCount 2 (both match); path 6 sibling ordinal isolates A, which is also the unfiltered
+  // disambiguation winner → verified on A.
+  assertVerified(result, { winnerRef: nodeA.ref!, matchCount: 2 });
 });

@@ -6,34 +6,18 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import type { SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
-import type {
-  ReplayTargetGuardDenotation,
-  TargetAnnotationV1,
-} from '@agent-device/contracts/replay';
+import type { ReplayTargetGuardDenotation } from '@agent-device/contracts/replay';
 import { readNodeLocalIdentity, readNodeStructuralDenotation } from '@agent-device/ad-script';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import {
-  ref as interactionRef,
-  selector,
-} from '../../../commands/interaction/runtime/selector-read-utils.ts';
-import { createInteractionDevice } from '../../../commands/interaction/runtime/__tests__/test-utils/index.ts';
-import { classifyReplayTarget } from '@agent-device/replay-port/target-classification';
+import { ref as interactionRef, selector } from './selector-read-utils.ts';
+import { createInteractionDevice } from './__tests__/test-utils/index.ts';
+
 /** The verified-member guard denotation the replay loop mints (identity + structural position). */
 function guardFor(node: SnapshotNode, nodes: SnapshotNode[]): ReplayTargetGuardDenotation {
   return {
     identity: readNodeLocalIdentity(node),
     structural: readNodeStructuralDenotation(node, nodes),
   };
-}
-
-function assertVerified(
-  result: ReturnType<typeof classifyReplayTarget>,
-  expected: { winnerRef: string; matchCount: number },
-): void {
-  assert.equal(result.verified, true);
-  if (!result.verified) throw new Error('unreachable');
-  assert.equal(result.winnerNode.ref, expected.winnerRef);
-  assert.equal(result.matchCount, expected.matchCount);
 }
 
 // ---------------------------------------------------------------------------
@@ -79,35 +63,6 @@ function splitResolverSnapshot(): SnapshotState {
     },
   ]);
 }
-
-test('split resolver: verification verifies the covered deeper node while dispatch would resolve its visible sibling', () => {
-  const nodes = splitResolverSnapshot().nodes;
-  const nodeA = nodes.find((node) => node.identifier === 'save-a');
-  assert.ok(nodeA);
-  const recorded: TargetAnnotationV1 = {
-    id: 'save-a',
-    role: 'button',
-    label: 'Save',
-    ancestry: [{ role: 'application', label: 'Example' }],
-    sibling: 0,
-    viewportOrder: 0,
-    verification: 'verified',
-  };
-  const result = classifyReplayTarget({
-    recorded,
-    token: 'label="Save"',
-    nodes,
-    platform: 'ios',
-    refLabel: undefined,
-    requireRect: true,
-    allowDisambiguation: true,
-  });
-  // Verification's unfiltered domain: both buttons match; the identity set
-  // isolates A; the unfiltered disambiguation winner is also A (deepest) —
-  // path 4 verified. Dispatch would resolve B: exactly the split the
-  // post-resolution guard exists to catch.
-  assertVerified(result, { winnerRef: nodeA.ref!, matchCount: 2 });
-});
 
 test('split resolver: the post-resolution guard refuses pre-action when dispatch resolves a different element', async () => {
   const snapshot = splitResolverSnapshot();
@@ -248,35 +203,6 @@ function sameIdentityDuplicatesSnapshot(): SnapshotState {
     },
   ]);
 }
-
-test('same-identity duplicates: verification denotes the covered member A among two identical id/role/label buttons', () => {
-  const nodes = sameIdentityDuplicatesSnapshot().nodes;
-  const nodeA = nodes[1]!; // document order 1, covered
-  const nodeB = nodes[2]!; // document order 2, visible
-  // Sanity: A and B are genuinely indistinguishable by local identity.
-  assert.deepEqual(readNodeLocalIdentity(nodeA), readNodeLocalIdentity(nodeB));
-  const recorded: TargetAnnotationV1 = {
-    id: 'save',
-    role: 'button',
-    label: 'Save',
-    ancestry: [{ role: 'application', label: 'Example' }],
-    sibling: 0, // isolates A among the two same-identity duplicates
-    viewportOrder: 0,
-    verification: 'verified',
-  };
-  const result = classifyReplayTarget({
-    recorded,
-    token: 'label="Save"',
-    nodes,
-    platform: 'ios',
-    refLabel: undefined,
-    requireRect: true,
-    allowDisambiguation: true,
-  });
-  // matchCount 2 (both match); path 6 sibling ordinal isolates A, which is
-  // also the unfiltered disambiguation winner → verified on A.
-  assertVerified(result, { winnerRef: nodeA.ref!, matchCount: 2 });
-});
 
 test('same-identity duplicates: the structural guard refuses pre-action when dispatch resolves the OTHER duplicate (P1 regression)', async () => {
   const snapshot = sameIdentityDuplicatesSnapshot();
