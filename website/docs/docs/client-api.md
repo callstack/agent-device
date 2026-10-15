@@ -33,6 +33,9 @@ Entry points for driving devices from Node.js:
   - `createAgentDeviceClient(options?)`
   - `createLocalArtifactAdapter(options?)`
   - `AppError`, `isAgentDeviceError(error)`, `normalizeAgentDeviceError(error)`
+  - `isUnreadableCaptureContentError(error)`: true when a capture failed because the screen had no
+    readable app content yet (an Android helper content verdict, for example while the app is still
+    loading). Polling callers may keep polling; mechanism failures stay false.
   - `centerOfRect(rect)`
   - types: `AgentDeviceClient`, `AgentDeviceClientConfig`, `AgentDeviceDevice`
   - types: every option and result type of the client's methods, among them `AppOpenOptions`,

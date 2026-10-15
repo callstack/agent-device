@@ -383,6 +383,7 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       'createAgentDeviceClient',
       'createLocalArtifactAdapter',
       'isAgentDeviceError',
+      'isUnreadableCaptureContentError',
       'normalizeAgentDeviceError',
     ]);
     assert.equal(imports.rootClientSnapshot, 'function');
