@@ -184,17 +184,9 @@
       "types": "./src/execution/interaction/internal/__tests__/*.ts",
       "default": "./src/execution/interaction/internal/__tests__/*.ts"
     },
-    "./testing/interaction/internal/interaction-android-escape": {
-      "types": "./src/execution/interaction/internal/interaction-android-escape.ts",
-      "default": "./src/execution/interaction/internal/interaction-android-escape.ts"
-    },
     "./testing/interaction/internal/interaction-touch-response": {
       "types": "./src/execution/interaction/internal/interaction-touch-response.ts",
       "default": "./src/execution/interaction/internal/interaction-touch-response.ts"
-    },
-    "./testing/interaction/internal/types": {
-      "types": "./src/core/interaction/internal/types.ts",
-      "default": "./src/core/interaction/internal/types.ts"
     },
     "./testing/interactor-resolution": {
       "types": "./src/core/interactor-resolution.ts",
