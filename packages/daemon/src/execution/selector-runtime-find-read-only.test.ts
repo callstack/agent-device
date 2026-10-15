@@ -130,7 +130,7 @@ test('handleFindCommands wait bypasses snapshot cache while Android freshness re
   expect(mockDispatch).toHaveBeenCalledTimes(2);
 });
 
-test('handleFindCommands wait over a sparse capture answers the surface refusal and leaves the stored tree alone', async () => {
+test('handleFindCommands wait over a sparse capture hands the surface its sparse verdict and leaves the stored tree alone', async () => {
   const session = makeSession('default');
   session.snapshot = {
     nodes: [
@@ -173,7 +173,12 @@ test('handleFindCommands wait over a sparse capture answers the surface refusal 
 
   expect(response.ok).toBe(false);
   expect(session.snapshot).toBe(previousSnapshot);
-  expect(!response.ok && response.error).toMatchObject({ code: 'COMMAND_FAILED' });
+  // The sparse verdict is the daemon's capture result reaching the surface: a timeout would carry no
+  // reason, so the reason proves the refusal came from the verdict and not from the poll budget.
+  expect(!response.ok && response.error).toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: { reason: 'sparse tree' },
+  });
 });
 
 test('handleFindCommands wait captures fresh snapshots while polling', async () => {
