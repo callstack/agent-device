@@ -12,7 +12,7 @@ import { platformResourceCleanup } from '../../../platform-runtime-resource-clea
 import { runCmd } from '@agent-device/host-kit/command';
 import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import { makeWebSession } from '@agent-device/daemon/testing/__tests__/session-teardown.fixtures';
-import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/server/daemon-runtime';
+import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/testing/server/daemon-runtime';
 
 const mockRunCmd = vi.mocked(runCmd);
 

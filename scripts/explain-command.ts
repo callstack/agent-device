@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { explainCommand, formatCommandExplanation } from '../src/cli/command-explain.ts';
-import { getDaemonRouteOwnerFiles } from '@agent-device/daemon/route-owner-files';
+import { getDaemonRouteOwnerFiles } from '@agent-device/command-registry/owner-files';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 export type ExplainCommandCliResult = {

@@ -31,7 +31,7 @@ import type {
 import { handleSnapshotCommands } from '@agent-device/daemon/testing/handlers/snapshot';
 import { resolveBoundSelectorCapture } from '@agent-device/daemon/testing/selector-capture-binding';
 import { dispatchGetViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const webDevice = {

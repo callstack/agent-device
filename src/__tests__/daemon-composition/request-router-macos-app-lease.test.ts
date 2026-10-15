@@ -6,7 +6,7 @@ import { MACOS_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { makeMacOsSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
 import { screenshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/screenshot-runtime-fixture';

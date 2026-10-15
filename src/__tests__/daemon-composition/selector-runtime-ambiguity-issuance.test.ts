@@ -4,7 +4,7 @@ import { attachRefs } from '@agent-device/kernel/snapshot';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { selectorCaptureFixture } from '@agent-device/daemon/testing/__tests__/selector-capture-fixture';
 import { refFrameScope, refFrameState } from '@agent-device/daemon/testing/ref-frame';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon';
 import { dispatchIsViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {

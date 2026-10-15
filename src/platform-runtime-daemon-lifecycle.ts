@@ -1,4 +1,4 @@
-import type { PlatformOwnerLifecycle } from '@agent-device/daemon/platform-owner-lifecycle';
+import type { PlatformOwnerLifecycle } from '@agent-device/daemon';
 import {
   configureAppleRunnerDeviceClaimAuthorityProbe,
   configureAppleRunnerLeaseOwnerStateDir,

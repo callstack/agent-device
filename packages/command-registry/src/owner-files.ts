@@ -1,3 +1,4 @@
+import type { DaemonCommandRoute } from './daemon-command-descriptor.ts';
 import { RAW_COMMAND_DESCRIPTORS, type Command } from './registry.ts';
 
 /**
@@ -45,4 +46,29 @@ export const COMMAND_OWNER_FILES = buildOwnerFiles(RAW_COMMAND_DESCRIPTORS) sati
 /** The owner-file claims for one command (development-only navigation metadata). */
 export function ownerFilesForCommand(command: Command): readonly [string, ...string[]] {
   return COMMAND_OWNER_FILES[command];
+}
+
+/**
+ * Development-only owner-file navigation claims for each daemon route. The route's runtime
+ * binding is its lazy loader in the daemon's handler table; this map is tooling metadata only
+ * `explain:command` reads, so it lives with the command claims above and the bundler drops it.
+ *
+ * `satisfies Record<DaemonCommandRoute, string>` keeps the map complete: adding or renaming a
+ * route is a compile error until this map matches. The daemon's `request-handler-chain` parity
+ * test asserts each path still points at the module that route's loader imports.
+ */
+const DAEMON_ROUTE_OWNER_FILES = {
+  humanControl: 'packages/daemon/src/sessions/handlers/human-control.ts',
+  lease: 'packages/daemon/src/sessions/handlers/lease.ts',
+  session: 'packages/daemon/src/sessions/handlers/session.ts',
+  snapshot: 'packages/daemon/src/sessions/handlers/snapshot.ts',
+  reactNative: 'packages/daemon/src/execution/handlers/react-native.ts',
+  recordTrace: 'packages/daemon/src/sessions/handlers/record-trace.ts',
+  find: 'packages/daemon/src/execution/interaction/index.ts',
+  interaction: 'packages/daemon/src/execution/interaction/index.ts',
+  generic: 'packages/daemon/src/execution/request-generic-dispatch.ts',
+} as const satisfies Record<DaemonCommandRoute, string>;
+
+export function getDaemonRouteOwnerFiles(): Record<DaemonCommandRoute, string> {
+  return { ...DAEMON_ROUTE_OWNER_FILES };
 }

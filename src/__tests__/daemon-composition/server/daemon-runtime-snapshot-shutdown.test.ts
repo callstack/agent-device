@@ -12,7 +12,7 @@ import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/s
 import { platformResourceCleanup } from '../../../platform-runtime-resource-cleanup.ts';
 import { DAEMON_SESSION_TEARDOWN_TIMEOUT_MS } from '@agent-device/daemon/testing/session-teardown-budget';
 import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
-import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/server/daemon-runtime';
+import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/testing/server/daemon-runtime';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({

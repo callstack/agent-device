@@ -26,7 +26,7 @@ import type { AppleSimulatorScreenRecordingProcess } from '../../../src/platform
 import { trackDownloadableArtifact } from '@agent-device/daemon/testing/artifact-tracking';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { SessionStore } from '@agent-device/daemon/testing/session-store';
-import type { DaemonInvokeFn } from '@agent-device/daemon/daemon-request';
+import type { DaemonInvokeFn } from '@agent-device/daemon';
 import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import { createOwnedProcessRecordStore } from '@agent-device/host-kit/process';

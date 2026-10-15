@@ -7,7 +7,7 @@ import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { createDaemonRuntimeDeps } from '../daemon-composition.ts';
 import { startDaemonRuntimeFixture } from './daemon-composition/daemon-runtime-fixture.ts';
-import type { DaemonRuntimeDepsInput } from '@agent-device/daemon/server/daemon-runtime';
+import type { DaemonRuntimeDepsInput } from '@agent-device/daemon';
 
 // The server builds its own store, so capture that instance the same way the shutdown tests do:
 // the proof is about the store the server hands to the composition callbacks, not one the test

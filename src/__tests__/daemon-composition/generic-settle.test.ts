@@ -24,7 +24,7 @@ import {
 } from '@agent-device/daemon/testing/ref-frame';
 import { setSessionSnapshot } from '@agent-device/daemon/testing/session-snapshot';
 import type { SessionStore } from '@agent-device/daemon/testing/session-store';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon';
 import type { SessionRef, SessionState } from '@agent-device/daemon/testing/session-state';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { selectorCaptureFixture } from '@agent-device/daemon/testing/__tests__/selector-capture-fixture';

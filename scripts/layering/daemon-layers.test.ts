@@ -8,6 +8,7 @@ import { resolveImportEdges, type ResolvedImportEdge } from './model.ts';
 import {
   checkDaemonLayers,
   DAEMON_LAYER_ORDER,
+  DAEMON_PACKAGE_ENTRY,
   DAEMON_ROOT,
   daemonLayerOf,
 } from './daemon-layers.ts';
@@ -142,6 +143,14 @@ test('a production file at the daemon root fails: the folder is the declaration'
   );
   assert.match(violations[0]!.message, /is not under a layer folder/);
   assert.match(violations[1]!.message, /does not start with one/);
+});
+
+test('the package entry is the one root file that needs no layer folder', () => {
+  assert.deepEqual(
+    checkDaemonLayers([...FIXTURE_FILES, DAEMON_PACKAGE_ENTRY], [], () => {}),
+    [],
+  );
+  assert.equal(DAEMON_PACKAGE_ENTRY, `${DAEMON_ROOT}/index.ts`);
 });
 
 test('tests and test support carry no layer and never trip the folder claim', () => {

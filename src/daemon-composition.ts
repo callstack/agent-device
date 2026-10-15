@@ -42,7 +42,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type {
   ComposeDaemonRuntimeDeps,
   DaemonRuntimeDeps,
-} from '@agent-device/daemon/server/daemon-runtime';
+} from '@agent-device/daemon';
 
 /**
  * Best-effort startup cleanup of managed-agent-browser orphans left by a previous daemon. It runs

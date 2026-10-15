@@ -9,8 +9,8 @@
 //   only direction claim over the daemon's interior. Dynamic imports crossing layers are reported
 //   explicitly, never rejected: the route loaders in `request-handler-chain.ts` defer exactly the
 //   handlers the eager closure must not carry, and R5 made the same dynamic-vs-static decision
-//   (#3280). An unknown first segment (or a production file sitting at the daemon root) fails,
-//   so a new file cannot enter the zone without picking a layer.
+//   (#3280). An unknown first segment (or a production file sitting at the daemon root, bar the
+//   package entry `index.ts`) fails, so a new file cannot enter the zone without picking a layer.
 // Evidence: #3391 landed the partition; PR 10 moved each layer into its folder and re-measured
 //   the zero upward static value-or-type edge claim against the moved graph.
 // Cost: attributed to the R81 rule registration in check.ts; not a standalone CI job.
@@ -26,6 +26,12 @@ export const DAEMON_ROOT = DAEMON_SOURCE_ROOT.slice(0, -1);
 
 /** The daemon-local order, lowest first. The global spine rank stays 4 for all five layers. */
 export const DAEMON_LAYER_ORDER = ['core', 'resources', 'execution', 'sessions', 'server'] as const;
+
+/**
+ * The package boundary: the one production file allowed at the daemon root, because it declares
+ * the public API rather than belonging to a layer.
+ */
+export const DAEMON_PACKAGE_ENTRY = `${DAEMON_SOURCE_ROOT}index.ts`;
 
 export type DaemonLayer = (typeof DAEMON_LAYER_ORDER)[number];
 
@@ -99,7 +105,7 @@ export function checkDaemonLayers(
   for (const file of trackedDaemonProductionFiles) {
     // The context's scan names every tracked TS file in the zone; tests and test support mirror
     // their source module by convention and carry no folder claim.
-    if (!isProductionSourceFile(file)) continue;
+    if (!isProductionSourceFile(file) || file === DAEMON_PACKAGE_ENTRY) continue;
     if (daemonLayerOf(file) === null) {
       const rest = path.relative(DAEMON_ROOT, file);
       violations.push({

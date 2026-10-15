@@ -31,33 +31,9 @@
     "yaml": "^2.9.0"
   },
   "exports": {
-    "./daemon-command-registry": {
-      "types": "./src/core/daemon-command-registry.ts",
-      "default": "./src/core/daemon-command-registry.ts"
-    },
-    "./daemon-request": {
-      "types": "./src/core/daemon-request.ts",
-      "default": "./src/core/daemon-request.ts"
-    },
-    "./platform-owner-lifecycle": {
-      "types": "./src/core/platform-owner-lifecycle.ts",
-      "default": "./src/core/platform-owner-lifecycle.ts"
-    },
-    "./platform-resource-cleanup": {
-      "types": "./src/core/platform-resource-cleanup.ts",
-      "default": "./src/core/platform-resource-cleanup.ts"
-    },
-    "./platform-services": {
-      "types": "./src/core/platform-services.ts",
-      "default": "./src/core/platform-services.ts"
-    },
-    "./route-owner-files": {
-      "types": "./src/sessions/route-owner-files.ts",
-      "default": "./src/sessions/route-owner-files.ts"
-    },
-    "./server/daemon-runtime": {
-      "types": "./src/server/http/daemon-runtime.ts",
-      "default": "./src/server/http/daemon-runtime.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
     },
     "./testing/__tests__/android-observation-fixture": {
       "types": "./src/__tests__/support/android-observation-fixture.ts",
@@ -186,6 +162,10 @@
     "./testing/context": {
       "types": "./src/core/context.ts",
       "default": "./src/core/context.ts"
+    },
+    "./testing/daemon-command-registry": {
+      "types": "./src/core/daemon-command-registry.ts",
+      "default": "./src/core/daemon-command-registry.ts"
     },
     "./testing/deferred-interaction-outcome": {
       "types": "./src/core/deferred-interaction-outcome.ts",
@@ -362,6 +342,10 @@
     "./testing/selector-runtime-backend": {
       "types": "./src/execution/selector-runtime-backend.ts",
       "default": "./src/execution/selector-runtime-backend.ts"
+    },
+    "./testing/server/daemon-runtime": {
+      "types": "./src/server/http/daemon-runtime.ts",
+      "default": "./src/server/http/daemon-runtime.ts"
     },
     "./testing/server/http-server": {
       "types": "./src/server/http/http-server.ts",

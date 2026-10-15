@@ -24,7 +24,6 @@ import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
 import { readProcessStartTime } from '@agent-device/host-kit/process';
 import { readVersion } from '@agent-device/host-kit/version';
-import type { DaemonInvokeFn } from '@agent-device/daemon/daemon-request';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
 import { createAgentDeviceClient } from '../../agent-device-client.ts';
@@ -38,13 +37,15 @@ import {
 } from '@agent-device/test-kit/loopback';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
+type WireInvokeFn = (req: DaemonWireRequest) => Promise<DaemonResponse>;
+
 const TOKEN = 'default-transport-abort-token';
 
 type SeenRequest = { started: boolean; canceled: boolean[]; requestId?: string };
 
 // `wait` is the long request the caller abandons; it never answers on its own, so only the client's
 // disconnect ends it — through the daemon's own request-scoped cancellation.
-function hangingWaitHandler(seen: SeenRequest): DaemonInvokeFn {
+function hangingWaitHandler(seen: SeenRequest): WireInvokeFn {
   return async (req: DaemonWireRequest): Promise<DaemonResponse> => {
     const requestId = req.meta?.requestId;
     seen.started = true;
@@ -94,7 +95,7 @@ async function waitFor(condition: () => boolean, what: string): Promise<void> {
 async function runDefaultTransportAbort(
   t: SkippableTestContext,
   transport: 'socket' | 'http',
-  serve: (handleRequest: DaemonInvokeFn) => Promise<{
+  serve: (handleRequest: WireInvokeFn) => Promise<{
     server: Parameters<typeof closeLoopbackServer>[0];
     port: number;
     destroyConnections?: () => void;

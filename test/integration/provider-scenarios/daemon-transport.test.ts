@@ -1,4 +1,4 @@
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import http from 'node:http';

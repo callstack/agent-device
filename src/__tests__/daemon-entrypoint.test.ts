@@ -7,7 +7,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { startDaemonRuntimeFixture } from './daemon-composition/daemon-runtime-fixture.ts';
-import type { DaemonRuntimeController } from '@agent-device/daemon/server/daemon-runtime';
+import type { DaemonRuntimeController } from '@agent-device/daemon';
 import {
   cleanupDownloadableArtifact,
   trackDownloadableArtifact,

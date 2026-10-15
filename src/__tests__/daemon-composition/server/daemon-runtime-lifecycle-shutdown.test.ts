@@ -52,7 +52,7 @@ const shutdownProbe = vi.hoisted(() => ({
   store: undefined as import('@agent-device/daemon/testing/session-store').SessionStore | undefined,
   drain: undefined as (() => Promise<void>) | undefined,
   finalize: vi.fn(async () => {}),
-  dispatch: undefined as import('@agent-device/daemon/daemon-request').DaemonInvokeFn | undefined,
+  dispatch: undefined as import('@agent-device/daemon').DaemonInvokeFn | undefined,
   closeTimeout: undefined as number | undefined,
 }));
 vi.mock('@agent-device/daemon/testing/session-store', async (importOriginal) => {
@@ -142,7 +142,7 @@ import {
 } from '@agent-device/daemon/testing/__tests__/support/device-claim-store';
 import { sendRequest } from '../../../daemon-client/daemon-client-transport.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/server/daemon-runtime';
+import { teardownDaemonSessionForShutdown } from '@agent-device/daemon/testing/server/daemon-runtime';
 import { startDaemonRuntimeFixture } from '../daemon-runtime-fixture.ts';
 import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';

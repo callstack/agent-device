@@ -22,7 +22,7 @@ import type { ReplayTestCommand } from '@agent-device/replay-port/command-types'
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '@agent-device/replay-port/session-replay-test-policy';
 import { replayCommandFamily } from '../../../commands/replay/index.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import type { DaemonInvokeFn, DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { DaemonInvokeFn, DaemonRequest } from '@agent-device/daemon';
 
 // --- ADR 0012 decision 4 / migration step 5: `--from` is replay-only ---
 

@@ -6,7 +6,6 @@ import {
   listCliCommandNames,
   PUBLIC_COMMANDS,
 } from '@agent-device/command-registry/catalog';
-import { canRunReplayScopedAction } from '@agent-device/daemon/daemon-command-registry';
 import {
   deriveDaemonCommandDescriptors,
   deriveStructuredBatchCommandNames,
@@ -134,6 +133,9 @@ test('structured-batch allowlist is built from descriptors', () => {
 // #1310: every raw descriptor explicitly decides recording; the daemon
 // replayScopedAction trait and MCP schema projection are both derived from it.
 test('recordsSessionAction is explicit on every raw descriptor and drives daemon replay policy', () => {
+  const derivedDaemonCommands = new Map(
+    deriveDaemonCommandDescriptors(commandDescriptors).map((daemon) => [daemon.command, daemon]),
+  );
   for (const descriptor of RAW_COMMAND_DESCRIPTORS) {
     assert.equal(
       typeof descriptor.recordsSessionAction,
@@ -167,7 +169,7 @@ test('recordsSessionAction is explicit on every raw descriptor and drives daemon
     if (!('daemon' in descriptor)) continue;
     assert.equal(
       resolveCommandRecordsSessionAction(descriptor.name),
-      canRunReplayScopedAction(descriptor.name),
+      derivedDaemonCommands.get(descriptor.name)?.replayScopedAction === true,
       `${descriptor.name} recordsSessionAction matches daemon replayScopedAction`,
     );
   }

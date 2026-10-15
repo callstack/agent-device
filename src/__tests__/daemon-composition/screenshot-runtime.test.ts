@@ -13,7 +13,7 @@ import {
   screenshotRuntimeFixture,
   writeSolidPng,
 } from '@agent-device/daemon/testing/__tests__/screenshot-runtime-fixture';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon';
 import type { SessionState } from '@agent-device/daemon/testing/session-state';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';

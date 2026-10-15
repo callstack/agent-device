@@ -19,11 +19,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
+import { deriveDaemonCommandDescriptors } from '@agent-device/command-registry/derive';
+import { commandDescriptors } from '@agent-device/command-registry/registry';
 import {
   INTERACTION_DISPATCH_PATHS,
   type InteractionPathId,
 } from '@agent-device/contracts/interaction-guarantees';
-import { DAEMON_COMMAND_DESCRIPTORS } from '@agent-device/daemon/daemon-command-registry';
 import { parseArgs } from 'node:util';
 import { selectChecks, type CheckPlan } from '../check-affected/model.ts';
 import {
@@ -141,7 +142,7 @@ function commandChains(repoRoot: string): CommandChain[] {
   const source = fs.readFileSync(path.join(repoRoot, HANDLER_CHAIN_FILE), 'utf8');
   const routeEntries = parseRouteEntries(source, HANDLER_CHAIN_FILE);
   const publicCommands = new Set<string>(Object.values(PUBLIC_COMMANDS));
-  return DAEMON_COMMAND_DESCRIPTORS.filter((descriptor) =>
+  return deriveDaemonCommandDescriptors(commandDescriptors).filter((descriptor) =>
     publicCommands.has(descriptor.command),
   ).map((descriptor) => {
     const entry = routeEntries.get(descriptor.route);

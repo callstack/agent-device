@@ -56,7 +56,7 @@ import { createTestDeviceInventoryGateways } from '@agent-device/device-selectio
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import type { DaemonRequest } from '@agent-device/daemon/daemon-request';
+import type { DaemonRequest } from '@agent-device/daemon';
 import {
   prepareIosRunner,
   prewarmAppleRunnerCache,

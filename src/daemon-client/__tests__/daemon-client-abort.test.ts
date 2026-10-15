@@ -14,7 +14,6 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
 import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
-import type { DaemonInvokeFn } from '@agent-device/daemon/daemon-request';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
 import { sendRequest } from '../daemon-client-transport.ts';
@@ -26,6 +25,8 @@ import {
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit/loopback';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+
+type WireInvokeFn = (req: DaemonWireRequest) => Promise<DaemonResponse>;
 
 const TOKEN = 'abort-signal-token';
 const STATE_PATHS = resolveDaemonPaths(mkdtempForTestSync('agent-device-client-abort-'));
@@ -40,7 +41,7 @@ type SeenRequest = {
 
 // `wait` models the long request the caller abandons; every other command answers immediately, so
 // the same handler also proves the daemon still serves requests after one was canceled.
-function canceledAwareHandler(seen: SeenRequest): DaemonInvokeFn {
+function canceledAwareHandler(seen: SeenRequest): WireInvokeFn {
   return async (req: DaemonWireRequest): Promise<DaemonResponse> => {
     const requestId = req.meta?.requestId;
     seen.requestId = requestId;
