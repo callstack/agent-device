@@ -119,9 +119,9 @@ export function releaseSpeculativeRunner(
  * held URL, and the URL is handed over again and read once more. A launch still proven not running
  * afterwards fails the open with `launch_confirmation_unanswered` rather than returning green to a
  * session whose every later command then fails `app is not running`. A recognized prompt still
- * visible after a failed accept also fails the open, even if the app is running. A read that found no prompt, an
- * unrecognized prompt and an unresolved URL owner all leave the open as green as it was, with only
- * the bounded alert wait spent.
+ * visible after a failed accept also fails the open, even if the app is running. A missing or
+ * unrecognized prompt, or an unresolved URL owner, leaves the launch unchanged. An unresolved owner
+ * spends both the bounded alert wait and the bounded URL-owner lookup.
  */
 export async function settleAppleOpen(
   host: Pick<PlatformRuntimeHost, 'clock'>,
