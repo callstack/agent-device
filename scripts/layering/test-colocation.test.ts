@@ -39,6 +39,11 @@ test('a test named for no module in its directory is unmatched', () => {
   );
 });
 
+test('a declaration module is named for its stem: foo.d.ts matches foo.test.ts', () => {
+  assert.deepEqual(unmatched('src/foo.d.ts', 'src/foo.test.ts', 'src/foo-shape.test.ts'), []);
+  assert.deepEqual(unmatched('src/foo.d.ts', 'src/foo.d.test.ts'), ['src/foo.d.test.ts']);
+});
+
 test('the aspect suffix is dash-separated: a dotted or glued name does not match', () => {
   assert.deepEqual(
     unmatched(

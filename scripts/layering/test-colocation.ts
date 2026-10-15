@@ -48,7 +48,7 @@ export function measureUnmatchedTests(files: readonly string[]): string[] {
     if (!IN_SCOPE.test(file) || !isProductionSourceFile(file)) continue;
     const dir = path.posix.dirname(file);
     const modules = modulesByDirectory.get(dir) ?? [];
-    modules.push(path.posix.basename(file, '.ts'));
+    modules.push(path.posix.basename(file).replace(/(?:\.d)?\.ts$/, ''));
     modulesByDirectory.set(dir, modules);
   }
   const unmatched: string[] = [];

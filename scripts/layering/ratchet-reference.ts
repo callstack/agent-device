@@ -111,6 +111,6 @@ export function mergeBaseRatchets(
     ...base,
     // Base entries in head coordinates, like the edges above: a test moved or renamed since the
     // merge-base is the same entry, not new.
-    unmatchedTests: base.unmatchedTests.map(toHead),
+    unmatchedTests: base.unmatchedTests.map(toHead).sort(),
   };
 }
