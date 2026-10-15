@@ -1,19 +1,8 @@
-import type { CommandFlags } from '@agent-device/contracts/command';
 import { getRuntimeBindings } from '../../execution/__tests__/interaction-get-runtime-fixture.ts';
 import { handleInteractionCommands } from '../../execution/interaction/index.ts';
+import { contextFromFlags } from '../../execution/interaction/internal/__tests__/interaction-touch-fixtures.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import { touchCreateCommandSurface } from './touch-command-surface-fake.ts';
-
-/** The request-flag projection the interaction handler's runtime context is built from. */
-const contextFromFlags = (flags: CommandFlags | undefined) => ({
-  count: flags?.count,
-  intervalMs: flags?.intervalMs,
-  delayMs: flags?.delayMs,
-  holdMs: flags?.holdMs,
-  jitterPx: flags?.jitterPx,
-  doubleTap: flags?.doubleTap,
-  clickButton: flags?.clickButton,
-});
 
 /**
  * One interaction request through `handleInteractionCommands` on the touch command surface fake
