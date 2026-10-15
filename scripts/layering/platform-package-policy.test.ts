@@ -528,6 +528,10 @@ test('platform package tests may import test-kit, production source may not', ()
     'packages/platform-apple/src/recording/fixtures.ts',
     "import { mkdtempForTest } from '@agent-device/test-kit';",
   );
+  tests.set(
+    'packages/platform-apple/src/probe.spec.ts',
+    "import { mkdtempForTest } from '@agent-device/test-kit';",
+  );
   assert.deepEqual(checkPlatformPackagePolicy(tests, declarations()), []);
 
   const production = validSources();
