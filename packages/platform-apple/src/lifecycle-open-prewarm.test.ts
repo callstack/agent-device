@@ -53,16 +53,31 @@ test.each([
 test('a Maestro app link on a Simulator resets the runner target it prewarmed before the URL dispatch', async () => {
   const events: string[] = [];
   const { host, notifyRunnerAppRelaunched } = simulatorHost({ events });
+  const open = vi.fn(async (_app: string, _options?: Record<string, unknown>) => {
+    events.push('open');
+  });
   const signal = new AbortController().signal;
-  const lifecycle = bindAppleApplicationLifecycle({ host, device: simulator, signal });
+  const lifecycle = bindAppleApplicationLifecycle({
+    host: {
+      ...host,
+      localInteractors: { resolve: async () => ({ open }) as unknown as Interactor },
+    } as unknown as PlatformRuntimeHost,
+    device: simulator,
+    signal,
+  });
 
   await lifecycle.openApplication({
     ...openInput(),
+    positionals: ['com.example.app', 'https://example.com/deal'],
     relaunch: false,
     prewarmRunnerBeforeOpen: true,
   });
 
   expect(events).toEqual(['prewarm', 'open', 'reset']);
+  expect(open).toHaveBeenCalledWith(
+    'com.example.app',
+    expect.objectContaining({ url: 'https://example.com/deal' }),
+  );
   expect(notifyRunnerAppRelaunched).toHaveBeenCalledWith(simulator, {}, signal);
 });
 

@@ -212,6 +212,7 @@ test.each([
       dispatchedContext = context as Record<string, unknown> | undefined;
       return {};
     });
+    mockResolveOpenTarget.mockClear();
     mockResolveOpenTarget.mockResolvedValueOnce(resolved);
 
     const response = await handleSessionCommands({

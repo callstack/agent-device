@@ -164,6 +164,7 @@ async function invokePrepare(params: {
       use,
     );
   };
+  vi.mocked(resolveTargetDevice).mockClear();
   vi.mocked(resolveTargetDevice).mockResolvedValue(device);
   const response = await handlePrepareCommand({
     platformServices: daemonPlatformServicesFixture(),
