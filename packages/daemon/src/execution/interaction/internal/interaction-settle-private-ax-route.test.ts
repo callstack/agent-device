@@ -1,31 +1,24 @@
 import { beforeEach, expect, test, vi } from 'vitest';
+import type { Interactor, SnapshotResult } from '@agent-device/contracts/interactor-types';
+import type { SettleObservation } from '@agent-device/contracts/interaction';
+import type { SnapshotOptions } from '@agent-device/contracts/interactor-types';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { withAppleRunnerProvider } from '@agent-device/platform-apple/runner';
-import { contextFromFlags as buildDaemonContext } from '@agent-device/daemon/testing/context';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
-import { getRuntimeBindings } from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
-import { getInteractor } from '../../../core/interactors.ts';
-import { installInteractorResolution } from '@agent-device/daemon/testing/interactor-resolution';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { contextFromFlags as buildDaemonContext } from '../../../core/context.ts';
+import { installInteractorResolution } from '../../../core/interactor-resolution.ts';
+import { handleInteractionCommands } from '../index.ts';
+import { getRuntimeBindings } from '../../__tests__/interaction-get-runtime-fixture.ts';
+import { touchForwardingCreateCommandSurface } from '../../../__tests__/support/touch-forwarding-surface-fake.ts';
 
-// Root composition hands the daemon its interactor resolution; this test drives the real
-// settle capture, so it composes the real lookup the way the process root does.
-installInteractorResolution({ resolve: getInteractor });
+// The settle loop pins `private-ax` on its captures once the observation reports that producer; the
+// daemon must carry that preference through its capture path to the interactor, which is what the
+// runner request is built from. Where the loop decides to pin is pinned beside it, in
+// src/commands/interaction/runtime/settle.test.ts, and how the Apple interactor turns the preference
+// into a runner request in packages/platform-apple.
 
-vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  return {
-    ...actual,
-    runAppleRunnerCommand: vi.fn(async () => ({})),
-  };
-});
+const snapshotCalls: SnapshotOptions[] = [];
 
-import { runAppleRunnerCommand } from '@agent-device/platform-apple/runner/operations';
-
-const mockRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const nodes = [
   { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
   {
@@ -51,12 +44,36 @@ const privateAxQuality = {
   reasonCode: 'requested-backend' as const,
 };
 
+installInteractorResolution({
+  resolve: async () =>
+    ({
+      snapshot: vi.fn(async (options: SnapshotOptions): Promise<SnapshotResult> => {
+        snapshotCalls.push(options);
+        return { nodes, backend: 'xctest', quality: privateAxQuality } as SnapshotResult;
+      }),
+    }) as unknown as Interactor,
+});
+
 beforeEach(() => {
-  mockRunnerCommand.mockReset();
-  mockRunnerCommand.mockImplementation(async (_device, command) => {
-    if (command.command === 'snapshot') return { nodes, snapshotQuality: privateAxQuality };
-    return {};
-  });
+  snapshotCalls.length = 0;
+});
+
+/** The pin the settle loop applies: every settle capture asks for `private-ax` once it is established. */
+const pinningSurface = touchForwardingCreateCommandSurface({
+  observeSettle: async ({ settle, baselineQuality, capture }): Promise<SettleObservation> => {
+    let pinned = baselineQuality?.backend === 'private-ax';
+    for (let captures = 0; captures < 3; captures += 1) {
+      const settled = await capture(pinned ? { preferredBackend: 'private-ax' } : undefined);
+      pinned ||= settled.snapshotQuality?.backend === 'private-ax';
+    }
+    return {
+      settled: true,
+      waitedMs: 0,
+      captures: 3,
+      quietMs: settle.quietMs ?? 500,
+      timeoutMs: settle.timeoutMs ?? 10_000,
+    };
+  },
 });
 
 test('daemon press --settle pins private-ax on emitted snapshot runner requests', async () => {
@@ -73,30 +90,25 @@ test('daemon press --settle pins private-ax on emitted snapshot runner requests'
     }),
   );
 
-  const response = await withAppleRunnerProvider(mockRunnerCommand, { deviceId: 'sim-1' }, () =>
-    handleInteractionCommands({
-      createCommandSurface: testCreateCommandSurface,
-      req: {
-        token: 't',
-        session: sessionName,
-        command: 'press',
-        positionals: ['label=Continue'],
-        flags: { settle: true, settleQuietMs: 25, timeoutMs: 1_000 },
-      },
-      sessionName,
-      sessionStore,
-      contextFromFlags: (flags, appBundleId, traceLogPath) =>
-        buildDaemonContext('', flags, appBundleId, traceLogPath),
-      ...getRuntimeBindings(),
-    }),
-  );
+  const response = await handleInteractionCommands({
+    createCommandSurface: pinningSurface,
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['label=Continue'],
+      flags: { settle: true, settleQuietMs: 25, timeoutMs: 1_000 },
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags: (flags, appBundleId, traceLogPath) =>
+      buildDaemonContext('', flags, appBundleId, traceLogPath),
+    ...getRuntimeBindings(),
+  });
 
   expect(response?.ok).toBe(true);
-  const snapshotCommands = mockRunnerCommand.mock.calls
-    .map(([, command]) => command)
-    .filter((command) => command.command === 'snapshot');
-  expect(snapshotCommands.length).toBeGreaterThanOrEqual(3);
-  const preferredBackends = snapshotCommands.map((command) => command.preferredBackend);
+  expect(snapshotCalls.length).toBeGreaterThanOrEqual(3);
+  const preferredBackends = snapshotCalls.map((options) => options.preferredBackend);
   expect(preferredBackends).toEqual([
     undefined,
     ...Array.from({ length: preferredBackends.length - 1 }, () => 'private-ax' as const),

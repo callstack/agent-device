@@ -1,24 +1,22 @@
-import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import { legacyDispatchCapture } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import {
   createInteractionRuntime,
   handleInteractionCommands,
-} from '@agent-device/daemon/testing/interaction/index';
-import type { SessionStore } from '@agent-device/daemon/testing/session-store';
-import type { SessionRef, SessionState } from '@agent-device/daemon/testing/session-state';
+} from '../index.ts';
+import type { SessionStore } from '../../../core/session-store.ts';
+import type { SessionRef, SessionState } from '../../../core/session-state.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import { setSessionSnapshot } from '@agent-device/daemon/testing/session-snapshot';
+import { setSessionSnapshot } from '../../session-snapshot.ts';
 import {
   activateCompleteRefFrame,
   expireRefFrame,
   refFrameState,
   refFrameTree,
-} from '@agent-device/daemon/testing/ref-frame';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+} from '../../../core/ref-frame.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import {
   clearRequestAbortRegistration,
   registerRequestAbort,
@@ -29,8 +27,12 @@ import {
   mockFillPoint,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
+import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
+import { installLegacyCaptureInteractorResolution } from '../../../__tests__/support/legacy-capture-interactor-resolution.ts';
+import { touchForwardingCreateCommandSurface } from '../../../__tests__/support/touch-forwarding-surface-fake.ts';
+import type { SettleObservation } from '@agent-device/contracts/interaction';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 
 // #1101 --settle daemon response shape: the settle payload (diff + settled +
 // refsGeneration) rides the wire response through the shared builder, and a
@@ -38,11 +40,9 @@ import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 // Quiet windows are tuned down (--settle-quiet 25) so no test waits real time
 // beyond a few poll ticks.
 
+installLegacyCaptureInteractorResolution();
+
 const mockCaptureSnapshotForSession = vi.hoisted(() => vi.fn());
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
-  captureSnapshotWithInteractor: vi.fn(),
-}));
-const nativeCapture = vi.mocked(captureSnapshotWithInteractor);
 
 const BEFORE_NODES = [
   { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
@@ -106,6 +106,83 @@ function seedSession(sessionName: string, sessionStore: ReturnType<typeof makeSe
   return session;
 }
 
+const diffKey = (node: SnapshotNode) => `${node.type}|${node.label ?? ''}`;
+
+/**
+ * A stand-in for the command family's settled diff, keyed by role and label: enough for the daemon
+ * to have added lines that carry refs minted from the settled tree, removed lines that carry none,
+ * and, when nothing was added, the unchanged interactive tail. How the real diff is computed is
+ * pinned beside it, in src/commands/interaction/runtime/settle.test.ts.
+ */
+function settledDiff(baseline: SnapshotNode[] | undefined, settled: SnapshotNode[]) {
+  const before = baseline ?? [];
+  const beforeKeys = new Set(before.map(diffKey));
+  const settledKeys = new Set(settled.map(diffKey));
+  const added = settled.filter((node) => !beforeKeys.has(diffKey(node)));
+  const removed = before.filter((node) => !settledKeys.has(diffKey(node)));
+  const unchanged = settled.filter((node) => beforeKeys.has(diffKey(node)));
+  return {
+    diff: {
+      summary: { additions: added.length, removals: removed.length, unchanged: unchanged.length },
+      lines: [
+        ...removed.map((node) => ({ kind: 'removed' as const, text: `${node.type} "${node.label}"` })),
+        ...added.map((node) => ({
+          kind: 'added' as const,
+          text: `${node.type} "${node.label}"`,
+          ref: node.ref,
+        })),
+      ],
+    },
+    tail:
+      added.length === 0
+        ? unchanged
+            .filter((node) => node.hittable && node.label)
+            .map((node) => ({
+              ref: node.ref,
+              role: node.type.toLowerCase(),
+              label: node.label,
+            }))
+        : undefined,
+  };
+}
+
+/**
+ * The touch-forwarding surface with the post-action observation `--settle` owes: it captures the
+ * settled tree through the config's backend under the settle budget's deadline and answers with the
+ * diff, or with the unavailable/stalled verdict the command family reports when that capture fails.
+ */
+const settlingSurface = touchForwardingCreateCommandSurface({
+  observeSettle: async ({ settle, baseline, capture }): Promise<SettleObservation> => {
+    const quietMs = settle.quietMs ?? 500;
+    const timeoutMs = settle.timeoutMs ?? 10_000;
+    const deadline = AbortSignal.timeout(timeoutMs);
+    try {
+      const settled = await capture({ signal: deadline });
+      const { diff, tail } = settledDiff(baseline, settled.nodes);
+      return {
+        settled: true,
+        waitedMs: 0,
+        captures: 1,
+        quietMs,
+        timeoutMs,
+        diff,
+        ...(tail ? { tail } : {}),
+      };
+    } catch (error) {
+      return {
+        settled: false,
+        waitedMs: 0,
+        captures: 1,
+        quietMs,
+        timeoutMs,
+        hint: deadline.aborted
+          ? 'A snapshot capture stalled past the settle budget, so no settled diff is shown.'
+          : `Settle observation unavailable (${error instanceof Error ? error.message : String(error)}).`,
+      };
+    }
+  },
+});
+
 test('interaction runtime inherits the registered daemon request signal', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'request-signal';
@@ -116,8 +193,8 @@ test('interaction runtime inherits the registered daemon request signal', async 
 
   try {
     const runtime = await createInteractionRuntime({
-      createCommandSurface: testCreateCommandSurface,
-      platformServices: composedPlatformServicesFixture(),
+      createCommandSurface: settlingSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -175,7 +252,6 @@ beforeEach(() => {
   });
   mockCaptureSnapshotForSession.mockReset();
   mockCaptureSnapshotForSession.mockImplementation(emulateCaptureSnapshotForSession);
-  nativeCapture.mockReset();
 });
 
 const SETTLE_FLAGS = { settle: true, settleQuietMs: 25, timeoutMs: 2_000 };
@@ -221,7 +297,7 @@ test('press --settle responds with the settled diff, refsGeneration, and activat
   mockCommandDispatch({ snapshots: [BEFORE_NODES, AFTER_NODES, AFTER_NODES, AFTER_NODES] });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: settlingSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -271,7 +347,8 @@ test('held touch settle publishes refs into the current record of its scoped lif
     release = resolve;
   });
   let captures = 0;
-  nativeCapture.mockImplementation(async () => {
+  legacyDispatchCapture.mockImplementation(async (_device, command) => {
+    if (command !== 'snapshot') return {};
     captures += 1;
     if (captures === 2) {
       enter();
@@ -284,7 +361,7 @@ test('held touch settle publishes refs into the current record of its scoped lif
     };
   });
   const running = handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: settlingSurface,
     req: {
       token: 't',
       session: address,
@@ -359,7 +436,7 @@ test('press --settle on a removals-only diff attaches the unchanged interactive 
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: settlingSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -396,7 +473,7 @@ test('press --settle rejects an expired-frame ref before dispatch or observation
   );
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: settlingSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -438,7 +515,7 @@ test('a settle observation without a diff leaves ref staleness untouched', async
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: settlingSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -504,7 +581,7 @@ test('a stalled settle capture receives its deadline signal and leaves the inter
 
   const startedAt = Date.now();
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: settlingSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -535,7 +612,7 @@ test('bare timeout without --settle stays compatible', async () => {
   mockCommandDispatch({ snapshots: [BEFORE_NODES] });
 
   const compatible = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: settlingSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -561,7 +638,7 @@ test('settle-specific tuning flags without --settle are rejected', async () => {
   mockCommandDispatch({ snapshots: [BEFORE_NODES] });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: settlingSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -587,7 +664,7 @@ test('fill @ref --settle carries the settle payload on the ref wire shape', asyn
   mockCommandDispatch({ snapshots: [AFTER_NODES, AFTER_NODES] });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: settlingSurface,
     req: {
       token: 't',
       session: sessionName,
