@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
+import type { ClientOptions } from '@limrun/api';
 import { createInstanceClient as createAndroidInstanceClient } from '@limrun/api/instance-client';
 import { createInstanceClient as createIosInstanceClient } from '@limrun/api/ios-client';
 import { LimrunRuntime } from '../sdk/limrun.ts';
@@ -20,7 +21,7 @@ type LimrunInstancePage = {
 const limrunMockState = vi.hoisted(() => {
   const androidTunnelClose = vi.fn();
   return {
-    constructorOptions: [] as Array<{ defaultHeaders?: Record<string, string> }>,
+    constructorOptions: [] as ClientOptions[],
     assetsGetOrUpload: vi.fn(async () => ({
       signedDownloadUrl: 'https://assets.example/app',
       md5: 'asset-md5',
@@ -86,7 +87,7 @@ vi.mock('@limrun/api', () => ({
       getOrUpload: limrunMockState.assetsGetOrUpload,
     };
 
-    constructor(options: { defaultHeaders?: Record<string, string> }) {
+    constructor(options: ClientOptions) {
       limrunMockState.constructorOptions.push(options);
     }
   },
@@ -160,10 +161,13 @@ test('Limrun runtime identifies direct CLI usage when creating an instance', asy
     assert.equal(deviceSession ? 'client' in deviceSession : true, false);
 
     assert.equal(limrunMockState.constructorOptions[0]?.defaultHeaders, undefined);
+    assert.equal(
+      limrunMockState.constructorOptions[0]?.userAgent,
+      `agent-device-cli/${readVersion()}`,
+    );
     const iosCreateCalls = limrunMockState.iosCreate.mock.calls as unknown as Array<
-      [{ metadata?: { labels?: Record<string, string> } }, { headers: Record<string, string> }]
+      [{ metadata?: { labels?: Record<string, string> } }]
     >;
-    assert.equal(iosCreateCalls[0]?.[1].headers['User-Agent'], `agent-device-cli/${readVersion()}`);
     assert.deepEqual(iosCreateCalls[0]?.[0].metadata?.labels, {
       tenantId: 'team-a',
       runId: 'run-a',
