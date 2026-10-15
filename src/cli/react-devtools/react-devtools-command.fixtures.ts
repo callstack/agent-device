@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 import vm from 'node:vm';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { InspectorSession } from './metro-inspector.ts';
 import type { ReactDevtoolsCommandOptions } from './react-devtools-connection.ts';
 import { FakeAppRuntime } from './react-devtools-runtime.fixtures.ts';
