@@ -87,6 +87,10 @@ const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
 function createOpenHandler(
   sessionStore: ReturnType<typeof makeSessionStore>,
   leaseRegistry = new LeaseRegistry(),
+  capabilities: Pick<
+    Parameters<typeof createRequestHandler>[0],
+    'androidObservation' | 'platformResourceCleanup'
+  > = {},
 ) {
   return createRequestHandler({
     createCommandSurface: fakeCreateCommandSurface,
@@ -97,6 +101,7 @@ function createOpenHandler(
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
     trackDownloadableArtifact: () => 'artifact-id',
+    ...capabilities,
   });
 }
 
@@ -364,7 +369,10 @@ test('proxy open without required lease metadata fails before device resolution'
   expect(legacyDispatchCapture).not.toHaveBeenCalled();
 });
 
-test('close releases the session lease', async () => {
+test.each([
+  ['omitted', {}],
+  ['explicit undefined', { androidObservation: undefined, platformResourceCleanup: undefined }],
+])('close releases the session lease with %s fixture capabilities', async (_case, capabilities) => {
   const sessionStore = makeSessionStore('agent-device-router-open-');
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({
@@ -385,7 +393,7 @@ test('close releases the session lease', async () => {
       clientId: 'client-a',
     },
   });
-  const handler = createOpenHandler(sessionStore, leaseRegistry);
+  const handler = createOpenHandler(sessionStore, leaseRegistry, capabilities);
 
   const response = await handler({
     token: 'test-token',

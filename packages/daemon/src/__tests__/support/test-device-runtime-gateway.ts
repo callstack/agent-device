@@ -234,12 +234,14 @@ export function createRequestHandler(
     providerCredentials = providerCredentialsFixture({}, path.dirname(deps.logPath)),
     platformServices = daemonPlatformServicesFixture(),
     claimRecoveryGateway = daemonClaimRecoveryGatewayFixture(),
+    androidObservation = clearAndroidObservationFixture,
+    platformResourceCleanup = platformResourceCleanupFixture(),
     ...rest
   } = deps;
   const handle = createProductionRequestHandler({
-    androidObservation: clearAndroidObservationFixture,
-    platformResourceCleanup: platformResourceCleanupFixture(),
     ...rest,
+    androidObservation,
+    platformResourceCleanup,
     platformServices,
     claimRecoveryGateway,
     deviceRuntimeGateway,
