@@ -66,6 +66,7 @@ export function checkRetiredPlatformsZone(files: readonly string[]): LayeringVio
     'src/platforms is retired; family code belongs in its platform package, shared mechanics in an owning substrate package, and cross-family tests in their root or package test owner',
   );
 }
+const APPLE_RUNNER_TEST_HOST_FILE = 'packages/platform-apple/src/runner/test-host';
 const APPLE_RUNNER_FACADE = '@agent-device/platform-apple/runner';
 const ANDROID_MECHANICS_FACADE = '@agent-device/platform-android/mechanics';
 const ANDROID_HOST_FACET = '@agent-device/platform-android/adb-host';
@@ -156,6 +157,12 @@ function resolvesToRequestProviderComposition(file: string, specifier: string): 
   if (!specifier.startsWith('.')) return false;
   const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
   return resolved === REQUEST_PROVIDER_COMPOSITION_FILE;
+}
+
+function resolvesToAppleRunnerTestHost(file: string, specifier: string): boolean {
+  if (!specifier.startsWith('.')) return false;
+  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
+  return resolved.replace(/\.ts$/, '') === APPLE_RUNNER_TEST_HOST_FILE;
 }
 
 function isPackageOwnedFacadeTest(file: string, family: string, specifier: string): boolean {
@@ -255,6 +262,15 @@ function checkSource(file: string, source: string): LayeringViolation[] {
           file,
           site.line,
           `only ${COMPOSITION_FILE} may import the private request-provider composition submodule`,
+        ),
+      );
+    }
+    if (resolvesToAppleRunnerTestHost(file, site.spec) && isProductionSource(file)) {
+      violations.push(
+        violation(
+          file,
+          site.line,
+          'runner/test-host.ts binds the runner test dispatcher — only test files and __tests__ helpers may import it',
         ),
       );
     }

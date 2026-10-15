@@ -284,6 +284,26 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
   );
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 
+  // The runner test host is package-internal: tests and __tests__ helpers may import it relatively,
+  // production runner modules may not.
+  const testHostSources = validSources();
+  testHostSources.set(
+    'packages/platform-apple/src/runner/__tests__/host-setup.ts',
+    "import { installAppleRunnerTestHost } from '../test-host.ts';",
+  );
+  testHostSources.set(
+    'packages/platform-apple/src/runner/runner-lifecycle.ts',
+    "import { appleRunnerTestHost } from './test-host.ts';",
+  );
+  assert.match(
+    messages(testHostSources).join('\n'),
+    /runner\/test-host\.ts binds the runner test dispatcher/,
+  );
+  assert.equal(
+    messages(testHostSources).filter((message) => message.includes('test dispatcher')).length,
+    1,
+  );
+
   // A NEW unenumerated subpath widens the export list and fails declarations.
   const widened = declarations();
   const apple = widened.find((pkg) => pkg.family === 'apple')!;

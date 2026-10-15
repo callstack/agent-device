@@ -201,7 +201,7 @@ the Apple package. R13 models the package by enumeration rather than by exceptio
 exports its root façade plus thirteen named domain/mechanics facades — `./app-lifecycle`,
 `./app-resolution`, `./debug-symbols`, `./doctor`, `./install-artifact`, `./macos`,
 `./perf`, `./physical-device`, `./runner-owner`, `./runner/operations`, `./simctl`, `./simulator`, and
-`./tool-provider` — as well as exactly the `./runner`
+`./tool-provider` — as well as the `./runner`
 subpath. The named facades replace root-only access for synchronous domain consumers without a
 broad compatibility barrel; R13 pins the exact export set and allowed consumer seams. The
 `./runner` façade subpath is the seam through which daemon and root consumers reach runner mechanics
