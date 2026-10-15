@@ -132,7 +132,14 @@ export const NEW_ENTRY_CEILINGS: Readonly<Record<EntryCategory, number>> = Objec
  */
 export const APPROVED_OVER_CEILING: Readonly<
   Record<string, { issue: string; reason: string; owner: string }>
-> = Object.freeze({});
+> = Object.freeze({
+  'packages/daemon/src/index.ts': {
+    issue: '#3352',
+    reason:
+      "The daemon package's one public entry. Its only value export is `startDaemonRuntime`, so its closure is the server graph that `src/daemon.ts` loads on every daemon start; the other exports are types. `src/daemon.ts` stays under the no-growth rule, and no CLI-process entry reaches the package (R78).",
+    owner: 'thymikee',
+  },
+});
 
 /** The category is a function of the path, never a hand-written column. */
 export function entryCategoryOf(entryFile: string): EntryCategory {

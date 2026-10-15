@@ -35,7 +35,7 @@ test('every tracked daemon production file resolves to a layer folder, and no st
   const daemonFiles = listSourceFiles().filter((file) => file.startsWith(`${DAEMON_ROOT}/`));
   assert.ok(daemonFiles.length > 0, 'expected daemon production files to scan');
   assert.deepEqual(
-    daemonFiles.filter((file) => daemonLayerOf(file) === null),
+    daemonFiles.filter((file) => file !== DAEMON_PACKAGE_ENTRY && daemonLayerOf(file) === null),
     [],
   );
 

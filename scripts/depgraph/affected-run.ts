@@ -142,19 +142,19 @@ function commandChains(repoRoot: string): CommandChain[] {
   const source = fs.readFileSync(path.join(repoRoot, HANDLER_CHAIN_FILE), 'utf8');
   const routeEntries = parseRouteEntries(source, HANDLER_CHAIN_FILE);
   const publicCommands = new Set<string>(Object.values(PUBLIC_COMMANDS));
-  return deriveDaemonCommandDescriptors(commandDescriptors).filter((descriptor) =>
-    publicCommands.has(descriptor.command),
-  ).map((descriptor) => {
-    const entry = routeEntries.get(descriptor.route);
-    if (!entry) {
-      throw new Error(
-        `no handler entry for daemon route "${descriptor.route}" — the route table in ` +
-          `${HANDLER_CHAIN_FILE} changed shape; update parseRouteEntries in ` +
-          `scripts/depgraph/affected-run.ts.`,
-      );
-    }
-    return { command: descriptor.command, route: descriptor.route, entry };
-  });
+  return deriveDaemonCommandDescriptors(commandDescriptors)
+    .filter((descriptor) => publicCommands.has(descriptor.command))
+    .map((descriptor) => {
+      const entry = routeEntries.get(descriptor.route);
+      if (!entry) {
+        throw new Error(
+          `no handler entry for daemon route "${descriptor.route}" — the route table in ` +
+            `${HANDLER_CHAIN_FILE} changed shape; update parseRouteEntries in ` +
+            `scripts/depgraph/affected-run.ts.`,
+        );
+      }
+      return { command: descriptor.command, route: descriptor.route, entry };
+    });
 }
 
 /** Flatten the ADR 0011 matrix into one row per (path, guarantee) cell that names a module. */
