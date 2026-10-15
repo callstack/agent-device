@@ -26,8 +26,8 @@ vi.mock('../../core/session-store.ts', async (importOriginal) => {
     },
   };
 });
-vi.mock('../http/server-shutdown.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../http/server-shutdown.ts')>();
+vi.mock('./server-shutdown.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./server-shutdown.ts')>();
   return {
     ...actual,
     closeDaemonServers: async (...args: Parameters<typeof actual.closeDaemonServers>) => {
@@ -97,7 +97,7 @@ import {
   daemonRuntimeDepsFixture,
 } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { lifecycleDeviceRuntimeGateway } from '../../__tests__/support/test-device-runtime-gateway.ts';
-import { startDaemonRuntime, teardownDaemonSessionForShutdown } from '../http/daemon-runtime.ts';
+import { startDaemonRuntime, teardownDaemonSessionForShutdown } from './daemon-runtime.ts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 

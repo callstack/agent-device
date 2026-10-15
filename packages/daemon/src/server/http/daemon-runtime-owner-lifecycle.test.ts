@@ -7,7 +7,7 @@ import {
   platformOwnerLifecycleFixture,
 } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import type { PlatformOwnerLifecycle } from '../../core/platform-owner-lifecycle.ts';
-import { startDaemonRuntime } from '../http/daemon-runtime.ts';
+import { startDaemonRuntime } from './daemon-runtime.ts';
 
 type LoggedEvent = { phase: string; data?: Record<string, unknown> };
 

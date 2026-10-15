@@ -3,10 +3,10 @@ import { expect, test, vi } from 'vitest';
 import { startDaemonRuntime } from '@agent-device/daemon';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { createDaemonRuntimeDeps } from '../../../daemon-composition.ts';
-import { providerCredentialFingerprint } from '../../../provider-credential-fingerprint.ts';
+import { createDaemonRuntimeDeps } from './daemon-composition.ts';
+import { providerCredentialFingerprint } from './provider-credential-fingerprint.ts';
 
-vi.mock('../../../platform-runtime.ts', () => ({
+vi.mock('./platform-runtime.ts', () => ({
   androidObservation: {},
   createRequestPlatformProviders: () => ({
     run: async (_context: unknown, task: () => Promise<unknown>) => await task(),
@@ -28,7 +28,7 @@ vi.mock('../../../platform-runtime.ts', () => ({
   createPlatformDeviceInventoryGateways: () => ({}),
 }));
 
-vi.mock('../../../provider-device-runtimes.ts', () => ({
+vi.mock('./provider-device-runtimes.ts', () => ({
   DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: [],
   createDaemonProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
 }));

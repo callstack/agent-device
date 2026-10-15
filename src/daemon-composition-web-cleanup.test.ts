@@ -16,7 +16,7 @@ vi.mock('@agent-device/platform-web', async (importOriginal) => {
   };
 });
 
-import { cleanupWebBrowserOrphansForDaemonStartup } from '../daemon-composition.ts';
+import { cleanupWebBrowserOrphansForDaemonStartup } from './daemon-composition.ts';
 
 const mockCleanupManagedAgentBrowserOrphans = vi.mocked(cleanupManagedAgentBrowserOrphansMock);
 

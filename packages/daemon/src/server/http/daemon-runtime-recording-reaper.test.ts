@@ -16,7 +16,7 @@ vi.mock('@agent-device/host-kit/process', async (importOriginal) => {
 });
 
 import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
-import { startDaemonRuntime } from '../http/daemon-runtime.ts';
+import { startDaemonRuntime } from './daemon-runtime.ts';
 
 afterEach(() => {
   reapCalls.length = 0;

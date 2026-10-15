@@ -32,7 +32,7 @@ vi.mock('../request-router.ts', async (importOriginal) => {
 });
 
 import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
-import { startDaemonRuntime } from '../http/daemon-runtime.ts';
+import { startDaemonRuntime } from './daemon-runtime.ts';
 
 afterEach(() => {
   requestProbe.failuresRemaining = 0;

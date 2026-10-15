@@ -16,7 +16,7 @@ import {
   platformOwnerLifecycleFixture,
 } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { lifecycleDeviceRuntimeGateway } from '../../__tests__/support/test-device-runtime-gateway.ts';
-import { startDaemonRuntime } from '../http/daemon-runtime.ts';
+import { startDaemonRuntime } from './daemon-runtime.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
 type DaemonPaths = ReturnType<typeof resolveDaemonPaths>;
@@ -232,7 +232,7 @@ test('a successor published during this daemon lifetime is recorded at detection
 test('the loss watch is armed only after this daemon publishes its own record', () => {
   // Arming before publication would report a predecessor's record as a takeover of something this
   // daemon never owned. Ordering is the invariant, the same way the startup-ordering guards read it.
-  const source = fs.readFileSync(new URL('../http/daemon-runtime.ts', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('./daemon-runtime.ts', import.meta.url), 'utf8');
   const published = source.indexOf('publishDaemonInfo(socketPort, httpPort);');
   const armed = source.indexOf('stopMetadataLossWatch = armDaemonMetadataLossWatch(');
 
@@ -245,7 +245,7 @@ test('both exits tear the watch down before they touch daemon.json', () => {
   // deleted. The startup-failure half of this is unreachable from a test — everything after
   // publication needs a real toolchain — so the invariant is read off the source, the same way the
   // arming order above is.
-  const source = fs.readFileSync(new URL('../http/daemon-runtime.ts', import.meta.url), 'utf8');
+  const source = fs.readFileSync(new URL('./daemon-runtime.ts', import.meta.url), 'utf8');
   const stops = [...source.matchAll(/stopMetadataLossWatch\(\);/g)].map((m) => m.index);
   const finishes = [...source.matchAll(/await finishDaemonRegistration\(/g)].map((m) => m.index);
   expect(stops).toHaveLength(2);

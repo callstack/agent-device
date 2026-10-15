@@ -6,8 +6,8 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { startDaemonRuntimeFixture } from './daemon-composition/daemon-runtime-fixture.ts';
-import type { DaemonRuntimeController } from '@agent-device/daemon';
+import { startDaemonRuntime, type DaemonRuntimeController } from '@agent-device/daemon';
+import { createDaemonRuntimeDeps } from './daemon-composition.ts';
 import { runCmdBackground } from '@agent-device/host-kit/command';
 import {
   createOwnedProcessRecordStore,
@@ -80,7 +80,8 @@ test('daemon runtime starts HTTP transport in-process and shuts down cleanly', a
   let exitCode: number | undefined;
 
   try {
-    const runtime = await startDaemonRuntimeFixture({
+    const runtime = await startDaemonRuntime({
+      composeDeps: createDaemonRuntimeDeps,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -124,7 +125,8 @@ test('daemon runtime publishes dual transport metadata', async () => {
   let exitCode: number | undefined;
 
   try {
-    const runtime = await startDaemonRuntimeFixture({
+    const runtime = await startDaemonRuntime({
+      composeDeps: createDaemonRuntimeDeps,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -174,7 +176,8 @@ test('daemon rejects unowned cloud artifacts over RPC', async () => {
   let runtime: DaemonRuntimeController | null = null;
 
   try {
-    runtime = await startDaemonRuntimeFixture({
+    runtime = await startDaemonRuntime({
+      composeDeps: createDaemonRuntimeDeps,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -304,7 +307,8 @@ test('daemon runtime records startup device-claim reconciliation in daemon.log',
       }),
     );
 
-    const runtime = await startDaemonRuntimeFixture({
+    const runtime = await startDaemonRuntime({
+      composeDeps: createDaemonRuntimeDeps,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -429,7 +433,8 @@ test('startup sweep settles a foreign dead owner without touching a live same-na
       }),
     );
 
-    runtime = await startDaemonRuntimeFixture({
+    runtime = await startDaemonRuntime({
+      composeDeps: createDaemonRuntimeDeps,
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: daemonStateDir,

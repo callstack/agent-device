@@ -12,7 +12,7 @@ import { IOS_SIMULATOR, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { interactorResolution } from '../../core/interactor-resolution.ts';
 import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
-import { startDaemonRuntime, type DaemonRuntimeDepsInput } from '../http/daemon-runtime.ts';
+import { startDaemonRuntime, type DaemonRuntimeDepsInput } from './daemon-runtime.ts';
 
 // The server builds its own store, so capture that instance: the proof is about the store the
 // server hands to the composition callbacks, not one the test fabricates.

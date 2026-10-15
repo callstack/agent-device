@@ -5,7 +5,7 @@ import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import { makeRecordingSession } from '../../__tests__/support/session-teardown.fixtures.ts';
-import { teardownDaemonSessionForShutdown } from '../http/daemon-runtime.ts';
+import { teardownDaemonSessionForShutdown } from './daemon-runtime.ts';
 
 afterEach(() => {
   vi.useRealTimers();

@@ -222,7 +222,7 @@ test('daemon session teardown closes an open web session immediately, not on age
   // session's browser right away, the same way an explicit `session close` does, instead of
   // leaving the Chrome processes to agent-browser's own multi-minute idle timer. That the close
   // reaches the agent-browser process is real mechanics, pinned root-owned in
-  // daemon-composition/server/daemon-runtime-web-close-teardown.
+  // src/platform-runtime-resource-cleanup.test.ts.
   expect(platformCleanup.closeManagedBrowser).toHaveBeenCalledWith({
     device: WEB_DESKTOP_DEVICE,
     sessionName,
