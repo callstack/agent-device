@@ -18,6 +18,7 @@
     "@agent-device/platform-android": "workspace:*",
     "@agent-device/platform-apple": "workspace:*",
     "@agent-device/platform-web": "workspace:*",
+    "@agent-device/proxy": "workspace:*",
     "@agent-device/replay-port": "workspace:*",
     "@agent-device/replay-test": "workspace:*",
     "@agent-device/selectors": "workspace:*",
@@ -25,7 +26,6 @@
     "@agent-device/test-kit": "workspace:*"
   },
   "devDependencies": {
-    "@agent-device/proxy": "workspace:*",
     "fast-check": "^4.9.0",
     "oxc-parser": "^0.146.0",
     "vitest": "5.0.4",

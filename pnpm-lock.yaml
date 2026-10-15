@@ -324,6 +324,9 @@ importers:
       '@agent-device/platform-web':
         specifier: workspace:*
         version: link:../platform-web
+      '@agent-device/proxy':
+        specifier: workspace:*
+        version: link:../proxy
       '@agent-device/replay-port':
         specifier: workspace:*
         version: link:../replay-port
@@ -340,9 +343,6 @@ importers:
         specifier: workspace:*
         version: link:../test-kit
     devDependencies:
-      '@agent-device/proxy':
-        specifier: workspace:*
-        version: link:../proxy
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
