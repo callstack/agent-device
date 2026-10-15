@@ -8,7 +8,7 @@ import type {
 } from '@agent-device/contracts/perf-runtime';
 import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-recording-runtime';
 import type { SessionAction, SessionScope, SessionSurface } from '@agent-device/contracts/session';
-import type { MovingTargetBaseline as ContractsMovingTargetBaseline } from '@agent-device/contracts/moving-target-gate';
+import type { MovingTargetBaseline } from '@agent-device/contracts/runtime-contract';
 import type {
   LeaseBackend,
   SessionRuntimeHints as PublicSessionRuntimeHints,
@@ -122,9 +122,9 @@ export type DeferredSurface =
        * The tree the mutation resolved its target against, beside the instant the mutation
        * finished, so the next action can ask whether its own coordinates are still in play
        * (#3471). The shape is `MovingTargetBaseline` in
-       * `@agent-device/contracts/moving-target-gate`, declared beside the gate that reads it.
+       * `@agent-device/contracts/runtime-contract`, declared beside the session record that carries it.
        */
-      baseline: ContractsMovingTargetBaseline;
+      baseline: MovingTargetBaseline;
     };
 
 /**
