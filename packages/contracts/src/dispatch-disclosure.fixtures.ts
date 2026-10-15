@@ -42,7 +42,7 @@ export const DISPATCH_DISCLOSURE_DRIVER_OWNERS: Readonly<Record<string, string>>
   'daemon.route.': 'src/__tests__/daemon-composition/request-dispatch-disclosure.test.ts',
   'post-action-guard.':
     'src/__tests__/daemon-composition/interaction/interaction-dispatch-disclosure.test.ts',
-  'ios-runner.': 'packages/platform-apple/src/runner/__tests__/runner-dispatch-disclosure.test.ts',
+  'ios-runner.': 'packages/platform-apple/src/runner/__tests__/index-dispatch-disclosure.test.ts',
   'ios-runner.pre-send.':
     'packages/platform-apple/src/runner/__tests__/runner-lifecycle-dispatch-disclosure.test.ts',
   'ios-runner.transport.':
