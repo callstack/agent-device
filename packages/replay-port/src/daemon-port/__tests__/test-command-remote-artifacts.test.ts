@@ -17,9 +17,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { ReplaySuiteResult } from '@agent-device/contracts/replay';
-import type { DaemonRequest } from '../../../core/daemon-request.ts';
-import { attachRemoteReplayTestArtifacts } from '@agent-device/replay-port/test-command';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import type { DaemonWireRequest } from '@agent-device/contracts/command';
+import { attachRemoteReplayTestArtifacts } from '../test-command.ts';
+import { mkdtempForTestSync } from '../../tmp-dir.fixtures.ts';
 
 const SUITE_INVOCATION_ID = 'cd5f9c01feec8d70';
 
@@ -73,7 +73,7 @@ function suiteResult(daemonRoot: string): ReplaySuiteResult {
   };
 }
 
-function req(clientArtifactsRoot: string | undefined): DaemonRequest {
+function req(clientArtifactsRoot: string | undefined): DaemonWireRequest {
   return {
     token: 't',
     session: 'default',
