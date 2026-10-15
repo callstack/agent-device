@@ -272,7 +272,12 @@ function prepareRemoteArtifactCommand(
   }
   if (req.command === 'record' && (positionals[0] ?? '').toLowerCase() === 'start') {
     if (!recordingHasRequestedClientPath(req) && req.flags?.platform === undefined) {
-      return null;
+      // The extension follows the session platform, which only the daemon knows: it completes
+      // this destination and records to a temp path on its own host.
+      return {
+        field: 'outPath',
+        localPath: resolveAbsoluteClientPath(`recording-${Date.now()}`, req.meta?.cwd),
+      };
     }
     const fallbackExtension = recordingFallbackExtension(req);
     const localPath = normalizeRecordingClientArtifactPath(

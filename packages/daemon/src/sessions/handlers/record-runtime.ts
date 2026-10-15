@@ -46,7 +46,10 @@ import {
   prepareRecordingRequest,
   readRecordingScope,
 } from './record-runtime-request.ts';
-import { resolveRecordingOutputPaths } from '@agent-device/capture-kit/recording-output-path';
+import {
+  type RecordingOutputPaths,
+  resolveRecordingOutputPaths,
+} from '@agent-device/capture-kit/recording-output-path';
 import {
   buildRecordingStartResponse,
   buildRecordingStartedAction,
@@ -163,7 +166,7 @@ async function startRecording(
   const { fence, outputPaths } = prepareRecordingStart(params, session);
   binding.assertAdoptable();
   const started = await runtime.operations.screenRecordingStart(
-    screenRecordingStartInput(params, session, prepared, fence, outputPaths.outputPath),
+    screenRecordingStartInput(params, session, prepared, fence, outputPaths),
   );
   await adoptStartedScreenRecording({
     admissionLedger: params.admissionLedger,
@@ -205,6 +208,7 @@ function prepareRecordingStart(params: RecordRuntimeHandlerParams, session: Sess
     }),
     outputPaths: resolveRecordingOutputPaths({
       requestedPath: params.req.positionals?.[1],
+      clientOutputPath: params.req.meta?.clientArtifactPaths?.outPath,
       platform: session.device.platform,
       cwd: params.req.meta?.cwd,
     }),
@@ -216,12 +220,12 @@ function screenRecordingStartInput(
   session: SessionState,
   prepared: ReturnType<typeof prepareRecordingRequest>,
   fence: ScreenRecordingStartInput['fence'],
-  outputPath: string,
+  outputPaths: RecordingOutputPaths,
 ): ScreenRecordingStartInput {
   return {
     sessionId: params.sessionName,
-    outputPath,
-    clientOutputPath: params.req.meta?.clientArtifactPaths?.outPath,
+    outputPath: outputPaths.outputPath,
+    clientOutputPath: outputPaths.clientOutputPath,
     scope: prepared.scope,
     showTouches: prepared.showTouches,
     hideTouchesRequested: prepared.hideTouchesRequested,

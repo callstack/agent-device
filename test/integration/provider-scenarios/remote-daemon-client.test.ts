@@ -709,7 +709,7 @@ test('remote web recording appends WebM extension to extensionless client paths'
   assert.equal(prepared.clientArtifactPaths?.outPath, '/tmp/project/recording.webm');
 });
 
-test('remote recording without platform or requested path lets daemon choose session-specific default', async () => {
+test('remote recording without platform or requested path lets daemon name the client default', async () => {
   const prepared = await prepareRemoteRequestArtifacts(
     {
       session: 'default',
@@ -723,7 +723,7 @@ test('remote recording without platform or requested path lets daemon choose ses
   );
 
   assert.deepEqual(prepared.positionals, ['start']);
-  assert.equal(prepared.clientArtifactPaths, undefined);
+  assert.match(prepared.clientArtifactPaths?.outPath ?? '', /^\/tmp\/project\/recording-\d+$/);
 });
 
 test('Provider-backed integration daemon proxy forwards remote client RPC commands', async (t) => {
