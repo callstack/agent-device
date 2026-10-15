@@ -3,10 +3,19 @@ import type {
   FillCommandResult,
   InteractionTarget,
   PressCommandResult,
+  SettleObservation,
+  SettleParams,
 } from '@agent-device/contracts/interaction';
 import { buildSelectorChainForNode } from '@agent-device/selectors';
 import { AppError } from '@agent-device/kernel/errors';
-import { centerOfRect, type Point, type SnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  centerOfRect,
+  type Point,
+  type SnapshotNode,
+  type SnapshotPreferredBackend,
+  type SnapshotQualityVerdict,
+  type SnapshotState,
+} from '@agent-device/kernel/snapshot';
 import {
   captureAndStoreSnapshot,
   commandSurfaceWithMembers,
@@ -20,6 +29,7 @@ type TouchResolution = {
   node?: SnapshotNode;
   nodes?: SnapshotNode[];
   selectorChain?: string[];
+  snapshotQuality?: SnapshotQualityVerdict;
 };
 
 export type TouchForwardingSurfaceOptions = {
@@ -28,6 +38,21 @@ export type TouchForwardingSurfaceOptions = {
    * `id="X"` / `id=X`; a suite that needs another selector shape states its own matcher.
    */
   matchSelector?: (nodes: SnapshotNode[], selector: string) => SnapshotNode | undefined;
+  /**
+   * The post-action observation a `--settle` touch owes. It runs after the touch with the
+   * settle parameters the daemon forwarded, the pre-action tree, and a capture taken through the
+   * config's backend and stored as the session snapshot; its answer rides on the result.
+   */
+  observeSettle?: (params: {
+    settle: SettleParams;
+    baseline: SnapshotNode[] | undefined;
+    /** The quality verdict of the tree the touch resolved against, when it published one. */
+    baselineQuality: SnapshotQualityVerdict | undefined;
+    capture: (options?: {
+      signal?: AbortSignal;
+      preferredBackend?: SnapshotPreferredBackend;
+    }) => Promise<SnapshotState>;
+  }) => Promise<SettleObservation>;
   /** Members the suite answers itself, layered over the touch actions (selector reads, gestures). */
   members?: (config: AgentDeviceRuntimeConfig) => CommandSurfaceMembers;
 };
@@ -80,9 +105,10 @@ export function touchForwardingCreateCommandSurface(
           node,
           nodes,
           selectorChain: chainFor(node, nodes),
+          snapshotQuality: record?.snapshot?.snapshotQuality,
         };
       }
-      const { nodes } = await captureAndStoreSnapshot(config, {
+      const { nodes, snapshotQuality } = await captureAndStoreSnapshot(config, {
         ...context,
         interactiveOnly: true,
         includeRects: true,
@@ -95,6 +121,7 @@ export function touchForwardingCreateCommandSurface(
           node,
           nodes,
           selectorChain: chainFor(node, nodes),
+          snapshotQuality,
         };
       }
       throw new AppError('COMMAND_FAILED', `Selector did not match: ${target.selector}`, {
@@ -120,9 +147,34 @@ export function touchForwardingCreateCommandSurface(
       };
     };
 
+    const observe = async (
+      context: { session?: string; requestId?: string; signal?: AbortSignal },
+      resolution: TouchResolution,
+      settle: SettleParams | undefined,
+    ): Promise<SettleObservation | undefined> => {
+      if (!settle || !options.observeSettle) return undefined;
+      return await options.observeSettle({
+        settle,
+        baseline: resolution.nodes,
+        baselineQuality: resolution.snapshotQuality,
+        capture: (capture) =>
+          captureAndStoreSnapshot(config, {
+            ...context,
+            signal: capture?.signal ?? context.signal,
+            preferredBackend: capture?.preferredBackend,
+            includeRects: true,
+          }),
+      });
+    };
+
     const press = async (
       target: InteractionTarget,
-      pressOptions?: { session?: string; requestId?: string; signal?: AbortSignal },
+      pressOptions?: {
+        session?: string;
+        requestId?: string;
+        signal?: AbortSignal;
+        settle?: SettleParams;
+      },
     ): Promise<PressCommandResult> => {
       const context = {
         session: pressOptions?.session,
@@ -131,13 +183,23 @@ export function touchForwardingCreateCommandSurface(
       };
       const resolution = await locate(target, context, 'click');
       const backendResult = await config.backend.tap?.(context, resolution.point);
-      return { ...resolvedTarget(resolution), ...(backendResult ? { backendResult } : {}) };
+      const settle = await observe(context, resolution, pressOptions?.settle);
+      return {
+        ...resolvedTarget(resolution),
+        ...(backendResult ? { backendResult } : {}),
+        ...(settle ? { settle } : {}),
+      };
     };
 
     const fill = async (
       target: InteractionTarget,
       text: string,
-      fillOptions?: { session?: string; requestId?: string; signal?: AbortSignal },
+      fillOptions?: {
+        session?: string;
+        requestId?: string;
+        signal?: AbortSignal;
+        settle?: SettleParams;
+      },
     ): Promise<FillCommandResult> => {
       const context = {
         session: fillOptions?.session,
@@ -146,10 +208,12 @@ export function touchForwardingCreateCommandSurface(
       };
       const resolution = await locate(target, context, 'fill');
       const backendResult = await config.backend.fill?.(context, resolution.point, text);
+      const settle = await observe(context, resolution, fillOptions?.settle);
       return {
         ...resolvedTarget(resolution),
         text,
         ...(backendResult ? { backendResult } : {}),
+        ...(settle ? { settle } : {}),
       };
     };
 

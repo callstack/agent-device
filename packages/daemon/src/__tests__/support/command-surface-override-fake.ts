@@ -3,7 +3,7 @@ import type {
   DaemonCommandSurface,
 } from '@agent-device/contracts/daemon-command-surface';
 import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
-import type { SnapshotState } from '@agent-device/kernel/snapshot';
+import type { SnapshotPreferredBackend, SnapshotState } from '@agent-device/kernel/snapshot';
 import { fakeCreateCommandSurface } from './command-surface-fake.ts';
 
 export type CommandSurfaceMembers = {
@@ -47,12 +47,17 @@ export async function captureAndStoreSnapshot(
     signal?: AbortSignal;
     interactiveOnly?: boolean;
     includeRects?: boolean;
+    preferredBackend?: SnapshotPreferredBackend;
   },
 ): Promise<SnapshotState> {
   const name = params.session ?? 'default';
   const captured = await config.backend.captureSnapshot?.(
     { session: name, requestId: params.requestId, signal: params.signal ?? config.signal },
-    { interactiveOnly: params.interactiveOnly, includeRects: params.includeRects },
+    {
+      interactiveOnly: params.interactiveOnly,
+      includeRects: params.includeRects,
+      preferredBackend: params.preferredBackend,
+    },
   );
   const snapshot = captured?.snapshot;
   if (!snapshot) throw new Error('captureAndStoreSnapshot: the backend returned no snapshot');
