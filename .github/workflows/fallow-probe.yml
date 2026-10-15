@@ -33,7 +33,7 @@ jobs:
           echo "== top 60 paths"
           grep -o '"[^"]*"' /tmp/s.txt | sort | uniq -c | sort -rn | head -60
           echo "== top 40 parent dirs"
-          grep -o '"[^"]*"' /tmp/s.txt | tr -d '"' | xargs -r -n1 dirname 2>/dev/null | sort | uniq -c | sort -rn | head -40 || true
+          grep -o '"[^"]*"' /tmp/s.txt | tr -d '"' | awk '{sub(/\/[^\/]*$/, ""); print}' | sort | uniq -c | sort -rn | head -40
           echo "== top 40 basenames"
           grep -o '"[^"]*"' /tmp/s.txt | tr -d '"' | awk -F/ '{print $NF}' | sort | uniq -c | sort -rn | head -40
           echo "== ENOENT share"
