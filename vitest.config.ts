@@ -7,7 +7,7 @@ import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 // mutation lane excludes these tests even though the unit lane runs them normally.
 const MUTATION_EXCLUDED_SUBPROCESS_TESTS: readonly string[] = [
   // Stubs npx plus the package managers and spawns a real Metro dev server per case.
-  'src/__tests__/client-metro.test.ts',
+  'src/metro/client-metro.test.ts',
   // The SUT is the subprocess watchdog: a node subprocess per case, one hangs on purpose (#1414).
   'scripts/fuzz/harness.test.ts',
   // The daemon takeover test launches a branch-named daemon per case to prove

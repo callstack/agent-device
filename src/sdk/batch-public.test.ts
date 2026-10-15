@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { runBatch } from '../../sdk/batch.ts';
+import { runBatch } from './batch.ts';
 import type { DaemonRequest } from '@agent-device/kernel/contracts';
 
 test('public batch entrypoint exports daemon-compatible orchestration helpers', async () => {

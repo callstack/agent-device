@@ -24,13 +24,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { CommandResult } from '@agent-device/command-registry/command-result';
-import {
-  centerOfRect,
-  defaultHintForCode,
-  normalizeError,
-  type DaemonError,
-} from '../sdk/contracts.ts';
-import { AppError } from '../sdk/index.ts';
+import { centerOfRect, defaultHintForCode, normalizeError, type DaemonError } from './contracts.ts';
+import { AppError } from './index.ts';
 
 const invalidArgsCode = 'INVALID_ARGS' satisfies AppErrorCode;
 const rect = { x: 1, y: 2, width: 3, height: 4 } satisfies Rect;
@@ -53,7 +48,7 @@ test('public contracts error helpers do not load diagnostics module', () => {
 });
 
 test('public contract facade does not expose parser schemas', async () => {
-  const publicContracts = (await import('../sdk/contracts.ts')) as Record<string, unknown>;
+  const publicContracts = (await import('./contracts.ts')) as Record<string, unknown>;
 
   assert.equal(publicContracts.daemonCommandRequestSchema, undefined);
   assert.equal(publicContracts.daemonRuntimeSchema, undefined);

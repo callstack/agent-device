@@ -8,7 +8,7 @@ import {
   clearMetroSessionHints,
   readMetroSessionHints,
   writeMetroSessionHints,
-} from '../metro/metro-session-hints.ts';
+} from './metro-session-hints.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 
 function tempStateDir(): string {

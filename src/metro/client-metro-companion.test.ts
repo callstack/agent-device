@@ -28,7 +28,7 @@ import {
   type ConfirmedProcessStop,
 } from '@agent-device/host-kit/process';
 
-import { ensureMetroCompanion, stopMetroCompanion } from '../metro/client-metro-companion.ts';
+import { ensureMetroCompanion, stopMetroCompanion } from './client-metro-companion.ts';
 import { ensureReactDevtoolsCompanion } from '../client/client-react-devtools-companion.ts';
 import { METRO_COMPANION_RUN_ARG } from '../client/client-companion-tunnel-contract.ts';
 

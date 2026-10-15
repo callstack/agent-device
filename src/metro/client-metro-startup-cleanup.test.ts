@@ -25,7 +25,7 @@ import {
   type ConfirmedProcessStop,
 } from '@agent-device/host-kit/process';
 
-import { prepareMetroRuntime } from '../metro/client-metro.ts';
+import { prepareMetroRuntime } from './client-metro.ts';
 
 afterEach(() => {
   vi.useRealTimers();
