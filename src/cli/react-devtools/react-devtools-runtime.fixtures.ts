@@ -13,6 +13,7 @@ const OP_UPDATE_ERRORS_OR_WARNINGS = 5;
 const ROOT_TYPE = 11;
 export const FUNCTION_TYPE = 5;
 export const MEMO_TYPE = 8;
+export const SUSPENSE_TYPE = 12;
 
 export type FakeElement = {
   id: number;
@@ -21,6 +22,8 @@ export type FakeElement = {
   owner?: number;
   parent?: number;
   key?: string;
+  /** The `name` prop React DevTools 7+ shows for Suspense and Activity boundaries. */
+  nameProp?: string;
 };
 
 export type FakeCommit = {
@@ -39,6 +42,8 @@ type OperationsBatch = {
   reorder?: [parent: number, children: number[]];
   logs?: Array<[id: number, errors: number, warnings: number]>;
   extra?: number[];
+  /** React DevTools 7+ layout: each non-root ADD ends with a name-prop string id. */
+  nameProps?: boolean;
 };
 
 /** Interns strings the way the backend's string table does: 1-based ids, 0 for none. */
@@ -60,7 +65,11 @@ class StringTable {
   }
 }
 
-function addOperations(elements: FakeElement[], strings: StringTable): number[] {
+function addOperations(
+  elements: FakeElement[],
+  strings: StringTable,
+  nameProps: boolean,
+): number[] {
   return elements.flatMap((element) => [
     OP_ADD,
     element.id,
@@ -69,6 +78,7 @@ function addOperations(elements: FakeElement[], strings: StringTable): number[] 
     element.owner ?? 0,
     strings.id(element.name),
     strings.id(element.key),
+    ...(nameProps ? [strings.id(element.nameProp)] : []),
   ]);
 }
 
@@ -94,7 +104,7 @@ export function encodeOperations(batch: OperationsBatch): number[] {
   const strings = new StringTable();
   const ops = [
     ...(batch.root ? [OP_ADD, 1, ROOT_TYPE, 0, 1, 1, 1] : []),
-    ...addOperations(batch.add ?? [], strings),
+    ...addOperations(batch.add ?? [], strings, batch.nameProps === true),
     ...updateOperations(batch),
     ...(batch.extra ?? []),
   ];
@@ -188,6 +198,8 @@ export type FakeRuntimeOptions = {
   hook?: boolean;
   /** React DevTools 6 hooks carry console settings and attribute logs to components from app start. */
   consoleSettings?: boolean;
+  /** React DevTools 7+ renderer interfaces report Suspense toggling and add name props to ADD ops. */
+  nameProps?: boolean;
 };
 
 /** A JavaScript realm shaped like a React Native dev runtime, with the profiler runtime evaluable. */
@@ -202,6 +214,7 @@ export class FakeAppRuntime {
     emit: (event: string, payload: number[]) => void;
     settings?: { showInlineWarningsAndErrors: boolean };
   };
+  readonly nameProps: boolean;
   domainInitializations = 0;
   customConnections = 0;
 
@@ -211,6 +224,8 @@ export class FakeAppRuntime {
       for (const listener of listeners[event] ?? []) listener(payload);
     };
     this.renderer = new FakeRendererInterface(emit);
+    this.nameProps = options.nameProps === true;
+    if (this.nameProps) Object.assign(this.renderer, { supportsTogglingSuspense: true });
     this.hook = {
       renderers: new Map([[1, {}]]),
       rendererInterfaces: new Map(),
@@ -278,7 +293,9 @@ export class FakeAppRuntime {
 
   /** Mounts elements before profiling, as the app's initial render would. */
   mount(elements: FakeElement[]): void {
-    this.renderer.commit(encodeOperations({ root: true, add: elements }));
+    this.renderer.commit(
+      encodeOperations({ root: true, add: elements, nameProps: this.nameProps }),
+    );
     for (const element of elements) this.renderer.names.set(element.id, element.name);
   }
 }

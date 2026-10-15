@@ -52,7 +52,36 @@ export const REACT_DEVTOOLS_RUNTIME_SOURCE = String.raw`
   function size(collection) { var n = 0; if (collection && collection.forEach) collection.forEach(function () { n++; }); return n; }
   function eachRenderer(fn) { var h = hook(); if (h && h.rendererInterfaces) h.rendererInterfaces.forEach(fn); }
 
+  /**
+   * React DevTools 7 added a name-prop field to each non-root ADD, in the same release that gave
+   * renderer interfaces supportsTogglingSuspense.
+   */
+  function addLength(rendererID) {
+    var h = hook();
+    var ri = h && h.rendererInterfaces && h.rendererInterfaces.get ? h.rendererInterfaces.get(rendererID) : null;
+    return ri && 'supportsTogglingSuspense' in ri ? 8 : 7;
+  }
+
+  /** Length of an op this runtime skips: the Suspense tree and Activity slice ops of DevTools 7+. */
+  function skippedLength(ops, i) {
+    var op = ops[i];
+    if (op === 4 || op === 7) return 3;
+    if (op === 6) return 1;
+    if (op === 8) return 6 + 4 * Math.max(ops[i + 5], 0);
+    if (op === 9) return 2 + ops[i + 1];
+    if (op === 10) return 3 + ops[i + 2];
+    if (op === 11) return 3 + 4 * Math.max(ops[i + 2], 0);
+    if (op === 12) {
+      var j = i + 2;
+      for (var c = 0; c < ops[i + 1]; c++) j += 5 + ops[j + 4];
+      return j - i;
+    }
+    if (op === 13) return 2;
+    return 0;
+  }
+
   function readOperations(ops) {
+    var nonRootAdd = addLength(ops[0]);
     var strings = [null];
     var i = 3;
     var tableEnd = 3 + ops[2];
@@ -75,22 +104,22 @@ export const REACT_DEVTOOLS_RUNTIME_SOURCE = String.raw`
           if (nameIndex >= strings.length || keyIndex >= strings.length) return false;
           elements.set(id, [strings[nameIndex] || 'Anonymous', type, ops[i + 4], ops[i + 3], strings[keyIndex]]);
         }
-        i += 7;
+        i += type === ROOT_TYPE ? 7 : nonRootAdd;
       } else if (op === 2) {
         for (var r = 0; r < ops[i + 1]; r++) forget(ops[i + 2 + r]);
         i += 2 + ops[i + 1];
       } else if (op === 3) {
         order.set(ops[i + 1], ops.slice(i + 3, i + 3 + ops[i + 2]));
         i += 3 + ops[i + 2];
-      } else if (op === 4) i += 3;
-      else if (op === 5) {
+      } else if (op === 5) {
         if (ops[i + 2] || ops[i + 3]) logs.set(ops[i + 1], [ops[i + 2], ops[i + 3]]);
         else logs.delete(ops[i + 1]);
         i += 4;
+      } else {
+        var skipped = skippedLength(ops, i);
+        if (!skipped) return false;
+        i += skipped;
       }
-      else if (op === 6) i += 1;
-      else if (op === 7) i += 3;
-      else return false;
     }
     return true;
   }

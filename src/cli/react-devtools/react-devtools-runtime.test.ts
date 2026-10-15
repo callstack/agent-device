@@ -1,6 +1,11 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { FakeAppRuntime, MEMO_TYPE, encodeOperations } from './react-devtools-runtime.fixtures.ts';
+import {
+  FakeAppRuntime,
+  MEMO_TYPE,
+  SUSPENSE_TYPE,
+  encodeOperations,
+} from './react-devtools-runtime.fixtures.ts';
 import type { RawReactProfile } from './react-profile-renders.ts';
 
 type Started = {
@@ -301,6 +306,35 @@ test('tree exports every mounted component with its key, child order, and logged
   ]);
   assert.deepEqual(tree.order, { '2': [4, 3] });
   assert.deepEqual(tree.logs, { '3': [1, 2] });
+});
+
+test('a React DevTools 7+ backend adds a name prop to each element and emits Suspense ops', () => {
+  const app = new FakeAppRuntime({ nameProps: true });
+  app.mount([
+    { id: 2, name: 'App', parent: 1 },
+    { id: 3, name: 'Suspense', type: SUSPENSE_TYPE, parent: 2, owner: 2, nameProp: 'feed' },
+  ]);
+  app.install();
+  const suspenseAdd = [8, 3, 1, 0, 1, 2, 0, 0, 10, 20, 0, 0, 5, 5];
+  const suspenseResize = [11, 3, -1];
+  const suspenders = [12, 2, 3, 1, 1500, 0, 1, 1, 4, 0, 900, 1, 0];
+  const activitySlice = [13, 0];
+  app.renderer.commit(
+    encodeOperations({
+      nameProps: true,
+      add: [{ id: 4, name: 'Row', parent: 3, owner: 2, key: 'a', nameProp: 'first' }],
+      extra: [...suspenseAdd, ...suspenseResize, ...suspenders, ...activitySlice, 10, 3, 1, 4],
+    }),
+  );
+  app.renderer.commit(encodeOperations({ nameProps: true, logs: [[4, 1, 0]], extra: [9, 1, 3] }));
+
+  const tree = app.call<Tree>('tree');
+  assert.deepEqual(tree.nodes, [
+    [2, 'App', 5, 1, 0, null],
+    [3, 'Suspense', SUSPENSE_TYPE, 2, 2, null],
+    [4, 'Row', 5, 3, 2, 'a'],
+  ]);
+  assert.deepEqual(tree.logs, { '4': [1, 0] });
 });
 
 test('a component that unmounts while a profile records leaves the tree but keeps its name', () => {
