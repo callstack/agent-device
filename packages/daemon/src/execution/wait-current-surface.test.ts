@@ -17,7 +17,7 @@ const req = {
  * not on the `snapshot-capture` module — and "no capture started" is provable as "the binding
  * was never invoked".
  */
-function boundCapture(nodes: { index: number; depth: number; type: string; label?: string }[]) {
+function boundCapture(nodes: readonly Record<string, unknown>[]) {
   return vi.fn(async () => ({ nodes, backend: 'android' })) as unknown as BoundSelectorCapture &
     ReturnType<typeof vi.fn>;
 }
@@ -95,6 +95,102 @@ test('an absent-target wait describes the current surface through its own reques
     labels: ['Checkout', 'Pay now'],
     buttons: ['Pay now'],
   });
+});
+
+test('the surface summary prefers content labels over chrome and identifier noise', async () => {
+  const capture = boundCapture([
+    {
+      index: 0,
+      depth: 0,
+      type: 'XCUIElementTypeApplication',
+      label: 'Expo Go',
+      rect: { x: 0, y: 0, width: 393, height: 852 },
+    },
+    {
+      index: 1,
+      depth: 1,
+      type: 'XCUIElementTypeImage',
+      label: 'gearshape.fill',
+      rect: { x: 12, y: 54, width: 24, height: 24 },
+    },
+    {
+      index: 2,
+      depth: 1,
+      type: 'XCUIElementTypeOther',
+      label: 'Tab Bar',
+      rect: { x: 0, y: 760, width: 393, height: 92 },
+    },
+    {
+      index: 3,
+      depth: 1,
+      type: 'XCUIElementTypeStaticText',
+      label: 'Confirm catalog refresh',
+      rect: { x: 48, y: 280, width: 297, height: 36 },
+    },
+    {
+      index: 4,
+      depth: 1,
+      type: 'XCUIElementTypeButton',
+      label: 'Keep browsing',
+      rect: { x: 48, y: 360, width: 297, height: 48 },
+    },
+    {
+      index: 5,
+      depth: 1,
+      type: 'XCUIElementTypeButton',
+      identifier: 'host.exp.exponent:id/reload_button',
+      rect: { x: 260, y: 54, width: 48, height: 48 },
+    },
+  ]);
+
+  const result = await maybeWaitTimeoutSurfaceResponse(
+    { req, session: undefined, device: ANDROID_EMULATOR, capture },
+    {
+      ok: false as const,
+      error: {
+        code: 'COMMAND_FAILED' as const,
+        message: 'wait timed out for text: Impossible success text',
+        details: { reason: 'wait_target_absent' },
+      },
+    },
+  );
+
+  expect(result.ok).toBe(false);
+  if (result.ok) return;
+  expect(result.error.message).toBe(
+    'wait timed out for text: Impossible success text. Current surface: Confirm catalog refresh, Keep browsing.',
+  );
+  expect(result.error.details?.currentSurface).toEqual({
+    labels: [
+      'Confirm catalog refresh',
+      'Keep browsing',
+      'host.exp.exponent:id/reload_button',
+      'Expo Go',
+      'gearshape.fill',
+      'Tab Bar',
+    ],
+    buttons: ['Keep browsing', 'host.exp.exponent:id/reload_button'],
+  });
+});
+
+test('a capture-stalled wait failure is returned untouched without inspecting the surface', async () => {
+  const capture = boundCapture([]);
+  const response = {
+    ok: false as const,
+    error: {
+      code: 'COMMAND_FAILED' as const,
+      message: 'wait timed out for text: Receipt uploaded',
+      details: { reason: 'wait_capture_stalled', retriable: true, readableCaptures: 0 },
+    },
+  };
+
+  const result = await maybeWaitTimeoutSurfaceResponse(
+    { req, session: undefined, device: ANDROID_EMULATOR, capture },
+    response,
+  );
+
+  expect(result).toBe(response);
+  expect(capture).not.toHaveBeenCalled();
 });
 
 /**
