@@ -108,10 +108,6 @@
       "types": "./src/__tests__/support/command-surface-fake.ts",
       "default": "./src/__tests__/support/command-surface-fake.ts"
     },
-    "./testing/__tests__/support/provider-device-admission-fixture": {
-      "types": "./src/__tests__/support/provider-device-admission-fixture.ts",
-      "default": "./src/__tests__/support/provider-device-admission-fixture.ts"
-    },
     "./testing/__tests__/support/screen-recording-live-handle": {
       "types": "./src/__tests__/support/screen-recording-live-handle.ts",
       "default": "./src/__tests__/support/screen-recording-live-handle.ts"
@@ -191,18 +187,6 @@
     "./testing/handlers/session-appstate": {
       "types": "./src/sessions/handlers/session-appstate.ts",
       "default": "./src/sessions/handlers/session-appstate.ts"
-    },
-    "./testing/handlers/session-doctor": {
-      "types": "./src/sessions/handlers/session-doctor.ts",
-      "default": "./src/sessions/handlers/session-doctor.ts"
-    },
-    "./testing/handlers/session-doctor-app": {
-      "types": "./src/sessions/handlers/session-doctor-app.ts",
-      "default": "./src/sessions/handlers/session-doctor-app.ts"
-    },
-    "./testing/handlers/session-doctor-metro": {
-      "types": "./src/sessions/handlers/session-doctor-metro.ts",
-      "default": "./src/sessions/handlers/session-doctor-metro.ts"
     },
     "./testing/handlers/session-replay-command": {
       "types": "./src/sessions/handlers/session-replay-command.ts",
@@ -348,10 +332,6 @@
       "types": "./src/core/session-capture-binding.ts",
       "default": "./src/core/session-capture-binding.ts"
     },
-    "./testing/session-lifecycle/index": {
-      "types": "./src/sessions/session-lifecycle/index.ts",
-      "default": "./src/sessions/session-lifecycle/index.ts"
-    },
     "./testing/session-lifecycle/internal/__tests__/*": {
       "types": "./src/sessions/session-lifecycle/internal/__tests__/*.ts",
       "default": "./src/sessions/session-lifecycle/internal/__tests__/*.ts"
@@ -384,10 +364,6 @@
       "types": "./src/core/session-store.ts",
       "default": "./src/core/session-store.ts"
     },
-    "./testing/snapshot-capture": {
-      "types": "./src/core/snapshot-capture.ts",
-      "default": "./src/core/snapshot-capture.ts"
-    },
     "./testing/snapshot-diff-runtime": {
       "types": "./src/sessions/snapshot-diff-runtime.ts",
       "default": "./src/sessions/snapshot-diff-runtime.ts"
@@ -403,10 +379,6 @@
     "./testing/snapshot-runtime": {
       "types": "./src/sessions/snapshot-runtime.ts",
       "default": "./src/sessions/snapshot-runtime.ts"
-    },
-    "./testing/snapshot-session": {
-      "types": "./src/core/snapshot-session.ts",
-      "default": "./src/core/snapshot-session.ts"
     },
     "./testing/wait-runtime": {
       "types": "./src/execution/wait-runtime.ts",
