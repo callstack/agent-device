@@ -45,6 +45,7 @@ type LifecycleFixture = Readonly<{
 
 function createLifecycle(
   params: Readonly<{
+    device?: DeviceInfo;
     snapshot?: (options: SnapshotOptions) => Promise<unknown>;
     openedAppBundleId?: string;
     launchedAppBundleId?: string;
@@ -128,7 +129,7 @@ function createLifecycle(
   >;
   const lifecycle = bindAndroidApplicationLifecycle({
     host,
-    device,
+    device: params.device ?? device,
     signal: params.signal ?? new AbortController().signal,
   });
   return { calls, framePerfResets, launchReports, lifecycle };
@@ -429,6 +430,26 @@ test('close --shutdown restores the keyboard and only then kills the emulator (#
   const result = await finalizing;
   expect(sequence).toEqual(['restore:true', 'restored', 'shutdown']);
   expect(result.shutdown).toMatchObject({ success: true });
+});
+
+test('close --shutdown is ignored for a physical Android device', async () => {
+  const shutdownTarget = vi.fn(async () => ({
+    success: true,
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+  }));
+  const { lifecycle } = createLifecycle({
+    device: { ...device, id: 'R5CT123456A', kind: 'device' },
+    shutdownTarget,
+  });
+
+  const result = await lifecycle.finalizeApplicationClose(
+    finalizationInput({ shutdownTarget: true }),
+  );
+
+  expect(shutdownTarget).not.toHaveBeenCalled();
+  expect(result).toEqual({});
 });
 
 test('an ordinary close tells the restore no emulator kill is coming', async () => {

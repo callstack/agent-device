@@ -4,12 +4,19 @@ import {
   type SessionState,
 } from './session-close-shutdown.fixtures.ts';
 import { platformResourceCleanupFixture } from '../../../../__tests__/support/platform-resource-cleanup-fixture.ts';
+import { daemonPlatformServicesFixture } from '../../../../__tests__/support/platform-services-fixture.ts';
+import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
+import { lifecycleOperationsSpy } from '../../../../__tests__/support/lifecycle-operations-spy.ts';
 
 const {
   AppError,
+  handleSessionCommands,
   makeIosSimulatorRecordingSession,
   makeSession,
   makeSessionStore,
+  mkdtempForTestSync,
+  noopInvoke,
+  path,
   mockStopIosRunnerSession,
   mockStopIosRunnerSession: stopIosRunnerSession,
   recordingCleanupMock,
@@ -177,6 +184,69 @@ test('daemon session teardown attempts every resource after an earlier cleanup r
 
   // The later resource still runs despite the earlier rejection.
   expect(platformCleanup.stopSnapshotHelper).toHaveBeenCalledWith(session.device);
+});
+
+test('close finalizes an active iOS simulator recording before deleting the session', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-active-recording-close-session';
+  const session = makeIosSimulatorRecordingSession(sessionStore, sessionName);
+  const finish = recordingFinishMock(session);
+  sessionStore.publish(sessionName, session);
+  const platformResourceCleanup = platformResourceCleanupFixture();
+  const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
+
+  const response = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    platformResourceCleanup,
+    lifecycleOperationsLoader: loader,
+    req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
+    sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(finish).toHaveBeenCalledOnce();
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+  expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledWith(
+    expect.objectContaining({ hasScreenRecording: true }),
+  );
+  expect(finalizeApplicationClose).toHaveBeenCalledOnce();
+  expect(finish.mock.invocationCallOrder[0]).toBeLessThan(
+    finalizeApplicationClose.mock.invocationCallOrder[0]!,
+  );
+});
+
+test('close surfaces a recording finalization failure through the cleanup-failure channel', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-recording-close-failure-session';
+  const session = makeIosSimulatorRecordingSession(sessionStore, sessionName, {
+    recorderExitCode: 1,
+  });
+  const finish = recordingFinishMock(session);
+  const forceCleanup = recordingCleanupMock(session);
+  sessionStore.publish(sessionName, session);
+  const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
+
+  await expect(
+    handleSessionCommands({
+      createCommandSurface: fakeCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      lifecycleOperationsLoader: loader,
+      req: { token: 't', session: sessionName, command: 'close', positionals: [], flags: {} },
+      sessionName,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    }),
+  ).rejects.toThrow(/recording: .*failed to stop recording/);
+
+  expect(finish).toHaveBeenCalledOnce();
+  expect(forceCleanup).toHaveBeenCalledOnce();
+  expect(finalizeApplicationClose).toHaveBeenCalledOnce();
+  expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
 function attachPerfCapture(

@@ -263,6 +263,42 @@ test('discards a retained physical iOS runner when relaunch fails and preserves 
   expect(notifyRunnerAppRelaunched).not.toHaveBeenCalled();
 });
 
+test('close stops a physical Apple runner before the platform close and skips the close when the stop fails', async () => {
+  const signal = new AbortController().signal;
+  const events: string[] = [];
+  const preCloseError = new AppError('RUNNER_UNAVAILABLE', 'runner stop failed', {
+    reason: 'runner_stop_failed',
+  });
+  const interactor = {
+    close: vi.fn(async () => {
+      events.push('close');
+    }),
+  } as unknown as Interactor;
+  const baseHost = platformRuntimeHostFixture();
+  const stopRunnerSession = vi.fn(async () => {
+    events.push('stop');
+    throw preCloseError;
+  });
+  const host = {
+    ...baseHost,
+    localInteractors: { resolve: async () => interactor },
+    appleApplications: { ...baseHost.appleApplications, stopRunnerSession },
+  } as unknown as PlatformRuntimeHost;
+  const lifecycle = bindAppleApplicationLifecycle({ host, device, signal });
+
+  await expect(
+    lifecycle.closeApplication({
+      positionals: ['com.example.app'],
+      surface: 'app',
+      execution: {},
+    }),
+  ).rejects.toBe(preCloseError);
+
+  expect(events).toEqual(['stop']);
+  expect(stopRunnerSession).toHaveBeenCalledWith(device.id);
+  expect(interactor.close).not.toHaveBeenCalled();
+});
+
 test.each([true, false])(
   'close finalization delegates the runner release to the runner module with retain=%s (#2552)',
   async (retainRunner) => {
@@ -311,6 +347,32 @@ test('daemon-shutdown finalization dismisses alerts and defers the runner releas
 
   expect(releaseRunnerOnClose).not.toHaveBeenCalled();
   expect(dismissCloseAlerts).toHaveBeenCalled();
+});
+
+test('close --shutdown is ignored for a physical Apple device', async () => {
+  const signal = new AbortController().signal;
+  const baseHost = platformRuntimeHostFixture();
+  const shutdownTarget = vi.fn(async () => ({
+    success: true,
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+  }));
+  const host = {
+    ...baseHost,
+    deviceShutdown: { ...baseHost.deviceShutdown, apple: { shutdownTarget } },
+  } as unknown as PlatformRuntimeHost;
+  const lifecycle = bindAppleApplicationLifecycle({ host, device, signal });
+
+  const result = await lifecycle.finalizeApplicationClose({
+    surface: 'app',
+    retainRunner: false,
+    stateDir: '/tmp',
+    shutdownTarget: true,
+  });
+
+  expect(shutdownTarget).not.toHaveBeenCalled();
+  expect(result).toEqual({});
 });
 
 test('prepare shares one startup budget across the Simulator boot and the runner preparation', async () => {

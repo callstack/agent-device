@@ -7,6 +7,7 @@ import {
 } from './session-close-shutdown.fixtures.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
+import { lifecycleOperationsSpy } from '../../../../__tests__/support/lifecycle-operations-spy.ts';
 
 const {
   handleSessionCommands,
@@ -297,3 +298,61 @@ test('close --shutdown returns success and failure payload when shutdownSimulato
   expect(sessionStore.get(sessionName)).toBeUndefined();
   expectShutdownFailure(response, sessionName, 'simctl shutdown failed');
 });
+
+test.each([
+  {
+    label: 'a non-simulator iOS device',
+    device: {
+      platform: 'apple' as const,
+      id: 'physical-device-1',
+      name: 'My iPhone',
+      kind: 'device' as const,
+      booted: true,
+    },
+  },
+  {
+    label: 'an Android device',
+    device: {
+      platform: 'android' as const,
+      id: 'R5CT123456A',
+      name: 'Pixel 9',
+      kind: 'device' as const,
+      booted: true,
+    },
+  },
+])(
+  'close --shutdown reaches the platform finalization for $label and reports no shutdown when the platform declines',
+  async ({ device }) => {
+    const sessionStore = makeSessionStore();
+    const sessionName = `${device.platform}-device-shutdown-session`;
+    sessionStore.publish(sessionName, makeSession(sessionName, device));
+    const { loader, finalizeApplicationClose } = lifecycleOperationsSpy();
+
+    const response = await handleSessionCommands({
+      createCommandSurface: fakeCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      lifecycleOperationsLoader: loader,
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'close',
+        positionals: [],
+        flags: { shutdown: true },
+      },
+      sessionName,
+      logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    });
+
+    expect(response?.ok).toBe(true);
+    expect(finalizeApplicationClose).toHaveBeenCalledWith(
+      expect.objectContaining({ shutdownTarget: true }),
+    );
+    expect(sessionStore.get(sessionName)).toBeUndefined();
+    if (response?.ok) {
+      expect(response.data?.session).toBe(sessionName);
+      expect(response.data?.shutdown).toBeUndefined();
+    }
+  },
+);
