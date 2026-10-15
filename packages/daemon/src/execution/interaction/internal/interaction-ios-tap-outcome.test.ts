@@ -1,5 +1,8 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import {
+  legacyDispatchCapture,
+  resetLegacySnapshotCapture,
+} from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 
@@ -7,47 +10,40 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { handleInteractionCommands } from '../index.ts';
 import {
   makeIosSession,
   authoringPublication,
-} from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { SessionScriptWriter } from '@agent-device/daemon/testing/session-script-writer';
-import { runReplayForTest } from '@agent-device/daemon/testing/__tests__/replay-runtime/replay-command-fixture';
+} from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { SessionScriptWriter } from '../../../core/session-script-writer.ts';
+import { runReplayForTest } from '../../../sessions/__tests__/replay-runtime/replay-command-fixture.ts';
 import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import {
   imageViewerNodes,
   profileNodes,
   snapshot,
   snapshotPayload,
-} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-ios-tap-outcome-fixtures';
+} from './__tests__/interaction-ios-tap-outcome-fixtures.ts';
 import {
   appCaptureComparisonIdentity,
   appCaptureComparisonKey,
   systemSurfaceCaptureComparisonKey,
-} from '@agent-device/daemon/testing/__tests__/ios-comparison-key-fixture';
+} from '../../../core/__tests__/ios-comparison-key-fixture.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
 import {
   getRuntimeBindings,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
-import { corroborateIosTapFailure } from '@agent-device/daemon/testing/interaction/internal/interaction-ios-tap-outcome';
-import { movingTargetBaseline } from '@agent-device/daemon/testing/deferred-interaction-outcome';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
+import {
+  installInteractorSnapshotResolution,
+  mockInteractorSnapshot,
+} from '../../../__tests__/support/interactor-resolution-fixture.ts';
+import { corroborateIosTapFailure } from './interaction-ios-tap-outcome.ts';
+import { movingTargetBaseline } from '../../../core/deferred-interaction-outcome.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
-
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
-  const fixture =
-    await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
-  return {
-    captureSnapshotWithInteractor: vi.fn(fixture.captureSnapshotThroughLegacyDispatchFixture),
-  };
-});
-
-const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
+import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 
 const contextFromFlags = (flags: CommandFlags | undefined) => ({
   count: flags?.count,
@@ -70,7 +66,7 @@ async function runClick(
   const session = sessionStore.get(sessionName);
   if (session?.snapshot && !session.scriptPublication && options.positionals?.length !== 2) {
     const baseline = session.snapshot;
-    mockCaptureSnapshotForSession.mockResolvedValueOnce({
+    mockInteractorSnapshot.mockResolvedValueOnce({
       nodes: baseline.nodes,
       backend: 'xctest',
       producer: 'apple-runner',
@@ -78,7 +74,7 @@ async function runClick(
     });
   }
   return await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 'test',
       session: sessionName,
@@ -95,7 +91,8 @@ async function runClick(
 
 beforeEach(() => {
   resetGetRuntimeFixture();
-  mockCaptureSnapshotForSession.mockClear();
+  installInteractorSnapshotResolution();
+  resetLegacySnapshotCapture(mockInteractorSnapshot);
   legacyDispatchCapture.mockReset();
   mockTapPoint.mockImplementation(async (input) => {
     return await legacyDispatchCapture(
@@ -580,7 +577,7 @@ test('corroborates a tap when the request carries no flags and the baseline used
   // mirrors the raw daemon/JSON-RPC production boundary, which can omit the
   // key entirely. CLI and batch paths always materialize a flags object.
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 'test',
       session: sessionName,
@@ -839,7 +836,7 @@ test('corroborated runtime taps retain target evidence through save and replay',
     sessionStore: replayStore,
     invoke: async (req) => {
       const response = await handleInteractionCommands({
-        createCommandSurface: testCreateCommandSurface,
+        createCommandSurface: touchCreateCommandSurface,
         req,
         sessionName: replaySessionName,
         sessionStore: replayStore,
@@ -873,7 +870,7 @@ test('a tap corroborates against its admitted snapshot after a same-lifetime rec
     return {};
   });
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: { token: 'test', session: name, command: 'click', positionals: ['104', '222'], flags: {} },
     sessionName: name,
     sessionRef: ref,

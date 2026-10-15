@@ -1,21 +1,21 @@
-import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
 import { beforeEach, expect, test } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import {
   makeIosSession,
   authoringPublication,
-} from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { activateCompleteRefFrame, refFrameState } from '@agent-device/daemon/testing/ref-frame';
+} from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
+import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
+import { activateCompleteRefFrame, refFrameState } from '../../../core/ref-frame.ts';
 
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
-import { gestureRuntimeBindingsFixture } from '@agent-device/daemon/testing/interaction/internal/__tests__/gesture-runtime-bindings.fixtures';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+import { handleInteractionCommands } from '../index.ts';
+import { gestureRuntimeBindingsFixture } from './__tests__/gesture-runtime-bindings.fixtures.ts';
 
 const contextFromFlags = () => ({});
 const captureSnapshotForSession = async ({
   session,
-}: import('@agent-device/daemon/testing/session-state').SessionRef) => session.snapshot!;
+}: import('../../../core/session-state.ts').SessionRef) => session.snapshot!;
 let gestures = gestureRuntimeBindingsFixture();
 
 beforeEach(() => {
@@ -63,8 +63,8 @@ function makeDragSession(sessionName: string) {
 
 async function runDrag(sessionStore: ReturnType<typeof makeSessionStore>, sessionName: string) {
   return await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: touchCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       token: 't',
       session: sessionName,
