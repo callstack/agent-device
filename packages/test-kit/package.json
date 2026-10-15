@@ -6,7 +6,6 @@
   "description": "Private shared test helpers (temp dirs, device/session/snapshot fixtures, mocked processes, loopback servers) for the root and workspace-package test trees. One entry, named exports; test-only, never bundled, never importing root `src/`, `platform-*`, `provider-*` or the daemon.",
   "dependencies": {
     "@agent-device/capture-kit": "workspace:*",
-    "@agent-device/command-registry": "workspace:*",
     "@agent-device/contracts": "workspace:*",
     "@agent-device/daemon-contracts": "workspace:*",
     "@agent-device/host-kit": "workspace:*",

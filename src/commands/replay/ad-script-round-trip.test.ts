@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { replayScriptArb } from '@agent-device/test-kit';
+import { replayScriptArb } from './replay-script.fixtures.ts';
 import { PROPERTY_RUNS } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import {
   formatPortableActionLine,

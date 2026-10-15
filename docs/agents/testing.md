@@ -70,7 +70,7 @@ Before creating fixtures, look in `@agent-device/test-kit` and
 `packages/daemon/src/__tests__/support/`. Shared `DeviceInfo`, session, snapshot, store,
 runtime-fact, and mocked-binary values belong in a sibling fixture module, not in repeated test
 literals; a fixture one package uses is a `*.fixtures.ts` beside its module. The packages test-kit
-builds on (kernel, contracts, capture-kit, host-kit, command-registry, daemon-contracts) cannot
+builds on (kernel, contracts, capture-kit, host-kit, daemon-contracts) cannot
 declare it; their tests keep helpers local. Never import test-kit in the `vi.mock` factory of a
 module its entry loads (`host-kit/process`, `command`, `file`): spy it in place, as
 `pinOwnProcessStartTime` does. Fixtures a package still exports (R83's legacy count) stay
