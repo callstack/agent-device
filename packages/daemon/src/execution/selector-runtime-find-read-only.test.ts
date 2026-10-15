@@ -1,36 +1,63 @@
-import { test, expect, vi, beforeEach } from 'vitest';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { test, expect, beforeEach } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
+import { isSparseSnapshotQualityVerdict } from '@agent-device/capture-kit/snapshot-quality-verdict';
 import { buildSnapshotSignatures } from '@agent-device/capture-kit/snapshot-freshness';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import type { DaemonFindOptions } from '@agent-device/contracts/daemon-command-surface';
+import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
+import type { SessionState } from '../core/session-state.ts';
+import { makeSessionStore } from '../__tests__/support/store-factory.ts';
 import {
   makeAuthoringSession,
   makeIosSession as makeSession,
-} from '@agent-device/daemon/testing/__tests__/support/session-factories';
-
-vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...actual,
-    resolveTargetDevice: actual.resolveTargetDevice,
-  };
-});
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
-  const fixture =
-    await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
-  return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
-});
-
+} from '../__tests__/support/session-factories.ts';
+import { commandSurfaceWithMembers } from '../__tests__/support/command-surface-override-fake.ts';
+import { installLegacyCaptureInteractorResolution } from '../__tests__/support/legacy-capture-interactor-resolution.ts';
 import {
   mockDispatch,
   resetFindTouchRuntimeFixture,
   runFindClickScenario,
-} from '@agent-device/daemon/testing/interaction/internal/__tests__/find-touch-runtime-fixture';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
-import { invokeFindHandler } from '@agent-device/daemon/testing/interaction/internal/__tests__/find-handler-fixture';
+} from './interaction/internal/__tests__/find-touch-runtime-fixture.ts';
+import { invokeFindHandler } from './interaction/internal/__tests__/find-handler-fixture.ts';
+
+installLegacyCaptureInteractorResolution();
 
 beforeEach(() => {
   resetFindTouchRuntimeFixture();
 });
+
+/**
+ * `find <text> wait|exists` as the command family serves it: capture through the config's backend
+ * up to `maxPolls` times, answer found once a node carries the query as its label, and fail with
+ * the timeout the command family reports otherwise. Everything the daemon decides about those
+ * captures (cache tier, freshness recovery, what a sparse tree may store) happens behind the
+ * backend, which is what these cases pin.
+ */
+function pollingFindSurface(maxPolls: number) {
+  return commandSurfaceWithMembers((config: AgentDeviceRuntimeConfig) => ({
+    selectors: {
+      find: async (options: DaemonFindOptions) => {
+        for (let poll = 0; poll < maxPolls; poll += 1) {
+          const captured = await config.backend.captureSnapshot?.(
+            { session: options.session, requestId: options.requestId, signal: options.signal },
+            { interactiveOnly: true },
+          );
+          if (!captured?.snapshot) throw new Error('the backend returned no snapshot');
+          if (isSparseSnapshotQualityVerdict(captured.snapshot.snapshotQuality)) {
+            throw new AppError(
+              'COMMAND_FAILED',
+              'find could not read the current accessibility tree',
+              { reason: captured.snapshot.snapshotQuality?.reason },
+            );
+          }
+          if (captured.snapshot.nodes.some((node) => node.label === options.query)) {
+            return { kind: 'found' as const, found: true as const };
+          }
+        }
+        throw new AppError('COMMAND_FAILED', 'find wait timed out');
+      },
+    },
+  }));
+}
 
 test('handleFindCommands wait bypasses snapshot cache while Android freshness recovery is active', async () => {
   const sessionName = 'android-find-wait';
@@ -91,7 +118,7 @@ test('handleFindCommands wait bypasses snapshot cache while Android freshness re
     });
 
   const { response } = await runFindClickScenario({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: pollingFindSurface(1),
     positionals: ['text', 'Create document', 'wait', '700'],
     session,
   });
@@ -103,7 +130,7 @@ test('handleFindCommands wait bypasses snapshot cache while Android freshness re
   expect(mockDispatch).toHaveBeenCalledTimes(2);
 });
 
-test('handleFindCommands wait reports sparse verdict through selector runtime route', async () => {
+test('handleFindCommands wait stores no tree from a sparse capture and reports the surface verdict', async () => {
   const session = makeSession('default');
   session.snapshot = {
     nodes: [
@@ -139,7 +166,7 @@ test('handleFindCommands wait reports sparse verdict through selector runtime ro
   });
 
   const { response } = await runFindClickScenario({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: pollingFindSurface(1),
     positionals: ['text', 'Never appears', 'wait', '350'],
     session,
   });
@@ -149,16 +176,14 @@ test('handleFindCommands wait reports sparse verdict through selector runtime ro
   expect(!response.ok && response.error).toMatchObject({
     code: 'COMMAND_FAILED',
     message: 'find could not read the current accessibility tree',
-    details: {
-      reason: 'sparse tree',
-      hint: expect.stringContaining('snapshot quality verdict is sparse'),
-    },
+    details: { reason: 'sparse tree' },
   });
 });
 
 test('handleFindCommands wait captures fresh snapshots while polling', async () => {
+  const polls = 3;
   const { response } = await runFindClickScenario({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: pollingFindSurface(polls),
     positionals: ['text', 'Never appears', 'wait', '350'],
     nodes: [{ index: 0, depth: 0, type: 'StaticText', label: 'Other text' }],
   });
@@ -167,12 +192,10 @@ test('handleFindCommands wait captures fresh snapshots while polling', async () 
   if (!response.ok) {
     expect(response.error.message).toContain('find wait timed out');
   }
-  // What this test guards is that every poll re-captures instead of reusing the first tree.
-  // The exact poll count is a timing artifact and is not assertable: the loop's last sleep
-  // consumes whatever remains of the budget, so it lands on `remainingMs() === 0`, and a
-  // sleep that returns a millisecond early admits one more poll. Pinning this to 2 made the
-  // test fail under CI load on unrelated PRs. Assert the property, not the artifact.
-  expect(mockDispatch.mock.calls.length).toBeGreaterThanOrEqual(2);
+  // Every poll the surface takes reaches the device: the daemon forces a fresh capture for `find`
+  // instead of answering the later polls from the first tree inside the cache window. The poll
+  // count is the surface's here, so the property holds without waiting on a real clock.
+  expect(mockDispatch.mock.calls.length).toBe(polls);
   expect(mockDispatch.mock.calls.every(([, command]) => command === 'snapshot')).toBe(true);
 });
 
@@ -201,7 +224,7 @@ test('read-only find while recording is intentionally deferred from target-v1 ev
   });
 
   const response = await invokeFindHandler({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: pollingFindSurface(1),
     sessionName,
     sessionStore,
     positionals: ['text', 'Save', 'exists'],
