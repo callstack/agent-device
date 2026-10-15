@@ -1,10 +1,8 @@
 name: Cancel runs of closed PRs
 
 # A merged or closed PR gates nothing, so its queued and running runs only hold runners.
-# `pull_request_target` runs the base branch's workflow with a token that can cancel runs of
-# fork PRs too; it never checks out the PR's code.
 on:
-  pull_request_target:
+  pull_request:
     types:
       - closed
 
@@ -13,6 +11,8 @@ permissions:
 
 jobs:
   cancel:
+    # A fork PR's token is read-only, so it cannot cancel runs.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -21,13 +21,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           gh api --paginate -X GET "repos/$GITHUB_REPOSITORY/actions/runs" \
             -f branch="$HEAD_REF" -f event=pull_request -f per_page=100 \
             --jq ".workflow_runs[]
               | select(.status != \"completed\")
-              | select(.head_repository.full_name == \"$HEAD_REPO\")
+              | select(.head_repository.full_name == \"$GITHUB_REPOSITORY\")
+              | select(.id != $RUN_ID)
               | select(.path != \".github/workflows/pr-preview-cleanup.yml\")
               | .id" |
             while read -r id; do
