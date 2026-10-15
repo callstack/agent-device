@@ -681,6 +681,10 @@ importers:
       '@agent-device/session-journal':
         specifier: workspace:*
         version: link:../session-journal
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/replay-test:
     dependencies:

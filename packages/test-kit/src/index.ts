@@ -77,6 +77,10 @@ export {
   unavailableDeploymentSnapshotAndShutdownOperationFacts,
 } from './runtime-operation-facts.ts';
 export { buildNodes } from './snapshot-builders.ts';
+export {
+  bottomTabsRealCaptureFixture,
+  recordArticleEvidence,
+} from './target-classification-fixtures.ts';
 export { mkdtempForTest, mkdtempForTestSync } from './tmp-dir.ts';
 export { likelyPlayableWebmContainer } from './video-fixtures.ts';
 export {

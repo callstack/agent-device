@@ -24,7 +24,13 @@ import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts
  *    `caution`/`manual` divergence is no longer a dead end.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  bottomTabsRealCaptureFixture,
+  buildNodes,
+  mkdtempForTestSync,
+  recordArticleEvidence,
+} from '@agent-device/test-kit';
+import { computeTargetEvidence } from '@agent-device/selectors/target-evidence';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -52,11 +58,6 @@ import {
   writeReplayFile,
 } from '../replay-runtime/session-replay-runtime.fixtures.ts';
 import { freshEvidence, makeRecordingReplayInvoke } from './session-replay-repair.fixtures.ts';
-import {
-  bottomTabsRealCaptureFixture,
-  recordArticleEvidence,
-  toSnapshotNodes,
-} from '@agent-device/replay-port/target-classification-fixtures';
 
 /** Repair-transaction status, or `undefined` outside a repair publication. */
 function sessionRepairStatus(session: SessionState | undefined) {
@@ -90,7 +91,7 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
     sessionName,
     makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
   );
-  const evidence = await recordArticleEvidence();
+  const evidence = recordArticleEvidence(computeTargetEvidence);
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch',
     `# agent-device:target-v1 ${JSON.stringify(evidence)}`,
@@ -561,7 +562,7 @@ test('an unauthorized --from one past the plan end is rejected on an ARMED sessi
     sessionName,
     makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
   );
-  const evidence = await recordArticleEvidence();
+  const evidence = recordArticleEvidence(computeTargetEvidence);
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch',
     `# agent-device:target-v1 ${JSON.stringify(evidence)}`,
@@ -574,7 +575,7 @@ test('an unauthorized --from one past the plan end is rejected on an ARMED sessi
   // `state-repair` (the app-state sub-flow), never `record-and-heal`. No
   // `pendingRecordAndHeal` watermark is ever stamped for this session.
   mockDispatchCommand.mockResolvedValue({
-    nodes: toSnapshotNodes([
+    nodes: buildNodes([
       {
         index: 0,
         type: 'Application',
@@ -647,7 +648,7 @@ test('a stale --plan-digest on an empty-tail resume is rejected WITHOUT consumin
     sessionName,
     makeIosSession(sessionName, { appBundleId: 'com.example.app' }),
   );
-  const evidence = await recordArticleEvidence();
+  const evidence = recordArticleEvidence(computeTargetEvidence);
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch',
     `# agent-device:target-v1 ${JSON.stringify(evidence)}`,

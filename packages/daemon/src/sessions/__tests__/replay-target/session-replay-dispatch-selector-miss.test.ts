@@ -20,7 +20,12 @@
  * zero-match selector) instead of returning it.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  bottomTabsRealCaptureFixture,
+  mkdtempForTestSync,
+  recordArticleEvidence,
+} from '@agent-device/test-kit';
+import { computeTargetEvidence } from '@agent-device/selectors/target-evidence';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =
@@ -42,10 +47,6 @@ import {
   baseReplayRequest as baseReq,
   writeReplayFile,
 } from '../replay-runtime/session-replay-runtime.fixtures.ts';
-import {
-  bottomTabsRealCaptureFixture,
-  recordArticleEvidence,
-} from '@agent-device/replay-port/target-classification-fixtures';
 import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,
@@ -111,7 +112,7 @@ function assertDivergenceShape(
 test('(a) an ANNOTATED press whose dispatch throws a selector-miss yields REPLAY_DIVERGENCE, not COMMAND_FAILED', async () => {
   const root = mkdtempForTestSync('agent-device-replay-dispatch-miss-annotated-');
   const { sessionStore, sessionName } = setupSession(root);
-  const evidence = await recordArticleEvidence();
+  const evidence = recordArticleEvidence(computeTargetEvidence);
   const filePath = writeReplayFile(root, [
     `# agent-device:target-v1 ${JSON.stringify(evidence)}`,
     'click id="article"',

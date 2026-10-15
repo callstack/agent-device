@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict';
-import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
+import type { SnapshotNode } from '@agent-device/kernel/snapshot';
 import type { TargetAnnotationV1 } from '@agent-device/contracts/replay';
-
-export function toSnapshotNodes(raw: RawSnapshotNode[]): SnapshotNode[] {
-  return raw.map((node, position) => ({ ...node, ref: `e${position + 1}` }));
-}
+import { buildNodes } from './snapshot-builders.ts';
 
 export function bottomTabsRealCaptureFixture(): SnapshotNode[] {
-  return toSnapshotNodes([
+  return buildNodes([
     {
       index: 0,
       type: 'Application',
@@ -80,8 +77,12 @@ export function bottomTabsRealCaptureFixture(): SnapshotNode[] {
   ]);
 }
 
-export async function recordArticleEvidence(): Promise<TargetAnnotationV1> {
-  const { computeTargetEvidence } = await import('@agent-device/selectors/target-evidence');
+export function recordArticleEvidence(
+  computeTargetEvidence: (capture: {
+    node: SnapshotNode;
+    preActionNodes: SnapshotNode[];
+  }) => TargetAnnotationV1 | undefined,
+): TargetAnnotationV1 {
   const nodes = bottomTabsRealCaptureFixture();
   const winner = nodes.find((node) => node.label === 'Article, unselected');
   if (!winner) throw new Error('fixture missing Article tab');

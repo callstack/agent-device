@@ -16,8 +16,8 @@ import {
 import {
   bottomTabsRealCaptureFixture,
   recordArticleEvidence,
-  toSnapshotNodes,
-} from '@agent-device/replay-port/target-classification-fixtures';
+  buildNodes,
+} from '@agent-device/test-kit';
 
 /** Verified outcomes carry the verified member + matchCount (for the post-resolution guard). */
 function assertVerified(
@@ -33,7 +33,7 @@ function assertVerified(
 const PLATFORM = 'ios' as const;
 
 test('classifyReplayTarget: real-capture fixture verifies by @ref when the tree is unchanged', async () => {
-  const recorded = await recordArticleEvidence();
+  const recorded = recordArticleEvidence(computeTargetEvidence);
   const replayNodes = bottomTabsRealCaptureFixture();
   const winner = replayNodes.find((node) => node.label === 'Article, unselected');
   assert.ok(winner);
@@ -50,7 +50,7 @@ test('classifyReplayTarget: real-capture fixture verifies by @ref when the tree 
 });
 
 test('classifyReplayTarget: real-capture fixture — a relabeled node is identity-mismatch (path 3)', async () => {
-  const recorded = await recordArticleEvidence();
+  const recorded = recordArticleEvidence(computeTargetEvidence);
   const replayNodes = bottomTabsRealCaptureFixture();
   const winner = replayNodes.find((node) => node.label === 'Article, unselected');
   assert.ok(winner);
@@ -99,7 +99,7 @@ function saveButtonRecorded(overrides: Partial<TargetAnnotationV1> = {}): Target
 }
 
 function saveButtonTree(): SnapshotNode[] {
-  return toSnapshotNodes([
+  return buildNodes([
     { index: 0, type: 'Window', depth: 0 },
     { index: 1, type: 'Toolbar', label: 'Editor', depth: 1, parentIndex: 0 },
     {
@@ -116,7 +116,7 @@ function saveButtonTree(): SnapshotNode[] {
 
 test('classifyReplayTarget path 2: selector-miss when the recorded target is gone', () => {
   const recorded = saveButtonRecorded();
-  const nodes = toSnapshotNodes([
+  const nodes = buildNodes([
     { index: 0, type: 'Window', depth: 0 },
     { index: 1, type: 'Toolbar', label: 'Editor', depth: 1, parentIndex: 0 },
   ]);
@@ -152,7 +152,7 @@ test('classifyReplayTarget path 4: verified via @ref on an unchanged tree', () =
 });
 
 test('classifyReplayTarget uses the later chain alternative that resolution selected after an earlier tie', () => {
-  const nodes = toSnapshotNodes([
+  const nodes = buildNodes([
     {
       index: 0,
       type: 'Button',
@@ -231,7 +231,7 @@ test('classifyReplayTarget path 5: a unique-but-wrong rebind is caught even when
   // Two "Go back" buttons at different depths: the label-only selector
   // matches both, but only one carries the recorded id. The disambiguation
   // heuristic (deepest-then-smallest-area) prefers the decoy.
-  const nodes = toSnapshotNodes([
+  const nodes = buildNodes([
     { index: 0, type: 'Window', rect: { x: 0, y: 0, width: 400, height: 800 }, depth: 0 },
     {
       index: 1,
@@ -279,7 +279,7 @@ test('classifyReplayTarget path 5: a unique-but-wrong rebind is caught even when
 // ---------------------------------------------------------------------------
 
 function duplicateRowTree(): SnapshotNode[] {
-  return toSnapshotNodes([
+  return buildNodes([
     { index: 0, type: 'Window', depth: 0 },
     { index: 1, type: 'ScrollView', identifier: 'list', depth: 1, parentIndex: 0 },
     // Two anonymous section wrappers (role only, no label) — a real
@@ -439,7 +439,7 @@ test('classifyReplayTarget: document-order determinism for equal rect centers', 
   // tie-break were nondeterministic or reversed, the winner (e3) would not
   // match `orderedRegion[0]` and this would report a mismatch instead of
   // verified.
-  const nodes = toSnapshotNodes([
+  const nodes = buildNodes([
     { index: 0, type: 'ScrollView', identifier: 'list', depth: 0 },
     { index: 1, type: 'Other', depth: 1, parentIndex: 0 },
     { index: 2, type: 'Other', depth: 1, parentIndex: 0 },
@@ -508,7 +508,7 @@ function androidSharedIdListFixture(
       parentIndex: wrapperIndex,
     });
   });
-  return toSnapshotNodes(raw);
+  return buildNodes(raw);
 }
 
 test('#1269 e2e: a demoted shared-id row rebinds by role+label after the shared-id rows reorder on replay', () => {
@@ -663,7 +663,7 @@ test('#1280 e2e: a retargeted press on a row container rebinds its labeled desce
 // ---------------------------------------------------------------------------
 
 test('#2498 e2e: a read recorded on a collapsed wrapper chain verifies on the same tree', () => {
-  const nodes = toSnapshotNodes(UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES);
+  const nodes = buildNodes(UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES);
   const reports = nodes.filter((node) => node.identifier === 'scoring_home_button');
   const control = resolveElementReportedTwice(nodes, reports);
   assert.ok(control, 'dispatch resolves the toolbar button, not the item host that reports it');
@@ -684,7 +684,7 @@ test('#2498 e2e: a read recorded on a collapsed wrapper chain verifies on the sa
 });
 
 test('#2498 e2e: matches in distinct subtrees stay a refusal, not a collapse to one of them', () => {
-  const nodes = toSnapshotNodes(ELEMENT14_DISTINCT_SUBTREE_NODES);
+  const nodes = buildNodes(ELEMENT14_DISTINCT_SUBTREE_NODES);
   const recordedWinner = nodes.find((node) => node.type === 'XCUIElementTypeButton');
   assert.ok(recordedWinner);
   const recorded = computeTargetEvidence({ node: recordedWinner, preActionNodes: nodes });
