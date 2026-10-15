@@ -3,16 +3,13 @@ import assert from 'node:assert/strict';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { normalizeError } from '@agent-device/kernel/errors';
 import { isAndroidCaptureFailureReason } from '@agent-device/contracts/android-snapshot-quality';
-import {
-  snapshotAndroid,
-  type AndroidAdbExecutor,
-  type AndroidAdbExecutorResult,
-  resetAndroidSnapshotHelperInstallCache,
-  resetAndroidSnapshotHelperSessions,
-} from '@agent-device/platform-android/mechanics';
+import type { AndroidAdbExecutor, AndroidAdbExecutorResult } from '../adb-executor.ts';
+import { snapshotAndroid } from '../snapshot.ts';
+import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
+import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session-lifecycle.ts';
 import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from './test-utils/android-snapshot-helper.ts';
 import { isAndroidSnapshotTimeoutError } from '@agent-device/capture-kit/snapshot-timeout-policy';
-import '../platform-runtime-android-adb-host.ts';
+import './test-utils/android-host-test-setup.ts';
 
 /**
  * The Android capture-failure-reason contract, from producer to consumer.
