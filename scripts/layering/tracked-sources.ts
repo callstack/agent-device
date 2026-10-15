@@ -75,7 +75,8 @@ function listTrackedFiles(repoRoot: string, pathspecs: readonly string[]): strin
  */
 export const DAEMON_SOURCE_ROOT = 'packages/daemon/src/';
 
-const PRODUCTION_SOURCE_ROOT = /^(?:src|packages\/[^/]+\/src)\//;
+/** Root `src/` and any package's `src/`: the trees whose files layering rules read. */
+export const SOURCE_TREE_ROOT = /^(?:src|packages\/[^/]+\/src)\//;
 
 /**
  * Test support, by path: `__tests__/` and package-local `test/` trees, `*.test.*` and
@@ -92,7 +93,7 @@ const TEST_SUPPORT_PATH =
  * production sources, so tooling and vitest setup there may import test support.
  */
 export function isProductionSourceFile(file: string): boolean {
-  return file.endsWith('.ts') && PRODUCTION_SOURCE_ROOT.test(file) && !TEST_SUPPORT_PATH.test(file);
+  return file.endsWith('.ts') && SOURCE_TREE_ROOT.test(file) && !TEST_SUPPORT_PATH.test(file);
 }
 
 /** Every tracked file under root `src/` and `packages/`, repo-root-relative. */

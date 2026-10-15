@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { test } from 'node:test';
 import { memoizedImportParser, resolveImportEdges } from './model.ts';
-import { measureRatchets, mergeBaseRatchets } from './ratchet-reference.ts';
+import { inHeadCoordinates, measureRatchets, mergeBaseRatchets } from './ratchet-reference.ts';
 import { sessionStateWritePressure } from './session-state.ts';
 import { listTrackedProductionSources } from './tracked-sources.ts';
 import { readCommittedSources } from '../__tests__/committed-source-tree.ts';
@@ -50,6 +50,17 @@ test('sessionStateWritePressure counts written fields and (field, writer) claims
     writerOwnedFields: 0,
     ownerFileClaims: 0,
   });
+});
+
+test('carried merge-base entries map to head paths and stay sorted', () => {
+  const moved = new Map([['src/z-old.test.ts', 'src/a-new.test.ts']]);
+  assert.deepEqual(
+    inHeadCoordinates(
+      ['src/b.test.ts', 'src/z-old.test.ts', 'src/c.test.ts'],
+      (file) => moved.get(file) ?? file,
+    ),
+    ['src/a-new.test.ts', 'src/b.test.ts', 'src/c.test.ts'],
+  );
 });
 
 test('measureRatchets reports all ratchets from one tree', () => {

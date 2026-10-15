@@ -51,6 +51,17 @@ export type RepoTreeInput = Readonly<{
   files: readonly string[];
 }>;
 
+/**
+ * Merge-base entries in head coordinates, sorted again: a rename can change lexical order, and
+ * `measureUnmatchedTests` promises sorted output.
+ */
+export function inHeadCoordinates(
+  entries: readonly string[],
+  toHead: (file: string) => string,
+): string[] {
+  return entries.map(toHead).sort();
+}
+
 export type MergeBaseRatchets = LayeringRatchets & Readonly<{ ref: string }>;
 
 export function measureRatchets(
@@ -111,6 +122,6 @@ export function mergeBaseRatchets(
     ...base,
     // Base entries in head coordinates, like the edges above: a test moved or renamed since the
     // merge-base is the same entry, not new.
-    unmatchedTests: base.unmatchedTests.map(toHead).sort(),
+    unmatchedTests: inHeadCoordinates(base.unmatchedTests, toHead),
   };
 }

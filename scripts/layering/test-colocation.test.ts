@@ -2,6 +2,8 @@
 // merge-base ratchet over those that do not.
 
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
 import {
   checkTestColocation,
@@ -144,6 +146,15 @@ test('growth against the merge-base fails; moving a test into place or an unchan
   assert.match(violations[0]!.message, /test\/repo-guards\//);
   assert.deepEqual(checkTestColocation([], base), []);
   assert.deepEqual(checkTestColocation(base, base), []);
+});
+
+test('the remedy locations R84 names are collected by a vitest project', () => {
+  // A test moved to test/repo-guards/ must run somewhere: no gate fails on a test no project collects.
+  const config = fs.readFileSync(
+    path.resolve(import.meta.dirname, '../../vitest.config.ts'),
+    'utf8',
+  );
+  assert.match(config, /'test\/repo-guards\/\*\.test\.ts'/);
 });
 
 test('the summary reports the remaining count against the merge-base', () => {
