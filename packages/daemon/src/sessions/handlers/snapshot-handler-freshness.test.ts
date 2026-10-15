@@ -4,7 +4,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { forwardingCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
-import { diffForwardingCreateCommandSurface } from '../../__tests__/support/diff-forwarding-command-surface.ts';
+import { diffForwardingCreateCommandSurface } from '../../__tests__/support/snapshot-command-surface-fakes.ts';
 import { SessionStore } from '../../core/session-store.ts';
 import {
   fixtureScreenshotCaptures,

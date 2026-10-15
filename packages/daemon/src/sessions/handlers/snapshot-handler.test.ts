@@ -5,7 +5,7 @@ import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-c
 import { resetSnapshotRuntimeFixture } from '../../__tests__/support/snapshot-runtime-fixture.ts';
 import { forwardingCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 import { providerDeviceAdmissionFixture } from '../../__tests__/support/provider-device-admission-fixture.ts';
-import { diffForwardingCreateCommandSurface } from '../../__tests__/support/diff-forwarding-command-surface.ts';
+import { diffForwardingCreateCommandSurface } from '../../__tests__/support/snapshot-command-surface-fakes.ts';
 import type { SessionState } from '../../core/session-state.ts';
 import {
   androidCapture,

@@ -1,12 +1,12 @@
 import { beforeEach, expect, test } from 'vitest';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
-import { handleSnapshotCommands as handleProductionSnapshotCommands } from '@agent-device/daemon/testing/handlers/snapshot';
+import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
+import { handleSnapshotCommands as handleProductionSnapshotCommands } from './snapshot.ts';
 import type { RawSnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
-import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { expireRefFrame } from '@agent-device/daemon/testing/ref-frame';
-import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+import { makeAndroidSession } from '../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { expireRefFrame } from '../../core/ref-frame.ts';
+import { snapshotRuntimeFixture } from '../../__tests__/support/snapshot-runtime-fixture.ts';
+import { storingCreateCommandSurface } from '../../__tests__/support/snapshot-command-surface-fakes.ts';
 
 const ANDROID_SCRIPT_ERROR = 'Unable to load script. Make sure you are running Metro.';
 
@@ -98,7 +98,7 @@ function requestScopedSnapshot(
 ) {
   const runtime = snapshotRuntimeFixture();
   return handleProductionSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: storingCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
