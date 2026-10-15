@@ -1,24 +1,38 @@
-import { test, expect, vi, beforeEach } from 'vitest';
-
-vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
-  return {
-    ...actual,
-    resolveTargetDevice: actual.resolveTargetDevice,
-  };
-});
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
-  const fixture =
-    await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
-  return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
-});
-
+import { test, expect, beforeEach } from 'vitest';
+import type { FindReadResult } from '@agent-device/contracts/interaction';
+import { refFrameScope, refFrameState } from '../../../core/ref-frame.ts';
+import {
+  captureAndStoreSnapshot,
+  commandSurfaceWithMembers,
+} from '../../../__tests__/support/command-surface-override-fake.ts';
+import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+import { installLegacyCaptureInteractorResolution } from '../../../__tests__/support/legacy-capture-interactor-resolution.ts';
 import {
   resetFindTouchRuntimeFixture,
   runFindClickScenario,
-} from '@agent-device/daemon/testing/interaction/internal/__tests__/find-touch-runtime-fixture';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
-import { refFrameScope, refFrameState } from '@agent-device/daemon/testing/ref-frame';
+} from './__tests__/find-touch-runtime-fixture.ts';
+
+installLegacyCaptureInteractorResolution();
+
+/**
+ * The command family's `find <q> list`: every node the locator matches, read from a capture it
+ * took through the config's backend and stored as the session snapshot, exactly as the daemon's
+ * ref issuance expects to find it.
+ */
+const listingSurface = (label: string) =>
+  commandSurfaceWithMembers((config) => ({
+    selectors: {
+      find: async (options): Promise<FindReadResult> => {
+        const snapshot = await captureAndStoreSnapshot(config, options);
+        return {
+          kind: 'list',
+          matches: snapshot.nodes
+            .filter((node) => node.label === label)
+            .map((node) => ({ ref: `@${node.ref}`, node })),
+        };
+      },
+    },
+  }));
 
 beforeEach(() => {
   resetFindTouchRuntimeFixture();
@@ -41,7 +55,7 @@ test('handleFindCommands ambiguous match lists snapshot-line candidates capped a
   });
 
   const { response } = await runFindClickScenario({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     positionals: ['Follow', 'click'],
     nodes: [
       { index: 0, ref: 'e1', type: 'Application', rect: { x: 0, y: 0, width: 800, height: 1200 } },
@@ -75,7 +89,7 @@ test('handleFindCommands ambiguous match lists snapshot-line candidates capped a
 
 test('handleFindCommands ambiguous match with few candidates lists them all uncapped', async () => {
   const { response } = await runFindClickScenario({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     positionals: ['Follow', 'click'],
     nodes: [
       { index: 0, ref: 'e1', type: 'Application', rect: { x: 0, y: 0, width: 800, height: 1200 } },
@@ -130,7 +144,7 @@ test('handleFindCommands list returns every match without acting', async () => {
   });
 
   const { response, invokeCalls, session } = await runFindClickScenario({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: listingSurface('Follow'),
     positionals: ['text', 'Follow', 'list'],
     nodes: [
       { index: 0, ref: 'e1', type: 'Application', rect: { x: 0, y: 0, width: 800, height: 1200 } },
@@ -157,7 +171,7 @@ test('handleFindCommands list returns every match without acting', async () => {
 
 test('handleFindCommands list on a unique match still lists instead of tapping', async () => {
   const { response, invokeCalls } = await runFindClickScenario({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: listingSurface('Dictionary'),
     positionals: ['Dictionary', 'list'],
     nodes: [
       { index: 0, ref: 'e1', type: 'Application', rect: { x: 0, y: 0, width: 800, height: 1200 } },
@@ -196,7 +210,7 @@ test('handleFindCommands selector-shaped find rejects multiple matches with cand
   });
 
   const { response, invokeCalls } = await runFindClickScenario({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     positionals: ['role=button', 'click'],
     nodes: [
       { index: 0, ref: 'e1', type: 'Application', rect: { x: 0, y: 0, width: 800, height: 1200 } },
@@ -226,7 +240,7 @@ test('handleFindCommands selector-shaped find honors the explicit --first opt-ou
   });
 
   const { response, invokeCalls } = await runFindClickScenario({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: fakeCreateCommandSurface,
     positionals: ['role=button', 'click'],
     flags: { findFirst: true },
     nodes: [
