@@ -284,8 +284,20 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
   );
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
 
-  // The runner test host is package-internal: tests and __tests__ helpers may import it relatively,
-  // production runner modules may not.
+  // A NEW unenumerated subpath widens the export list and fails declarations.
+  const widened = declarations();
+  const apple = widened.find((pkg) => pkg.family === 'apple')!;
+  widened[widened.indexOf(apple)] = {
+    ...apple,
+    exportedSubpaths: [...apple.exportedSubpaths, '@agent-device/platform-apple/internal'],
+  };
+  assert.match(
+    messages(validSources(), widened).join('\n'),
+    /platform-apple must export exactly its root façade/,
+  );
+});
+
+test('the runner test host is importable only from tests and __tests__ helpers', () => {
   const testHostSources = validSources();
   testHostSources.set(
     'packages/platform-apple/src/runner/__tests__/host-setup.ts',
@@ -302,18 +314,6 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
   assert.equal(
     messages(testHostSources).filter((message) => message.includes('test dispatcher')).length,
     1,
-  );
-
-  // A NEW unenumerated subpath widens the export list and fails declarations.
-  const widened = declarations();
-  const apple = widened.find((pkg) => pkg.family === 'apple')!;
-  widened[widened.indexOf(apple)] = {
-    ...apple,
-    exportedSubpaths: [...apple.exportedSubpaths, '@agent-device/platform-apple/internal'],
-  };
-  assert.match(
-    messages(validSources(), widened).join('\n'),
-    /platform-apple must export exactly its root façade/,
   );
 });
 
