@@ -1,8 +1,5 @@
-import {
-  gesturePayloadFromPositionals,
-  normalizePublicGesture,
-} from '@agent-device/contracts/gesture-normalization';
-import { GESTURE_SAMPLE_INTERVAL_MS, buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import { gesturePayloadFromPositionals, normalizePublicGesture } from './gesture-normalization.ts';
+import { GESTURE_SAMPLE_INTERVAL_MS, buildGesturePlan } from './gesture-plan.ts';
 import { PUBLIC_PLATFORMS } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
 import fc from 'fast-check';
@@ -19,7 +16,7 @@ import {
   LANDSCAPE,
   PORTRAIT,
   requireTwoPointerPlan,
-} from './gesture-plan-test-utils.ts';
+} from './gesture-plan.fixtures.ts';
 
 describe('viewport-aware multi-touch geometry', () => {
   test.each([

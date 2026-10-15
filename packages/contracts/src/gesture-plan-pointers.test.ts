@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
-import {
-  GESTURE_INITIAL_ANGLE_DEGREES,
-  buildGesturePlan,
-} from '@agent-device/contracts/gesture-plan';
+import { GESTURE_INITIAL_ANGLE_DEGREES, buildGesturePlan } from './gesture-plan.ts';
 import {
   centroid,
   distance,
@@ -15,7 +12,7 @@ import {
   requiredPoint,
   requireTwoPointerPlan,
   rotationDelta,
-} from './gesture-plan-test-utils.ts';
+} from './gesture-plan.fixtures.ts';
 
 describe('single-pointer plans', () => {
   test('pan defaults to one pointer and preserves endpoints and duration', () => {
