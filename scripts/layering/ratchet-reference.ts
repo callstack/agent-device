@@ -28,6 +28,7 @@ import {
   type SessionAuthorityOverlay,
 } from './session-authority-overlay.ts';
 import { sessionStateWritePressure, type SessionStateWritePressure } from './session-state.ts';
+import { measureUnmatchedTests } from './test-colocation.ts';
 
 export type LayeringRatchets = Readonly<{
   /** R6: distinct type-only spine inversions per `from -> to` zone pair. */
@@ -40,12 +41,14 @@ export type LayeringRatchets = Readonly<{
   sessionAuthority: SessionAuthorityOverlay;
   /** R83: the test-only package exports published, whole tree, test-kit excluded. */
   testOnlyExports: readonly TestOnlyExport[];
+  /** R84: unit tests named for no module beside them, sorted. */
+  unmatchedTests: readonly string[];
 }>;
 
-/** What R83 measures a tree from: its package manifests and its tracked package paths. */
-export type PackageExportSurfaceInput = Readonly<{
+/** What R83 and R84 measure a tree from: its package manifests and its tracked `src/` and `packages/` paths. */
+export type RepoTreeInput = Readonly<{
   manifests: ReadonlyMap<string, string>;
-  packageFiles: readonly string[];
+  files: readonly string[];
 }>;
 
 export type MergeBaseRatchets = LayeringRatchets & Readonly<{ ref: string }>;
@@ -53,14 +56,15 @@ export type MergeBaseRatchets = LayeringRatchets & Readonly<{ ref: string }>;
 export function measureRatchets(
   sources: ReadonlyMap<string, string>,
   edges: readonly ResolvedImportEdge[],
-  exportSurface: PackageExportSurfaceInput = { manifests: new Map(), packageFiles: [] },
+  tree: RepoTreeInput = { manifests: new Map(), files: [] },
 ): LayeringRatchets {
   return {
     typeInversions: typeInversionCounts(edges),
     largestTypeCycle: largestTypeCycleMembers(edges),
     sessionState: sessionStateWritePressure(sources),
     sessionAuthority: measureSessionAuthorityOverlay(sources, edges),
-    testOnlyExports: measureTestOnlyExports(exportSurface.manifests, exportSurface.packageFiles),
+    testOnlyExports: measureTestOnlyExports(tree.manifests, tree.files),
+    unmatchedTests: measureUnmatchedTests(tree.files),
   };
 }
 
@@ -101,11 +105,12 @@ export function mergeBaseRatchets(
       : { ...edge, file, target, fromZone: targetDagZone(file), toZone: targetDagZone(target) };
   });
   const canonical = new Map([...sources].map(([file, text]) => [toHead(file), text]));
+  const base = measureRatchets(canonical, edges, { manifests, files });
   return {
     ref,
-    ...measureRatchets(canonical, edges, {
-      manifests,
-      packageFiles: files.filter((file) => file.startsWith('packages/')),
-    }),
+    ...base,
+    // Base entries in head coordinates, like the edges above: a test moved or renamed since the
+    // merge-base is the same entry, not new.
+    unmatchedTests: base.unmatchedTests.map(toHead),
   };
 }

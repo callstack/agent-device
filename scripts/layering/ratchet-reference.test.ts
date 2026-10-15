@@ -60,6 +60,7 @@ test('measureRatchets reports all ratchets from one tree', () => {
     sessionState: { writerOwnedFields: 2, ownerFileClaims: 3 },
     sessionAuthority: { shapeFiles: [], authorityFiles: [] },
     testOnlyExports: [],
+    unmatchedTests: [],
   });
   const withExports = measureRatchets(sources, resolveImportEdges(sources), {
     manifests: new Map([
@@ -68,7 +69,7 @@ test('measureRatchets reports all ratchets from one tree', () => {
         JSON.stringify({ name: '@agent-device/p', exports: { './x-fixtures': './src/x.ts' } }),
       ],
     ]),
-    packageFiles: [],
+    files: [],
   });
   assert.deepEqual(
     withExports.testOnlyExports.map(({ id }) => id),

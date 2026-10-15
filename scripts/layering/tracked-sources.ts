@@ -95,9 +95,9 @@ export function isProductionSourceFile(file: string): boolean {
   return file.endsWith('.ts') && PRODUCTION_SOURCE_ROOT.test(file) && !TEST_SUPPORT_PATH.test(file);
 }
 
-/** Every tracked file under `packages/`, repo-root-relative. */
-export function listTrackedPackageFiles(repoRoot: string): string[] {
-  return listTrackedFiles(repoRoot, ['packages']);
+/** Every tracked file under root `src/` and `packages/`, repo-root-relative. */
+export function listTrackedSourceTreeFiles(repoRoot: string): string[] {
+  return listTrackedFiles(repoRoot, ['src', 'packages']);
 }
 
 /** The canonical layering scan input: tracked, production, repo-root-relative. */
