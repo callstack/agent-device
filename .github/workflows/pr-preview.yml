@@ -21,7 +21,7 @@ jobs:
   command-docs-gate:
     # ci.yml ignores website/**, so a docs-only PR never triggers the unit lane
     # that carries the command-reference coverage gate
-    # (src/__tests__/command-doc-coverage.test.ts). Run it here — where
+    # (test/repo-guards/command-doc-coverage.test.ts). Run it here — where
     # commands.md changes DO trigger a workflow — so documenting a retired
     # command (or dropping a public command's docs) fails on docs-only PRs too.
     # Unlike deploy-preview this has no fork guard: the gate is read-only and

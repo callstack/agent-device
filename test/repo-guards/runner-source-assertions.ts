@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const PROJECT_ROOT = path.resolve(import.meta.dirname, '../../..');
+export const PROJECT_ROOT = path.resolve(import.meta.dirname, '../..');
 
 const RUNNER_SOURCES_DIR = path.join(
   PROJECT_ROOT,

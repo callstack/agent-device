@@ -42,10 +42,10 @@ test('a filtered Vitest run does not credit the whole project', () => {
   const units = scriptUnits(
     'docs',
     scriptModel({
-      docs: 'vitest run --project unit-core src/__tests__/command-doc-coverage.test.ts',
+      docs: 'vitest run --project unit-core test/repo-guards/command-doc-coverage.test.ts',
     }),
   );
-  assert.deepEqual(units, ['vitest:unit-core@src/__tests__/command-doc-coverage.test.ts']);
+  assert.deepEqual(units, ['vitest:unit-core@test/repo-guards/command-doc-coverage.test.ts']);
   assert.equal(
     unitCovers('vitest:unit-core', units[0] as string),
     true,

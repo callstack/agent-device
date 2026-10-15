@@ -160,7 +160,7 @@
     "check:production-exports": "fallow dead-code --config fallow-production-exports.json --production --unused-exports --fail-on-issues",
     "check:bundle-owner-files": "node --experimental-strip-types scripts/check-bundle-owner-files.ts",
     "check:package": "node --experimental-strip-types scripts/check-package.ts",
-    "check:command-docs": "vitest run --project unit-core src/__tests__/command-doc-coverage.test.ts",
+    "check:command-docs": "vitest run --project unit-core test/repo-guards/command-doc-coverage.test.ts",
     "check:doc-links": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/__tests__/check-doc-links.test.ts && pnpm --dir website build && node --experimental-strip-types scripts/check-doc-links.ts",
     "check:doc-prose": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/__tests__/check-doc-prose.test.ts && node --experimental-strip-types scripts/check-doc-prose.ts",
     "check:agent-guidance": "node --experimental-strip-types scripts/node-test-tmpdir.ts --experimental-strip-types --test scripts/__tests__/agent-guidance-contract.test.ts",
