@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import { requireManagedSessionArtifactPath, resolveSessionDir } from './session-artifact-paths.ts';
-import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test('resolveSessionDir keeps every session dir beneath the sessions dir', () => {
   const sessionsDir = path.join(

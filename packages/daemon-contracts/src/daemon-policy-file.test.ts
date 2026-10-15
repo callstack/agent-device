@@ -4,7 +4,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { commandDescriptors } from '@agent-device/command-registry/registry';
 import type { CommandDescriptor } from '@agent-device/command-registry/types';
-import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { DAEMON_POLICY_ENV, loadDaemonPolicy, parseDaemonPolicy } from './daemon-policy-file.ts';
 
 const SOURCE = '/etc/agent-device/policy.json';

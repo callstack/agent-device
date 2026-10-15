@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, test } from 'vitest';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { withDaemonDiagnosticsScope } from './daemon-diagnostics-scope.ts';
-import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 let dir: string;
 let logPath: string;
