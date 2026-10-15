@@ -1,7 +1,7 @@
 {
-  // The root program's `tsc -b` build node: tsconfig.json plus the package references. The
-  // references stay out of tsconfig.json because fallow >=3.20 walks the references of each
-  // file's tsconfig on every import (~14x slower resolve); `extends` does not inherit them.
+  // The `tsc -b` node for the root program. References live here, not in tsconfig.json, because
+  // fallow and freerange read tsconfig.json and slow down or run out of memory on references.
+  // Its own build info keeps a `tsc -p tsconfig.json` run from marking this build up to date.
   "extends": "./tsconfig.json",
   "compilerOptions": { "tsBuildInfoFile": "./.tmp/tsconfig.typecheck.tsbuildinfo" },
   "references": [
