@@ -68,10 +68,6 @@
       "types": "./src/runner/runner-requests.fixtures.ts",
       "default": "./src/runner/runner-requests.fixtures.ts"
     },
-    "./runner/test-host": {
-      "types": "./src/runner/test-host.ts",
-      "default": "./src/runner/test-host.ts"
-    },
     "./runner-owner": {
       "types": "./src/runner-owner-facade.ts",
       "default": "./src/runner-owner-facade.ts"

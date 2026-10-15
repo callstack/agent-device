@@ -36,7 +36,6 @@ function declarations(): PlatformPackageDeclaration[] {
             '@agent-device/platform-apple/perf',
             '@agent-device/platform-apple/physical-device',
             '@agent-device/platform-apple/runner',
-            '@agent-device/platform-apple/runner/test-host',
             '@agent-device/platform-apple/runner/operations',
             '@agent-device/platform-apple/runner/requests-fixtures',
             '@agent-device/platform-apple/runner-owner',
@@ -284,22 +283,6 @@ test('the apple runner mechanics facet subpaths are the enumerated exception', (
     "import type { RunnerCommand } from '@agent-device/platform-apple/runner';",
   );
   assert.deepEqual(checkPlatformPackagePolicy(sources, declarations()), []);
-
-  // The test-host installer is a single vitest setup file, dynamic imports included.
-  const testHostSources = validSources();
-  testHostSources.set(
-    'scripts/vitest-apple-runner-host-setup.ts',
-    "import { installAppleRunnerTestHost } from '@agent-device/platform-apple/runner/test-host';",
-  );
-  assert.deepEqual(checkPlatformPackagePolicy(testHostSources, declarations()), []);
-  testHostSources.set(
-    'src/platform-runtime.ts',
-    composition() + "\nvoid import('@agent-device/platform-apple/runner/test-host');",
-  );
-  assert.match(
-    messages(testHostSources).join('\n'),
-    /only scripts\/vitest-apple-runner-host-setup\.ts may import/,
-  );
 
   // A NEW unenumerated subpath widens the export list and fails declarations.
   const widened = declarations();

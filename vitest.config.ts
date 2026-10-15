@@ -242,7 +242,7 @@ export default defineConfig({
           setupFiles: [
             ...SETUP_FILES,
             'scripts/vitest-apple-runner-home-setup.ts',
-            'scripts/vitest-apple-runner-host-setup.ts',
+            'packages/platform-apple/src/runner/__tests__/host-setup.ts',
           ],
         },
       },
