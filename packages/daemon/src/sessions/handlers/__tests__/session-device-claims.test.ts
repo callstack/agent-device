@@ -305,6 +305,39 @@ test('a canceled attempt lets the next attempt of the same suite open the device
   );
 });
 
+test('cancellation after local device setup retains the device claim for recovery', async () => {
+  const { store, stateDir } = setup();
+  const requestId = 'claim-canceled-after-dispatch';
+  mockResolveTargetDevice.mockResolvedValue(android);
+  mockDispatch.mockResolvedValue(undefined);
+  markRequestCanceled(requestId);
+
+  try {
+    const response = await handleOpenCommand({
+      createCommandSurface: fakeCreateCommandSurface,
+      platformServices: daemonPlatformServicesFixture(),
+      req: {
+        command: 'open',
+        token: 'test',
+        session: 'claim-canceled-after-dispatch',
+        positionals: ['Demo'],
+        flags: { platform: 'android' },
+        meta: { requestId },
+      },
+      sessionName: 'claim-canceled-after-dispatch',
+      logPath: path.join(stateDir, 'daemon.log'),
+      sessionStore: store,
+    });
+
+    assert.equal(response.ok, false);
+    assert.equal(mockDispatch.mock.calls.length, 1);
+    assert.equal(inspectDeviceClaims({ serial: android.id })[0]?.classification, 'live');
+    assert.equal(store.get('claim-canceled-after-dispatch'), undefined);
+  } finally {
+    clearRequestCanceled(requestId);
+  }
+});
+
 test('provider-owned open creates no host-local device claim from its selected owner', async () => {
   const { store, stateDir } = setup();
   mockResolveTargetDevice.mockResolvedValue(android);

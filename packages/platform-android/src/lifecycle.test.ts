@@ -109,7 +109,9 @@ function createLifecycle(
       },
       applyRuntimeHints: async () => {},
       clearRuntimeHints: async () => {},
-      activateTestIme: async () => {},
+      activateTestIme: async () => {
+        calls.push('activate-test-ime');
+      },
       restoreTestIme: params.restoreTestIme ?? (async () => {}),
       recoverTestImeStartup: async () => {},
       hasTestImeRecoveryEvidence: async () => false,
@@ -203,6 +205,14 @@ test('preserves a runtime launch URL duration after the admitted Android follow-
     'open:example://after-open',
   ]);
   expect(outcome.timing.launchUrlDurationMs).toBe(20);
+});
+
+test('an Android open activates the test IME after the launch dispatch when requested', async () => {
+  const { calls, lifecycle } = createLifecycle();
+
+  await lifecycle.openApplication(openInput({ enableTestIme: true }));
+
+  expect(calls.slice(0, 2)).toEqual(['open:com.example.app', 'activate-test-ime']);
 });
 
 test('an Android app open returns only after the launched app observation settles', async () => {
