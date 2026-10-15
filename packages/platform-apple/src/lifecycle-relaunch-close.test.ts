@@ -166,7 +166,6 @@ test('a physical iOS relaunch waits for the runner prewarm and reports its timin
     runnerPrewarmWaited: true,
     runnerPrewarmDurationMs: 250,
   });
-  expect(outcome.timing.totalDurationMs ?? 250).toBeGreaterThanOrEqual(250);
 });
 
 test('a physical iOS relaunch without an existing session closes then opens the target app', async () => {

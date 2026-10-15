@@ -145,6 +145,7 @@ test('JSON output keeps snapshot quality and warnings and drops capture analysis
   assert.deepEqual((output.jsonData as { warnings?: unknown }).warnings, [
     'backend warning from interaction capture',
   ]);
-  assert.equal('analysis' in (output.jsonData ?? {}), false);
-  assert.equal('freshness' in (output.jsonData ?? {}), false);
+  const jsonData = output.jsonData as Record<string, unknown>;
+  assert.equal('analysis' in jsonData, false);
+  assert.equal('freshness' in jsonData, false);
 });
