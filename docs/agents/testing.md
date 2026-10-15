@@ -32,9 +32,8 @@ Two selection traps recur:
 - A workspace package manifest or TypeScript config can rewire all consumers, so the affected
   selector fails open to the full gate set on purpose.
 
-Docs-only changes with no runtime behavior impact need no runtime tests or new tests asserting prose.
-Keep required gates; after those and focused checks pass, repeat or broaden only for changes,
-failures, or unresolved risks.
+Docs-only changes need no runtime tests or tests asserting prose. After the required gates, repeat
+or broaden only for changes, failures, or unresolved risks.
 
 ## Platform and live-device policy
 
@@ -67,13 +66,13 @@ Read the entry file before running a lane. Do not copy its environment matrix he
 
 ## Shared test utilities
 
-Before creating fixtures, look in `@agent-device/test-kit/` (generic) and
-`packages/daemon/src/__tests__/support/` (daemon-shaped). Import named builders from their
-defining module, never through a barrel. Shared `DeviceInfo`, session, snapshot, store,
-runtime-fact, and mocked-binary values belong in a sibling fixture module, not in repeated
-test literals. `PROPERTY_RUNS` and the touch-point/rect arbitraries live in
-`@agent-device/selectors/snapshot-geometry-fixtures`;
-`makeSnapshotState` lives in `@agent-device/capture-kit/snapshot-state-fixtures`.
+Before creating fixtures, look in `@agent-device/test-kit` and
+`packages/daemon/src/__tests__/support/`. Shared `DeviceInfo`, session, snapshot, store,
+runtime-fact, and mocked-binary values belong in a sibling fixture module, not in repeated test
+literals; a fixture one package uses is a `*.fixtures.ts` beside its module. The packages test-kit
+builds on (kernel, contracts, capture-kit, host-kit, command-registry, daemon-contracts) cannot
+declare it; their tests keep helpers local. Never import test-kit in a `vi.mock` factory: it loads
+the module being mocked; spy it in place, as `pinOwnProcessStartTime` does.
 
 Use `mkdtempForTest` or `mkdtempForTestSync`. Global setup redirects `TMPDIR` for the run and
 removes it after every worker exits — skip per-test cleanup. An interrupted run may leave a
@@ -109,8 +108,8 @@ For structured classifiers, pair the positive case with the closest negative. Wh
 can be identical with and without a typed reason, the negative test must prove the message alone
 cannot activate retry, fallback, or recovery.
 
-Test through public interfaces where practical; never add production exports or test-only
-dependency injection — a missing seam needs a real product seam.
+Test through public interfaces; never add production exports or test-only dependency injection — a
+missing seam needs a real product seam.
 
 ## Properties, fuzzing, and mutation
 

@@ -91,6 +91,13 @@ under `contracts/fixtures/`.
 - Tests mirror source topology one-to-one. Split a source module and its test together; do not add to
   the legacy `interaction.test.ts` or platform `index.test.ts` aggregations. Pure moves carry their
   tests unchanged; rename-only hunks owe no new coverage.
+- A test sits beside the module it is named for: `<module>.test.ts` or `<module>-<aspect>.test.ts`
+  (R84). Cross-module package tests are `index-<aspect>.test.ts` beside `index.ts`; repo-level guards on
+  Swift sources, manifests, docs or scripts live in `test/repo-guards/`.
+- No package `exports` entry points at test support (R83). A fixture one package uses stays inside
+  it, imported relatively; helpers shared across packages live only in `@agent-device/test-kit`, a
+  `devDependency` production source never imports and that never depends on `platform-*`,
+  `provider-*`, the daemon or root.
 
 ## Toolchain and worktree traps
 
