@@ -26,12 +26,13 @@
 // and via its package specifier instantiates twice in one process — duplicate AppError, broken
 // instanceof), and, for all `scripts/` files, the root-side unknown-package and exports-map
 // checks. Explicit tooling roots also receive those resolution checks from TS2307.
-// On top, `TEST_ONLY_FIXTURE_SUBPATHS` mirrors R13's Android fixture gate for the non-platform
-// packages: a production file importing one of those fixture subpaths is an R11 violation.
+// The consumer half of R83 (production code importing a test-only export or test-kit) is checked at
+// the same import sites, so the one specifier walk serves both rules.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseImports, resolveWorkspaceSpecifier } from './model.ts';
+import { PACKAGE_EXPORT_SURFACE_RULE, testOnlyImportMessage } from './package-export-surface.ts';
 import { listTrackedPackageManifests, listTrackedProductionSources } from './tracked-sources.ts';
 
 export type PackageBoundaryViolation = {
@@ -103,13 +104,16 @@ export function specifierSites(file: string, source: string): SpecifierSite[] {
  * filtering the output.
  */
 export function readWorkspacePackages(repoRoot: string): WorkspacePackage[] {
-  return workspacePackagesFromManifests(
-    new Map(
-      listTrackedPackageManifests(repoRoot).map((manifestFile) => [
-        manifestFile,
-        fs.readFileSync(path.join(repoRoot, manifestFile), 'utf8'),
-      ]),
-    ),
+  return workspacePackagesFromManifests(readTrackedPackageManifests(repoRoot));
+}
+
+/** Tracked workspace package manifests, text keyed by repo-relative path. */
+export function readTrackedPackageManifests(repoRoot: string): Map<string, string> {
+  return new Map(
+    listTrackedPackageManifests(repoRoot).map((manifestFile) => [
+      manifestFile,
+      fs.readFileSync(path.join(repoRoot, manifestFile), 'utf8'),
+    ]),
   );
 }
 
@@ -174,45 +178,26 @@ function namedByExports(target: WorkspacePackage, specifier: string): boolean {
   return resolveWorkspaceSpecifier(specifier, target.exportTargets) !== undefined;
 }
 
-const TEST_CONSUMER_RE = /(^|\/)__tests__\/|\.test\.[cm]?[jt]sx?$|(?:^|\/)test\//;
-
 /**
- * The one file vocabulary for "this file consumes test data": the root `test/` tree, a
- * package-local `test/` harness tree, `*.test.*` files, and `__tests__/` trees (root or
- * nested). Both test-data gates call this — the `./testing/` façade check and the
- * TEST_ONLY_FIXTURE_SUBPATHS predicate — so what counts as a test consumer is one rule,
- * not two spellings that drift. Pinned by an accept/deny table in
- * `package-boundaries-facade.test.ts`.
+ * R83's consumer half (see package-export-surface.ts): a production file importing a test-only
+ * export, or the private test-kit package, is production code depending on a test double — it
+ * must use a production subpath or inject the real port.
  */
-export function isTestConsumerFile(file: string): boolean {
-  return TEST_CONSUMER_RE.test(file);
-}
-
-/**
- * Façade policy (ADR-0033 amendment): a package publishes test data only under its
- * `./testing/` namespace — named `./testing/<fixture>` entries and per-folder
- * `./testing/<dir>/*` patterns — and only test files may import it. The gate is the
- * namespace, not a pattern entry: narrowing the surface to exact keys must not
- * smuggle a fixture past the test-file rule. Production code that reaches a fixture
- * through the package boundary is production code depending on a test double — it
- * must inject the real port instead.
- */
-function checkTestDataOnlySites(
+function checkTestOnlyImportSite(
   site: SpecifierSite,
   target: WorkspacePackage,
 ): PackageBoundaryViolation | undefined {
-  if (!site.specifier.startsWith(`${target.name}/testing/`)) return undefined;
-  if (!namedByExports(target, site.specifier)) return undefined;
-  if (isTestConsumerFile(site.file)) return undefined;
-  return {
-    rule: 'R11 package-boundaries',
-    file: site.file,
-    line: site.line,
-    message:
-      `'${site.specifier}' resolves through ${target.dir}/package.json#exports './testing/' ` +
-      `namespace, which publishes test data to test files only. '${site.file}' is not a test ` +
-      `file: import a production subpath or inject the port.`,
-  };
+  const resolvedTarget = resolveWorkspaceSpecifier(site.specifier, target.exportTargets);
+  const message = testOnlyImportMessage(
+    site.file,
+    site.specifier,
+    target.name,
+    resolvedTarget === undefined
+      ? undefined
+      : { key: `.${site.specifier.slice(target.name.length)}`, targets: [resolvedTarget] },
+  );
+  if (message === undefined) return undefined;
+  return { rule: PACKAGE_EXPORT_SURFACE_RULE, file: site.file, line: site.line, message };
 }
 
 function specifierPackageName(specifier: string): string | undefined {
@@ -240,21 +225,6 @@ function specifierPackageName(specifier: string): string | undefined {
  */
 export function insideCompiledSources(file: string): boolean {
   return /^packages\/[^/]+\/src\//.test(file) || /^src\//.test(file) || /^test\//.test(file);
-}
-
-/**
- * Workspace fixture subpaths only non-production files may import — the same claim R13's
- * `ANDROID_TEST_ONLY_SUBPATHS` makes for the platform packages, which R13 cannot express for
- * non-platform packages. A production file (root or package) importing one is a violation.
- */
-export const TEST_ONLY_FIXTURE_SUBPATHS: ReadonlySet<string> = new Set([
-  '@agent-device/device-selection/inventory-gateways-fixtures',
-  '@agent-device/replay-port/replay-script-source-fixtures',
-]);
-
-/** Consumer side of `TEST_ONLY_FIXTURE_SUBPATHS`. */
-function importsTestOnlyFixtureFromProduction(file: string, specifier: string): boolean {
-  return TEST_ONLY_FIXTURE_SUBPATHS.has(specifier) && !isTestConsumerFile(file);
 }
 
 /**
@@ -305,16 +275,6 @@ export function checkPackageInternalSites(
     }
     const name = specifierPackageName(site.specifier);
     if (!name || !name.startsWith('@agent-device/')) continue;
-    if (importsTestOnlyFixtureFromProduction(site.file, site.specifier)) {
-      violations.push({
-        rule: 'R11 package-boundaries',
-        file: site.file,
-        line: site.line,
-        message:
-          `'${site.specifier}' is a test-only fixture subpath — production code may not ` +
-          `import it; use the package's production subpath instead.`,
-      });
-    }
     const target = packageByName(allPackages, name);
     if (!target) {
       if (!compiled) {
@@ -337,7 +297,7 @@ export function checkPackageInternalSites(
           `in ${pkg.dir}/package.json ${pkg.workspaceDependencyField}.`,
       });
     }
-    const testDataOnly = checkTestDataOnlySites(site, target);
+    const testDataOnly = checkTestOnlyImportSite(site, target);
     if (testDataOnly) {
       violations.push(testDataOnly);
       continue;
@@ -391,16 +351,6 @@ export function checkRootSites(
     }
     const name = specifierPackageName(site.specifier);
     if (!name || !name.startsWith('@agent-device/')) continue;
-    if (importsTestOnlyFixtureFromProduction(site.file, site.specifier)) {
-      violations.push({
-        rule: 'R11 package-boundaries',
-        file: site.file,
-        line: site.line,
-        message:
-          `'${site.specifier}' is a test-only fixture subpath — production code may not ` +
-          `import it; use the package's production subpath instead.`,
-      });
-    }
     const target = packageByName(packages, name);
     if (!target) {
       if (!compiled) {
@@ -423,7 +373,7 @@ export function checkRootSites(
           `package.json devDependencies.`,
       });
     }
-    const testDataOnly = checkTestDataOnlySites(site, target);
+    const testDataOnly = checkTestOnlyImportSite(site, target);
     if (testDataOnly) {
       violations.push(testDataOnly);
       continue;

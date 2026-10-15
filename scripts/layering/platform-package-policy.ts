@@ -20,6 +20,7 @@ import { PLATFORMS } from '@agent-device/kernel/device';
 import { parseImports, type LayeringViolation } from './model.ts';
 import { checkPlatformComposition } from './platform-composition-policy.ts';
 import { checkPlatformPackageSourcePolicy } from './platform-package-source-policy.ts';
+import { isTestOnlyExportSpecifier } from './package-export-surface.ts';
 import { retiredPathViolations } from './retired-zone-policy.ts';
 
 export const CANONICAL_PLATFORM_FAMILIES = PLATFORMS;
@@ -85,7 +86,6 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
     '@agent-device/platform-apple/physical-device',
     '@agent-device/platform-apple/runner-owner',
     '@agent-device/platform-apple/runner/operations',
-    '@agent-device/platform-apple/runner/requests-fixtures',
     '@agent-device/platform-apple/session-observation',
     '@agent-device/platform-apple/snapshot-source',
     '@agent-device/platform-apple/simctl',
@@ -97,17 +97,9 @@ const MECHANICS_FACET_SUBPATHS: Readonly<Partial<Record<PlatformFamily, readonly
   android: [ANDROID_HOST_FACET, ANDROID_MECHANICS_FACADE, ANDROID_DEVICE_BOOT_FACADE],
 };
 
-// Test-only entries: the shared Android capture/walk fixtures (#3517). They ride export
-// validation with the facets above but not its consumer set: only non-production files
-// may import them, so `src/commands/` style production code importing a fixture trips R13.
-const ANDROID_TEST_ONLY_SUBPATHS: readonly string[] = [
-  '@agent-device/platform-android/snapshot-capture-fixtures',
-  '@agent-device/platform-android/ui-hierarchy-fixtures',
-];
-
 function isAndroidFacetSubpathImport(file: string, specifier: string): boolean {
   if (specifier === ANDROID_HOST_FACET) return file === ANDROID_HOST_BINDING;
-  if (ANDROID_TEST_ONLY_SUBPATHS.includes(specifier)) return isNonProductionConsumer(file);
+  if (isPlatformTestOnlyImport(specifier)) return true;
   if (!(MECHANICS_FACET_SUBPATHS.android ?? []).includes(specifier)) return false;
   // The named facets are the implementation seam for root/core/SDK consumers. Daemon production
   // code still reaches platform behavior through the request-bound runtime gateway; tests may
@@ -115,8 +107,17 @@ function isAndroidFacetSubpathImport(file: string, specifier: string): boolean {
   return !file.startsWith(DAEMON_SOURCE_ROOT) || !isProductionSource(file);
 }
 
+// Test-only subpaths (fixtures, the runner test host) are R83's: it holds the export list and
+// bans production importers, so R13 neither requires nor polices them.
+function isPlatformTestOnlyImport(specifier: string): boolean {
+  return concretePlatformFamily(specifier) !== undefined && isTestOnlyExportSpecifier(specifier);
+}
+
 function isAppleFacadeSubpathImport(specifier: string): boolean {
-  return MECHANICS_FACET_SUBPATHS.apple?.includes(specifier) ?? false;
+  return (
+    (MECHANICS_FACET_SUBPATHS.apple?.includes(specifier) ?? false) ||
+    isPlatformTestOnlyImport(specifier)
+  );
 }
 
 function violation(file: string, line: number, message: string): LayeringViolation {
@@ -213,14 +214,13 @@ function checkDeclarations(packages: readonly PlatformPackageDeclaration[]): Lay
         violation(`${expectedDir}/package.json`, 1, `${expectedDir} must be private`),
       );
     }
-    const expectedSubpaths = [
-      expectedName,
-      ...(MECHANICS_FACET_SUBPATHS[family] ?? []),
-      ...(family === 'android' ? ANDROID_TEST_ONLY_SUBPATHS : []),
-    ];
+    const expectedSubpaths = [expectedName, ...(MECHANICS_FACET_SUBPATHS[family] ?? [])];
+    const productionSubpaths = declaration.exportedSubpaths.filter(
+      (subpath) => !isTestOnlyExportSpecifier(subpath),
+    );
     if (
-      declaration.exportedSubpaths.length !== expectedSubpaths.length ||
-      expectedSubpaths.some((subpath) => !declaration.exportedSubpaths.includes(subpath))
+      productionSubpaths.length !== expectedSubpaths.length ||
+      expectedSubpaths.some((subpath) => !productionSubpaths.includes(subpath))
     ) {
       violations.push(
         violation(
