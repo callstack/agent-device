@@ -5,6 +5,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import type { CloseApplicationFinalizationInput } from '@agent-device/contracts/application-lifecycle-runtime';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { SessionStore } from '../../../core/session-store.ts';
+import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
@@ -61,6 +62,8 @@ async function closeSession(params: {
   retainExecutionHost: boolean;
   positionals?: string[];
   flags?: Record<string, unknown>;
+  internal?: DaemonRequest['internal'];
+  leaseRegistry?: LeaseRegistry;
   events?: string[];
 }) {
   const platformResourceCleanup = platformResourceCleanupFixture({
@@ -94,7 +97,9 @@ async function closeSession(params: {
       command: 'close',
       positionals: params.positionals ?? [],
       flags: params.flags ?? {},
+      ...(params.internal === undefined ? {} : { internal: params.internal }),
     },
+    ...(params.leaseRegistry === undefined ? {} : { leaseRegistry: params.leaseRegistry }),
     sessionName: params.sessionName,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     sessionStore: params.sessionStore,
@@ -155,6 +160,100 @@ test('close <app> terminates the app before finalizing with the platform retenti
 
   expect(response?.ok).toBe(true);
   expect(events).toEqual(['close:com.example.app', 'finalize:retain']);
+});
+
+test('close hands the session app and surface to the platform finalization', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'macos-session';
+  publishSession(
+    sessionStore,
+    sessionName,
+    {
+      platform: 'apple',
+      appleOs: 'macos',
+      id: 'host-macos-local',
+      name: 'Host Mac',
+      kind: 'device',
+      target: 'desktop',
+      booted: true,
+    },
+    { appBundleId: 'com.apple.systempreferences', appName: 'System Settings' },
+  );
+
+  const { response, finalizations } = await closeSession({
+    sessionStore,
+    sessionName,
+    retainExecutionHost: false,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(finalizations).toEqual([
+    expect.objectContaining({ appBundleId: 'com.apple.systempreferences', surface: 'app' }),
+  ]);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('close of a leased session tells the platform that a lease holds the device', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-leased-simulator-session';
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseBackend: 'ios-simulator',
+    deviceKey: 'ios:sim-1',
+    clientId: 'client-a',
+  });
+  publishSession(sessionStore, sessionName, IOS_SIMULATOR, {
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      deviceKey: lease.deviceKey,
+      clientId: lease.clientId,
+      expiresAt: lease.expiresAt,
+    },
+  });
+
+  const { response, finalizations, platformResourceCleanup } = await closeSession({
+    sessionStore,
+    sessionName,
+    retainExecutionHost: false,
+    leaseRegistry,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(platformResourceCleanup.retainExecutionHostAfterClose).toHaveBeenCalledWith(
+    expect.objectContaining({ hasLease: true }),
+  );
+  expect(finalizations).toEqual([expect.objectContaining({ retainRunner: false })]);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('an app-only close terminates the app without finalizing or ending the session', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-simulator-app-only-close';
+  publishSession(sessionStore, sessionName, IOS_SIMULATOR, { appBundleId: 'com.example.app' });
+
+  const { response, finalizations } = await closeSession({
+    sessionStore,
+    sessionName,
+    retainExecutionHost: true,
+    positionals: ['com.example.app'],
+    internal: { closeAppOnly: true },
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockDispatch).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'sim-1' }),
+    'close',
+    ['com.example.app'],
+    undefined,
+    expect.any(Object),
+  );
+  expect(finalizations).toEqual([]);
+  expect(sessionStore.get(sessionName)).toBeDefined();
 });
 
 test('close --shutdown tells the platform that shutdown was requested', async () => {
