@@ -632,9 +632,9 @@ const COMMAND_COVERAGE_DECLARATIONS = {
       'session inventory proves the app lease is removed',
     ),
     macos: macos.contract(
-      'src/__tests__/daemon-composition/handlers/session-relaunch-close.test.ts',
-      'close on macOS session stops runner and dismisses automation alert before delete',
-      'macOS close stops the runner, dismisses automation state, and deletes the session',
+      'packages/platform-apple/src/lifecycle-relaunch-close.test.ts',
+      'close finalization releases the runner before it dismisses close alerts',
+      'macOS close stops the runner and then dismisses automation state; the daemon close tests own the session deletion',
     ),
     tvos: tvos.contract(
       TVOS_REMOTE_EVIDENCE.path,
