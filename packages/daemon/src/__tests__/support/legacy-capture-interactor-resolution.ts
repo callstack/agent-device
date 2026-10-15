@@ -16,7 +16,11 @@ export function installLegacyCaptureInteractorResolution(): void {
     resolve: async (device, runnerContext) =>
       ({
         snapshot: async (options) =>
-          await captureSnapshotThroughLegacyDispatchFixture({ device, runnerContext, options }),
+          await captureSnapshotThroughLegacyDispatchFixture({
+            device,
+            runnerContext,
+            options: options ?? {},
+          }),
       }) as Interactor,
   });
 }

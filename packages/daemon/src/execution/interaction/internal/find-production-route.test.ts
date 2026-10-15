@@ -29,7 +29,7 @@ beforeEach(() => {
 // either producer (click or fill) stops attaching the channel, or the handler stops forwarding it,
 // which a hand-built request cannot catch. That the command family then acts on the carried node
 // rather than re-resolving the ref is pinned beside it in
-// src/commands/interaction/runtime/preresolved-target.test.ts.
+// src/commands/interaction/runtime/interactions-find-carried-target.test.ts.
 
 const findRouteContextFromFlags = (flags: CommandFlags | undefined) => ({
   count: flags?.count,
@@ -67,7 +67,10 @@ function recordingTouchSurface(forwarded: ForwardedTarget[]) {
   const answer = (
     options: { preresolvedTarget?: { ref: string; node: { label?: string } } } | undefined,
   ) => {
-    forwarded.push({ ref: options?.preresolvedTarget?.ref, label: options?.preresolvedTarget?.node.label });
+    forwarded.push({
+      ref: options?.preresolvedTarget?.ref,
+      label: options?.preresolvedTarget?.node.label,
+    });
     return {
       kind: 'ref' as const,
       target: { kind: 'ref' as const, ref: options?.preresolvedTarget?.ref ?? '' },
@@ -123,7 +126,10 @@ async function runFindThroughHandler(positionals: string[], forwarded: Forwarded
 
 test('#1654 production route: find click carries its resolved node into the interaction handler', async () => {
   const forwarded: ForwardedTarget[] = [];
-  const { response, invokeCalls } = await runFindThroughHandler(['text', 'Save', 'click'], forwarded);
+  const { response, invokeCalls } = await runFindThroughHandler(
+    ['text', 'Save', 'click'],
+    forwarded,
+  );
 
   expect(response?.ok).toBe(true);
   // The producer attaches the channel — fails if handleFindClick stops doing so.

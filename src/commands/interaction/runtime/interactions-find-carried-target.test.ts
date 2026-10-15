@@ -20,7 +20,10 @@ const APPLICATION = {
   rect: { x: 0, y: 0, width: 390, height: 844 },
 };
 
-function treeWithButton(label: string, rect: { x: number; y: number; width: number; height: number }) {
+function treeWithButton(
+  label: string,
+  rect: { x: number; y: number; width: number; height: number },
+) {
   return makeSnapshotState([
     APPLICATION,
     {
