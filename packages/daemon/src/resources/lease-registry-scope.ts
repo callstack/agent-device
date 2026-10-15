@@ -256,7 +256,9 @@ export function normalizeLeaseAdmissionRequest(
   const runId = normalizeRunId(request.runId);
   if (!runId) throw new AppError('INVALID_ARGS', 'tenant isolation requires run id.');
   const leaseId = normalizeLeaseId(request.leaseId);
-  if (!leaseId) throw new AppError('INVALID_ARGS', 'tenant isolation requires lease id.');
+  if (!leaseId) {
+    throw new AppError('INVALID_ARGS', 'tenant isolation requires lease id from leases.allocate.');
+  }
   return { ...request, tenantId, runId, leaseId, leaseBackend };
 }
 function normalizeOptionalLeaseScope(

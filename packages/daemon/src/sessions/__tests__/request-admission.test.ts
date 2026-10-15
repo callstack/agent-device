@@ -61,7 +61,7 @@ test('close on a lease-less but stored tenant-isolated session still requires a 
         registry,
         session,
       ),
-    /tenant isolation requires lease id/,
+    /tenant isolation requires lease id from leases\.allocate/,
   );
 });
 
@@ -84,7 +84,7 @@ test('close with an app target still requires a lease id even with no lease anyw
         registry,
         undefined,
       ),
-    /tenant isolation requires lease id/,
+    /tenant isolation requires lease id from leases\.allocate/,
   );
 });
 
@@ -123,7 +123,7 @@ test('non-close commands on a tenant-isolated session still require a lease id',
         registry,
         undefined,
       ),
-    /tenant isolation requires lease id/,
+    /tenant isolation requires lease id from leases\.allocate/,
   );
 });
 
@@ -143,7 +143,7 @@ test.each(['bogus', 'proxy', 'browserstack'])(
           registry,
           undefined,
         ),
-      /tenant isolation requires lease id/,
+      /tenant isolation requires lease id from leases\.allocate/,
     );
   },
 );
