@@ -10,7 +10,10 @@ import {
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { IOS_SIMULATOR, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
 import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { interactorResolution } from '../../core/interactor-resolution.ts';
+import {
+  installInteractorResolution,
+  interactorResolution,
+} from '../../core/interactor-resolution.ts';
 import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { startDaemonRuntime, type DaemonRuntimeDepsInput } from './daemon-runtime.ts';
 
@@ -35,8 +38,10 @@ vi.mock('../../core/session-store.ts', async (importOriginal) => {
 test('daemon startup installs the interactor resolution the composition supplied', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-interactor-composition-');
   const composed = Object.freeze({ resolve: vi.fn(async () => ({}) as never) });
+  const previousResolution = interactorResolution();
+  let runtime: Awaited<ReturnType<typeof startDaemonRuntime>> = null;
   try {
-    const runtime = await startDaemonRuntime({
+    runtime = await startDaemonRuntime({
       env: {
         ...process.env,
         AGENT_DEVICE_STATE_DIR: stateDir,
@@ -54,9 +59,9 @@ test('daemon startup installs the interactor resolution the composition supplied
     expect(interactorResolution()).toBe(composed);
     await interactorResolution().resolve(IOS_SIMULATOR, {});
     expect(composed.resolve).toHaveBeenCalledOnce();
-
-    await runtime?.shutdown();
   } finally {
+    await runtime?.shutdown();
+    installInteractorResolution(previousResolution);
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });

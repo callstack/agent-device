@@ -70,7 +70,7 @@ export const fakeCreateCommandSurface: CreateDaemonCommandSurface = async () => 
  * through the config's session store. Suites that pin what the daemon does around a capture in
  * flight (shutdown, cancellation, session lifetime) need both, because the daemon's refusals land
  * on those seams; everything else the real command family does with the result stays out of the
- * daemon suites, so the result is the backend's nodes and nothing else.
+ * daemon suites, so the result is the backend's snapshot tree and nothing else.
  */
 export const forwardingCreateCommandSurface: CreateDaemonCommandSurface = async (config) => ({
   ...fakeCommandSurface,
@@ -84,13 +84,17 @@ export const forwardingCreateCommandSurface: CreateDaemonCommandSurface = async 
         { session: name, requestId: options.requestId, signal: options.signal ?? config.signal },
         { interactiveOnly: options.interactiveOnly, depth: options.depth, scope: options.scope },
       );
-      const nodes = (captured?.nodes ?? []) as never;
+      const stored = captured?.snapshot ?? {
+        nodes: captured?.nodes ?? [],
+        createdAt: Date.now(),
+        backend: 'android' as const,
+      };
       await config.sessions?.set({
         ...(session ?? { name }),
         name: session?.name ?? name,
-        snapshot: { nodes, createdAt: Date.now(), backend: 'android' },
+        snapshot: stored,
       });
-      return { nodes };
+      return { nodes: stored.nodes as never };
     },
   },
 });
