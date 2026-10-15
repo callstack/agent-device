@@ -38,7 +38,11 @@ import {
   resolveAllConditionTargets,
   testOnlyImportMessage,
 } from './package-export-surface.ts';
-import { listTrackedPackageManifests, listTrackedProductionSources } from './tracked-sources.ts';
+import {
+  isProductionSourceFile,
+  listTrackedPackageManifests,
+  listTrackedProductionSources,
+} from './tracked-sources.ts';
 
 export type PackageBoundaryViolation = {
   rule: string;
@@ -57,6 +61,13 @@ export type WorkspacePackage = {
   exportConditionTargets?: ReadonlyMap<string, readonly string[]>;
   /** Declared `workspace:*` dependencies on sibling internal packages. */
   workspaceDependencies: ReadonlySet<string>;
+  /**
+   * Workspace siblings a private package declares in `devDependencies`. Only test support (tests,
+   * fixtures, test trees) may import through them; production source still needs
+   * `workspaceDependencyField`. A published package keeps every sibling in `devDependencies`
+   * already, so this is empty there.
+   */
+  workspaceDevDependencies?: ReadonlySet<string>;
   /** Where siblings are declared: a published package bundles them, so it lists them as dev-only. */
   workspaceDependencyField: 'dependencies' | 'devDependencies';
   /** Non-workspace dependencies that the root build must externalize. */
@@ -168,6 +179,13 @@ export function workspacePackagesFromManifests(
         .filter(([, range]) => range.startsWith('workspace:'))
         .map(([name]) => name),
     );
+    const workspaceDevDependencies = new Set(
+      manifest.private === true
+        ? Object.entries(manifest.devDependencies ?? {})
+            .filter(([, range]) => range.startsWith('workspace:'))
+            .map(([name]) => name)
+        : [],
+    );
     const externalDependencies = new Map(
       Object.entries(manifest.dependencies ?? {}).filter(
         ([, range]) => !range.startsWith('workspace:'),
@@ -179,6 +197,7 @@ export function workspacePackagesFromManifests(
       exportTargets,
       exportConditionTargets: conditionTargets,
       workspaceDependencies,
+      workspaceDevDependencies,
       workspaceDependencyField,
       externalDependencies,
     });
@@ -252,6 +271,29 @@ export function insideCompiledSources(file: string): boolean {
 }
 
 /**
+ * A sibling import must be declared `workspace:*` in the package manifest. Production source needs
+ * the production field (`dependencies`, or `devDependencies` for a published package, which
+ * bundles its siblings); test support — tests, `*.fixtures.*` files, test trees, test-kit — may
+ * also resolve through a private package's `devDependencies`, so a test-only sibling such as
+ * test-kit never ships as a runtime dependency.
+ */
+function undeclaredSiblingMessage(
+  pkg: WorkspacePackage,
+  name: string,
+  site: SpecifierSite,
+): string | undefined {
+  if (name === pkg.name || pkg.workspaceDependencies.has(name)) return undefined;
+  const declaredForTests = pkg.workspaceDevDependencies?.has(name) ?? false;
+  if (declaredForTests && !isProductionSourceFile(site.file)) return undefined;
+  return declaredForTests
+    ? `${pkg.name} imports '${site.specifier}' from production source, but ${pkg.dir}/package.json ` +
+        `declares "${name}" only in devDependencies: declare it in ${pkg.workspaceDependencyField} ` +
+        `or import it from test support only.`
+    : `${pkg.name} imports '${site.specifier}' without declaring "${name}": "workspace:*" ` +
+        `in ${pkg.dir}/package.json ${pkg.workspaceDependencyField}.`;
+}
+
+/**
  * Rules for files INSIDE a package. An undeclared sibling import is R11's alone: pnpm links
  * every workspace package under the root `node_modules`, so the import resolves, compiles, and
  * runs in this repo even when the manifest never declares it — and a published bundle
@@ -311,14 +353,13 @@ export function checkPackageInternalSites(
       }
       continue;
     }
-    if (name !== pkg.name && !pkg.workspaceDependencies.has(name)) {
+    const undeclared = undeclaredSiblingMessage(pkg, name, site);
+    if (undeclared) {
       violations.push({
         rule: 'R11 package-boundaries',
         file: site.file,
         line: site.line,
-        message:
-          `${pkg.name} imports '${site.specifier}' without declaring "${name}": "workspace:*" ` +
-          `in ${pkg.dir}/package.json ${pkg.workspaceDependencyField}.`,
+        message: undeclared,
       });
     }
     const testDataOnly = checkTestOnlyImportSite(site, target);

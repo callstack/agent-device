@@ -22,10 +22,10 @@
     "@agent-device/replay-port": "workspace:*",
     "@agent-device/replay-test": "workspace:*",
     "@agent-device/selectors": "workspace:*",
-    "@agent-device/session-journal": "workspace:*",
-    "@agent-device/test-kit": "workspace:*"
+    "@agent-device/session-journal": "workspace:*"
   },
   "devDependencies": {
+    "@agent-device/test-kit": "workspace:*",
     "fast-check": "^4.9.0",
     "oxc-parser": "^0.146.0",
     "vitest": "5.0.4",

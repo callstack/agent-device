@@ -343,10 +343,10 @@ importers:
       '@agent-device/session-journal':
         specifier: workspace:*
         version: link:../session-journal
+    devDependencies:
       '@agent-device/test-kit':
         specifier: workspace:*
         version: link:../test-kit
-    devDependencies:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
