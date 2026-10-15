@@ -24,25 +24,17 @@ jobs:
           nproc; free -g; df -h .; uname -a
           FALLOW_VERIFY_LOG=1 pnpm exec fallow --version
           ls node_modules/.pnpm | grep -i fallow
-      - name: dead-code (cold)
-        run: rm -rf .fallow; time pnpm exec fallow dead-code --performance --summary || true
-      - name: dead-code (warm)
-        run: time pnpm exec fallow dead-code --performance --summary || true
-      - name: dead-code threads 4 (cold)
-        run: rm -rf .fallow; time pnpm exec fallow dead-code --performance --summary --threads 4 || true
-      - name: dupes (cold)
-        run: rm -rf .fallow; time pnpm exec fallow dupes --performance --summary || true
-      - name: health (cold)
-        run: rm -rf .fallow; time pnpm exec fallow health --performance --summary || true
-      - name: audit (cold, current gate)
-        run: rm -rf .fallow; time pnpm exec fallow audit --base "$BASE" --performance || true
-      - name: audit gate all (cold)
-        run: rm -rf .fallow; time pnpm exec fallow audit --base "$BASE" --gate all --performance || true
-      - name: production-exports (cold)
-        run: rm -rf .fallow; time pnpm check:production-exports --performance || true
-      - name: strace summary of dead-code
+      - name: sample statx paths during resolve
         run: |
-          rm -rf .fallow
           sudo apt-get install -y strace >/dev/null 2>&1 || true
-          timeout 600 strace -f -c -o /tmp/strace.txt pnpm exec fallow dead-code --summary >/dev/null 2>&1 || true
-          head -30 /tmp/strace.txt
+          rm -rf .fallow
+          timeout 90 strace -f -e trace=statx,newfstatat,openat,readlink -o /tmp/s.txt pnpm exec fallow dead-code --summary >/dev/null 2>&1 || true
+          wc -l /tmp/s.txt
+          echo "== top 60 paths"
+          grep -o '"[^"]*"' /tmp/s.txt | sort | uniq -c | sort -rn | head -60
+          echo "== top 40 parent dirs"
+          grep -o '"[^"]*"' /tmp/s.txt | tr -d '"' | xargs -r -n1 dirname 2>/dev/null | sort | uniq -c | sort -rn | head -40 || true
+          echo "== top 40 basenames"
+          grep -o '"[^"]*"' /tmp/s.txt | tr -d '"' | awk -F/ '{print $NF}' | sort | uniq -c | sort -rn | head -40
+          echo "== ENOENT share"
+          grep -c ENOENT /tmp/s.txt || true

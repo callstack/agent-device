@@ -221,6 +221,29 @@ jobs:
   assert.ok(caller?.uses.includes('.github/workflows/called.yml'));
 });
 
+test('gates inside a parallel step group belong to the lane, alongside sequential ones', () => {
+  const lanes = planted({
+    '.github/workflows/planted.yml': `name: Planted
+on:
+  pull_request:
+jobs:
+  planted:
+    steps:
+      - parallel:
+          - uses: ./.github/actions/run-gate
+            with:
+              gate: layering
+          - uses: ./.github/actions/run-gate
+            with:
+              gate: lint
+      - uses: ./.github/actions/run-gate
+        with:
+          gate: format
+`,
+  });
+  assert.deepEqual(lanes[0]?.gates, ['layering', 'lint', 'format']);
+});
+
 test('a remote or nested reusable workflow fails closed', () => {
   const lanes = planted({
     '.github/workflows/planted.yml': `name: Planted
