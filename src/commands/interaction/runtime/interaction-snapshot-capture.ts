@@ -1,7 +1,7 @@
 import { AppError } from '@agent-device/kernel/errors';
 import type { SnapshotState } from '@agent-device/kernel/snapshot';
 import type { AgentDeviceRuntime, CommandContext } from '@agent-device/contracts/runtime-contract';
-import { now, toBackendContext } from '../../runtime-common.ts';
+import { toBackendContext } from '../../runtime-common.ts';
 
 /**
  * A leaf shared by every interaction runtime module that needs a fresh (or session-cached) tree:
@@ -31,14 +31,7 @@ export async function captureInteractionSnapshot(
     interactiveOnly,
     includeRects: true,
   });
-  const snapshot =
-    result.snapshot ??
-    ({
-      nodes: result.nodes ?? [],
-      truncated: result.truncated,
-      backend: result.backend as SnapshotState['backend'],
-      createdAt: now(runtime),
-    } satisfies SnapshotState);
+  const snapshot = result.snapshot;
   await runtime.sessions.set({ ...session, snapshot });
   return { snapshot };
 }

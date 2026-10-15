@@ -237,24 +237,29 @@ test('runtime find wait reports sparse snapshot verdicts on the selector-read ro
       session.snapshot = record.snapshot ?? session.snapshot;
     },
   } satisfies CommandSessionStore;
-  const sparseSnapshot = makeSnapshotState([
+  const sparseSnapshot = makeSnapshotState(
+    [
+      {
+        index: 0,
+        type: 'Application',
+      },
+    ],
     {
-      index: 0,
-      type: 'Application',
+      backend: 'xctest',
+      snapshotQuality: {
+        state: 'sparse',
+        backend: 'private-ax',
+        reason: 'sparse tree',
+        reasonCode: 'sparse-tree',
+      },
     },
-  ]);
+  );
   const device = createAgentDevice({
     backend: {
       platform: 'ios',
       captureSnapshot: async () => ({
-        nodes: sparseSnapshot.nodes,
-        backend: 'xctest',
-        quality: {
-          state: 'sparse',
-          backend: 'private-ax',
-          reason: 'sparse tree',
-          reasonCode: 'sparse-tree',
-        },
+        snapshot: sparseSnapshot,
+        quality: sparseSnapshot.snapshotQuality,
       }),
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),

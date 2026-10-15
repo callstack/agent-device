@@ -130,7 +130,7 @@ test('wait absent rides out sparse and truncated captures without counting them 
       reasonCode: 'sparse-tree',
     },
   });
-  const truncated = { snapshot: makeSnapshotState([]), truncated: true };
+  const truncated = snapshot(undefined, { truncated: true });
   const device = absentDevice([sparse, truncated, snapshot()]);
 
   const result = await waitAbsent(device, 2000);
@@ -163,7 +163,7 @@ test('wait absent excludes sparse and truncated polls from deadline readable-cap
   const sparse = snapshot(undefined, {
     snapshotQuality: { state: 'sparse', backend: 'private-ax', reasonCode: 'sparse-tree' },
   });
-  const truncated = { snapshot: makeSnapshotState([]), truncated: true };
+  const truncated = snapshot(undefined, { truncated: true });
   const device = absentDevice([snapshot('Removed'), sparse, truncated]);
 
   await assert.rejects(waitAbsent(device, 500), (error: unknown) => {
@@ -200,7 +200,7 @@ test('wait absent preserves the final typed diagnostic when no valid capture arr
 });
 
 test('wait absent preserves a final truncated diagnostic when no valid capture arrives', async () => {
-  const device = absentDevice([{ snapshot: makeSnapshotState([]), truncated: true }]);
+  const device = absentDevice([snapshot(undefined, { truncated: true })]);
 
   await assert.rejects(waitAbsent(device, 500), (error: unknown) => {
     assert.ok(error instanceof AppError);

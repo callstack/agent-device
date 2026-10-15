@@ -338,7 +338,7 @@ test('runtime is absent fails closed for a sparse capture and preserves the last
 test('runtime is absent fails closed for a truncated capture even with zero matches', async () => {
   const snapshot = makeSnapshotState([]);
   const device = createSelectorDevice(snapshot, {
-    captureSnapshot: async () => ({ snapshot, truncated: true }),
+    captureSnapshot: async () => ({ snapshot: { ...snapshot, truncated: true } }),
   });
 
   await assert.rejects(
