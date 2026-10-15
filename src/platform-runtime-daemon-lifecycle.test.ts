@@ -2,8 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
-import { withMockedPlatform } from '@agent-device/test-kit/host-execution';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync, withMockedPlatform } from '@agent-device/test-kit';
 
 const legacyRedirect = vi.hoisted(() => ({ xctestDeviceSetPath: '' }));
 

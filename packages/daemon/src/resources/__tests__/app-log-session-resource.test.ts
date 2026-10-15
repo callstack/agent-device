@@ -10,8 +10,7 @@ import {
   createDurableResourceEnvelope,
 } from '@agent-device/capture-kit';
 import { PendingTransferGuard } from '@agent-device/contracts/async-lifecycle';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
+import { createTestAppLogLiveHandle, mkdtempForTestSync } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';

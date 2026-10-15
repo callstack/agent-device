@@ -10,7 +10,7 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import { makeSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { readOpenWaitAttempt } from '../../sessions/open-device-contention-wait.ts';

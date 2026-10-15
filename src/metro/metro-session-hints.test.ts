@@ -9,7 +9,7 @@ import {
   readMetroSessionHints,
   writeMetroSessionHints,
 } from './metro-session-hints.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 function tempStateDir(): string {
   const dir = path.join(

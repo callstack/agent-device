@@ -12,7 +12,7 @@ import {
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
 import { sendToDaemon } from '../../../src/daemon-client/daemon-client.ts';
-import { listenOnLoopback, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
+import { listenOnLoopback, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { PARALLEL_PROVIDER_SCENARIO_TIMEOUT_MS } from './test-timeouts.ts';
 
 const LEASE_ID = 'lease-upload-beat';

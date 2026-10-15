@@ -7,7 +7,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 
 // The compact lease envelope is the only projection that has to name the provider-allocation flags
 // by key; the daemon's lease request must carry every one the lease-lifecycle provider reads, and

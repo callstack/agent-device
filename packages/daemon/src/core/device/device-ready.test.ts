@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  ANDROID_EMULATOR,
-  IOS_DEVICE,
-  IOS_SIMULATOR,
-} from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR, IOS_DEVICE, IOS_SIMULATOR } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { DEVICE_READY_CACHE_TTL_MS, ensureDeviceReady } from './device-ready.ts';
 

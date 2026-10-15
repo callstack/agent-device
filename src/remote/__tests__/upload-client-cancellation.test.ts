@@ -14,7 +14,7 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import { once } from 'node:events';
 import { uploadArtifact } from '../upload-client.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const TEST_TOKEN = 'agent-device-upload-cancel-token';
 const tempDirs: string[] = [];

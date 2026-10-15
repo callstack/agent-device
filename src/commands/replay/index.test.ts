@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
 import type { CliFlags } from '@agent-device/contracts/command';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { REPLAY_ONLY_TEST_FLAG_REJECTIONS } from '@agent-device/replay-port/session-replay-test-policy';
 import {
   replayCommandFamily,

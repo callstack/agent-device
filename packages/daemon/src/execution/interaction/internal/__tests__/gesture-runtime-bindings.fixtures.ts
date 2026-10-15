@@ -14,7 +14,7 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../../core/request-runtime-binding.ts';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
 
 const available = Object.freeze({ available: true } as const);
 

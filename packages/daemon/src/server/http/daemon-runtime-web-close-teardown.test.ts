@@ -1,7 +1,6 @@
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
-import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
 import { platformResourceCleanupFixture } from '../../__tests__/support/platform-resource-cleanup-fixture.ts';
 import { makeWebSession } from '../../__tests__/support/session-teardown.fixtures.ts';
 import { SessionStore } from '../../core/session-store.ts';

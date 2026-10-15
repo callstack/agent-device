@@ -12,7 +12,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 
 const NO_CANCELLATION = new AbortController().signal;
 

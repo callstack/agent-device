@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { TargetShutdownResult } from '@agent-device/contracts/device';
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit';
 import { deviceStatusReportResponse } from '../session-device-status-response.ts';
 
 const shutdownResult: TargetShutdownResult = {

@@ -1,7 +1,7 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
+import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { postRpcCommand, postRpcRaw, startRpcServer } from './http-server-rpc.fixtures.ts';
 
 const TOKEN = 'invalid-body-token';

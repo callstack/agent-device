@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { makeIosAppSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { assertRpcOk } from './assertions.ts';
 import { createProviderScenarioHarness } from './harness.ts';

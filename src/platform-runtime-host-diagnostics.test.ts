@@ -1,6 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { HostDiagnosticsContext } from '@agent-device/contracts/host-diagnostics';
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit';
 import { createHostDiagnostics } from './platform-runtime-host-diagnostics.ts';
 
 const { mockAppleRunnerWarmupCheck } = vi.hoisted(() => ({

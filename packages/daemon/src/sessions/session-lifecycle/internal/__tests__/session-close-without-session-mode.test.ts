@@ -8,7 +8,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DaemonRequest } from '../../../../core/daemon-request.ts';
 import { SessionStore } from '../../../../core/session-store.ts';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const mockResolveTargetDevice = vi.hoisted(() => vi.fn());
 

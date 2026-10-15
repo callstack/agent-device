@@ -3,7 +3,7 @@ import {
   legacyDispatchCapture,
   resetLegacySnapshotCapture,
 } from '../__tests__/support/legacy-snapshot-capture-fixture.ts';
-import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
+import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
 import {
   makeAndroidSession as makeBaseAndroidSession,
   makeIosSession,

@@ -12,7 +12,7 @@ import {
   finalizeTouchInteraction,
   handleInteractionCommands,
 } from '@agent-device/daemon/testing/interaction/index';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import {
   getRuntimeBindings,
   mockFillPoint,

@@ -14,7 +14,7 @@ import {
 import { markRepairTransactionComplete } from '../session-replay-transaction.ts';
 import { NO_SCRIPT_PUBLICATION, scriptTargetPath } from '../session-script-publication-state.ts';
 import { parseReplayScriptDetailed } from '@agent-device/ad-script';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 function action(overrides: Partial<SessionAction> = {}): SessionAction {
   return { ts: Date.now(), command: 'click', positionals: [], flags: {}, ...overrides };

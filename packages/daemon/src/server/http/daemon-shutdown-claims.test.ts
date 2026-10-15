@@ -1,6 +1,6 @@
 import { resolveDeviceClaimPath } from '@agent-device/daemon-contracts/device-claims-fixtures';
 import { afterEach, expect, test, vi } from 'vitest';
-import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR } from '@agent-device/test-kit';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,

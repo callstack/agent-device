@@ -24,7 +24,7 @@ import {
   clearRuntimeHintsFixture,
   dispatchApplicationLifecycleEffect,
 } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({ ok: true, data: {} });

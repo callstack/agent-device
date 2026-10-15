@@ -9,7 +9,7 @@ import {
   baseReplayRequest as baseReq,
   writeReplayFile,
 } from './session-replay-runtime.fixtures.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 /**
  * #1478 P5 follow-up (one daemon-owned artifact ledger): artifact-path

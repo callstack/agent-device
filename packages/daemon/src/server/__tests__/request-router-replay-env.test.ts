@@ -5,7 +5,7 @@ import { expect, test } from 'vitest';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 

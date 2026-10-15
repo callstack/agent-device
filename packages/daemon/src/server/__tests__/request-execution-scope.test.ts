@@ -21,7 +21,7 @@ import {
 } from '../request-execution-scope.ts';
 import { resolveSessionScope } from '../../sessions/session-routing.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
 import { handleSessionCloseCommands } from '../../sessions/session-lifecycle/index.ts';
 

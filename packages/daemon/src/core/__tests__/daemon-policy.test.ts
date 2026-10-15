@@ -7,11 +7,10 @@ import { fakeCreateCommandSurface } from '../../__tests__/support/command-surfac
 vi.mock('../device/device-ready.ts', () => ({ ensureDeviceReady: vi.fn(async () => {}) }));
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR, IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { parseDaemonPolicy } from '@agent-device/daemon-contracts/daemon-policy-file';
 import { assertDaemonPolicyAdmitsRequest } from '../daemon-policy.ts';
 import type { DaemonRequest } from '../daemon-request.ts';

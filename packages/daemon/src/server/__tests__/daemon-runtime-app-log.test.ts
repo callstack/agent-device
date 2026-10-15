@@ -7,9 +7,8 @@ import { expect, test, vi } from 'vitest';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import type { ResourceDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
-import { createTestAppLogLiveHandle } from '@agent-device/test-kit/app-log-live-handle';
+import { createTestAppLogLiveHandle, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   flushDaemonStartupDiagnostics,
   teardownDaemonSessionForShutdown,

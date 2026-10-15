@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import { LeaseRegistry } from '../../../resources/lease-registry.ts';
 import {

@@ -13,7 +13,7 @@ import {
   replayInvokeOverDispatch,
   splitReplayCommandRequest,
 } from '@agent-device/replay-port/replay-dispatch-envelope';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import {
   unavailableBindDevice,

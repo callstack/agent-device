@@ -5,7 +5,7 @@ import type { PlatformRuntimeHost } from '@agent-device/contracts/platform-runti
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 export type LimrunDeploymentAsset = { signedDownloadUrl: string; md5: string };
 

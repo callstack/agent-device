@@ -23,7 +23,7 @@ import {
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import { makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

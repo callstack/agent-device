@@ -22,9 +22,9 @@ import { screenRecordingDurableResource } from '@agent-device/capture-kit/screen
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   waitForHttpOk,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
 
 type DaemonInfoFile = {
   httpPort?: number;

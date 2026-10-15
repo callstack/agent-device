@@ -21,10 +21,10 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import {
   closeLoopbackServer,
   listenOnLoopback,
-  trackLoopbackSockets,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+  trackLoopbackSockets,
+} from '@agent-device/test-kit';
 
 type WireInvokeFn = (req: DaemonWireRequest) => Promise<DaemonResponse>;
 

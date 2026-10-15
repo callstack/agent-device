@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { test } from 'vitest';
-import { mkdtempForTest } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTest } from '@agent-device/test-kit';
 import { parseConfig } from './benchmark-config.ts';
 import { createBenchmarkStateRoot } from './state-ownership.ts';
 

@@ -15,7 +15,7 @@ import {
 import { resolveOpenTargetFixture } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
 import type { SessionState } from '../../../../core/session-state.ts';
 import { handleSessionCommands } from '../../../../__tests__/support/handlers/session-command-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 
 const mockResolveOpenTarget = vi.mocked(resolveOpenTargetFixture);

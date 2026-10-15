@@ -13,11 +13,11 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
 import {
   ANDROID_EMULATOR,
+  createUnavailableRuntimeFactsForTest,
   IOS_SIMULATOR,
   MACOS_DEVICE,
-} from '@agent-device/test-kit/device-fixtures';
+} from '@agent-device/test-kit';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
-import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

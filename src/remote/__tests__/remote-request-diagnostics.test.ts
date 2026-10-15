@@ -8,9 +8,9 @@ import { localizeRemoteDaemonError } from '../remote-request-diagnostics.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
 import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 
 const DAEMON_LOG_PATH = '/Users/daemon-host/.agent-device/sessions/default/requests/abc123.ndjson';

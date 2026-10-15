@@ -20,8 +20,10 @@ import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../core/request-runtime-binding.ts';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import {
+  IOS_SIMULATOR,
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+} from '@agent-device/test-kit';
 import { makeIosSession, makeMacOsSession } from '../../__tests__/support/session-factories.ts';
 import { activateCompleteRefFrame, expireRefFrame } from '../../core/ref-frame.ts';
 

@@ -4,8 +4,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { assertRejectsAppError } from '@agent-device/test-kit/app-error';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { assertRejectsAppError, mkdtempForTestSync } from '@agent-device/test-kit';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { sendRequest } from '../daemon-client-transport.ts';
 

@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
+import * as hostProcess from '@agent-device/host-kit/process';
 import {
   acquireDeviceClaim as acquireProductionDeviceClaim,
   canonicalLocalDeviceKey,
@@ -10,11 +11,9 @@ import {
 } from '@agent-device/daemon-contracts/device-claims';
 import type { DeviceBootObservationService } from '@agent-device/contracts/device-boot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync, pinOwnProcessStartTime } from '@agent-device/test-kit';
 import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
-vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
-  (await import('@agent-device/test-kit/host-process-mock')).pinOwnProcessStartTime(importOriginal),
-);
+pinOwnProcessStartTime(hostProcess);
 
 const device: DeviceInfo = {
   platform: 'android',

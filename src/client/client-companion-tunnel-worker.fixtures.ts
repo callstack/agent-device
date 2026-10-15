@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import http from 'node:http';
 import type { Duplex } from 'node:stream';
-import { listenOnLoopback } from '@agent-device/test-kit/loopback';
+import { listenOnLoopback } from '@agent-device/test-kit';
 
 /**
  * Wire-level doubles for the companion tunnel worker (`src/client/client-companion-tunnel-worker.ts`).

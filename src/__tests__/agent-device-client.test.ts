@@ -27,7 +27,7 @@ import type { DaemonResponse, DaemonResponseData } from '@agent-device/kernel/co
 import { AppError } from '@agent-device/kernel/errors';
 import fs from 'node:fs';
 import nodePath from 'node:path';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createTransport } from './client-transport-fixture.ts';
 
 // #1802: replay/test requests carry the script text the CLIENT read, so these cases need real

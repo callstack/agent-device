@@ -37,7 +37,7 @@ vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
 }));
 
 import { resolveTargetDevice } from '@agent-device/device-selection/dispatch-resolve';
-import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR } from '@agent-device/test-kit';
 import { withSystemSurfaceDisclosure } from '@agent-device/daemon/testing/capture-disclosure';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import { TARGET_ACTIVATION_FACT } from '@agent-device/daemon/testing/__tests__/capture-disclosure-target-activation-fact';

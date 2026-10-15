@@ -140,6 +140,7 @@ import { checkDaemonClientEntry } from './daemon-client-entry.ts';
 import { checkDaemonProcessReach } from './daemon-process-reach.ts';
 import {
   checkPackageExportSurface,
+  checkTestKitIsolation,
   packageExportSurfaceSummary,
 } from './package-export-surface.ts';
 import { checkDaemonLayers, DAEMON_ROOT } from './daemon-layers.ts';
@@ -607,8 +608,13 @@ export const LAYERING_RULES: Readonly<Record<LayeringRuleId, LayeringRule>> = {
       context.sourceFiles.filter((file) => file.startsWith(DAEMON_SOURCE_ROOT)),
       context.edges,
     ),
-  'package-export-surface': (context) =>
-    checkPackageExportSurface(context.ratchets.testOnlyExports, context.reference.testOnlyExports),
+  'package-export-surface': (context) => [
+    ...checkPackageExportSurface(
+      context.ratchets.testOnlyExports,
+      context.reference.testOnlyExports,
+    ),
+    ...checkTestKitIsolation(readTrackedPackageManifests(repoRoot), context.allTypeScriptSources),
+  ],
 };
 
 export function main(): number {

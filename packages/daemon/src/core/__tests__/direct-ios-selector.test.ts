@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit';
 import type { SessionState } from '../session-state.ts';
 import {
   deriveDirectIosNodeSelector,

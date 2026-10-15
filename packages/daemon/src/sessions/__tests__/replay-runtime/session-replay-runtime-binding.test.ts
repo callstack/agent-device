@@ -8,7 +8,7 @@ import { SessionStore } from '../../../core/session-store.ts';
 import { runReplayForTest } from './replay-command-fixture.ts';
 import { captureSnapshotWithInteractor } from '../../../core/snapshot-interactor-capture.ts';
 import { baseReplayRequest as baseReq } from './session-replay-runtime.fixtures.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
   const actual =

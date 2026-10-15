@@ -31,9 +31,8 @@ import {
 import type { SessionState } from '../../../core/session-state.ts';
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { refFrameState } from '../../../core/ref-frame.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { createUnavailableRuntimeFactsForTest, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
-import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 const available = Object.freeze({ available: true } as const);

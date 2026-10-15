@@ -8,7 +8,7 @@
 // reaches deep parser branches that uniformly random noise never gets past the first token of.
 
 import fc from 'fast-check';
-import { replayScriptArb } from '@agent-device/test-kit/property-arbitraries';
+import { replayScriptArb } from '@agent-device/test-kit';
 import type { FuzzTarget, FuzzTargetName } from './target-types.ts';
 
 const SELECTOR_VALUE_HAZARDS = [

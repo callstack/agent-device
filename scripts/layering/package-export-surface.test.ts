@@ -12,6 +12,7 @@ import {
 } from './package-boundaries.ts';
 import {
   checkPackageExportSurface,
+  checkTestKitIsolation,
   expandExportTarget,
   isTestOnlyExport,
   isTestOnlyExportSpecifier,
@@ -338,4 +339,123 @@ test('a production subpath of the same package stays importable from production 
     assert.deepEqual(refusals(file, '@agent-device/owner/thing'), [], file);
     assert.deepEqual(refusals(file, '@agent-device/owner'), [], file);
   }
+});
+
+function kitManifests(overrides: {
+  kit?: Record<string, unknown>;
+  kernel?: Record<string, unknown>;
+}): Map<string, string> {
+  return new Map([
+    [
+      'packages/test-kit/package.json',
+      JSON.stringify({
+        name: '@agent-device/test-kit',
+        exports: { '.': entry('./src/index.ts') },
+        dependencies: { '@agent-device/kernel': 'workspace:*' },
+        ...overrides.kit,
+      }),
+    ],
+    [
+      'packages/kernel/package.json',
+      JSON.stringify({
+        name: '@agent-device/kernel',
+        exports: { '.': entry('./src/index.ts') },
+        ...overrides.kernel,
+      }),
+    ],
+  ]);
+}
+
+const KIT_SOURCE = new Map([
+  ['packages/test-kit/src/index.ts', "export { a } from './a.ts';"],
+  ['packages/test-kit/src/a.ts', "import { x } from '@agent-device/kernel/errors';"],
+]);
+
+test('the test-kit shape holds: one entry, built only on packages below it', () => {
+  assert.deepEqual(checkTestKitIsolation(kitManifests({}), KIT_SOURCE), []);
+});
+
+test('test-kit exports exactly "." and nothing else', () => {
+  const extra = checkTestKitIsolation(
+    kitManifests({
+      kit: { exports: { '.': entry('./src/index.ts'), './tmp-dir': entry('./src/tmp-dir.ts') } },
+    }),
+    KIT_SOURCE,
+  );
+  assert.equal(extra.length, 1);
+  assert.match(extra[0]!.message, /exports exactly "\."/);
+  assert.equal(
+    checkTestKitIsolation(
+      kitManifests({ kit: { exports: { './tmp-dir': entry('./x.ts') } } }),
+      KIT_SOURCE,
+    ).length,
+    1,
+  );
+});
+
+test('test-kit may not depend on a platform, provider, daemon or root package', () => {
+  for (const name of [
+    '@agent-device/platform-apple',
+    '@agent-device/provider-limrun',
+    '@agent-device/daemon',
+    'agent-device',
+  ]) {
+    for (const field of ['dependencies', 'devDependencies', 'peerDependencies']) {
+      const found = checkTestKitIsolation(
+        kitManifests({ kit: { [field]: { [name]: 'workspace:*' } } }),
+        KIT_SOURCE,
+      );
+      assert.equal(found.length, 1, `${name} in ${field}`);
+      assert.match(found[0]!.message, /belongs in it/);
+    }
+  }
+});
+
+test('test-kit may not import a platform, provider, daemon or root module, or reach out of its directory', () => {
+  for (const spec of [
+    '@agent-device/platform-android',
+    '@agent-device/platform-apple/runner',
+    '@agent-device/provider-testmu/connection',
+    '@agent-device/daemon/testing/context',
+    '@agent-device/daemon',
+    'agent-device/commands',
+    '../../../src/platform-runtime-gateway.ts',
+    '../../kernel/src/errors.ts',
+  ]) {
+    const found = checkTestKitIsolation(
+      kitManifests({}),
+      new Map([['packages/test-kit/src/a.ts', `import { x } from '${spec}';`]]),
+    );
+    assert.equal(found.length, 1, spec);
+    assert.equal(found[0]!.file, 'packages/test-kit/src/a.ts');
+  }
+  // A sibling inside its own directory, and a lookalike package name, are fine.
+  assert.deepEqual(
+    checkTestKitIsolation(
+      kitManifests({}),
+      new Map([
+        [
+          'packages/test-kit/src/a.ts',
+          "import { b } from './b.ts';\nimport { c } from '@agent-device/daemon-contracts/device-claims';",
+        ],
+      ]),
+    ),
+    [],
+  );
+});
+
+test('a package test-kit builds on cannot declare test-kit: that is a reference cycle', () => {
+  for (const field of ['dependencies', 'devDependencies']) {
+    const found = checkTestKitIsolation(
+      kitManifests({ kernel: { [field]: { '@agent-device/test-kit': 'workspace:*' } } }),
+      KIT_SOURCE,
+    );
+    assert.equal(found.length, 1, field);
+    assert.equal(found[0]!.file, 'packages/kernel/package.json');
+    assert.match(found[0]!.message, /project-reference cycle/);
+  }
+});
+
+test('a repo without a test-kit package has nothing to isolate', () => {
+  assert.deepEqual(checkTestKitIsolation(new Map(), new Map()), []);
 });

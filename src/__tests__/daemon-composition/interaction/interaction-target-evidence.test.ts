@@ -13,7 +13,7 @@ import {
 } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { SessionScriptWriter } from '@agent-device/daemon/testing/session-script-writer';
 import type { SessionState } from '@agent-device/daemon/testing/session-state';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { testCreateCommandSurface } from '../command-surface-fixture.ts';
 
 // ADR 0012 decision 3, daemon-routed recording: target-v1 evidence is

@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Duplex } from 'node:stream';
 import { fileURLToPath } from 'node:url';
-import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit/loopback';
+import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit';
 import { runCmd, runCmdSync } from '@agent-device/host-kit/command';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');

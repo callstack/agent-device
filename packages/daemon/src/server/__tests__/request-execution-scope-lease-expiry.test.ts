@@ -4,7 +4,7 @@ import {
   daemonClaimRecoveryGatewayFixture,
 } from '../../__tests__/support/platform-services-fixture.ts';
 import { makeSession } from '../../__tests__/support/session-factories.ts';
-import { LINUX_DEVICE } from '@agent-device/test-kit/device-fixtures';
+import { LINUX_DEVICE } from '@agent-device/test-kit';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestExecutionScope } from '../request-execution-scope.ts';

@@ -1,12 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import { captureSnapshot, captureSnapshotData } from '../snapshot-capture.ts';
 import { buildSnapshotVisibility } from '@agent-device/capture-kit/snapshot-visibility';
-import {
-  ANDROID_EMULATOR,
-  IOS_SIMULATOR,
-  MACOS_DEVICE,
-} from '@agent-device/test-kit/device-fixtures';
-import { buildNodes } from '@agent-device/test-kit/snapshot-builders';
+import { ANDROID_EMULATOR, buildNodes, IOS_SIMULATOR, MACOS_DEVICE } from '@agent-device/test-kit';
 import {
   legacyDispatchCapture,
   resetLegacySnapshotCapture,

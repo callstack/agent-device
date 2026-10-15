@@ -2,8 +2,7 @@ import { ensureAppLogPath, rotateAppLogIfNeeded } from '@agent-device/capture-ki
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { assertThrowsAppError } from '@agent-device/test-kit/app-error';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { assertThrowsAppError, mkdtempForTestSync } from '@agent-device/test-kit';
 
 // Pinned as a literal on purpose — see the note in packages/host-kit/src/internal/verified-file.test.ts.
 const NOT_REGULAR_FILE_HINT =

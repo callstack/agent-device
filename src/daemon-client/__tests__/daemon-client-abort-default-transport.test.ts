@@ -31,11 +31,11 @@ import { currentDaemonCodeSignature } from '../../__tests__/test-utils/daemon-ht
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
+  type SkippableTestContext,
   skipWhenLoopbackUnavailable,
   trackLoopbackSockets,
-  type SkippableTestContext,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
 
 type WireInvokeFn = (req: DaemonWireRequest) => Promise<DaemonResponse>;
 

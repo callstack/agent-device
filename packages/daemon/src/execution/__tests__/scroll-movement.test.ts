@@ -13,7 +13,7 @@ import type { CommandFlags } from '@agent-device/contracts/command';
 import type { Rect, SnapshotNode } from '@agent-device/kernel/snapshot';
 import { emitDiagnostic } from '@agent-device/host-kit/diagnostics';
 import { readScrollEdgeState } from '@agent-device/capture-kit/scroll-edge-state';
-import { IOS_SIMULATOR, MACOS_DEVICE } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR, MACOS_DEVICE } from '@agent-device/test-kit';
 import { makeSession } from '../../__tests__/support/session-factories.ts';
 import { expireRefFrame } from '../../core/ref-frame.ts';
 import {

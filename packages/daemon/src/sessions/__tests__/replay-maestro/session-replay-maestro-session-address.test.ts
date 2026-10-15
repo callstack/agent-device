@@ -7,7 +7,7 @@ import { SessionStore } from '../../../core/session-store.ts';
 import { replayCommandForTest } from '../replay-runtime/replay-command-fixture.ts';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { maestroScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 
 // The Maestro replay route resolves the store key upstream and then validates the session's

@@ -41,13 +41,13 @@ import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { sendRequest } from '../daemon-client-transport.ts';
 import type { DaemonInfo } from '../daemon-client-metadata.ts';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   closeLoopbackServer,
   listenOnLoopback,
-  skipWhenLoopbackUnavailable,
   type LoopbackServer,
-} from '@agent-device/test-kit/loopback';
+  mkdtempForTestSync,
+  skipWhenLoopbackUnavailable,
+} from '@agent-device/test-kit';
 
 import {
   spawnRegisteredDaemonFixture,

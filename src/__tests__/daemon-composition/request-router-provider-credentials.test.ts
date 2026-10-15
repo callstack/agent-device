@@ -2,7 +2,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   providerCredentialFingerprint,
   readDaemonProviderCredentials,

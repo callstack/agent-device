@@ -4,7 +4,7 @@ import {
   markRequestCanceled,
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
-import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR } from '@agent-device/test-kit';
 import { makeAndroidSession } from '../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';

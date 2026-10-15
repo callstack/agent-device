@@ -25,9 +25,9 @@ import type { DaemonError } from '@agent-device/kernel/errors';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
 
 const UPSTREAM_TOKEN = 'upstream-token';
 const PROXY_TOKEN = 'proxy-token';

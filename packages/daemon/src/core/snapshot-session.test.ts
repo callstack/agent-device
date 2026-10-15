@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'vitest';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import { withSessionlessRunnerCleanup } from './snapshot-session.ts';
 import { installProviderDeviceAdmission } from './provider-device-admission.ts';
 import { platformResourceCleanupFixture } from '../__tests__/support/platform-resource-cleanup-fixture.ts';

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const reapCalls = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 

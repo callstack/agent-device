@@ -25,7 +25,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 import { restoreEnv } from './harness.ts';
 
 type RpcResponse = {

@@ -15,7 +15,7 @@ import {
   handleSessionCommands,
   mockInspectDeviceRuntimeFacts,
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import type {
   AppStateRuntimeInput,

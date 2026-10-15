@@ -2,7 +2,7 @@ import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
+import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 import { postRpcCommand, startRpcServer } from './http-server-rpc.fixtures.ts';
 
 const TOKEN = 'lifetime-token';

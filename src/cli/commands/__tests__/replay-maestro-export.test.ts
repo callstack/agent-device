@@ -11,7 +11,7 @@ import {
 import { parseReplayScriptDetailed, readReplayScriptMetadata } from '@agent-device/ad-script';
 import { projectSelectorExpression } from '@agent-device/selectors';
 import { runCliCapture } from '../../../__tests__/cli-capture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 describe('exportReplayScriptToMaestro', () => {
   test.each([

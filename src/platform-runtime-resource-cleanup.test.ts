@@ -7,9 +7,12 @@ vi.mock('@agent-device/host-kit/command', async (importOriginal) => {
 
 import { runCmd } from '@agent-device/host-kit/command';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { ANDROID_EMULATOR, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { installFakeManagedAgentBrowser } from '@agent-device/test-kit/web-managed-agent-browser';
+import {
+  ANDROID_EMULATOR,
+  installFakeManagedAgentBrowser,
+  mkdtempForTestSync,
+  WEB_DESKTOP_DEVICE,
+} from '@agent-device/test-kit';
 import { platformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
 
 const mockRunCmd = vi.mocked(runCmd);

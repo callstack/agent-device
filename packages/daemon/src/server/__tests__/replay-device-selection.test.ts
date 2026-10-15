@@ -8,7 +8,7 @@ import {
   appTargetResolutionOptions,
   buildReplayScriptPlatformFlags,
 } from '@agent-device/replay-port/replay-script-selection';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   maestroScriptSourceBundleFor,
   replayScriptSourceBundleFor,

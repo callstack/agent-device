@@ -9,7 +9,7 @@ import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { runRequestHandlerChain } from '@agent-device/daemon/testing/request-handler-chain';
 import { getDaemonRouteOwnerFiles } from '@agent-device/command-registry/owner-files';
 import type { DaemonRequest } from '@agent-device/daemon';
-import { LINUX_DEVICE } from '@agent-device/test-kit/device-fixtures';
+import { LINUX_DEVICE } from '@agent-device/test-kit';
 import {
   makeIosSession,
   makeSession,

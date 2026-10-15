@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { expect, test, vi } from 'vitest';
 import { startDaemonRuntime } from '@agent-device/daemon';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
 import { providerCredentialFingerprint } from './provider-credential-fingerprint.ts';
 

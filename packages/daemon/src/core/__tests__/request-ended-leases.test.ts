@@ -2,7 +2,7 @@ import { createTestDeviceInventoryGateways } from '@agent-device/device-selectio
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeIosSession } from '../../__tests__/support/session-factories.ts';

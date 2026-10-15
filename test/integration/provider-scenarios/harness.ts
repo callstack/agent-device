@@ -290,7 +290,7 @@ async function removeProviderScenarioTempDir(dir: string): Promise<void> {
   }
 }
 
-export { restoreEnv } from '@agent-device/test-kit/env';
+export { restoreEnv } from '@agent-device/test-kit';
 
 export function likelyPlayableMp4Container(): Buffer {
   return Buffer.concat([atom('ftyp', Buffer.from('isom0000isom')), atom('moov')]);

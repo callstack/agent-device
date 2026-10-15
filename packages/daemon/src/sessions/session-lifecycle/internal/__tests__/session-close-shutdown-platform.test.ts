@@ -5,7 +5,7 @@ import {
   type DeviceBinding,
   type PlatformRuntimeOperations,
 } from './session-close-shutdown.fixtures.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../../__tests__/support/command-surface-fake.ts';
 import { lifecycleOperationsSpy } from '../../../../__tests__/support/lifecycle-operations-spy.ts';
 

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR, IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 import { makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import type { GenericPlatformExecutionParams } from '@agent-device/daemon/testing/generic-leaf-execution';
 import { resolveScreenshotGenericExecution } from '@agent-device/daemon/testing/screenshot-runtime';
@@ -15,7 +15,6 @@ import {
 } from '@agent-device/daemon/testing/__tests__/screenshot-runtime-fixture';
 import type { DaemonRequest } from '@agent-device/daemon';
 import type { SessionState } from '@agent-device/daemon/testing/session-state';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const unavailableCapture = Object.freeze({

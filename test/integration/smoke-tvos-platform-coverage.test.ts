@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 
-import { TVOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { TVOS_SIMULATOR } from '@agent-device/test-kit';
 import { PUBLIC_COMMANDS } from '@agent-device/command-registry/catalog';
 import { assertCoverageClassificationSummaryWiredToManifest } from './support/coverage-classification.ts';
 import { createPlatformRuntimeGateway } from '../../src/platform-runtime.ts';

@@ -8,8 +8,7 @@ import {
   tryAcquireDaemonRegistration,
 } from '@agent-device/daemon-contracts/daemon-registration-owner';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { IOS_SIMULATOR, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { IOS_SIMULATOR, mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
 import {
   installInteractorResolution,
   interactorResolution,

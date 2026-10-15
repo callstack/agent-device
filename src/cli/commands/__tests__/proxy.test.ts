@@ -6,11 +6,11 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { afterEach, test, vi } from 'vitest';
 import {
-  skipWhenLoopbackUnavailable,
   closeLoopbackServer,
   listenOnLoopback,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+  mkdtempForTestSync,
+  skipWhenLoopbackUnavailable,
+} from '@agent-device/test-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 
 const mocks = vi.hoisted(() => ({

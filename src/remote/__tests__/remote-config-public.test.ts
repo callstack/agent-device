@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { resolveRemoteConfigProfile } from '../remote-config.ts';
 import { resolveRemoteConfigPath } from '../remote-config-core.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 test('public remote-config helpers resolve file paths and merged profiles', () => {
   const root = mkdtempForTestSync('agent-device-remote-config-public-');

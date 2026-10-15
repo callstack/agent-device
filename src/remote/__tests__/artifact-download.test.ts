@@ -7,9 +7,9 @@ import path from 'node:path';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
 import { downloadRemoteArtifactFromUrl } from '../artifact-download.ts';
 import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 

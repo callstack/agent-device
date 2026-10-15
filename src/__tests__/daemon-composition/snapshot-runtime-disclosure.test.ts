@@ -9,7 +9,7 @@ import {
   makeAndroidSession,
   makeIosSession,
 } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '@agent-device/daemon/testing/session-store';
 import { handleSnapshotCommands } from '@agent-device/daemon/testing/handlers/snapshot';
 import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';

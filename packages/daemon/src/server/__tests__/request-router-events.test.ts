@@ -7,8 +7,7 @@ import { createRequestHandler } from '../../__tests__/support/test-device-runtim
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { makeIosSession, makeSession } from '../../__tests__/support/session-factories.ts';
-import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 test('events reads the daemon-owned session timeline without appending poll noise', async () => {

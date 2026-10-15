@@ -2,7 +2,7 @@ import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import { runReplayForTest } from '../replay-runtime/replay-command-fixture.ts';
 import {

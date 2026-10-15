@@ -1,10 +1,6 @@
 import { expect, test } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import {
-  ANDROID_EMULATOR,
-  IOS_DEVICE,
-  IOS_SIMULATOR,
-} from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR, IOS_DEVICE, IOS_SIMULATOR } from '@agent-device/test-kit';
 import { platformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
 
 const PLAIN_CLOSE = { shutdownRequested: false, hasScreenRecording: false, hasLease: false };

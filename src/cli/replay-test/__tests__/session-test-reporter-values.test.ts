@@ -37,7 +37,7 @@ import {
   runReplayTestReporters,
 } from '../reporters/registry.ts';
 import type { ReplayTestReporter, ReplayTestReporterContext } from '../reporters/types.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 type RecordedHook = {
   hook: 'onSuiteStart' | 'onTestStart' | 'onTestStep' | 'onTestResult' | 'onSuiteEnd';

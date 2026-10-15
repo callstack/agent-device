@@ -10,7 +10,7 @@ import {
   snapshotRuntimeOperationFacts,
   type SnapshotResult,
 } from '@agent-device/contracts/snapshot-runtime';
-import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
+import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { makeSession as makeStoredSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { dispatchGetViaRuntime } from '@agent-device/daemon/testing/selector-runtime';

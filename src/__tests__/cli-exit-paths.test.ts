@@ -14,7 +14,7 @@ import { runWebCommand } from '../cli/commands/web.ts';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonResponse } from '../daemon-client/daemon-client.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { beginStderrCapture, beginStdoutCapture } from './test-utils/stream-capture.ts';
 
 afterEach(() => {

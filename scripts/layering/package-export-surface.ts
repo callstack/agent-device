@@ -20,7 +20,8 @@
 // fixture. `@agent-device/test-kit` is the one package exempt from the export check. "Production
 // source" is `isProductionSourceFile` in `tracked-sources.ts`.
 
-import { resolveWorkspaceSpecifier, type LayeringViolation } from './model.ts';
+import path from 'node:path';
+import { parseImports, resolveWorkspaceSpecifier, type LayeringViolation } from './model.ts';
 import { isProductionSourceFile } from './tracked-sources.ts';
 
 export const PACKAGE_EXPORT_SURFACE_RULE = 'R83 package-export-surface';
@@ -283,4 +284,103 @@ export function testOnlyImportMessage(
     `'${specifier}' is a test-only export — production code may not import it; use the ` +
     `package's production subpath or inject the port.`
   );
+}
+
+function violation(file: string, message: string): LayeringViolation {
+  return { rule: PACKAGE_EXPORT_SURFACE_RULE, file, line: 1, message };
+}
+
+/**
+ * Packages test-kit may not depend on, import or reach: a platform or provider package, the
+ * daemon, or the root package. A fixture that needs one of those packages' code is a test of that
+ * package and belongs in it.
+ */
+const TEST_KIT_FORBIDDEN_PACKAGE =
+  /^(?:@agent-device\/(?:platform-[^/]+|provider-[^/]+|daemon)|agent-device)(?:\/|$)/;
+
+const TEST_KIT_DIR = 'packages/test-kit';
+
+type DependencyManifest = {
+  name?: string;
+  exports?: unknown;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+};
+
+function workspaceNames(manifest: DependencyManifest): string[] {
+  return [
+    ...Object.keys(manifest.dependencies ?? {}),
+    ...Object.keys(manifest.devDependencies ?? {}),
+    ...Object.keys(manifest.peerDependencies ?? {}),
+  ];
+}
+
+/**
+ * The shape of the one shared test package: a single `.` entry, no dependency on or import of a
+ * platform, provider, daemon or root module, no relative reach out of its directory, and no
+ * dependency cycle through the packages it builds on (a package test-kit depends on cannot declare
+ * test-kit: project references are acyclic, so its tests keep their helpers local).
+ */
+export function checkTestKitIsolation(
+  manifests: ReadonlyMap<string, string>,
+  sources: ReadonlyMap<string, string>,
+): LayeringViolation[] {
+  const violations: LayeringViolation[] = [];
+  const parsed = new Map<string, DependencyManifest>();
+  for (const [file, text] of manifests) parsed.set(file, JSON.parse(text) as DependencyManifest);
+  const testKitFile = `${TEST_KIT_DIR}/package.json`;
+  const testKit = parsed.get(testKitFile);
+  if (!testKit) return violations;
+
+  const exportKeys = Object.keys((testKit.exports as Record<string, unknown> | undefined) ?? {});
+  if (exportKeys.length !== 1 || exportKeys[0] !== '.') {
+    violations.push(
+      violation(
+        testKitFile,
+        `${TEST_KIT_PACKAGE} exports exactly "." (found ${exportKeys.join(', ') || 'none'}): a ` +
+          `shared helper is a named export of src/index.ts, not a subpath.`,
+      ),
+    );
+  }
+  for (const name of workspaceNames(testKit)) {
+    if (!TEST_KIT_FORBIDDEN_PACKAGE.test(name)) continue;
+    violations.push(
+      violation(
+        testKitFile,
+        `${TEST_KIT_PACKAGE} depends on '${name}'. A fixture that needs a platform, provider, ` +
+          `daemon or root module's code is a test of that package and belongs in it.`,
+      ),
+    );
+  }
+  const builtOn = new Set(workspaceNames(testKit));
+  for (const [file, manifest] of parsed) {
+    if (!manifest.name || !builtOn.has(manifest.name)) continue;
+    if (!workspaceNames(manifest).includes(TEST_KIT_PACKAGE)) continue;
+    violations.push(
+      violation(
+        file,
+        `'${manifest.name}' declares ${TEST_KIT_PACKAGE}, which already depends on it: a ` +
+          `project-reference cycle. Keep that package's test helpers beside its tests.`,
+      ),
+    );
+  }
+  for (const [file, source] of sources) {
+    if (!file.startsWith(`${TEST_KIT_DIR}/`)) continue;
+    for (const site of parseImports(source)) {
+      const escapes =
+        site.spec.startsWith('.') &&
+        !path.posix.join(path.posix.dirname(file), site.spec).startsWith(`${TEST_KIT_DIR}/`);
+      if (!escapes && !TEST_KIT_FORBIDDEN_PACKAGE.test(site.spec)) continue;
+      violations.push({
+        rule: PACKAGE_EXPORT_SURFACE_RULE,
+        file,
+        line: site.line,
+        message:
+          `${TEST_KIT_PACKAGE} imports '${site.spec}'. It may build only on the packages below ` +
+          `it, never on a platform, provider, daemon or root module.`,
+      });
+    }
+  }
+  return violations;
 }

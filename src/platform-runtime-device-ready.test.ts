@@ -21,12 +21,7 @@ vi.mock('@agent-device/platform-android/mechanics', () => ({
 import { runCmd } from '@agent-device/host-kit/command';
 import { waitForAndroidBoot } from '@agent-device/platform-android/mechanics';
 import { ensureBootedSimulator } from '@agent-device/platform-apple/simulator';
-import {
-  ANDROID_EMULATOR,
-  IOS_DEVICE,
-  IOS_SIMULATOR,
-  LINUX_DEVICE,
-} from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR, IOS_DEVICE, IOS_SIMULATOR, LINUX_DEVICE } from '@agent-device/test-kit';
 import { ensureLocalPlatformDeviceReady } from './platform-runtime-device-ready.ts';
 
 const mockRunCmd = vi.mocked(runCmd);

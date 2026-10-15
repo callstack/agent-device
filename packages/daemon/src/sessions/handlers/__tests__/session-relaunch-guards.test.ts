@@ -11,7 +11,7 @@ import {
 } from '../../../__tests__/support/handlers/session-test-harness.ts';
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { makeTestScreenRecordingResource } from '../../../__tests__/support/screen-recording-live-handle.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 import type { DaemonPlatformServices } from '../../../core/platform-services.ts';
 

@@ -11,7 +11,7 @@ import {
   startAndroidPerfCapture,
   startApplePerfCapture,
 } from './platform-runtime-perf-capture-host.ts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR } from '@agent-device/test-kit';
 
 const androidNative = vi.hoisted(() => ({
   startAndroidSimpleperfProfile: vi.fn(),

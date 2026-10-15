@@ -12,7 +12,7 @@ import type { SessionCommandParams } from '../session-command-input.ts';
 import { handleReplayTestCommand } from '../session-replay-command.ts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { makeSessionStore } from '../../../__tests__/support/handlers/session-test-harness.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 import { withClientReplayScriptSources } from '@agent-device/replay-port/replay-script-source-fixtures';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';

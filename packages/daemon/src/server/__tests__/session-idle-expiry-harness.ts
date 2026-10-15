@@ -15,8 +15,7 @@ import {
   acquireDeviceClaim,
   type DeviceClaimSessionOwnership,
 } from '@agent-device/daemon-contracts/device-claims';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 
 /** The inactivity window every harness session is already past, except where a test says otherwise. */
 export const WINDOW_MS = 1_000;

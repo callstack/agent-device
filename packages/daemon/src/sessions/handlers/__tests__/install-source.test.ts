@@ -26,8 +26,10 @@ import { snapshotRuntimeOperationFacts } from '@agent-device/contracts/snapshot-
 import { touchRuntimeOperationFacts } from '@agent-device/contracts/touch-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { AppError } from '@agent-device/kernel/errors';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { unavailableApplicationLifecycleOperationFacts } from '@agent-device/test-kit/runtime-operation-facts';
+import {
+  mkdtempForTestSync,
+  unavailableApplicationLifecycleOperationFacts,
+} from '@agent-device/test-kit';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,

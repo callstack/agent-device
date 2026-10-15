@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { createAgentBrowserWebProvider, type WebProvider } from '@agent-device/platform-web';
-import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import {
   installFakeManagedAgentBrowser,
+  mkdtempForTestSync,
+  WEB_DESKTOP_DEVICE,
   withNodeRuntime,
-} from '@agent-device/test-kit/web-managed-agent-browser';
+} from '@agent-device/test-kit';
+import { createAgentBrowserWebProvider, type WebProvider } from '@agent-device/platform-web';
+import { withCommandExecutorOverride } from '@agent-device/host-kit/command';
 import { createProviderScenarioHarness } from './harness.ts';
 
 test('web provider is scoped through the request router and dispatch path', async () => {

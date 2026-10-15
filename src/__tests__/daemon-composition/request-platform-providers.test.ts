@@ -5,7 +5,7 @@ import {
   IOS_SIMULATOR,
   MACOS_DEVICE,
   WEB_DESKTOP_DEVICE,
-} from '@agent-device/test-kit/device-fixtures';
+} from '@agent-device/test-kit';
 import {
   makeAndroidSession,
   makeIosSession,

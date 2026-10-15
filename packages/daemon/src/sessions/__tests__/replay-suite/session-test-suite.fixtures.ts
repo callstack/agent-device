@@ -1,7 +1,7 @@
 import type { DaemonResponse, DaemonResponseData } from '@agent-device/kernel/contracts';
 import { expect } from 'vitest';
 import path from 'node:path';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 
 export function makeSessionStore(): SessionStore {

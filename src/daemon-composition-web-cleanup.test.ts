@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { installFakeManagedAgentBrowser } from '@agent-device/test-kit/web-managed-agent-browser';
+import { installFakeManagedAgentBrowser, mkdtempForTestSync } from '@agent-device/test-kit';
 
 const { cleanupManagedAgentBrowserOrphansMock } = vi.hoisted(() => ({
   cleanupManagedAgentBrowserOrphansMock: vi.fn(),

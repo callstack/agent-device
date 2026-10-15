@@ -3,7 +3,7 @@ import { afterEach, describe, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import net from 'node:net';
 import { AppError } from '@agent-device/kernel/errors';
-import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit/loopback';
+import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
   buildLeaseHeartbeatRequest,

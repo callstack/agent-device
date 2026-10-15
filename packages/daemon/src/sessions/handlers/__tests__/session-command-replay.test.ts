@@ -7,7 +7,7 @@ import { handleSessionCommands } from '../../../__tests__/support/handlers/sessi
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 
 import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 test('replay parses open --relaunch flag and replays open with relaunch semantics', async () => {

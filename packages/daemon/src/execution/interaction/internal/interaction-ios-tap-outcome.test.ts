@@ -30,7 +30,7 @@ import {
   appCaptureComparisonKey,
   systemSurfaceCaptureComparisonKey,
 } from '../../../core/__tests__/ios-comparison-key-fixture.ts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   getRuntimeBindings,
   mockTapPoint,
@@ -42,7 +42,6 @@ import {
 } from '../../../__tests__/support/interactor-resolution-fixture.ts';
 import { corroborateIosTapFailure } from './interaction-ios-tap-outcome.ts';
 import { movingTargetBaseline } from '../../../core/deferred-interaction-outcome.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 
 const contextFromFlags = (flags: CommandFlags | undefined) => ({

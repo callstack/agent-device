@@ -11,9 +11,9 @@ import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
 
 const RECORD = '{"phase":"request_start"}\n{"phase":"request_failed"}\n';
 

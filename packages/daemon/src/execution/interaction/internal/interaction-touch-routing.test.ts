@@ -1,6 +1,6 @@
 import { test, expect, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
+import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import {
   installInteractorSnapshotResolution,

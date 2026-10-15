@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 // The HTTP server hands a `/rpc` flow rejection it answered itself to `onUnownedRequestFailure`,
 // because that event has no request scope to be recorded in — the request's own scope opens later,

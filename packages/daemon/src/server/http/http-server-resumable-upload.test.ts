@@ -13,7 +13,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 
 test('chunked ranged overflow rolls back before an exact retry and finalize', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP resumable upload coverage')) return;

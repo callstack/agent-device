@@ -8,8 +8,9 @@ import { createTestDeviceInventoryGateways } from '@agent-device/device-selectio
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { limrunTestDependencies } from '../../platform-runtime-gateway.fixtures.ts';
 import {
@@ -19,7 +20,6 @@ import {
 import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
 import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 
 const limrunIo = vi.hoisted(() => ({

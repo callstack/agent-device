@@ -19,9 +19,9 @@ import { runCliCapture, type CapturedCliRun } from './cli-capture.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
 
 const DAEMON_TOKEN = 'daemon-secret';
 const DAEMON_SESSION = 'cwd:abcdef0123456789:default';

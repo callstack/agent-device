@@ -34,9 +34,9 @@ import { makeIosSession } from '../../__tests__/support/session-factories.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+} from '@agent-device/test-kit';
 import { flushSessionEventLogWrites } from '@agent-device/session-journal/session-event-log';
 import { fakeCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 

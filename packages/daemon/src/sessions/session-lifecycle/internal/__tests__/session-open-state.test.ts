@@ -6,7 +6,7 @@ import {
   authoringPublication,
   makeIosSession,
 } from '../../../../__tests__/support/session-factories.ts';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import { isSessionRecording } from '../../../../core/session-script-publication-capability.ts';
 
 // --- #1533: a re-open cannot resurrect a terminal authoring lifecycle ---

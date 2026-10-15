@@ -7,7 +7,7 @@ import type { IncomingMessage } from 'node:http';
 import { receiveUpload } from '../upload.ts';
 import { streamReadableToFile, validateArtifactContentLength } from '../artifact-download.ts';
 import { runCmdSync } from '@agent-device/host-kit/command';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 function makeUploadRequest(body: Buffer, headers: Record<string, string>): IncomingMessage {
   return Object.assign(Readable.from(body), { headers }) as IncomingMessage;

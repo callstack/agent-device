@@ -3,17 +3,16 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { test, vi } from 'vitest';
+import { test } from 'vitest';
+import * as hostProcess from '@agent-device/host-kit/process';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import { localRuntimeOwner } from '@agent-device/contracts/platform-runtime';
 import { runStaleDeviceClaimRelease } from '../platform-runtime-claim-recovery.ts';
 import { runCliCapture } from './cli-capture.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync, pinOwnProcessStartTime } from '@agent-device/test-kit';
 
-vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
-  (await import('@agent-device/test-kit/host-process-mock')).pinOwnProcessStartTime(importOriginal),
-);
+pinOwnProcessStartTime(hostProcess);
 
 function hashedClaimPath(claimsDir: string, deviceKey: string): string {
   const hash = crypto.createHash('sha256').update(deviceKey).digest('hex');

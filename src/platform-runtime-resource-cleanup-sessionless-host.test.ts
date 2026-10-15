@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { IOS_SIMULATOR, ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR, IOS_SIMULATOR } from '@agent-device/test-kit';
 import { platformResourceCleanup } from './platform-runtime-resource-cleanup.ts';
 
 const { RUNNER_BUNDLE_ID, closeIosApp, stopIosRunnerSession } = vi.hoisted(() => ({

@@ -1,8 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { Interactor } from '@agent-device/contracts/interactor-types';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
 import { setActiveProviderDeviceRuntimes } from './provider-device-runtime.ts';
 

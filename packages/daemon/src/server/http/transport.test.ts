@@ -6,7 +6,7 @@ import net from 'node:net';
 import { test } from 'vitest';
 import { createSocketServer, listenHttpServer, listenNetServer } from './transport.ts';
 import { getRequestSignal } from '@agent-device/host-kit/request';
-import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit/loopback';
+import { closeLoopbackServer, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 
 test('Provider-backed integration daemon socket transport frames requests and normalizes malformed input', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) {

@@ -5,7 +5,12 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import {
+  closeLoopbackServer,
+  listenOnLoopback,
+  mkdtempForTestSync,
+  supportsLoopbackBind,
+} from '@agent-device/test-kit';
 import {
   spawnRegisteredDaemonFixture,
   finishRegisteredDaemonFixture,
@@ -25,11 +30,6 @@ vi.mock('@agent-device/host-kit/retry', async (importOriginal) => ({
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import type { DaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import { sendToDaemon } from '../daemon-client.ts';
-import {
-  closeLoopbackServer,
-  listenOnLoopback,
-  supportsLoopbackBind,
-} from '@agent-device/test-kit/loopback';
 import {
   startHttpDaemonFixture,
   type HttpDaemonFixture,

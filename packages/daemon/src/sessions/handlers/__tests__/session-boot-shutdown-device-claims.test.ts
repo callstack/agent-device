@@ -13,7 +13,7 @@ import {
   readinessDeviceRuntimeGateway,
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { ANDROID_EMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { ANDROID_EMULATOR } from '@agent-device/test-kit';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,

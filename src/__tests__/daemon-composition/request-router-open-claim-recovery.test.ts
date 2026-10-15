@@ -92,7 +92,7 @@ import {
   makeIosDevice,
   openRequest,
 } from '@agent-device/daemon/testing/__tests__/request-router-open-harness';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);

@@ -18,8 +18,7 @@ import {
   makeAuthoringSession,
   makeSession,
 } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { WEB_DESKTOP_DEVICE } from '@agent-device/test-kit/device-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
 import { replayScriptSourceBundleFor } from '@agent-device/replay-port/replay-script-source-fixtures';
 import {

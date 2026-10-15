@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,

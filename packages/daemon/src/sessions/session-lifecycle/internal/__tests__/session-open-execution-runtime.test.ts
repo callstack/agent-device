@@ -76,7 +76,7 @@ import {
   makeSessionStore,
   noopInvoke,
 } from './session-open-runtime.fixtures.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsFixture);

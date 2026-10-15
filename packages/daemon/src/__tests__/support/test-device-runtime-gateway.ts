@@ -24,7 +24,7 @@ import {
   applicationLifecycleRuntimeFixture,
   type LifecycleOperationsLoader,
 } from './application-lifecycle-runtime-fixture.ts';
-import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
+import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit';
 import { withClientReplayScriptSources } from '@agent-device/replay-port/replay-script-source-fixtures';
 import type { DaemonInvokeFn } from '../../core/daemon-request.ts';
 import { clearAndroidObservationFixture } from './android-observation-fixture.ts';

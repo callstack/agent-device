@@ -31,7 +31,7 @@ import {
   makeSession,
 } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 import type { DaemonRequest } from '@agent-device/daemon';
 import { discloseRequestDispatch } from '@agent-device/daemon/testing/request-dispatch-disclosure';
 import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';

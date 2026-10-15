@@ -6,14 +6,13 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { reconcileOrphanedDeviceClaims } from '@agent-device/daemon-contracts/device-claims';
 import { acquireProcessLock } from '@agent-device/host-kit/file';
+import * as hostProcess from '@agent-device/host-kit/process';
 import { readCurrentOwnerIdentity } from '@agent-device/host-kit/process';
 import { publishDaemonRegistration } from '@agent-device/daemon-contracts/daemon-registration-fixtures';
 
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync, pinOwnProcessStartTime } from '@agent-device/test-kit';
 
-vi.mock('@agent-device/host-kit/process', async (importOriginal) =>
-  (await import('@agent-device/test-kit/host-process-mock')).pinOwnProcessStartTime(importOriginal),
-);
+pinOwnProcessStartTime(hostProcess);
 
 const previousClaimsDir = process.env.AGENT_DEVICE_CLAIMS_DIR;
 

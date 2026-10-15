@@ -11,10 +11,10 @@ import type { DaemonRequest } from '../../core/daemon-request.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,
+  mkdtempForTestSync,
+  restoreEnv,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { restoreEnv } from '@agent-device/test-kit/env';
+} from '@agent-device/test-kit';
 
 const DAEMON_TOKEN = 'daemon-secret';
 const DIAGNOSTICS_RECORD = '{"phase":"request_start"}\n{"phase":"request_failed"}\n';

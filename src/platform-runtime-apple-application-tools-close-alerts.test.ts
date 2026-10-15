@@ -1,6 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { IOS_SIMULATOR } from '@agent-device/test-kit/device-fixtures';
+import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import { createAppleApplicationTools } from './platform-runtime-apple-application-tools.ts';
 
 const runMacOsAlertAction = vi.hoisted(() => vi.fn());

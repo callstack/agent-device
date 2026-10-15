@@ -38,7 +38,7 @@ vi.mock('../request-execution-scope.ts', async (importOriginal) => {
 import { SessionStore } from '../../core/session-store.ts';
 import { daemonRuntimeDepsFixture } from '../../__tests__/support/daemon-runtime-deps-fixture.ts';
 import { startDaemonRuntime } from './daemon-runtime.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
+import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 afterEach(() => {
   vi.useRealTimers();

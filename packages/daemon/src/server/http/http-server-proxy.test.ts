@@ -19,7 +19,7 @@ import {
   closeLoopbackServer,
   listenOnLoopback,
   skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit/loopback';
+} from '@agent-device/test-kit';
 
 const PROXY_ARTIFACT_INVENTORY_ENTRY = {
   id: 'shot-1',

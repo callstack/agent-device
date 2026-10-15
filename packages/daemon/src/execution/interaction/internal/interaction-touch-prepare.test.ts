@@ -15,7 +15,7 @@ import {
 } from '@agent-device/contracts/touch-runtime';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit/runtime-operation-facts';
+import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit';
 import { makeIosAppSession } from '../../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import type {

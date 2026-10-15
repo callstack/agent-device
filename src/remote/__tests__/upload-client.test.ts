@@ -7,8 +7,7 @@ import path from 'node:path';
 import { uploadArtifact } from '../upload-client.ts';
 import type { UploadProgressEvent } from '../upload-progress.ts';
 import { runCmdSync, withCommandExecutorOverride } from '@agent-device/host-kit/command';
-import { mkdtempForTestSync } from '@agent-device/test-kit/tmp-dir';
-import { closeLoopbackServer, listenOnLoopback } from '@agent-device/test-kit/loopback';
+import { closeLoopbackServer, listenOnLoopback, mkdtempForTestSync } from '@agent-device/test-kit';
 import { DAEMON_HTTP_LEASE_HEADER } from '@agent-device/contracts/daemon-http';
 
 const TEST_TOKEN = 'agent-device-upload-test-token';
