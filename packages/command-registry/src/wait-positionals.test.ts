@@ -10,10 +10,7 @@ import fc from 'fast-check';
 import { test } from 'vitest';
 import { isValidSelectorExpression, SELECTOR_KEY_NAMES } from '@agent-device/selectors';
 import { PROPERTY_RUNS } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import {
-  parseWaitPositionals,
-  resolveWaitBudgetMs,
-} from '@agent-device/command-registry/wait-positionals';
+import { parseWaitPositionals, resolveWaitBudgetMs } from './wait-positionals.ts';
 
 function assertInvalid(args: string[], messageFragment: string) {
   const result = parseWaitPositionals(args);

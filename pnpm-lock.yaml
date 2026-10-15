@@ -272,6 +272,10 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
+    devDependencies:
+      fast-check:
+        specifier: ^4.9.0
+        version: 4.9.0
 
   packages/contracts:
     dependencies:
