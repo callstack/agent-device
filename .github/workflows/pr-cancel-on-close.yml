@@ -21,6 +21,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           RUN_ID: ${{ github.run_id }}
         run: |
           ids=$(gh api --paginate -X GET "repos/$GITHUB_REPOSITORY/actions/runs" \
@@ -28,6 +29,7 @@ jobs:
             --jq ".workflow_runs[]
               | select(.status != \"completed\")
               | select(.head_repository.full_name == \"$GITHUB_REPOSITORY\")
+              | select(any(.pull_requests[]; .number == $PR_NUMBER))
               | select(.id != $RUN_ID)
               | select(.path != \".github/workflows/pr-preview-cleanup.yml\")
               | .id")
