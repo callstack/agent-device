@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  warm-from-base:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -19,22 +19,31 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-node-pnpm
-      - name: Host
+      - name: Build the cache at the base commit (what a main push would save)
         run: |
-          nproc; free -g; df -h .; uname -a
-          FALLOW_VERIFY_LOG=1 pnpm exec fallow --version
-          ls node_modules/.pnpm | grep -i fallow
-      - name: sample statx paths during resolve
-        run: |
-          sudo apt-get install -y strace >/dev/null 2>&1 || true
-          rm -rf .fallow
-          timeout 90 strace -f -e trace=statx,newfstatat,openat,readlink -o /tmp/s.txt pnpm exec fallow dead-code --summary >/dev/null 2>&1 || true
-          wc -l /tmp/s.txt
-          echo "== top 60 paths"
-          grep -o '"[^"]*"' /tmp/s.txt | sort | uniq -c | sort -rn | head -60
-          echo "== top 40 parent dirs"
-          grep -o '"[^"]*"' /tmp/s.txt | tr -d '"' | awk '{sub(/\/[^\/]*$/, ""); print}' | sort | uniq -c | sort -rn | head -40
-          echo "== top 40 basenames"
-          grep -o '"[^"]*"' /tmp/s.txt | tr -d '"' | awk -F/ '{print $NF}' | sort | uniq -c | sort -rn | head -40
-          echo "== ENOENT share"
-          grep -c ENOENT /tmp/s.txt || true
+          git checkout -q "$BASE"
+          time pnpm exec fallow dead-code --summary || true
+          time pnpm check:production-exports || true
+          du -sh .fallow
+          git checkout -q "$GITHUB_SHA"
+      - name: audit on head, cache from base
+        run: time pnpm gate fallow --base "$BASE" || true
+      - name: production-exports on head, cache from base
+        run: time pnpm gate production-exports || true
+      - name: health on head, cache from base
+        run: time pnpm exec fallow health --summary --performance || true
+      - name: audit again (fully warm)
+        run: time pnpm gate fallow --base "$BASE" || true
+
+  parallel-syntax:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - id: slow
+        run: sleep 20; echo "out=slow" >> "$GITHUB_OUTPUT"
+        background: true
+      - parallel:
+          - run: sleep 10; echo a
+          - run: sleep 10; echo b
+      - wait: slow
+      - run: echo "slow said ${{ steps.slow.outputs.out }}"
