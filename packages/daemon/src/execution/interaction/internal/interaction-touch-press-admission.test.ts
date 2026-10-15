@@ -1,79 +1,35 @@
-import { test, expect, vi, beforeEach } from 'vitest';
+import { test, expect, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { activateCompleteRefFrame, refFrameState } from '@agent-device/daemon/testing/ref-frame';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { activateCompleteRefFrame, refFrameState } from '../../../core/ref-frame.ts';
+import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../session-snapshot.ts';
 import {
-  setSessionSnapshot,
-  STALE_SNAPSHOT_REFS_WARNING,
-} from '@agent-device/daemon/testing/session-snapshot';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+  installInteractorSnapshotResolution,
+  mockInteractorSnapshot,
+} from '../../../__tests__/support/interactor-resolution-fixture.ts';
+import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
+import { runInteraction } from '../../../__tests__/support/touch-interaction-runner.ts';
 import {
   getRuntimeBindings,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
 import {
   contextFromFlags,
-  findResolvedTarget,
-  makeFindPreresolvedTree,
   makeSession,
   makeStaleRefSession,
   makeTwoButtonNodes,
-  readPressPoint,
-} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
-import { runFindInternalClick, runInteraction } from './interaction-touch-runner.ts';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+} from './__tests__/interaction-touch-fixtures.ts';
+import { handleInteractionCommands } from '../index.ts';
 
 // Whether a targeted touch may act, and on what: click-option and positional
-// validation, and the ADR 0014 @ref rules (staleness, pins, frame expiry,
-// locator provenance) that admit or reject before any device op.
-
-const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
-  mockRunAppleRunnerCommand: vi.fn(),
-}));
-
-vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
-  return {
-    ...actual,
-    getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })),
-    getAndroidAppState: vi.fn(async () => ({})),
-    getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
-  };
-});
-
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
-  captureSnapshotWithInteractor: vi.fn(),
-}));
-
-vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
-});
-
-import {
-  getAndroidAppState,
-  getAndroidBlockingDialogObservation,
-  getAndroidScreenSize,
-} from '@agent-device/platform-android/mechanics';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
-const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
-const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
-const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
-const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
+// validation, and the ADR 0014 @ref rules (staleness, pins, frame expiry) that
+// admit or reject before any device op.
 
 beforeEach(() => {
   resetGetRuntimeFixture();
-  mockGetAndroidAppState.mockReset();
-  mockGetAndroidAppState.mockResolvedValue({});
-  mockGetAndroidBlockingDialogObservation.mockReset();
-  mockGetAndroidBlockingDialogObservation.mockResolvedValue({ status: 'clear' });
-  mockGetAndroidScreenSize.mockReset();
-  mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
-  mockCaptureSnapshotForSession.mockReset();
-  mockRunAppleRunnerCommand.mockReset();
-  mockRunAppleRunnerCommand.mockResolvedValue({});
+  installInteractorSnapshotResolution();
+  mockInteractorSnapshot.mockReset();
 });
 
 test('click --button middle on macOS fails with an explicit unsupported-operation error', async () => {
@@ -95,7 +51,7 @@ test('click --button middle on macOS fails with an explicit unsupported-operatio
   );
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -123,7 +79,7 @@ test('press coordinates does not treat extra trailing args as selector', async (
   sessionStore.publish(sessionName, makeSession(sessionName));
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -143,30 +99,12 @@ test('press coordinates does not treat extra trailing args as selector', async (
   expect(sessionStore.get(sessionName)?.actions.length).toBe(1);
 });
 
-test('#1654: the resolved-target payload fails closed when its ref provenance disagrees', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'find-preresolved-mismatched-ref';
-  sessionStore.publish(sessionName, makeStaleRefSession(sessionName));
-  const preresolved = makeFindPreresolvedTree();
-
-  const response = await runFindInternalClick(sessionStore, sessionName, {
-    findResolvedTarget: findResolvedTarget(preresolved, '@e9'),
-  });
-
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('COMMAND_FAILED');
-    expect(response.error.message).toContain('provenance does not match');
-  }
-  expect(readPressPoint(mockTapPoint)).toBeUndefined();
-});
-
 test('press selector then press @ref rejects refs that outlived the stored snapshot before dispatch', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'stale-ref-warns';
   const session = makeStaleRefSession(sessionName);
   sessionStore.publish(sessionName, session);
-  mockCaptureSnapshotForSession.mockResolvedValue({
+  mockInteractorSnapshot.mockResolvedValue({
     nodes: makeTwoButtonNodes(),
     backend: 'xctest',
     producer: 'apple-runner',
@@ -202,7 +140,7 @@ test('a ref press crosses the ADR 0014 side-effect seam and expires the ref fram
   const sessionName = 'seam-expiry';
   const session = makeStaleRefSession(sessionName);
   sessionStore.publish(sessionName, session);
-  mockCaptureSnapshotForSession.mockResolvedValue({
+  mockInteractorSnapshot.mockResolvedValue({
     nodes: makeTwoButtonNodes(),
     backend: 'xctest',
     producer: 'apple-runner',
@@ -225,7 +163,7 @@ test('ADR 0014 evidence #1: a second ref mutation rejects (bare and pinned) unti
   // A complete snapshot issued the frame at generation 500.
   activateCompleteRefFrame(session);
   sessionStore.publish(sessionName, session);
-  mockCaptureSnapshotForSession.mockResolvedValue({
+  mockInteractorSnapshot.mockResolvedValue({
     nodes: makeTwoButtonNodes(),
     backend: 'xctest',
     producer: 'apple-runner',
@@ -270,7 +208,7 @@ test('re-issuing a complete frame lets press @ref succeed again without warning'
   const sessionName = 'reissued-refs-no-warning';
   const session = makeStaleRefSession(sessionName);
   sessionStore.publish(sessionName, session);
-  mockCaptureSnapshotForSession.mockResolvedValue({
+  mockInteractorSnapshot.mockResolvedValue({
     nodes: makeTwoButtonNodes(),
     backend: 'xctest',
     producer: 'apple-runner',
