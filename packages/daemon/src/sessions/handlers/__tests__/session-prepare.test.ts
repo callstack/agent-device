@@ -149,9 +149,11 @@ async function invokePrepare(params: {
     params.prepareAppleRunner ??
       (async () => ({ runner: { currentUptimeMs: 42 }, connectMs: 3, healthCheckMs: 3 })),
   );
-  const inspectFacts = vi.fn<InspectDeviceRuntimeFacts>(async () => facts);
-  const bindDevice = vi.fn<BindDeviceRuntime>(async (candidate, use) =>
-    narrowDeviceBinding(
+  const inspectFacts = vi.fn(async () => facts);
+  const bindDevice = vi.fn();
+  const bindDeviceRuntime: BindDeviceRuntime = async (candidate, use) => {
+    bindDevice();
+    return narrowDeviceBinding(
       {
         device: candidate,
         owner: localRuntimeOwner('apple'),
@@ -160,8 +162,8 @@ async function invokePrepare(params: {
         [Symbol.asyncDispose]: async () => {},
       },
       use,
-    ),
-  );
+    );
+  };
   vi.mocked(resolveTargetDevice).mockResolvedValue(device);
   const response = await handlePrepareCommand({
     platformServices: daemonPlatformServicesFixture(),
@@ -177,7 +179,7 @@ async function invokePrepare(params: {
     logPath: '/dev/null',
     sessionStore,
     inspectFacts,
-    bindDevice,
+    bindDevice: bindDeviceRuntime,
   });
   return { response, sessionStore, prepareAppleRunner, inspectFacts, bindDevice };
 }
