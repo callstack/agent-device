@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { once } from 'node:events';
 import type { Duplex } from 'node:stream';
 import {
+  debuggerUrlOn,
   InspectorSession,
   listMetroInspectorTargets,
   selectReactNativeTarget,
@@ -261,4 +262,20 @@ test('a dropped connection rejects the pending evaluation', async () => {
   } finally {
     await server.close().catch(() => {});
   }
+});
+
+test('the debugger socket is opened on the server that listed the target', () => {
+  const target = {
+    id: 'device-1',
+    title: 'app',
+    webSocketDebuggerUrl: 'ws://127.0.0.1:8081/inspector/debug?device=d1&page=1',
+  };
+  assert.equal(
+    debuggerUrlOn(new URL('http://10.0.2.2:8081'), target),
+    'ws://10.0.2.2:8081/inspector/debug?device=d1&page=1',
+  );
+  assert.equal(
+    debuggerUrlOn(new URL('https://bridge.example.test/api/metro/runtimes/r1/'), target),
+    'wss://bridge.example.test/api/metro/runtimes/r1/inspector/debug?device=d1&page=1',
+  );
 });

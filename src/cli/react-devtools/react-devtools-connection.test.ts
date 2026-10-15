@@ -37,7 +37,7 @@ test('the session Metro binding picks the dev server', async () => {
   assert.deepEqual(requested, ['http://127.0.0.1:19000/json/list']);
 });
 
-test('a remote bridge profiles through the public dev-server URL without its bundle path', async () => {
+test('a remote bridge without a Metro binding profiles through the public dev-server URL without its bundle path', async () => {
   const { run, requested, options } = harness();
   options.flags = {
     leaseBackend: 'android-instance',
@@ -45,6 +45,17 @@ test('a remote bridge profiles through the public dev-server URL without its bun
   };
   await run('start');
   assert.deepEqual(requested, ['https://metro.example.test/json/list']);
+});
+
+test('a remote bridge prefers the Metro server next to the agent over the public URL', async () => {
+  const { run, requested, options, stateDir } = harness();
+  bindSession(stateDir, 'http://127.0.0.1:8081/');
+  options.flags = {
+    leaseBackend: 'android-instance',
+    metroPublicBaseUrl: 'https://metro.example.test',
+  };
+  await run('start');
+  assert.deepEqual(requested, ['http://127.0.0.1:8081/json/list']);
 });
 
 test('a host flag on its own keeps the port of the session binding', async () => {

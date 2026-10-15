@@ -142,7 +142,25 @@ test('errors returns the same shape when nothing logged', async () => {
   app.mount([{ id: 2, name: 'App' }]);
   const { run, options } = harness(app);
   options.flags = { json: true };
-  assert.deepEqual(JSON.parse((await run('errors')).text).data, { total: 0, components: [] });
+  assert.deepEqual(JSON.parse((await run('errors')).text).data, {
+    total: 0,
+    logsTracked: true,
+    components: [],
+  });
+});
+
+test('errors says its list can be incomplete when the backend does not track logs per component', async () => {
+  const app = new FakeAppRuntime({ consoleSettings: false });
+  app.mount([{ id: 2, name: 'App' }]);
+  const { run } = harness(app);
+  assert.equal(
+    (await run('errors')).text,
+    [
+      'No mounted component logged an error or warning while rendering.',
+      "Note: this app's React DevTools backend does not attribute every console error and warning to a component, so this list can be incomplete; check agent-device logs as well.",
+      '',
+    ].join('\n'),
+  );
 });
 
 test('each command refuses options it does not read', async () => {

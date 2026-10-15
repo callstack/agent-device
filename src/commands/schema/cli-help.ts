@@ -296,13 +296,13 @@ Render profiling:
   agent-device react-devtools profile commit [N]
 
 Connection:
-  Every command except profile report and profile commit, which read the saved profile, attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes and no start or connect step. It is verified on Android emulators and iOS simulators; remote bridge sessions, which reach the dev server through the remote config's public Metro URL, are not verified yet.
+  Every command except profile report and profile commit, which read the saved profile, attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes and no start or connect step. It is verified on Android emulators and iOS simulators, through agent-device proxy, and on remote bridge sessions, where it uses the session's Metro server next to the agent (or the remote config's public Metro URL when the session recorded none).
   Add --app <bundle-id> when several apps share the dev server, --metro-device <name> when one app runs on several devices connected to it, and --metro-port/--metro-host (or --bundle-url) when the dev server is neither the session's nor localhost:8081.
 
 Component inspection:
   Start with find <part of a name> or tree; both print @c refs. Wrapper chains such as providers collapse onto one line, and three or more consecutive siblings with identical subtrees, such as list rows, collapse into one line with a count; run tree @ref to open a branch.
   inspect takes an @c ref, or a name only one mounted component has. It prints the owners that rendered it, its props, state, hooks (custom hooks list the hooks they call), and what it logged while rendering. Deep values print as short previews.
-  errors lists the mounted components that logged console errors or warnings while rendering, with the messages.
+  errors lists the mounted components that logged console errors or warnings while rendering, with the messages. When the app's React DevTools backend does not attribute every log to a component, as on React Native 0.74 and 0.76, errors says its list can be incomplete; check logs as well.
   Refs are DevTools element ids: they change when a component remounts or the app reloads, so find again after either.
   With a React DevTools window connected to the app, tree, find, errors, and inspect by name fail with tree-unavailable; close it and reload the app.
 

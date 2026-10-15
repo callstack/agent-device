@@ -122,7 +122,7 @@ test('one app on two devices fails closed until --metro-device picks one', async
   assert.match((await run('start', '--metro-device', 'Tablet')).text, /^Profiling React renders/);
   assert.deepEqual(
     vi.mocked(InspectorSession.connect).mock.calls.map(([url]) => url),
-    [second.webSocketDebuggerUrl],
+    ['ws://localhost:8081/inspector/debug?device=tablet&page=1'],
   );
 });
 

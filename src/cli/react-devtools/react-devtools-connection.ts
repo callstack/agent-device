@@ -5,6 +5,7 @@ import { resolveMetroServerUrl } from '../../metro/metro-reload-endpoints.ts';
 import { readMetroSessionHints } from '../../metro/metro-session-hints.ts';
 import { isRemoteBridgeBackend } from '../commands/remote-bridge.ts';
 import {
+  debuggerUrlOn,
   InspectorSession,
   listMetroInspectorTargets,
   selectReactNativeTarget,
@@ -115,21 +116,28 @@ export function parseDevtoolsArgs(
 }
 
 /**
- * Explicit flags, then a remote bridge's public dev-server URL, then the session's Metro binding.
- * A host or port flag on its own overrides that part of the binding and keeps the rest.
+ * Explicit flags, then the session's Metro binding, then a remote bridge's public dev-server URL.
+ * A host or port flag on its own overrides that part of the binding and keeps the rest. A bridged
+ * session's binding is the Metro server next to the agent, which the app reaches through the
+ * bridge; the public URL is the fallback when no binding was recorded.
  */
 function resolveDevServerUrl(args: RuntimeArgs, options: ReactDevtoolsCommandOptions): URL {
-  const publicBaseUrl = options.flags?.metroPublicBaseUrl?.trim();
   const explicit =
     args.metroHost !== undefined || args.metroPort !== undefined || args.bundleUrl !== undefined;
-  if (!explicit && publicBaseUrl && isRemoteBridgeBackend(options.flags?.leaseBackend)) {
-    return resolveMetroServerUrl({ bundleUrl: publicBaseUrl });
-  }
   const complete =
     args.bundleUrl !== undefined || (args.metroHost !== undefined && args.metroPort !== undefined);
   const binding = complete
     ? undefined
     : readMetroSessionHints({ stateDir: options.stateDir, session: options.session });
+  const publicBaseUrl = options.flags?.metroPublicBaseUrl?.trim();
+  if (
+    !explicit &&
+    !binding &&
+    publicBaseUrl &&
+    isRemoteBridgeBackend(options.flags?.leaseBackend)
+  ) {
+    return resolveMetroServerUrl({ bundleUrl: publicBaseUrl });
+  }
   return resolveMetroServerUrl({
     metroHost: args.metroHost,
     metroPort: args.metroPort,
@@ -149,7 +157,9 @@ export async function withAppRuntime<T>(
     appId: args.app,
     device: args.metroDevice,
   });
-  const session: InspectorSession = await InspectorSession.connect(target.webSocketDebuggerUrl);
+  const session: InspectorSession = await InspectorSession.connect(
+    debuggerUrlOn(serverUrl, target),
+  );
   try {
     await session.evaluate(
       `(${REACT_DEVTOOLS_RUNTIME_SOURCE})(${JSON.stringify(REACT_DEVTOOLS_RUNTIME_VERSION)})`,

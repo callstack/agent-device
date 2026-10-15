@@ -186,6 +186,8 @@ export type FakeRuntimeOptions = {
   fusebox?: boolean;
   devtoolsCoreModule?: boolean;
   hook?: boolean;
+  /** React DevTools 6 hooks carry console settings and attribute logs to components from app start. */
+  consoleSettings?: boolean;
 };
 
 /** A JavaScript realm shaped like a React Native dev runtime, with the profiler runtime evaluable. */
@@ -198,6 +200,7 @@ export class FakeAppRuntime {
     listeners: Record<string, Listener[]>;
     sub: (event: string, fn: Listener) => () => void;
     emit: (event: string, payload: number[]) => void;
+    settings?: { showInlineWarningsAndErrors: boolean };
   };
   domainInitializations = 0;
   customConnections = 0;
@@ -219,6 +222,9 @@ export class FakeAppRuntime {
         };
       },
       emit,
+      ...(options.consoleSettings === false
+        ? {}
+        : { settings: { showInlineWarningsAndErrors: true } }),
     };
     const attach = () => this.hook.rendererInterfaces.set(1, this.renderer);
     if (options.attachAtInject !== false) attach();

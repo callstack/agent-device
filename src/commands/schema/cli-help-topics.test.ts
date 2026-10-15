@@ -533,7 +533,7 @@ test('usageForCommand resolves react-devtools help topic', async () => {
   assert.doesNotMatch(help, /profile (slow|rerenders|timeline|status)/);
   assert.match(help, /React Native 0\.74 or newer, with no app, Metro, or Babel changes/);
   assert.match(help, /verified on Android emulators and iOS simulators/);
-  assert.match(help, /remote bridge sessions[^.]*are not verified yet/);
+  assert.match(help, /through agent-device proxy, and on remote bridge sessions/);
   assert.match(help, /Add --app <bundle-id> when several apps share the dev server/);
   assert.match(help, /--metro-device <name> when one app runs on several devices/);
   assert.match(help, /ranked findings, each naming a component, its evidence, and a fix/);

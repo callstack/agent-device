@@ -27,7 +27,7 @@ function appTree(rows = 3): RawComponentTree {
     nodes.push([20 + index, 'Memo(Row)', MEMO, 8, 8, String(index)]);
     nodes.push([40 + index, 'Text', FUNCTION, 20 + index, 20 + index, null]);
   }
-  return { nodes, order: {}, logs: { '21': [1, 0] } };
+  return { nodes, order: {}, logs: { '21': [1, 0] }, logsTracked: true };
 }
 
 test('wrapper chains and runs of same-shape sibling rows each read as one line', () => {

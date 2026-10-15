@@ -313,6 +313,20 @@ export class InspectorSession {
   }
 }
 
+/**
+ * The target's debugger socket on the server that listed it. Metro builds `webSocketDebuggerUrl`
+ * from the Host header it received, and a bridge or tunnel in front of Metro shows it Metro's own
+ * loopback address, which a caller on another machine cannot reach.
+ */
+export function debuggerUrlOn(serverUrl: URL, target: MetroInspectorTarget): string {
+  const advertised = new URL(target.webSocketDebuggerUrl);
+  const url = withTrailingSlash(serverUrl);
+  url.protocol = serverUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.pathname = `${url.pathname.replace(/\/+$/, '')}${advertised.pathname}`;
+  url.search = advertised.search;
+  return url.toString();
+}
+
 function withTrailingSlash(url: URL): URL {
   const copy = new URL(url);
   if (!copy.pathname.endsWith('/')) copy.pathname = `${copy.pathname}/`;

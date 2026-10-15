@@ -11,6 +11,11 @@ export type RawComponentTree = {
   order: Record<string, number[]>;
   /** `[errors, warnings]` the component logged while rendering, by id. */
   logs: Record<string, [number, number]>;
+  /**
+   * Whether the backend attributes console errors and warnings to components from app start.
+   * Older backends attribute them partly or not at all, so missing counts prove nothing.
+   */
+  logsTracked: boolean;
 };
 
 export type TreeNode = {
@@ -25,7 +30,11 @@ export type TreeNode = {
   warnings: number;
 };
 
-export type ComponentTree = { roots: TreeNode[]; byId: Map<number, TreeNode> };
+export type ComponentTree = {
+  roots: TreeNode[];
+  byId: Map<number, TreeNode>;
+  logsTracked: boolean;
+};
 
 const ELEMENT_CLASS = 1;
 const ELEMENT_FORWARD_REF = 6;
@@ -77,7 +86,7 @@ export function buildComponentTree(raw: RawComponentTree): ComponentTree {
       (a, b) => (position.get(a.id) ?? Infinity) - (position.get(b.id) ?? Infinity),
     );
   }
-  return { roots, byId };
+  return { roots, byId, logsTracked: raw.logsTracked };
 }
 
 export function componentRef(node: { id: number }): string {

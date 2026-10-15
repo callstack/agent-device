@@ -312,7 +312,9 @@ export const REACT_DEVTOOLS_RUNTIME_SOURCE = String.raw`
     order.forEach(function (children, id) { childOrder[id] = children; });
     var counts = Object.create(null);
     logs.forEach(function (count, id) { counts[id] = count; });
-    return { ok: true, nodes: nodes, order: childOrder, logs: counts };
+    var h = hook();
+    var logsTracked = !!(h.settings && h.settings.showInlineWarningsAndErrors !== false);
+    return { ok: true, nodes: nodes, order: childOrder, logs: counts, logsTracked: logsTracked };
   }
 
   function inspectOne(id) {

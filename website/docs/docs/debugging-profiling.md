@@ -38,7 +38,7 @@ hooks:
   State: false
 ```
 
-`inspect` also takes a component name when only one mounted component has it. `errors` lists the components that logged console errors or warnings while rendering, with the messages. Refs change when a component remounts or the app reloads.
+`inspect` also takes a component name when only one mounted component has it. `errors` lists the components that logged console errors or warnings while rendering, with the messages; on older React Native versions, such as 0.74 and 0.76, it notes that the list can be incomplete. Refs change when a component remounts or the app reloads.
 
 These commands use the same connection as profiling, described below. If a React DevTools window is connected to the app, close it and reload the app first.
 
@@ -85,7 +85,7 @@ Profiling works with development builds of React Native 0.74 and later, includin
 
 Development builds render slower than release builds. Compare profiles of the same interaction before and after a change rather than reading the numbers as absolute.
 
-Render profiling has not been verified on remote bridge sessions yet.
+Component inspection and profiling also work through `agent-device proxy` and on remote bridge sessions, where they use the Metro server next to the agent.
 
 For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to profiling or debugging evidence, start with `agent-device help react-native`. For slow-flow investigations, combine `help react-devtools` for the React profile with `help debugging` for log markers, network/audio evidence, traces, and perf samples.
 

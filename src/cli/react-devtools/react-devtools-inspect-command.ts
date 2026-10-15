@@ -45,6 +45,9 @@ type TreeResult = ({ ok: true } & RawComponentTree) | RuntimeFailure;
 type InspectedResult = InspectedComponent | { missing: true } | { error: string };
 type InspectResult = { ok: true; elements: Record<string, InspectedResult> } | RuntimeFailure;
 
+const UNTRACKED_LOGS_NOTE =
+  "Note: this app's React DevTools backend does not attribute every console error and warning to a component, so this list can be incomplete; check agent-device logs as well.";
+
 const TREE_DEPTH = 8;
 const TREE_LINES = 60;
 const FIND_LIMIT = 20;
@@ -152,19 +155,30 @@ const HANDLERS: Record<InspectCommand, Handler> = {
   },
   errors: async (args, options, emit) => {
     const limit = args.limit ?? ERRORS_LIMIT;
-    const { logged, inspected } = await withAppRuntime(args, options, async (session) => {
-      const tree = await readTree(session);
-      const logged = [...tree.byId.values()]
-        .filter((node) => node.errors + node.warnings > 0)
-        .sort((a, b) => b.errors - a.errors || b.warnings - a.warnings);
-      const ids = logged.slice(0, limit).map((node) => node.id);
-      return { logged, inspected: ids.length > 0 ? await inspectIds(session, ids) : {} };
-    });
+    const { logged, inspected, logsTracked } = await withAppRuntime(
+      args,
+      options,
+      async (session) => {
+        const tree = await readTree(session);
+        const logged = [...tree.byId.values()]
+          .filter((node) => node.errors + node.warnings > 0)
+          .sort((a, b) => b.errors - a.errors || b.warnings - a.warnings);
+        const ids = logged.slice(0, limit).map((node) => node.id);
+        return {
+          logged,
+          inspected: ids.length > 0 ? await inspectIds(session, ids) : {},
+          logsTracked: tree.logsTracked,
+        };
+      },
+    );
+    const untracked = logsTracked ? [] : [UNTRACKED_LOGS_NOTE];
     if (logged.length === 0) {
-      emit('No mounted component logged an error or warning while rendering.', {
-        total: 0,
-        components: [],
-      });
+      emit(
+        ['No mounted component logged an error or warning while rendering.', ...untracked].join(
+          '\n',
+        ),
+        { total: 0, logsTracked, components: [] },
+      );
       return;
     }
     const shown = logged.slice(0, limit);
@@ -180,8 +194,10 @@ const HANDLERS: Record<InspectCommand, Handler> = {
     }
     if (logged.length > shown.length)
       lines.push(`  +${logged.length - shown.length} more (--limit ${logged.length})`);
+    lines.push(...untracked);
     emit(lines.join('\n'), {
       total: logged.length,
+      logsTracked,
       components: shown.map((node) => {
         const messages = loggedMessages(inspected[String(node.id)]);
         return 'unavailable' in messages
