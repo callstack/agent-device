@@ -6,23 +6,20 @@ import {
   type SnapshotState,
 } from '@agent-device/kernel/snapshot';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
-import { getRuntimeBindings } from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { handleInteractionCommands } from '../index.ts';
+import { getRuntimeBindings } from '../../__tests__/interaction-get-runtime-fixture.ts';
 import {
   contextFromFlags,
   makeSession,
-} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
-import { markDeferredInteractionOutcome } from '@agent-device/daemon/testing/deferred-interaction-outcome';
+} from './__tests__/interaction-touch-fixtures.ts';
+import { legacyDispatchCapture } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
+import { markDeferredInteractionOutcome } from '../../../core/deferred-interaction-outcome.ts';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+import { installLegacyCaptureInteractorResolution } from '../../../__tests__/support/legacy-capture-interactor-resolution.ts';
+import { touchForwardingCreateCommandSurface } from '../../../__tests__/support/touch-forwarding-surface-fake.ts';
 
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
-  const fixture =
-    await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
-  return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
-});
+installLegacyCaptureInteractorResolution();
 
 const FACT: IosTargetActivation = {
   reason: 'stale_target',
@@ -62,7 +59,7 @@ async function pressSelector(params: {
   const sessionStore = makeSessionStore();
   sessionStore.publish(params.sessionName, makeSession(params.sessionName));
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchForwardingCreateCommandSurface(),
     req: {
       token: 't',
       session: params.sessionName,
@@ -115,7 +112,7 @@ test('a press that consumes no capture is not disclosed against an older tree', 
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchForwardingCreateCommandSurface(),
     req: {
       token: 't',
       session: sessionName,
@@ -175,7 +172,7 @@ async function pressAfterUnsettledScroll(selector: string) {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   let done = false;
   const pending = handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchForwardingCreateCommandSurface(),
     req: { token: 't', session: 'default', command: 'press', positionals: [selector], flags: {} },
     sessionName: 'default',
     sessionStore,
