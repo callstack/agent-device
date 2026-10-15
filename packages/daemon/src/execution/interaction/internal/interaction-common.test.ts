@@ -1,24 +1,24 @@
 import type { CommandFlags } from '@agent-device/contracts/command';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import { legacyDispatchCapture } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { beforeEach, expect, test } from 'vitest';
 import {
   makeIosSession,
   makeAuthoringSession,
   authoringPublication,
-} from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+} from '../../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { attachRefs, type RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import {
   finalizeTouchInteraction,
   handleInteractionCommands,
-} from '@agent-device/daemon/testing/interaction/index';
+} from '../index.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import {
   getRuntimeBindings,
   mockFillPoint,
   resetGetRuntimeFixture,
-} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
+import { touchForwardingCreateCommandSurface } from '../../../__tests__/support/touch-forwarding-surface-fake.ts';
 
 const contextFromFlags = (_flags: CommandFlags | undefined) => ({});
 
@@ -165,7 +165,7 @@ test('parameterized fill scrubs concatenated backend values and object keys thro
   );
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchForwardingCreateCommandSurface(),
     req: {
       token: 't',
       session: sessionName,
@@ -223,7 +223,7 @@ test('parameterized fill collapses whitespace-only backend echoes through the ha
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchForwardingCreateCommandSurface(),
     req: {
       token: 't',
       session: sessionName,

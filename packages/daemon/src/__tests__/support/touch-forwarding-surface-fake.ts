@@ -4,6 +4,7 @@ import type {
   InteractionTarget,
   PressCommandResult,
 } from '@agent-device/contracts/interaction';
+import { buildSelectorChainForNode } from '@agent-device/selectors';
 import { AppError } from '@agent-device/kernel/errors';
 import { centerOfRect, type Point, type SnapshotNode } from '@agent-device/kernel/snapshot';
 import {
@@ -54,7 +55,10 @@ export function touchForwardingCreateCommandSurface(
     const locate = async (
       target: InteractionTarget,
       context: { session?: string; requestId?: string; signal?: AbortSignal },
+      action: 'click' | 'fill',
     ): Promise<TouchResolution> => {
+      const chainFor = (node: SnapshotNode, nodes: SnapshotNode[]) =>
+        buildSelectorChainForNode(node, config.backend.platform, { action, nodes });
       if (target.kind === 'point') return { point: { x: target.x, y: target.y }, target };
       if (target.kind === 'ref') {
         const record = await config.sessions?.get(context.session ?? 'default');
@@ -65,7 +69,13 @@ export function touchForwardingCreateCommandSurface(
             reason: 'ref_not_found',
           });
         }
-        return { point: centerOfRect(node.rect), target, node, nodes };
+        return {
+          point: centerOfRect(node.rect),
+          target,
+          node,
+          nodes,
+          selectorChain: chainFor(node, nodes),
+        };
       }
       const { nodes } = await captureAndStoreSnapshot(config, {
         ...context,
@@ -79,7 +89,7 @@ export function touchForwardingCreateCommandSurface(
           target,
           node,
           nodes,
-          selectorChain: [target.selector],
+          selectorChain: chainFor(node, nodes),
         };
       }
       throw new AppError('COMMAND_FAILED', `Selector did not match: ${target.selector}`, {
@@ -92,7 +102,7 @@ export function touchForwardingCreateCommandSurface(
       const preAction = nodes ? { nodes } : undefined;
       if (target.kind === 'point') return { kind: 'point' as const, point, preAction };
       if (target.kind === 'ref') {
-        return { kind: 'ref' as const, point, target, node, preAction };
+        return { kind: 'ref' as const, point, target, node, selectorChain, preAction };
       }
       return {
         kind: 'selector' as const,
@@ -113,7 +123,7 @@ export function touchForwardingCreateCommandSurface(
         requestId: pressOptions?.requestId,
         signal: pressOptions?.signal,
       };
-      const resolution = await locate(target, context);
+      const resolution = await locate(target, context, 'click');
       const backendResult = await config.backend.tap?.(context, resolution.point);
       return { ...resolvedTarget(resolution), ...(backendResult ? { backendResult } : {}) };
     };
@@ -128,7 +138,7 @@ export function touchForwardingCreateCommandSurface(
         requestId: fillOptions?.requestId,
         signal: fillOptions?.signal,
       };
-      const resolution = await locate(target, context);
+      const resolution = await locate(target, context, 'fill');
       const backendResult = await config.backend.fill?.(context, resolution.point, text);
       return {
         ...resolvedTarget(resolution),
