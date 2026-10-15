@@ -5,7 +5,7 @@ import {
   isAndroidInputMethodNode,
   parseAndroidInputMethodPackage,
   readAndroidActiveInputMethodPackage,
-} from '@agent-device/contracts/android-input-ownership';
+} from './android-input-ownership.ts';
 
 test('classifies raw snapshot nodes through the node-shaped IME predicate', () => {
   assert.equal(
