@@ -16,6 +16,7 @@ import {
   androidDevice,
   androidTextRows,
   inboxBaselineNodes,
+  inboxRow,
   makeAndroidFreshnessSession,
 } from '../../__tests__/support/handlers/snapshot-handler.fixtures.ts';
 import { pendingSurfaceStabilization } from '../deferred-interaction-outcome.ts';
@@ -153,4 +154,70 @@ test('captureSnapshot composes post-gesture stabilization with Android freshness
   ]);
   expect(session.androidSnapshotFreshness).toBeUndefined();
   expect(pendingSurfaceStabilization(session)).toBeUndefined();
+});
+
+test('captureSnapshot retries a stale Android tree after recent navigation until the tree changes', async () => {
+  resetLegacySnapshotCapture(captureSnapshotWithInteractor);
+  const session = makeAndroidFreshnessSession(
+    'android-stale-retry',
+    'press',
+    inboxBaselineNodes(24),
+  );
+  legacyDispatchCapture
+    .mockResolvedValueOnce(
+      androidCapture(androidTextRows(24, inboxRow), { rawNodeCount: 24, maxDepth: 2 }),
+    )
+    .mockResolvedValueOnce(
+      androidCapture(
+        [
+          { index: 0, depth: 0, type: 'android.widget.TextView', label: 'Create document' },
+          { index: 1, depth: 0, type: 'android.widget.Button', label: 'Submit', hittable: true },
+        ],
+        { rawNodeCount: 2, maxDepth: 1 },
+      ),
+    );
+
+  const result = await captureSnapshot({
+    device: androidDevice,
+    session,
+    flags: { snapshotInteractiveOnly: true },
+    logPath: '/tmp/daemon.log',
+  });
+
+  expect(result.snapshot.nodes).toEqual(
+    expect.arrayContaining([expect.objectContaining({ label: 'Create document' })]),
+  );
+  expect(legacyDispatchCapture).toHaveBeenCalledTimes(2);
+  expect(session.androidSnapshotFreshness).toBeUndefined();
+});
+
+test('Android ref refresh mode does not retry narrow snapshots as sharp drops', async () => {
+  resetLegacySnapshotCapture(captureSnapshotWithInteractor);
+  const session = makeAndroidFreshnessSession(
+    'android-ref-refresh-no-sharp-drop',
+    'press',
+    buildNodes(androidTextRows(50, (row) => `Previous row ${row}`)),
+  );
+  legacyDispatchCapture.mockResolvedValue(
+    androidCapture(
+      Array.from({ length: 8 }, (_, index) => ({
+        index,
+        depth: 0,
+        type: 'android.widget.TextView',
+      })),
+      { rawNodeCount: 8, maxDepth: 1 },
+    ),
+  );
+
+  const result = await captureSnapshot({
+    device: androidDevice,
+    session,
+    flags: { snapshotInteractiveOnly: true },
+    logPath: '/tmp/daemon.log',
+    androidFreshnessMode: 'ref-refresh',
+  });
+
+  expect(result.freshness).toBeUndefined();
+  expect(legacyDispatchCapture).toHaveBeenCalledTimes(1);
+  expect(session.androidSnapshotFreshness).toBeUndefined();
 });

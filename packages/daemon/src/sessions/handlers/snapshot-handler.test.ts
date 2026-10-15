@@ -1,20 +1,12 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { composedPlatformServicesFixture } from '../platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import { test, expect, vi, afterEach, beforeEach } from 'vitest';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
-import { resetGetRuntimeFixture } from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
-import { resetSnapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
-import {
-  isActiveProviderDevice,
-  setActiveProviderDeviceRuntimes,
-} from '../../../provider-device-runtime.ts';
-import { installProviderDeviceAdmission } from '@agent-device/daemon/testing/provider-device-admission';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
-
-// The daemon reads provider ownership through its own typed admission seam; production
-// installs it from root composition, and these tests compose it the same way.
-installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
+import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
+import { resetSnapshotRuntimeFixture } from '../../__tests__/support/snapshot-runtime-fixture.ts';
+import { forwardingCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
+import { providerDeviceAdmissionFixture } from '../../__tests__/support/provider-device-admission-fixture.ts';
+import { diffForwardingCreateCommandSurface } from '../../__tests__/support/diff-forwarding-command-surface.ts';
+import type { SessionState } from '../../core/session-state.ts';
 import {
   androidCapture,
   androidDevice,
@@ -26,50 +18,35 @@ import {
   makeSessionStore,
   providerIosDevice,
   snapshotRequest,
-} from '@agent-device/daemon/testing/handlers/__tests__/snapshot-handler.fixtures';
-
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
-  const fixture =
-    await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
-  return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
-});
-vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  return { ...actual, runAppleRunnerCommand: vi.fn(async () => ({})) };
-});
+} from '../../__tests__/support/handlers/snapshot-handler.fixtures.ts';
 
 // The real implementation shells out to simctl to probe for a hint-worthy
 // unambiguous environment; that live-probe logic is covered by
 // ios-app-session-hint.test.ts. Stubbed here so this suite stays hermetic and
 // fast — defaults to "no enrichment", matching the current-behavior fallback.
-vi.mock('@agent-device/daemon/testing/ios-app-session-hint', () => ({
+vi.mock('../../core/ios-app-session-hint.ts', () => ({
   buildIosOpenCommandHint: vi.fn(async () => undefined),
 }));
 
-import { runAppleRunnerCommand } from '@agent-device/platform-apple/runner/operations';
-import { buildIosOpenCommandHint } from '@agent-device/daemon/testing/ios-app-session-hint';
+import { buildIosOpenCommandHint } from '../../core/ios-app-session-hint.ts';
 import {
   expireRefFrame,
   refFrame,
   refFrameState,
   refFrameTree,
-} from '@agent-device/daemon/testing/ref-frame';
+} from '../../core/ref-frame.ts';
 
-const mockRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const mockBuildIosOpenCommandHint = vi.mocked(buildIosOpenCommandHint);
+const providerAdmission = providerDeviceAdmissionFixture();
 
 afterEach(() => {
-  setActiveProviderDeviceRuntimes([]);
+  providerAdmission.setActive([]);
 });
 
 beforeEach(() => {
   resetSnapshotRuntimeFixture();
   legacyDispatchCapture.mockReset();
   legacyDispatchCapture.mockResolvedValue({});
-  resetGetRuntimeFixture();
-  mockRunnerCommand.mockReset();
-  mockRunnerCommand.mockResolvedValue({});
   mockBuildIosOpenCommandHint.mockReset();
   mockBuildIosOpenCommandHint.mockResolvedValue(undefined);
 });
@@ -89,8 +66,8 @@ test('snapshot rejects @ref scope without existing session snapshot', async () =
   );
 
   const response = await handleSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot', { flags: { snapshotScope: '@e1' } }),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -112,8 +89,8 @@ test('snapshot on iOS rejects sessions without a tracked app', async () => {
   const runtime = countingSnapshotRuntime();
 
   const response = await handleSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -142,9 +119,9 @@ test('snapshot on iOS without a tracked app carries the detected open command as
   const sessionName = 'ios-sim-no-app-hinted';
   sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
-  const platformServices = composedPlatformServicesFixture();
+  const platformServices = daemonPlatformServicesFixture();
   const response = await handleSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: forwardingCreateCommandSurface,
     platformServices,
     req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
@@ -171,7 +148,7 @@ test('snapshot on provider-backed iOS runs without a tracked app', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-cloud-no-app';
   sessionStore.publish(sessionName, makeSession(sessionName, providerIosDevice));
-  setActiveProviderDeviceRuntimes([makeProviderRuntimeOwning(providerIosDevice)]);
+  providerAdmission.setActive([makeProviderRuntimeOwning(providerIosDevice)]);
   legacyDispatchCapture.mockResolvedValue({
     nodes: [{ index: 0, depth: 0, type: 'XCUIElementTypeButton', label: 'Sign in' }],
     truncated: false,
@@ -180,8 +157,8 @@ test('snapshot on provider-backed iOS runs without a tracked app', async () => {
   const runtime = countingSnapshotRuntime();
 
   const response = await handleSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -205,8 +182,8 @@ test('diff on local iOS still requires a tracked app', async () => {
   sessionStore.publish(sessionName, makeSession(sessionName, iosSimulatorDevice));
 
   const response = await handleSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'diff', { positionals: ['snapshot'] }),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -235,8 +212,8 @@ test('snapshot on iOS runs when the session tracks an app', async () => {
   });
 
   const response = await handleSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -272,8 +249,8 @@ test('snapshot re-activates a complete frame; diff preserves it (ADR 0014)', asy
   });
 
   const snapshotResponse = await handleSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot'),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -286,8 +263,8 @@ test('snapshot re-activates a complete frame; diff preserves it (ADR 0014)', asy
   expect(refFrameState(sessionStore.get(sessionName)!)).toBe('active');
 
   const diffResponse = await handleSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'diff', { positionals: ['snapshot'] }),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -307,8 +284,8 @@ async function runVersionedRefsCommand(params: {
   command: 'snapshot' | 'diff';
 }): Promise<Record<string, unknown> | undefined> {
   const response = await handleSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: params.command === 'diff' ? diffForwardingCreateCommandSurface : forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(params.sessionName, params.command, {
       positionals: params.command === 'diff' ? ['snapshot'] : [],
     }),
@@ -394,8 +371,8 @@ test('daemon-private snapshot observation advances capture state without publish
   });
 
   const response = await handleSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot', { internal: { observationOnly: true } }),
     sessionName,
     logPath: '/tmp/daemon.log',
@@ -410,7 +387,7 @@ test('daemon-private snapshot observation advances capture state without publish
   });
 });
 
-test('snapshot surfaces filtered-to-zero Android guidance for interactive snapshots', async () => {
+test('snapshot hands the interactive-only and depth flags to the device capture', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-empty-interactive';
   sessionStore.publish(sessionName, makeSession(sessionName, androidDevice));
@@ -418,8 +395,8 @@ test('snapshot surfaces filtered-to-zero Android guidance for interactive snapsh
   legacyDispatchCapture.mockResolvedValue(androidCapture([], { rawNodeCount: 42, maxDepth: 8 }));
 
   const response = await handleSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest(sessionName, 'snapshot', {
       flags: { snapshotInteractiveOnly: true, snapshotDepth: 3 },
     }),
@@ -429,19 +406,20 @@ test('snapshot surfaces filtered-to-zero Android guidance for interactive snapsh
   });
 
   expect(response?.ok).toBe(true);
-  if (response?.ok) {
-    expect(response.data?.warnings).toEqual([
-      expect.stringContaining('Interactive snapshot is empty after filtering 42 raw Android nodes'),
-      'Interactive output is empty at depth 3; retry without -d.',
-    ]);
-  }
+  expect(legacyDispatchCapture).toHaveBeenCalledWith(
+    androidDevice,
+    'snapshot',
+    [],
+    undefined,
+    expect.objectContaining({ snapshotInteractiveOnly: true, snapshotDepth: 3 }),
+  );
 });
 
 test('diff rejects unsupported kind', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest('default', 'diff', { positionals: ['unknown'] }),
     sessionName: 'default',
     logPath: '/tmp/daemon.log',
@@ -459,8 +437,8 @@ test('diff rejects unsupported kind', async () => {
 test('diff screenshot is not handled daemon-side (client-backed command)', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSnapshotCommands({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: forwardingCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: snapshotRequest('default', 'diff', { positionals: ['screenshot'] }),
     sessionName: 'default',
     logPath: '/tmp/daemon.log',
