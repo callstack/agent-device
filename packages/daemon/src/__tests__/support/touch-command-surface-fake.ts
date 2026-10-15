@@ -18,6 +18,10 @@ import type {
 } from '@agent-device/contracts/interaction';
 import type { AgentDeviceRuntimeConfig } from '@agent-device/contracts/runtime-contract';
 import { attachResolvedInteractionTarget } from '@agent-device/host-kit/interaction-outcome';
+import {
+  buildDragGesturePlan,
+  singlePointerPlanEndpoints,
+} from '@agent-device/contracts/gesture-plan';
 import { AppError } from '@agent-device/kernel/errors';
 import type { Point, SnapshotNode, SnapshotState } from '@agent-device/kernel/snapshot';
 import { extractReadableText } from '@agent-device/capture-kit/text-surface';
@@ -124,7 +128,7 @@ function touchInteractions(
     target: InteractionTarget,
     options: CommandOptions & { button?: unknown; [key: string]: unknown } = {},
   ) => {
-    const resolved = await resolveTarget(config, target, options);
+    const resolved = await resolveTarget(config, target, options, undefined, 'tapTarget');
     const backendResult = await dispatch(resolved, () => dispatchTap(config, resolved, options));
     return await finish(config, resolved, options, { backendResult });
   };
@@ -134,7 +138,7 @@ function touchInteractions(
     press,
     gesture: async (options) => await dragOrInert(config, inert, options),
     fill: async (target, text, options = {}) => {
-      const resolved = await resolveTarget(config, target, options);
+      const resolved = await resolveTarget(config, target, options, undefined, 'fillTarget');
       const backendResult = await dispatch(resolved, () =>
         dispatchFill(config, resolved, text, options),
       );
@@ -155,7 +159,7 @@ function touchInteractions(
       });
     },
     hover: async (target, options = {}) => {
-      const resolved = await resolveTarget(config, target, options);
+      const resolved = await resolveTarget(config, target, options, undefined, 'hoverTarget');
       const backendResult = await dispatch(resolved, () =>
         dispatchHover(config, resolved, options),
       );
@@ -190,14 +194,26 @@ async function dragOrInert(
         ),
     ),
   );
-  const from = requirePointOf(source!);
-  const to = requirePointOf(destination!);
-  const durationMs =
-    (gesture.sourceHoldMs ?? 0) + (gesture.moveMs ?? 0) + (gesture.destinationHoldMs ?? 0);
+  const viewport =
+    (await config.backend.resolveGestureViewport?.(context(config, commandOptions))) ??
+    source!.preAction?.nodes.find((node) => node.rect)?.rect;
+  if (!viewport) throw new AppError('COMMAND_FAILED', 'gesture viewport is unavailable');
+  const plan = buildDragGesturePlan(
+    {
+      from: requirePointOf(source!),
+      to: requirePointOf(destination!),
+      sourceHoldMs: gesture.sourceHoldMs,
+      moveMs: gesture.moveMs,
+      destinationHoldMs: gesture.destinationHoldMs,
+    },
+    viewport,
+  );
   const backendResult = await backendOperation(config.backend.performGesture?.bind(config.backend))(
     context(config, commandOptions),
-    { topology: 'single', intent: 'drag', durationMs } as never,
+    plan,
   );
+  const { start: from, end: to } = singlePointerPlanEndpoints(plan);
+  const durationMs = plan.durationMs;
   const endpoint = (resolved: ResolvedInteractionTarget) => {
     if (resolved.kind === 'point' || !resolved.node || !resolved.selectorChain) {
       throw new AppError('COMMAND_FAILED', 'drag endpoint did not resolve to a node');
@@ -239,12 +255,13 @@ async function resolveTarget(
   target: InteractionTarget,
   options: CommandOptions,
   captureOptions: BackendSnapshotOptions = { interactiveOnly: true },
+  nativeRefRoute?: 'tapTarget' | 'fillTarget' | 'hoverTarget',
 ): Promise<ResolvedInteractionTarget> {
   if (target.kind === 'point') return { kind: 'point', point: { x: target.x, y: target.y } };
   const pre = options.preresolvedTarget;
   if (pre && target.kind === 'ref') return resolvedFromNode(config, target, pre.node, pre.tree);
   if (target.kind === 'ref') {
-    if (hasNativeRefRoute(config.backend)) return { kind: 'ref', target };
+    if (nativeRefRoute && config.backend[nativeRefRoute]) return { kind: 'ref', target };
     const record = await config.sessions?.get(options.session ?? 'default');
     const tree = record?.refFrameSnapshot ?? record?.snapshot;
     const node = tree?.nodes.find((candidate) => `@${candidate.ref}` === refBody(target.ref));
@@ -281,10 +298,6 @@ function resolvedFromNode(
     selectorChain: buildSelectorChainForNode(node, config.backend.platform),
     preAction: { nodes: tree.nodes },
   };
-}
-
-function hasNativeRefRoute(backend: AgentDeviceBackend): boolean {
-  return Boolean(backend.tapTarget ?? backend.hoverTarget ?? backend.fillTarget);
 }
 
 function refBody(ref: string): string {

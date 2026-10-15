@@ -154,6 +154,9 @@ test('runtime click keeps the shared guards running on a pre-resolved node', asy
       assert.ok(error instanceof Error);
       assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
       assert.match(error.message, /covered by another visible element/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'target_covered');
+      assert.equal(details?.dispatched, 'no');
       return true;
     },
   );

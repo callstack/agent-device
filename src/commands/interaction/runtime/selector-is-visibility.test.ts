@@ -62,6 +62,9 @@ test('runtime is visible fails for nodes outside the current viewport', async ()
       assert.ok(error instanceof Error);
       assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
       assert.match(error.message, /actual=\{"visible":false/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'predicate_failed');
+      assert.equal(details?.predicate, 'visible');
       return true;
     },
   );

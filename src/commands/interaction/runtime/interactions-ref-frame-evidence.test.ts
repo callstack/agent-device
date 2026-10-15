@@ -67,34 +67,41 @@ function assertOffscreenRefusal(error: unknown): boolean {
 
 test('runtime press @ref fails closed when stored ref bounds are invalid (ADR 0014)', async () => {
   const taps: Point[] = [];
-  const device = createInteractionDevice(
-    androidTextViewSnapshot('android.widget.TextView', 'My App'),
-    {
-      platform: 'android',
-      tap: async (_context, point) => {
-        taps.push(point);
-      },
+  let captures = 0;
+  const snapshot = androidTextViewSnapshot('android.widget.TextView', 'My App');
+  const device = createInteractionDevice(snapshot, {
+    platform: 'android',
+    captureSnapshot: async () => {
+      captures += 1;
+      return { snapshot };
     },
-  );
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+  });
 
   await assert.rejects(
     () => device.interactions.press(ref('@e1'), { session: 'default' }),
     assertBoundsInvalid,
   );
   assert.deepEqual(taps, []);
+  assert.equal(captures, 0, 'a ref with invalid bounds is refused without a positional recapture');
 });
 
 test('runtime fill @ref fails closed when stored ref bounds are invalid (ADR 0014)', async () => {
   const fills: Point[] = [];
-  const device = createInteractionDevice(
-    androidTextViewSnapshot('android.widget.EditText', 'Email'),
-    {
-      platform: 'android',
-      fill: async (_context, point) => {
-        fills.push(point);
-      },
+  let captures = 0;
+  const snapshot = androidTextViewSnapshot('android.widget.EditText', 'Email');
+  const device = createInteractionDevice(snapshot, {
+    platform: 'android',
+    captureSnapshot: async () => {
+      captures += 1;
+      return { snapshot };
     },
-  );
+    fill: async (_context, point) => {
+      fills.push(point);
+    },
+  });
 
   await assert.rejects(
     () =>
@@ -105,6 +112,7 @@ test('runtime fill @ref fails closed when stored ref bounds are invalid (ADR 001
     assertBoundsInvalid,
   );
   assert.deepEqual(fills, []);
+  assert.equal(captures, 0, 'a ref with invalid bounds is refused without a positional recapture');
 });
 
 test('runtime press @ref fails fast when the target is off-screen', async () => {

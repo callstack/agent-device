@@ -140,6 +140,8 @@ test('fill with a pinned stale ref rejects; pinned current is clean', async () =
   expect(stale?.ok).toBe(false);
   if (stale && !stale.ok) {
     expect(stale.error.code).toBe('COMMAND_FAILED');
+    expect(stale.error.details?.reason).toBe('ref_generation_mismatch');
+    expect(stale.error.details?.dispatched).toBe('no');
     expect(stale.error.details?.hint).toBe(
       "Ref @e1 was minted from snapshot s2 but the session's ref frame is now s3 — re-run snapshot -i.",
     );
@@ -189,7 +191,9 @@ test("ADR 0014 blocker-2: a mutating find's internal fill from an expired frame 
   expect(userRef?.ok).toBe(false);
   if (userRef && !userRef.ok) {
     expect(userRef.error.details?.reason).toBe('ref_frame_expired');
+    expect(userRef.error.details?.dispatched).toBe('no');
   }
+  expect(mockFillPoint).not.toHaveBeenCalled();
 
   // The mutating find's internal dispatch (the exact request find.ts hands the
   // leaf) bypasses admission AND attaches no stale-ref warning.

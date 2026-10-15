@@ -264,6 +264,7 @@ test('is reports Android permission dialog blocker when app content assertion fa
       blockedBy: 'android_foreground_surface',
       expectedPackage: 'com.example.demo',
       foregroundPackage: 'com.google.android.permissioncontroller',
+      permissionDialog: true,
     });
   }
 });

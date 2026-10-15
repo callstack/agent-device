@@ -67,6 +67,7 @@ test('runtime get text on an iOS label selector disambiguates among same-label n
 
   assert.equal(result.kind, 'text');
   assert.equal(result.text, 'General');
+  assert.notEqual(result.node.type, 'Cell');
   assert.deepEqual(result.target, { kind: 'selector', selector: 'label="General"' });
   assert.equal(captures, 1);
 });

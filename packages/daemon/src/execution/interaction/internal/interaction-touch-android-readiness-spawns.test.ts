@@ -12,7 +12,7 @@ import { runWithAndroidDialogReadinessCheck } from './interaction-touch-android-
 const NORMAL_FOCUS_DUMP =
   '  mCurrentFocus=Window{a1b2c3 u0 com.agentdevice.tester/com.agentdevice.tester.MainActivity}';
 
-test('a run of taps on a clear screen costs one window dump per tap', async () => {
+test('a run of taps on a clear screen costs two window dumps per tap', async () => {
   const session = makeAndroidSession('readiness-spawn-budget');
   const runAdb = vi.fn<AndroidObservationHost['runAdb']>(async (_device, args) => ({
     exitCode: 0,
