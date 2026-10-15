@@ -151,15 +151,14 @@ test('every package tsconfig references exactly its manifest workspace dependenc
         `${pkg.dir}/tsconfig.json references ${dir}, which is not a workspace package`,
       );
     }
+    const declared = new Set([...pkg.workspaceDependencies, ...pkg.workspaceDevDependencies]);
     assert.deepEqual(
       referencedDirs.map((dir) => nameByDir.get(dir)),
-      [...new Set([...pkg.workspaceDependencies, ...(pkg.workspaceDevDependencies ?? [])])]
-        .filter((name) => name !== rootPackageName)
-        .sort(),
+      [...declared].filter((name) => name !== rootPackageName).sort(),
       `${pkg.dir}/tsconfig.json references must equal its manifest workspace:* dependencies and ` +
         `devDependencies`,
     );
-    if (pkg.workspaceDependencies.has(rootPackageName)) {
+    if (declared.has(rootPackageName)) {
       const config = readTsconfig(`${pkg.dir}/tsconfig.json`);
       const paths = (config.compilerOptions?.paths ?? {}) as Record<string, unknown>;
       assert.ok(

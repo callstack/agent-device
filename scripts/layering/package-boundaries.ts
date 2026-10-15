@@ -67,7 +67,7 @@ export type WorkspacePackage = {
    * `workspaceDependencyField`. A published package keeps every sibling in `devDependencies`
    * already, so this is empty there.
    */
-  workspaceDevDependencies?: ReadonlySet<string>;
+  workspaceDevDependencies: ReadonlySet<string>;
   /** Where siblings are declared: a published package bundles them, so it lists them as dev-only. */
   workspaceDependencyField: 'dependencies' | 'devDependencies';
   /** Non-workspace dependencies that the root build must externalize. */
@@ -283,7 +283,7 @@ function undeclaredSiblingMessage(
   site: SpecifierSite,
 ): string | undefined {
   if (name === pkg.name || pkg.workspaceDependencies.has(name)) return undefined;
-  const declaredForTests = pkg.workspaceDevDependencies?.has(name) ?? false;
+  const declaredForTests = pkg.workspaceDevDependencies.has(name);
   if (declaredForTests && !isProductionSourceFile(site.file)) return undefined;
   return declaredForTests
     ? `${pkg.name} imports '${site.specifier}' from production source, but ${pkg.dir}/package.json ` +

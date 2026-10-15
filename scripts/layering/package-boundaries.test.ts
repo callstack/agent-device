@@ -34,6 +34,7 @@ const kernel: WorkspacePackage = {
     ['@agent-device/kernel/device', 'packages/kernel/src/device.ts'],
   ]),
   workspaceDependencies: new Set(),
+  workspaceDevDependencies: new Set(),
   workspaceDependencyField: 'dependencies',
   externalDependencies: new Map(),
 };
@@ -45,6 +46,7 @@ const contracts: WorkspacePackage = {
     ['@agent-device/contracts/interaction', 'packages/contracts/src/interaction.ts'],
   ]),
   workspaceDependencies: new Set(['@agent-device/kernel']),
+  workspaceDevDependencies: new Set(),
   workspaceDependencyField: 'dependencies',
   externalDependencies: new Map(),
 };
@@ -760,15 +762,9 @@ test('the real tree parses, declares, and passes R11', () => {
   // daemon used to own (#2340). The per-file subpaths under `./interaction-*`,
   // `./selector-pipeline*`, `./press-retarget`, `./touch-semantics` are the
   // execution surface the core selector pipeline moved into this package —
-  // one subpath per module so consumers pull only the stage they run; the
-  // `-fixtures` entries are the test-fixture surface (host-kit's
-  // `./audio-probe-fixtures` precedent) — `./interaction-targeting-fixtures`
-  // for the interaction-targeting node trees and `./snapshot-geometry-fixtures`
-  // for the geometry/touch-point builders both this package's and root's
-  // tests build on (#2402, replacing the copy that used to live under root's
-  // `src/__tests__/test-utils/`; it re-exports `makeSnapshotState` from
-  // capture-kit's own `./snapshot-state-fixtures`, its canonical home). Any
-  // other subpath, or the AST leaking into `.`, fails here.
+  // one subpath per module so consumers pull only the stage they run. The `-fixtures`
+  // entries are R83 burn-down, deleted with the export. Any other subpath, or the AST leaking
+  // into `.`, fails here.
   assert.deepEqual([...selectorsPackage.exportTargets.keys()].sort(), [
     '@agent-device/selectors',
     '@agent-device/selectors/absence-observation',
