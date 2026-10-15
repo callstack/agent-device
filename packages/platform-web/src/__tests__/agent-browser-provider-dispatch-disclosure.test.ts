@@ -5,7 +5,7 @@
 // produce one for a current provider argv, that row's driver says so.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { test, vi } from 'vitest';
+import { test } from 'vitest';
 import {
   assertDispatchDisclosureDriversMatchRows,
   DISPATCH_DISCLOSURE_TABLE_PATH,
@@ -18,19 +18,6 @@ import {
   mkdtempForTestSync,
   withManagedAgentBrowserProvider,
 } from './test-utils.ts';
-
-const { providerStartupCleanupMock } = vi.hoisted(() => ({
-  providerStartupCleanupMock: vi.fn(async () => undefined),
-}));
-
-vi.mock('../agent-browser-lifecycle.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../agent-browser-lifecycle.ts')>();
-  return {
-    ...actual,
-    cleanupManagedAgentBrowserOrphansForProviderStartup: providerStartupCleanupMock,
-  };
-});
-
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
 import type { WebProvider } from '../provider.ts';
 
