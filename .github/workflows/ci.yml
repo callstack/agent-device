@@ -148,21 +148,26 @@ jobs:
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
 
-      # Slowest guard (~4.5 min) and independent of the others, so it runs beside them.
+      # The two slowest gates run in the background beside the light guards below. A cold fallow
+      # run costs several minutes on a hosted runner: since fallow 3.20 every import re-walks the
+      # root tsconfig's project references.
       - name: Check numeric ranges
         id: freerange
         background: true
         uses: ./.github/actions/run-gate
         with: { gate: freerange }
 
-      # A cold fallow run re-resolves every import against the root tsconfig's project
-      # references, which costs minutes on a hosted runner; the parse cache skips unchanged files.
-      - name: Restore fallow cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
+      - name: Run Fallow audit
+        id: fallow-audit
+        background: true
+        env:
+          FALLOW_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        uses: ./.github/actions/run-gate
         with:
-          path: .fallow
-          key: fallow-${{ github.job }}-${{ github.sha }}
-          restore-keys: fallow-${{ github.job }}-
+          gate: fallow
+          args: |
+            --base
+            ${{ env.FALLOW_BASE }}
 
       - name: Check import-direction DAG
         # Structured import-direction lint over the resolved graph. See
@@ -236,20 +241,6 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: mcp-metadata }
 
-      - name: Run Fallow audit
-        env:
-          FALLOW_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
-        uses: ./.github/actions/run-gate
-        with:
-          gate: fallow
-          args: |
-            --base
-            ${{ env.FALLOW_BASE }}
-
-      - name: Check for production-unused exports
-        uses: ./.github/actions/run-gate
-        with: { gate: production-exports }
-
       # The frozen replay-compat corpus (#1417) claims each entry was published by
       # a released tag. Only a full-history checkout can re-derive that claim.
       - name: Verify corpus entries against their released blobs
@@ -266,13 +257,13 @@ jobs:
         uses: ./.github/actions/run-gate
         with: { gate: daemon-wire-compat }
 
-      # Main pushes refresh the cache PR runs restore; PR runs only read it.
-      - name: Save fallow cache
-        if: ${{ github.event_name == 'push' }}
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
-        with:
-          path: .fallow
-          key: fallow-${{ github.job }}-${{ github.sha }}
+      # Shares fallow's `.fallow` cache directory with the audit, so it starts once the audit ends.
+      - name: Wait for the Fallow audit
+        wait: fallow-audit
+
+      - name: Check for production-unused exports
+        uses: ./.github/actions/run-gate
+        with: { gate: production-exports }
 
       - name: Wait for numeric ranges
         wait: freerange
@@ -291,14 +282,6 @@ jobs:
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
-
-      # The CRAP steps score through `fallow health`; see Repo Guards for why its cache matters.
-      - name: Restore fallow cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
-        with:
-          path: .fallow
-          key: fallow-${{ github.job }}-${{ github.sha }}
-          restore-keys: fallow-${{ github.job }}-
 
       - name: Test changed-line coverage gate
         uses: ./.github/actions/run-gate
@@ -368,13 +351,6 @@ jobs:
         with:
           gate: coverage-crap
           args: --all
-
-      - name: Save fallow cache
-        if: ${{ !cancelled() && github.event_name == 'push' }}
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
-        with:
-          path: .fallow
-          key: fallow-${{ github.job }}-${{ github.sha }}
 
   integration:
     name: Integration Tests
