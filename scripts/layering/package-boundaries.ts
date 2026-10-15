@@ -1,7 +1,8 @@
 // Catches: a package importing a workspace sibling its manifest never declared, and a root
 //   file tunnelling into a package's src with a relative path — both for every file, compiled
 //   or not — plus the whole specifier sweep (unknown package, un-exported subpath) for the
-//   scripts/ files the type graph omits. `tsc -b` owns the rest of the old R11 surface for
+//   scripts/ files, including tooling roots the type graph also checks. `tsc -b` owns the
+//   rest of the old R11 surface for
 //   compiled sources: NodeNext resolution rejects a non-exported subpath and an unknown
 //   package (TS2307), and composite `rootDir` rejects a package→root relative escape
 //   (TS6059 + TS6307) — planted proofs recorded on #3279.
@@ -18,13 +19,13 @@
 //
 // R11 package-boundaries: the workspace rules of #1490, as data the gate walks.
 //
-// What remains is exactly what the type graph cannot see:
+// R11 retains the claims the type graph cannot see, plus conservative checks for scripts:
 // a package import of a sibling the manifest never declared (pnpm's root links make it resolve
 // anyway), a root file tunnelling into `packages/*/src` with a relative path (tsc typechecks
 // it fine; Node's ESM loader does not realpath specifiers, so a module loaded BOTH relatively
 // and via its package specifier instantiates twice in one process — duplicate AppError, broken
-// instanceof), and, for `scripts/` files which sit outside the type graph by design, the
-// root-side unknown-package and exports-map checks that compiled files get from TS2307.
+// instanceof), and, for all `scripts/` files, the root-side unknown-package and exports-map
+// checks. Explicit tooling roots also receive those resolution checks from TS2307.
 // On top, `TEST_ONLY_FIXTURE_SUBPATHS` mirrors R13's Android fixture gate for the non-platform
 // packages: a production file importing one of those fixture subpaths is an R11 violation.
 
@@ -221,20 +222,18 @@ function specifierPackageName(specifier: string): string | undefined {
 
 /**
  * The file set R11 treats as parsed by the `tsc -b` graph: each package project includes its
- * own `src/`, and the root project includes `src/` and `test/`. Everything else the R11 walk
- * visits — the rest of `scripts/` (gate and tooling modules run through
- * `--experimental-strip-types`, not a tsconfig program), the `packages/maestro/test/`
- * conformance harness, and package build configs — reaches packages through import sites the
+ * own `src/`, and the root project includes `src/` and `test/`. Other regions the R11 walk
+ * visits include `scripts/`, the `packages/maestro/test/` conformance harness, and package
+ * build configs. Files outside the compiler graph reach packages through import sites the
  * compiler never parses, so R11 stays the only owner of every boundary claim about those
  * routes (#3279). Only the RESOLUTION branches (unknown package, un-exported subpath) are
  * split this way; the relative-escape branch fires regardless — a planted sibling tunnel
  * `tsc -b` accepted, see `checkPackageInternalSites`.
  *
- * One documented divergence: the root program also includes
- * `scripts/help-conformance-command-validator.ts`, which this predicate classifies as
- * uncompiled. That is fail-closed — R11 keeps its full branch set (unknown package,
- * exports-map) for the file on top of what tsc enforces — never fail-open. The divergence
- * and the exact root include list are pinned in `project-references.test.ts`, and the
+ * The root program also includes explicit help-conformance and coverage-tooling roots.
+ * This predicate classifies all scripts as uncompiled. That is fail-closed — R11 keeps its
+ * full branch set (unknown package, exports-map) on top of what tsc enforces. The divergence
+ * and the root include regions are pinned in `project-references.test.ts`, and the
  * per-package `include: ["src"]` / no-`exclude` shape this predicate's regexes assume is
  * pinned there too, so widening any project's file set must be recorded there rather than
  * silently diverging from this predicate.
@@ -364,8 +363,8 @@ export function checkPackageInternalSites(
  * fine (#3279), but Node's ESM loader does not realpath specifiers, so dual relative/specifier
  * loads instantiate the module twice — and a workspace specifier the root manifest never
  * declares, which the root's own link farm resolves anyway. For compiled root files the
- * compiler owns unknown packages and un-exported subpaths with TS2307; for scripts/ files,
- * which sit outside the type graph by design, R11 keeps every branch.
+ * compiler owns unknown packages and un-exported subpaths with TS2307. For scripts/ files,
+ * R11 keeps every branch, including where explicit tooling roots also receive compiler checks.
  */
 export function checkRootSites(
   sites: readonly SpecifierSite[],

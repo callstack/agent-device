@@ -26,6 +26,10 @@
     "src",
     "test",
     "scripts/help-conformance-command-validator.ts",
+    "scripts/coverage-crap/**/*.ts",
+    "scripts/coverage-changed/**/*.ts",
+    "scripts/vitest-coverage-run-stamp-reporter.ts",
+    "scripts/vitest-coverage-run-stamp-reporter.test.ts",
     "packages/command-registry/src/global.d.ts"
   ],
   "references": [

@@ -110,10 +110,8 @@ test('specifier sites carry 1-based lines for static and dynamic imports', () =>
 });
 
 test('the compiled set classifies every file region the R11 walk visits', () => {
-  // The compiler-owned/compiler-exempt split above is keyed on this predicate (#3279), so the
-  // mutation it must fail on is a file region joining or leaving `tsc -b`'s programs without
-  // the predicate following: package `src/`, root `src/` and root `test/` compile; `scripts/`
-  // and the package harness dirs are the fail-closed side.
+  // Package src, root src and root test are compiler-owned. Project-reference pins record
+  // compiler-root changes; scripts and package harness directories retain full R11 checks.
   assert.equal(insideCompiledSources('packages/kernel/src/errors.ts'), true);
   assert.equal(insideCompiledSources('packages/maestro/src/index.ts'), true);
   assert.equal(insideCompiledSources('src/cli.ts'), true);
@@ -122,11 +120,11 @@ test('the compiled set classifies every file region the R11 walk visits', () => 
   assert.equal(insideCompiledSources('packages/maestro/test/conformance/harness.ts'), false);
   assert.equal(insideCompiledSources('packages/proxy/tsdown.config.ts'), false);
 
-  // The one scripts file the root program DOES compile is classified as uncompiled: R11
-  // keeps its full branch set there (redundant with tsc, never narrower). The exact root
-  // include list and the reference sets are pinned against the graph itself in
-  // project-references.test.ts, where the divergence is recorded rather than assumed absent.
   assert.equal(insideCompiledSources('scripts/help-conformance-command-validator.ts'), false);
+  assert.equal(insideCompiledSources('scripts/coverage-crap/stamp.ts'), false);
+  assert.equal(insideCompiledSources('scripts/coverage-changed/run.ts'), false);
+  assert.equal(insideCompiledSources('scripts/vitest-coverage-run-stamp-reporter.ts'), false);
+  assert.equal(insideCompiledSources('scripts/vitest-coverage-run-stamp-reporter.test.ts'), false);
 });
 
 test('readWorkspacePackages reads tracked manifests only', () => {
