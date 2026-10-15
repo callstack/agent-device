@@ -257,7 +257,7 @@ function checkSource(file: string, source: string): LayeringViolation[] {
         ),
       );
     }
-    if (resolvesToAppleRunnerTestHost(file, site.spec) && isProductionSource(file)) {
+    if (resolvesToAppleRunnerTestHost(file, site.spec) && isProductionSourceFile(file)) {
       violations.push(
         violation(
           file,
