@@ -140,9 +140,9 @@ import { checkDaemonClientEntry } from './daemon-client-entry.ts';
 import { checkDaemonProcessReach } from './daemon-process-reach.ts';
 import {
   checkPackageExportSurface,
-  checkTestKitIsolation,
   packageExportSurfaceSummary,
 } from './package-export-surface.ts';
+import { checkTestKitIsolation } from './test-kit-isolation.ts';
 import { checkDaemonLayers, DAEMON_ROOT } from './daemon-layers.ts';
 import { checkSessionAuthorityOverlay, handlerOwnedOverlay } from './session-authority-overlay.ts';
 import {
