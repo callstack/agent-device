@@ -409,6 +409,8 @@ const MOBILE_DATA_REFUSING_DEVICES: SessionState['device'][] = [
     booted: true,
   },
   { platform: 'linux', id: 'linux-host', name: 'Linux Desktop', kind: 'device', booted: true },
+  { platform: 'vega', id: 'vega-tv', name: 'Vega TV', kind: 'device', target: 'tv', booted: true },
+  { platform: 'web', id: 'web', name: 'Web', kind: 'device', booted: true },
 ];
 
 test('settings mobile-data refuses every non-Android target before it expires the frame', async () => {

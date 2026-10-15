@@ -33,10 +33,8 @@ export type SettingsUpdateOptions =
       state: 'on' | 'off';
     })
   /**
-   * The mobile-data switch for the default data SIM on adb-backed Android targets, applied through
-   * `svc data`; the result reports the `mobileData` state the device stores afterwards. Every other
-   * target refuses it, WebDriver provider sessions included. The switch is device-wide, so naming an
-   * app is refused with `setting_app_not_consumed` rather than dropped.
+   * Mobile data on adb-backed Android targets through `svc data`, reporting the stored `mobileData` state. Every other
+   * target refuses it, and naming an app is refused with `setting_app_not_consumed`.
    */
   | (DeviceCommandBaseOptions & {
       setting: 'mobile-data';

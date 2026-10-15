@@ -358,6 +358,8 @@ describe('settingsAppScope', () => {
   test('mobile-data switches the whole device wherever it is served', () => {
     expect(settingsAppScope('mobile', 'mobile-data', 'on')).toBe('device-level');
     expect(settingsAppScope('mobile', 'mobile-data', 'off')).toBe('device-level');
+    // A bad state is left to the owner's INVALID_ARGS rather than refused as an app it never consumes.
+    expect(settingsAppScope('mobile', 'mobile-data', 'cellular')).toBe('unknown');
     // No Apple target serves it; its refusal belongs to the leaf, not to the app.
     expect(settingsAppScope('apple', 'mobile-data', 'on')).toBe('unknown');
     expect(settingsAppScope('macos-host', 'mobile-data', 'on')).toBe('unknown');

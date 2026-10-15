@@ -138,16 +138,3 @@ test('settings Limrun cannot serve are refused with the supported list', async (
   expect(applySimctlSetting).not.toHaveBeenCalled();
   expect(client.simctl).not.toHaveBeenCalled();
 });
-
-test('mobile-data is refused with the shared leaf reason before anything reaches the instance', async () => {
-  const { session, client, applySimctlSetting } = sessionWithClient();
-
-  await expect(
-    setLimrunIosSetting(session, 'mobile-data', 'on', undefined, undefined),
-  ).rejects.toMatchObject({
-    code: 'UNSUPPORTED_OPERATION',
-    details: { reason: 'setting-unsupported-on-leaf', dispatched: 'no' },
-  });
-  expect(applySimctlSetting).not.toHaveBeenCalled();
-  expect(client.simctl).not.toHaveBeenCalled();
-});

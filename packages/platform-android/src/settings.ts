@@ -2,7 +2,6 @@ import {
   AppError,
   discloseDispatch,
   sessionAppRequiredDetails,
-  type DispatchDisclosure,
   summarizeCommandAttemptFailures,
   type CommandAttemptFailure,
 } from '@agent-device/kernel/errors';
@@ -24,8 +23,8 @@ import {
   type SettingOptions,
   type TextSizeSettingPayload,
 } from '@agent-device/contracts/settings';
-import { Deadline } from '@agent-device/host-kit/retry';
-import { runAndroidAdb, runAndroidShell, sleep } from './adb.ts';
+import { runAndroidAdb, runAndroidShell } from './adb.ts';
+import { sampleUntilSettled } from './sample-until-settled.ts';
 import { setAndroidAirplaneMode } from './settings-airplane.ts';
 import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-deployment-resolution.ts';
@@ -296,24 +295,14 @@ function nearestTextSizeCategory(scale: number): (typeof TEXT_SIZE_CATEGORIES)[n
 
 type AndroidMobileData = 'enabled' | 'disabled';
 
-/** The `persist.radio.multisim.config` values Android runs more than one active modem for. */
-const MULTI_SIM_CONFIGS: ReadonlySet<string> = new Set(['dsds', 'dsda', 'tsts']);
-
-/**
- * `svc data` hands the switch to the telephony service, which can store it after the shell call has
- * returned, and can create the row only then. The read-back therefore samples, through an absent or
- * unreadable row, until the stored value agrees with the request or this budget runs out; a device
- * that stores it inside the call answers on the first sample. Like the font-scale table, this stays
- * beside the dispatcher because the `mechanics.ts` eager closure may not grow.
- */
+/** `svc data` can return before the telephony service stores the switch, so the read-back polls. */
 const MOBILE_DATA_SETTLE_MS = 2000;
 const MOBILE_DATA_SAMPLE_INTERVAL_MS = 100;
 
 /**
- * Switches mobile data for the default data SIM and reports the state the device stores rather than
- * the one requested, so a switch that did not take fails instead of reading as applied. Which row
- * holds the switch is settled before `svc data` runs, so a failure to tell refuses with the device
- * unchanged, and every failure after it discloses that the switch may have landed.
+ * Reads back only the global `mobile_data` row, where a single-SIM device stores the switch. A
+ * multi-SIM device keeps it per subscription; that read-back is uncovered until a dual-SIM run shows
+ * which row to read.
  */
 async function setAndroidMobileData(
   device: DeviceInfo,
@@ -321,71 +310,36 @@ async function setAndroidMobileData(
   signal: AbortSignal | undefined,
 ): Promise<{ mobileData: AndroidMobileData }> {
   const requested: AndroidMobileData = enabled ? 'enabled' : 'disabled';
-  const settingKey = await withDispatchDisclosure('no', () =>
-    resolveAndroidMobileDataSettingKey(device),
-  );
-  return await withDispatchDisclosure('unknown', async () => {
-    await runAndroidShell(device, ['svc', 'data', enabled ? 'enable' : 'disable']);
-    return { mobileData: await awaitAndroidMobileData(device, settingKey, requested, signal) };
-  });
-}
-
-async function withDispatchDisclosure<T>(
-  dispatched: DispatchDisclosure,
-  run: () => Promise<T>,
-): Promise<T> {
+  signal?.throwIfAborted();
   try {
-    return await run();
+    await runAndroidShell(device, ['svc', 'data', enabled ? 'enable' : 'disable'], { signal });
+    return { mobileData: await awaitAndroidMobileData(device, requested, signal) };
   } catch (error) {
-    throw error instanceof AppError ? discloseDispatch(error, dispatched) : error;
+    throw error instanceof AppError ? discloseDispatch(error, 'unknown') : error;
   }
-}
-
-/**
- * The global row the telephony service stores the switch in, decided the way it decides: by active
- * modem count, never by which rows exist, because a row left from an earlier SIM layout outlives the
- * layout. With more than one modem the switch is kept per subscription, in `mobile_data<subId>` for
- * the default data subscription, and the plain row keeps its seeded value; with one modem, or no
- * valid default data subscription, it is kept in the plain `mobile_data` row.
- */
-async function resolveAndroidMobileDataSettingKey(device: DeviceInfo): Promise<string> {
-  const config = await runAndroidShell(device, ['getprop', 'persist.radio.multisim.config']);
-  if (!MULTI_SIM_CONFIGS.has(config.stdout.trim().toLowerCase())) return 'mobile_data';
-  const subscription = await readAndroidGlobalSetting(device, 'multi_sim_data_call');
-  return /^[1-9]\d*$/.test(subscription) ? `mobile_data${subscription}` : 'mobile_data';
 }
 
 async function awaitAndroidMobileData(
   device: DeviceInfo,
-  settingKey: string,
   requested: AndroidMobileData,
   signal: AbortSignal | undefined,
 ): Promise<AndroidMobileData> {
-  const deadline = Deadline.fromTimeoutMs(MOBILE_DATA_SETTLE_MS);
-  for (;;) {
-    signal?.throwIfAborted();
-    const storedValue = await readAndroidGlobalSetting(device, settingKey);
-    const mobileData = parseAndroidMobileData(storedValue);
-    if (mobileData === requested) return mobileData;
-    const remainingMs = deadline.remainingMs();
-    if (remainingMs <= 0) {
-      throw androidMobileDataSettleError(device, {
-        settingKey,
-        requested,
-        mobileData,
-        storedValue,
-      });
-    }
-    await sleep(Math.min(MOBILE_DATA_SAMPLE_INTERVAL_MS, remainingMs), signal);
-  }
+  const storedValue = await sampleUntilSettled(
+    async (remainingMs) =>
+      (
+        await runAndroidShell(device, ['settings', 'get', 'global', 'mobile_data'], {
+          signal,
+          timeoutMs: remainingMs,
+        })
+      ).stdout.trim(),
+    (value) => parseAndroidMobileData(value) === requested,
+    { timeoutMs: MOBILE_DATA_SETTLE_MS, intervalMs: MOBILE_DATA_SAMPLE_INTERVAL_MS, signal },
+  );
+  const mobileData = parseAndroidMobileData(storedValue);
+  if (mobileData === requested) return mobileData;
+  throw androidMobileDataSettleError(device, requested, mobileData, storedValue);
 }
 
-async function readAndroidGlobalSetting(device: DeviceInfo, setting: string): Promise<string> {
-  const result = await runAndroidShell(device, ['settings', 'get', 'global', setting]);
-  return result.stdout.trim();
-}
-
-/** The switch a stored value spells, or `undefined` for an absent row (`null`) or any other value. */
 function parseAndroidMobileData(storedValue: string): AndroidMobileData | undefined {
   if (storedValue === '1') return 'enabled';
   if (storedValue === '0') return 'disabled';
@@ -394,17 +348,13 @@ function parseAndroidMobileData(storedValue: string): AndroidMobileData | undefi
 
 function androidMobileDataSettleError(
   device: DeviceInfo,
-  observed: {
-    settingKey: string;
-    requested: AndroidMobileData;
-    mobileData: AndroidMobileData | undefined;
-    storedValue: string;
-  },
+  requested: AndroidMobileData,
+  mobileData: AndroidMobileData | undefined,
+  storedValue: string,
 ): AppError {
-  const { settingKey, requested, mobileData, storedValue } = observed;
   const message =
     mobileData === undefined
-      ? `Android reported an unusable ${settingKey} value after requesting mobile data ${requested}: ${storedValue || '(empty)'}`
+      ? `Android reported an unusable mobile_data value after requesting mobile data ${requested}: ${storedValue || '(empty)'}`
       : `Android mobile data reads ${mobileData} after requesting ${requested}.`;
   return new AppError('COMMAND_FAILED', message, {
     deviceId: device.id,
@@ -412,9 +362,8 @@ function androidMobileDataSettleError(
       mobileData === undefined ? MOBILE_DATA_UNREADABLE_REASON : MOBILE_DATA_NOT_APPLIED_REASON,
     requested,
     ...(mobileData === undefined ? {} : { mobileData }),
-    settingKey,
     storedValue,
-    hint: `Run \`adb shell settings get global ${settingKey}\` to see what the device holds. A target without an active SIM can accept svc data without storing the switch.`,
+    hint: 'Run `adb shell settings get global mobile_data` to see what the device holds. A target without an active SIM, or with more than one, can accept svc data without changing that row.',
   });
 }
 

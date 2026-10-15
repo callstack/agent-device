@@ -189,18 +189,6 @@ test('setIosSetting biometric refuses an Apple TV simulator before posting anyth
   );
 });
 
-test('setIosSetting mobile-data refuses every Apple leaf before spawning anything', async () => {
-  await withFakeAppleTool(unexpectedArgs, async () => {
-    for (const device of [IOS_TEST_SIMULATOR, TVOS_TEST_SIMULATOR]) {
-      await assertRejectsAppError(() => setIosSetting(device, 'mobile-data', 'off'), {
-        code: 'UNSUPPORTED_OPERATION',
-        reason: 'setting-unsupported-on-leaf',
-        dispatched: 'no',
-      });
-    }
-  });
-});
-
 test('setIosSetting biometric rejects an unknown state before spawning anything', async () => {
   await withFakeAppleTool(
     (args) => {

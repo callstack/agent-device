@@ -1,4 +1,4 @@
-import type { SettingLeafRefusal } from '@agent-device/contracts/settings';
+import type { AppleSettingLeafRefusal } from '@agent-device/contracts/settings';
 import {
   isHandheldAppleSimulator,
   resolveDeviceAppleOs,
@@ -16,7 +16,7 @@ import { AppError } from '@agent-device/kernel/errors';
  */
 export function requireHandheldAppleSimulatorLeaf(
   device: DeviceInfo,
-  refusal: SettingLeafRefusal,
+  refusal: AppleSettingLeafRefusal,
 ): void {
   if (isHandheldAppleSimulator(device)) return;
   throw new AppError('UNSUPPORTED_OPERATION', refusal.message, {

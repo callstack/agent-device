@@ -11,14 +11,12 @@ import {
   describeSettingWrite,
   getUnsupportedMacOsSettingMessage,
   isMacOsSettingSupported,
-  MOBILE_DATA_LEAF_REFUSAL,
   invalidTextSizeMessage,
   readTextSizeCategory,
   settingsAppNotConsumedRefusal,
   settingsAppScope,
   SETTINGS_INVALID_ARGS_MESSAGE,
   type ReadableSetting,
-  type SettingLeafRefusal,
   type SettingsTargetFamily,
   type SettingOptions,
 } from '@agent-device/contracts/settings';
@@ -342,33 +340,31 @@ function settingsRequestRefusal(
     isApplePlatform(device.platform) &&
     !isHandheldAppleSimulator(device)
   ) {
-    return settingLeafRefusalResponse(device, APPLE_TEXT_SIZE_LEAF_REFUSAL);
+    return errorResponse(
+      'UNSUPPORTED_OPERATION',
+      APPLE_TEXT_SIZE_LEAF_REFUSAL.message,
+      {
+        deviceKind: device.kind,
+        appleOs: resolveDeviceAppleOs(device),
+        reason: APPLE_TEXT_SIZE_LEAF_REFUSAL.reason,
+      },
+      { hint: APPLE_TEXT_SIZE_LEAF_REFUSAL.hint },
+    );
   }
-  // Every non-Android owner admits `settings` for some other setting, so admission alone would
-  // expire the frame before the owner refused mobile data.
   if (setting === 'mobile-data' && device.platform !== 'android') {
-    return settingLeafRefusalResponse(device, MOBILE_DATA_LEAF_REFUSAL);
+    return errorResponse(
+      'UNSUPPORTED_OPERATION',
+      'settings mobile-data is supported only on adb-backed Android targets, through svc data.',
+      {
+        platform: device.platform,
+        deviceKind: device.kind,
+        reason: 'setting-unsupported-on-leaf',
+        dispatched: 'no',
+      },
+      { hint: 'Run `settings mobile-data <on|off>` on an adb-backed Android device or emulator.' },
+    );
   }
   return undefined;
-}
-
-/** The one response shape a setting refused on its leaf answers with, whichever setting refused. */
-function settingLeafRefusalResponse(
-  device: SessionState['device'],
-  refusal: SettingLeafRefusal,
-): DaemonResponse {
-  return errorResponse(
-    'UNSUPPORTED_OPERATION',
-    refusal.message,
-    {
-      platform: device.platform,
-      deviceKind: device.kind,
-      ...(isApplePlatform(device.platform) ? { appleOs: resolveDeviceAppleOs(device) } : {}),
-      reason: refusal.reason,
-      dispatched: 'no',
-    },
-    { hint: refusal.hint },
-  );
 }
 
 /**

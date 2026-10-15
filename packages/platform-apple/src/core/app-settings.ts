@@ -1,7 +1,6 @@
 import {
   APPLE_BIOMETRIC_LEAF_REFUSAL,
   getUnsupportedMacOsSettingMessage,
-  mobileDataUnsupportedError,
   parsePermissionAction,
   parseSettingState,
   resolveSettingsApp,
@@ -62,10 +61,9 @@ export async function setIosSetting(
     }
     throw new AppError('INVALID_ARGS', getUnsupportedMacOsSettingMessage(setting));
   }
-  const normalized = setting.toLowerCase();
-  if (normalized === 'mobile-data') throw mobileDataUnsupportedError(device.id);
   requireSimulatorDevice(device, 'settings');
   await ensureBootedSimulator(device);
+  const normalized = setting.toLowerCase();
 
   switch (normalized) {
     case 'clear-app-state': {

@@ -6,7 +6,6 @@ import {
 } from '@agent-device/contracts/alert-contract';
 import { AppError } from '@agent-device/kernel/errors';
 import { withDiagnosticTimer } from '@agent-device/host-kit/diagnostics';
-import { sleep } from '@agent-device/host-kit/retry';
 import { successText } from '@agent-device/kernel/success-text';
 
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -18,6 +17,7 @@ import {
   type AndroidAlertInfo,
 } from './alert-detection.ts';
 import { backAndroid, pressAndroid } from './input-actions.ts';
+import { sampleUntilSettled } from './sample-until-settled.ts';
 
 type AndroidAlertOptions = {
   timeoutMs?: number;
@@ -133,18 +133,17 @@ async function confirmAndroidAlertDismissed(
   action: 'accept' | 'dismiss',
   captureNodes: AndroidAlertOptions['captureNodes'],
 ): Promise<void> {
-  const start = Date.now();
-  for (;;) {
-    const current = await readAndroidAlertCandidate(captureNodes);
-    if (!current || !sameAndroidAlert(current.alert, dismissed)) return;
-    if (Date.now() - start >= ALERT_ACTION_RETRY_MS) {
-      throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
-        alert: dismissed,
-        hint: 'The alert button was pressed but the dialog is still visible. Inspect alert get --json, then press the visible button by label/ref or retry.',
-      });
-    }
-    await sleep(ALERT_POLL_INTERVAL_MS);
-  }
+  const isGone = (current: AndroidAlertCandidate | null) =>
+    !current || !sameAndroidAlert(current.alert, dismissed);
+  const current = await sampleUntilSettled(() => readAndroidAlertCandidate(captureNodes), isGone, {
+    timeoutMs: ALERT_ACTION_RETRY_MS,
+    intervalMs: ALERT_POLL_INTERVAL_MS,
+  });
+  if (isGone(current)) return;
+  throw new AppError('COMMAND_FAILED', `alert ${action} did not dismiss the visible alert`, {
+    alert: dismissed,
+    hint: 'The alert button was pressed but the dialog is still visible. Inspect alert get --json, then press the visible button by label/ref or retry.',
+  });
 }
 
 function sameAndroidAlert(left: AndroidAlertInfo, right: AndroidAlertInfo): boolean {
@@ -155,13 +154,11 @@ async function pollAndroidAlertCandidate(
   captureNodes: AndroidAlertOptions['captureNodes'],
   timeoutMs: number,
 ): Promise<AndroidAlertCandidate | null> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const candidate = await readAndroidAlertCandidate(captureNodes);
-    if (candidate) return candidate;
-    await sleep(ALERT_POLL_INTERVAL_MS);
-  }
-  return null;
+  return await sampleUntilSettled(
+    () => readAndroidAlertCandidate(captureNodes),
+    (candidate) => candidate !== null,
+    { timeoutMs, intervalMs: ALERT_POLL_INTERVAL_MS },
+  );
 }
 
 async function readAndroidAlertCandidate(
