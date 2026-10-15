@@ -82,7 +82,7 @@ extension RunnerTests {
     let alert = try XCTUnwrap(
       resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
     )
-    XCTAssertEqual(alert.buttons.map(\.label).last, "Allow", "the fixture keeps the affirmative button last");
+    XCTAssertEqual(alert.buttons.map(\.label).last, "Allow", "the fixture keeps the affirmative button last")
 
     let response = handleAlert(
       alert,
@@ -91,7 +91,34 @@ extension RunnerTests {
     )
 
     XCTAssertTrue(response.ok, String(describing: response.error))
-    XCTAssertEqual(app.staticTexts["agent-device-alert-decline-answer"].label, "Declined");
+    XCTAssertEqual(app.staticTexts["agent-device-alert-decline-answer"].label, "Declined")
+  }
+
+  /// A prompt whose every button the accept rule claims has no decline to name: `dismiss` must
+  /// refuse with the typed code and tap nothing, and the canary proves the prompt stayed
+  /// unanswered (#3627).
+  @MainActor
+  func testAlertDismissRefusesAnAffirmativeOnlyPromptWithoutActivatingIt() throws {
+    app.launchArguments = ["--agent-device-alert-decline-choice", "--agent-device-alert-affirmative-only"]
+    app.launch()
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: appExistenceTimeout))
+    let alert = try XCTUnwrap(
+      resolveAlert(app: app, deadline: Date().addingTimeInterval(RunnerTests.defaultAlertCommandTimeout))
+    )
+
+    let response = handleAlert(
+      alert,
+      action: "dismiss",
+      deadline: Date().addingTimeInterval(RunnerTests.alertActivationDeadline)
+    )
+
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "ALERT_BUTTON_NOT_FOUND")
+    XCTAssertEqual(app.staticTexts["agent-device-alert-decline-answer"].label, "Unanswered")
   }
 }
 #endif

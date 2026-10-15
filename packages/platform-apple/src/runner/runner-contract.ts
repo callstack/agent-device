@@ -5,7 +5,10 @@ import {
   type DispatchDisclosure,
 } from '@agent-device/kernel/errors';
 import crypto from 'node:crypto';
-import { ALERT_NOT_FOUND_RUNNER_CODE } from '@agent-device/contracts/alert-contract';
+import {
+  ALERT_BUTTON_NOT_FOUND_RUNNER_CODE,
+  ALERT_NOT_FOUND_RUNNER_CODE,
+} from '@agent-device/contracts/alert-contract';
 import type { DeviceRotation } from '@agent-device/contracts/device';
 import type { SnapshotPreferredBackend } from '@agent-device/kernel/snapshot';
 import type { ClickButton } from '@agent-device/contracts/click-button';
@@ -319,6 +322,7 @@ const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new 
   [ALERT_NOT_FOUND_RUNNER_CODE, 'no'],
   [NO_TEXT_INPUT_AT_POINT_RUNNER_CODE, 'no'],
   [TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'no'],
+  [ALERT_BUTTON_NOT_FOUND_RUNNER_CODE, 'no'],
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, 'no'] as const),
 ]);
 

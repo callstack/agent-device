@@ -206,6 +206,12 @@
     "dispatched": "no"
   },
   {
+    "id": "ios-runner.reply.ALERT_BUTTON_NOT_FOUND",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code ALERT_BUTTON_NOT_FOUND: the accept/dismiss button choice refused before any activation (#3627)",
+    "dispatched": "no"
+  },
+  {
     "id": "ios-runner.reply.APP_SCREEN_WINDOW_UNRESOLVED",
     "producer": "ios-runner",
     "trigger": "structured runner reply with code APP_SCREEN_WINDOW_UNRESOLVED: a refusal that ran nothing",

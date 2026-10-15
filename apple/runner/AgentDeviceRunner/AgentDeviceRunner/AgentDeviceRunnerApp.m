@@ -396,15 +396,18 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
 // The App Tracking Transparency prompt's button order, which is what `alert dismiss` got wrong:
 // the affirmative button is last, so a fallback to it answers "Allow" (#3627). The answer label
 // says which button the app really took, so a test does not trust the command's own report.
+// `--agent-device-alert-affirmative-only` shows the same alert with no decline button at all,
+// where `dismiss` must refuse without activating anything.
 - (void)presentAlertDeclineChoiceFixture {
+  BOOL affirmativeOnly =
+      [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-affirmative-only"];
   UIAlertController *alert = [UIAlertController
     alertControllerWithTitle:@"“Runner” Would Like to Track Your Activity"
                      message:@"Track your activity across other companies' apps and websites."
               preferredStyle:UIAlertControllerStyleAlert];
-  NSArray<NSArray *> *buttons = @[
-    @[@"Ask App Not to Track", @"Declined"],
-    @[@"Allow", @"Authorized"],
-  ];
+  NSArray<NSArray *> *buttons = affirmativeOnly
+      ? @[ @[@"Allow", @"Authorized"], @[@"OK", @"Authorized"] ]
+      : @[ @[@"Ask App Not to Track", @"Declined"], @[@"Allow", @"Authorized"] ];
   for (NSArray *button in buttons) {
     [alert addAction:[UIAlertAction actionWithTitle:button[0]
                                               style:UIAlertActionStyleDefault
@@ -418,7 +421,10 @@ static NSTimeInterval AgentDeviceAlertActivationBusyWindow(void) {
 
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
-  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-decline-choice"]) {
+  if (!self.alertFixtureStarted &&
+      ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-decline-choice"] ||
+       [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-affirmative-only"])) {
+    self.alertFixtureStarted = YES;
     [self presentAlertDeclineChoiceFixture];
   }
   if (!self.alertFixtureStarted &&
@@ -602,7 +608,8 @@ static const CGFloat AgentDeviceTextEntryNeighbourGap = 16;
     [self updateAlertActionStatus];
   }
 
-  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-decline-choice"]) {
+  if ([NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-decline-choice"] ||
+      [NSProcessInfo.processInfo.arguments containsObject:@"--agent-device-alert-affirmative-only"]) {
     UILabel *declineAnswer = [[UILabel alloc] init];
     declineAnswer.text = @"Unanswered";
     declineAnswer.accessibilityIdentifier = @"agent-device-alert-decline-answer";

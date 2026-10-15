@@ -59,7 +59,13 @@ extension RunnerTests {
   func handleAlert(_ alert: RunnerAlert, action: String, deadline: Date) -> Response {
     if action == "accept" || action == "dismiss" {
       guard let button = chooseAlertButton(alert.buttons, action: action) else {
-        return Response(ok: false, error: ErrorPayload(message: "alert \(action) button not found"))
+        // The choice refused before any activation, so this discloses dispatched: no like the
+        // runner's other pre-run refusals; naming an affirmative button here is what #3627 is about.
+        return Response(ok: false, error: ErrorPayload(
+          code: "ALERT_BUTTON_NOT_FOUND",
+          message: "alert \(action) button not found",
+          hint: "No alert button was activated. Inspect the current alert before deciding on an action."
+        ))
       }
       guard Date() < deadline else {
         return alertVerificationResponse(.timedOut, action: action, activated: false)
