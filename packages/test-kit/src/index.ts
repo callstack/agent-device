@@ -28,6 +28,11 @@ export {
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from './device-fixtures.ts';
+export {
+  assertDispatchDisclosureDriversMatchRows,
+  DISPATCH_DISCLOSURE_TABLE_PATH,
+  dispatchDisclosureRowsOwnedBy,
+} from './dispatch-disclosure.fixtures.ts';
 export { restoreEnv } from './env.ts';
 export {
   type FilesystemBoundaryFixture,

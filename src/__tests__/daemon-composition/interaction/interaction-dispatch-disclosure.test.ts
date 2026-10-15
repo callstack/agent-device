@@ -9,7 +9,7 @@ import {
   assertDispatchDisclosureDriversMatchRows,
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
-} from '@agent-device/contracts/dispatch-disclosure-fixtures';
+} from '@agent-device/test-kit';
 import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import {

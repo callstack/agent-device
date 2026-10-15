@@ -469,6 +469,9 @@ importers:
         specifier: workspace:*
         version: link:../xml
     devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
@@ -493,6 +496,10 @@ importers:
       '@agent-device/xml':
         specifier: workspace:*
         version: link:../xml
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/platform-harmonyos:
     dependencies:
@@ -559,6 +566,10 @@ importers:
       '@agent-device/selectors':
         specifier: workspace:*
         version: link:../selectors
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/provider-limrun:
     dependencies:
@@ -611,6 +622,10 @@ importers:
       '@agent-device/xml':
         specifier: workspace:*
         version: link:../xml
+    devDependencies:
+      '@agent-device/test-kit':
+        specifier: workspace:*
+        version: link:../test-kit
 
   packages/provision-kit:
     dependencies:

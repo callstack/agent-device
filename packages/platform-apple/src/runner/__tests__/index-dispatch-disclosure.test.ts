@@ -7,7 +7,7 @@ import {
   assertDispatchDisclosureDriversMatchRows,
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
-} from '@agent-device/contracts/dispatch-disclosure-fixtures';
+} from '@agent-device/test-kit';
 import { IOS_SIMULATOR } from './device-fixtures.ts';
 import { handleRunnerTransportErrorAfterCommandSend } from '../runner-command-recovery.ts';
 import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';

@@ -10,7 +10,7 @@ import {
   assertDispatchDisclosureDriversMatchRows,
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
-} from '@agent-device/contracts/dispatch-disclosure-fixtures';
+} from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import { withCommandExecutorOverride, type ExecResult } from '@agent-device/host-kit/command';
 import {

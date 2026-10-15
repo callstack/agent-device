@@ -96,5 +96,8 @@
       "types": "./src/tool-provider-facade.ts",
       "default": "./src/tool-provider-facade.ts"
     }
+  },
+  "devDependencies": {
+    "@agent-device/test-kit": "workspace:*"
   }
 }

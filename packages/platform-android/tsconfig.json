@@ -16,6 +16,7 @@
     { "path": "../host-kit" },
     { "path": "../kernel" },
     { "path": "../provision-kit" },
+    { "path": "../test-kit" },
     { "path": "../xml" }
   ]
 }

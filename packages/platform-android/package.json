@@ -13,6 +13,7 @@
     "@agent-device/xml": "workspace:*"
   },
   "devDependencies": {
+    "@agent-device/test-kit": "workspace:*",
     "fast-check": "^4.9.0"
   },
   "exports": {

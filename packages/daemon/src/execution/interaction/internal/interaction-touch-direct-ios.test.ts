@@ -5,7 +5,7 @@ import {
   assertDispatchDisclosureDriversMatchRows,
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
-} from '@agent-device/contracts/dispatch-disclosure-fixtures';
+} from '@agent-device/test-kit';
 import { beforeEach, expect, test } from 'vitest';
 import { makeIosSession } from '../../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';

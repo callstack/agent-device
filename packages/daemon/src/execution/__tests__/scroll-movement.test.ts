@@ -5,7 +5,7 @@ import {
   assertDispatchDisclosureDriversMatchRows,
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
-} from '@agent-device/contracts/dispatch-disclosure-fixtures';
+} from '@agent-device/test-kit';
 import type { SnapshotResult } from '@agent-device/contracts/interactor-types';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 import { AppError } from '@agent-device/kernel/errors';
