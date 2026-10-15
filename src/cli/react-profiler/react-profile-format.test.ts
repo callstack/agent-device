@@ -5,11 +5,10 @@ import type { ComponentProfile } from './react-profile-renders.ts';
 import {
   findComponents,
   formatCommit,
+  formatCommits,
   formatComponentReport,
+  formatComponents,
   formatProfileSummary,
-  formatRerenders,
-  formatSlowComponents,
-  formatTimeline,
 } from './react-profile-format.ts';
 
 function component(name: string, overrides: Partial<ComponentProfile> = {}): ComponentProfile {
@@ -35,6 +34,7 @@ function finding(index: number): Finding {
   return {
     kind: 'slow-render',
     component: `C${index}`,
+    componentKind: 'function',
     costMs: 100 - index,
     evidence: 'slow',
     fix: 'memoize',
@@ -43,7 +43,6 @@ function finding(index: number): Finding {
 
 function analysis(overrides: Partial<ReactProfileAnalysis> = {}): ReactProfileAnalysis {
   return {
-    version: 1,
     wallMs: 3_200,
     commitCount: 4,
     renderMs: 96,
@@ -59,8 +58,8 @@ function analysis(overrides: Partial<ReactProfileAnalysis> = {}): ReactProfileAn
         durationMs: 10,
         rendered: 3,
         mounts: 0,
-        updaters: ['List'],
-        top: [],
+        updaters: [{ name: 'List', kind: 'function' }],
+        components: [],
       },
       {
         index: 1,
@@ -69,7 +68,7 @@ function analysis(overrides: Partial<ReactProfileAnalysis> = {}): ReactProfileAn
         rendered: 30,
         mounts: 30,
         updaters: [],
-        top: [],
+        components: [],
       },
     ],
     findings: [finding(1)],
@@ -83,7 +82,7 @@ test('the summary is a headline, one line per finding, and the drill-down comman
     [
       'React profile 3.2s: 4 commits, 96ms rendering, 2 over 16ms (worst #2 42ms)',
       '1. slow-render C1: slow -> memoize',
-      'More: profile slow | profile rerenders | profile report <Component> | profile timeline | profile commit <N>',
+      'More: profile report [Component] | profile commit [N]',
     ].join('\n'),
   );
 });
@@ -111,23 +110,26 @@ test('lookup naming warns that unmounted components may be unnamed', () => {
   );
 });
 
-test('slow and rerender tables rank by self time and render count', () => {
-  assert.match(
-    formatSlowComponents(analysis(), 1),
-    /^Components by self time:\n {2}Chart \[function\] self 40ms avg 10ms max 12ms renders 4\n {2}\+1 more \(--limit 2\)$/,
-  );
-  assert.match(
-    formatRerenders(analysis(), 1),
-    /^Components by render count:\n {2}Row \[function\] 9 renders 3 inst: props 3, mount 1; changed props onPress 3\n {2}\+1 more \(--limit 2\)$/,
+test('the component table ranks by self time and says why each rendered', () => {
+  assert.equal(
+    formatComponents(analysis(), 1),
+    [
+      'Components by self time:',
+      '  Chart [function] self 40ms avg 10ms max 12ms renders 4: props 3, mount 1; changed props onPress 3',
+      '  +1 more (--limit 2)',
+    ].join('\n'),
   );
 });
 
-test('the timeline lists commits with their trigger and mounts', () => {
+test('the commit list keeps order and, when capped, keeps the slowest commits', () => {
   assert.equal(
-    formatTimeline(analysis(), 5, false),
+    formatCommits(analysis(), 5),
     'Commits:\n  #0 +0.0s 10ms 3 rendered <- List\n  #1 +0.9s 42ms 30 rendered (30 mounted)',
   );
-  assert.match(formatTimeline(analysis(), 1, true), /^Slowest commits \(1 of 2\):\n {2}#1/);
+  assert.match(
+    formatCommits(analysis(), 1),
+    /^Commits \(1 slowest of 2, --limit 2 for all\):\n {2}#1 /,
+  );
 });
 
 test('component lookup falls back to a case-insensitive match', () => {
@@ -138,7 +140,7 @@ test('component lookup falls back to a case-insensitive match', () => {
   assert.deepEqual(findComponents(analysis(), 'Missing'), []);
 });
 
-test('a report covers every component of the name, then its findings once', () => {
+test('a report covers every component of the name, each with its own findings', () => {
   const base = analysis();
   const row = base.components.find((c) => c.name === 'Row')!;
   const memoRow = { ...row, kind: 'memo' as const, renders: 2, selfMs: 4, maxSelfMs: 2 };
@@ -149,6 +151,7 @@ test('a report covers every component of the name, then its findings once', () =
       {
         kind: 'parent-cascade' as const,
         component: 'Row',
+        componentKind: 'function' as const,
         costMs: 9,
         evidence: 'often re-renders',
         fix: 'memoize',
@@ -161,7 +164,10 @@ test('a report covers every component of the name, then its findings once', () =
     ['function', 'memo'],
   );
   const text = formatComponentReport(withVariants, variants);
-  assert.match(text, /^Row \[function\][^\n]*\n[\s\S]*\nRow \[memo\] self 4\.0ms/);
+  assert.match(
+    text,
+    /^Row \[function\][\s\S]*\nfinding parent-cascade[^\n]*\nRow \[memo\] self 4\.0ms/,
+  );
   assert.equal(text.match(/finding parent-cascade/g)?.length, 1);
 });
 
@@ -174,9 +180,11 @@ test('a commit entry without recorded changes says its cause is unrecorded', () 
       rendered: 2,
       mounts: 0,
       updaters: [],
-      top: [{ name: 'Row', instances: 2, selfMs: 12, actualMs: 18, causes: [] }],
+      components: [
+        { name: 'Row', kind: 'function', instances: 2, selfMs: 12, actualMs: 18, causes: [] },
+      ],
     },
     5,
   );
-  assert.equal(text, '#3 +1.2s 20ms 2 rendered\n  Row x2 self 12ms unrecorded');
+  assert.equal(text, '#3 +1.2s 20ms 2 rendered\n  Row [function] x2 self 12ms unrecorded');
 });

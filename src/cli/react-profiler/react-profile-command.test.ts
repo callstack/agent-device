@@ -103,12 +103,16 @@ test('profile start, an interaction, and profile stop print a compact diagnosis 
     /^Row \[memo\] self 108ms avg 3\.0ms max 3\.0ms renders 36 12 inst\ncauses: props 36\nchanged props: onPress 36 \(function\)/,
   );
   assert.match(
-    (await run('timeline', '--sort', 'duration', '--limit', '1')).text,
-    /^Slowest commits \(1 of 3\):\n {2}#0 \+0\.0s 40ms 13 rendered <- List/,
+    (await run('report')).text,
+    /^Components by self time:\n {2}Row \[memo\] self 108ms [^\n]*: props 36; changed props onPress 36\n/,
+  );
+  assert.match(
+    (await run('commit', '--limit', '1')).text,
+    /^Commits \(1 slowest of 3, --limit 3 for all\):\n {2}#0 \+0\.0s 40ms 13 rendered <- List\n$/,
   );
   assert.match(
     (await run('commit', '#1')).text,
-    /^#1 \+0\.2s 40ms 13 rendered <- List\n {2}Row x12 self 36ms props/,
+    /^#1 \+0\.2s 40ms 13 rendered <- List\n {2}Row \[memo\] x12 self 36ms props/,
   );
 });
 
@@ -138,7 +142,6 @@ test('profile start twice keeps the running recording and what it captured', asy
     (await run('start')).text,
     /^Already profiling com\.example\.app for \d+\.\ds; run react-devtools profile stop/,
   );
-  assert.match((await run('status')).text, /^Profiling com\.example\.app for \d+\.\ds\.$/m);
   assert.match((await run('stop')).text, /^React profile \d+\.\ds: 3 commits/);
 });
 
@@ -197,12 +200,12 @@ test('runtime failures carry a typed reason and a hint', async () => {
 });
 
 test('drill-down views need a saved profile', async () => {
-  await assert.rejects(harness().run('slow'), /No React profile saved for session qa/);
+  await assert.rejects(harness().run('report'), /No React profile saved for session qa/);
 });
 
 test('explicit dev-server flags override the session binding', async () => {
   const { run, requested } = harness();
-  await run('status', '--metro-port', '8082');
+  await run('start', '--metro-port', '8082');
   assert.deepEqual(requested, ['http://localhost:8082/json/list']);
 });
 
@@ -213,7 +216,7 @@ test('the session Metro binding picks the dev server', async () => {
     path.join(stateDir, 'metro-sessions', 'qa.json'),
     JSON.stringify({ controlBaseUrl: 'http://127.0.0.1:19000/' }),
   );
-  await run('status');
+  await run('start');
   assert.deepEqual(requested, ['http://127.0.0.1:19000/json/list']);
 });
 
@@ -223,7 +226,7 @@ test('a remote bridge profiles through the public dev-server URL without its bun
     leaseBackend: 'android-instance',
     metroPublicBaseUrl: 'https://metro.example.test/index.bundle?platform=android',
   };
-  await run('status');
+  await run('start');
   assert.deepEqual(requested, ['https://metro.example.test/json/list']);
 });
 
@@ -231,25 +234,27 @@ test('a corrupt saved profile asks for a new recording', async () => {
   const { run, stateDir } = harness();
   fs.mkdirSync(path.join(stateDir, 'react-profiles'), { recursive: true });
   const file = path.join(stateDir, 'react-profiles', 'qa.json');
-  fs.writeFileSync(file, '{"analysis":');
-  await assert.rejects(run('slow'), /unsupported format/);
-  fs.writeFileSync(file, JSON.stringify({ analysis: { version: 1, components: {} } }));
-  await assert.rejects(run('slow'), /unsupported format/);
+  fs.writeFileSync(file, '{"profile":');
+  await assert.rejects(run('report'), /unsupported format/);
+  fs.writeFileSync(file, JSON.stringify({ version: 1, analysis: { components: [] } }));
+  await assert.rejects(run('report'), /unsupported format/);
 });
 
 test('unknown profile commands and malformed options are invalid arguments', async () => {
   const { run } = harness();
   const cases: Array<[string[], RegExp]> = [
     [['export', 'out.json'], /Unknown react-devtools profile command: export/],
-    [['slow', '--limit', '0'], /Invalid --limit: 0/],
-    [['slow', '--limit', '10garbage'], /Invalid --limit: 10garbage/],
-    [['slow', '--limit', '1.5'], /Invalid --limit: 1\.5/],
-    [['timeline', '--sort', 'name'], /Invalid --sort: name/],
+    [['report', '--limit', '0'], /Invalid --limit: 0/],
+    [['report', '--limit', '10garbage'], /Invalid --limit: 10garbage/],
+    [['commit', '--limit', '1.5'], /Invalid --limit: 1\.5/],
     [['stop', 'extra'], /Unexpected argument for react-devtools profile stop: extra/],
     [['start', '--limit', '5'], /react-devtools profile start does not take --limit/],
     [['report', 'Row', 'extra'], /Unexpected argument for react-devtools profile report: extra/],
-    [['report', 'Row', '--limit', '2'], /react-devtools profile report does not take --limit/],
-    [['slow', '--sort', 'duration'], /react-devtools profile slow does not take --sort/],
+    [
+      ['report', 'Row', '--limit', '2'],
+      /react-devtools profile report <Component> does not take --limit/,
+    ],
+    [['commit', '--sort', 'duration'], /Unknown option '--sort'/],
   ];
   for (const [args, message] of cases) {
     await assert.rejects(run(...args), (error: { code: string; message: string }) => {
@@ -267,9 +272,11 @@ test('profile commit --json honors --limit like the text view', async () => {
   await run('stop');
   options.flags = { json: true };
   const { text } = await run('commit', '1', '--limit', '1');
-  const parsed = JSON.parse(text) as { data: { top: Array<{ name: string }>; rendered: number } };
+  const parsed = JSON.parse(text) as {
+    data: { components: Array<{ name: string }>; rendered: number };
+  };
   assert.deepEqual(
-    parsed.data.top.map((entry) => entry.name),
+    parsed.data.components.map((entry) => entry.name),
     ['Row'],
   );
   assert.equal(parsed.data.rendered, 13);
@@ -285,4 +292,34 @@ test('commit selectors must be whole indexes', async () => {
     (error: { code: string }) => error.code === 'INVALID_ARGS',
   );
   assert.match((await run('commit', '#1')).text, /^#1 /);
+});
+
+test('a profile the backend cannot export fails the stop with its reason', async () => {
+  const { app, run } = harness();
+  await run('start');
+  app.renderer.getProfilingData = () => {
+    throw new Error('profiling data unavailable');
+  };
+  await assert.rejects(
+    run('stop'),
+    (error: { code: string; message: string; details: { reason: string } }) => {
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details.reason, 'collect-failed');
+      assert.match(error.message, /profiling data unavailable$/);
+      return true;
+    },
+  );
+});
+
+test('drill-down views read the saved recording, not a trimmed analysis', async () => {
+  const { app, run, stateDir } = harness();
+  await run('start');
+  recordRowRenders(app);
+  await run('stop');
+  const saved = JSON.parse(
+    fs.readFileSync(path.join(stateDir, 'react-profiles', 'qa.json'), 'utf8'),
+  ) as { version: number; profile: { commits: unknown[] }; propKinds: unknown };
+  assert.equal(saved.version, 2);
+  assert.equal(saved.profile.commits.length, 3);
+  assert.match((await run('report', 'Row')).text, /changed props: onPress 36 \(function\)/);
 });

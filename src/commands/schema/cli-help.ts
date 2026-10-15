@@ -286,12 +286,8 @@ Use this for React Native performance profiling: slow renders, rerenders and the
 Commands:
   agent-device react-devtools profile start
   agent-device react-devtools profile stop
-  agent-device react-devtools profile report <Component>
-  agent-device react-devtools profile commit <N>
-  agent-device react-devtools profile slow --limit 5
-  agent-device react-devtools profile rerenders --limit 5
-  agent-device react-devtools profile timeline --limit 20 --sort duration
-  agent-device react-devtools profile status
+  agent-device react-devtools profile report [Component]
+  agent-device react-devtools profile commit [N]
   Profiling attaches to the app's JavaScript runtime through its Metro dev server: a development build on React Native 0.74 or newer, with no app, Metro, or Babel changes. It is verified on Android emulators and iOS simulators; remote bridge sessions, which reach the dev server through the remote config's public Metro URL, are not verified yet.
   Add --app <bundle-id> when several apps share the dev server, --metro-device <name> when one app runs on several devices connected to it, and --metro-port/--metro-host (or --bundle-url) when the dev server is neither the session's nor localhost:8081.
 
@@ -299,7 +295,7 @@ Profiling loop:
   1. Run profile start immediately before the interaction; keep the window narrow.
   2. Drive the interaction with normal agent-device commands. When correlating with logs, run logs clear --restart before the first logs mark.
   3. Run profile stop. It prints the commit count, render time, commits over the 16 ms frame budget, and ranked findings, each naming a component, its evidence, and a fix.
-  4. Drill into one finding with profile report <Component> or profile commit <N> before reaching for the slow and rerenders tables.
+  4. Drill into one finding with profile report <Component> or profile commit <N>. Without an argument, report lists components by self time with why they rendered, and commit lists commits in order (the slowest when capped).
   5. After a fix, repeat the same start, interaction, and stop, and compare the findings.
 
 Findings:

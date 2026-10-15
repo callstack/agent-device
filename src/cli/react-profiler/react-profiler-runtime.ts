@@ -193,9 +193,15 @@ export const REACT_PROFILER_RUNTIME_SOURCE = String.raw`
     var commits = [];
     var refs = Object.create(null);
     var keyTable = { keys: [], index: Object.create(null) };
+    var renderers = 0;
+    var failures = [];
     eachRenderer(function (ri) {
       var data;
-      try { ri.stopProfiling(); data = ri.getProfilingData(); } catch (e) { return; }
+      renderers++;
+      try { ri.stopProfiling(); data = ri.getProfilingData(); } catch (e) {
+        failures.push(String(e && e.message || e));
+        return;
+      }
       data.dataForRoots.forEach(function (root) {
         root.commitData.forEach(function (commit) {
           var fibers = [];
@@ -236,7 +242,7 @@ export const REACT_PROFILER_RUNTIME_SOURCE = String.raw`
       if (owner && !refs[owner] && !owners[owner] && elements.get(owner)) owners[owner] = elements.get(owner);
     });
     Object.keys(owners).forEach(function (id) { refs[id] = owners[id]; });
-    return { elements: refs, keys: keyTable.keys, commits: commits };
+    return { elements: refs, keys: keyTable.keys, commits: commits, renderers: renderers, failures: failures };
   }
 
   function propKind(value, path, cleaned) {
@@ -278,7 +284,7 @@ export const REACT_PROFILER_RUNTIME_SOURCE = String.raw`
     });
     if (started === 0) return { ok: false, reason: 'start-failed' };
     session = { startedAt: Date.now(), removed: [] };
-    return { ok: true, attach: attached.attach };
+    return { ok: true, attach: attached.attach, naming: attached.naming };
   }
 
   function stop() {
@@ -287,6 +293,9 @@ export const REACT_PROFILER_RUNTIME_SOURCE = String.raw`
     var profile = exportProfile();
     session.removed.forEach(function (id) { elements.delete(id); });
     session = null;
+    if (profile.failures.length > 0 && profile.failures.length === profile.renderers) {
+      return { ok: false, reason: 'collect-failed', detail: profile.failures[0] };
+    }
     return {
       ok: true,
       startedAt: startedAt,
@@ -294,7 +303,8 @@ export const REACT_PROFILER_RUNTIME_SOURCE = String.raw`
       naming: naming(),
       elements: profile.elements,
       keys: profile.keys,
-      commits: profile.commits
+      commits: profile.commits,
+      failures: profile.failures
     };
   }
 
@@ -309,17 +319,6 @@ export const REACT_PROFILER_RUNTIME_SOURCE = String.raw`
     version: VERSION,
     elements: elements,
     get history() { return history; },
-    status: function () {
-      var h = hook();
-      return JSON.stringify({
-        hook: !!h,
-        renderers: h ? size(h.renderers) : 0,
-        rendererInterfaces: h ? size(h.rendererInterfaces) : 0,
-        profiling: !!session,
-        elapsedMs: session ? Date.now() - session.startedAt : null,
-        naming: naming()
-      });
-    },
     start: function () { return JSON.stringify(start()); },
     stop: function () { return JSON.stringify(stop()); },
     describeProps: function (request) { return JSON.stringify(describeProps(request)); },

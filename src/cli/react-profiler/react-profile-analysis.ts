@@ -2,13 +2,17 @@ import {
   bump,
   chronological,
   commitRenders,
-  componentNames,
+  componentKey,
+  componentsOf,
   formatMs,
   FRAME_BUDGET_MS,
   isFrameworkPrimitive,
+  sameComponent,
   summarizeRenders,
   type CommitComponent,
   type CommitProfile,
+  type ComponentId,
+  type ComponentKind,
   type ComponentProfile,
   type PropKindsById,
   type RawProfileCommit,
@@ -28,6 +32,8 @@ export type FindingKind =
 export type Finding = {
   kind: FindingKind;
   component: string;
+  /** Absent only for a slow commit that no app component accounts for. */
+  componentKind?: ComponentKind;
   /** Estimated render time the pattern cost during the profile. */
   costMs: number;
   evidence: string;
@@ -35,7 +41,6 @@ export type Finding = {
 };
 
 export type ReactProfileAnalysis = {
-  version: 1;
   wallMs: number;
   commitCount: number;
   renderMs: number;
@@ -70,6 +75,17 @@ function costShare(entry: ComponentProfile, renders: number): number {
 
 const ms = formatMs;
 
+function about(component: ComponentId): Pick<Finding, 'component' | 'componentKind'> {
+  return { component: component.name, componentKind: component.kind };
+}
+
+export function isFindingFor(finding: Finding, component: ComponentId): boolean {
+  return (
+    finding.componentKind !== undefined &&
+    sameComponent({ name: finding.component, kind: finding.componentKind }, component)
+  );
+}
+
 function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
@@ -85,7 +101,7 @@ function slowRenderFinding(entry: ComponentProfile): Finding | null {
   if (entry.instances > 20 && avg < 4) return null;
   return {
     kind: 'slow-render',
-    component: entry.name,
+    ...about(entry),
     costMs: entry.selfMs,
     evidence: `${ms(avg)} per render (max ${ms(entry.maxSelfMs)}), ${plural(entry.renders, 'render')}${instancesNote(entry)}`,
     fix: 'memoize or move the expensive work out of render',
@@ -118,7 +134,7 @@ function memoDefeatedFinding(entry: ComponentProfile): Finding | null {
   if (identities.length === 0) {
     return {
       kind: 'memo-defeated',
-      component: entry.name,
+      ...about(entry),
       costMs: costShare(entry, entry.causes.props),
       evidence: `memo bypassed on ${entry.causes.props}/${updates} updates; changed ${unstable.map((key) => `${key} ${changes(key)}`).join(', ')}${from} (value kinds not inspected)`,
       fix: `check whether those props are recreated on each render${inOwner}; stabilize them with useCallback/useMemo`,
@@ -126,7 +142,7 @@ function memoDefeatedFinding(entry: ComponentProfile): Finding | null {
   }
   return {
     kind: 'memo-defeated',
-    component: entry.name,
+    ...about(entry),
     costMs: costShare(entry, entry.causes.props),
     evidence: `memo bypassed on ${entry.causes.props}/${updates} updates; new ${identities.map((key) => `${key} (${entry.propKinds[key]}) ${changes(key)}`).join(', ')}${from}`,
     fix: `wrap those props in useCallback/useMemo${inOwner}`,
@@ -138,7 +154,7 @@ function contextCascadeFinding(entry: ComponentProfile, triggers: string[]): Fin
   if (updates < 10 || entry.causes.context < updates * 0.5) return null;
   return {
     kind: 'context-cascade',
-    component: entry.name,
+    ...about(entry),
     costMs: costShare(entry, entry.causes.context),
     evidence: `${entry.causes.context} context-driven renders${instancesNote(entry)}${triggers.length ? ` after updates in ${triggers.join(', ')}` : ''}`,
     fix: 'split the context so consumers subscribe only to what they read, or memoize the provider value',
@@ -151,7 +167,7 @@ function parentCascadeFinding(entry: ComponentProfile): Finding | null {
   const owner = topOwner(entry);
   return {
     kind: 'parent-cascade',
-    component: entry.name,
+    ...about(entry),
     costMs: costShare(entry, entry.causes.parent),
     evidence: `${entry.causes.parent}/${updates} re-renders with unchanged props, state, and context${owner ? ` when ${owner} rendered` : ''}${instancesNote(entry)}`,
     fix: `wrap ${entry.name} in React.memo or move state below ${owner ?? 'its parent'}`,
@@ -170,36 +186,37 @@ type EagerMount = {
 };
 
 function eagerMountFindings(profile: RawReactProfile, commits: CommitProfile[]): Finding[] {
-  const mountsByName = new Map<string, EagerMount[]>();
+  const mountsByComponent = new Map<string, { component: ComponentId; mounts: EagerMount[] }>();
   profile.commits.forEach((commit, index) => {
-    const groups = new Map<string, { count: number; actualMs: number }>();
+    const groups = new Map<string, { component: ComponentId; count: number; actualMs: number }>();
     let mounted = 0;
     for (const render of commitRenders(profile, commit)) {
       if (!render.causes.includes('mount')) continue;
       mounted += 1;
       if (isFrameworkPrimitive(render.name)) continue;
-      const group = groups.get(render.name) ?? { count: 0, actualMs: 0 };
+      const key = componentKey(render);
+      const group = groups.get(key) ?? { component: render, count: 0, actualMs: 0 };
       group.count += 1;
       group.actualMs += render.actualMs;
-      groups.set(render.name, group);
+      groups.set(key, group);
     }
     const durationMs = commits[index]!.durationMs;
-    for (const [name, group] of groups) {
+    for (const [key, group] of groups) {
       if (group.count < EAGER_MOUNT_INSTANCES) continue;
       const costMs = Math.min(group.actualMs, durationMs);
-      const mounts = mountsByName.get(name) ?? [];
-      mounts.push({ index, count: group.count, costMs, durationMs, mounted });
-      mountsByName.set(name, mounts);
+      const entry = mountsByComponent.get(key) ?? { component: group.component, mounts: [] };
+      entry.mounts.push({ index, count: group.count, costMs, durationMs, mounted });
+      mountsByComponent.set(key, entry);
     }
   });
-  return [...mountsByName.entries()].map(([name, mounts]) => {
+  return [...mountsByComponent.values()].map(({ component, mounts }) => {
     const worst = mounts.reduce((a, b) => (b.costMs > a.costMs ? b : a));
     const costMs = mounts.reduce((sum, mount) => sum + mount.costMs, 0);
     const repeated =
       mounts.length > 1 ? `; ${mounts.length} such commits, ${ms(costMs)} in all` : '';
     return {
       kind: 'eager-mount' as const,
-      component: name,
+      ...about(component),
       costMs,
       evidence: `${worst.count} instances mounted at once in commit #${worst.index}, ${ms(worst.costMs)} of its ${ms(worst.durationMs)} (${worst.mounted} components mounted)${repeated}`,
       fix: 'virtualize the list (FlatList/FlashList)',
@@ -215,38 +232,39 @@ function eagerMountFindings(profile: RawReactProfile, commits: CommitProfile[]):
 const CHAINED_COMMIT_GAP_MS = FRAME_BUDGET_MS;
 
 /** App components that rendered in `previous` without triggering it, then triggered `commit`. */
-function chainedUpdaterNames(
+function chainedUpdaters(
   profile: RawReactProfile,
   previous: RawProfileCommit,
   commit: RawProfileCommit,
-): string[] {
+): ComponentId[] {
   const renderedBefore = new Set(previous.fibers.filter((_, offset) => offset % 3 === 0));
   const triggeredBefore = new Set(previous.updaters);
   const chained = commit.updaters.filter(
     (updater) => renderedBefore.has(updater) && !triggeredBefore.has(updater),
   );
-  return componentNames(profile, chained).filter((name) => !isFrameworkPrimitive(name));
+  return componentsOf(profile, chained).filter((updater) => !isFrameworkPrimitive(updater.name));
 }
 
 function effectChainFindings(profile: RawReactProfile): Finding[] {
-  const chains = new Map<string, { count: number; costMs: number }>();
+  const chains = new Map<string, { component: ComponentId; count: number; costMs: number }>();
   for (let index = 1; index < profile.commits.length; index += 1) {
     const previous = profile.commits[index - 1]!;
     const commit = profile.commits[index]!;
     const gap = commit.timestamp - commit.duration - previous.timestamp;
     if (gap > CHAINED_COMMIT_GAP_MS) continue;
-    for (const name of chainedUpdaterNames(profile, previous, commit)) {
-      const chain = chains.get(name) ?? { count: 0, costMs: 0 };
+    for (const updater of chainedUpdaters(profile, previous, commit)) {
+      const key = componentKey(updater);
+      const chain = chains.get(key) ?? { component: updater, count: 0, costMs: 0 };
       chain.count += 1;
       chain.costMs += commit.duration;
-      chains.set(name, chain);
+      chains.set(key, chain);
     }
   }
-  return [...chains.entries()]
-    .filter(([, chain]) => chain.count >= 3)
-    .map(([name, chain]) => ({
+  return [...chains.values()]
+    .filter((chain) => chain.count >= 3)
+    .map((chain) => ({
       kind: 'effect-chain' as const,
-      component: name,
+      ...about(chain.component),
       costMs: chain.costMs,
       evidence: `${plural(chain.count, 'follow-up commit')} it triggered right after rendering, likely state set in an effect (${ms(chain.costMs)})`,
       fix: 'if an effect copies derived state, compute it during render (useMemo) instead',
@@ -257,17 +275,18 @@ const STORM_MIN_COMMITS = 20;
 const STORM_MIN_RATE_PER_SECOND = 20;
 
 function renderStormFindings(profile: RawReactProfile): Finding[] {
-  const byUpdater = new Map<string, number[]>();
+  const byUpdater = new Map<string, { component: ComponentId; indexes: number[] }>();
   profile.commits.forEach((commit, index) => {
-    for (const name of componentNames(profile, commit.updaters)) {
-      const indexes = byUpdater.get(name) ?? [];
-      indexes.push(index);
-      byUpdater.set(name, indexes);
+    for (const updater of componentsOf(profile, commit.updaters)) {
+      const key = componentKey(updater);
+      const entry = byUpdater.get(key) ?? { component: updater, indexes: [] };
+      entry.indexes.push(index);
+      byUpdater.set(key, entry);
     }
   });
   const findings: Finding[] = [];
-  for (const [name, indexes] of byUpdater) {
-    if (indexes.length < STORM_MIN_COMMITS || isFrameworkPrimitive(name)) continue;
+  for (const { component, indexes } of byUpdater.values()) {
+    if (indexes.length < STORM_MIN_COMMITS || isFrameworkPrimitive(component.name)) continue;
     const first = profile.commits[indexes[0]!]!.timestamp;
     const last = profile.commits[indexes.at(-1)!]!.timestamp;
     const spanSeconds = Math.max((last - first) / 1000, 0.001);
@@ -276,7 +295,7 @@ function renderStormFindings(profile: RawReactProfile): Finding[] {
     const costMs = indexes.reduce((sum, index) => sum + profile.commits[index]!.duration, 0);
     findings.push({
       kind: 'render-storm',
-      component: name,
+      ...about(component),
       costMs,
       evidence: `${indexes.length} commits in ${spanSeconds.toFixed(1)}s (${Math.round(rate)}/s, ${ms(costMs)} rendering)`,
       fix: 'throttle the updates or animate outside React state (Animated/Reanimated)',
@@ -297,47 +316,48 @@ const SELF_COST_FINDINGS = new Set<FindingKind>(['slow-render', 'effect-chain', 
 
 /** Render time in a commit that earlier findings already account for. */
 function explainedMs(commit: CommitProfile, earlier: Finding[]): number {
-  const bySelf = new Set(
-    earlier.filter((f) => SELF_COST_FINDINGS.has(f.kind)).map((f) => f.component),
-  );
-  const bySubtree = new Set(
-    earlier.filter((f) => !SELF_COST_FINDINGS.has(f.kind)).map((f) => f.component),
-  );
   let total = 0;
-  for (const entry of commit.top) {
-    if (bySubtree.has(entry.name)) total += entry.actualMs;
-    else if (bySelf.has(entry.name)) total += entry.selfMs;
+  for (const entry of commit.components) {
+    const findings = earlier.filter((finding) => isFindingFor(finding, entry));
+    if (findings.some((finding) => !SELF_COST_FINDINGS.has(finding.kind))) total += entry.actualMs;
+    else if (findings.length > 0) total += entry.selfMs;
   }
   return total;
 }
 
 /** The app component to cut work under: the updater when it holds the commit, else the deepest holder. */
 function subtreeOwner(commit: CommitProfile): CommitComponent | undefined {
-  const covering = commit.top.filter(
+  const covering = commit.components.filter(
     (entry) =>
       !isFrameworkPrimitive(entry.name) && entry.actualMs >= commit.durationMs * SUBTREE_SHARE,
   );
   return (
-    covering.find((entry) => commit.updaters.includes(entry.name)) ??
+    covering.find((entry) => commit.updaters.some((updater) => sameComponent(updater, entry))) ??
     covering.sort((a, b) => a.actualMs - b.actualMs)[0]
   );
 }
 
 function slowCommitFinding(commit: CommitProfile): Finding {
   const owner = subtreeOwner(commit);
-  const heaviest = [...commit.top]
-    .sort((a, b) => b.selfMs - a.selfMs)
+  const heaviest = commit.components
     .slice(0, 3)
     .map(
       (entry) =>
         `${entry.name}${entry.instances > 1 ? ` x${entry.instances}` : ''} ${ms(entry.selfMs)}`,
     );
   const mounted = commit.mounts > 0 ? ` (${commit.mounts} mounted)` : '';
-  const inside = owner && !commit.updaters.includes(owner.name) ? ` inside ${owner.name}` : '';
-  const trigger = commit.updaters.length > 0 ? ` after ${commit.updaters.join(', ')} updated` : '';
+  const inside =
+    owner && !commit.updaters.some((updater) => sameComponent(updater, owner))
+      ? ` inside ${owner.name}`
+      : '';
+  const trigger =
+    commit.updaters.length > 0
+      ? ` after ${commit.updaters.map((updater) => updater.name).join(', ')} updated`
+      : '';
+  const component = owner ?? commit.updaters[0];
   return {
     kind: 'slow-commit',
-    component: owner?.name ?? commit.updaters[0] ?? `#${commit.index}`,
+    ...(component ? about(component) : { component: `#${commit.index}` }),
     costMs: commit.durationMs,
     evidence: `commit #${commit.index} took ${ms(commit.durationMs)} rendering ${commit.rendered} components${mounted}${inside}${trigger}; most time in ${heaviest.join(', ')}`,
     fix: `render less ${owner ? `under ${owner.name} ` : ''}per update (memoize, virtualize, or defer)`,
@@ -353,18 +373,18 @@ function slowCommitFindings(commits: CommitProfile[], earlier: Finding[]): Findi
     .map(slowCommitFinding);
 }
 
-function contextTriggers(profile: RawReactProfile, name: string): string[] {
+function contextTriggers(profile: RawReactProfile, component: ComponentId): string[] {
   const triggers: Record<string, number> = {};
   for (const commit of profile.commits) {
     let contextRender = false;
     for (const render of commitRenders(profile, commit)) {
-      if (render.name === name && render.causes.includes('context')) {
+      if (sameComponent(render, component) && render.causes.includes('context')) {
         contextRender = true;
         break;
       }
     }
     if (!contextRender) continue;
-    for (const name of componentNames(profile, commit.updaters)) bump(triggers, name);
+    for (const updater of componentsOf(profile, commit.updaters)) bump(triggers, updater.name);
   }
   return topKeys(triggers, 1).slice(0, 2);
 }
@@ -387,10 +407,7 @@ export function analyzeReactProfile(
     if (isFrameworkPrimitive(entry.name)) continue;
     const cascades = [
       memoDefeatedFinding(entry),
-      contextCascadeFinding(
-        entry,
-        entry.causes.context > 0 ? contextTriggers(profile, entry.name) : [],
-      ),
+      contextCascadeFinding(entry, entry.causes.context > 0 ? contextTriggers(profile, entry) : []),
       parentCascadeFinding(entry),
     ].filter((finding): finding is Finding => finding !== null);
     // A cascade explains many cheap renders; only a render that alone overruns a frame is also slow.
@@ -410,7 +427,6 @@ export function analyzeReactProfile(
     .sort((a, b) => b.costMs - a.costMs);
 
   return {
-    version: 1,
     wallMs: profile.stoppedAt - profile.startedAt,
     commitCount: commits.length,
     renderMs,

@@ -352,6 +352,36 @@ test('memo-wrapped and plain components of one name are profiled separately', ()
   );
 });
 
+test('a finding about memo Row does not explain a slow commit spent in plain Row', () => {
+  const memoRows = repeat(12, (i) => 10 + i);
+  const plainRows = repeat(50, (i) => 100 + i);
+  const elements: Record<number, [string, number?, number?]> = { 1: ['List'] };
+  for (const id of memoRows) elements[id] = ['Memo(Row)', MEMO, 1];
+  for (const id of plainRows) elements[id] = ['Row', FUNCTION, 1];
+  const raw = rawProfile(elements, [
+    ...repeat(3, (i): [number, number, number[], Render[]] => [
+      i * 200,
+      10,
+      [1],
+      [
+        [1, 1, [0, null, [0], null]],
+        ...memoRows.map((id): Render => [id, 0.5, [0, [0], null, null]]),
+      ],
+    ]),
+    [
+      1_000,
+      100,
+      [1],
+      [[1, 0, [0, null, [0], null], 100], ...plainRows.map((id): Render => [id, 2, 1])],
+    ],
+  ]);
+
+  const findings = analyzeReactProfile(raw).findings;
+  const slowCommit = findings.find((finding) => finding.kind === 'slow-commit');
+  assert.equal(slowCommit?.costMs, 100);
+  assert.match(slowCommit!.evidence, /^commit #3 took 100ms/);
+});
+
 test('a prop whose inspected instances disagree on its kind claims no new identity', () => {
   const rows = repeat(12, (i) => 10 + i);
   const elements: Record<number, [string, number?, number?]> = { 1: ['List'] };

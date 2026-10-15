@@ -23,7 +23,7 @@ test('start on a hook-attached backend flushes the queued tree so mounted compon
 
   const started = app.call<Started>('start');
   assert.deepEqual(
-    { ok: started.ok, attach: started.attach, naming: app.call<Started>('status').naming },
+    { ok: started.ok, attach: started.attach, naming: started.naming },
     { ok: true, attach: 'attached', naming: 'operations' },
   );
   assert.equal(app.renderer.flushes, 1);
@@ -129,8 +129,7 @@ test('a connected DevTools frontend keeps its operations stream: no second flush
 test('an attached backend without Fusebox belongs to an external frontend: names come from lookups', () => {
   const app = new FakeAppRuntime({ fusebox: false });
   app.install();
-  app.call('start');
-  assert.equal(app.call<Started>('status').naming, 'lookup');
+  assert.equal(app.call<Started>('start').naming, 'lookup');
   assert.equal(app.renderer.flushes, 0);
 });
 
@@ -143,7 +142,7 @@ test('another DevTools agent keeps its queue; new mounts are parsed and the rest
 
   const started = app.call<Started>('start');
   assert.equal(started.ok, true);
-  assert.equal(app.call<Started>('status').naming, 'lookup');
+  assert.equal(started.naming, 'lookup');
   assert.equal(app.renderer.flushes, 0);
   app.renderer.commit(encodeOperations({ add: [{ id: 7, name: 'Fresh' }] }), {
     timestamp: 1,
@@ -239,4 +238,33 @@ test('describeProps classifies changed prop values on a mounted instance', () =>
       '3': { onPress: 'function', style: 'object', items: 'array', label: 'string' },
     },
   );
+});
+
+test('a renderer whose profiling data cannot be read fails the stop instead of returning no commits', () => {
+  const app = new FakeAppRuntime();
+  app.install();
+  app.call('start');
+  app.renderer.getProfilingData = () => {
+    throw new Error('profiling data unavailable');
+  };
+  assert.deepEqual(app.call('stop'), {
+    ok: false,
+    reason: 'collect-failed',
+    detail: 'profiling data unavailable',
+  });
+});
+
+test('a profile read from only some renderers says which ones failed', () => {
+  const app = new FakeAppRuntime();
+  app.install();
+  const broken = Object.assign(Object.create(app.renderer), {
+    getProfilingData: () => {
+      throw new Error('second root gone');
+    },
+  });
+  app.hook.rendererInterfaces.set(2, broken);
+  app.call('start');
+  const stopped = app.call<Stopped & { failures: string[] }>('stop');
+  assert.equal(stopped.ok, true);
+  assert.deepEqual(stopped.failures, ['second root gone']);
 });

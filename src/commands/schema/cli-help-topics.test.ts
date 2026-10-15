@@ -524,9 +524,9 @@ test('usageForCommand resolves react-devtools help topic', async () => {
   if (help === null) throw new Error('Expected react-devtools help text');
   assert.match(help, /React Native performance profiling/);
   assert.match(help, /agent-device react-devtools profile start/);
-  assert.match(help, /agent-device react-devtools profile report <Component>/);
-  assert.match(help, /agent-device react-devtools profile commit <N>/);
-  assert.match(help, /agent-device react-devtools profile timeline --limit 20 --sort duration/);
+  assert.match(help, /agent-device react-devtools profile report \[Component\]/);
+  assert.match(help, /agent-device react-devtools profile commit \[N\]/);
+  assert.doesNotMatch(help, /profile (slow|rerenders|timeline|status)/);
   assert.match(help, /React Native 0\.74 or newer, with no app, Metro, or Babel changes/);
   assert.match(help, /verified on Android emulators and iOS simulators/);
   assert.match(help, /remote bridge sessions[^.]*are not verified yet/);

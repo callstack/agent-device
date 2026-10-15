@@ -23,7 +23,7 @@ test('commits from several roots are read as one timeline', () => {
   ]);
   const { commits } = summarizeRenders(chronological(raw));
   assert.deepEqual(
-    commits.map((commit) => [commit.atMs, commit.updaters[0]]),
+    commits.map((commit) => [commit.atMs, commit.updaters[0]?.name]),
     [
       [0, 'B'],
       [200, 'A'],
@@ -72,4 +72,12 @@ test('prop kinds are requested for the most recent instances of each props-drive
   const { components } = summarizeRenders(raw, { '12': { onPress: 'function' } });
   assert.deepEqual(components.find((c) => c.name === 'Row')?.propKinds, { onPress: 'function' });
   assert.equal(components.find((c) => c.name === 'Header')?.causes.parent, 1);
+});
+
+test('a commit keeps every component that rendered in it', () => {
+  const ids = repeat(20, (i) => 10 + i);
+  const elements: Record<number, [string, number?, number?]> = {};
+  for (const id of ids) elements[id] = [`Widget${id}`];
+  const raw = rawProfile(elements, [[0, 40, [], ids.map((id): Render => [id, 1, 'parent'])]]);
+  assert.equal(summarizeRenders(raw).commits[0]?.components.length, 20);
 });

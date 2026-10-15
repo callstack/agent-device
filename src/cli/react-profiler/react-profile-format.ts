@@ -1,4 +1,4 @@
-import type { ReactProfileAnalysis } from './react-profile-analysis.ts';
+import { isFindingFor, type ReactProfileAnalysis } from './react-profile-analysis.ts';
 import {
   FRAME_BUDGET_MS,
   formatMs,
@@ -51,9 +51,7 @@ export function formatProfileSummary(
       'Note: component names came from mounted elements; components unmounted during the profile are left out.',
     );
   }
-  lines.push(
-    'More: profile slow | profile rerenders | profile report <Component> | profile timeline | profile commit <N>',
-  );
+  lines.push('More: profile report [Component] | profile commit [N]');
   return lines.join('\n');
 }
 
@@ -85,34 +83,20 @@ function componentLine(component: ComponentProfile): string {
   return `${component.name} [${component.kind}] self ${ms(component.selfMs)} avg ${ms(avg)} max ${ms(component.maxSelfMs)} renders ${component.renders}${instances}`;
 }
 
-export function formatSlowComponents(analysis: ReactProfileAnalysis, limit: number): string {
+/** One line per component, costliest first: its cost, then why it rendered. */
+export function formatComponents(analysis: ReactProfileAnalysis, limit: number): string {
   if (analysis.components.length === 0) return 'No component renders recorded.';
   const shown = analysis.components.slice(0, limit);
   return [
     'Components by self time:',
-    ...shown.map((c) => `  ${componentLine(c)}`),
+    ...shown.map((c) => {
+      const props = keyCounts(c.changedProps);
+      return `  ${componentLine(c)}: ${causeSummary(c.causes)}${props ? `; changed props ${props}` : ''}`;
+    }),
     ...omittedRows(shown.length, analysis.components.length),
   ].join('\n');
 }
 
-export function componentsByRenders(analysis: ReactProfileAnalysis): ComponentProfile[] {
-  return [...analysis.components].sort((a, b) => b.renders - a.renders);
-}
-
-export function formatRerenders(analysis: ReactProfileAnalysis, limit: number): string {
-  if (analysis.components.length === 0) return 'No component renders recorded.';
-  const sorted = componentsByRenders(analysis).slice(0, limit);
-  return [
-    'Components by render count:',
-    ...sorted.map((c) => {
-      const props = keyCounts(c.changedProps);
-      return `  ${c.name} [${c.kind}] ${c.renders} renders${c.instances > 1 ? ` ${c.instances} inst` : ''}: ${causeSummary(c.causes)}${props ? `; changed props ${props}` : ''}`;
-    }),
-    ...omittedRows(sorted.length, analysis.components.length),
-  ].join('\n');
-}
-
-/** Every component of that name, such as `Row [memo]` and `Row [function]`; case-insensitive when no exact match. */
 export function findComponents(analysis: ReactProfileAnalysis, name: string): ComponentProfile[] {
   const exact = analysis.components.filter((c) => c.name === name);
   if (exact.length > 0) return exact;
@@ -144,56 +128,58 @@ function componentDetail(analysis: ReactProfileAnalysis, component: ComponentPro
   return lines;
 }
 
-/** Reports each component of one name, then the findings that name it. */
+/** Reports each component of one name with the findings about it. */
 export function formatComponentReport(
   analysis: ReactProfileAnalysis,
   components: ComponentProfile[],
 ): string {
-  const lines = components.flatMap((component) => componentDetail(analysis, component));
-  const name = components[0]?.name;
-  for (const finding of analysis.findings.filter((f) => f.component === name))
-    lines.push(`finding ${finding.kind}: ${finding.evidence} -> ${finding.fix}`);
-  return lines.join('\n');
+  return components
+    .flatMap((component) => [
+      ...componentDetail(analysis, component),
+      ...analysis.findings
+        .filter((finding) => isFindingFor(finding, component))
+        .map((finding) => `finding ${finding.kind}: ${finding.evidence} -> ${finding.fix}`),
+    ])
+    .join('\n');
 }
 
 function commitLine(commit: CommitProfile): string {
-  const trigger = commit.updaters.length > 0 ? ` <- ${commit.updaters.join(', ')}` : '';
+  const trigger =
+    commit.updaters.length > 0
+      ? ` <- ${commit.updaters.map((updater) => updater.name).join(', ')}`
+      : '';
   const mounts = commit.mounts > 0 ? ` (${commit.mounts} mounted)` : '';
   return `#${commit.index} +${seconds(commit.atMs)} ${ms(commit.durationMs)} ${commit.rendered} rendered${mounts}${trigger}`;
 }
 
-export function timelineCommits(
-  analysis: ReactProfileAnalysis,
-  byDuration: boolean,
-): CommitProfile[] {
-  return byDuration
-    ? [...analysis.commits].sort((a, b) => b.durationMs - a.durationMs)
-    : analysis.commits;
+/** Every commit in order, or the slowest `limit` of them, still in order. */
+export function listedCommits(analysis: ReactProfileAnalysis, limit: number): CommitProfile[] {
+  if (analysis.commits.length <= limit) return analysis.commits;
+  return [...analysis.commits]
+    .sort((a, b) => b.durationMs - a.durationMs)
+    .slice(0, limit)
+    .sort((a, b) => a.index - b.index);
 }
 
-export function formatTimeline(
-  analysis: ReactProfileAnalysis,
-  limit: number,
-  byDuration: boolean,
-): string {
+export function formatCommits(analysis: ReactProfileAnalysis, limit: number): string {
   if (analysis.commits.length === 0) return 'No commits recorded.';
-  const commits = timelineCommits(analysis, byDuration);
-  const shown = commits.slice(0, limit);
-  const header = byDuration ? 'Slowest commits' : 'Commits';
-  const range = shown.length < commits.length ? ` (${shown.length} of ${commits.length})` : '';
-  return [`${header}${range}:`, ...shown.map((commit) => `  ${commitLine(commit)}`)].join('\n');
+  const shown = listedCommits(analysis, limit);
+  const header =
+    shown.length < analysis.commits.length
+      ? `Commits (${shown.length} slowest of ${analysis.commits.length}, --limit ${analysis.commits.length} for all):`
+      : 'Commits:';
+  return [header, ...shown.map((commit) => `  ${commitLine(commit)}`)].join('\n');
 }
 
 export function formatCommit(commit: CommitProfile, limit: number): string {
   const lines = [commitLine(commit)];
-  const shown = commit.top.slice(0, limit);
+  const shown = commit.components.slice(0, limit);
   for (const entry of shown) {
     const instances = entry.instances > 1 ? ` x${entry.instances}` : '';
     lines.push(
-      `  ${entry.name}${instances} self ${ms(entry.selfMs)} ${entry.causes.join('+') || 'unrecorded'}`,
+      `  ${entry.name} [${entry.kind}]${instances} self ${ms(entry.selfMs)} ${entry.causes.join('+') || 'unrecorded'}`,
     );
   }
-  const hidden = commit.rendered - shown.reduce((sum, entry) => sum + entry.instances, 0);
-  if (hidden > 0) lines.push(`  +${hidden} more component renders`);
+  lines.push(...omittedRows(shown.length, commit.components.length));
   return lines.join('\n');
 }

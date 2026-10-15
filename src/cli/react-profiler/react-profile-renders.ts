@@ -105,6 +105,17 @@ export type RawReactProfile = {
 
 export type ComponentKind = 'class' | 'function' | 'forwardRef' | 'memo' | 'unknown';
 
+/** A component as the profile can tell it apart: `Row` and memo-wrapped `Row` are two components. */
+export type ComponentId = { name: string; kind: ComponentKind };
+
+export function componentKey(component: ComponentId): string {
+  return `${component.name}\0${component.kind}`;
+}
+
+export function sameComponent(a: ComponentId, b: ComponentId): boolean {
+  return a.name === b.name && a.kind === b.kind;
+}
+
 export type RenderCauses = {
   mount: number;
   props: number;
@@ -115,9 +126,7 @@ export type RenderCauses = {
   parent: number;
 };
 
-export type ComponentProfile = {
-  name: string;
-  kind: ComponentKind;
+export type ComponentProfile = ComponentId & {
   instances: number;
   renders: number;
   selfMs: number;
@@ -134,8 +143,7 @@ export type ComponentProfile = {
   costliestCommits: Array<{ index: number; selfMs: number }>;
 };
 
-export type CommitComponent = {
-  name: string;
+export type CommitComponent = ComponentId & {
   instances: number;
   selfMs: number;
   /** Time including descendants, summed over instances. */
@@ -150,16 +158,15 @@ export type CommitProfile = {
   durationMs: number;
   rendered: number;
   mounts: number;
-  updaters: string[];
-  /** Components with the largest self time in this commit, capped. */
-  top: CommitComponent[];
+  updaters: ComponentId[];
+  /** Every component that rendered in this commit, largest self time first. */
+  components: CommitComponent[];
 };
 
 /** Mounted instance to inspect, per component name, for the value kinds of its changed props. */
 type PropKindRequest = Record<string, string[]>;
 export type PropKindsById = Record<string, Record<string, string>>;
 
-const COMMIT_TOP_LIMIT = 15;
 const COMPONENT_COMMIT_LIMIT = 5;
 const RECENT_INSTANCE_LIMIT = 3;
 const PROP_KIND_CANDIDATES = 8;
@@ -171,10 +178,8 @@ type ComponentAccumulator = ComponentProfile & {
   commitCosts: Map<number, number>;
 };
 
-type ParsedRender = {
+type ParsedRender = ComponentId & {
   id: number;
-  name: string;
-  type: number;
   actualMs: number;
   selfMs: number;
   causes: string[];
@@ -201,18 +206,21 @@ function elementOf(profile: RawReactProfile, id: number): RawProfileElement | un
   return profile.elements[String(id)];
 }
 
-function componentName(profile: RawReactProfile, id: number): string | undefined {
-  const element = elementOf(profile, id);
-  return element ? renderName(element[0]).name : undefined;
+function componentOf(element: RawProfileElement): ComponentId {
+  const { name, wrappers } = renderName(element[0]);
+  return { name, kind: componentKind(wrappers.includes('Memo') ? ELEMENT_MEMO : element[1]) };
 }
 
-export function componentNames(profile: RawReactProfile, ids: number[]): string[] {
-  const names = new Set<string>();
+/** The distinct components behind these elements, leaving out any the profile could not name. */
+export function componentsOf(profile: RawReactProfile, ids: number[]): ComponentId[] {
+  const components = new Map<string, ComponentId>();
   for (const id of ids) {
-    const name = componentName(profile, id);
-    if (name) names.add(name);
+    const element = elementOf(profile, id);
+    if (!element) continue;
+    const component = componentOf(element);
+    components.set(componentKey(component), component);
   }
-  return [...names];
+  return [...components.values()];
 }
 
 function keysAt(profile: RawReactProfile, indexes: number[] | null): string[] {
@@ -231,12 +239,9 @@ export function* commitRenders(
     const id = commit.fibers[offset]!;
     const element = elementOf(profile, id);
     if (!element || !COMPONENT_TYPES.has(element[1])) continue;
-    const [displayName, type] = element;
-    const { name, wrappers } = renderName(displayName);
     yield {
+      ...componentOf(element),
       id,
-      name,
-      type: wrappers.includes('Memo') ? ELEMENT_MEMO : type,
       actualMs: commit.fibers[offset + 1]!,
       selfMs: commit.fibers[offset + 2]!,
       causes: renderCauses(commit, id),
@@ -261,7 +266,7 @@ function renderCauses(commit: RawProfileCommit, id: number): string[] {
 function createAccumulator(render: ParsedRender): ComponentAccumulator {
   return {
     name: render.name,
-    kind: componentKind(render.type),
+    kind: render.kind,
     instances: 0,
     renders: 0,
     selfMs: 0,
@@ -302,16 +307,15 @@ function recordRender(
     for (const hook of change[3] ?? []) bump(entry.changedHooks, String(hook));
   }
   const ownerId = elementOf(profile, render.id)?.[2];
-  const owner = ownerId ? componentName(profile, ownerId) : undefined;
-  if (owner) bump(entry.owners, owner);
+  const owner = ownerId ? elementOf(profile, ownerId) : undefined;
+  if (owner) bump(entry.owners, componentOf(owner).name);
 }
 
-/** A memo-wrapped and a plain component of one name are separate components with separate costs. */
 function accumulateComponents(profile: RawReactProfile): Map<string, ComponentAccumulator> {
   const components = new Map<string, ComponentAccumulator>();
   profile.commits.forEach((commit, commitIndex) => {
     for (const render of commitRenders(profile, commit)) {
-      const key = `${render.name}\0${componentKind(render.type)}`;
+      const key = componentKey(render);
       let entry = components.get(key);
       if (!entry) {
         entry = createAccumulator(render);
@@ -350,14 +354,16 @@ export function selectPropKindRequests(profile: RawReactProfile): PropKindReques
 function summarizeCommits(profile: RawReactProfile): CommitProfile[] {
   const origin = profile.commits[0]?.timestamp ?? 0;
   return profile.commits.map((commit, index) => {
-    const byName = new Map<string, CommitComponent>();
+    const byComponent = new Map<string, CommitComponent>();
     let rendered = 0;
     let mounts = 0;
     for (const render of commitRenders(profile, commit)) {
       rendered += 1;
       if (render.causes.includes('mount')) mounts += 1;
-      const entry = byName.get(render.name) ?? {
+      const key = componentKey(render);
+      const entry = byComponent.get(key) ?? {
         name: render.name,
+        kind: render.kind,
         instances: 0,
         selfMs: 0,
         actualMs: 0,
@@ -368,7 +374,7 @@ function summarizeCommits(profile: RawReactProfile): CommitProfile[] {
       entry.actualMs += render.actualMs;
       for (const cause of render.causes)
         if (!entry.causes.includes(cause)) entry.causes.push(cause);
-      byName.set(render.name, entry);
+      byComponent.set(key, entry);
     }
     return {
       index,
@@ -376,8 +382,8 @@ function summarizeCommits(profile: RawReactProfile): CommitProfile[] {
       durationMs: commit.duration,
       rendered,
       mounts,
-      updaters: componentNames(profile, commit.updaters),
-      top: [...byName.values()].sort((a, b) => b.selfMs - a.selfMs).slice(0, COMMIT_TOP_LIMIT),
+      updaters: componentsOf(profile, commit.updaters),
+      components: [...byComponent.values()].sort((a, b) => b.selfMs - a.selfMs),
     };
   });
 }
