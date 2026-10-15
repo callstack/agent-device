@@ -6,7 +6,6 @@ import {
 } from '../internal/support-matrix.ts';
 
 export const maestroReplayBackendDeclaration: ReplayBackendDeclaration<'maestro'> = {
-  apiVersion: 1,
   id: 'maestro',
   help: {
     summary: 'Supported Maestro YAML commands, grammar, and runtime boundaries',

@@ -6,9 +6,8 @@ import type { ReplayBackend, ReplayBackendPlugin } from '@agent-device/contracts
  *
  * The host (the replay command, `test` discovery, request device binding, and the client-side
  * replay surface) reaches a non-native engine only through this module. A backend id resolves to
- * one plugin (`ReplayBackendPlugin`: an engine-free declaration plus `create(host)`) whose
- * loading is memoized per process; this module and `replay-backend-declarations.ts` are the only
- * host code that names an engine package. Backend ids come from the format grammar's vocabulary
+ * one plugin (`ReplayBackendPlugin`, `create(host)`) whose loading is memoized per process; this
+ * module and `replay-backend-declarations.ts` are the only host code that names an engine package. Backend ids come from the format grammar's vocabulary
  * (`@agent-device/ad-script`), so the registry's keys and the `--maestro` flag's accepted values
  * can never drift apart. The Maestro plugin extraction (#3377) swaps the builtin
  * table for an installed-plugin lookup and changes no caller.
@@ -31,9 +30,9 @@ import type { ReplayBackend, ReplayBackendPlugin } from '@agent-device/contracts
  * no host entry evaluates an engine eagerly (the `cli-startup-import-closure` pins). Extraction
  * swaps this table for the installed-plugin lookup; the host call sites never change.
  */
-const BUILTIN_REPLAY_BACKEND_PLUGINS: Readonly<
-  Record<ReplayBackendId, () => Promise<ReplayBackendPlugin<ReplayBackendId>>>
-> = {
+const BUILTIN_REPLAY_BACKEND_PLUGINS: {
+  readonly [TId in ReplayBackendId]: () => Promise<ReplayBackendPlugin<TId>>;
+} = {
   maestro: async () =>
     (await import('@agent-device/maestro/replay-backend')).maestroReplayBackendPlugin,
 };

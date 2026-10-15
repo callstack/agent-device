@@ -10,7 +10,6 @@ import {
   inspectMaestroFlow,
   MAESTRO_SELECTOR_PROJECTION,
 } from '@agent-device/maestro';
-import { maestroReplayBackendDeclaration } from './replay-maestro-declaration.ts';
 import { runTypedMaestroReplay } from './session-replay-maestro-runtime.ts';
 
 /**
@@ -46,6 +45,5 @@ function createMaestroReplayBackend(host: ReplayBackendHost): ReplayBackend<'mae
 }
 
 export const maestroReplayBackendPlugin: ReplayBackendPlugin<'maestro'> = {
-  declaration: maestroReplayBackendDeclaration,
   create: createMaestroReplayBackend,
 };

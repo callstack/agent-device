@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { maestroReplayBackendPlugin as maestroPlugin } from '@agent-device/maestro/replay-backend';
+import { maestroReplayBackendDeclaration } from '@agent-device/maestro/replay-backend-declaration';
 import { getReplayBackendDeclaration } from '../replay-backend-declarations.ts';
 import { getReplayBackend } from '../replay-backend-registry.ts';
 
@@ -7,8 +7,8 @@ import { getReplayBackend } from '../replay-backend-registry.ts';
 // what it promises is exactly what the plugin swap must keep — the load-once contract and the
 // capability shape every host call site routes through.
 
-test('lists the declaration the Maestro plugin carries', () => {
-  expect(getReplayBackendDeclaration('maestro')).toBe(maestroPlugin.declaration);
+test('lists the Maestro declaration for the maestro id', () => {
+  expect(getReplayBackendDeclaration('maestro')).toBe(maestroReplayBackendDeclaration);
 });
 
 test('memoizes the backend so a process evaluates the engine once', async () => {
@@ -39,10 +39,7 @@ test('a failed load is not cached, so the next call retries it', async () => {
     get maestroReplayBackendPlugin() {
       loadAttempts += 1;
       if (loadAttempts === 1) throw new Error('transient load failure');
-      return {
-        declaration: maestroPlugin.declaration,
-        create: () => ({ id: 'maestro' }),
-      };
+      return { create: () => ({ id: 'maestro' }) };
     },
   }));
   const { getReplayBackend: freshGet } = await import('../replay-backend-registry.ts');

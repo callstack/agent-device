@@ -254,16 +254,13 @@ export type ReplayBackendHost = Readonly<{
 }>;
 
 /**
- * Versioned like `apiVersion` in the provider plugin manifest. A declaration is engine-free
- * metadata, importable without evaluating the engine, so help and registry listings stay light.
+ * Engine-free metadata, importable without evaluating the engine, so help stays light.
  */
 export type ReplayBackendDeclaration<TId extends string = string> = Readonly<{
-  apiVersion: 1;
   id: TId;
   help: Readonly<{ summary: string; body: string }>;
 }>;
 
 export type ReplayBackendPlugin<TId extends string = string> = Readonly<{
-  declaration: ReplayBackendDeclaration<TId>;
   create(host: ReplayBackendHost): ReplayBackend<TId>;
 }>;
