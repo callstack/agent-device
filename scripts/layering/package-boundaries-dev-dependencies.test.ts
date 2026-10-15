@@ -45,7 +45,7 @@ const DEV_ONLY = { private: true, devDependencies: { '@agent-device/helper': 'wo
 test('a private package reads its devDependencies as test-only siblings', () => {
   const [, owner] = workspacePackagesFromManifests(manifests(DEV_ONLY));
   assert.deepEqual([...owner!.workspaceDependencies], []);
-  assert.deepEqual([...owner!.workspaceDevDependencies!], ['@agent-device/helper']);
+  assert.deepEqual([...owner!.workspaceDevDependencies], ['@agent-device/helper']);
 });
 
 test('test support may import a sibling declared only in devDependencies', () => {
