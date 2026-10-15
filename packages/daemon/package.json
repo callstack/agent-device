@@ -44,17 +44,9 @@
       "types": "./src/__tests__/support/application-lifecycle-runtime-fixture.ts",
       "default": "./src/__tests__/support/application-lifecycle-runtime-fixture.ts"
     },
-    "./testing/__tests__/application-lifecycle-runtime-harness": {
-      "types": "./src/__tests__/support/application-lifecycle-runtime-harness.ts",
-      "default": "./src/__tests__/support/application-lifecycle-runtime-harness.ts"
-    },
     "./testing/__tests__/capture-disclosure-target-activation-fact": {
       "types": "./src/core/__tests__/capture-disclosure-target-activation-fact.ts",
       "default": "./src/core/__tests__/capture-disclosure-target-activation-fact.ts"
-    },
-    "./testing/__tests__/device-selection-stub": {
-      "types": "./src/__tests__/support/device-selection-stub.ts",
-      "default": "./src/__tests__/support/device-selection-stub.ts"
     },
     "./testing/__tests__/human-control-fixtures": {
       "types": "./src/__tests__/support/human-control-fixtures.ts",
@@ -187,10 +179,6 @@
     "./testing/handlers/session-appstate": {
       "types": "./src/sessions/handlers/session-appstate.ts",
       "default": "./src/sessions/handlers/session-appstate.ts"
-    },
-    "./testing/handlers/session-replay-command": {
-      "types": "./src/sessions/handlers/session-replay-command.ts",
-      "default": "./src/sessions/handlers/session-replay-command.ts"
     },
     "./testing/handlers/snapshot": {
       "types": "./src/sessions/handlers/snapshot.ts",
@@ -331,10 +319,6 @@
     "./testing/session-capture-binding": {
       "types": "./src/core/session-capture-binding.ts",
       "default": "./src/core/session-capture-binding.ts"
-    },
-    "./testing/session-lifecycle/internal/__tests__/*": {
-      "types": "./src/sessions/session-lifecycle/internal/__tests__/*.ts",
-      "default": "./src/sessions/session-lifecycle/internal/__tests__/*.ts"
     },
     "./testing/session-observability/__tests__/*": {
       "types": "./src/sessions/session-observability/__tests__/*.ts",
