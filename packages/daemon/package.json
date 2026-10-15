@@ -56,10 +56,6 @@
       "types": "./src/execution/__tests__/interaction-get-runtime-fixture.ts",
       "default": "./src/execution/__tests__/interaction-get-runtime-fixture.ts"
     },
-    "./testing/__tests__/ios-comparison-key-fixture": {
-      "types": "./src/core/__tests__/ios-comparison-key-fixture.ts",
-      "default": "./src/core/__tests__/ios-comparison-key-fixture.ts"
-    },
     "./testing/__tests__/legacy-snapshot-capture-fixture": {
       "types": "./src/__tests__/support/legacy-snapshot-capture-fixture.ts",
       "default": "./src/__tests__/support/legacy-snapshot-capture-fixture.ts"
@@ -67,10 +63,6 @@
     "./testing/__tests__/platform-services-fixture": {
       "types": "./src/__tests__/support/platform-services-fixture.ts",
       "default": "./src/__tests__/support/platform-services-fixture.ts"
-    },
-    "./testing/__tests__/replay-runtime/replay-command-fixture": {
-      "types": "./src/sessions/__tests__/replay-runtime/replay-command-fixture.ts",
-      "default": "./src/sessions/__tests__/replay-runtime/replay-command-fixture.ts"
     },
     "./testing/__tests__/request-router-dispatch-mocks": {
       "types": "./src/__tests__/support/request-router-dispatch-mocks.ts",
@@ -195,14 +187,6 @@
     "./testing/interaction/internal/interaction-android-escape": {
       "types": "./src/execution/interaction/internal/interaction-android-escape.ts",
       "default": "./src/execution/interaction/internal/interaction-android-escape.ts"
-    },
-    "./testing/interaction/internal/interaction-ios-tap-outcome": {
-      "types": "./src/execution/interaction/internal/interaction-ios-tap-outcome.ts",
-      "default": "./src/execution/interaction/internal/interaction-ios-tap-outcome.ts"
-    },
-    "./testing/interaction/internal/interaction-touch-android-readiness": {
-      "types": "./src/execution/interaction/internal/interaction-touch-android-readiness.ts",
-      "default": "./src/execution/interaction/internal/interaction-touch-android-readiness.ts"
     },
     "./testing/interaction/internal/interaction-touch-response": {
       "types": "./src/execution/interaction/internal/interaction-touch-response.ts",
