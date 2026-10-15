@@ -1,35 +1,32 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { expireRefFrame } from '@agent-device/daemon/testing/ref-frame';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { expireRefFrame } from '../../../core/ref-frame.ts';
+import {
+  installInteractorSnapshotResolution,
+  mockInteractorSnapshot,
+} from '../../../__tests__/support/interactor-resolution-fixture.ts';
+import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 import {
   getRuntimeBindings,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
-import {
-  contextFromFlags,
-  makeAndroidSession,
-} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
+import { contextFromFlags, makeAndroidSession } from './__tests__/interaction-touch-fixtures.ts';
+import { handleInteractionCommands } from '../index.ts';
 
 // The Android device state a dispatch has to survive: an escape to launcher or
 // Settings fails the press, a permission prompt warns instead, and
 // blocking-dialog recovery aborts an admitted @ref rather than retargeting it.
 
 type EnsureAndroidBlockingSystemDialogReady =
-  typeof import('@agent-device/daemon/testing/android-system-dialog').ensureAndroidBlockingSystemDialogReady;
+  typeof import('../../android-system-dialog.ts').ensureAndroidBlockingSystemDialogReady;
 
 const { androidDialogReadiness } = vi.hoisted(() => ({
   androidDialogReadiness: {
     spy: vi.fn<EnsureAndroidBlockingSystemDialogReady>(),
     actual: undefined as unknown as EnsureAndroidBlockingSystemDialogReady,
   },
-}));
-
-const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
-  mockRunAppleRunnerCommand: vi.fn(),
 }));
 
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
@@ -42,21 +39,10 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
-  captureSnapshotWithInteractor: vi.fn(),
-}));
-
-vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
-});
-
 // The blocking-dialog readiness check runs for real (its focus probe is mocked
 // above); the recovery regression below swaps in a recovering implementation.
-vi.mock('@agent-device/daemon/testing/android-system-dialog', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/android-system-dialog')>();
+vi.mock('../../android-system-dialog.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../android-system-dialog.ts')>();
   androidDialogReadiness.actual = actual.ensureAndroidBlockingSystemDialogReady;
   return { ...actual, ensureAndroidBlockingSystemDialogReady: androidDialogReadiness.spy };
 });
@@ -66,11 +52,9 @@ import {
   getAndroidBlockingDialogObservation,
   getAndroidScreenSize,
 } from '@agent-device/platform-android/mechanics';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
-const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
   resetGetRuntimeFixture();
@@ -80,9 +64,8 @@ beforeEach(() => {
   mockGetAndroidBlockingDialogObservation.mockResolvedValue({ status: 'clear' });
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
-  mockCaptureSnapshotForSession.mockReset();
-  mockRunAppleRunnerCommand.mockReset();
-  mockRunAppleRunnerCommand.mockResolvedValue({});
+  installInteractorSnapshotResolution();
+  mockInteractorSnapshot.mockReset();
   androidDialogReadiness.spy.mockReset();
   androidDialogReadiness.spy.mockImplementation((params) => androidDialogReadiness.actual(params));
 });
@@ -115,7 +98,7 @@ test('press @ref fails when Android tap escapes to launcher', async () => {
 
   await expect(
     handleInteractionCommands({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: touchCreateCommandSurface,
       req: {
         token: 't',
         session: sessionName,
@@ -164,7 +147,7 @@ test('press @ref fails when Android tap escapes to Settings', async () => {
 
   await expect(
     handleInteractionCommands({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: touchCreateCommandSurface,
       req: {
         token: 't',
         session: sessionName,
@@ -219,7 +202,7 @@ test.each(ANDROID_PERMISSION_PROMPT_PACKAGES)(
     });
 
     const response = await handleInteractionCommands({
-      createCommandSurface: testCreateCommandSurface,
+      createCommandSurface: touchCreateCommandSurface,
       req: {
         token: 't',
         session: sessionName,
@@ -279,7 +262,7 @@ test('a ref action aborts with the shared ref_frame_expired rejection after Andr
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: { token: 't', session: sessionName, command: 'press', positionals: ['@e1'], flags: {} },
     sessionName,
     sessionStore,

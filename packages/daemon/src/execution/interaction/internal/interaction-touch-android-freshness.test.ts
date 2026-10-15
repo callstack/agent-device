@@ -1,25 +1,23 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
+import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
+import { activateCompleteRefFrame } from '../../../core/ref-frame.ts';
+import {
+  installInteractorSnapshotResolution,
+  mockInteractorSnapshot,
+} from '../../../__tests__/support/interactor-resolution-fixture.ts';
+import { touchCreateCommandSurface } from '../../../__tests__/support/touch-command-surface-fake.ts';
 import {
   getRuntimeBindings,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
-import {
-  contextFromFlags,
-  makeAndroidSession,
-} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
-import { testCreateCommandSurface } from '../command-surface-fixture.ts';
+} from '../../__tests__/interaction-get-runtime-fixture.ts';
+import { contextFromFlags, makeAndroidSession } from './__tests__/interaction-touch-fixtures.ts';
+import { handleInteractionCommands } from '../index.ts';
 
 // The Android ref-refresh capture a @ref mutation takes before dispatch: when
 // it runs, what it may not retarget, and the comparison-safe baseline it hands
 // finalization when the refresh fails.
-
-const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
-  mockRunAppleRunnerCommand: vi.fn(),
-}));
 
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
@@ -31,27 +29,14 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', () => ({
-  captureSnapshotWithInteractor: vi.fn(),
-}));
-
-vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
-});
-
 import {
   getAndroidAppState,
   getAndroidBlockingDialogObservation,
   getAndroidScreenSize,
 } from '@agent-device/platform-android/mechanics';
-import { captureSnapshotWithInteractor } from '@agent-device/daemon/testing/snapshot-interactor-capture';
-import { activateCompleteRefFrame } from '@agent-device/daemon/testing/ref-frame';
 const mockGetAndroidAppState = vi.mocked(getAndroidAppState);
 const mockGetAndroidBlockingDialogObservation = vi.mocked(getAndroidBlockingDialogObservation);
 const mockGetAndroidScreenSize = vi.mocked(getAndroidScreenSize);
-const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotWithInteractor);
 
 beforeEach(() => {
   resetGetRuntimeFixture();
@@ -61,9 +46,8 @@ beforeEach(() => {
   mockGetAndroidBlockingDialogObservation.mockResolvedValue({ status: 'clear' });
   mockGetAndroidScreenSize.mockReset();
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
-  mockCaptureSnapshotForSession.mockReset();
-  mockRunAppleRunnerCommand.mockReset();
-  mockRunAppleRunnerCommand.mockResolvedValue({});
+  installInteractorSnapshotResolution();
+  mockInteractorSnapshot.mockReset();
 });
 
 test('press @ref refreshes Android snapshot when freshness tracking is active', async () => {
@@ -93,7 +77,7 @@ test('press @ref refreshes Android snapshot when freshness tracking is active', 
   };
   sessionStore.publish(sessionName, session);
 
-  mockCaptureSnapshotForSession.mockResolvedValue({
+  mockInteractorSnapshot.mockResolvedValue({
     nodes: [
       {
         index: 0,
@@ -109,7 +93,7 @@ test('press @ref refreshes Android snapshot when freshness tracking is active', 
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -124,8 +108,8 @@ test('press @ref refreshes Android snapshot when freshness tracking is active', 
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockCaptureSnapshotForSession).toHaveBeenCalledTimes(1);
-  expect(mockCaptureSnapshotForSession.mock.calls[0]?.[0].options).toMatchObject({
+  expect(mockInteractorSnapshot).toHaveBeenCalledTimes(1);
+  expect(mockInteractorSnapshot.mock.calls[0]?.[0].options).toMatchObject({
     interactiveOnly: true,
   });
   expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 140, y: 220 } }));
@@ -168,7 +152,7 @@ test('ADR 0014: Android freshness cannot retarget an admitted ref by positional 
 
   // The freshness refresh returns a DIFFERENT element at @e1's index — after
   // navigation the button at that position is now "Cancel", not "Continue".
-  mockCaptureSnapshotForSession.mockResolvedValue({
+  mockInteractorSnapshot.mockResolvedValue({
     nodes: [
       {
         index: 0,
@@ -184,7 +168,7 @@ test('ADR 0014: Android freshness cannot retarget an admitted ref by positional 
   });
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -232,10 +216,10 @@ test('press @ref falls back to cached Android ref when freshness refresh fails',
   };
   sessionStore.publish(sessionName, session);
 
-  mockCaptureSnapshotForSession.mockRejectedValueOnce(new Error('uiautomator timeout'));
+  mockInteractorSnapshot.mockRejectedValueOnce(new Error('uiautomator timeout'));
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
@@ -250,7 +234,7 @@ test('press @ref falls back to cached Android ref when freshness refresh fails',
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockCaptureSnapshotForSession).toHaveBeenCalledTimes(1);
+  expect(mockInteractorSnapshot).toHaveBeenCalledTimes(1);
   expect(mockTapPoint).toHaveBeenCalledWith(expect.objectContaining({ point: { x: 60, y: 40 } }));
   expect(sessionStore.get(sessionName)?.androidSnapshotFreshness).toMatchObject({
     action: 'press',
@@ -303,7 +287,7 @@ test('coordinate press preserves Android route freshness from last comparable sn
   sessionStore.publish(sessionName, session);
 
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: touchCreateCommandSurface,
     req: {
       token: 't',
       session: sessionName,
