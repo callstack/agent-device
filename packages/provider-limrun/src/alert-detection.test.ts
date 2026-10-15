@@ -64,12 +64,7 @@ describe('findLimrunAlertCandidate', () => {
     expect(candidate?.alert.source).toBe('permission');
     expect(candidate?.buttons.map((button) => button.role)).toEqual(['dismiss', 'accept']);
     // The tap point is the live button frame's center, rounded the way `centerOfRect` rounds.
-    expect(candidate?.buttons[1]).toEqual({
-      label: 'Allow',
-      x: 201,
-      y: 592,
-      role: 'accept',
-    });
+    expect(candidate?.buttons[1]).toEqual({ label: 'Allow', x: 201, y: 592, role: 'accept' });
   });
 
   it('finds the alert when the app screen is the first root of the capture', () => {
@@ -89,8 +84,36 @@ describe('findLimrunAlertCandidate', () => {
     expect(findLimrunAlertCandidate(limrunHomeScreenTree())).toBeNull();
   });
 
+  it('refuses a widget-bearing home screen: LaunchIcon buttons never qualify', () => {
+    const home = limrunHomeScreenTree();
+    const withWidgets = {
+      ...home,
+      children: [
+        {
+          type: 'StaticText',
+          role: 'AXStaticText',
+          AXLabel: 'Mostly Sunny',
+          pid: home.pid,
+          frame: { x: 24, y: 300, width: 160, height: 20 },
+        },
+        ...(home.children ?? []),
+      ],
+    };
+    expect(findLimrunAlertCandidate(withWidgets)).toBeNull();
+  });
+
   it('refuses an alert-shaped sheet with no actionable button', () => {
     expect(findLimrunAlertCandidate(limrunAlertTreeWithoutButtons())).toBeNull();
+  });
+
+  it('refuses a one-choice sheet: no action can tell its single option from the asked-for one', () => {
+    expect(findLimrunAlertCandidate(alertTreeWithButtons('Allow'))).toBeNull();
+    expect(findLimrunAlertCandidate(alertTreeWithButtons('OK'))).toBeNull();
+  });
+
+  it('refuses a capture whose host sheets disagree, rather than shadowing one with the other', () => {
+    const second = { ...limrunAttAlertTree(), pid: 99 };
+    expect(findLimrunAlertCandidate([limrunAttAlertTree(), second])).toBeNull();
   });
 
   it('reports a permission alert from its button vocabulary and a plain one as a system dialog', () => {
@@ -118,18 +141,21 @@ describe('chooseLimrunAlertButton', () => {
     expect(chooseLimrunAlertButton(buttons, 'dismiss')).toBeNull();
   });
 
-  it('refuses an action that would press the wrong choice of a one-button alert', () => {
-    const allowOnly = findLimrunAlertCandidate(alertTreeWithButtons('Allow'))!.buttons;
-    const denyOnly = findLimrunAlertCandidate(
-      alertTreeWithButtons('Ask App Not to Track'),
-    )!.buttons;
+  it('never picks a choice of the wrong role, whatever else the alert offers', () => {
+    const allowOnly = findLimrunAlertCandidate(alertTreeWithButtons('Deny', 'Allow'))!.buttons;
     expect(chooseLimrunAlertButton(allowOnly, 'accept')?.label).toBe('Allow');
-    expect(chooseLimrunAlertButton(allowOnly, 'dismiss')).toBeNull();
-    expect(chooseLimrunAlertButton(denyOnly, 'dismiss')?.label).toBe('Ask App Not to Track');
-    expect(chooseLimrunAlertButton(denyOnly, 'accept')).toBeNull();
+    expect(chooseLimrunAlertButton(allowOnly, 'dismiss')?.label).toBe('Deny');
+    const noAccept = findLimrunAlertCandidate(
+      alertTreeWithButtons('Cancel', 'Maybe Later'),
+    )!.buttons;
+    expect(chooseLimrunAlertButton(noAccept, 'accept')).toBeNull();
+    const noDismiss = findLimrunAlertCandidate(
+      alertTreeWithButtons('Open Settings', 'Continue'),
+    )!.buttons;
+    expect(chooseLimrunAlertButton(noDismiss, 'dismiss')).toBeNull();
   });
 
-  it('classifies the classic iOS pair, the curly-apostrophe denial, and an open-settings prompt', () => {
+  it('classifies the classic iOS pair, the typographic apostrophe, and iOS variant grants', () => {
     const classic = findLimrunAlertCandidate(alertTreeWithButtons("Don't Allow", 'OK'))!.buttons;
     expect(chooseLimrunAlertButton(classic, 'accept')?.label).toBe('OK');
     expect(chooseLimrunAlertButton(classic, 'dismiss')?.label).toBe("Don't Allow");
@@ -140,9 +166,15 @@ describe('chooseLimrunAlertButton', () => {
     )!.buttons;
     expect(chooseLimrunAlertButton(settings, 'accept')?.label).toBe('Open Settings');
     expect(chooseLimrunAlertButton(settings, 'dismiss')?.label).toBe('Not Now');
+    for (const label of ['Allow Once', 'Allow All the Time', 'Allow While Using App']) {
+      const granted = findLimrunAlertCandidate(
+        alertTreeWithButtons('Ask App Not to Track', label),
+      )!.buttons;
+      expect(chooseLimrunAlertButton(granted, 'accept')?.label).toBe(label);
+    }
   });
 
-  it('refuses the candidate when no button is enabled with a frame to tap', () => {
+  it('refuses the candidate when no button is pressable', () => {
     const root = limrunAttAlertTree();
     const crippled = {
       ...root,
@@ -163,12 +195,22 @@ describe('chooseLimrunAlertButton', () => {
           AXLabel: 'Ask App Not to Track',
           pid: root.pid,
           enabled: true,
+          hittable: false,
+          frame: { x: 57, y: 567.67, width: 288, height: 48 },
+          traits: ['Button'],
+        },
+        {
+          type: 'Button',
+          role: 'AXButton',
+          AXLabel: 'Later',
+          pid: root.pid,
+          enabled: true,
           traits: ['Button'],
         },
       ],
     };
-    // The only button that could deny has no frame to tap, and the framed one is disabled:
-    // nothing is actionable, so the whole candidate is refused rather than half-served.
+    // Disabled, unhittable, and frameless buttons are all unpressable; with nothing pressable
+    // left, the whole candidate is refused rather than half-served.
     expect(findLimrunAlertCandidate(crippled)).toBeNull();
   });
 });

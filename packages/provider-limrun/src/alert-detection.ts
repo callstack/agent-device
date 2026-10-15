@@ -6,11 +6,14 @@ import { readIosNodeChildren, readIosNodeRect, type IosTreeNode } from './snapsh
 /**
  * System-alert detection over a Limrun iOS element tree (issue #3349). A Limrun iOS direct
  * session has no XCUITest runner, but its element tree does carry the system alert: on a live
- * instance the ATT prompt arrives as its own `AXApplication` root whose `AXLabel` is blank and
- * whose content nodes carry the hosting process's `pid` — not the app's. The app's own
- * `UIAlertController`, by contrast, rides inside the app's root, labeled with the app name and
- * carrying the app's pid. The rules below encode exactly that observed split; they are
- * conservative in both directions and every shape here is pinned to the live captures.
+ * instance the ATT prompt arrives as its own `AXApplication` root whose `AXLabel` is blank, with
+ * its text and buttons as direct children all sharing the hosting process's `pid` — never the
+ * app's. The app's own `UIAlertController`, by contrast, rides inside the app's root, labeled
+ * with the app name and carrying the app's pid. The rules below encode that observed split and
+ * refuse everything it does not vouch for: a named root is app UI, launch-icon buttons are a
+ * home screen, and a button without a frame or a live `pid` match across visible roots is not
+ * pressable. What one live capture cannot exclude — an app that left its own root's label blank
+ * while showing a dialog — is why the acting legs press only label-unambiguous buttons below.
  */
 
 type LimrunAlertButtonRole = 'accept' | 'dismiss' | 'neutral';
@@ -37,12 +40,15 @@ export type LimrunAlertCandidate = Readonly<{
 }>;
 
 const ACCEPT_LABEL_PATTERN =
-  /^(?:ok|allow|allow all|always allow|yes|continue|save|confirm|turn on|open settings)$/i;
+  /^(?:ok|allow|allow all|allow once|allow all the time|allow while using (?:the )?app|allow notifications|always allow|yes|continue|save|confirm|turn on|open settings|while using the app|only this time)$/i;
+// `don.?t allow` covers the straight, missing, and typographic apostrophe in one alternate.
 const DISMISS_LABEL_PATTERN =
-  /^(?:cancel|deny|don.?t allow|don’t allow|don.t allow|not now|no|dismiss|close|later|skip|ask app not to track)$/i;
+  /^(?:cancel|deny|don.?t allow|not now|no|dismiss|close|close app|later|skip|ask app not to track)$/i;
 /** The subset that states a grant/deny choice; a plain Yes/No dialog is not a permission prompt. */
 const PERMISSION_LABEL_PATTERN =
-  /^(?:allow.*|always allow|deny|don.?t allow|don’t allow|don.t allow|ask app not to track|turn on|open settings)$/i;
+  /^(?:allow.*|deny|don.?t allow|ask app not to track|turn on|open settings)$/i;
+/** SpringBoard marks its home-screen icons with this trait; an alert never carries it. */
+const LAUNCH_ICON_TRAIT = 'LaunchIcon';
 
 function nodeLabel(node: IosTreeNode): string {
   const label = node.AXLabel ?? node.label;
@@ -62,25 +68,36 @@ export function isLimrunAlertHostRoot(node: IosTreeNode): boolean {
 
 /**
  * The actionable alert on this capture, or null. A host root qualifies only when its content is
- * dialog-shaped: a button that can actually be pressed (enabled, with a complete rect) and at
- * least one piece of text or another button beside it. That refusals both an app dialog (wrong
- * root) and SpringBoard's home screen (blank root, launch icons instead of a dialog).
+ * dialog-shaped: at least two pressable choices (enabled, hittable, with a complete rect), at
+ * least one piece of text, and no SpringBoard launch icons. One live capture cannot exclude an
+ * app that leaves its own root's label blank while showing a dialog — the provider reports no
+ * capture-level fact that separates it from the alert host — which is why the acting legs press
+ * only buttons whose label states the asked-for choice, and an alert-shaped sheet offering a
+ * single choice is refused entirely rather than acted on by position.
+ *
+ * The button vocabulary is English, matching the untranslated simulator locale these instances
+ * run; a localized alert classifies as undecided and the acting legs report the ambiguity rather
+ * than guessing.
  */
 export function findLimrunAlertCandidate(
   tree: IosTreeNode | IosTreeNode[],
 ): LimrunAlertCandidate | null {
+  const candidates: LimrunAlertCandidate[] = [];
   for (const root of Array.isArray(tree) ? tree : [tree]) {
     if (!isLimrunAlertHostRoot(root)) continue;
     const candidate = readAlertCandidateFromHostRoot(root);
-    if (candidate) return candidate;
+    if (candidate) candidates.push(candidate);
   }
-  return null;
+  // More than one alert-shaped host sheet is a shape this reader does not understand; pressing
+  // into it would guess, and the observation would silently shadow one with the other.
+  return candidates.length === 1 ? candidates[0]! : null;
 }
 
 function readAlertCandidateFromHostRoot(root: IosTreeNode): LimrunAlertCandidate | null {
   const descendants = collectDescendants(root);
   const buttons = findAlertButtons(descendants);
-  if (buttons.length === 0) return null;
+  // A lone choice says nothing about which action the caller asked for; refuse the sheet.
+  if (buttons.length < 2) return null;
   const texts = descendants
     .filter((node) => isStaticTextNode(node) && !isButtonNode(node))
     .map(nodeLabel)
@@ -120,14 +137,17 @@ function isStaticTextNode(node: IosTreeNode): boolean {
 }
 
 /**
- * Pressable buttons only: a disabled button is not a choice the alert offers right now, and a
- * button without a complete rect has no point the touch seam could aim at.
+ * Pressable alert choices only: a disabled button is not a choice the alert offers right now, a
+ * button without a complete rect has no point the touch seam could aim at, a button the provider
+ * reports as unhittable cannot be pressed, and a `LaunchIcon` is a home-screen app icon rather
+ * than a dialog button.
  */
 function findAlertButtons(nodes: IosTreeNode[]): LimrunAlertButton[] {
   const seen = new Set<string>();
   const buttons: LimrunAlertButton[] = [];
   for (const node of nodes) {
-    if (!isButtonNode(node) || node.enabled === false) continue;
+    if (!isButtonNode(node) || node.enabled === false || node.hittable === false) continue;
+    if (node.traits?.includes(LAUNCH_ICON_TRAIT)) continue;
     const label = nodeLabel(node);
     if (!label || seen.has(label.toLowerCase())) continue;
     const rect = readIosNodeRect(node);
@@ -160,14 +180,15 @@ function classifyAlertSource(buttons: readonly LimrunAlertButton[]): LimrunAlert
 /**
  * The button one action may press, or null when pressing any visible choice would guess.
  * Deliberately stricter than Android's: with no `android:id/button1`-style identity to fall back
- * on, only a button whose own label states the asked-for choice may be pressed — an accept must
- * never press a denial, and an alert whose choices are all neutral is refused for both actions
- * rather than resolved by position.
+ * on, only a button whose own label states the asked-for choice may be pressed, and even then
+ * only when exactly one choice does — an accept must never press a denial, and an alert whose
+ * choices leave the action undecided is refused rather than resolved by tree position.
  */
 export function chooseLimrunAlertButton(
   buttons: readonly LimrunAlertButton[],
   action: 'accept' | 'dismiss',
 ): LimrunAlertButton | null {
   const wanted = action === 'accept' ? 'accept' : 'dismiss';
-  return buttons.find((button) => button.role === wanted) ?? null;
+  const matching = buttons.filter((button) => button.role === wanted);
+  return matching.length === 1 ? matching[0]! : null;
 }
