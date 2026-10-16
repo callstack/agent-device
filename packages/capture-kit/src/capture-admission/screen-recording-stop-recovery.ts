@@ -79,9 +79,9 @@ export function screenRecordingManifestIsTerminal(params: ScreenRecordingManifes
  * The device a stop without a held session must be answered on: the one the session's durable
  * manifest names, when a decodable manifest exists. `undefined` means there is nothing to recover
  * from, and a caller that addressed a session answers on the session instead of choosing a device.
- * The device is not re-picked from the host; it is read from the manifest the named session
- * addresses, and `assertManifestBelongsToRequest` still fails the request closed when the
- * resolved device or the session address does not match what the manifest recorded.
+ * The caller still resolves this identity against the host to recover the live device fields, and
+ * `assertManifestBelongsToRequest` still fails the request closed when the resolved device or the
+ * session address does not match what the manifest recorded.
  */
 export function screenRecordingManifestDevice(
   params: ScreenRecordingManifestParams,

@@ -22,7 +22,17 @@ type AppStateSessionStoreEntry = ReturnType<RuntimeCommandHandlerParams['session
 type AppStateTargetDecision =
   | { refusal: DaemonResponse }
   | { answeredBy: 'apple-session'; session: AppStateSessionRecord }
-  | { answeredBy: 'device-runtime'; session: AppStateSessionStoreEntry };
+  | {
+      answeredBy: 'device-runtime';
+      session: AppStateSessionStoreEntry;
+      /**
+       * Decided from the same store read as `session`: the request names a session this daemon
+       * does not hold. The device-runtime lane answers an Apple device from this admission-time
+       * fact, not from a re-read after the await — resolution cannot change which error family
+       * the request was admitted into.
+       */
+      namedSessionMissing: boolean;
+    };
 
 /**
  * Has this appstate request an answerable target, and which authority answers it: the Apple
@@ -64,7 +74,13 @@ function admitAppStateTarget(params: RuntimeCommandHandlerParams): AppStateTarge
   if (useSessionStateForApple && session) {
     return { answeredBy: 'apple-session' as const, session };
   }
-  return { answeredBy: 'device-runtime' as const, session };
+  // Only an identity selector reaches the device-runtime lane with a named-but-missing session
+  // (the guard above refused the rest); this is the one read that decides it.
+  return {
+    answeredBy: 'device-runtime' as const,
+    session,
+    namedSessionMissing: !session && namesSessionExplicitly(req),
+  };
 }
 
 /**
@@ -85,5 +101,5 @@ export async function handleAppStateCommand(
     flags: params.req.flags ?? {},
     platformServices: params.platformServices,
   });
-  return await queryDeviceRuntimeAppState(params, device);
+  return await queryDeviceRuntimeAppState(params, device, target.namedSessionMissing);
 }

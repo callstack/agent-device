@@ -69,11 +69,13 @@ test('appstate --platform apple missing-session error never suggests omitting --
   }
 });
 
-test('appstate --udid with no --platform still answers the typed reason for a named missing session', async () => {
+test('appstate --udid with no --platform resolves the stated device and THEN answers the typed reason', async () => {
   // `--udid` is the Apple identity flag, so a bare `--udid <ios>` reaches the device-runtime lane
   // and lands on an Apple device. The commands.md row promises the typed reason "even with an
-  // explicit device", so this lane — the only appstate route that resolves a device — answers it
-  // too, not the reasonless session-required refusal.
+  // explicit device", so this lane answers it too — and it answers it from the resolved device,
+  // NOT from a pre-resolution guard: the request states a target, and the route must first prove
+  // that target by resolving it. A refusal answered before resolution is a different policy, so
+  // the resolution call itself is the pin here.
   const iosSim: DeviceInfo = {
     platform: 'apple',
     appleOs: 'ios',
@@ -83,18 +85,82 @@ test('appstate --udid with no --platform still answers the typed reason for a na
     target: 'mobile',
     booted: true,
   };
-  const resolved = vi.mocked(resolveTargetDevice).mockResolvedValue(iosSim);
+  const resolved = vi.mocked(resolveTargetDevice);
+  resolved.mockReset();
+  resolved.mockResolvedValue(iosSim);
+  // The refusal precedes runtime admission, so a fact read here would mean the lane queried a
+  // device it had just refused; the pin is that it never gets that far.
+  const inspected: string[] = [];
   try {
     const response = await handleAppStateCommand({
       platformServices: daemonPlatformServicesFixture(),
       req: appStateRequest('lost', { session: 'lost', udid: 'SIM-UDID-A' }),
       sessionName: 'lost',
       sessionStore: makeSessionStore(),
+      inspectFacts: async (inspectedDevice) => {
+        inspected.push(inspectedDevice.id);
+        return createUnavailableRuntimeFactsForTest(inspectedDevice, localRuntimeOwner('ios'), {
+          available: false,
+          reason: 'owner-capability-missing',
+        });
+      },
     });
 
     expect(response.ok).toBe(false);
     if (response.ok) return;
     expect(response.error.code).toBe('SESSION_NOT_FOUND');
+    expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+    expect(response.error.details?.session).toBe('lost');
+    // Resolution ran, once, on the identity the request stated — the refusal is the device
+    // runtime lane's, after the target was proven, not a guard that skipped the stated device.
+    expect(resolved).toHaveBeenCalledTimes(1);
+    expect(resolved).toHaveBeenCalledWith(
+      expect.objectContaining({ udid: 'SIM-UDID-A' }),
+      expect.anything(),
+    );
+    expect(inspected).toEqual([]);
+  } finally {
+    resolved.mockReset();
+  }
+});
+
+test('appstate keeps the admission-time named-session verdict when the store changes during resolution', async () => {
+  // The error family is decided once, at admission. If another caller recreates the session
+  // while this request is resolving its device, the Apple refusal this request was admitted into
+  // stays the typed named-session one — a mid-await store change must not silently switch the
+  // request into a different family (nor answer from a session it never admitted).
+  const iosSim: DeviceInfo = {
+    platform: 'apple',
+    appleOs: 'ios',
+    id: 'SIM-UDID-C',
+    name: 'iPhone Air',
+    kind: 'simulator',
+    target: 'mobile',
+    booted: true,
+  };
+  const sessionStore = makeSessionStore();
+  const resolved = vi.mocked(resolveTargetDevice);
+  resolved.mockReset();
+  resolved.mockImplementation(async () => {
+    // The concurrent store change, planted mid-await exactly where a re-read would disagree.
+    sessionStore.publish('lost', {
+      name: 'lost',
+      device: iosSim,
+      createdAt: 1,
+      actions: [],
+    });
+    return iosSim;
+  });
+  try {
+    const response = await handleAppStateCommand({
+      platformServices: daemonPlatformServicesFixture(),
+      req: appStateRequest('lost', { session: 'lost', udid: 'SIM-UDID-C' }),
+      sessionName: 'lost',
+      sessionStore,
+    });
+
+    expect(response.ok).toBe(false);
+    if (response.ok) return;
     expect(response.error.details?.reason).toBe(PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
     expect(response.error.details?.session).toBe('lost');
   } finally {

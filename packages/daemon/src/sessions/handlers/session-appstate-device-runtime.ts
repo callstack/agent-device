@@ -5,7 +5,6 @@ import {
   publicPlatformString,
   type DeviceInfo,
 } from '@agent-device/kernel/device';
-import { namesSessionExplicitly } from '@agent-device/kernel/contracts';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { resolveAndroidSerialAllowlist } from '@agent-device/kernel/device-isolation';
 import { admitRuntimeUse } from '../../core/runtime-admission.ts';
@@ -29,13 +28,14 @@ function sortedAndroidSerialAllowlist(value: string | undefined): string[] | und
 export async function queryDeviceRuntimeAppState(
   params: RuntimeCommandHandlerParams,
   device: DeviceInfo,
+  namedSessionMissing: boolean,
 ): Promise<DaemonResponse> {
   if (isIosFamily(device) || isMacOs(device)) {
-    // A request that names a session this daemon does not hold and resolves onto an Apple device
-    // is missing its session, not its device (#3674): the same typed refusal the session-required
-    // selectors answer, whatever flag routed it here. A request that named no session keeps the
-    // plain session-required refusal, which is the right advice for it.
-    if (!params.sessionStore.get(params.sessionName) && namesSessionExplicitly(params.req)) {
+    // A request admitted without the session it names (#3674) keeps the typed refusal whatever
+    // flag routed it here — the fact comes from admission, so resolving the device cannot change
+    // the error family. A request that named no session keeps the plain session-required refusal,
+    // which is the right advice for it.
+    if (namedSessionMissing) {
       return appStateSessionNotFoundResponse(params.sessionName, device.platform);
     }
     return appleSessionRequiredRefusal(isMacOs(device) ? 'macos' : 'ios');
