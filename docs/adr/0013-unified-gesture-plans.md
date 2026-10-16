@@ -6,215 +6,253 @@ Accepted
 
 Completed process history is in git history.
 
+## Rules at a glance
+
+- Normalize public gesture input once in `packages/contracts/src/gesture-normalization.ts`.
+- Plan canonical intent in `packages/contracts/src/gesture-plan.ts`. Keep contact topology separate from motion.
+- Reject removed timed public forms with actionable `INVALID_ARGS` messages.
+- Keep Maestro's `endpoint-hold` profile private. Public `pan` uses `timed-pan`.
+- Every injected sample must fit the freshly resolved active-app interaction viewport. Never clamp or distort the plan.
+- Android touch execution never falls back to `adb input swipe`.
+- Keep the positional `.ad` codec and shared `PUBLIC_GESTURE_SYNTAX` arity table.
+- Repeated swipe and pause schedules must fit within 60 seconds.
+- Before target-authored drag, resolve and verify both endpoints. Admit it only on Android touch devices and iOS/iPadOS.
+- iOS timing changes require independent app-observed live simulator evidence.
+
 ## Context
 
-Gesture intent was previously interpreted at several private boundaries: command aliases produced
-positional strings, daemon dispatch reparsed them, the `Interactor` exposed parallel semantic
-methods, and each platform derived its own two-contact geometry. That duplicated validation,
-responses, and behavior behind the three public surfaces: CLI, Node.js, and MCP.
+Several private boundaries previously interpreted gesture intent:
 
-Two-contact geometry also differed by platform. Android used a fixed radius while Apple derived a
-radius from the app frame. Neither path validated every planned point against the active
-interaction viewport before injection.
+- Command aliases produced positional strings.
+- Daemon dispatch parsed them again.
+- `Interactor` exposed parallel semantic methods.
+- Each platform derived its own two-contact geometry.
 
-`scroll` remains a separate command because it owns viewport/edge traversal and content-state
-verification rather than a single physical gesture. Its Android physical movement still lowers to
-the Android planned-touch executor.
+This duplicated validation, responses, and behavior behind CLI, Node.js, and MCP.
+
+Two-contact geometry also differed by platform.
+Android used a fixed radius, while Apple derived radius from the app frame.
+Neither path validated every planned point against the active interaction viewport before injection.
+
+`scroll` remains separate because it owns viewport/edge traversal and content-state verification, not one physical gesture.
+Its Android physical movement still uses the Android planned-touch executor.
 
 ## Decision
 
-Public gesture inputs normalize once in `packages/contracts/src/gesture-normalization.ts`. This is the
-explicit public compatibility boundary: canonical semantic intent is produced before entering the
-runtime. Deprecated arguments that have been removed (timed `swipe`, timed `gesture fling`,
-`gesture rotate` `velocity`) are rejected with actionable `INVALID_ARGS` messages rather than
-silently reinterpreted. The private daemon wire remains free to carry compatibility-only hints
-that do not appear on public surfaces; Maestro timed swipes use
-`internal.gestureExecutionProfile: 'endpoint-hold'` to preserve iOS fast-swipe-then-hold behavior
-while still routing through the canonical `pan` input.
+Public gesture inputs normalize once in `packages/contracts/src/gesture-normalization.ts`.
+This is the explicit public compatibility boundary.
+It produces canonical semantic intent before runtime entry.
+Removed deprecated arguments receive actionable `INVALID_ARGS` errors instead of silent reinterpretation:
 
-The runtime plans canonical intent in `packages/contracts/src/gesture-plan.ts`. Contact topology is separate
-from motion:
+- Timed `swipe`.
+- Timed `gesture fling`.
+- `gesture rotate` `velocity`.
 
-- one contact: pan, fling, or target-authored drag with a complete pointer trajectory and an explicit
-  execution profile;
-- two contacts: pan, pinch, rotate, or transform with two complete, synchronized trajectories.
+The private daemon wire may still carry compatibility-only hints absent from public surfaces.
+Maestro timed swipes use `internal.gestureExecutionProfile: 'endpoint-hold'` with canonical `pan` input.
+This preserves iOS fast-swipe-then-hold behavior.
 
-`swipe` without a duration remains public sugar for a fixed-duration fling. Timed public forms
-(`swipe x1 y1 x2 y2 durationMs`, `gesture fling direction x y distance durationMs`,
-`gesture swipe preset durationMs`, and `gesture rotate degrees x y velocity`) are rejected; callers
-must use `gesture pan` for deliberate timed translation and `gesture rotate` without `velocity`.
-Maestro-authored swipes normalize to the canonical `pan` input (origin, delta, durationMs) and carry
-the `endpoint-hold` execution profile through a daemon-internal compatibility seam
-(`internal.gestureExecutionProfile`). This preserves the iOS fast-swipe-then-hold behavior that
-matches Maestro's XCTest driver, without exposing the profile on the public command surface. Maestro
-materializes its 400 ms default when duration is omitted. A genuine public `pan` uses the `timed-pan`
-profile, so compatibility-only paths retain their release behavior without becoming a new semantic
-intent. Pinch fixes translation and rotation at zero; rotate fixes
-translation at zero and scale at one; two-finger pan fixes scale at one and rotation at zero;
-transform can apply all three
-components atomically. Intent remains on the plan even when aliases share an executor.
+The runtime plans canonical intent in `packages/contracts/src/gesture-plan.ts`.
+Contact topology is separate from motion:
 
-The planner owns deterministic multi-touch geometry. Contacts start at -90 degrees, except Android
-pinch starts horizontally because a vertical pinch is captured by common vertical app scroll
-containers before the pinch recognizer activates. The same explicit planning profile preserves the
-proven frame-count convention for dense two-contact trajectories: Android rounds while Apple
-truncates the duration/16 ms frame count. The Android transport lowerer uses that same Android
-sampling profile for one-contact endpoint plans. These are planner inputs, not adapter-generated
-trajectories. The larger of pinch's initial and final spans is 40% of the
-viewport's shorter side, preserving the proven Apple pinch geometry; other two-contact intents use
-25% to keep translation and rotation trajectories compact. The other span follows from the requested scale, and both must
-satisfy a 48-point reliability floor. Combined transforms progress translation, scale, and rotation
-together inside one uninterrupted two-contact sequence so recognizers observe every intent without an
-adapter regenerating geometry. The planner does not clamp points, cache the viewport, or distort
-the requested components. Every injected sample must fit the freshly resolved active-app
-interaction viewport; otherwise the request fails before injection with
-`GESTURE_TRAJECTORY_OUT_OF_BOUNDS` and actionable details. Span and angle remain internal because
-no established automation use case justifies a public tuning surface.
+- One contact: pan, fling, or target-authored drag with a complete pointer trajectory and explicit execution profile.
+- Two contacts: pan, pinch, rotate, or transform with two complete synchronized trajectories.
+
+Public `swipe` without duration remains an alias for fixed-duration fling.
+These timed public forms are rejected:
+
+- `swipe x1 y1 x2 y2 durationMs`.
+- `gesture fling direction x y distance durationMs`.
+- `gesture swipe preset durationMs`.
+- `gesture rotate degrees x y velocity`.
+
+For deliberate timed translation, callers must use `gesture pan`.
+For rotation, they must use `gesture rotate` without `velocity`.
+Maestro swipes normalize to canonical `pan` with origin, delta, and durationMs.
+They carry `endpoint-hold` through daemon-internal `internal.gestureExecutionProfile`.
+This matches Maestro's XCTest driver without a public execution-profile option.
+If duration is absent, Maestro supplies its 400 ms default.
+A public `pan` uses `timed-pan`.
+Thus, compatibility paths retain release behavior without a new semantic intent.
+
+The plan retains intent even when aliases share an executor:
+
+- Pinch fixes translation and rotation at zero.
+- Rotate fixes translation at zero and scale at one.
+- Two-finger pan fixes scale at one and rotation at zero.
+- Transform can apply all three components atomically.
+
+The planner owns deterministic multi-touch geometry.
+Contacts start at -90 degrees, except Android pinch starts horizontally.
+Common vertical app scroll containers capture vertical Android pinches before the pinch recognizer activates.
+An explicit planning profile also preserves dense two-contact frame-count conventions.
+Android rounds the duration/16 ms frame count.
+Apple truncates it.
+The Android transport lowerer uses the same Android sampling profile for one-contact endpoint plans.
+These profiles are planner inputs, not trajectories generated by adapters.
+
+For pinch, the larger initial/final span is 40% of the viewport's shorter side, which preserves proven Apple geometry.
+Other two-contact intents use 25% for compact translation and rotation trajectories.
+Requested scale determines the other span.
+Both spans must satisfy a 48-point reliability floor.
+Combined transforms progress translation, scale, and rotation together in one uninterrupted two-contact sequence.
+Recognizers observe every intent without adapter-generated geometry.
+The planner does not clamp points, cache the viewport, or distort requested components.
+Every injected sample must fit the freshly resolved active-app interaction viewport.
+Otherwise, the request fails before injection with `GESTURE_TRAJECTORY_OUT_OF_BOUNDS` and actionable details.
+Span and angle remain internal because no established automation use case justifies public controls.
 
 Platform adapters consume the canonical plan:
 
-- Android's `executeAndroidTouchPlan` adapter seam sends planned touch, including gesture plans plus
-  the physical movement for scroll and long-press, to provider-native touch injection when
-  available, otherwise to the bundled instrumentation helper. One-contact endpoint plans lower in
-  `packages/platform-android/src/touch-plan-lowering.ts` to approximately 16 ms transport samples before
-  either injection path. Controlled directional scrolls accelerate for one frame, then decelerate
-  through release within the requested duration, without an appended tail. Inertial scrolls and
-  general one-contact plans retain linear interpolation; two-contact plans retain their exact
-  planned samples. Easing reduces release momentum but does not guarantee an exact content offset. Transport samples are typed as
-  strictly denser than the canonical endpoint pair, so skipping that lowering is a type error at
-  the injection seams instead of a silently sparse gesture. A stationary long-press needs no
-  viewport on the helper path; the executor adds the paired provider-owned viewport only for
-  provider-native touch. Android touch execution never falls back to `adb input swipe`. Public
-  scroll durations below one 16 ms planner frame normalize to that physical minimum and report the
-  executed duration. Scroll evidence reports absolute injected coordinates against zero-origin
-  extents that include the viewport offset. Because Android permits only one instrumentation owner
-  of `UiAutomation`, snapshot capture, gesture viewport resolution, and planned-touch injection
-  share one bundled automation helper: a live persistent helper session executes touch commands
-  directly, and without one the same helper runs one-shot. Nothing stops the snapshot session
-  around gestures anymore (amended 2026-07, issue #1275; previously a separate one-shot
-  multi-touch helper forced a session stop/restart around every local gesture).
-- iOS lowers one-contact endpoint-hold plans to the established fast-swipe synthesis profile. That
-  profile reaches the endpoint in 100 ms, then holds there for the planned duration before lifting,
-  matching Maestro's XCTest driver. One-contact plans are linear and therefore carry only their
-  start and end samples, with the authored duration between them. Two-contact plans convert every
-  planned point to native orientation and feed the exact arrays to the private XCTest event bridge.
-  macOS lowers a one-contact plan to its drag executor and tvOS lowers it to remote direction. Core
-  admission and the Apple adapter both consume the same shared multi-touch support policy;
-  multi-touch remains capability-gated to iOS simulators.
+- **Android.** `executeAndroidTouchPlan` receives gesture plans and physical movement for scroll and long-press.
+  If provider-native touch injection is available, it uses that provider.
+  Otherwise, it uses the bundled instrumentation helper.
+  `packages/platform-android/src/touch-plan-lowering.ts` lowers one-contact endpoint plans to approximately 16 ms transport samples before either injection path.
+  Controlled directional scrolls accelerate for one frame, then decelerate through release within the requested duration.
+  They append no extra movement.
+  Inertial scrolls and general one-contact plans retain linear interpolation.
+  Two-contact plans retain their exact planned samples.
+  Easing reduces release momentum but does not guarantee an exact content offset.
+  Transport types require samples strictly denser than the canonical endpoint pair.
+  Thus, omitted lowering causes a type error at injection boundaries instead of silently sparse input.
+  A stationary long-press needs no viewport on the helper path.
+  Only provider-native touch adds the paired provider-owned viewport.
+  Android touch execution never falls back to `adb input swipe`.
+  Public scroll durations below one 16 ms planner frame normalize to that minimum and report the executed duration.
+  Scroll evidence reports absolute injected coordinates against zero-origin extents that include viewport offset.
+  Android permits only one instrumentation owner of `UiAutomation`.
+  Snapshot capture, gesture viewport resolution, and planned-touch injection therefore share one bundled automation helper.
+  A live persistent helper session executes touch commands directly.
+  Without one, the same helper runs one-shot.
+- **Apple.** iOS lowers one-contact endpoint-hold plans to the established fast-swipe synthesis profile.
+  It reaches the endpoint in 100 ms, holds for the planned duration, then lifts, as Maestro's XCTest driver does.
+  One-contact plans are linear and carry only start/end samples with the authored duration between them.
+  Two-contact plans convert every planned point to native orientation and send the exact arrays to the private XCTest event bridge.
+  macOS lowers one-contact plans to its drag executor.
+  tvOS lowers them to remote direction.
+  Core admission and the Apple adapter consume the same shared multi-touch support policy.
+  Multi-touch remains capability-gated to iOS simulators.
 
-  iOS deliberately retains three one-contact motion schedules behind the shared private-XCTest event
-  bridge. Apple's public drag API models the phases independently as an
-  [initial hold, movement velocity, and destination hold](https://developer.apple.com/documentation/xcuiautomation/xcuicoordinate/press%28forduration%3Athendragto%3Awithvelocity%3Athenholdforduration%3A%29).
-  UIKit likewise reports the velocity at finger-up together with the scroll view's predicted
-  [resting content offset](https://developer.apple.com/documentation/uikit/uiscrollviewdelegate/scrollviewwillenddragging%28_%3Awithvelocity%3Atargetcontentoffset%3A%29),
-  then applies the scroll view's configured
-  [post-lift deceleration rate](https://developer.apple.com/documentation/uikit/uiscrollview/decelerationrate-swift.property).
-  The distribution of movement over time is therefore observable gesture input, not an adapter
-  implementation detail.
+  iOS intentionally retains three one-contact motion schedules behind the shared private-XCTest event bridge.
+  Apple's public drag API independently models [initial hold, movement velocity, and destination hold](https://developer.apple.com/documentation/xcuiautomation/xcuicoordinate/press%28forduration%3Athendragto%3Awithvelocity%3Athenholdforduration%3A%29).
+  UIKit reports finger-up velocity with the predicted [resting content offset](https://developer.apple.com/documentation/uikit/uiscrollviewdelegate/scrollviewwillenddragging%28_%3Awithvelocity%3Atargetcontentoffset%3A%29).
+  It then applies the configured [post-lift deceleration rate](https://developer.apple.com/documentation/uikit/uiscrollview/decelerationrate-swift.property).
+  Movement distribution over time is therefore observable gesture input, not merely adapter implementation.
 
-  The three schedules shape that velocity differently. `endpoint-hold` moves quickly for 100 ms and
-  becomes stationary before lift. `timed-pan` and target-authored drag submit the authored samples
-  unchanged, preserving piecewise-linear movement plus explicit source and destination holds. The
-  runner's fused `scroll` reuses `endpoint-hold` for inertial release; controlled release instead
-  expands the movement to evenly spaced samples, one per roughly 16 ms capped at 30, using cubic
-  ease-out `s(t) = 1 - (1 - t)³`. A linear segment has constant movement velocity through its
-  endpoint unless a destination hold follows it; cubic ease-out decelerates from the first movement
-  and has zero slope at lift, with a starting velocity three times its average. Identical endpoints
-  and total durations can consequently produce different recognizer and deceleration outcomes.
-  Neither a destination hold nor an analytically zero endpoint slope proves a controlled release by
-  itself: XCTest event sampling and app recognizer thresholds can still leave observable post-lift
-  motion, so live evidence must measure the resulting content offset after pointer-up.
+  The schedules produce different velocity profiles:
 
-  Live iOS characterization of an eased sampled schedule against the linear ones in
-  [issue #1586](https://github.com/callstack/agent-device/issues/1586) confirmed that distinction:
-  the schedules crossed the same fling-recognizer thresholds in the tested range but produced
-  materially different post-release ScrollView positions and long-duration recognition behavior. The
-  distinction is intentional policy at the Apple adapter boundary, not a second interpretation of a
-  `GesturePlan`; changes require live evidence for both recognizer activation and post-release
-  content movement.
-- WebDriver lowers a supported plan to synchronized W3C pointer action sources. A one-contact
-  endpoint plan becomes pointer down, one timed W3C `pointerMove` from start to end, and pointer up;
-  the driver owns interpolation across that W3C tick. Multi-touch remains capability-gated until a
-  provider proves it.
+  - `endpoint-hold` moves for 100 ms, then remains stationary before lift.
+  - `timed-pan` and target-authored drag submit authored samples unchanged.
+    They preserve piecewise-linear movement and explicit source/destination holds.
+  - Fused runner `scroll` reuses `endpoint-hold` for inertial release.
+    Controlled release expands movement into evenly spaced samples, approximately one per 16 ms, capped at 30.
+    It uses cubic ease-out `s(t) = 1 - (1 - t)³`.
 
-The `Interactor` and backend expose one compositional `performGesture(plan)` primitive instead of a
-method per semantic alias. The old scalar Apple and Android multi-touch executors and the
-public-command alias-to-positionals-to-reparse route are deleted. `.ad` keeps its established
-positional syntax through one named codec; CLI, Node.js, and MCP send structured input. Providers
-should compose transport/device bindings with the shared platform adapter rather than reimplement
-the interaction runtime.
+  A linear segment retains constant velocity through its endpoint unless a destination hold follows.
+  Cubic ease-out decelerates from first movement and has zero slope at lift.
+  Its starting velocity is three times its average.
+  Thus, identical endpoints and total durations can produce different recognition and deceleration outcomes.
+  Neither destination hold nor analytically zero endpoint slope alone proves controlled release.
+  XCTest event sampling and app recognizer thresholds can still produce post-lift motion.
+  Live evidence must therefore measure content offset after pointer-up.
 
-That `.ad` codec is the script format's own syntax, not a compatibility shim, and is not scheduled
-for removal. Its callers are the CLI argv parse and
-the `.ad` line parse — both the current public syntax.
-A structured `.ad` gesture payload was rejected: it would make recordings unreadable and ungreppable
-for no behavioral gain.
+  Live iOS characterization in [issue #1586](https://github.com/callstack/agent-device/issues/1586) compared an eased sampled schedule with linear schedules.
+  In the tested range, they crossed the same fling-recognizer thresholds.
+  However, post-release ScrollView positions and long-duration recognition differed materially.
+  This distinction is intentional Apple adapter policy, not a second interpretation of `GesturePlan`.
+  Changes require live evidence for recognizer activation and post-release content movement.
+- **WebDriver.** Supported plans become synchronized W3C pointer action sources.
+  One-contact endpoint plans produce pointer down, one timed W3C `pointerMove` from start to end, and pointer up.
+  The driver owns interpolation across that W3C tick.
+  Multi-touch remains capability-gated until a provider proves it.
 
-Argument arity for both callers comes from one table (`PUBLIC_GESTURE_SYNTAX`), so a form removed
-from the CLI is removed from `.ad` in the same edit. A `.ad` script that still carries a removed
-positional fails when the script is parsed, before the replay executes any device action, with the
-offending line and its rewrite. Arity is the only thing checked at parse time: `${VAR}` tokens
-resolve after planning, and interpolation never splits a token, so the count is decidable while the
-values are not. The removal process these inputs follow — announce, warn for one minor release,
-publish the migration guide, prove the repository is clean, then remove the branch and its tests —
-is documented in the public
-[gesture migration guide](https://oss.callstack.com/agent-device/docs/migrating-gestures).
+`Interactor` and backend expose one compositional `performGesture(plan)` primitive instead of one method per semantic alias.
+The old scalar Apple/Android multi-touch executors are deleted.
+The public alias-to-positionals-to-reparse route is also deleted.
+`.ad` retains its established positional syntax through one named codec.
+CLI, Node.js, and MCP send structured input.
+Providers should compose transport/device bindings with the shared platform adapter instead of duplicating the interaction runtime.
 
-Repeated coordinate swipes are bounded at the public command contract and daemon trust boundary.
-Individual count and pause limits prevent pathological fields, while the combined planned gesture
-and pause schedule must fit within 60 seconds so valid fields cannot compose into an unbounded
-session lock.
+The `.ad` codec owns script syntax.
+It is not a compatibility shim and is not scheduled for removal.
+Its callers are CLI argv parse and `.ad` line parse, both current public syntax.
+A structured `.ad` gesture payload was rejected because it would reduce readability and text search without behavioral benefit.
 
-Public two-finger pan is additive: `pointerCount?: 1 | 2` on pan and CLI
-`--pointer-count 2`; omission remains one contact. Responses share the canonical
-`kind`, `durationMs`, `pointerCount`, `from`, and `to` fields, followed by backend evidence.
-Recording/replay keeps its existing public command identity and session semantics.
+One table, `PUBLIC_GESTURE_SYNTAX`, defines argument arity for both callers.
+Thus, removal of a CLI form removes the `.ad` form in the same edit.
+If a script retains a removed positional, parsing fails before any replay device action.
+The error names the offending line and its rewrite.
+Only arity is checked at parse time.
+`${VAR}` tokens resolve after planning, and interpolation never splits a token.
+Thus, counts are known before values.
+The public [gesture migration guide](https://oss.callstack.com/agent-device/docs/migrating-gestures) defines this removal process:
 
-Target-authored drag is additive: `gesture drag <source> <destination>` accepts a selector or pinned
-snapshot ref at each endpoint, resolves both endpoints before device injection, then lowers their center
-points to one uninterrupted single-pointer plan. The plan holds at the source, moves over the authored
-duration, optionally holds at the destination, and releases. Both endpoint-resolution disclosures and
-portable selector chains are returned to the caller. Recordings replace session-local refs at both
-endpoints with those selector chains and attach one `targets-v1` annotation containing independent source
-and destination identity evidence. Replay verifies both identities before pointer-down and guards both
-independent endpoint resolutions against the verified elements. Ref admission happens for both endpoints
-before either is dispatched, and the usual mutation boundary expires the frame after the gesture. Because
-this contract includes the source hold, timed movement, and destination hold phases, target-authored drag
-is admitted only on Android touch devices and iOS/iPadOS, whose adapters preserve the full plan.
+1. Announce the removal.
+2. Warn for one minor release.
+3. Publish the migration guide.
+4. Prove that the repository has no remaining use.
+5. Remove the branch and its tests.
 
-ADR 0011's coordinate path remains unchanged: coordinate-authored gestures do not resolve selectors or
-refs and therefore cannot claim element-targeting guarantees. Target-authored drag explicitly runs the
-shared selector/ref resolution preflight before it enters the coordinate gesture executor; its endpoint
-resolution and recording contracts are tested at that composition seam.
+The public command contract and daemon trust boundary bound repeated coordinate swipes.
+Individual count and pause limits prevent pathological fields.
+The combined planned gesture and pause schedule must fit within 60 seconds.
+Thus, individually valid fields cannot create an unbounded session lock.
+
+Public two-finger pan is additive through `pointerCount?: 1 | 2` and CLI `--pointer-count 2`.
+Omission remains one contact.
+Responses share canonical `kind`, `durationMs`, `pointerCount`, `from`, and `to`, followed by backend evidence.
+Recording/replay retains public command identity and session semantics.
+
+Target-authored drag is additive through `gesture drag <source> <destination>`.
+Each endpoint accepts a selector or pinned snapshot ref.
+Both endpoints resolve before injection.
+Their center points become one uninterrupted single-pointer plan:
+
+1. Hold at the source.
+2. Move over the authored duration.
+3. If requested, hold at the destination.
+4. Release.
+
+The caller receives both endpoint-resolution disclosures and portable selector chains.
+Recordings replace both session-local refs with those chains.
+One `targets-v1` annotation carries independent source and destination identity evidence.
+Before pointer-down, replay verifies both identities.
+It guards each independent endpoint resolution against the verified element.
+Ref admission occurs for both endpoints before either dispatch.
+After the gesture, the usual mutation boundary expires the frame.
+Only Android touch devices and iOS/iPadOS admit target-authored drag.
+Their adapters preserve the complete source-hold, timed-movement, and destination-hold plan.
+
+ADR 0011's coordinate path remains unchanged.
+Coordinate-authored gestures resolve neither selectors nor refs and cannot claim element-targeting guarantees.
+Before coordinate gesture execution, target-authored drag runs shared selector/ref preflight.
+Tests prove endpoint resolution and recording contracts at that composition boundary.
 
 ## Consequences
 
-- CLI, Node.js, MCP, runtime, and platform adapters share one normalization and planning model.
-- Adding an ergonomic gesture alias does not add a platform implementation.
-- One-finger pan remains the default and explicit two-finger pan retains pan intent.
-- The active viewport is resolved for each gesture, so rotation, keyboard, and window changes do
-  not use stale geometry.
-- On bare ADB, Android scroll and long-press require the bundled automation helper (the snapshot
-  helper APK) and `UiAutomation`; helper installation or runtime failure is surfaced directly
-  rather than degrading to an approximate `adb input swipe`.
-- Canonical one-contact plans contain only two samples: a 10-second pan is two shared-plan samples
-  instead of 626. Android expands that plan only at the transport boundary, while two-contact
-  plans remain cadence-bounded because their synchronized geometry is part of their contract.
-- Unit tests cover canonical plan shape, Android lowering, helper/provider payloads, and WebDriver
-  action construction. They cannot prove timing or event delivery inside the private XCTest bridge,
-  so iOS timing changes require live simulator evidence from an independent app-observed
-  postcondition. Runner start/end uptime deltas can supplement that evidence, but request echoes or
-  internal timing alone do not prove that the app recognized the intended gesture.
+- CLI, Node.js, MCP, runtime, and adapters share one normalization and planning model.
+- A new ergonomic alias does not require a platform implementation.
+- One-finger pan remains default, and explicit two-finger pan retains pan intent.
+- Each gesture resolves its active viewport.
+  Rotation, keyboard, and window changes therefore do not use stale geometry.
+- On bare ADB, Android scroll and long-press require the bundled automation helper, the snapshot helper APK, and `UiAutomation`.
+  Helper install or runtime failure returns directly instead of approximate `adb input swipe` fallback.
+- Canonical one-contact plans contain only two samples.
+  A 10-second pan therefore has two shared-plan samples instead of 626.
+  Android expands them only at the transport boundary.
+  Two-contact plans remain cadence-bounded because synchronized geometry belongs to their contract.
+- Unit tests cover plan shape, Android lowering, helper/provider payloads, and WebDriver actions.
+  They cannot prove timing or delivery inside the private XCTest bridge.
+  iOS timing changes therefore require live simulator evidence from an independent app-observed postcondition.
+  Runner start/end uptime deltas can supplement it.
+  Request echoes or internal timing alone do not prove recognition of the intended gesture.
 
 ## Alternatives Considered
 
-- Keep positional aliases and share only geometry math: rejected because validation, response, and
-  routing would still have two implementations.
-- Make platform gesture APIs the source of truth: rejected because their timing, geometry, and
-  recognizer behavior differ and cannot provide cross-platform semantics.
-- Make swipe a public synonym for pan: rejected because battle-tested gesture vocabulary treats a
-  fling/swipe as a quick directional throw and pan as deliberate timed translation.
-- Add `two-finger-pan`: rejected because pointer count is topology, not a new motion intent.
-- Expose span/angle controls: rejected until a concrete automation use case needs them.
-- Consolidate scroll command semantics: rejected because edge/content verification is distinct;
-  only its Android physical touch execution is shared.
+- **Keep positional aliases and share only geometry.** Rejected because validation, response, and routes would retain two implementations.
+- **Make platform gesture APIs authoritative.** Rejected because their timing, geometry, and recognition differ and cannot define cross-platform semantics.
+- **Make swipe a public synonym for pan.** Rejected because established gesture vocabulary distinguishes quick directional fling/swipe from deliberate timed pan.
+- **Add `two-finger-pan`.** Rejected because pointer count defines topology, not new motion intent.
+- **Expose span/angle controls.** Rejected until a concrete automation use case requires them.
+- **Consolidate scroll semantics.** Rejected because edge/content verification is distinct.
+  Only Android physical touch execution is shared.
