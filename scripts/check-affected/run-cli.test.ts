@@ -54,34 +54,42 @@ function invoke(cwd: string, args: string[]) {
   return { ...result, receipt: JSON.parse(result.stdout) as ExecutionReceipt };
 }
 
-test('CLI JSON contains execution plan and preserves the failing command exit code', () => {
-  const { cwd, base } = fixture();
-  try {
-    const result = invoke(cwd, ['--base', base]);
-    assert.equal(result.exitCode, 7, result.stderr);
-    assert.equal(result.receipt.status, 'failed');
-    assert.equal(result.receipt.exactCommit, true);
-    assert.deepEqual(result.receipt.changedFiles, ['AGENTS.md']);
-    assert.deepEqual(result.receipt.plan?.checks, ['agent-guidance']);
-    assert.equal(result.receipt.results[0]?.exitCode, 7);
-    assert.equal(result.receipt.results[0]?.status, 'failed');
-  } finally {
-    fs.rmSync(cwd, { recursive: true, force: true });
-  }
-});
+test(
+  'CLI JSON contains execution plan and preserves the failing command exit code',
+  { skip: process.platform === 'win32' },
+  () => {
+    const { cwd, base } = fixture();
+    try {
+      const result = invoke(cwd, ['--base', base]);
+      assert.equal(result.exitCode, 7, result.stderr);
+      assert.equal(result.receipt.status, 'failed');
+      assert.equal(result.receipt.exactCommit, true);
+      assert.deepEqual(result.receipt.changedFiles, ['AGENTS.md']);
+      assert.deepEqual(result.receipt.plan?.checks, ['agent-guidance']);
+      assert.equal(result.receipt.results[0]?.exitCode, 7);
+      assert.equal(result.receipt.results[0]?.status, 'failed');
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  },
+);
 
-test('full CLI works without origin/main and still blocks a missing install', () => {
-  const { cwd } = fixture();
-  try {
-    const full = invoke(cwd, ['--full']);
-    assert.equal(full.exitCode, 0, full.stderr);
-    assert.equal(full.receipt.results[0]?.id, 'check:tooling');
-    fs.writeFileSync(path.join(cwd, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
-    const stale = invoke(cwd, ['--full']);
-    assert.equal(stale.exitCode, 1);
-    assert.match(stale.stderr, /node_modules does not match/);
-    assert.deepEqual(stale.receipt.results, []);
-  } finally {
-    fs.rmSync(cwd, { recursive: true, force: true });
-  }
-});
+test(
+  'full CLI works without origin/main and still blocks a missing install',
+  { skip: process.platform === 'win32' },
+  () => {
+    const { cwd } = fixture();
+    try {
+      const full = invoke(cwd, ['--full']);
+      assert.equal(full.exitCode, 0, full.stderr);
+      assert.equal(full.receipt.results[0]?.id, 'check:tooling');
+      fs.writeFileSync(path.join(cwd, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
+      const stale = invoke(cwd, ['--full']);
+      assert.equal(stale.exitCode, 1);
+      assert.match(stale.stderr, /node_modules does not match/);
+      assert.deepEqual(stale.receipt.results, []);
+    } finally {
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  },
+);

@@ -35,6 +35,7 @@ test('checkout fingerprint distinguishes edits with identical porcelain status a
     git('add', '.');
     assert.notEqual(second.fingerprint, readCheckoutState(cwd).fingerprint);
     // Both status and ls-files must tolerate more than spawnSync's default 1 MiB.
+    git('config', 'core.longpaths', 'true');
     const wide = path.join(cwd, ...Array<string>(3).fill('d'.repeat(220)));
     fs.mkdirSync(wide, { recursive: true });
     for (let index = 0; index < 1200; index++)

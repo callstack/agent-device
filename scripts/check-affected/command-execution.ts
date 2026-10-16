@@ -26,9 +26,6 @@ export async function executeValidationCommand(
     15_000,
   );
   let commandPid: number | undefined;
-  const cancelTree = () => {
-    if (commandPid !== undefined) lock.cancelCommand(commandPid);
-  };
   try {
     lock.recordCommand(run.receiptPath, null);
     const output = await runCmdStreaming(
@@ -38,16 +35,13 @@ export async function executeValidationCommand(
         cwd,
         allowFailure: true,
         captureOutput: false,
-        detached: process.platform !== 'win32',
+        detached: true,
         kill: { signal: 'SIGTERM', graceMs: 5000 },
         signal: run.controller.signal,
         stdin: 'run\n',
         onSpawn: (child) => {
           commandPid = child.pid;
           if (commandPid) lock.recordCommand(run.receiptPath, commandPid);
-          // Register before host-kit installs its abort handler, which can kill the wrapper.
-          if (process.platform === 'win32')
-            run.controller.signal.addEventListener('abort', cancelTree, { once: true });
         },
         env: {
           ...process.env,
@@ -72,7 +66,6 @@ export async function executeValidationCommand(
     result.reason = error instanceof Error ? error.message : String(error);
     throw error;
   } finally {
-    run.controller.signal.removeEventListener('abort', cancelTree);
     clearInterval(heartbeat);
     fs.closeSync(descriptor);
     result.durationMs = Date.now() - started;

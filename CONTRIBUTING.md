@@ -217,6 +217,9 @@ For broad refactors or when explicitly requested, run the deterministic core agg
 pnpm check
 ```
 
+Serialized validation (`pnpm check` and `check:affected --run`) requires macOS or Linux.
+On Windows, use the affected plan and direct focused checks.
+
 `pnpm check` takes the same host lock as `check:affected --run`, prints a receipt path, and writes
 logs under `.tmp/validation`. It covers formatting, lint, typechecking, layering, dependency-graph parity, production
 exports, MCP metadata, the distributable build, bundle ownership, Fallow, unit tests, and local smoke

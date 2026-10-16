@@ -1,6 +1,6 @@
 # Validate a change
 
-Use this to select checks and interpret results. Use [isolated experiments](test-experiments.md) for mutations or base comparisons.
+For mutations or base comparisons, use [isolated experiments](test-experiments.md).
 
 ## Run checks
 
@@ -8,12 +8,12 @@ Use this to select checks and interpret results. Use [isolated experiments](test
 2. Before pushing, commit the change. Run `pnpm check:affected --run --head <commit>`.
 3. For a broad refactor or an explicitly requested full gate, run `pnpm check`.
 
+Serialized validation requires macOS or Linux. On Windows, use plan mode or focused checks.
 Both broad commands acquire the same host lock. Wait for the owner to finish, or cancel your waiter with Ctrl-C.
 Do not add lock wrappers or delete lock files. A wait ends after two hours. Nested validation fails immediately.
 Focused tests do not lock. Avoid subprocess-heavy tests beside a broad gate.
 
-The runner prints progress and a receipt path. The receipt links command logs and Vitest JSON.
-It records refs, checkout state, commands, exit codes, skips, and failures.
+The runner prints progress and a receipt path with refs, checkout state, command logs, exits, skips, and Vitest results.
 Execution stops at the first failure. Unexecuted checks remain `not-run`.
 
 - `pnpm check:affected`: compact plan.
@@ -29,7 +29,7 @@ Initial/final checks detect persistent changes; they do not sandbox the checkout
 ## Interpret selection
 
 A package manifest or TypeScript config can affect every consumer. A full selection for these changes is intentional.
-`FAIL-OPEN` means the selector could not safely narrow the set. Read `plan.failOpenReasons`.
+`FAIL-OPEN` means the selector could not safely narrow the set. Read `failOpenReasons` in plan JSON or `plan.failOpenReasons` in a receipt.
 Do not reduce selection to get a pass.
 
 Read required-check status on the PR. The receipt lists skipped checks and owners in `results[].reason`.
