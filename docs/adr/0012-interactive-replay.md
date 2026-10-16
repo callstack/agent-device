@@ -905,390 +905,359 @@ Measure clean replay and one induced divergence repaired through the permitted `
 
 ### 6. Agent-supervised re-record repair ("heal-by-doing")
 
-Decision 1 retired `--update`'s SILENT auto-rewrite because selector agreement is not proof of the same
-target. This decision is not a reversal of that: it adds an EXPLICIT, agent-driven repair path — the
-agent performs the failed step with ordinary interactive commands an operator can see, and the CLI
-records what actually worked. Nothing here re-applies a candidate selector unattended; retiring silent
-auto-rewrite and adding explicit agent-driven re-record are consistent, not contradictory.
+Decision 1 retires silent `--update` rewrites because selector agreement does not prove target identity.
+This decision adds explicit agent-driven repair without restoring unattended selector application.
+The agent performs the failed step with ordinary visible interactive commands.
+The CLI records the successful execution.
 
-Decision 1's replacement repair surface for a selector-drift divergence (a recorded label/id renamed so
-the selector no longer matches) is: hand-edit the `.ad` selector text, then fresh-replay. Measured
-2026-07-12: this is a hostile repair surface for models — a small-model (Haiku) repair run thrashed 26
-turns and corrupted the `.ad` to `INVALID_ARGS`, editing escaped-quote selector chains
-(`label="X" || label="X"`), and the divergence `suggestions` list was empty for the renamed label. The
-divergence *report* is good (decision 4); the repair *affordance* is broken. Models should not edit `.ad`
-text.
+Decision 1 initially requires hand edits to `.ad` selectors followed by fresh replay after selector drift.
+A 2026-07-12 Haiku experiment showed that this repair method is difficult for models.
+The model used 26 turns and corrupted escaped-quote selector chains (`label="X" || label="X"`) into `INVALID_ARGS`.
+The renamed label also produced no divergence `suggestions`.
+Decision 4's report is useful, but text editing is an unsuitable repair method.
+Models should not edit `.ad` text.
 
-When a replay diverges on selector drift, the agent instead performs the failed step's **intent** with
-ordinary interactive commands against the fresh blessed `@refs` the divergence's `screen` already hands
-it (decision 4), and the CLI emits a healed `.ad` equal to the session's actual successful execution
-path — no text editing, no silent similarity-heal.
+For selector drift, the agent instead performs the failed step's **intent** through fresh actionable refs from divergence `screen` (decision 4).
+The CLI produces a healed `.ad` from the session's actual successful execution path.
+This requires neither text edits nor silent similarity-based repair.
 
-**Core mechanism — the healed script IS `session.actions`.** No new splice engine. `session.actions`
-already accumulates every executed action for the session's lifetime
-(`packages/daemon/src/core/session-action-recorder.ts:92`, unconditional push), and the divergence refusal is
-pre-dispatch (target verification refuses before the device action, decision 3), so a divergent step is
-never pushed. Across a repair session: original steps that verified and dispatched land in
-`session.actions`; the divergent step is absent (refused pre-dispatch, never recorded); the agent's
-corrective interactive action(s) land in `session.actions` with fresh `target-v1` evidence, because
-recording is armed and armed recording also disables the direct-iOS fast path (PR #1196) so evidence is
-computable. `formatSessionScript` over `session.actions` from the repair-run boundary (R6 — the slice
-recorded during this repair, not the whole session history) is therefore the healed script: the path that
-actually worked. The only net-new code is flag-threading plus one writer entry point.
+**Core mechanism — the healed script IS `session.actions`.** No new splice engine is necessary.
+`session.actions` accumulates executed actions throughout session lifetime.
+`packages/daemon/src/core/session-action-recorder.ts:92` pushes them unconditionally.
+Decision 3's pre-dispatch refusal prevents a divergent target-binding step from entering that list.
+Verified original steps and corrective interactive actions enter the list.
+Corrective actions receive fresh `target-v1` evidence because recording is armed.
+Armed recording also disables the direct-iOS fast path (PR #1196), which permits evidence computation.
+`formatSessionScript` serializes actions from the repair boundary onward (R6).
+That slice is the successful path, independent of earlier session history.
+Only flag propagation and one writer entry point require new code.
 
-**The two repair sub-flows (routed by the mechanical `repairHint`).** A `selector-miss` with
-`matchCount: 0` (decision 3) is the same wire surface for "label renamed" and "app is on the wrong screen
-entirely", so the sub-flow is not left to the agent to guess. The daemon computes a `repairHint` enum at
-divergence time (R3 below) and sends only that value on the wire: `record-and-heal` selects the
-selector-drift sub-flow, `state-repair` selects the app-state sub-flow. The agent follows the hint —
-overriding with a fresh `screen.refs` read (or one `snapshot -i`) only when it is genuinely ambiguous —
-rather than routing blind. The two sub-flows use different recording discipline:
+**The two repair sub-flows (routed by the mechanical `repairHint`).**
+A `selector-miss` with `matchCount: 0` can mean a renamed label or an entirely incorrect screen.
+The daemon distinguishes the sub-flows with R3's `repairHint`.
+Only the enum crosses the wire.
+`record-and-heal` selects selector-drift repair; `state-repair` selects app-state repair.
+The agent follows the hint.
+Only if the case is ambiguous does it override routing after a fresh `screen.refs` read or one `snapshot -i`.
+Each sub-flow has different recording rules:
 
-1. **Selector drift** (expected screen, one control renamed or moved): the agent presses the correct
-   control via a blessed `@ref` from `screen.refs` — recorded (no `--no-record`). This corrective
-   action, with fresh evidence, becomes the healed step. Then `replay --from N+1 --plan-digest
-   <original>` continues past the step the agent just performed. If a later step also diverges, the loop
-   repeats.
-2. **App-state divergence** (the script is correct; the app is simply in the wrong state): the agent
-   drives the app to the expected state with `--no-record` actions — one-time state setup, not script
-   steps, and must not pollute the healed script — then `replay --from N --plan-digest <original>`
-   re-runs the *unchanged* step N, which now matches.
+1. **Selector drift:** the expected screen has a renamed or moved control.
+   The agent presses the correct actionable `screen.refs` target without `--no-record`.
+   This action and its fresh evidence replace the failed step in the healed script.
+   `replay --from N+1 --plan-digest <original>` then continues after the manually performed step.
+   A later divergence repeats the loop.
+2. **App-state divergence:** the script is correct, but the app state is incorrect.
+   The agent restores expected state with `--no-record` actions.
+   These one-time setup actions must not enter the healed script.
+   `replay --from N --plan-digest <original>` then repeats unchanged step N.
 
-**Required protocol rules (normative).** These seven rules are the difference between "the mechanism
-works" and "healed scripts are always valid":
+**Required protocol rules (normative).** Seven rules make healed scripts valid:
 
-- **R1 — recording is armed from the first replay, not on divergence.** `replay <file>.ad
-  --save-script[=<out>]` sets `session.recordSession = true` before step 1, not on divergence. Prefix
-  steps are re-executed during the repair replay; only if recording is armed from the start do they land
-  in `session.actions` with fresh `target-v1` evidence. Arming late yields a hybrid healed script (an
-  annotated corrective step glued to a bare, unannotated prefix) that re-diverges on its own next replay
-  (`packages/daemon/src/execution/interaction/internal/interaction-common.ts:64-65` attaches evidence only when `recordSession` was
-  true when the step ran).
-- **R2 — `--from` continuation only; never re-run the full replay on the same session.** After a
-  divergence at step N and the corrective action, the agent must continue with `replay --from k
-  --plan-digest <original>`, not a fresh full `replay`. A full re-replay on the same session re-appends
-  the already-recorded prefix `1..N-1` to `session.actions` — duplication, because
-  `session-action-recorder.ts:92` pushes unconditionally and replay dispatch does not inject `noRecord`.
-  The two sub-flows differ in `k`: app-state uses `k = N` (re-run the unchanged step after fixing state);
-  selector-drift uses `k = N + 1` (the agent already performed step N manually; do not re-run it).
-- **R3 — a mechanical `repairHint` on the divergence payload gates the sub-flow; no LLM-only routing.**
-  The `repairHint` enum is computed **daemon-side at divergence time, never by the agent**, from two
-  inputs the daemon already holds: (i) the recorded `targetEvidence` — the daemon owns the parsed
-  `target-v1` `ancestry`/`scrollRegion` (decision 3), *when the diverged action carried an annotation* —
-  and (ii) the divergence's own screen capture — the daemon owns the whole current tree, not the flat,
-  20-capped `screen.refs` shipped on the wire. Only the resulting enum value crosses the wire, so "the
-  wire omits `ancestry`" is moot: the container-presence test runs where both inputs exist.
-  **Capture timing differs by kind, and the test uses whichever capture the kind already provides:** a
-  target-binding kind (`selector-miss`/`identity-mismatch`/`identity-unverifiable`) verifies before
-  dispatch, so its capture is the PRE-action tree; an ordinary `action-failure` (the dispatch-thrown
-  path, per PR #1223) captures its screen AFTER the failed response, so its capture is the POST-response
-  tree. The post-response tree is adequate for the only question the test asks — "does the recorded
-  container currently exist?" — so `action-failure` does not need a separately stored pre-action tree.
-  The mapping covers all four divergence `kind`s:
-  - **selector-miss** (`matchCount: 0`): recorded container still present in the current capture →
-    `record-and-heal` (selector drift); container absent or the screen differs → `state-repair`
-    (app-state).
-  - **identity-mismatch** (`matchCount >= 1`, wrong identity) → `caution`: something matched the recorded
-    selector, so a blind re-press may repeat the mistake.
-  - **identity-unverifiable** → `manual`: future replays block this step pre-action, so heal-by-doing is
-    a poor fit.
-  - **action-failure** → the same container-presence test over its post-response capture: container
-    present → `record-and-heal`, else `manual`.
+- **R1 — recording starts with the first replay.** `replay <file>.ad --save-script[=<out>]` sets `session.recordSession = true` before step 1.
+  It must not wait for divergence.
+  The repair replay re-executes prefix steps.
+  Recording from the start supplies fresh `target-v1` evidence for those steps.
+  Late activation creates an annotated correction with an unannotated prefix that can diverge on its next replay.
+  `packages/daemon/src/execution/interaction/internal/interaction-common.ts:64-65` attaches evidence only when `recordSession` was true at execution.
+- **R2 — continuation uses `--from`.** After divergence at N and correction, the agent must use `replay --from k --plan-digest <original>`.
+  It must never repeat full replay on that session.
+  Full replay appends prefix `1..N-1` again because `session-action-recorder.ts:92` pushes unconditionally.
+  Replay dispatch does not inject `noRecord`.
+  App-state repair uses `k = N` to repeat the unchanged step.
+  Selector-drift repair uses `k = N + 1` because the agent already performed N.
+- **R3 — daemon-computed `repairHint` determines the sub-flow.** The agent must not compute it alone.
+  At divergence, the daemon uses recorded `targetEvidence` and the full divergence capture.
+  Parsed `target-v1` `ancestry`/`scrollRegion` are available when the action has an annotation.
+  The current tree is available before reduction to the wire's 20-ref cap.
+  The daemon tests container presence where both inputs exist.
+  Only the enum crosses the wire; omission of ancestry from the wire does not affect computation.
 
-  The mapping is **total**: every (`kind` × evidence-presence × capture-availability) triple resolves to a
-  defined enum, and any case that cannot be proven safe defaults to `manual`. Two fail-safes make it so.
-  First, when the diverged action carried **no recorded `targetEvidence`** — PR #1223 wraps unannotated
-  actions too, so this is reachable for `action-failure` and for any kind on a legacy/unannotated script —
-  there is no recorded container to test → `manual`. Second, when the divergence capture is sparse or
-  unavailable so the container-presence test cannot run → `manual`. This resolves the routing mechanically
-  instead of leaving it to agent judgment.
-- **R4 — corrective actions must materialize to selector form; the writer fails loudly on a bare `@ref`
-  cross-session export.** A `press @e12` normally resolves a `selectorChain` at runtime
-  (`packages/daemon/src/execution/interaction/internal/interaction-touch-targets.ts`), which `buildOptimizedActions`
-  (`packages/daemon/src/core/session-script-writer.ts:368-377`) rewrites to a selector line. If no `selectorChain` was
-  captured, the writer must refuse to emit a bare `@ref` line into a persisted `.ad` — a session-bound
-  ref will not resolve in a fresh run. It **fails loudly**: an error surfaced to the user with a non-zero
-  exit, never a swallowed or silently-dropped line (existing session-write paths swallow such failures;
-  this one must not), so the repair never ships a non-replayable script.
-- **R5 — the repair session must contain a recorded `open`.** The repair must start with a `replay` of a
-  script whose step 1 is `open --relaunch` (or an explicit recorded `open`), so the healed `.ad` is
-  self-contained.
-- **R6 — the healed script is bounded to the repair run, not the whole session.** `replay --save-script`
-  records a **boundary watermark** = `session.actions.length` at the replay invocation (see "Emitting the
-  healed script" below). The healed `.ad` serializes only actions from that watermark onward — the repair
-  replay's own execution path — so a reused session's earlier, unrelated actions never leak into the
-  healed script. This makes the healed output independent of prior session history without requiring a
-  fresh session for the repair itself.
-- **R7 — the repair transaction spans the whole live session; the session stays addressable until the
-  transaction ends (commit or abort).** `--save-script` opens a multi-invocation repair **transaction**
-  whose state **persists on the session** — it is not re-derived from each request's flags. A repair-armed
-  replay that returns `REPLAY_DIVERGENCE` with **`resume.repairSessionHeld: true`** (decision 4 — the
-  distinct session-lifetime signal, NOT `resume.allowed`, which conveys plan-resumability only and is
-  emitted for every divergence) **MUST NOT** tear down the owning daemon or session. **Continuation is by
-  persisted transaction state, not the per-request flag:** `replay --from <n> --plan-digest <sha>` resumes
-  the repair on that same armed session **without repeating `--save-script`** — the opener is the only
-  place that flag appears — and the implementation MUST key keep-alive and continuation off the session's
-  persisted transaction, never off whether the current request carried `--save-script`. The boundary
-  watermark (R6) and the accumulating `session.actions` slice only mean anything if that one session
-  survives across invocations. This strengthens R2: same-session continuation is not merely preferred, it
-  is a lifetime guarantee.
+  Capture timing depends on divergence kind.
+  Target-binding kinds use the pre-action verification tree.
+  Ordinary `action-failure` uses the post-response capture from the dispatch-thrown path (PR #1223).
+  That tree answers whether the recorded container currently exists.
+  No separately stored pre-action tree is necessary.
+  The mapping covers all four kinds:
 
-  **Commit is at teardown, gated on `COMPLETE`.** Any teardown of the session — an explicit `close`, an
-  idle-reap, or a daemon shutdown — **commits** the healed `.ad` atomically **iff** the transaction is
-  `COMPLETE`, and otherwise **aborts** with no publish (never a prefix), per the commit state machine
-  below. An idle-reap or shutdown of an INCOMPLETE transaction additionally leaves a **tombstone** (R7's
-  ownership guarantee, under "Repair-session tombstone" below), so a later command on that session key
-  surfaces a specific `REPAIR_SESSION_EXPIRED` recovery error with re-run guidance, never a bare
-  `SESSION_NOT_FOUND`; an explicit `close` of an incomplete transaction simply discards. A
-  **persistent-daemon precondition is explicitly rejected**: if some implementation constraint would
-  prevent keep-alive, the armed replay must **fail-fast before step 1** with actionable guidance, never
-  proceed and then fail a later `--from` with `SESSION_NOT_FOUND`.
+  | Kind | Condition | Hint |
+  | --- | --- | --- |
+  | `selector-miss` (`matchCount: 0`) | Recorded container present | `record-and-heal` |
+  | `selector-miss` | Container absent or screen differs | `state-repair` |
+  | `identity-mismatch` (`matchCount >= 1`) | Selector matched incorrect identity | `caution` |
+  | `identity-unverifiable` | Every case | `manual` |
+  | `action-failure` | Recorded container present in post-response capture | `record-and-heal` |
+  | `action-failure` | Otherwise | `manual` |
 
-  **Interaction with the CLI client's one-shot teardown (issue #1384).** A repair-armed replay that
-  completes cleanly (no divergence, transaction reaches `COMPLETE`) skips its terminal source `close` by
-  design (above), so the session always survives the run. Once the client keeps a one-shot `replay`'s
-  owning daemon alive whenever the session survives (`ReplayCommandResult.sessionActive`, independent of
-  repair state), that keep-alive now applies here too: the healed `.ad` commit — gated on teardown, not on
-  the replay response — is deferred past the request that completed it, landing only when the agent issues
-  an explicit `close`/`close --save-script` or ordinary idle-reap tears the session down. This is the
-  correct shape of "commit at teardown" (the session stays addressable for inspection immediately after a
-  completed repair, per R7), but it changes observable timing for a scripted caller that previously saw
-  the healed sibling appear the instant the one-shot client process exited.
+  `caution` prevents an unexamined repeat press from repeating an incorrect match.
+  `manual` reflects future pre-action refusal for unverifiable identity.
+  The mapping is total over kind, evidence presence, and capture availability.
+  Anything not proven safe defaults to `manual`.
+  Two fail-safes override the container mapping:
 
-**Terminal lifecycle steps during a repair-armed `--from` resume.** Verification is scoped, per decision
-3, to *annotated resolved targets* — so a non-target step (a source `close`, or any step carrying no
-`target-v1` `targetEvidence`) is already exempt from target-binding divergence: it may still surface an
-`action-failure` if its dispatch genuinely fails, but never a `selector-miss`/`identity-mismatch`/
-`identity-unverifiable` merely for lacking evidence. This is a clarification of decision 3's existing
-scope, not a change to it. The **terminal source `close`** is defined precisely as *the last action of
-the source plan being a `close`*. During a repair-armed replay or resume that terminal source `close` is
-**SKIPPED — not dispatched**: dispatching it deletes the session mid-transaction (the very session R7
-keeps alive), so it must never run under an armed repair. Reaching it instead marks the transaction
-`COMPLETE` (see commit state machine); the next teardown of the session — normally the agent's own
-`close`/`close --save-script` — then commits (a teardown at `COMPLETE` always commits; R7).
+  - No recorded `targetEvidence` means no container to test, so the hint is `manual`.
+    PR #1223 also wraps unannotated actions, including reachable `action-failure` and legacy/unannotated cases.
+  - Sparse or unavailable capture prevents the test, so the hint is `manual`.
 
-**Acceptance test (mandatory).** A healed sibling `.ad` produced by the repair loop must replay
-end-to-end in a **fresh session** with every selector step annotated and no bare `@ref`.
+- **R4 — corrective actions must materialize to selectors.** The writer must refuse persisted bare `@ref` exports with an explicit error.
+  `press @e12` normally resolves a `selectorChain` in `packages/daemon/src/execution/interaction/internal/interaction-touch-targets.ts`.
+  `buildOptimizedActions` converts it to a selector line (`packages/daemon/src/core/session-script-writer.ts:368-377`).
+  Without a captured chain, the writer must refuse a bare `@ref` in persisted `.ad` output.
+  A session-bound ref cannot resolve in a fresh run.
+  Failure must reach the user with a nonzero exit.
+  The writer must neither suppress the failure nor silently omit the line, despite existing session-write behavior.
+- **R5 — repair must contain a recorded `open`.** The source script's first step must be `open --relaunch` or an explicit recorded `open`.
+  This makes the healed `.ad` self-contained.
+- **R6 — the healed script contains only the repair run.** `replay --save-script` records `session.actions.length` as its boundary watermark at invocation.
+  Only actions at or after that watermark are serialized.
+  Earlier unrelated actions from a reused session never enter the healed script.
+  The repair session itself need not be fresh.
+- **R7 — the transaction persists across the live session.** The session remains addressable until commit or abort.
+  `--save-script` opens a multi-invocation repair transaction persisted on the session.
+  Each request does not reconstruct it from flags.
+  If an armed replay returns `resume.repairSessionHeld: true`, it **MUST NOT** terminate the owning daemon or session.
+  Decision 4's `resume.allowed` only describes plan resumability.
+  It is not the lifetime signal.
+  `replay --from <n> --plan-digest <sha>` continues on the same armed session **without another `--save-script`**.
+  The implementation MUST use persisted transaction state for continuation and keep-alive.
+  It must not depend on current-request `--save-script`.
+  The R6 watermark and action slice require this one surviving session.
+  Same-session continuation is therefore a lifetime guarantee, beyond R2's preference.
 
-**Digest and resume — unchanged, live-session loop.** Per decision 4, "editing a script requires a fresh
-full replay" governs validating a persisted, on-disk *edited* `.ad`. It does not block the live loop
-here: the repair happens in one live session against the unedited original file, so its plan digest is
-stable — `--from k --plan-digest <original>` is exactly decision 4's already-designed "perform step
-manually, then resume" loop. Steps `1..k-1` never re-run, so decision 4's non-idempotency guarantee holds
-by construction. The healed `.ad` is written only when the repair ends (below) and is a fresh script for
-*future* runs, carrying the same pre-existing non-idempotency caveat as any hand-written `.ad`.
+  **Every teardown commits if and only if the state is `COMPLETE`.**
+  Explicit `close`, idle-reap, and daemon shutdown otherwise abort without publication, including any prefix.
+  Idle-reap/shutdown of an incomplete transaction also leaves the tombstone described below.
+  Commands on its session key receive `REPAIR_SESSION_EXPIRED` with restart guidance instead of `SESSION_NOT_FOUND`.
+  Explicit `close` of an incomplete transaction simply discards it.
+  A persistent-daemon precondition is explicitly rejected.
+  If the implementation cannot preserve lifetime, armed replay must fail before step 1 with actionable guidance.
+  It must not proceed and later fail `--from` with `SESSION_NOT_FOUND`.
 
-**Emitting the healed script — opt-in via `--save-script`.** Arming and emission reuse the existing
-`--save-script` vocabulary and the precedented close-time write:
+  **CLI one-shot teardown interaction (issue #1384).** A clean armed replay reaches `COMPLETE` and skips terminal source `close`.
+  Its session therefore survives.
+  Once client keep-alive uses `ReplayCommandResult.sessionActive` independently of repair state, it also preserves this daemon.
+  Publication remains deferred until explicit `close`/`close --save-script` or ordinary idle-reap tears down the session.
+  This preserves R7's post-repair inspection opportunity.
+  It changes timing for scripted callers that previously saw the healed sibling immediately after one-shot client exit.
 
-- `replay <file>.ad --save-script[=<out>]` arms the repair loop at invocation, before step 1: it sets
-  `session.recordSession = true` (mirroring the existing `saveScript` handling in `session-lifecycle/internal/session-close.ts`)
-  **and** records the repair-run boundary watermark `session.actions.length` (R6). Absent this flag,
-  replay behaves exactly as today: no recording, no heal. The heal is opt-in, preserving decision 1's "no
-  silent rewrite."
-- The healed `.ad` is published when a teardown commits the transaction at state `COMPLETE` — normally the
-  agent's own `close`/`close --save-script <out>`, but any teardown of a completed transaction commits
-  (see the commit state machine below) — reusing the existing `session.actions` serializer
-  (`SessionScriptWriter.write`, `packages/daemon/src/core/session-script-writer.ts:120-158`) over the post-watermark slice
-  only (R6). When no
-  `<out>` path is given, the default is the **`<original-stem>.healed.ad` sibling**: the original script's
-  path with its `.ad` extension replaced by `.healed.ad` (e.g. `flows/login.ad` → `flows/login.healed.ad`),
-  written beside the original. The original is never overwritten in place without an explicit `<out>`
-  path, so a human reviews the diff and promotes it.
+**Terminal lifecycle steps during a repair-armed `--from` resume.**
+Decision 3 verifies only annotated resolved targets.
+A source `close` or any step without `target-v1` `targetEvidence` is exempt from target-binding divergence.
+A real dispatch failure can still produce `action-failure`.
+Absent evidence alone never causes `selector-miss`, `identity-mismatch`, or `identity-unverifiable`.
+This clarifies existing scope.
 
-**Commit state machine — `ARMED` → `COMPLETE` → `COMMITTED`.** R6 defines the *slice*; this defines *when
-the slice may be published*, as a machine-enforceable state, not a heuristic:
+A **terminal source `close`** means the source plan's last action is `close`.
+An armed replay or resume **skips it without dispatch**.
+Dispatch would delete the session that R7 preserves.
+Reaching this step instead marks the transaction `COMPLETE`.
+The next teardown, normally the agent's `close`/`close --save-script`, commits it.
+Every teardown at `COMPLETE` commits.
 
-- **`ARMED`** — set the instant `replay --save-script` arms the transaction (before step 1). The healed
-  slice is accumulating but MUST NOT be published.
-- **`COMPLETE`** — reached when the source plan has executed/healed through its **last executable step**
-  with **no outstanding divergence** (the terminal source `close` is excluded from "executable" here —
-  see the terminal-close contract above; reaching it is what flips `ARMED` → `COMPLETE`). Only in this
-  state is a publish permitted.
-- **`COMMITTED`** — the healed `.ad` has been atomically published (below). Terminal.
+**Acceptance test (mandatory).** A healed sibling `.ad` must replay completely in a **fresh session**.
+Every selector step must have an annotation.
+The script must contain no bare `@ref`.
 
-**Teardown is the commit trigger, gated on `COMPLETE`.** Any teardown of the repair-armed session — an
-explicit `close`/`close --save-script`, an idle-reap, or a daemon shutdown — commits the healed `.ad`
-**iff** the state is `COMPLETE`. A teardown while **not** `COMPLETE` is an **ABORT**: discard the slice,
-publish **nothing** — never a prefix. Reaching `COMPLETE` does not itself write a file; it only makes the
-*next* teardown a commit rather than an abort, so the artifact is published exactly once — when the
-transaction has both completed and ended. Commit is thus gated on `COMPLETE` but happens at *any* teardown
-(safer for the artifact than requiring one specific finalize command, and the model #1235 implements).
-Teardown after `COMMITTED` is **teardown-only, idempotent — no re-publish** (so it can neither
-double-commit nor trip the no-clobber guard).
+**Digest and resume — unchanged, live-session loop.**
+Decision 4 requires fresh full replay to validate an edited on-disk `.ad`.
+This repair loop keeps the original file unchanged and operates in one live session.
+Its original digest remains stable.
+`--from k --plan-digest <original>` already permits manual correction followed by continuation.
+Steps `1..k-1` never repeat, which preserves decision 4's non-idempotency constraint.
+The healed script is published only at repair completion and teardown.
+It is a new script for future runs with the same non-idempotency risk as any hand-written `.ad`.
 
-**Atomic, race-safe publication.** The commit serializes the healed slice (ending with a serialized
-`close` line so the artifact is self-contained) to a temp file created **in the same directory as the
-final target** — an explicit `--save-script=<path>` target may live on a different mount than any
-process-wide temp dir, and `linkSync` requires the same filesystem — then publishes with a single
-exclusive `linkSync(temp, target)`: create-if-absent, first writer wins. A reader therefore never
-observes a half-written healed script, and an aborted repair leaves no partial behind.
+**Emitting the healed script — opt-in via `--save-script`.** Activation reuses existing flag vocabulary and close-time publication:
 
-**Publication refuses ANY pre-existing target — complete or partial, default or explicit path alike.**
-An earlier design distinguished a *complete, review-worthy* artifact (protected) from an incomplete or
-partial one (silently overwritable), enforced through a publish lock. That distinction added a whole
-class of lock/lease/reclaim races for a case that is, in practice, a degenerate state: a partial healed
-file left behind by an aborted or reaped repair. The simpler, adopted design collapses this: the atomic
-`linkSync` itself decides the winner (`EEXIST` iff a file already sits at the target, regardless of its
-contents), and the caller must explicitly clear the way — remove the existing file, or pass a different
-`replay --save-script=<path>` — rather than have it silently replaced. No lock, no lease, no steal, no
-overwrite. The `# agent-device:heal-complete` trailing sentinel remains — it still marks a healed `.ad` as
-a complete, review-worthy repair artifact for any other reader — but it no longer participates in the
-publish decision. Auto-versioned output names (e.g. `.healed.2.ad`) are explicitly **out of scope** here —
-a separate naming change, not part of this decision.
+- Before step 1, `replay <file>.ad --save-script[=<out>]` sets `session.recordSession = true` and records the R6 boundary.
+  This follows existing `saveScript` handling in `session-lifecycle/internal/session-close.ts`.
+  Without the flag, replay retains existing behavior: no recording and no repair publication.
+  Explicit activation preserves decision 1's prohibition on silent rewrites.
+- A teardown at `COMPLETE` publishes the healed `.ad`.
+  The usual trigger is `close`/`close --save-script <out>`, but every completed-transaction teardown commits.
+  `SessionScriptWriter.write` (`packages/daemon/src/core/session-script-writer.ts:120-158`) serializes only the post-watermark slice.
+  Without `<out>`, publication uses the **`<original-stem>.healed.ad` sibling** beside the original.
+  For example, `flows/login.ad` becomes `flows/login.healed.ad`.
+  The original is never overwritten in place without an explicit `<out>` path.
+  A human reviews the diff and promotes the result.
 
-**Scope: this refusal is uniform across repair AND ordinary recording, not repair-only.** Everything
-above is written in the context of decision 6's repair-armed heal, but `publishHealedScriptAtomically`
-(`packages/daemon/src/core/session-script-writer.ts`) is the single publish primitive `SessionScriptWriter.write` calls
-for every `--save-script` target, with no repair-armed-vs-ordinary branch — a repair-armed heal
-(`saveScriptBoundary` set) and an ordinary, non-repair `open --save-script`/`close --save-script`
-recording (`saveScriptBoundary` absent) publish through the exact same exclusive `linkSync`. Before this
-decision, ordinary recording published via a separate atomic rename-replace path
-(`publishOverwriteAtomically`, since removed), silently overwriting an existing target; that overwrite
-path is gone. An ordinary recording whose target already exists is now refused exactly like a healed
-repair publish would be: `EEXIST` surfaces as the same `AppError`, the existing file is left
-byte-for-byte unchanged, and the caller must remove it or choose a different `--save-script=<path>`.
-There is no `--force`/`--overwrite` escape hatch for either path today; that is tracked as a future
-follow-up (#1258), not part of this decision.
+**Commit state machine — `ARMED` → `COMPLETE` → `COMMITTED`.**
+R6 defines the slice.
+This machine defines permission to publish:
 
-**Repair-session tombstone (R7 ownership).** When a bounded-expiry escape hatch idle-reaps (or a daemon
-shutdown tears down) a repair-armed transaction that has **not** reached `COMPLETE`, the teardown aborts
-(no publish, per the state machine) and must leave a **tombstone** rather than deleting the session record
-outright. (A teardown of a `COMPLETE` transaction instead *commits* and needs no tombstone — the
-transaction ended successfully.) The tombstone is keyed by the **session key** (the same
-owner-scoped session identifier a `--from` continuation addresses), records the **owner** and an
-**expiry**, and lives for a bounded window after reap. While it exists, any command targeting that key —
-a `--from` resume, an interactive heal step, or a `close` — resolves to `REPAIR_SESSION_EXPIRED` (with
-re-run guidance to restart the repair from the original script), never a bare `SESSION_NOT_FOUND`. A new
-`replay --save-script` on the same key **clears the tombstone and starts a fresh transaction** (`ARMED`).
-The tombstone itself expires after its bounded window, after which the key is fully free.
+- **`ARMED`:** starts immediately when `replay --save-script` activates the transaction before step 1.
+  The slice accumulates and MUST NOT be published.
+- **`COMPLETE`:** all executable source steps have executed or been repaired, with no outstanding divergence.
+  The terminal source `close` is excluded from executable steps.
+  Reaching it changes `ARMED` to `COMPLETE`.
+  Only `COMPLETE` permits publication.
+- **`COMMITTED`:** atomic publication succeeded.
+  This state is terminal.
 
-> **Amendment (#1271 stage 2): repair-segment default exclusion of observation-only commands, and the
-> `--record` opt-in.** #1271 reported that read-only diagnostics an agent runs mid-repair to LOCATE the
-> repair target — `snapshot -i`, `get attrs`, `find`, `is` — recorded into the healed script exactly like
-> the corrective action itself. The wave-3 E3 experiment measured 0/4 trials producing a clean healed
-> script hands-off; one recorded `get attrs` caused a second, self-inflicted `identity-mismatch` divergence
-> on fresh replay. This amendment excludes these observations by default. An agent can explicitly record
-> a corrective observation with `--record`.
+**Teardown is the commit trigger, gated on `COMPLETE`.**
+Explicit `close`/`close --save-script`, idle-reap, or shutdown commits if and only if the state is `COMPLETE`.
+Before that state, teardown aborts, discards the slice, and publishes nothing, including a prefix.
+Reaching `COMPLETE` alone writes no file.
+It makes the next teardown commit instead of abort.
+Publication therefore occurs once, after both completion and transaction end.
+Any teardown can preserve the completed artifact without a specific finalization command, as #1235 implements.
+After `COMMITTED`, teardown is idempotent and never republishes.
+It cannot double-commit or trigger no-clobber refusal again.
+
+**Atomic, race-safe publication.** Commit serializes the healed slice with a final `close` line for self-contained output.
+It creates a temp file **in the final target's directory**.
+An explicit target can be on another mount, and `linkSync` requires the same filesystem.
+One exclusive `linkSync(temp, target)` then publishes with create-if-absent, first-writer-wins semantics.
+Readers never see partial output.
+Aborted repair leaves no partial file.
+
+**Publication refuses every pre-existing target.** This applies to complete/partial files and default/explicit paths.
+A rejected earlier design protects complete artifacts but overwrites partial ones through a publication lock.
+That distinction introduces lock, lease, and reclaim races for partial files left by aborted repairs.
+The adopted design instead lets exclusive `linkSync` decide the winner.
+`EEXIST` means a target already exists, irrespective of content.
+The caller must remove it or select another `replay --save-script=<path>`.
+There is no lock, lease, ownership transfer, or overwrite.
+`# agent-device:heal-complete` remains a trailing marker of a complete, reviewable artifact.
+It does not affect publication permission.
+Automatic versioned names, such as `.healed.2.ad`, remain out of scope as a separate naming change.
+
+**Scope: the refusal applies to repair and ordinary recording.**
+`publishHealedScriptAtomically` in `packages/daemon/src/core/session-script-writer.ts` is the one publication primitive used by `SessionScriptWriter.write` for every `--save-script` target.
+It has no repair/ordinary branch.
+Repair sets `saveScriptBoundary`; ordinary `open --save-script`/`close --save-script` recording does not.
+Both use the same exclusive `linkSync`.
+The former ordinary rename-replace path, `publishOverwriteAtomically`, is removed.
+An ordinary recording with an existing target receives the same `AppError` for `EEXIST`.
+The existing bytes remain unchanged.
+The caller must remove the file or select another path.
+Neither path has a `--force`/`--overwrite` override.
+Issue #1258 tracks that future work outside this decision.
+
+**Repair-session tombstone (R7 ownership).**
+Idle-reap or shutdown before `COMPLETE` aborts without publication and must leave a tombstone.
+Teardown at `COMPLETE` commits instead and needs no tombstone.
+The tombstone uses the owner-scoped **session key** addressed by continuation.
+It records owner and expiry and persists for a bounded period after reap.
+During that period, every command on the key receives `REPAIR_SESSION_EXPIRED`, never `SESSION_NOT_FOUND`.
+This includes resume, interactive correction, and `close`.
+The error guides the caller to restart from the original script.
+A new `replay --save-script` on the key clears the tombstone and starts a fresh `ARMED` transaction.
+After bounded expiry, the tombstone disappears and the key is free.
+
+> **Amendment (#1271 stage 2): repair-segment default exclusion of observation-only commands, and the `--record` opt-in.**
+> Issue #1271 reports that diagnostic `snapshot -i`, `get attrs`, `find`, and `is` actions enter healed scripts alongside corrections.
+> The wave-3 E3 experiment produced 0/4 clean healed scripts without intervention.
+> One recorded `get attrs` caused another `identity-mismatch` on fresh replay.
+> This amendment excludes diagnostics by default and permits explicit corrective observations through `--record`.
 >
-> **1. Which observations are excluded — a PROVENANCE rule, not a command-class rule.** The exclusion
-> applies to an observation that is BOTH:
+> **1. Exclusion depends on provenance.** Both conditions must hold:
 >
-> - **observation-only by command**: `snapshot`, `get`, `is`, or a **read-only** `find` sub-action
->   (`exists`, `wait`, `get_text`, `get_attrs`). A **mutating** `find … click|fill|focus|type` is not in
->   this set — it is a corrective action like `press`/`fill` and always records. The top-level `wait`
->   command is deliberately **not** in this set either: it is flow timing/synchronisation (pacing the
->   script), not observation, so it must keep recording unconditionally — a healed script that silently
->   dropped its own timing steps would replay differently from what actually happened; **AND**
-> - **dispatched OUT OF BAND**: typed by the agent mid-repair, NOT replayed from the `.ad` plan under
->   repair.
+> - The command is observation-only: `snapshot`, `get`, `is`, or read-only `find` (`exists`, `wait`, `get_text`, `get_attrs`).
+>   Mutating `find … click|fill|focus|type` remains a corrective action like `press`/`fill` and always records.
+>   Top-level `wait` is excluded from this set.
+>   It controls flow timing/synchronization and must continue to record unconditionally.
+>   Silent removal of timing steps would change replay behavior.
+> - The agent dispatches the observation **out of band** during repair.
+>   It is not a step from the `.ad` plan under repair.
 >
-> The second clause is load-bearing and is the rule's real discriminator. Replayed plan steps dispatch
-> through the ordinary request path and land in `session.actions` like any other action, and the healed
-> script IS that slice (`buildOptimizedActions` over `session.actions.slice(saveScriptBoundary)`). So a
-> command-class-only exclusion would replay an authored `is visible` assertion and then **silently drop it
-> from its own healed script** — the repaired flow would quietly stop checking what the original checked,
-> which for a deterministic QA suite is the worst possible failure mode. **Planned prefix/suffix
-> observations must survive automatically; a user must never have to annotate authored `.ad` steps with
-> `--record` to keep them.** An authored observation and an interactive diagnostic read are the same
-> command, so only provenance separates them.
+> Plan steps use the ordinary request path and enter `session.actions`.
+> The healed script is `buildOptimizedActions` over `session.actions.slice(saveScriptBoundary)`.
+> A command-only exclusion would execute an authored `is visible` and silently remove its assertion from the healed script.
+> **Authored prefix/suffix observations must survive automatically without `--record`.**
+> Only provenance distinguishes authored observations from interactive diagnostics using the same command.
 >
-> Provenance travels as `internal.replayPlanStep`, stamped by `invokeResolvedReplayAction`
-> (`src/daemon/handlers/session-replay-action-runtime.ts`) — the single point every plan step is
-> dispatched, so the marker covers annotated and unannotated steps alike. `internal` is a daemon-only
-> channel (`toDaemonRequest`, `packages/daemon/src/server/http/http-rpc-methods.ts`, never copies it off the wire), so
-> authored provenance cannot be spoofed by a client; this is the same channel `replayTargetGuard` and
-> `findResolvedTarget` already use. The rule is written once, in `isInteractiveObservation`
-> (`packages/daemon/src/core/session-action-recorder.ts`), and both recording call sites consume it.
+> `invokeResolvedReplayAction` stamps `internal.replayPlanStep` at the one dispatch point for every annotated or unannotated plan step.
+> Its pointer is `src/daemon/handlers/session-replay-action-runtime.ts`.
+> `internal` is daemon-only.
+> `toDaemonRequest` in `packages/daemon/src/server/http/http-rpc-methods.ts` never copies it from the wire.
+> A client therefore cannot forge authored provenance.
+> `replayTargetGuard` and `findResolvedTarget` use the same channel.
+> `isInteractiveObservation` in `packages/daemon/src/core/session-action-recorder.ts` defines the rule once for both recording call sites.
 >
-> **2. The corrective-read trap: why even out-of-band reads need an opt-in.** Excluding every out-of-band
-> read is still not safe on its own: a divergence's **correction** can itself be a read. In the wave-3 E3 drift, the diverged step **was** a `get`, so its corrective replacement is a
-> recorded `get` that **must** land in the heal — a blanket read-exclusion would silently drop the very
-> step being repaired, producing an incomplete heal with no signal anything was missing (the same class of
-> silent-failure mode decision 3 exists to close for target-binding, and decision 6 R4 exists to close for
-> bare `@ref` exports). Distinguishing "the read that replaces the diverged step" from "reads used to locate
-> the target" by POSITION (e.g., relative to the eventual `--from` resume) was considered and rejected: the
-> daemon records each action as it happens and has no reliable way to know, at record time, which one the
-> agent will later treat as the resume boundary — and a position-based rule would silently reinterpret
-> intent after the fact rather than let the agent state it. The adopted rule instead makes this an **explicit
-> opt-in per action**: `--record` (below) marks the ONE read that must count, independent of its position in
-> the repair segment.
+> **2. A corrective read requires explicit inclusion.**
+> The failed step itself can be `get`, as wave-3 E3 measured.
+> Its corrective `get` must enter the healed script.
+> Blanket exclusion would silently remove the repaired step.
+> This resembles the silent failures prevented by decision 3 and R4.
+> A rejected alternative infers correction from position relative to eventual `--from`.
+> The daemon records actions immediately and cannot know their future resume role.
+> That alternative would retrospectively reinterpret intent.
+> `--record` instead identifies the corrective read explicitly, irrespective of position.
 >
-> **3. Explicit recording remains possible.** `--record` forces an out-of-band observation into the heal
-> even though its command is observation-only. It exists for exactly one job: an interactive corrective
-> read the agent is deliberately inserting into the healed script. It is a no-op outside a repair-armed
-> session (there is no default exclusion to override), and it is **not** needed for authored plan steps —
-> those survive on provenance alone (rule 1).
+> **3. Explicit recording remains possible.**
+> `--record` forces an out-of-band observation into the healed script.
+> Its purpose is an interactive corrective read.
+> Outside repair, it has no effect because no default exclusion applies.
+> Authored plan steps need no flag because provenance preserves them.
 >
-> `--record` is **not a common flag**, unlike `--no-record`. `--no-record` applies to every recordable
-> command, mutations included, so it stays universal
-> (`COMMON_COMMAND_SUPPORTED_FLAG_KEYS`). `--record` only means something for a command the exclusion can
-> drop, so it is scoped **statically** to `snapshot`, `get`, and `is` through each command schema's
-> `allowedFlags` — accepting it on `press`/`fill`/`click` would be misleading, and the grammar rejects
-> unsupported uses before projection. `find` is the one command whose observe-vs-mutate split is a
-> POSITIONAL rather than the command name, so it cannot be settled statically: it allows `--record`
-> in the grammar and validates **dynamically** in the daemon (`handleFindCommands`), rejecting
-> `--record` on a mutating `find … click|fill|focus|type` with `INVALID_ARGS` before any device work. Both
-> halves read one shared predicate (`isReadOnlyFindAction`, `@agent-device/selectors`), so the routing and
-> the validation can never disagree about which sub-actions observe.
+> `--record` is not a common flag.
+> Universal `--no-record` covers every recordable command, including mutations, through `COMMON_COMMAND_SUPPORTED_FLAG_KEYS`.
+> `--record` applies only where observation exclusion is possible.
+> Each `snapshot`, `get`, and `is` schema lists it in `allowedFlags`.
+> Grammar rejects unsupported `press`/`fill`/`click` uses before projection.
+> `find` selects observation/mutation through a positional, so grammar permits the flag.
+> `handleFindCommands` dynamically rejects it on mutating `find … click|fill|focus|type` with `INVALID_ARGS` before device work.
+> Both routing and validation use shared `isReadOnlyFindAction` from `@agent-device/selectors`.
+> Their classifications therefore cannot differ.
+> `--record` and `--no-record` are mutually exclusive.
+> Every surface rejects both together with `INVALID_ARGS` before execution.
+> Neither silently overrides the other.
 >
-> `--record` and `--no-record` express opposite intents for the same action and are **mutually exclusive**:
-> passing both is rejected as `INVALID_ARGS` before the command runs, uniformly for every surface, rather
-> than letting one silently win.
+> **4. CLI/Node/MCP use the same rule.**
+> `isExcludedRepairSegmentObservation` in `recordActionEntry` is the single daemon enforcement point (`packages/daemon/src/core/session-action-recorder.ts`).
+> It requires `session.saveScriptBoundary !== undefined` and the entry's `interactiveObservation` marker.
+> Only repair-armed `replay --save-script` sets that boundary.
+> Ordinary non-repair authoring never sets it.
+> Both recording call sites compute the marker with shared `isInteractiveObservation`:
 >
-> **4. How the rule projects across CLI/Node/MCP surfaces.** The exclusion is enforced at a single
-> daemon-side choke point — `isExcludedRepairSegmentObservation` in `recordActionEntry`
-> (`packages/daemon/src/core/session-action-recorder.ts`), gated on `session.saveScriptBoundary !== undefined` (set ONLY
-> by a repair-armed `replay --save-script`; an ordinary, non-repair `open --save-script`/`close --save-script`
-> authoring recording never sets it — see decision 6's "Scope" note above) and on the entry's
-> `interactiveObservation` marker, which both recording call sites
-> (`packages/daemon/src/core/selector-recording.ts` for `get`/`is`/read-only `find`, `packages/daemon/src/sessions/snapshot-runtime.ts` for
-> `snapshot`) compute from the shared `isInteractiveObservation` predicate rather than each re-deriving it.
-> Every surface reaches this same function because every surface's request reaches the same daemon.
+> - `packages/daemon/src/core/selector-recording.ts` for `get`/`is`/read-only `find`
+> - `packages/daemon/src/sessions/snapshot-runtime.ts` for `snapshot`
 >
-> The flags project asymmetrically, matching their different scopes:
+> Every surface reaches that same daemon function.
+> The flags retain their different scopes:
 >
-> - `--no-record` stays a common flag: its key is in `COMMON_COMMAND_SUPPORTED_FLAG_KEYS`, and every
->   recordable reader forwards it through the shared `noRecordInputFromFlags` helper
->   (`src/commands/cli-grammar/common.ts`, per #1304).
-> - `--record` is scoped: its key is NOT common, it appears in `allowedFlags` only for `snapshot`/`get`/`is`
->   (plus `find`, which validates dynamically per rule 3), and only those readers spread
->   `observationRecordInputFromFlags`. Two named helpers rather than one helper with an `allowRecord`
->   policy argument: the capability is then the helper's NAME, so a mutating reader physically cannot
->   forward `--record`, whereas a policy argument would let a future mutating reader opt in by flipping a
->   literal with no schema change — the fail-open the split exists to prevent.
+> - Common `--no-record` belongs to `COMMON_COMMAND_SUPPORTED_FLAG_KEYS`.
+>   Every recordable reader forwards it with `noRecordInputFromFlags` (`src/commands/cli-grammar/common.ts`, #1304).
+> - Scoped `--record` is not common.
+>   Only `snapshot`/`get`/`is` and dynamically validated `find` permit it.
+>   Only their readers use `observationRecordInputFromFlags`.
 >
-> From there both flags ride the ordinary typed path: the Node client threads them through
-> `buildRequestFlags`/`buildFlags` (`src/commands/command-flags.ts`) from `InternalRequestOptions` and each
-> typed per-command Options type (`GetOptions`/`IsOptions`/`FindOptions`/`CaptureSnapshotOptions`), and the
-> MCP tool schema exposes `record`/`noRecord` on the `get`/`is`/`find`/`snapshot` tools
-> (`src/commands/interaction/metadata.ts`, `src/commands/capture/snapshot.ts`) through the same
-> `CommandMetadata.inputSchema` + `readMetadataCommandFlags` path every other typed field already uses. No
-> surface has a separate recording contract; all of them hit the identical daemon-side default.
+> Separate named helpers express capability without an `allowRecord` policy argument.
+> A mutating reader cannot forward `--record` merely by changing a policy literal without a schema change.
+> This prevents unintended acceptance.
+> Both flags then use the ordinary typed path:
 >
-> **5. The fail-loud guard is the EXISTING resume watermark, not new state.** Because the exclusion happens
-> at the same point `--no-record` is enforced — before an action ever reaches `session.actions` — an excluded
-> diagnostic read never grows `session.actions.length`. That counter is exactly what
-> `describeUnperformedRecordAndHeal` (`src/daemon/handlers/session-replay-runtime-plan.ts`, R2/#1262's
-> `pendingRecordAndHeal` watermark) already compares against `actionsCountAtDivergence` to prove a corrective
-> action happened before authorizing a `record-and-heal`-shaped `--from` resume. No additional bookkeeping is
-> needed: a repair segment containing only excluded diagnostic reads is indistinguishable, at that check,
-> from a repair segment containing no activity at all, so the existing guard already refuses it. This
-> amendment only updates the guard's message to name `--record` alongside the existing `--no-record`
-> mention, since the missing corrective action may have been a read rather than a press: "no corrective
-> action was recorded in this repair segment; press the correct control via a blessed `@ref` … — or, if your
+> - Node forwards them through `buildRequestFlags`/`buildFlags` in `src/commands/command-flags.ts`.
+>   Sources are `InternalRequestOptions`, `GetOptions`, `IsOptions`, `FindOptions`, and `CaptureSnapshotOptions`.
+> - MCP exposes `record`/`noRecord` on `get`/`is`/`find`/`snapshot` tools.
+>   `src/commands/interaction/metadata.ts` and `src/commands/capture/snapshot.ts` use `CommandMetadata.inputSchema` plus `readMetadataCommandFlags`, as for other typed fields.
+>
+> There is no separate per-surface recording contract.
+>
+> **5. The existing resume watermark detects missing corrections.**
+> Exclusion occurs before `session.actions`, at the same point as `--no-record`.
+> Excluded reads never increase `session.actions.length`.
+> `describeUnperformedRecordAndHeal` already compares this count with `actionsCountAtDivergence`.
+> Its pointer is `src/daemon/handlers/session-replay-runtime-plan.ts`, using R2/#1262's `pendingRecordAndHeal` watermark.
+> Count growth proves a corrective action before a `record-and-heal`-shaped resume.
+> A segment with only excluded diagnostics fails the existing guard like an empty segment.
+> No new state is necessary.
+> The guard's message adds `--record` beside `--no-record` because correction can be a read:
+> "no corrective action was recorded in this repair segment; press the correct control via a blessed `@ref` … — or, if your
 > corrective action was a read, re-run it with `--record` … — before resuming."
 >
-> **Regression coverage** proves: an out-of-band diagnostic read inside an armed repair segment is omitted
-> from the healed script by default; an **authored** `is visible` plan step in the same repair, carrying no
-> `--record`, **survives** into the heal (the provenance rule — this fails if the exclusion is
-> command-class-only); a corrective action remains for both a mutating press/fill (unaffected — never
-> observation-only) and a `--record`ed read (the diverged-step-was-a-`get` case); the resulting healed
-> script replays cleanly in a fresh session; `--record` on a mutating `find … click` is refused with
-> `INVALID_ARGS`; the empty-segment guard refuses a blind resume with the actionable `--record` hint; and
-> ordinary, non-repair `open --save-script` authoring recording is completely unchanged — a read in a fresh
-> authoring session still records with no flag needed, because `session.saveScriptBoundary` is never set
-> there.
+> **Regression coverage** proves these cases:
+>
+> - Out-of-band diagnostic reads are omitted by default within an armed repair segment.
+> - An authored `is visible` survives without `--record` through provenance.
+>   A command-only exclusion fails this test.
+> - Corrective press/fill actions remain included because they are not observation-only.
+> - A corrective `get` with `--record` remains included.
+> - The healed script replays cleanly in a fresh session.
+> - Mutating `find … click --record` returns `INVALID_ARGS`.
+> - The empty-segment guard refuses blind resume with actionable `--record` guidance.
+> - Ordinary `open --save-script` authoring still records reads without a flag.
+>   It never sets `session.saveScriptBoundary`.
 
 ## Consequences
 
