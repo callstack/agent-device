@@ -343,7 +343,7 @@ The builders are in `packages/contracts/src/*-runtime.ts`. They are side-calls o
 
 The plan sheet suggested façade PRs #2178, #2222, and #2232 as a possible explanation.
 All merged before `e624ef9d3f`, the commit cited for the ADR's 38/29 measurement.
-Thus, they cannot explain why that count is higher than this one.
+Thus, they cannot explain the difference between 38/29 and the current 41 and 47/49 counts.
 They were already in effect when 38/29 was recorded.
 
 This trace measures 41 hops for `press`/Android and 47/49 per arm for `snapshot`/iOS.
