@@ -61,6 +61,7 @@ export type {
   TelephonyAction,
   TelephonyCommandResult,
   TelephonyEventInput,
+  TelephonyRuntimeOperations,
 } from '../device-rotation.ts';
 export type { BootCommandResult, ShutdownCommandResult } from '../device.ts';
 export type {

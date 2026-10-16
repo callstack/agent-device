@@ -1,10 +1,9 @@
 import type { RuntimeOperationFact } from '@agent-device/contracts/platform-runtime';
 import { whenAdmitted } from '@agent-device/contracts/platform-runtime';
 import type { TelephonyEventInput } from '@agent-device/contracts/device';
-import { telephonyRuntimeOperationFacts } from '@agent-device/contracts/telephony-runtime';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 
-import { sendAndroidTelephonyEvent } from './emulator-console.ts';
+import { sendAndroidTelephonyEvent } from './console-event.ts';
 
 const available = Object.freeze({ available: true } as const);
 
@@ -21,7 +20,7 @@ function androidTelephonyFact(device: DeviceInfo): RuntimeOperationFact {
 
 /** The telephony cell: `sendTelephonyEvent`. */
 export function androidTelephonyFacts(device: DeviceInfo) {
-  return telephonyRuntimeOperationFacts({ telephony: androidTelephonyFact(device) });
+  return Object.freeze({ sendTelephonyEvent: androidTelephonyFact(device) });
 }
 
 /** Binds `sendTelephonyEvent` when {@link androidTelephonyFacts} admitted it. */

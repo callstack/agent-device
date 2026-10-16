@@ -12,7 +12,6 @@ import {
   telephonyRuntimeUse,
   type PlatformRuntimeOperations,
 } from '@agent-device/contracts/platform-runtime-operations';
-import { telephonyRuntimeOperationFacts } from '@agent-device/contracts/telephony-runtime';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import { makeSession } from '../../__tests__/support/session-factories.ts';
 import type {
@@ -58,7 +57,7 @@ function runtimeHarness(fact: RuntimeOperationFact = available) {
   const facts: RuntimeFacts<PlatformRuntimeOperations> = {
     device: { ...deviceShape(testDevice), providerMode: 'local' },
     operations: {
-      ...telephonyRuntimeOperationFacts({ telephony: fact }),
+      sendTelephonyEvent: fact,
     } as RuntimeFacts<PlatformRuntimeOperations>['operations'],
   };
   const binding = {

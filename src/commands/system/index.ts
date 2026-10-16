@@ -1,9 +1,6 @@
 import { FOLD_FLAGS } from '@agent-device/command-registry/flag-groups';
 import type { CommandResultMap } from '@agent-device/command-registry/command-result';
-import type {
-  ClipboardCommandOptions,
-  TelephonyCommandOptions,
-} from '@agent-device/contracts/client';
+import type { ClipboardCommandOptions } from '@agent-device/contracts/client';
 import {
   type FoldKeyframe,
   FOLD_SCREEN_COORDINATE_SPACE,
@@ -308,7 +305,7 @@ const tvRemoteCommandDescription =
   'Press or long-press a TV remote or D-pad button on Android TV, tvOS, or Vega OS. Choose the button and optional hold duration through the input fields. The aliases ok, center, and enter all map to select.';
 
 const telephonyCommandDescription =
-  'Simulate an incoming phone call or SMS on an Android emulator through the emulator console, for example to check how an app reacts when a call or message interrupts playback. call starts an incoming call from the number, accept answers it, cancel ends it, and sms delivers a text message from the number. The call screen or message notification can cover the app, so re-snapshot before using refs from before the event. Local Android emulators only; physical Android devices, iOS, and every other target refuse with UNSUPPORTED_OPERATION.';
+  'Simulate an incoming phone call or SMS on a local Android emulator through its console: call rings from the number, accept answers, cancel ends the call, and sms delivers a text message. The call screen or notification can cover the app, so re-snapshot afterwards.';
 
 const backCommandMetadata = defineFieldCommandMetadata(BACK_COMMAND_NAME, backCommandDescription, {
   mode: enumField(BACK_MODES),
@@ -669,7 +666,7 @@ const telephonyCommandFacet = defineCommandFacet({
       'Android emulators only, through the emulator console. Quote the SMS text, or pass it as the remaining words. Re-snapshot after the event: the call screen or notification can cover the app.',
   },
   metadata: telephonyCommandMetadata,
-  run: (client, input) => client.command.telephony(input as TelephonyCommandOptions),
+  run: (client, input) => client.command.telephony(input),
   cliSchema: telephonyCliSchema,
   cliReader: telephonyCliReader,
   daemonWriter: telephonyDaemonWriter,

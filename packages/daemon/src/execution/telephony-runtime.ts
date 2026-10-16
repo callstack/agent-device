@@ -36,36 +36,28 @@ export async function resolveBoundTelephonyRuntime(
   );
 }
 
+const CALL_EVENT_MESSAGES = {
+  call: 'Simulated an incoming call from',
+  accept: 'Accepted the call from',
+  cancel: 'Ended the call from',
+} as const satisfies Record<Exclude<TelephonyEventInput['action'], 'sms'>, string>;
+
 async function executeTelephonyEvent(
   runtime: BoundDeviceRuntime<typeof telephonyRuntimeUse>,
   input: TelephonyEventInput,
 ): Promise<TelephonyCommandResult> {
   await runtime.operations.sendTelephonyEvent(input);
-  switch (input.action) {
-    case 'call':
-      return {
-        action: input.action,
-        number: input.number,
-        message: `Simulated an incoming call from ${input.number}`,
-      };
-    case 'accept':
-      return {
-        action: input.action,
-        number: input.number,
-        message: `Accepted the call from ${input.number}`,
-      };
-    case 'cancel':
-      return {
-        action: input.action,
-        number: input.number,
-        message: `Ended the call from ${input.number}`,
-      };
-    case 'sms':
-      return {
-        action: input.action,
-        number: input.number,
-        textLength: input.text.length,
-        message: `Simulated an incoming SMS from ${input.number}`,
-      };
+  if (input.action === 'sms') {
+    return {
+      action: input.action,
+      number: input.number,
+      textLength: input.text.length,
+      message: `Simulated an incoming SMS from ${input.number}`,
+    };
   }
+  return {
+    action: input.action,
+    number: input.number,
+    message: `${CALL_EVENT_MESSAGES[input.action]} ${input.number}`,
+  };
 }

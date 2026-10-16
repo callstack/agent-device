@@ -222,10 +222,9 @@ const foldUnavailable = unavailableFact(
   'fold runs a HID helper through simctl spawn inside a foldable iPhone simulator on the daemon host; a WebDriver backend has no such simulator.',
 );
 
-/** No WebDriver backend reaches an emulator console, so no call or text message is simulated. */
 const telephonyUnavailable = unavailableFact(
   'unsupported-provider-mode',
-  'telephony simulates calls and SMS through the console of an Android emulator on the daemon host; a WebDriver backend exposes no emulator console.',
+  "telephony sends calls and SMS to an Android emulator's console through local adb; agent-device does not drive a WebDriver backend's own call or SMS simulation.",
 );
 
 /**

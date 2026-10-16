@@ -238,9 +238,8 @@ export function createUnavailablePlatformRuntimeFacts(
       ...elementTextRuntimeOperationFacts({ readTextAtPoint: frozen.elementText }),
       ...backRuntimeOperationFacts({ back: frozen.back }),
       ...orientationRuntimeOperationFacts({ orientation: frozen.orientation }),
-      // Stated directly rather than through `foldRuntimeOperationFacts` and
-      // `telephonyRuntimeOperationFacts`, so this hub does not evaluate either contract for owners
-      // that never pose a hinge or simulate a call (eager-closure budgets).
+      // Stated directly rather than through `foldRuntimeOperationFacts`, so this hub does not
+      // evaluate the fold contract for owners that never pose a hinge (eager-closure budgets).
       setFoldPose: frozen.fold,
       sendTelephonyEvent: frozen.telephony,
       ...tvRemoteRuntimeOperationFacts({ tvRemote: frozen.tvRemote }),
