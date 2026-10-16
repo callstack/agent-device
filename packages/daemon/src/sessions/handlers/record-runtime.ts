@@ -99,9 +99,14 @@ async function handleRecordCommandUnsafe(
   const { req, sessionName, sessionStore } = params;
   const existingRef = sessionStore.lookup(sessionName);
   const existingSession = existingRef?.session;
-  // Ordered before every record-specific refusal: a named missing session answers on the
-  // session. Only that branch pays the function-scoped import (ADR-0019 loading shape).
-  if (!existingSession) {
+  const { plan, scope } = resolveRecordPlan(req, existingSession);
+  // Only the start half can be answered on a device, so only it answers on the session: a named
+  // missing session refuses before any device is chosen, ahead of the record-specific refusals.
+  // The stop half must reach the durable manifest first — after a daemon restart the memory-only
+  // session is gone for exactly the callers whose manifest the named session addresses, and the
+  // recovery lane proves the manifest's session and device before serving anything.
+  // Only that branch pays the function-scoped import (ADR-0019 loading shape).
+  if (!existingSession && plan.kind === 'start') {
     const { requireNamedSessionHoldsDevice } =
       await import('../../core/explicit-session-resolution.ts');
     requireNamedSessionHoldsDevice({
@@ -110,7 +115,6 @@ async function handleRecordCommandUnsafe(
       session: existingSession,
     });
   }
-  const { plan, scope } = resolveRecordPlan(req, existingSession);
   if (plan.kind === 'start' && !isWholeScreenRecordingScope(scope) && !existingSession) {
     return missingAppSessionResponse(req);
   }

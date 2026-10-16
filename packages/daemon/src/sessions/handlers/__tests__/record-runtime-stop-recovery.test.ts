@@ -1,6 +1,6 @@
+import { expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, test } from 'vitest';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { screenRecordingResourceStore } from '@agent-device/capture-kit/screen-recording-resource-store';
 import {
@@ -8,6 +8,65 @@ import {
   makeRecordRuntimeHarness,
   recordingResourcePath,
 } from './record-runtime.fixtures.ts';
+
+// The stop lane that runs WITHOUT a held session resolves its device through the selection
+// dispatch. The daemon-restart tests below pin that lane, so the dispatch answers with the
+// harness device here; the live-handle tests never reach it because their session is held.
+const RESTART_SELECTED_DEVICE = {
+  platform: 'android',
+  id: 'emulator-5554',
+  name: 'Pixel',
+  kind: 'emulator',
+} as const;
+vi.mock('@agent-device/device-selection/dispatch-resolve', () => ({
+  resolveTargetDevice: vi.fn(async () => ({ ...RESTART_SELECTED_DEVICE })),
+}));
+
+test('record stop after a daemon restart replays the completed export for the named session', async () => {
+  // The #3674 state itself: sessions are memory-only, so a restart drops `recording`, while the
+  // on-disk manifest survives. The caller still names the session (the only address that finds
+  // the manifest at all), and `help record` promises the completed recording on that stop.
+  const harness = makeRecordRuntimeHarness('record-runtime-restart-stop-');
+  const outPath = path.join(
+    mkdtempForTestSync('record-runtime-restart-stop-output-'),
+    'capture.mp4',
+  );
+  fs.writeFileSync(outPath, 'mp4');
+  await harness.run(['start', outPath]);
+  await harness.run(['stop']);
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected the stopped recording session');
+  harness.sessionStore.retire(ref);
+
+  const recovered = await harness.run(['stop'], { sessionExplicit: true });
+
+  expect(recovered).toMatchObject({
+    ok: true,
+    data: { recording: 'stopped', outPath, recordingBackend: 'adb screenrecord' },
+  });
+});
+
+test('record start after a daemon restart still refuses the named missing session', async () => {
+  // The sibling direction of the restart pair: start has no manifest to recover, so the
+  // named-session refusal keeps its priority for it.
+  const harness = makeRecordRuntimeHarness('record-runtime-restart-start-');
+  const outPath = path.join(
+    mkdtempForTestSync('record-runtime-restart-start-output-'),
+    'capture.mp4',
+  );
+  await harness.run(['start', outPath]);
+  const ref = harness.sessionStore.lookup(harness.sessionName);
+  if (!ref) throw new Error('Expected the live recording session');
+  harness.sessionStore.retire(ref);
+
+  const response = await harness.run(['start', outPath], { sessionExplicit: true });
+
+  expect(response).toMatchObject({
+    ok: false,
+    error: { code: 'SESSION_NOT_FOUND', details: { reason: 'named_session_not_found' } },
+  });
+  expect(harness.runtime.start).toHaveBeenCalledOnce();
+});
 
 test('record stop with a live handle binds no runtime and terminalizes the durable record', async () => {
   const harness = makeRecordRuntimeHarness('record-runtime-live-stop-');
