@@ -60,8 +60,12 @@ function guard(params: {
   });
 }
 
-/** Runs the guard expecting a refusal, and hands back that refusal's typed details. */
-function keyboardRefusalDetails(params: Parameters<typeof guard>[0]) {
+/** Runs the guard expecting a refusal, and hands back that refusal's message and typed details. */
+function keyboardRefusalDetails(params: Parameters<typeof guard>[0]): {
+  message: string;
+  details: Record<string, unknown>;
+} {
+  let message = '';
   let details: Record<string, unknown> | undefined;
   assert.throws(
     () => guard(params),
@@ -69,16 +73,17 @@ function keyboardRefusalDetails(params: Parameters<typeof guard>[0]) {
       assert.ok(error instanceof Error);
       assert.equal((error as { code?: string }).code, 'COMMAND_FAILED');
       assert.match(error.message, /Ref @e2 is behind the visible keyboard/);
+      message = error.message;
       details = (error as { details?: Record<string, unknown> }).details;
       return true;
     },
   );
   assert.ok(details, 'the refusal carries details');
-  return details;
+  return { message, details };
 }
 
 test('the refusal carries the shared reason, the target, and the band it measured', () => {
-  assert.deepEqual(keyboardRefusalDetails({ snapshot: keyboardCoveredTabBarSnapshot() }), {
+  assert.deepEqual(keyboardRefusalDetails({ snapshot: keyboardCoveredTabBarSnapshot() }).details, {
     ...TAP_KEYBOARD_OCCLUDES_TARGET_DETAILS,
     ref: '@e2',
     rect: KEYBOARD_COVERED_TAB_BAR_RECT,
@@ -93,9 +98,18 @@ test('the refusal names the action it declined', () => {
     ['fill', 'be filled'],
     ['focus', 'be focused'],
   ] as const) {
-    assert.throws(
-      () => guard({ snapshot: keyboardCoveredTabBarSnapshot(), action }),
+    // Each iteration runs the full typed refusal — code, reason, dispatched: 'no' — so the verb
+    // check cannot pass on an unrelated rejection that merely mentions the action.
+    const { message, details } = keyboardRefusalDetails({
+      snapshot: keyboardCoveredTabBarSnapshot(),
+      action,
+    });
+    assert.equal(details.reason, 'tap_keyboard_occludes_target');
+    assert.equal(details.dispatched, 'no');
+    assert.match(
+      message,
       new RegExp(`cannot ${verb} safely`),
+      `${action} refuses with the "${verb}" verb`,
     );
   }
 });
