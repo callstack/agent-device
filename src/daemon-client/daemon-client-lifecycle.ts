@@ -118,6 +118,28 @@ export function resolveClientSettings(
 }
 
 /**
+ * The local daemon a request would use, in the terms `ensureDaemon` takes, or `undefined` when the
+ * request has no shared local daemon to ensure: a remote connection has none, and a one-shot replay
+ * or test with no explicit state directory runs on a private daemon of its own.
+ */
+export function resolveEnsurableDaemon(
+  req: Omit<DaemonWireRequest, 'token'>,
+): EnsureDaemonOptions | undefined {
+  const stateDir = resolveExplicitStateDir(req);
+  const rawBaseUrl = req.flags?.daemonBaseUrl ?? process.env.AGENT_DEVICE_DAEMON_BASE_URL;
+  if (rawBaseUrl || shouldUseOwnedReplayStateDir(req, stateDir, rawBaseUrl)) return undefined;
+  return {
+    ...(stateDir !== undefined ? { stateDir } : {}),
+    ...(req.flags?.daemonTransport !== undefined
+      ? { daemonTransport: req.flags.daemonTransport }
+      : {}),
+    ...(req.flags?.daemonServerMode !== undefined
+      ? { daemonServerMode: req.flags.daemonServerMode }
+      : {}),
+  };
+}
+
+/**
  * The settings of a local daemon with no request behind them, for the caller that ensures one. It
  * reads no remote base URL: a remote connection has no local daemon to ensure.
  */

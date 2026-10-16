@@ -11,7 +11,7 @@ import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolu
 import { exitAfterFlush } from './cli/process-exit.ts';
 import { readVersion } from '@agent-device/host-kit/version';
 import { pathToFileURL } from 'node:url';
-import { sendToDaemon } from './daemon-client/daemon-client.ts';
+import { createEnsuredDaemonTransport, sendToDaemon } from './daemon-client/daemon-client.ts';
 import fs from 'node:fs';
 import type { BatchStep } from '@agent-device/contracts/client';
 import type { ReplayTestReporterRuntime } from './cli/replay-test/reporting.ts';
@@ -70,8 +70,24 @@ const printJson = (
   import('./commands/output/json.ts').then(({ printJson: write }) => write(result));
 
 const DEFAULT_CLI_DEPS: CliDeps = {
-  sendToDaemon,
+  sendToDaemon: createEnsuredDaemonTransport({ onReplaced: writeDaemonReplacedNotice }),
 };
+
+function writeDaemonReplacedNotice(replaced: {
+  stateDir: string;
+  previous: { pid: number; version?: string };
+  reason: 'incompatible' | 'unreachable';
+}): void {
+  const { stateDir, previous, reason } = replaced;
+  const identity = previous.version
+    ? `pid ${previous.pid}, v${previous.version}`
+    : `pid ${previous.pid}`;
+  process.stderr.write(
+    reason === 'unreachable'
+      ? `Replaced unreachable daemon (${identity}) in ${stateDir}.\n`
+      : `Replaced idle daemon (${identity}) in ${stateDir}: it did not match this client.\n`,
+  );
+}
 
 const METRO_RUNTIME_OVERRIDE_FLAG_KEYS = new Set<FlagKey>([
   'launchUrl',

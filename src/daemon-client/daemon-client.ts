@@ -16,6 +16,7 @@ import {
   type PreparedRemoteRequest,
 } from '@agent-device/remote/daemon-artifacts';
 import type { DaemonClientSettings, EnsuredDaemon } from './daemon-client-lifecycle.ts';
+import type { EnsuringTransportOptions } from './daemon-client-ensuring.ts';
 import { createRequestGuard, sendRequest } from './daemon-client-transport.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { leaseScopeFromRequest } from '@agent-device/contracts/lease-scope';
@@ -121,6 +122,26 @@ export async function sendToDaemon(
       return attachSessionAddressHints(response, requestWithoutAuthFlag, settings);
     },
   );
+}
+
+/**
+ * The transport the CLI and MCP use: `sendToDaemon` behind an explicit `ensureDaemon`. The wrapper
+ * loads on the first request, so a CLI start that never reaches the daemon does not pay for it.
+ */
+export function createEnsuredDaemonTransport(
+  options: EnsuringTransportOptions = {},
+): typeof sendToDaemon {
+  // The load is memoized as a promise, so concurrent first requests share one wrapper and its
+  // ensure-once state.
+  let ensured: Promise<typeof sendToDaemon> | undefined;
+  return async (req, context) => {
+    ensured ??= import('./daemon-client-ensuring.ts').then(({ withEnsuredDaemon }) =>
+      withEnsuredDaemon(sendToDaemon, options),
+    );
+    return await (
+      await ensured
+    )(req, context);
+  };
 }
 
 function buildTransportRequest(
