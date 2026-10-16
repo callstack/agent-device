@@ -62,6 +62,10 @@ test('R85 rejects a static, type-only, dynamic, re-export, inline-type or mocked
     `await vi.importMock(${PROVIDER_ENTRY});`,
     `vi.mock(import(${PROVIDER_ENTRY}));`,
     `import plugin from '@agent-device/testmu';`,
+    `import { vi as mocks } from 'vitest';\nmocks.mock(${PROVIDER_ENTRY});`,
+    `import { vitest as mocks } from 'vitest';\nmocks.doMock(${PROVIDER_ENTRY});`,
+    `import * as testing from 'vitest';\ntesting.vi.mock(${PROVIDER_ENTRY});`,
+    `import * as testing from 'vitest';\ntesting['vitest']['importActual'](${PROVIDER_ENTRY});`,
   ]) {
     const [result, ...rest] = check(source);
     assert.equal(rest.length, 0, source);
@@ -107,6 +111,11 @@ test('R85 ignores a provider named only in a comment, a non-literal mock argumen
     `// vi.mock(${PROVIDER_ENTRY});`,
     'vi.mock(`@agent-device/provider-webdriver/${entry}`);',
     `other.mock(${PROVIDER_ENTRY});`,
+    `import { vi as mocks } from 'not-vitest';\nmocks.mock(${PROVIDER_ENTRY});`,
+    `import { expect as mocks } from 'vitest';\nmocks.mock(${PROVIDER_ENTRY});`,
+    `import type { vi as mocks } from 'vitest';\nmocks.mock(${PROVIDER_ENTRY});`,
+    `import * as testing from 'vitest';\ntesting.expect.mock(${PROVIDER_ENTRY});`,
+    `import { vi as mocks } from 'vitest';\nfunction f(mocks) { mocks.mock(${PROVIDER_ENTRY}); }`,
   ]) {
     assert.deepEqual(check(source), [], source);
   }

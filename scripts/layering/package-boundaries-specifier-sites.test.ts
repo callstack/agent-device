@@ -46,3 +46,36 @@ test('specifier sites skip comments, interpolated templates and unrelated object
     [],
   );
 });
+
+test('specifier sites carry mock-family arguments called through an imported Vitest alias or namespace', () => {
+  assert.deepEqual(
+    sites(
+      [
+        "import { vi as mocks, vitest as runner } from 'vitest';",
+        "import * as testing from 'vitest';",
+        "mocks.mock('a');",
+        "runner['doMock']('b');",
+        "testing.vi.mock('c');",
+        "testing['vitest'].unmock('d');",
+      ].join('\n'),
+    ),
+    ['1:vitest', '2:vitest', '3:a', '4:b', '5:c', '6:d'],
+  );
+});
+
+test('specifier sites skip alias calls on other modules, other exports and type-only imports', () => {
+  assert.deepEqual(
+    sites(
+      [
+        "import { vi as fromOther } from 'not-vitest';",
+        "import { expect as notMock } from 'vitest';",
+        "import type { vi as typeOnly } from 'vitest';",
+        "fromOther.mock('a');",
+        "notMock.mock('b');",
+        "typeOnly.mock('c');",
+        "function shadow(notMock) { notMock.mock('d'); }",
+      ].join('\n'),
+    ),
+    ['1:not-vitest', '2:vitest', '3:vitest'],
+  );
+});

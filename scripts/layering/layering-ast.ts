@@ -1,6 +1,18 @@
 /** Shared AST helpers for permanent layering policies. */
 export type ProductionSource = Readonly<{ path: string; source: string }>;
 
+export type AstNode = Record<string, unknown>;
+
+export function asNode(value: unknown): AstNode | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as AstNode)
+    : undefined;
+}
+
+export function nodeList(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 export function memberName(node: Record<string, unknown>): string | undefined {
   const property = node.property as Record<string, unknown> | undefined;
   if (!property) return undefined;
@@ -121,4 +133,117 @@ export function destructuredDynamicImportBindings(
   };
   visit(program);
   return captures;
+}
+
+function patternNames(pattern: unknown, into: string[]): void {
+  const node = asNode(pattern);
+  if (node === undefined) return;
+  switch (node.type) {
+    case 'Identifier':
+      into.push(node.name as string);
+      break;
+    case 'ObjectPattern':
+      for (const property of nodeList(node.properties)) {
+        const entry = asNode(property);
+        patternNames(entry?.type === 'Property' ? entry.value : entry, into);
+      }
+      break;
+    case 'ArrayPattern':
+      for (const element of nodeList(node.elements)) patternNames(element, into);
+      break;
+    case 'AssignmentPattern':
+      patternNames(node.left, into);
+      break;
+    case 'RestElement':
+      patternNames(node.argument, into);
+      break;
+    case 'TSParameterProperty':
+      patternNames(node.parameter, into);
+      break;
+  }
+}
+
+function lexicalNames(statements: unknown[], into: string[]): void {
+  for (const statement of statements) {
+    const node = asNode(statement);
+    if (node?.type === 'VariableDeclaration' && node.kind !== 'var') {
+      for (const declarator of nodeList(node.declarations)) {
+        patternNames(asNode(declarator)?.id, into);
+      }
+    } else if (node?.type === 'FunctionDeclaration' || node?.type === 'ClassDeclaration') {
+      patternNames(node.id, into);
+    }
+  }
+}
+
+function isFunctionNode(node: AstNode): boolean {
+  return (
+    node.type === 'FunctionDeclaration' ||
+    node.type === 'FunctionExpression' ||
+    node.type === 'ArrowFunctionExpression'
+  );
+}
+
+function hoistedVarNames(node: unknown, into: string[]): void {
+  for (const child of Array.isArray(node) ? node : [node]) {
+    const record = asNode(child);
+    if (record === undefined || isFunctionNode(record)) continue;
+    if (record.type === 'VariableDeclaration' && record.kind === 'var') {
+      for (const declarator of nodeList(record.declarations)) {
+        patternNames(asNode(declarator)?.id, into);
+      }
+    }
+    for (const value of Object.values(record)) hoistedVarNames(value, into);
+  }
+}
+
+/** Names `node` itself declares for its own subtree: parameters, `var`s, block-level lexical declarations. */
+function scopeBindings(node: AstNode): string[] {
+  const names: string[] = [];
+  if (isFunctionNode(node)) {
+    for (const param of nodeList(node.params)) patternNames(param, names);
+    if (node.type === 'FunctionExpression') patternNames(node.id, names);
+    hoistedVarNames(node.body, names);
+  } else if (
+    node.type === 'BlockStatement' ||
+    node.type === 'StaticBlock' ||
+    node.type === 'TSModuleBlock'
+  ) {
+    lexicalNames(nodeList(node.body), names);
+  } else if (node.type === 'ClassExpression') {
+    patternNames(node.id, names);
+  } else if (node.type === 'SwitchStatement') {
+    for (const switchCase of nodeList(node.cases)) {
+      lexicalNames(nodeList(asNode(switchCase)?.consequent), names);
+    }
+  } else if (node.type === 'ForStatement') {
+    lexicalNames([node.init], names);
+  } else if (node.type === 'ForInStatement' || node.type === 'ForOfStatement') {
+    lexicalNames([node.left], names);
+  } else if (node.type === 'CatchClause') {
+    patternNames(node.param, names);
+  }
+  return names;
+}
+
+/**
+ * `visitAst` that also hands the visitor the names declared by the enclosing scopes: function
+ * parameters and `var`s, block-level `let`/`const`/`function`/`class`, loop heads and `catch`
+ * parameters. A `with` statement or `eval` can rebind names invisibly and is not modelled.
+ */
+export function visitAstScoped(
+  node: unknown,
+  shadowed: ReadonlySet<string>,
+  visitor: (node: AstNode, shadowed: ReadonlySet<string>) => void,
+): void {
+  if (Array.isArray(node)) {
+    for (const child of node) visitAstScoped(child, shadowed, visitor);
+    return;
+  }
+  const record = asNode(node);
+  if (record === undefined) return;
+  const declared = scopeBindings(record);
+  const scope = declared.length > 0 ? new Set([...shadowed, ...declared]) : shadowed;
+  visitor(record, scope);
+  for (const child of Object.values(record)) visitAstScoped(child, scope, visitor);
 }
