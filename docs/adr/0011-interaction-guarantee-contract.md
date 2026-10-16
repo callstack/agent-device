@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted (implemented through Layer 3, 2026-07-04: #1080, #1082–#1086, #1091, #1092; ambiguity contract amended 2026-08-07)
+Accepted
+
+Completed process history is in git history.
 
 ## Context
 
@@ -395,20 +397,6 @@ Two-contact pan/pinch/rotate/transform planning is now owned by the typed
 gesture-plan contract in [ADR 0013](0013-unified-gesture-plans.md). It remains a
 sibling of this element-targeting matrix: coordinate gestures do not acquire
 selector/ref guarantees merely because their native executor uses XCTest.
-
-## Migration plan
-
-Each step lands green and independently useful:
-
-1. **Registry + gate** with an honest initial classification (waivers linked
-   to issues). No behavior change.
-2. **Response builder consolidation** (`buildInteractionResponseData`) + the
-   hand-rolled-literal guard test.
-3. **Golden fixture tables** + `TapPointPolicy` Swift extraction + the three
-   consumers (vitest, XCTest, fake runner).
-4. **Contract scenario suite** + registry-driven coverage gate; port the
-   Bluesky fixtures from #1075's tests into the permanent tables.
-5. **Descriptor timeout policy**; delete the two client-side command lists.
 
 ## Alternatives considered
 
