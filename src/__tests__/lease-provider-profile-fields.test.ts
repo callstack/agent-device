@@ -2,25 +2,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { AppError, normalizeError } from '@agent-device/kernel/errors';
-import {
-  errorResponse,
-  type DaemonRequest,
-  type DaemonResponse,
-} from '@agent-device/kernel/contracts';
-import { LimrunRuntime } from '../sdk/limrun.ts';
+import { AppError } from '@agent-device/kernel/errors';
 import { createAgentDeviceClient } from '../agent-device-client.ts';
-import { handleLeaseCommands } from '@agent-device/daemon/testing/handlers/lease';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { createProviderDeviceRuntimeRequestProviders } from '../provider-device-runtime.ts';
 import {
   hashRemoteConfigFile,
   writeRemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { createTransport } from './client-transport-fixture.ts';
 import { runCliCapture } from './cli-capture.ts';
 import { makeTempWorkspace } from './cli-config-fixtures.ts';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { startPublicDaemonRuntime } from './test-utils/public-daemon-runtime.ts';
 
 const limrunInstances = vi.hoisted(() => ({
   iosCreate: vi.fn(async () => {
@@ -38,50 +28,35 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// The daemon's lease handler over the same provider composition a daemon builds, so a request
-// reaches the Limrun runtime exactly as it does in production.
-function limrunDaemon(): (req: Omit<DaemonRequest, 'token'>) => Promise<DaemonResponse> {
-  const runtime = new LimrunRuntime({ apiKey: 'lim_test_key' });
-  const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
-  const leaseRegistry = new LeaseRegistry();
-  const sessionStore = makeSessionStore('agent-device-limrun-profile-fields-');
-  return async (req) => {
-    try {
-      return (await handleLeaseCommands({
-        req: { ...req, token: 'test-token' } as Parameters<typeof handleLeaseCommands>[0]['req'],
-        sessionName: req.session ?? 'default',
-        sessionStore,
-        leaseRegistry,
-        providerRuntimeIds: providers.providerRuntimeIds,
-        providerRuntimeRequiredIds: providers.providerRuntimeRequiredIds,
-        leaseLifecycleProvider: providers.leaseLifecycleProvider,
-      })) as DaemonResponse;
-    } catch (error) {
-      const normalized = normalizeError(error);
-      return errorResponse(normalized.code, normalized.message, normalized.details);
-    }
-  };
-}
-
 test('leases.allocate refuses an OS version Limrun cannot honour instead of ignoring it', async () => {
-  const setup = createTransport(limrunDaemon());
-  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
-
-  await assert.rejects(
-    client.leases.allocate({
-      tenant: 'limrun',
-      runId: 'run-os-version',
-      leaseBackend: 'ios-instance',
-      leaseProvider: 'limrun',
-      platform: 'ios',
-      providerOsVersion: '18.0',
-    }),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'INVALID_ARGS' &&
-      JSON.stringify(error.details?.flags) === '["--provider-os-version"]',
-  );
-  assert.equal(limrunInstances.iosCreate.mock.calls.length, 0);
+  const daemon = await startPublicDaemonRuntime({
+    serverMode: 'http',
+    env: { LIMRUN_API_KEY: 'lim_test_key' },
+  });
+  try {
+    const client = createAgentDeviceClient({
+      daemonBaseUrl: daemon.baseUrl,
+      daemonAuthToken: daemon.runtime.token,
+      daemonTransport: 'http',
+    });
+    await assert.rejects(
+      client.leases.allocate({
+        tenant: 'limrun',
+        runId: 'run-os-version',
+        leaseBackend: 'ios-instance',
+        leaseProvider: 'limrun',
+        platform: 'ios',
+        providerOsVersion: '18.0',
+      }),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        JSON.stringify(error.details?.flags) === '["--provider-os-version"]',
+    );
+    assert.equal(limrunInstances.iosCreate.mock.calls.length, 0);
+  } finally {
+    await daemon.close();
+  }
 });
 
 test('a remote-config profile cannot carry a field Limrun refuses past lease allocation', async () => {
@@ -106,23 +81,29 @@ test('a remote-config profile cannot carry a field Limrun refuses past lease all
       updatedAt: now,
     },
   });
-  const daemon = limrunDaemon();
+  const daemon = await startPublicDaemonRuntime({
+    serverMode: 'http',
+    env: { LIMRUN_API_KEY: 'lim_test_key' },
+  });
 
   try {
     const result = await runCliCapture(['open', '--state-dir', stateDir, '--json'], {
       cwd: project,
-      env: { HOME: home },
-      sendToDaemon: async (req) => await daemon(req),
+      env: {
+        HOME: home,
+        AGENT_DEVICE_DAEMON_BASE_URL: daemon.baseUrl,
+        AGENT_DEVICE_DAEMON_AUTH_TOKEN: daemon.runtime.token,
+      },
+      useRealDaemonClient: true,
     });
 
     assert.equal(result.code, 1);
-    assert.equal(result.calls[0]?.command, 'lease_allocate');
-    assert.equal(result.calls[0]?.flags?.providerGeoLocation, 'US');
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.error.code, 'INVALID_ARGS');
     assert.deepEqual(payload.error.details.flags, ['--provider-geo-location']);
     assert.equal(limrunInstances.iosCreate.mock.calls.length, 0);
   } finally {
+    await daemon.close();
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

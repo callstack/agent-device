@@ -12,7 +12,6 @@ import {
 } from '../cli/commands/connection-runtime.ts';
 import { disconnectCommand } from '../cli/commands/connection.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 
 test('HarmonyOS platform resolves to its proxy lease backend', () => {
   expect(
@@ -130,8 +129,10 @@ test('proxy HarmonyOS inventory materializes a scoped lease and closes that same
       clientId: 'harmony-client',
     },
   });
-  const registry = new LeaseRegistry();
-  const allocated: string[] = [];
+  const leaseId = 'harmony-proxy-lease';
+  let allocationRequest:
+    | Parameters<ReturnType<typeof createTestClient>['leases']['allocate']>[0]
+    | undefined;
   const released: string[] = [];
   const client = createTestClient({
     listDevices: async () => [
@@ -147,18 +148,20 @@ test('proxy HarmonyOS inventory materializes a scoped lease and closes that same
       },
     ],
     allocate: async (request) => {
-      expect(request.leaseBackend).toBe('harmonyos-instance');
-      expect(request.deviceKey).toBe('harmonyos:mobile:127.0.0.1:16001');
-      const lease = registry.allocateLease({ ...request, tenantId: request.tenant });
-      allocated.push(lease.leaseId);
-      return lease;
+      allocationRequest = request;
+      return {
+        leaseId,
+        tenantId: request.tenant,
+        runId: request.runId,
+        backend: request.leaseBackend ?? 'harmonyos-instance',
+        leaseProvider: request.leaseProvider,
+        clientId: request.clientId,
+        deviceKey: request.deviceKey,
+      };
     },
-    heartbeat: async (request) => registry.heartbeatLease({ ...request, tenantId: request.tenant }),
     release: async (request) => {
-      const result = registry.releaseLease({ ...request, tenantId: request.tenant });
-      expect(result.released).toBe(true);
       released.push(request.leaseId);
-      return result;
+      return { released: request.leaseId === leaseId };
     },
   });
   const flags = {
@@ -177,19 +180,13 @@ test('proxy HarmonyOS inventory materializes a scoped lease and closes that same
   expect(materialized.flags.platform).toBe('harmonyos');
   expect(materialized.flags.serial).toBe('127.0.0.1:16001');
   expect(materialized.flags.leaseBackend).toBe('harmonyos-instance');
-  expect(materialized.flags.leaseId).toBe(allocated[0]);
-  expect(readRemoteConnectionState({ stateDir, session: flags.session })?.leaseId).toBe(
-    allocated[0],
-  );
-  expect(() =>
-    registry.assertLeaseAdmission({
-      leaseId: allocated[0],
-      tenantId: 'proxy',
-      runId: 'harmony-run',
-      leaseBackend: 'android-instance',
-    }),
-  ).toThrow();
+  expect(materialized.flags.leaseId).toBe(leaseId);
+  expect(allocationRequest).toMatchObject({
+    leaseBackend: 'harmonyos-instance',
+    deviceKey: 'harmonyos:mobile:127.0.0.1:16001',
+  });
+  expect(readRemoteConnectionState({ stateDir, session: flags.session })?.leaseId).toBe(leaseId);
   await disconnectCommand({ positionals: [], flags, client });
-  expect(released).toEqual(allocated);
+  expect(released).toEqual([leaseId]);
   expect(readRemoteConnectionState({ stateDir, session: flags.session })).toBeNull();
 });

@@ -1,276 +1,128 @@
-/**
- * #3178: the built-in daemon transports honor a per-call `AbortSignal`.
- *
- * These run the REAL daemon servers (`createSocketServer`, `createDaemonHttpServer`) against a
- * request handler that waits on the daemon's own request-scoped signal, so each mid-flight case
- * proves the whole chain: the client aborts → that one connection closes → the daemon marks the
- * request canceled (`markRequestCanceled`, reached only through the transport's disconnect path) →
- * the client rejects with the typed canceled-request error — and the daemon itself stays alive to
- * serve a follow-up request.
- */
-import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { isRequestCanceledError } from '@agent-device/kernel/errors';
-import { getRequestSignal, isRequestCanceled } from '@agent-device/host-kit/request';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
-import { sendRequest } from '../daemon-client-transport.ts';
-import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
+import { createAgentDeviceClient } from '../../agent-device-client.ts';
 import {
-  closeLoopbackServer,
-  listenOnLoopback,
-  mkdtempForTestSync,
-  skipWhenLoopbackUnavailable,
-  trackLoopbackSockets,
-} from '@agent-device/test-kit';
-
-type WireInvokeFn = (req: DaemonWireRequest) => Promise<DaemonResponse>;
-
-const TOKEN = 'abort-signal-token';
-const STATE_PATHS = resolveDaemonPaths(mkdtempForTestSync('agent-device-client-abort-'));
-
-type SeenRequest = {
-  started: boolean;
-  requestId?: string;
-  canceled: boolean[];
-  /** The command of the last non-`wait` request the RPC handler itself served. */
-  servedCommand?: string;
-};
-
-// `wait` models the long request the caller abandons; every other command answers immediately, so
-// the same handler also proves the daemon still serves requests after one was canceled.
-function canceledAwareHandler(seen: SeenRequest): WireInvokeFn {
-  return async (req: DaemonWireRequest): Promise<DaemonResponse> => {
-    const requestId = req.meta?.requestId;
-    seen.requestId = requestId;
-    if (req.command !== 'wait') {
-      seen.servedCommand = req.command;
-      return { ok: true, data: {} };
-    }
-    seen.started = true;
-    const signal = getRequestSignal(requestId);
-    if (!signal) {
-      return { ok: true, data: { answeredWithoutSignal: true } };
-    }
-    // The long request never answers: only the client's disconnect ends it, through the abort.
-    return await new Promise<DaemonResponse>((_resolve, reject) => {
-      signal.addEventListener(
-        'abort',
-        () => {
-          seen.canceled.push(isRequestCanceled(requestId));
-          reject(signal.reason);
-        },
-        { once: true },
-      );
-    });
-  };
-}
-
-function canceledRequestError(error: unknown, dispatched: 'no' | 'unknown'): boolean {
-  return (
-    isRequestCanceledError(error) &&
-    (error as { details?: Record<string, unknown> }).details?.dispatched === dispatched
-  );
-}
-
-test('socket transport: an already-aborted signal sends nothing and refuses with dispatched no', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
-  const connections: number[] = [];
-  const server = createSocketServer(async () => {
-    connections.push(1);
-    return { ok: true, data: {} };
-  });
-  try {
-    const port = await listenNetServer(server);
-    const controller = new AbortController();
-    controller.abort();
-    await assert.rejects(
-      sendRequest(
-        { port, token: TOKEN, pid: 1 },
-        {
-          token: TOKEN,
-          command: 'devices',
-          session: 'default',
-          positionals: [],
-          flags: {},
-          meta: { requestId: 'req-socket-pre-abort' },
-        },
-        'socket',
-        STATE_PATHS,
-        undefined,
-        { signal: controller.signal },
-      ),
-      (error: unknown) => canceledRequestError(error, 'no'),
-    );
-    assert.deepEqual(connections, []);
-  } finally {
-    await closeLoopbackServer(server);
-  }
-});
-
-test('socket transport: an abort mid-request closes the connection, the daemon marks the request canceled, and the daemon stays alive', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
-  const seen: SeenRequest = { started: false, canceled: [] };
-  const server = createSocketServer(canceledAwareHandler(seen));
-  // The mid-request case's connection only closes through the client's abort; if an assertion
-  // above that fails, the daemon-side handler waits forever and `net.Server.close()` would hang
-  // the whole lane instead of reporting the failure.
-  const destroySockets = trackLoopbackSockets(server);
-  try {
-    const port = await listenNetServer(server);
-    const info = { port, token: TOKEN, pid: 1 };
-    const controller = new AbortController();
-    const inFlight = sendRequest(
-      info,
-      {
-        token: TOKEN,
-        command: 'wait',
-        session: 'default',
-        positionals: [],
-        flags: {},
-        meta: { requestId: 'req-socket-abort-in-flight' },
-      },
-      'socket',
-      STATE_PATHS,
-      undefined,
-      { signal: controller.signal },
-    );
-    // Abort only once the daemon has the request in hand, so this is genuinely a mid-request
-    // cancel rather than a race against connection setup.
-    await waitFor(() => seen.started, 'the daemon to start the request');
-    controller.abort();
-    await assert.rejects(inFlight, (error: unknown) => canceledRequestError(error, 'unknown'));
-    // The daemon's disconnect path ran: this request's id is registered-canceled, proven through
-    // the daemon-side registry rather than off the client's rejection.
-    await waitFor(() => seen.canceled.length > 0, 'daemon-side cancellation');
-    assert.deepEqual(seen.canceled, [true]);
-    assert.equal(seen.requestId, 'req-socket-abort-in-flight');
-
-    // Daemon alive and serving: a follow-up request without any cancellation completes.
-    const followUp = await sendRequest(
-      info,
-      {
-        token: TOKEN,
-        command: 'devices',
-        session: 'default',
-        positionals: [],
-        flags: {},
-        meta: { requestId: 'req-socket-follow-up' },
-      },
-      'socket',
-      STATE_PATHS,
-      5000,
-      {},
-    );
-    assert.equal(followUp.ok, true);
-    assert.equal(seen.servedCommand, 'devices');
-  } finally {
-    destroySockets();
-    await closeLoopbackServer(server);
-  }
-});
-
-test('http transport: an already-aborted signal sends nothing and refuses with dispatched no', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
-  const received: number[] = [];
-  const server = await createDaemonHttpServer({
-    handleRequest: async () => {
-      received.push(1);
-      return { ok: true, data: {} };
-    },
-    token: TOKEN,
-  });
-  try {
-    const port = await listenOnLoopback(server);
-    const controller = new AbortController();
-    controller.abort();
-    await assert.rejects(
-      sendRequest(
-        { httpPort: port, token: TOKEN, pid: 1 },
-        {
-          token: TOKEN,
-          command: 'devices',
-          session: 'default',
-          positionals: [],
-          flags: {},
-          meta: { requestId: 'req-http-pre-abort' },
-        },
-        'http',
-        STATE_PATHS,
-        undefined,
-        { signal: controller.signal },
-      ),
-      (error: unknown) => canceledRequestError(error, 'no'),
-    );
-    assert.deepEqual(received, []);
-  } finally {
-    await closeLoopbackServer(server);
-  }
-});
-
-test('http transport: an abort mid-request closes that request, the daemon marks it canceled, and the daemon stays alive', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
-  const seen: SeenRequest = { started: false, canceled: [] };
-  const server = await createDaemonHttpServer({
-    handleRequest: canceledAwareHandler(seen),
-    token: TOKEN,
-  });
-  try {
-    const port = await listenOnLoopback(server);
-    const info = { httpPort: port, token: TOKEN, pid: 1 };
-    const controller = new AbortController();
-    const inFlight = sendRequest(
-      info,
-      {
-        token: TOKEN,
-        command: 'wait',
-        session: 'default',
-        positionals: [],
-        flags: {},
-        meta: { requestId: 'req-http-abort-in-flight' },
-      },
-      'http',
-      STATE_PATHS,
-      undefined,
-      { signal: controller.signal },
-    );
-    await waitFor(() => seen.started, 'the daemon to start the request');
-    controller.abort();
-    await assert.rejects(inFlight, (error: unknown) => canceledRequestError(error, 'unknown'));
-    await waitFor(() => seen.canceled.length > 0, 'daemon-side cancellation');
-    assert.deepEqual(seen.canceled, [true]);
-    assert.equal(seen.requestId, 'req-http-abort-in-flight');
-
-    const followUp = await sendRequest(
-      info,
-      {
-        token: TOKEN,
-        command: 'devices',
-        session: 'default',
-        positionals: [],
-        flags: {},
-        meta: { requestId: 'req-http-follow-up' },
-      },
-      'http',
-      STATE_PATHS,
-      5000,
-      {},
-    );
-    assert.equal(followUp.ok, true);
-    // The follow-up ran through the RPC path `/health` does not: an aborted request's cancel must
-    // leave `handleRequest` serving, not just the health endpoint answering.
-    assert.equal(seen.servedCommand, 'devices');
-  } finally {
-    await closeLoopbackServer(server);
-  }
-});
+  createPublicWaitCommandSurface,
+  startPublicDaemonRuntime,
+} from '../../__tests__/test-utils/public-daemon-runtime.ts';
+import { skipWhenLoopbackUnavailable, type SkippableTestContext } from '@agent-device/test-kit';
 
 async function waitFor(condition: () => boolean, what: string): Promise<void> {
-  const deadline = Date.now() + 3000;
+  const deadline = Date.now() + 3_000;
   while (!condition()) {
     if (Date.now() >= deadline) throw new Error(`Timed out waiting for ${what}.`);
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }
+
+function clientFor(stateDir: string, daemonTransport: 'socket' | 'http') {
+  return createAgentDeviceClient({ stateDir, daemonTransport });
+}
+
+async function runAlreadyAborted(
+  t: SkippableTestContext,
+  daemonTransport: 'socket' | 'http',
+): Promise<void> {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let started = false;
+  const daemon = await startPublicDaemonRuntime({
+    createCommandSurface: createPublicWaitCommandSurface({
+      onStarted: () => {
+        started = true;
+      },
+    }),
+  });
+  try {
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(
+      clientFor(daemon.stateDir, daemonTransport).command.wait({
+        durationMs: 5_000,
+        platform: 'macos',
+        target: 'desktop',
+        signal: controller.signal,
+      }),
+      (error: unknown) =>
+        isRequestCanceledError(error) &&
+        (error as { details?: Record<string, unknown> }).details?.dispatched === 'no',
+    );
+    assert.equal(started, false);
+  } finally {
+    await daemon.close();
+  }
+}
+
+async function runAbortedInFlight(
+  t: SkippableTestContext,
+  daemonTransport: 'socket' | 'http',
+): Promise<void> {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+  let requestId: string | undefined;
+  let canceled = false;
+  const daemon = await startPublicDaemonRuntime({
+    createCommandSurface: createPublicWaitCommandSurface({
+      onStarted: (_target, startedRequestId) => {
+        requestId = startedRequestId;
+      },
+      onCanceled: (_target, canceledRequestId) => {
+        assert.equal(canceledRequestId, requestId);
+        canceled = true;
+      },
+    }),
+  });
+  try {
+    const client = clientFor(daemon.stateDir, daemonTransport);
+    const controller = new AbortController();
+    const inFlight = client.command.wait({
+      durationMs: 5_000,
+      platform: 'macos',
+      target: 'desktop',
+      signal: controller.signal,
+    });
+    await waitFor(() => requestId !== undefined, 'the daemon to start the request');
+    controller.abort();
+
+    const rejection = await inFlight.then(
+      () => {
+        throw new Error('expected the aborted call to reject');
+      },
+      (error: unknown) => error,
+    );
+    assert.equal(isRequestCanceledError(rejection), true);
+    const details = (rejection as { details?: Record<string, unknown> }).details ?? {};
+    assert.equal(details.dispatched, 'unknown');
+    assert.equal(details.requestId, requestId);
+    await waitFor(() => canceled, 'the daemon to observe cancellation');
+
+    await expectQuickWait(client);
+  } finally {
+    await daemon.close();
+  }
+}
+
+async function expectQuickWait(client: ReturnType<typeof createAgentDeviceClient>): Promise<void> {
+  await expectWaitResult(
+    client.command.wait({ durationMs: 1, platform: 'macos', target: 'desktop' }),
+  );
+}
+
+async function expectWaitResult(result: Promise<unknown>): Promise<void> {
+  assert.deepEqual(await result, { waitedMs: 1 });
+}
+
+test('socket transport refuses an already-aborted call without dispatching it', async (t) => {
+  await runAlreadyAborted(t, 'socket');
+});
+
+test('socket transport cancels an in-flight request and serves a follow-up call', async (t) => {
+  await runAbortedInFlight(t, 'socket');
+});
+
+test('HTTP transport refuses an already-aborted call without dispatching it', async (t) => {
+  await runAlreadyAborted(t, 'http');
+});
+
+test('HTTP transport cancels an in-flight request and serves a follow-up call', async (t) => {
+  await runAbortedInFlight(t, 'http');
+});

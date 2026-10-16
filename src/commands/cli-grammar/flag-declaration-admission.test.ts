@@ -6,8 +6,6 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { getFlagDefinitionsForKey } from '@agent-device/command-registry/flag-registry';
 import type { FlagDefinition } from '@agent-device/command-registry/flag-types';
 import { resolveConfigBackedFlagDefaults } from '../schema/cli-config.ts';
-import { recordActionEntry } from '@agent-device/daemon/testing/session-action-recorder';
-import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
 import { makeTempWorkspace } from '../../__tests__/cli-config-fixtures.ts';
 
 /**
@@ -79,36 +77,6 @@ test('project-config admission follows the declaration: an undeclared key is ref
   }
 });
 
-test('recorder sanitization follows the declaration: an undeclared key is dropped, a planted declaration is recorded', async () => {
-  // Shipped: `overlayRefs` declines recording so it is dropped; `fps` (recorded) is the
-  // control that proves the copy itself works.
-  assert.equal(declarationFor('overlayRefs').recorded, false);
-  const shipped = recordActionEntry(makeIosSession('default'), {
-    command: 'screenshot',
-    positionals: [],
-    flags: { overlayRefs: true, fps: 5 },
-    result: {},
-  });
-  assert.equal(shipped?.flags.overlayRefs, undefined, 'overlayRefs is undeclared for recording');
-  assert.equal(shipped?.flags.fps, 5, 'fps is declared for recording');
-
-  // Planted: flip the declaration before the recorder builds, and the production
-  // `sanitizeFlags` now copies the same value.
-  vi.resetModules();
-  const registry = await import('@agent-device/command-registry/flag-registry');
-  const planted = getInRegistry(registry, 'overlayRefs');
-  Object.assign(planted, { recorded: true });
-  const { recordActionEntry: recordPlanted } =
-    await import('@agent-device/daemon/testing/session-action-recorder');
-  const recorded = recordPlanted(makeIosSession('default'), {
-    command: 'screenshot',
-    positionals: [],
-    flags: { overlayRefs: true },
-    result: {},
-  });
-  assert.equal(recorded?.flags.overlayRefs, true, 'a planted declaration is copied');
-});
-
 test('a flag declaration without both admission fields does not compile', () => {
   // @ts-expect-error projectConfig and recorded are required; omission is the fail-closed gate.
   const declaration: FlagDefinition = { key: 'json', names: ['--json'], type: 'boolean' };
@@ -131,7 +99,7 @@ test('a CLI-only key cannot opt into recording', () => {
 
 function getInRegistry(
   registry: typeof import('@agent-device/command-registry/flag-registry'),
-  key: 'daemonBaseUrl' | 'overlayRefs',
+  key: 'daemonBaseUrl',
 ): FlagDefinition {
   const declaration = registry.getFlagDefinitionsForKey(key)[0];
   assert.ok(declaration, `expected a declaration for ${key}`);

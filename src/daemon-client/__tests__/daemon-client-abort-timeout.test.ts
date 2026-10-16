@@ -10,15 +10,11 @@
  * makes the abort case's empty-calls assertion evidence instead of an absent hook: delete the
  * abort path's `clearTimeout` and only the abort case fails.
  */
-import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { DAEMON_HTTP_INSTANCE_MISMATCH_HEADER } from '@agent-device/contracts/daemon-http';
 import { test, vi } from 'vitest';
 import { AppError, isRequestCanceledError } from '@agent-device/kernel/errors';
-import { getRequestSignal } from '@agent-device/host-kit/request';
-import { createSocketServer, listenNetServer } from '@agent-device/daemon/testing/server/transport';
 import { sendRequest } from '../daemon-client-transport.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import {
@@ -29,8 +25,6 @@ import {
   skipWhenLoopbackUnavailable,
   trackLoopbackSockets,
 } from '@agent-device/test-kit';
-
-type WireInvokeFn = (req: DaemonWireRequest) => Promise<DaemonResponse>;
 
 const { handleRequestTimeoutCalls } = vi.hoisted(() => ({
   handleRequestTimeoutCalls: [] as unknown[],
@@ -50,17 +44,6 @@ const TIMEOUT_MS = 15;
 // Past the armed budget, so a timer the abort forgot to clear fires inside the case.
 const OUTLIVE_MS = 80;
 
-// A request the daemon never answers: the only things that can end it are the client's abort and
-// the transport's own budget, which is what makes the timer's fate observable.
-function hangingHandler(): WireInvokeFn {
-  return async (req: DaemonWireRequest): Promise<DaemonResponse> => {
-    const signal = getRequestSignal(req.meta?.requestId);
-    return await new Promise<DaemonResponse>((_resolve, reject) => {
-      signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
-    });
-  };
-}
-
 async function runTimerDiscipline(
   t: SkippableTestContext,
   outcome: 'aborted' | 'timed-out',
@@ -68,15 +51,13 @@ async function runTimerDiscipline(
   if (await skipWhenLoopbackUnavailable(t)) return;
   const aborted = outcome === 'aborted';
   handleRequestTimeoutCalls.length = 0;
-  const server = createSocketServer(hangingHandler());
-  // The hanging handler never answers, so whichever way the request ends, a failed assertion
-  // before that would leave the connection open and `net.Server.close()` would hang the lane.
+  const server = http.createServer(() => {});
   const destroySockets = trackLoopbackSockets(server);
   try {
-    const port = await listenNetServer(server);
+    const port = await listenOnLoopback(server);
     const controller = new AbortController();
     const request = sendRequest(
-      { port, token: 't', pid: 1 },
+      { httpPort: port, token: 't', pid: 1 },
       {
         token: 't',
         command: 'wait',
@@ -85,7 +66,7 @@ async function runTimerDiscipline(
         flags: {},
         meta: { requestId: `req-${outcome}-timeout-timer` },
       },
-      'socket',
+      'http',
       STATE_PATHS,
       TIMEOUT_MS,
       aborted ? { signal: controller.signal } : {},

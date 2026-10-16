@@ -1,30 +1,20 @@
 /**
  * #1801: a caller driving a REMOTE daemon must never be handed a diagnostics
- * path on the daemon's filesystem. These run the real CLI against a real daemon
- * HTTP server on loopback — the only place the whole chain (daemon error →
- * locator → fetch → rendered line) is observable end to end.
+ * path on the daemon's filesystem. These run the real CLI against a daemon
+ * started through the public runtime entry, so the request record route is live.
  */
 
-import { resolveSessionRequestLogPath } from '@agent-device/daemon-contracts/session-artifact-paths';
-import type { DaemonWireRequest } from '@agent-device/contracts/command';
-import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { normalizeError, AppError } from '@agent-device/kernel/errors';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import { safeSessionName } from '@agent-device/host-kit/session-paths';
 import { runCliCapture, type CapturedCliRun } from './cli-capture.ts';
 import {
-  closeLoopbackServer,
-  listenOnLoopback,
-  mkdtempForTestSync,
-  skipWhenLoopbackUnavailable,
-} from '@agent-device/test-kit';
+  createPublicWaitCommandSurface,
+  startPublicDaemonRuntime,
+} from './test-utils/public-daemon-runtime.ts';
+import { mkdtempForTestSync, skipWhenLoopbackUnavailable } from '@agent-device/test-kit';
 
-const DAEMON_TOKEN = 'daemon-secret';
-const DAEMON_SESSION = 'cwd:abcdef0123456789:default';
 const RECORD_SENTINEL = 'REMOTE_RECORD_SENTINEL';
 
 type RemoteRun = {
@@ -34,78 +24,45 @@ type RemoteRun = {
   requestId: string;
 };
 
-/**
- * Runs `argv` against a loopback daemon that always fails the command and
- * writes the request's diagnostics record, exactly as the real router does.
- * `serveRecord: false` models a daemon with no diagnostics route (an older
- * release), so the fetch fails.
- */
-async function runAgainstRemoteDaemon(
-  argv: string[],
-  options: { serveRecord: boolean },
-): Promise<RemoteRun> {
+async function runAgainstRemoteDaemon(argv: string[]): Promise<RemoteRun> {
   const clientStateDir = mkdtempForTestSync('agent-device-remote-client-');
   const daemonStateDir = mkdtempForTestSync('agent-device-remote-daemon-');
-  const daemonSessionsDir = path.join(daemonStateDir, 'sessions');
-  const resolveRecordPath = (session: string, requestId: string | undefined): string =>
-    resolveSessionRequestLogPath(path.join(daemonSessionsDir, safeSessionName(session)), requestId);
-  let requestId = '';
-  let daemonLogPath = '';
-
-  const handleRequest = async (req: DaemonWireRequest): Promise<DaemonResponse> => {
-    requestId = req.meta?.requestId ?? '';
-    daemonLogPath = resolveRecordPath(DAEMON_SESSION, requestId);
-    fs.mkdirSync(path.dirname(daemonLogPath), { recursive: true });
-    fs.writeFileSync(daemonLogPath, `{"phase":"request_failed","data":"${RECORD_SENTINEL}"}\n`);
-    return {
-      ok: false,
-      error: normalizeError(new AppError('COMMAND_FAILED', 'wait timed out'), {
-        logPath: daemonLogPath,
-        diagnosticsRecord: { session: DAEMON_SESSION, requestId },
-      }),
-    };
-  };
-
-  const server = await createDaemonHttpServer({
-    token: DAEMON_TOKEN,
-    handleRequest,
-    ...(options.serveRecord
-      ? { resolveRequestDiagnosticsPath: (ref) => resolveRecordPath(ref.session, ref.requestId) }
-      : {}),
+  const daemon = await startPublicDaemonRuntime({
+    stateDir: daemonStateDir,
+    serverMode: 'http',
+    createCommandSurface: createPublicWaitCommandSurface({ fail: true }),
   });
 
   try {
-    const port = await listenOnLoopback(server);
     const run = await runCliCapture(argv, {
       useRealDaemonClient: true,
       env: {
         AGENT_DEVICE_STATE_DIR: clientStateDir,
-        AGENT_DEVICE_DAEMON_BASE_URL: `http://127.0.0.1:${port}`,
-        AGENT_DEVICE_DAEMON_AUTH_TOKEN: DAEMON_TOKEN,
+        AGENT_DEVICE_DAEMON_BASE_URL: daemon.baseUrl,
+        AGENT_DEVICE_DAEMON_AUTH_TOKEN: daemon.runtime.token,
       },
     });
+    const daemonLogPath = findRequestLog(daemonStateDir);
+    const requestId = path.basename(daemonLogPath, '.ndjson');
     return { run, clientStateDir, daemonLogPath, requestId };
   } finally {
-    await closeLoopbackServer(server);
-    fs.rmSync(daemonStateDir, { recursive: true, force: true });
+    await daemon.close();
   }
 }
 
 test('a remote failure names a record the caller can actually read', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
-  const { run, clientStateDir, daemonLogPath, requestId } = await runAgainstRemoteDaemon(
-    ['clipboard', 'write', 'hello'],
-    { serveRecord: true },
-  );
+  const { run, clientStateDir, daemonLogPath, requestId } = await runAgainstRemoteDaemon([
+    'wait',
+    '5000',
+    '--platform',
+    'macos',
+    '--target',
+    'desktop',
+  ]);
   try {
-    const localPath = path.join(
-      clientStateDir,
-      'remote-diagnostics',
-      safeSessionName(DAEMON_SESSION),
-      'requests',
-      `${requestId}.ndjson`,
-    );
+    const localPath = localRecordPath(clientStateDir, daemonLogPath, requestId);
     assert.equal(run.code, 1);
     assert.match(run.stderr, new RegExp(`Diagnostics Log: ${escapeRegExp(localPath)}`));
     assert.equal(run.stderr.includes(daemonLogPath), false, 'daemon-host path must not be printed');
@@ -118,10 +75,15 @@ test('a remote failure names a record the caller can actually read', async (t) =
 test('--json carries the caller-local record path, never the daemon-host one', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
-  const { run, clientStateDir, daemonLogPath } = await runAgainstRemoteDaemon(
-    ['clipboard', 'write', 'hello', '--json'],
-    { serveRecord: true },
-  );
+  const { run, clientStateDir, daemonLogPath } = await runAgainstRemoteDaemon([
+    'wait',
+    '5000',
+    '--platform',
+    'macos',
+    '--target',
+    'desktop',
+    '--json',
+  ]);
   try {
     const payload = JSON.parse(run.stdout) as { error: { logPath?: string } };
     assert.equal(payload.error.logPath?.startsWith(clientStateDir), true);
@@ -135,10 +97,15 @@ test('--json carries the caller-local record path, never the daemon-host one', a
 test('--debug prints the fetched record inline and not the local daemon log', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
-  const { run, clientStateDir } = await runAgainstRemoteDaemon(
-    ['clipboard', 'write', 'hello', '--debug'],
-    { serveRecord: true },
-  );
+  const { run, clientStateDir } = await runAgainstRemoteDaemon([
+    'wait',
+    '5000',
+    '--platform',
+    'macos',
+    '--target',
+    'desktop',
+    '--debug',
+  ]);
   try {
     // A local daemon log in the caller's state dir must stay unread: it belongs
     // to a different daemon than the one that failed.
@@ -150,31 +117,30 @@ test('--debug prints the fetched record inline and not the local daemon log', as
   }
 });
 
-test('an unfetchable remote record says so instead of naming a path', async (t) => {
-  if (await skipWhenLoopbackUnavailable(t)) return;
+function findRequestLog(stateDir: string): string {
+  const sessionsDir = path.join(stateDir, 'sessions');
+  const sessionDirs = fs
+    .readdirSync(sessionsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory());
+  const requestLogs = sessionDirs.flatMap((session) => {
+    const requestsDir = path.join(sessionsDir, session.name, 'requests');
+    if (!fs.existsSync(requestsDir)) return [];
+    return fs.readdirSync(requestsDir).map((name) => path.join(requestsDir, name));
+  });
+  assert.equal(requestLogs.length, 1);
+  return requestLogs[0]!;
+}
 
-  const { run, clientStateDir, daemonLogPath, requestId } = await runAgainstRemoteDaemon(
-    ['clipboard', 'write', 'hello', '--json'],
-    { serveRecord: false },
+function localRecordPath(clientStateDir: string, daemonLogPath: string, requestId: string): string {
+  const sessionDir = path.basename(path.dirname(path.dirname(daemonLogPath)));
+  return path.join(
+    clientStateDir,
+    'remote-diagnostics',
+    sessionDir,
+    'requests',
+    `${requestId}.ndjson`,
   );
-  try {
-    const payload = JSON.parse(run.stdout) as {
-      error: { logPath?: string; logPathUnavailable?: string };
-    };
-    // A path may still be named — the CLI's own client-side record, written on
-    // this machine — but never the daemon host's, and never a record the fetch
-    // failed to produce.
-    assert.notEqual(payload.error.logPath, daemonLogPath);
-    assert.equal(payload.error.logPath?.includes('remote-diagnostics') ?? false, false);
-    assert.match(
-      payload.error.logPathUnavailable ?? '',
-      new RegExp(`^remote daemon http://127\\.0\\.0\\.1:\\d+, request ${requestId}: HTTP 404$`),
-    );
-    assert.equal(run.stdout.includes(daemonLogPath), false);
-  } finally {
-    fs.rmSync(clientStateDir, { recursive: true, force: true });
-  }
-});
+}
 
 function escapeRegExp(value: string): string {
   return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);

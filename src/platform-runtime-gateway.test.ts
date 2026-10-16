@@ -1,4 +1,3 @@
-import { daemonPlatformServicesFixture } from '@agent-device/daemon/testing/__tests__/platform-services-fixture';
 import {
   type DeviceBinding,
   localRuntimeOwner,
@@ -16,11 +15,6 @@ import { viewportRuntimeOperationFacts } from '@agent-device/contracts/viewport-
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createLimrunRuntime } from '@agent-device/provider-limrun';
 import { describe, expect, test, vi } from 'vitest';
-import { handleAppStateCommand } from '@agent-device/daemon/testing/handlers/session-appstate';
-import { createRequestRuntimeBindings } from '@agent-device/daemon/testing/request-runtime-binding';
-import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { createComposedPlatformRuntimeGateway } from './platform-runtime-gateway.ts';
 import {
   gatewayFixture as gateway,
@@ -291,7 +285,7 @@ describe('composed platform runtime gateway', () => {
     expect(unrelatedLoad).not.toHaveBeenCalled();
   });
 
-  test('keeps a stale Limrun Android id unavailable through the production handler without binding or local fallback', async () => {
+  test('keeps a stale Limrun Android id unavailable without binding or local fallback', async () => {
     const registration = createLimrunRuntime(
       { apiKey: 'test-key', runtimeInstance: 'test-instance' },
       limrunTestDependencies,
@@ -334,42 +328,17 @@ describe('composed platform runtime gateway', () => {
       providerModules: [{ runtime: registration.runtime, module: providerModule }],
     });
 
-    const bindings = createRequestRuntimeBindings({
-      dispatchLedger: createRequestDispatchLedger(),
-      gateway: runtimeGateway,
-      scope,
-      admitDeviceClaim: async () => {},
-    });
     try {
-      const response = await withTestDeviceInventory(
-        { local: async () => [staleDevice] },
-        async () =>
-          await handleAppStateCommand({
-            platformServices: daemonPlatformServicesFixture(),
-            req: {
-              token: 't',
-              session: 'default',
-              command: 'appstate',
-              positionals: [],
-              flags: { platform: 'android', device: staleDevice.name },
-            },
-            sessionName: 'default',
-            sessionStore: makeSessionStore('agent-device-stale-limrun-'),
-            inspectFacts: bindings.inspectFacts,
-            bindDevice: bindings.bindDevice,
-          }),
-      );
-
-      expect(response?.ok).toBe(false);
-      if (response && !response.ok) {
-        expect(response.error.code).toBe('UNSUPPORTED_OPERATION');
-        expect(response.error.hint).toMatch(/matching live provider session/i);
-      }
+      const facts = await runtimeGateway.inspectFacts(staleDevice);
+      expect(facts.operations.appState).toMatchObject({
+        available: false,
+        reason: 'owner-capability-missing',
+        hint: 'Limrun requires a matching live provider session for this device.',
+      });
       expect(inspectCount).toBe(1);
       expect(bindCount).toBe(0);
       expect(localLoad).not.toHaveBeenCalled();
     } finally {
-      await bindings[Symbol.asyncDispose]();
       await runtimeGateway.shutdown();
       await registration.runtime.shutdown();
     }

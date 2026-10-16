@@ -2,10 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import { createAgentDeviceClient } from '../agent-device-client.ts';
-import {
-  HUMAN_CONTROL_HOLD,
-  HUMAN_CONTROL_SCOPE,
-} from '@agent-device/daemon/testing/__tests__/human-control-fixtures';
+import { HUMAN_CONTROL_HOLD, HUMAN_CONTROL_SCOPE } from './human-control.fixtures.ts';
 import type { DaemonRequest } from '@agent-device/kernel/contracts';
 
 test('human-control client carries normal remote authentication and full lease metadata', async () => {

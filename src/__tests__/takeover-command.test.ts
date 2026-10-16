@@ -6,10 +6,7 @@ import {
   renderTakeoverStatus,
   takeoverCommand,
 } from '../cli/commands/takeover.ts';
-import {
-  HUMAN_CONTROL_HOLD,
-  createControlLatch,
-} from '@agent-device/daemon/testing/__tests__/human-control-fixtures';
+import { HUMAN_CONTROL_HOLD } from '../client/human-control.fixtures.ts';
 import type { DaemonRequest } from '@agent-device/kernel/contracts';
 import { TAKEOVER_CLI_FLAGS } from './test-utils/client-lease-fixtures.ts';
 
@@ -17,6 +14,14 @@ const mocks = vi.hoisted(() => ({ writeCommandOutput: vi.fn() }));
 vi.mock('../cli/commands/shared.ts', () => ({ writeCommandOutput: mocks.writeCommandOutput }));
 beforeEach(() => mocks.writeCommandOutput.mockReset());
 afterEach(() => vi.useRealTimers());
+
+function createControlLatch() {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>((onResolve) => {
+    resolve = onResolve;
+  });
+  return { promise, resolve };
+}
 
 function clientForTest() {
   const transport = vi.fn(async (req: Omit<DaemonRequest, 'token'>) => ({
