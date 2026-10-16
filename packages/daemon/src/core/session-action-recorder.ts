@@ -88,7 +88,8 @@ export function recordActionEntry(
     result: recordedEntry.result,
     ...(recordedEntry.flags.record === true
       ? { publicationIntent: 'explicit-record' as const }
-      : recordedEntry.interactiveObservation === false
+      : OBSERVATION_ONLY_COMMANDS.has(recordedEntry.command) &&
+          recordedEntry.interactiveObservation === false
         ? { publicationIntent: 'authored' as const }
         : {}),
     ...(recordedEntry.targetEvidence ? { targetEvidence: recordedEntry.targetEvidence } : {}),

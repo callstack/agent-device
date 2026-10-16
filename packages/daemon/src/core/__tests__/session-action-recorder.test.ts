@@ -7,8 +7,36 @@ import { isSessionRecording } from '../session-script-publication-capability.ts'
  * (`selector-recording.test.ts` covers which commands set `interactiveObservation`).
  */
 import { test, expect } from 'vitest';
-import { recordActionEntry, type RecordActionEntry } from '../session-action-recorder.ts';
+import { isInteractiveObservation, recordActionEntry, type RecordActionEntry } from '../session-action-recorder.ts';
 import { authoringPublication, makeIosSession } from '../../__tests__/support/session-factories.ts';
+
+test.each([
+  { command: 'wait', replayPlanStep: false, intent: undefined },
+  { command: 'diff', replayPlanStep: false, intent: undefined },
+  { command: 'snapshot', replayPlanStep: false, intent: undefined },
+  { command: 'snapshot', replayPlanStep: true, intent: 'authored' },
+])(
+  'publication intent for $command with replayPlanStep=$replayPlanStep',
+  ({ command, replayPlanStep, intent }) => {
+    const session = makeIosSession('default');
+    const req = {
+      token: 't',
+      session: 'default',
+      command,
+      positionals: [],
+      internal: { replayPlanStep },
+    };
+    const action = recordActionEntry(session, {
+      command,
+      positionals: [],
+      flags: {},
+      interactiveObservation: isInteractiveObservation(req),
+    });
+
+    expect(action).toBeDefined();
+    expect(action?.publicationIntent).toBe(intent);
+  },
+);
 
 test('an observation-only action is excluded while repair-armed and no --record is given', () => {
   const session = makeIosSession('default', {
