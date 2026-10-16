@@ -104,6 +104,19 @@ test('serializeOpenResult carries an unanswered launch confirmation with its rea
   assert.equal(data.launchConfirmationReason, 'alert-unrecognized');
 });
 
+test('serializeOpenResult carries a probe-failure step without any confirmation outcome', () => {
+  const data = serializeOpenResult({
+    session: 'qa',
+    appBundleId: 'com.example.app',
+    launchConfirmationProbeFailure: 'runner',
+    identifiers: { session: 'qa', appId: 'com.example.app', appBundleId: 'com.example.app' },
+  });
+
+  assert.equal(data.launchConfirmationProbeFailure, 'runner');
+  assert.equal('launchConfirmation' in data, false);
+  assert.equal('launchConfirmationReason' in data, false);
+});
+
 test('serializeInstallFromSourceResult uses install-family package naming', () => {
   const data = serializeInstallFromSourceResult({
     launchTarget: 'com.example.demo',

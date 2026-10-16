@@ -1,6 +1,9 @@
 import type { DaemonWireRequest, InternalRequestOptions } from '@agent-device/contracts/command';
 import type {
   LaunchConfirmation,
+  LaunchConfirmationAbsent,
+  LaunchConfirmationOutcome,
+  LaunchConfirmationProbeFailure,
   LaunchConfirmationUnansweredReason,
 } from '@agent-device/contracts/application-lifecycle-runtime';
 import type {
@@ -384,24 +387,22 @@ export function normalizeOpenForegroundComposition(data: Record<string, unknown>
 }
 
 /**
- * The launch confirmation an open response reports, keyed on the typed outcome. An `unanswered`
- * outcome without a recognized reason stays `unanswered` with no reason rather than being dropped:
- * the prompt is on the device either way. The reason is read only for `unanswered`; an `accepted`
- * outcome never carries one.
+ * The launch confirmation an open response reports, keyed on the typed outcome. The daemon pairs
+ * an `unanswered` outcome with its reason, so an outcome or reason it does not recognize is dropped
+ * rather than guessed, as is a probe step outside the typed set; warnings travel separately and
+ * still reach the caller. With no outcome, the only report left is the typed probe-failure step.
  */
-export function normalizeLaunchConfirmation(data: Record<string, unknown>): {
-  launchConfirmation?: LaunchConfirmation;
-  launchConfirmationReason?: LaunchConfirmationUnansweredReason;
-} {
+export function normalizeLaunchConfirmation(
+  data: Record<string, unknown>,
+): LaunchConfirmationOutcome | LaunchConfirmationAbsent {
   const outcome = readLaunchConfirmationOutcome(data.launchConfirmation);
-  if (!outcome) return {};
-  const reason =
-    outcome === 'unanswered'
-      ? readLaunchConfirmationReason(data.launchConfirmationReason)
-      : undefined;
-  return reason
-    ? { launchConfirmation: outcome, launchConfirmationReason: reason }
-    : { launchConfirmation: outcome };
+  if (outcome === 'accepted') return { launchConfirmation: 'accepted' };
+  if (outcome === 'unanswered') {
+    const reason = readLaunchConfirmationReason(data.launchConfirmationReason);
+    return reason ? { launchConfirmation: 'unanswered', launchConfirmationReason: reason } : {};
+  }
+  const probeFailure = readLaunchConfirmationProbeFailure(data.launchConfirmationProbeFailure);
+  return probeFailure ? { launchConfirmationProbeFailure: probeFailure } : {};
 }
 
 function readLaunchConfirmationOutcome(value: unknown): LaunchConfirmation | undefined {
@@ -420,6 +421,19 @@ function readLaunchConfirmationReason(
   switch (value) {
     case 'alert-unrecognized':
     case 'url-owner-unresolved':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function readLaunchConfirmationProbeFailure(
+  value: unknown,
+): LaunchConfirmationProbeFailure | undefined {
+  switch (value) {
+    case 'alert-read':
+    case 'alert-accept':
+    case 'runner':
       return value;
     default:
       return undefined;

@@ -14,6 +14,7 @@ import {
 import type { BoundDeviceRuntime } from '@agent-device/contracts/platform-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import type {
+  LaunchConfirmationAbsent,
   LaunchConfirmationOutcome,
   LaunchConfirmationUnansweredReason,
   OpenApplicationOutcome,
@@ -119,10 +120,10 @@ function deviceClaimTakeoverWarning(tookOver: TakenOverDeviceClaim): string {
   );
 }
 
-/** The answered launch confirmation the outcome carries, as the response reports it. */
+/** What the caller's `open` output says about the launch-confirmation probe on this outcome. */
 function launchConfirmationReport(
   outcome: OpenApplicationOutcome,
-): LaunchConfirmationOutcome | undefined {
+): LaunchConfirmationOutcome | LaunchConfirmationAbsent {
   switch (outcome.launchConfirmation) {
     case 'accepted':
       return { launchConfirmation: 'accepted' };
@@ -132,7 +133,11 @@ function launchConfirmationReport(
         launchConfirmationReason: outcome.launchConfirmationReason,
       };
     default:
-      return undefined;
+      // Keeps the typed probe-failure step on the response beside its warning, so a machine
+      // reader tells "no prompt" from "prompt state unreadable" without parsing prose.
+      return outcome.launchConfirmationProbeFailure
+        ? { launchConfirmationProbeFailure: outcome.launchConfirmationProbeFailure }
+        : {};
   }
 }
 
