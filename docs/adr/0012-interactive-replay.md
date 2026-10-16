@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-07-10). The decisions are implemented on `main`, including the amendments below:
+Accepted (2026-07-10). Implemented on `main`, including the amendments folded into the decisions below:
 
 - #1264
 - #1269
@@ -10,80 +10,108 @@ Accepted (2026-07-10). The decisions are implemented on `main`, including the am
 - #1280
 - #1349
 - #1385
-- The 2026-08-07 mutating-ambiguity amendment
+- the 2026-08-07 mutating-ambiguity amendment
 
-Only the replay benchmark extension in decision 5 remains deferred.
-The completed migration plan and implementation history (PRs #1193-#1349) are in git history.
+Only the replay benchmark extension of decision 5 remains deferred.
+The per-step implementation record (PRs #1193-#1349) and the pre-acceptance migration plan are in the git history of this file.
 
 ## Rules at a glance
 
-This normative summary has one entry for each decision.
-[Decision](#decision) contains the full contracts, amendments, and exceptions.
-The named registries and tests are the living source of truth.
+This is a normative summary, with one entry for each decision.
+The binding contracts, amendments, and edge cases are in [Decision](#decision).
+The registries and tests named there are the living source of truth.
 
-1. **`--update` never rewrites.** The candidate machinery only ranks bounded divergence `suggestions`.
-   It orders identity components, then the same `scrollRegion`, then document order.
-   It deduplicates suggestions by node. There is no unattended repair path.
-2. **Every element resolution discloses its method.** The additive `resolution` field identifies runtime resolution, ref provenance, or direct-iOS non-observation.
-   Runtime disambiguation includes `matchCount`, `tiebreak`, and at most 5 alternatives.
-   Coordinate dispatches and executed maestro-fallbacks have no disclosure.
+1. **`--update` never rewrites.**
+   The candidate machinery of heal only ranks the bounded `suggestions` list inside a divergence report.
+   The order is identity components, then the same `scrollRegion`, then document order.
+   The list is deduplicated by node.
+   No unattended repair path exists.
+2. **Every element resolution discloses how it resolved.**
+   The additive `resolution` response field has one of these values:
+   - `runtime`/`unique`;
+   - `runtime`/`disambiguated` (`matchCount`, `tiebreak`, up to 5 alternatives);
+   - `ref`/`exact` or `ref`/`label-fallback`;
+   - `direct-ios`/`not-observed`.
+
+   Coordinate dispatches and executed maestro-fallbacks carry no `resolution`.
    Successful structural-collapse alternatives are pre-action diagnostics.
    Distinct-subtree rejection candidates issue a partial ref frame for immediate retry.
-   ADR 0011's `resolutionDisclosure` row enforces this contract (`packages/contracts/src/interaction-guarantees.ts`).
-3. **Recording writes `target-v1` identity evidence. Replay verifies it before an action.**
-   Each element-targeting action has one versioned JSON comment.
-   Identity uses a unique id, otherwise role+label, and a leaf-anchored ancestry prefix.
-   Disambiguation uses `sibling` and region-scoped `viewportOrder`. Diagnostic `rect` values are never compared.
-   Six verification paths classify each annotated step.
-   Evidence that cannot isolate a target causes `identity-unverifiable`, never a silent selection.
-   Amendments cover non-unique ids (#1269), identity-empty pressed containers (#1280), and read-only identity verification (#1349).
-   The #1385 amendment adds bounded retries for launch-race content verdicts, with explicit activation at each call site.
-4. **Divergence is a structured error with resume by plan ordinal.**
-   `ok:false`, `REPLAY_DIVERGENCE`, and `details.divergence` v1 identify four divergence kinds.
-   The bounded `screen` uses plain `snapshot` capture scope and ranked refs (#1264).
-   It activates a partial ref frame under ADR 0014.
-   Each report includes one `repairHint` enum and `resume` data.
-   Serialized ceilings are 8/24/64 KiB for compact/default/full responses.
-   Resume uses `replay --from N --plan-digest <sha>` without state reconstruction.
-   `test` rejects `--from`. Skipped `outputEnv` producers or runtime control flow prevent resume.
-5. **Validation is contractual.** Decision 5 defines required coverage for acceptance.
+   ADR 0011's `resolutionDisclosure` guarantee row enforces this rule (`packages/contracts/src/interaction-guarantees.ts`).
+
+3. **Recording writes `target-v1` identity evidence; replay verifies it before it acts.**
+   One versioned JSON comment for each element-targeting action carries these items:
+   - identity: unique id, else role+label, plus a leaf-anchored ancestry prefix;
+   - disambiguation signals: `sibling` and region-scoped `viewportOrder`;
+   - never-compared diagnostics: `rect`.
+
+   Replay classifies every annotated step through six exact verification paths.
+   Anything that the evidence cannot isolate is an `identity-unverifiable` divergence, never a silent pick.
+   Amendments:
+   - Non-unique ids demote to role+label (#1269).
+   - An identity-empty pressed container records its first labeled descendant, double-guarded fail-closed (#1280).
+   - `wait` landmark identity and `is` coverage dispatch on the `targetIdentityVerification` descriptor trait (#1349).
+   - The pre-dispatch verification capture bounds-retries a content-quality `capture-failed`/`sparse-snapshot` verdict on an app-launch race.
+     This retry is opt-in for each call site (#1385).
+
+4. **Divergence is a structured error, resumable by plan ordinal.**
+   The response is `ok:false` with code `REPLAY_DIVERGENCE` and `details.divergence` v1.
+   `details.divergence` has these fields:
+   - `kind`: `action-failure` | `selector-miss` | `identity-mismatch` | `identity-unverifiable`;
+   - a bounded `screen`: the same capture scope as plain `snapshot`, with ranked refs (#1264), that activates a partial ref frame under ADR 0014;
+   - one `repairHint` enum;
+   - `resume`: `from`, optional `alternateFrom`, `planDigest`, and `repairSessionHeld`.
+
+   Serialized ceilings for each response level are 8/24/64 KiB.
+   Resume is `replay --from N --plan-digest <sha>`.
+   Resume is replay-only (`test` rejects `--from`).
+   Resume has no state reconstruction: skipped `outputEnv` producers or control flow reject the resume.
+
+5. **Validation is contractual.**
+   The coverage inventory under decision 5 gates acceptance:
+   guarantee-matrix cells, parser/writer round trips, all six verification paths, wire-projection parity, and `--update` no-write.
    Benchmark evidence alone is insufficient.
-6. **The agent performs repair within a transaction.** `replay --save-script` persists an ARMED -> COMPLETE -> COMMITTED transaction.
-   Rules R1-R7 require recording from step 1 and continuation with `--from`.
-   The daemon computes `repairHint`. The writer refuses bare `@ref` exports with an explicit error.
-   `saveScriptBoundary` bounds the healed slice. The session remains active until commit or abort.
-   Exclusive `linkSync` publication refuses every pre-existing target.
-   Provenance (`internal.replayPlanStep`) excludes out-of-band observations by default.
-   `--record` explicitly includes one corrective observation (#1271 stage 2).
+6. **Repair is agent-performed and transactional.**
+   `replay --save-script` opens a persisted ARMED -> COMPLETE -> COMMITTED transaction.
+   Rules R1-R7 govern the transaction:
+   - recording is armed from step 1;
+   - `--from` continuation only;
+   - the daemon computes `repairHint` routing;
+   - fail-loud on bare `@ref` export;
+   - the `saveScriptBoundary` watermark bounds the healed slice;
+   - the session is kept alive until commit or abort;
+   - exclusive-`linkSync` publication refuses any pre-existing target.
+
+   Provenance (`internal.replayPlanStep`) excludes out-of-band observations from the healed script.
+   `--record` is the per-action opt-in (#1271 stage 2).
 
 ## Decision
 
 ### 1. Retire `--update` healing as an actor; repurpose its candidate machinery as ranked suggestions
 
-`--update`/`-u` no longer silently rewrites `.ad` files.
-Its existing machinery populates ranked `suggestions` in the divergence report (decision 4).
-`collectReplaySelectorCandidates` extracts recorded chains and positionals.
-Its `resolveSelectorChain` calls resolve those candidates again.
-Neither mechanism acts without agent supervision.
+`--update`/`-u` stops silently rewriting `.ad` files.
+It already has two pieces of machinery:
+`collectReplaySelectorCandidates` (recorded-chain/positional extraction) and the `resolveSelectorChain` re-resolution that it drives.
+These are repurposed to populate the ranked `suggestions` list inside the divergence report (decision 4).
+They do not act unattended.
 
 **Ranking is a total order:**
 
 1. Candidates that satisfy more identity components rank first.
    A recorded-id match precedes a role+label match. A role+label match precedes a label-only match.
-2. Among equal candidates, the recorded `scrollRegion` precedes other regions.
+2. Among equal candidates, candidates in the same `scrollRegion` as recorded rank before candidates in other regions.
 3. Document order resolves the remaining ties.
 
 Suggestions are deduplicated by node.
 A node reached through several recorded selector terms appears once, with its strongest match basis.
-Decision 4 bounds the list.
-Response levels change report content only.
+Decision 4's suggestion cap bounds the list.
+Response levels affect only report content, never file behavior.
 At every level, `--update` performs no rewrite and returns the same bounded suggestions object.
 `--level digest` omits entries and includes `suggestionCount`, as decision 4 specifies.
 
 An agent can accept, reject, or edit a proposed repair in one inexpensive model turn.
 This costs less than detection of a silent incorrect repair later.
 Audit item (a) in Context also found that heal could rarely act.
-An agent-reviewed proposal is therefore more useful than the same proposal applied without review.
+A proposal that an agent can accept, reject, or edit is strictly more valuable than the same proposal applied blind.
 
 ### 2. Disclose daemon-tree disambiguation and identify fast-path responses
 
@@ -138,7 +166,7 @@ ADR 0011's matrix must add a `resolutionDisclosure` guarantee with six accurate 
 
 The **executed dispatch** determines maestro-cell membership.
 Permission to use a fallback does not determine membership.
-If a permitted fallback is unnecessary, the normal direct-iOS press discloses `not-observed`.
+A press that was allowed to fall back but hit its element normally is the direct-iOS path, and it discloses `not-observed`.
 Only an executed coordinate fallback belongs to the inapplicable maestro cell.
 The four enforced cells use the shared response builder.
 The existing direct path delegates `disambiguation` to `runtime-selector` after its raw-match count.
@@ -165,12 +193,12 @@ The daemon tree owns structural equivalence and candidate publication.
 > The same identity, normalization, field-size, and verification rules apply.
 > The wrapper limit is 8,320 bytes.
 > Before dispatch, replay verifies both selectors and carries two post-resolution guards.
-> Either endpoint can refuse the whole action before pointer-down for these reasons:
+> If either endpoint has one of these failures, replay refuses the whole action before pointer-down:
 >
-> - Selector miss
-> - Identity mismatch
-> - Unverifiable evidence
-> - Dispatch-time guard mismatch
+> - selector miss;
+> - identity mismatch;
+> - unverifiable evidence;
+> - dispatch-time guard mismatch.
 >
 > Older readers treat unknown future `targets-vN` annotations as ordinary comments, as with single-target versions.
 
@@ -204,19 +232,19 @@ The payload has three comparison tiers:
 - **Identity, compared exactly:** recorded `id`, otherwise `role` plus normalized `label`, together with the leaf-anchored `ancestry` prefix.
   `role` is `normalizeType(node.type ?? "")`, as `buildSelectorChainForNode` uses.
   It is never the raw optional `node.role`.
-- **Disambiguation signals, used only for shared identity:** `sibling`, then `viewportOrder` within the recorded `scrollRegion` partition.
+- **Disambiguation signals, consulted only when several current nodes share the identity:** `sibling`, then `viewportOrder` within the recorded `scrollRegion` partition.
   `sibling` is the actual same-parent child index.
   These relative signals use no absolute pixels.
   Document order resolves every ordering tie.
 - **Diagnostics, never compared:** optional `rect` shows the recorded target's location in divergence reports.
 
-Absolute geometry is excluded from identity because healthy runs change rects.
-Causes include scroll offset, rotation, dynamic type, iPad/macOS window size changes, and ordinary RN layout changes.
-The audited “Prevent Remove” siblings also had identical rects.
-Thus, absolute geometry cannot always distinguish siblings.
-V1 has no absolute-coordinate tolerance.
-The earlier ±8-unit comparison has no measured drift distribution to justify its constant.
-Any future absolute tolerance must include measured evidence.
+Absolute geometry is deliberately demoted out of identity.
+An absolute rect is the least stable component of the identity of a target.
+Scroll offset, device rotation, dynamic type, iPad/macOS window resizing, and ordinary RN layout shifts all move rects between healthy runs.
+The audit's identical-rect "Prevent Remove" sibling pair proves that absolute geometry cannot even separate identical siblings in the worst case.
+No absolute-coordinate tolerance exists in v1.
+The earlier draft's ±8-unit rect comparison is removed, not tuned, because no measured drift distribution exists to justify any particular constant.
+If a future revision reintroduces an absolute tolerance, it must carry measured evidence.
 
 **Normalization.** All strings use Unicode NFC.
 `label` also removes leading/trailing whitespace and replaces each internal whitespace sequence with one space.
@@ -266,7 +294,7 @@ A recorded `id` never matches a node without that id.
 > Recording substitutes the container's first labeled descendant.
 > Its selector chain and `target-v1` tuple then carry selective role+label identity instead of a shared bare role.
 > The measured Android case is a clickable `role="linearlayout"` row with its title on a child `TextView`.
-> “First labeled descendant” means the first node in document order within the whole subtree with a non-empty normalized label.
+> "First labeled descendant" means the first node in document order within the whole subtree with a non-empty normalized label.
 > `fill` is excluded because its recorded `editable=true` constraints cannot match that descendant.
 > Otherwise, the script could not replay.
 >
@@ -319,7 +347,8 @@ A recorded `id` never matches a node without that id.
 > A destination guard proves landmark existence on the ready screen, irrespective of list position.
 > Positional comparison could incorrectly reject a valid reordered screen.
 >
-> A same-selector impostor does not abort polling.
+> Polling is fail-open in time and fail-closed at the deadline.
+> A same-selector impostor never aborts the wait.
 > Transient similar elements can appear during a transition.
 > At the deadline, matching polls without the recorded identity cause `identity-mismatch` before wait success.
 > `matchCount` comes from the last matching poll.
@@ -377,7 +406,7 @@ Truncation removes entries from the **root side only**.
 The nearest ancestors always remain.
 
 Comparison uses a **leaf-anchored prefix match**.
-Recorded chain R matches observed chain O if every index `i < |R|` satisfies these conditions:
+Recorded chain R matches observed chain O if and only if every index `i < |R|` satisfies these conditions:
 
 - `O[i]` exists.
 - The roles are equal.
@@ -389,6 +418,7 @@ An inserted or removed wrapper ancestor deliberately changes identity.
 Structure is part of identity.
 
 **Record-time write.** Record and replay compute both positional signals over identical candidate domains.
+They never use one domain at record time and another at replay.
 **Document order** is the node's pre-order tree-traversal index.
 It is the canonical total order for enumeration, ordering ties, and candidate lists throughout this contract.
 Every comparison is therefore deterministic and total.
@@ -404,16 +434,17 @@ Every comparison is therefore deterministic and total.
 4. Partition the identity set by **scroll region**.
    The key is the nearest scrollable ancestor's local identity (`role` + `id`/`label`), or *none* without that ancestor.
    `scrollRegion` is the winner's key and is omitted for *none*.
-   `viewportOrder` is its zero-based ordinal **within its own partition**.
+   `viewportOrder` is the zero-based ordinal of the winner **within its own partition**, not within the whole identity set.
    Order rect centers top-to-bottom, then left-to-right.
    Resolve equal centers by document order.
    Put rect-less members last, in document order.
-   Record and replay use this partition as the ordinal's domain.
+   The partition is the domain of the ordinal on both sides.
+   Thus recorded and replayed `viewportOrder` always refer to the same candidate domain.
 5. Run the replay verification algorithm against the record-time tree.
    If it isolates exactly the winner, write `verification: "verified"`.
    Otherwise, write `verification: "unverifiable"`.
    Both ordinals derive from the winner over deterministic total orders.
-   Thus, the self-check succeeds when capture supplies the required structural data.
+   Thus, the self-check succeeds by construction whenever the capture supplies the required structural data.
    Record-time `unverifiable` identifies a capture anomaly, such as missing parent linkage.
    It is a fail-closed safeguard, not an expected path.
    At replay, it causes `identity-unverifiable` before an action.
@@ -465,13 +496,14 @@ Identity verification applies only when `matchCount >= 1`.
 5. `|I| == 1` and W differs: return **identity-mismatch**.
    This detects a unique-but-wrong rebind or a changed ambiguity winner, even after unique resolution.
 6. `|I| > 1`: apply these signals in order over their record-time candidate domains:
-   - **sibling:** retain members of I whose index among their own parent's children equals recorded `sibling`.
+   - **sibling:** retain the members of I whose zero-based index among their own parent's children equals the recorded `sibling`.
      If exactly one remains, compare it with W under paths 4/5.
      If zero or multiple remain, continue.
      The same child index can recur under different parents.
-   - **Region-scoped viewportOrder:** restrict I to the recorded `scrollRegion` partition, including *none* when omitted.
-     If empty, the recorded region no longer exists.
-     The signal is unavailable and must never compare across regions.
+   - **Region-scoped viewportOrder:** restrict I to the partition whose scroll-region key equals the recorded `scrollRegion`.
+     If `scrollRegion` is omitted, use the *none* partition.
+     If the partition is empty, the recorded scroll region no longer exists.
+     Then `viewportOrder` is **unavailable**, and it is never compared across regions.
      Otherwise, order centers top-to-bottom, then left-to-right.
      Resolve equal centers by document order.
      Put rect-less members last in document order.
@@ -494,14 +526,15 @@ This is distinct from general outcome verification.
 > **Amendment (#1385).** `captureDivergenceObservation` supplies the pre-dispatch verification tree.
 > Immediately after `open --relaunch`, the app can still be in launch or mount operations.
 > A transient `capture-failed` or `sparse-snapshot` verdict can therefore occur without real divergence.
-> Android's helper can throw for insufficient foreground app content during mount.
+> While the app mounts, Android's snapshot helper returns "insufficient foreground app content", and the capture path throws.
 > iOS's private-AX fallback can return sparse content under load.
 > This capture retries with bounded backoff before it returns `identity-unverifiable`.
 > The fixed delay list has 7 entries and a 12s **DELAY-ONLY** budget.
 > This corresponds to `wait` landmark verification's existing continued polling (#1349).
 >
-> Each call site explicitly selects `retryLaunchRace`.
-> Only `verifyReplayActionTarget`'s pre-dispatch gate uses it.
+> The retry is opt-in for each call site (`retryLaunchRace`).
+> Other `captureDivergenceObservation` callers do not change.
+> Only the pre-dispatch verification gate in `verifyReplayActionTarget` races a launch this way.
 > `buildReplayFailureDivergence` and the post-resolution guard-mismatch capture follow established failures.
 > They do not retry because retries would only delay the decided divergence.
 >
@@ -535,7 +568,7 @@ This is distinct from general outcome verification.
 
 ### 4. Divergence wire contract and replay-only resume
 
-**Divergence is a structured error.** Both action failure and target-binding mismatch return `ok:false`, code `REPLAY_DIVERGENCE`, and `details.divergence`.
+**Divergence is a structured error, not success data.** Both action failure and target-binding mismatch return `ok:false`, code `REPLAY_DIVERGENCE`, and `details.divergence`.
 The version `1` object contains these fields:
 
 - `kind`
@@ -607,7 +640,7 @@ Capture failure never replaces or conceals the original replay cause.
 > Divergence must not use a first stale or app-scoped dump when plain `snapshot` retries for fresh full-window content.
 > Diagnostic flags use a fixed full-window, non-raw, default-depth policy.
 > They do not inherit the failed action's `snapshotRaw`, `snapshotScope`, or `snapshotDepth`.
-> Thus, failed raw, scoped, or `-d` snapshots cannot reduce diagnostic scope.
+> Thus, a failed `snapshot --raw`/scoped/`-d` action must never narrow or reshape the diagnostic tree below what a plain `snapshot` shows.
 > Only interactive-only policy is carried:
 > non-rect `get`/`is`/`wait` reads use full content; other actions use interactive content.
 > Chrome filtering (#1233/#1256, `collectSettleChromeRefs`) and meaningful-target filtering apply after full capture.
@@ -625,8 +658,9 @@ Capture failure never replaces or conceals the original replay cause.
 > If a system overlay marks every app node `covered`, the report shows those covered nodes instead of empty `refs`.
 > Meaningful captured nodes must not produce an empty ref report.
 >
-> An agent must never see a healthier divergence `screen` than plain `snapshot` would show.
-> A covering separate-window system overlay must survive both filters and the cap through its actionable/hittable/labeled nodes.
+> This is a hard invariant: **an agent must never see a healthier `screen` in a divergence report than a plain `snapshot` would show it.**
+> A covering separate-window system overlay at the moment of capture must appear in `screen.refs` exactly as `snapshot` would present it.
+> Its actionable/hittable/labeled nodes must survive the filters AND the cap.
 > Examples include a held volume dialog, persistent quick-settings shade, or permission dialog.
 > `repairHint` and `suggestions` use the **full captured node list**, never the capped `refs` slice.
 > Their routing must not treat an app beneath an overlay as healthy.
@@ -661,7 +695,7 @@ It names the attempted runtime operation instead of unresolved `${VAR}` or synth
 Text-entry payloads remain semantic secrets.
 `inputText` progress, failure messages, suggestions, and overflow artifacts never serialize entered text.
 Injected replay values are not global sensitive literals.
-Otherwise, ordinary short values such as `2` or `on` could corrupt timestamps, paths, and typed log fields.
+Otherwise, a short ordinary value such as `2` or `on` would corrupt unrelated timestamps, paths, and typed error fields throughout the request log.
 The actual text-entry dispatch boundary registers values before platform work, independently of the failure projection.
 Users must not put secrets in selectors, links, filenames, or other diagnostic identifiers expected in failure output.
 
@@ -695,7 +729,8 @@ No surface may reduce divergence to text and discard repair data.
 
 `--from N` belongs only to `replay`.
 `test` must reject it with `INVALID_ARGS` because a suite run must remain full and deterministic.
-`N` is an in-range 1-based index into the fully expanded executable plan.
+`N` is a 1-based index into the fully expanded executable plan.
+`N` must be in range.
 It is not a YAML line, fractional source-step number, or repeat iteration label.
 Static includes, platform conditions, and fixed-count repeats expand before indexing.
 Repeated source lines therefore have distinct plan indices.
@@ -703,18 +738,20 @@ Repeated source lines therefore have distinct plan indices.
 Every divergence includes `resume: { allowed, from, reason?, planDigest, alternateFrom?, repairSessionHeld? }`.
 `repairHint` determines `from` under decision 6, R2/R3:
 
-- For `record-and-heal`, `from` is the failed index **N + 1**.
-  The agent performs step N manually before resume.
+- For `record-and-heal`, `from` is the index of the failed step **+ 1** (N + 1).
+  The agent performs that step manually before it resumes.
+  A resume AT that step would diverge again on the exact step that the agent just completed.
 - For `state-repair`, `caution`, and `manual`, `from` remains **N**.
 
 For single-path hints (`record-and-heal`, `state-repair`), `from` describes the complete continuation.
-JSON/MCP callers therefore receive the same next command as text callers.
+A JSON/MCP-first caller that blindly resumes at `resume.from` therefore reads the same command that the text guidance renders.
+It never gets a stale `from` that loops the caller back onto the step that it just repaired.
 For dual-path hints (`caution`, `manual`), `from` describes only app-state repair.
 Their optional `alternateFrom` describes recorded correction.
 Structured callers read both fields to obtain both text alternatives.
 
 `alternateFrom` is an additive optional ordinal (#1262).
-For `caution`/`manual`, the daemon cannot yet distinguish these repairs:
+For `caution`/`manual`, there are two legitimate repairs, and the daemon cannot disambiguate them at divergence time:
 
 - App-state fix: use `--no-record`, then repeat unchanged step N at `from`.
 - Recorded correction: perform step N's intent as a recorded action, then continue at N + 1.
@@ -736,7 +773,7 @@ An armed transaction becomes `COMPLETE`, which permits its later `close` commit.
 Otherwise, `close` would abort the incomplete transaction and discard the correction.
 
 This ordinal requires authorization from the exact session and target that produced it.
-The daemon stamps a per-session watermark with `expectedFrom` and the recorded action count at divergence:
+The daemon stamps a per-session watermark (`expectedFrom`, the recorded action count at divergence time) in these cases:
 
 - For `record-and-heal` with `allowed: true`, the reported `from` is already N + 1.
 - For a preflight-safe `caution`/`manual` final-step alternate (#1262), the watermark uses `alternateFrom` N + 1.
@@ -744,6 +781,7 @@ The daemon stamps a per-session watermark with `expectedFrom` and the recorded a
 
 Only a live session can receive this watermark.
 Without one, an empty-tail `alternateFrom` is omitted.
+Otherwise, the daemon would advertise a `--from N + 1` that it must then reject.
 Examples include a one-step `open` failure or a session closed during replay.
 A later empty-tail resume must match the watermark and show growth in the session's action count.
 That growth proves a corrective action was recorded.
@@ -774,11 +812,14 @@ Its digest remains diagnostic and cannot bypass preflight.
 Every divergence emits it.
 It says nothing about session lifetime.
 The separate `repairSessionHeld: true` signal identifies an active repair transaction persisted on the session.
-A `--save-script` replay opens it; commit or abort ends it (decision 6, R7).
-A continuation without `--save-script` still reports it because persisted state determines this field.
+A `--save-script` replay opens the transaction.
+Commit or abort ends the transaction (decision 6, R7).
+The daemon sets `repairSessionHeld: true` until the transaction ends.
+A `--from` continuation without `--save-script` still reports `repairSessionHeld: true`, because the persisted transaction state determines this field, not the flags of the current request.
 Only this signal promises a live addressable daemon/session for repair.
 R7's lifetime guarantee never uses `allowed`.
 A non-armed replay can report `allowed: true` and then terminate its session normally.
+Thus a consumer must not read `allowed: true` as "the session is still there."
 
 Resume reconstructs no execution state.
 For `N > 1`, preflight must reject with `INVALID_ARGS` under either condition:
@@ -792,7 +833,14 @@ The daemon never infers app state.
 Before resume, the caller must establish the required app state.
 This conservative first-release scope defers deterministic state reconstruction until a separate specification and tests exist.
 
-The caller runs replay, reads divergence, repairs state or performs the failed action, and resumes with the reported digest and ordinal.
+The loop is therefore:
+
+1. Run the replay.
+2. Read the divergence.
+3. Repair the app state.
+4. Replay with the reported plan digest and index.
+   If you completed the failed action manually, use the next index:
+   `from` for `record-and-heal`, or `alternateFrom` for `caution`/`manual`.
 An edited script requires a fresh full replay and a new digest.
 Help documents this protocol and resume rejections.
 Successful text replay prints one line with replayed count and wall time.
@@ -810,8 +858,7 @@ Required automated coverage follows.
 - Runtime-ref `label-fallback` disclosure
 - Direct-iOS `not-observed`
 - Coordinate inapplicability
-- Maestro inapplicability after executed fallback
-- Direct-IOS `not-observed` when fallback is permitted but unused
+- Maestro inapplicability on both sides of the permission: fallback taken, and allowed-but-not-taken that discloses `not-observed`
 - The retained direct-path waiver list
 
 **Interaction mutation:** contracts prove that pre-action resolution diagnostics neither issue refs nor receive MCP pins.
@@ -839,7 +886,7 @@ A no-action target-binding divergence can issue and pin its fresh report refs.
 - Empty identity set
 - Verified
 - Unique-but-wrong rebind
-- Failure to isolate a target after both signals
+- Post-signal fall-through
 
 They also prove these positional properties:
 
@@ -870,19 +917,19 @@ Suggestions remain bounded, ranked, and deduplicated under decision 1's total or
 - A healed sibling `.ad` replays completely in a **fresh session**.
   Every selector step has an annotation.
   There is no bare `@ref`.
-- Daemon-side `repairHint` computation covers every combination of the four hints and four divergence kinds.
-  The mapping is total.
+- Daemon-side `repairHint` computation covers all four hints (`record-and-heal`, `state-repair`, `caution`, `manual`) and all four divergence kinds (`selector-miss`, `identity-mismatch`, `identity-unverifiable`, `action-failure`).
+  The tests prove that the mapping is total.
   Missing `targetEvidence` defaults to `manual`, including PR #1223's unannotated `action-failure`.
   Sparse/unavailable capture also defaults to `manual`.
-  `action-failure` tests use post-response capture for the container test.
-- `--no-record` state-fix actions are excluded.
-  The corrective selector-drift action remains included.
-- Recording starts at step 1 and produces fresh `target-v1` prefix evidence (R1).
+  The post-response-capture container test for `action-failure` is included.
+- `--no-record` state-fix actions are excluded from the healed script.
+  The corrective selector-drift action is included in the healed script.
+- When recording is armed from step 1, prefix steps are re-annotated with fresh `target-v1` evidence (R1).
 - `--from` continuation never duplicates the recorded prefix through another full replay on the same session (R2).
-- The boundary watermark excludes pre-invocation actions from a reused session (R6).
+- The boundary watermark excludes the pre-invocation actions of a reused session from the healed script (R6).
 - A bare `@ref` without a materializable selector causes a nonzero writer error instead of silent omission (R4).
 - `resume.repairSessionHeld: true` keeps the repair session addressable for a later `--from`.
-  A non-armed divergence with only `resume.allowed: true` has no such guarantee.
+  A non-armed divergence with only `resume.allowed: true` does not keep the session live.
   Continuation uses persisted transaction state without another `--save-script`.
 - A reaped incomplete transaction returns `REPAIR_SESSION_EXPIRED` through a session-key tombstone, never `SESSION_NOT_FOUND`.
   A fresh `replay --save-script` on that key clears the tombstone.
@@ -897,9 +944,9 @@ Suggestions remain bounded, ranked, and deduplicated under decision 1's total or
 - Publication refuses **every** existing target and preserves its bytes.
   This includes complete/partial files, the default healed sibling, and explicit `--save-script=<path>`.
   It also includes ordinary non-repair `open`/`close --save-script` recording.
-  The shared writer entry point and publication primitive enforce uniform refusal, as “Scope” specifies.
+  The shared writer entry point and publication primitive enforce uniform refusal, as "Scope" specifies.
 
-After these contracts pass, extend the settle benchmark with a replay arm.
+Extend the settle benchmark with a replay arm only after these contracts pass.
 Use the external `~/.agent-device-bench/rnnav-matrix.py` harness pattern.
 Measure clean replay and one induced divergence repaired through the permitted `--from` loop.
 
@@ -910,11 +957,12 @@ This decision adds explicit agent-driven repair without restoring unattended sel
 The agent performs the failed step with ordinary visible interactive commands.
 The CLI records the successful execution.
 
-Decision 1 initially requires hand edits to `.ad` selectors followed by fresh replay after selector drift.
-A 2026-07-12 Haiku experiment showed that this repair method is difficult for models.
-The model used 26 turns and corrupted escaped-quote selector chains (`label="X" || label="X"`) into `INVALID_ARGS`.
-The renamed label also produced no divergence `suggestions`.
-Decision 4's report is useful, but text editing is an unsuitable repair method.
+For a selector-drift divergence (a recorded label/id renamed so that the selector no longer matches), decision 1's replacement repair surface is this: hand-edit the `.ad` selector text, then fresh-replay.
+A 2026-07-12 measurement showed that this is a hostile repair surface for models.
+A small-model (Haiku) repair run thrashed for 26 turns.
+While it edited escaped-quote selector chains (`label="X" || label="X"`), it corrupted the `.ad` to `INVALID_ARGS`.
+The divergence `suggestions` list was empty for the renamed label.
+The divergence *report* is good (decision 4), but the repair *affordance* is broken.
 Models should not edit `.ad` text.
 
 For selector drift, the agent instead performs the failed step's **intent** through fresh actionable refs from divergence `screen` (decision 4).
@@ -924,8 +972,10 @@ This requires neither text edits nor silent similarity-based repair.
 **Core mechanism — the healed script IS `session.actions`.** No new splice engine is necessary.
 `session.actions` accumulates executed actions throughout session lifetime.
 `packages/daemon/src/core/session-action-recorder.ts:92` pushes them unconditionally.
-Decision 3's pre-dispatch refusal prevents a divergent target-binding step from entering that list.
-Verified original steps and corrective interactive actions enter the list.
+The divergence refusal is pre-dispatch (decision 3), so a divergent step is never pushed.
+Across a repair session, original steps that verified and dispatched enter `session.actions`.
+The divergent step is absent, because it was refused pre-dispatch and never recorded.
+The corrective interactive actions of the agent enter `session.actions`.
 Corrective actions receive fresh `target-v1` evidence because recording is armed.
 Armed recording also disables the direct-iOS fast path (PR #1196), which permits evidence computation.
 `formatSessionScript` serializes actions from the repair boundary onward (R6).
@@ -951,13 +1001,14 @@ Each sub-flow has different recording rules:
    These one-time setup actions must not enter the healed script.
    `replay --from N --plan-digest <original>` then repeats unchanged step N.
 
-**Required protocol rules (normative).** Seven rules make healed scripts valid:
+**Required protocol rules (normative).** These seven rules are the difference between "the mechanism works" and "healed scripts are always valid":
 
 - **R1 — recording starts with the first replay.** `replay <file>.ad --save-script[=<out>]` sets `session.recordSession = true` before step 1.
   It must not wait for divergence.
   The repair replay re-executes prefix steps.
   Recording from the start supplies fresh `target-v1` evidence for those steps.
-  Late activation creates an annotated correction with an unannotated prefix that can diverge on its next replay.
+  Late activation creates a hybrid healed script: an annotated corrective step with a bare, unannotated prefix.
+  That script diverges again on its own next replay.
   `packages/daemon/src/execution/interaction/internal/interaction-common.ts:64-65` attaches evidence only when `recordSession` was true at execution.
 - **R2 — continuation uses `--from`.** After divergence at N and correction, the agent must use `replay --from k --plan-digest <original>`.
   It must never repeat full replay on that session.
@@ -965,10 +1016,14 @@ Each sub-flow has different recording rules:
   Replay dispatch does not inject `noRecord`.
   App-state repair uses `k = N` to repeat the unchanged step.
   Selector-drift repair uses `k = N + 1` because the agent already performed N.
-- **R3 — daemon-computed `repairHint` determines the sub-flow.** The agent must not compute it alone.
-  At divergence, the daemon uses recorded `targetEvidence` and the full divergence capture.
-  Parsed `target-v1` `ancestry`/`scrollRegion` are available when the action has an annotation.
-  The current tree is available before reduction to the wire's 20-ref cap.
+- **R3 — a mechanical `repairHint` on the divergence payload determines the sub-flow; no LLM-only routing.**
+  The daemon computes `repairHint` at divergence time.
+  The agent never computes it.
+  It uses two inputs that the daemon already holds:
+  - the recorded `targetEvidence`: the daemon owns the parsed `target-v1` `ancestry`/`scrollRegion` (decision 3), *when the diverged action carried an annotation*;
+  - the screen capture of the divergence: the daemon owns the whole current tree, not the flat, 20-capped `screen.refs` on the wire.
+
+
   The daemon tests container presence where both inputs exist.
   Only the enum crosses the wire; omission of ancestry from the wire does not affect computation.
 
@@ -988,14 +1043,15 @@ Each sub-flow has different recording rules:
   | `action-failure` | Recorded container present in post-response capture | `record-and-heal` |
   | `action-failure` | Otherwise | `manual` |
 
-  `caution` prevents an unexamined repeat press from repeating an incorrect match.
-  `manual` reflects future pre-action refusal for unverifiable identity.
+  `caution` applies to `identity-mismatch` because something matched the recorded selector, so a blind re-press may repeat the mistake.
+  `manual` applies to unverifiable identity because future replays block this step pre-action, so heal-by-doing is a poor fit.
   The mapping is total over kind, evidence presence, and capture availability.
   Anything not proven safe defaults to `manual`.
   Two fail-safes override the container mapping:
 
   - No recorded `targetEvidence` means no container to test, so the hint is `manual`.
-    PR #1223 also wraps unannotated actions, including reachable `action-failure` and legacy/unannotated cases.
+    PR #1223 also wraps unannotated actions.
+    Thus this case is reachable for `action-failure`, and for any kind on a legacy/unannotated script.
   - Sparse or unavailable capture prevents the test, so the hint is `manual`.
 
 - **R4 — corrective actions must materialize to selectors.** The writer must refuse persisted bare `@ref` exports with an explicit error.
@@ -1018,6 +1074,7 @@ Each sub-flow has different recording rules:
   Decision 4's `resume.allowed` only describes plan resumability.
   It is not the lifetime signal.
   `replay --from <n> --plan-digest <sha>` continues on the same armed session **without another `--save-script`**.
+  The opener is the only place where that flag appears.
   The implementation MUST use persisted transaction state for continuation and keep-alive.
   It must not depend on current-request `--save-script`.
   The R6 watermark and action slice require this one surviving session.
@@ -1048,7 +1105,8 @@ This clarifies existing scope.
 
 A **terminal source `close`** means the source plan's last action is `close`.
 An armed replay or resume **skips it without dispatch**.
-Dispatch would delete the session that R7 preserves.
+Dispatch would delete the session mid-transaction, and R7 keeps that session alive.
+Thus the terminal source `close` must never run under an armed repair.
 Reaching this step instead marks the transaction `COMPLETE`.
 The next teardown, normally the agent's `close`/`close --save-script`, commits it.
 Every teardown at `COMPLETE` commits.
@@ -1062,7 +1120,7 @@ Decision 4 requires fresh full replay to validate an edited on-disk `.ad`.
 This repair loop keeps the original file unchanged and operates in one live session.
 Its original digest remains stable.
 `--from k --plan-digest <original>` already permits manual correction followed by continuation.
-Steps `1..k-1` never repeat, which preserves decision 4's non-idempotency constraint.
+Steps `1..k-1` never re-run, so decision 4's non-idempotency guarantee holds by construction.
 The healed script is published only at repair completion and teardown.
 It is a new script for future runs with the same non-idempotency risk as any hand-written `.ad`.
 
@@ -1081,8 +1139,8 @@ It is a new script for future runs with the same non-idempotency risk as any han
   A human reviews the diff and promotes the result.
 
 **Commit state machine — `ARMED` → `COMPLETE` → `COMMITTED`.**
-R6 defines the slice.
-This machine defines permission to publish:
+R6 defines the *slice*.
+This machine defines *when the slice may be published*, as a machine-enforceable state, not a heuristic:
 
 - **`ARMED`:** starts immediately when `replay --save-script` activates the transaction before step 1.
   The slice accumulates and MUST NOT be published.
@@ -1111,11 +1169,13 @@ Readers never see partial output.
 Aborted repair leaves no partial file.
 
 **Publication refuses every pre-existing target.** This applies to complete/partial files and default/explicit paths.
-A rejected earlier design protects complete artifacts but overwrites partial ones through a publication lock.
-That distinction introduces lock, lease, and reclaim races for partial files left by aborted repairs.
+An earlier design distinguished a *complete, review-worthy* artifact (protected) from an incomplete or partial one (silently overwritable).
+A publish lock enforced that distinction.
+The distinction added a whole class of lock/lease/reclaim races for a degenerate case: a partial healed file that an aborted or reaped repair left behind.
 The adopted design instead lets exclusive `linkSync` decide the winner.
-`EEXIST` means a target already exists, irrespective of content.
+`EEXIST` occurs if and only if a file already exists at the target, irrespective of its content.
 The caller must remove it or select another `replay --save-script=<path>`.
+The existing file is never silently replaced.
 There is no lock, lease, ownership transfer, or overwrite.
 `# agent-device:heal-complete` remains a trailing marker of a complete, reviewable artifact.
 It does not affect publication permission.
@@ -1145,17 +1205,20 @@ A new `replay --save-script` on the key clears the tombstone and starts a fresh 
 After bounded expiry, the tombstone disappears and the key is free.
 
 > **Amendment (#1271 stage 2): repair-segment default exclusion of observation-only commands, and the `--record` opt-in.**
-> Issue #1271 reports that diagnostic `snapshot -i`, `get attrs`, `find`, and `is` actions enter healed scripts alongside corrections.
-> The wave-3 E3 experiment produced 0/4 clean healed scripts without intervention.
-> One recorded `get attrs` caused another `identity-mismatch` on fresh replay.
-> This amendment excludes diagnostics by default and permits explicit corrective observations through `--record`.
+> #1271 reported a problem with read-only diagnostics that an agent runs mid-repair to LOCATE the repair target: `snapshot -i`, `get attrs`, `find`, `is`.
+> These diagnostics were recorded into the healed script exactly like the corrective action itself.
+> The wave-3 E3 experiment measured 0/4 trials that produced a clean healed script hands-off.
+> One recorded `get attrs` caused a second, self-inflicted `identity-mismatch` divergence on fresh replay.
+> Stage 1 (#1287) shipped interim guidance only: the divergence `repairHint` and `help workflow` told the agent to pass `--no-record` on those commands by hand.
+> This amendment makes the safer behavior the default.
+> It supersedes the "opt out by hand" guidance of stage 1 with "opt in by hand" for the one case that needs it.
 >
 > **1. Exclusion depends on provenance.** Both conditions must hold:
 >
 > - The command is observation-only: `snapshot`, `get`, `is`, or read-only `find` (`exists`, `wait`, `get_text`, `get_attrs`).
 >   Mutating `find … click|fill|focus|type` remains a corrective action like `press`/`fill` and always records.
->   Top-level `wait` is excluded from this set.
->   It controls flow timing/synchronization and must continue to record unconditionally.
+>   The top-level `wait` command is deliberately **not** in this set.
+>   It is flow timing/synchronization, not observation, so it must keep recording unconditionally.
 >   Silent removal of timing steps would change replay behavior.
 > - The agent dispatches the observation **out of band** during repair.
 >   It is not a step from the `.ad` plan under repair.
@@ -1163,6 +1226,8 @@ After bounded expiry, the tombstone disappears and the key is free.
 > Plan steps use the ordinary request path and enter `session.actions`.
 > The healed script is `buildOptimizedActions` over `session.actions.slice(saveScriptBoundary)`.
 > A command-only exclusion would execute an authored `is visible` and silently remove its assertion from the healed script.
+> The repaired flow would then stop checking what the original checked.
+> For a deterministic QA suite, that is the worst possible failure mode.
 > **Authored prefix/suffix observations must survive automatically without `--record`.**
 > Only provenance distinguishes authored observations from interactive diagnostics using the same command.
 >
@@ -1194,7 +1259,8 @@ After bounded expiry, the tombstone disappears and the key is free.
 > Universal `--no-record` covers every recordable command, including mutations, through `COMMON_COMMAND_SUPPORTED_FLAG_KEYS`.
 > `--record` applies only where observation exclusion is possible.
 > Each `snapshot`, `get`, and `is` schema lists it in `allowedFlags`.
-> Grammar rejects unsupported `press`/`fill`/`click` uses before projection.
+> Acceptance on `press`/`fill`/`click` would be misleading.
+> The grammar rejects every unsupported use before projection.
 > `find` selects observation/mutation through a positional, so grammar permits the flag.
 > `handleFindCommands` dynamically rejects it on mutating `find … click|fill|focus|type` with `INVALID_ARGS` before device work.
 > Both routing and validation use shared `isReadOnlyFindAction` from `@agent-device/selectors`.
@@ -1222,9 +1288,10 @@ After bounded expiry, the tombstone disappears and the key is free.
 >   Only `snapshot`/`get`/`is` and dynamically validated `find` permit it.
 >   Only their readers use `observationRecordInputFromFlags`.
 >
-> Separate named helpers express capability without an `allowRecord` policy argument.
-> A mutating reader cannot forward `--record` merely by changing a policy literal without a schema change.
-> This prevents unintended acceptance.
+> Two named helpers express the capability, not one helper with an `allowRecord` policy argument.
+> The capability is then the NAME of the helper, so a mutating reader physically cannot forward `--record`.
+> A policy argument would let a future mutating reader opt in through a changed literal, with no schema change.
+> That fail-open is what the split prevents.
 > Both flags then use the ordinary typed path:
 >
 > - Node forwards them through `buildRequestFlags`/`buildFlags` in `src/commands/command-flags.ts`.
@@ -1265,10 +1332,11 @@ After bounded expiry, the tombstone disappears and the key is free.
   Resume requires a matching digest and proof that variables and control flow do not depend on skipped execution.
   The daemon cannot know whether the app has step N's expected state.
   Context's live navigation-state example shows that the app determines the relaunch destination.
-- **Non-idempotent scripts require no repetition of `1..N-1`.**
-  A script that creates a record before navigation and assertion would create it twice if the prefix repeated.
-  This is a strict semantic constraint on `--from`.
-- **Retirement of unattended heal removes CI self-repair.**
+- **`--from` must never repeat steps `1..N-1`.**
+  Non-idempotent scripts are the reason.
+  A script that creates a record, navigates, then asserts on it would create the record twice on any re-run of its early steps.
+  This is a hard constraint on the semantics of the flag, not an implementation nicety.
+- **Retirement of heal-as-actor removes CI self-repair for agentless callers.**
   `--update` returns bounded suggestions but never rewrites.
   A nightly run that formerly patched a selector now remains failed.
   This is accepted because the audit found limited utility and silent target-binding risk.
@@ -1291,8 +1359,8 @@ After bounded expiry, the tombstone disappears and the key is free.
   An agent can press an incorrect visible ref.
   Live interactive commands currently have no target-binding verification; see Context (c).
   This existing risk is not a new failure class.
-  The retired-heal failure cannot occur through a stale selector rematch here.
-  Fresh evidence comes from the node the agent actually pressed.
+  The retired-heal failure mode ("selector agreement is not proof of the same target") is structurally impossible here.
+  Nothing re-matches a stale selector, because evidence comes fresh from the node that the agent actually pressed.
 - **Decision 4 bounds `screen.refs`.**
   Default/full output has at most 20 entries and can be filtered.
   If the required control is absent, one additional `snapshot -i` retrieves it.
@@ -1308,11 +1376,12 @@ After bounded expiry, the tombstone disappears and the key is free.
   No separate semantics are necessary.
 - **Retain `--update` auto-heal with target verification: rejected.** Decision 3 verifies resolved targets without retry-and-rewrite behavior.
   Reconsider only if agentless CI needs a separately specified and testable repair policy.
-- **Automatic safe/risky repair tiers: deferred.** This alternative is not rejected outright.
-  No evidence currently establishes safe repair categories.
+- **Auto-heal tiers (safe-tier heals applied automatically, risky-tier surfaced): deferred.** This alternative is not rejected outright.
+  There is no current evidence base for which heals are "safe", so tiers now would be speculative.
   Reconsider if agentless CI demand for self-repair appears.
-- **Hand-edit `.ad` text: rejected.** Models have difficulty with this method.
-  On 2026-07-12, Haiku used 26 turns and corrupted escaped-quote selector chains into `INVALID_ARGS`.
+- **Hand-edit `.ad` text (status quo): rejected.** It is hostile to models.
+  Measured 2026-07-12: a small-model (Haiku) repair run thrashed for 26 turns.
+  While it edited escaped-quote selector chains, it corrupted the `.ad` to `INVALID_ARGS`.
 - **Silent automatic rewrite: retired under decision 1.** The former `--update` risks incorrect binding.
   Selector agreement does not prove target identity.
 
@@ -1339,8 +1408,9 @@ It ran only after a hard step failure.
 It retried only the same recorded selector material.
 `collectReplaySelectorCandidates` (`session-replay-heal.ts:39-81`) collected original `selectorChain`/positionals.
 `resolveSelectorChain` retried those strings against a fresh snapshot (`session-replay-heal.ts:122-135`).
-A renamed id or label still failed because the string was unchanged.
-Heal could recover only drift that retained an original selector match, such as a moved or re-rendered node.
+If the identifying term itself changed (an id or label rename), the same string did not match the new tree either.
+Thus heal could not rescue renames.
+Heal could recover only drift that the ORIGINAL selector still matched: a moved or re-rendered node with the same id.
 PR #297, which closed #279, had already removed `refLabel` synthesis and numeric `get text` drift healing.
 Its stated scope was "centered on recorded selectors and explicit selector expressions".
 Thus, maintenance had narrowed heal rather than expanded it.
@@ -1359,8 +1429,8 @@ At one snapshot per interaction, model-turn latency dominates agent-driven QA wa
 A normal successful agent-driven flow costs O(steps) model turns.
 Deterministic replay costs O(divergences).
 The 38/38 run demonstrates zero divergences and zero model turns.
-Replay's benefit is removal of per-step model cost when execution matches the recording.
-Model work is necessary only at divergence.
+The entire economic case for replay is to collapse the per-step model-turn cost toward zero on the happy path.
+Replay pays only where reality diverged from the recording.
 
 **Audit evidence** below is historical, dated 2026-07-10.
 Element-14 later demonstrated the geometric incorrect-binding risk.
@@ -1368,15 +1438,15 @@ The 2026-08-07 structural-equivalence-or-reject amendment supersedes that policy
 
 - **(a) Heal had limited scope and rarely acted.** It recovered only same-selector drift.
   Most actual failures were renames or removals that recycled candidates could not resolve.
-- **(b) Ordinary silent disambiguation was the main incorrect-binding risk.** This affected live commands and replay.
+- **(b) The real mis-binding surface was not heal. It was silent disambiguation in ORDINARY resolution**, in live commands and replay alike.
   Every press/click/fill called `resolveSelectorChain(..., { disambiguateAmbiguous: true })` through `resolveSelectorInteractionTarget` (`resolution.ts:170-183`).
   For N>1 matches, `accumulateDisambiguationCandidate`/`compareDisambiguationCandidates` silently chose a winner (`packages/selectors/src/internal/resolve.ts:181-285`).
   Visible candidates preceded off-screen candidates, then deepest nodes, then smallest on-screen areas.
   Only exact ties failed.
-  `describeResolvedInteractionNode` (`resolution.ts:227-249`) returned these identity fields:
+  `describeResolvedInteractionNode` (`resolution.ts:227-249`), the entire identity payload of the response, returned these fields:
   `node`, `selectorChain`, `refLabel`, `targetHittable`, and `hint`.
   It disclosed neither match count nor tiebreak.
-  A live audit reproduced this with two identical-rect “Prevent Remove” buttons in the RN playground.
+  A live audit reproduced this with two identical-rect "Prevent Remove" buttons in the RN playground.
   Scroll position alone selected the target.
   General help documented the policy in `agent-device help workflow` and `src/cli/parser/cli-help.ts:243,384`:
   "does not fail by default ... auto-resolves deepest node first ... then smallest on-screen area".
@@ -1387,7 +1457,7 @@ The 2026-08-07 structural-equivalence-or-reject amendment supersedes that policy
   `--verify` attached a pre/post-action node diff through `captureEvidenceBaseline` (`resolution.ts:45-58,104-134`).
   ADR 0011's `verifyEvidence` cell records that guarantee.
   The diff proved change, not activation of the intended node.
-  An incorrect sibling “Prevent Remove” press produced a visible diff but remained incorrect.
+  An incorrect sibling "Prevent Remove" press produced a visible diff but remained incorrect.
 - **(d) Heal disclosed only a count.** Successful `--update` returned `{ replayed, healed, ... }` (`session-replay-runtime.ts:186-195`).
   `healed` was only a number.
   `writeReplayScript` rewrote `.ad` in place without a response diff (`session-replay-runtime.ts:182-184`, `src/replay/script.ts:459-484`).
@@ -1419,10 +1489,10 @@ It covers both `.ad` and Maestro:
   The RN app persisted navigation and restored Article after relaunch+deeplink.
   A correct selector therefore missed.
   Heal could not repair correct selector text on an incorrect screen.
-  A “current screen: Article” observation would have identified the repair immediately.
+  A "current screen: Article" observation would have identified the repair immediately.
   Only full replay was available, without `--from`.
   Repeated prefixes made state-restoring apps nondeterministic across attempts.
-- **Maestro indices had no usable source location.** Broken `tapOn: Push Input`, the fourth top-level YAML step, failed at step 5 (`__maestroTapOn`).
+- **Maestro step indices were untraceable to source.** A broken `tapOn: Push Input`, the 4th top-level YAML step, failed as "Replay failed at step 5 (`__maestroTapOn` ...)".
   `runFlow file: ../launch.yml` expanded into the linear plan and shifted later indices.
   Failure output included no file or line.
   `parseReplayInput` flattened `--maestro` input (`src/compat/replay-input.ts:47-68`).
