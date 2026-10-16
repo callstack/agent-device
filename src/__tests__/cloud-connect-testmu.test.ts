@@ -9,8 +9,8 @@ import {
 } from '@agent-device/remote/remote-connection-state';
 import { AppError } from '@agent-device/kernel/errors';
 import { verifyTestMuConnection } from '@agent-device/testmu/connection-verification';
-import testMuPlugin from '@agent-device/testmu';
-import { createPluginHost } from '@agent-device/plugins/host';
+import testmu from '@agent-device/testmu';
+import { resolveProviderPlugins } from '@agent-device/plugins/registry';
 import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
 import { mkdtempForTestSync, pluginHome, selectPlugin } from '@agent-device/test-kit';
 import manifest from '@agent-device/testmu/package.json' with { type: 'json' };
@@ -24,11 +24,13 @@ vi.mock('@agent-device/plugins/load', () => ({
   withPluginConnection: async (
     _provider: string,
     _builtinProviders: readonly string[],
-    env: NodeJS.ProcessEnv,
+    _env: NodeJS.ProcessEnv,
     runConnection: (connection: PluginConnectionCallbacks) => Promise<unknown>,
   ) => {
-    const registration = testMuPlugin(createPluginHost(env, undefined));
-    return await runConnection(registration.connection);
+    const { connections } = await resolveProviderPlugins([
+      { source: 'store', package: manifest.name, load: () => testmu() },
+    ]);
+    return await runConnection(connections.get('testmu')!);
   },
 }));
 

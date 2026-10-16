@@ -65,7 +65,15 @@ const TESTMU_PROFILE_FIELDS: ProviderProfileFieldDeclaration = {
   },
 };
 
+/** The version 1 plugin entry, kept so hosts without the version 2 contract still load this package. */
 export default function testMuPlugin(host: ProviderPluginHost) {
+  return {
+    webDriver: createTestMuWebDriver(host),
+    connection: createTestMuConnection(host, TESTMU_PROFILE_FIELDS),
+  };
+}
+
+function createTestMuWebDriver(host: ProviderPluginHost): WebDriverPluginOptions {
   const env = host.env;
   async function listTestMuArtifactsFromEnv(
     provider: string,
@@ -137,7 +145,7 @@ export default function testMuPlugin(host: ProviderPluginHost) {
       };
     },
   };
-  return { webDriver, connection: createTestMuConnection(host, TESTMU_PROFILE_FIELDS) };
+  return webDriver;
 }
 /** Each pool has its own upload API, so each has its own override. */
 function testMuAppUploadEndpoint(

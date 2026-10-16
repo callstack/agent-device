@@ -25,7 +25,7 @@ import {
   type StartedCloudWebDriverTestServer,
 } from './cloud-webdriver-test-server.ts';
 
-import testMuPlugin from '@agent-device/testmu';
+import testmu from '@agent-device/testmu';
 import { createPluginHost } from '@agent-device/plugins/host';
 import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/plugin';
 import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
@@ -194,22 +194,23 @@ test('AWS Device Farm facade rejects device features it does not read at session
   });
 }, 15_000);
 
+async function testMuWebDriver(env: Record<string, string>) {
+  const setup = await testmu().setup(createPluginHost(env, undefined));
+  if (!('webDriver' in setup)) throw new Error('TestMu AI sets up a WebDriver descriptor');
+  return setup.webDriver;
+}
+
 test('TestMu facade routes a real-device session to the real pool and its upload API', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
-    const registration = testMuPlugin(
-      createPluginHost(
-        {
-          LT_USERNAME: 'user',
-          LT_ACCESS_KEY: 'key',
-          TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-          TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
-          TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/realDevice`,
-        },
-        undefined,
-      ),
-    );
+    const webDriver = await testMuWebDriver({
+      LT_USERNAME: 'user',
+      LT_ACCESS_KEY: 'key',
+      TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+      TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
+      TESTMU_REAL_DEVICE_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/realDevice`,
+    });
     const runtime = await createCloudWebDriverRuntime({
-      ...registration.webDriver,
+      ...webDriver,
       clientVersion: CLIENT_VERSION,
     });
     const lease = makeLease('testmu');
@@ -249,19 +250,14 @@ test('TestMu uploads the materializer-selected simulator archive through the plu
       const installablePath = path.join(tempDir, 'extracted', 'App.app');
       fs.writeFileSync(archivePath, 'zip bytes');
       fs.mkdirSync(installablePath, { recursive: true });
-      const registration = testMuPlugin(
-        createPluginHost(
-          {
-            LT_USERNAME: 'user',
-            LT_ACCESS_KEY: 'key',
-            TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
-            TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
-          },
-          undefined,
-        ),
-      );
+      const webDriver = await testMuWebDriver({
+        LT_USERNAME: 'user',
+        LT_ACCESS_KEY: 'key',
+        TESTMU_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+        TESTMU_APP_UPLOAD_ENDPOINT: `${server.url}/lt/upload/virtualDevice`,
+      });
       const runtime = await createCloudWebDriverRuntime({
-        ...registration.webDriver,
+        ...webDriver,
         clientVersion: CLIENT_VERSION,
       });
       const lease = makeLease('testmu');

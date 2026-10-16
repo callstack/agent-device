@@ -19,6 +19,17 @@ import {
 import { verifyTestMuConnection } from './testmu-connection-verification.ts';
 import { readTestMuDeviceFeatureFields, readTestMuDeviceType } from './testmu-device-features.ts';
 
+/** Mirrors `agentDevicePlugin.connection` in package.json, which hosts without the version 2 contract read. */
+export const TESTMU_CONNECTION = {
+  leaseKind: 'direct-device-provider',
+  requiresAppAttachment: false,
+  requiresRemoteDaemon: false,
+  supportsArtifacts: true,
+  supportsDeferredAppSelection: false,
+  supportsDirectPortReverse: false,
+  usesCloudWebDriverLease: true,
+} as const;
+
 const PROVIDER = 'testmu';
 const SERVICE = 'TestMu AI';
 
