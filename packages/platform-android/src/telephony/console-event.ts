@@ -5,7 +5,7 @@ import { AppError } from '@agent-device/kernel/errors';
 import { runEmulatorConsole } from '../emulator-console.ts';
 
 const CONSOLE_REFUSED_HINT =
-  'The emulator console refused the event. accept and cancel need a call from that same number (start one with telephony call <number>), and an emulator image without a modem has no telephony to simulate.';
+  'The emulator console refused the event. accept needs a call from that same number (start one with telephony call <number>), and an emulator image without a modem has no telephony to simulate.';
 
 /** Simulates one telephony event through the emulator console (`gsm …` / `sms send …`). */
 export async function sendAndroidTelephonyEvent(

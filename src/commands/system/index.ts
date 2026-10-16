@@ -406,7 +406,9 @@ const telephonyFields = {
   number: requiredField(
     stringField('Caller or sender phone number: digits with an optional leading +.'),
   ),
-  text: stringField('Message text for sms; required for sms and refused for the call actions.'),
+  text: stringField(
+    'Message text for sms; required for sms and refused for the call actions. The emulator drops characters outside the Basic Multilingual Plane, such as emoji.',
+  ),
 };
 
 const telephonyFieldMetadata = defineFieldCommandMetadata(
