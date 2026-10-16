@@ -4,11 +4,17 @@ import {
   daemonClaimRecoveryGatewayFixture,
 } from '../../__tests__/support/platform-services-fixture.ts';
 import { makeSession } from '../../__tests__/support/session-factories.ts';
-import { LINUX_DEVICE, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  LINUX_DEVICE,
+  createTestHostEnvironment,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
 import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { createRequestExecutionScope } from '../request-execution-scope.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+
+bindTestCommandHost();
 
 function makeRequest(overrides: Partial<DaemonRequest>): DaemonRequest {
   return {

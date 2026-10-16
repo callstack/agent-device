@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -36,6 +37,8 @@ import {
 import { managedInstallPaths } from './agent-browser-install-paths.ts';
 import { recordManagedAgentBrowserProcesses } from './agent-browser-process-record.ts';
 import { getManagedAgentBrowserStatus } from './agent-browser-tool.ts';
+
+bindTestCommandHost();
 
 const mockRunCmd = vi.mocked(runCmdMock);
 

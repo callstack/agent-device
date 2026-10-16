@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -16,6 +17,8 @@ vi.mock('@agent-device/react-native', async (importOriginal) => ({
 
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+
+bindTestCommandHost();
 
 const DAEMON_LEASE_ID = 'abc123abc123abc1';
 

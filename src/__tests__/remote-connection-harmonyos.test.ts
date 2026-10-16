@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import {
@@ -12,6 +13,8 @@ import {
 } from '../cli/commands/connection-runtime.ts';
 import { disconnectCommand } from '../cli/commands/connection.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+
+bindTestCommandHost();
 
 test('HarmonyOS platform resolves to its proxy lease backend', () => {
   expect(

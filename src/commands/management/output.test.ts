@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { doctorCliOutput, managementCliOutputFormatters, openCliOutput } from './output.ts';
-import { withNoColorAsync } from '@agent-device/test-kit';
+import { withNoColorAsync, bindTestCommandHost } from '@agent-device/test-kit';
 import type { AppOpenResult } from '@agent-device/contracts/client';
+
+bindTestCommandHost();
 
 describe('openCliOutput', () => {
   test('prints session state directory on a second line', async () => {

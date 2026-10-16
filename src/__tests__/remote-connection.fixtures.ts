@@ -7,7 +7,10 @@ import {
   writeRemoteConnectionState,
   type RemoteConnectionState,
 } from '@agent-device/remote/remote-connection-state';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { bindTestCommandHost, mkdtempForTestSync } from '@agent-device/test-kit';
+
+// Every suite that imports this runs its tests as a command host.
+bindTestCommandHost();
 
 export const unexpectedCommandCall = async (): Promise<never> => {
   throw new Error('unexpected call');

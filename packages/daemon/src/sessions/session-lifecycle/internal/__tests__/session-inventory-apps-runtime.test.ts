@@ -13,7 +13,10 @@ import {
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
+import {
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
@@ -22,6 +25,8 @@ import {
   clearRequestAbortRegistration,
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
+
+bindTestCommandHost();
 
 const MACOS_DEVICE = {
   platform: 'apple' as const,

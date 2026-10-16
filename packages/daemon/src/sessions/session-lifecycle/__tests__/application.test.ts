@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
@@ -30,6 +31,8 @@ import {
   handleSessionInventoryCommands,
   handleSessionOpenCommands,
 } from '../index.ts';
+
+bindTestCommandHost();
 
 const mockHandleSessionCloseCommands = vi.mocked(handleSessionCloseCommands);
 const mockHandleSessionInventoryCommands = vi.mocked(handleSessionInventoryCommands);

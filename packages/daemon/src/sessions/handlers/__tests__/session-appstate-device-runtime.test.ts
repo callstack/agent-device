@@ -4,7 +4,10 @@ import { test, expect, vi } from 'vitest';
 import { handleAppStateCommand } from '../session-appstate.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
+import {
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
 import { applicationLifecycleOperationFacts } from '@agent-device/contracts/application-lifecycle-runtime';
 import {
   type DeviceBinding,
@@ -19,6 +22,8 @@ import {
 import { createUnavailablePlatformRuntimeFacts } from '@agent-device/contracts/platform-runtime-unavailable';
 import { deviceShape, type DeviceInfo } from '@agent-device/kernel/device';
 import type { BindDeviceRuntime } from '../../../core/request-runtime-binding.ts';
+
+bindTestCommandHost();
 
 test('appstate rejects web before Android app-state backend dispatch', async () => {
   const device = {

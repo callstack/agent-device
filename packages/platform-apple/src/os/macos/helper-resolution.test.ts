@@ -1,9 +1,12 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { mkdtempForTest } from '../../__tests__/tmp-dir.ts';
 import { quitMacOsApp, resolveMacOsHelperPackageRootFrom } from './helper.ts';
+
+bindTestCommandHost();
 
 test('resolveMacOsHelperPackageRootFrom finds helper package from source and dist-like paths', async () => {
   const repoRoot = await mkdtempForTest('agent-device-helper-root-');

@@ -4,7 +4,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import * as hostProcess from '@agent-device/host-kit/process';
-import { MACOS_DEVICE, mkdtempForTestSync, pinOwnProcessStartTime } from '@agent-device/test-kit';
+import {
+  MACOS_DEVICE,
+  mkdtempForTestSync,
+  pinOwnProcessStartTime,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
 
 vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal) => {
@@ -65,6 +70,8 @@ import {
   inspectLifecycleRuntimeFacts,
 } from '../../../__tests__/support/application-lifecycle-runtime-harness.ts';
 import { platformResourceCleanupFixture } from '../../../__tests__/support/platform-resource-cleanup-fixture.ts';
+
+bindTestCommandHost();
 
 const mockDispatch = vi.mocked(dispatchApplicationLifecycleEffect);
 const mockPrepareApplicationOpen = vi.mocked(prepareApplicationOpenFixture);

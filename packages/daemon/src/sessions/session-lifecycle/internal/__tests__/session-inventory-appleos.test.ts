@@ -26,7 +26,10 @@ import {
   MACOS_DEVICE,
   TVOS_SIMULATOR,
   VISIONOS_SIMULATOR,
+  bindTestCommandHost,
 } from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 const mockListDeviceInventory = vi.mocked(listDeviceInventory);
 

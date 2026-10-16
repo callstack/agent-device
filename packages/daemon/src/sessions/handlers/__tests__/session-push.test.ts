@@ -10,7 +10,7 @@ import type {
 
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { makeSessionStore } from '../../../__tests__/support/store-factory.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
 import {
   handleSessionCommands,
   mockBindDeviceRuntime,
@@ -19,6 +19,8 @@ import {
   mockPushNotificationRuntime,
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+
+bindTestCommandHost();
 
 const invoke = async (_req: DaemonRequest): Promise<DaemonResponse> => {
   return {

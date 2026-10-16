@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 // The platform axis a remote connection is named on (#2962).
 //
 // A `DeviceInfo` carries the INTERNAL `apple` platform while everything a connection records or
@@ -23,6 +24,8 @@ import { connectCommand } from '../cli/commands/connection.ts';
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+
+bindTestCommandHost();
 
 afterEach(() => {
   vi.clearAllMocks();

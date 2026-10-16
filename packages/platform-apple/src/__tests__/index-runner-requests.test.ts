@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
@@ -23,6 +24,8 @@ import {
   type RecordedRunnerCall,
 } from './recording-runner-provider.ts';
 import { mkdtempForTest } from './tmp-dir.ts';
+
+bindTestCommandHost();
 
 // Every Apple runner request site outside `runner/`, driven through its production entry point and
 // pinned to contracts/fixtures/runner-requests.json. The drives never write a request themselves;

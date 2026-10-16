@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts';
 /**
@@ -72,6 +73,8 @@ import {
   SAVE_ANNOTATION,
   setup,
 } from './session-replay-repair-transaction.fixtures.ts';
+
+bindTestCommandHost();
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);

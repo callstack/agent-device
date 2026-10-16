@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { expect, test, vi } from 'vitest';
 
 vi.mock('./core/app-resolution.ts', async (importOriginal) => ({
@@ -18,6 +19,8 @@ import { HOVER_UNAVAILABLE_HINT } from '@agent-device/contracts/touch-runtime';
 import type { AppleOS, DeviceInfo } from '@agent-device/kernel/device';
 import { createApplePlatformRuntime } from './runtime.ts';
 import { platformRuntimeHostFixture } from './runtime.fixtures.ts';
+
+bindTestCommandHost();
 
 const presentIosAcquisition: SnapshotRuntimeHost['presentIosAcquisition'] = async () => ({
   backend: 'xctest',

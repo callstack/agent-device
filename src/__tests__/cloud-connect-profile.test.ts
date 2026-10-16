@@ -21,8 +21,10 @@ import {
   verifyAwsDeviceFarmConnection,
   verifyBrowserStackConnection,
 } from '@agent-device/provider-webdriver/connection-verification';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
+
+bindTestCommandHost();
 
 vi.mock('../cli/auth-session.ts', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../cli/auth-session.ts')>()),

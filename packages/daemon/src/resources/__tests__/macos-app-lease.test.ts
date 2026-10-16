@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test, vi } from 'vitest';
@@ -11,6 +12,8 @@ import {
 } from '../macos-app-lease.ts';
 import { buildOpenResult } from '../../sessions/session-lifecycle/internal/session-open-surface.ts';
 import type { DaemonRequest } from '../../core/daemon-request.ts';
+
+bindTestCommandHost();
 
 const lease: Pick<DeviceLease, 'backend' | 'deviceKey'> = {
   backend: 'macos-app',

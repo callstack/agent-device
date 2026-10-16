@@ -6,7 +6,10 @@ import type {
   sendToDaemon,
 } from '../daemon-client/daemon-client.ts';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { bindTestCommandHost, mkdtempForTestSync } from '@agent-device/test-kit';
+
+// Every suite that imports this runs its tests as a command host.
+bindTestCommandHost();
 import { beginStderrCapture, beginStdoutCapture } from './test-utils/stream-capture.ts';
 
 class ExitSignal extends Error {

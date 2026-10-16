@@ -82,7 +82,6 @@ export const TEST_ISOLATION = { unstubEnvs: true } as const;
 export const SETUP_FILES = [
   'src/__tests__/hermetic-env-setup.ts',
   'src/__tests__/hermetic-signal-setup.ts',
-  'src/__tests__/host-environment-setup.ts',
   'src/__tests__/process-memo-setup.ts',
 ];
 

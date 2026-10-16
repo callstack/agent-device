@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { afterEach, expect, test, vi } from 'vitest';
 import type { DaemonStopResult } from '@agent-device/daemon-contracts/daemon-stop';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
 
 const mocks = vi.hoisted(() => ({
   cleanupDaemonOwner: vi.fn(async () => undefined),
@@ -28,6 +28,8 @@ vi.mock('../../../platform-runtime-daemon-owner-cleanup.ts', () => ({
 vi.mock('../shared.ts', () => ({ writeCommandOutput: mocks.writeCommandOutput }));
 
 import { daemonCommand } from '../daemon.ts';
+
+bindTestCommandHost();
 
 const GRACEFUL_RESULT: DaemonStopResult = {
   stopped: true,

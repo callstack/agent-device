@@ -9,7 +9,7 @@ import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
 import { runRequestHandlerChain } from '@agent-device/daemon/testing/request-handler-chain';
 import { getDaemonRouteOwnerFiles } from '@agent-device/command-registry/owner-files';
 import type { DaemonRequest } from '@agent-device/daemon';
-import { LINUX_DEVICE } from '@agent-device/test-kit';
+import { LINUX_DEVICE, bindTestCommandHost } from '@agent-device/test-kit';
 import {
   makeIosSession,
   makeSession,
@@ -32,6 +32,8 @@ import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
 import { eagerClosureOf } from '../eager-import-closure.fixtures.ts';
 import { testCreateCommandSurface } from './command-surface-fixture.ts';
+
+bindTestCommandHost();
 
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
   return {

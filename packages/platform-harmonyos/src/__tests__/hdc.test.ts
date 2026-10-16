@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -16,6 +17,8 @@ import {
   runHarmonyShell,
 } from '../hdc.ts';
 import { mkdtempForTestSync } from './tmp-dir.ts';
+
+bindTestCommandHost();
 
 const mockRunCmd = vi.mocked(runCmd);
 const device = { id: '127.0.0.1:5555' };

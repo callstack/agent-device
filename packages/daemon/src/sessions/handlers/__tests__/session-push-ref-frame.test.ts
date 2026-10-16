@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import type { InspectDeviceRuntimeFacts } from '../../../core/request-runtime-binding.ts';
@@ -12,6 +13,8 @@ import {
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { activateCompleteRefFrame, refFrameState } from '../../../core/ref-frame.ts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+
+bindTestCommandHost();
 
 const invoke = async (): Promise<never> => {
   throw new Error('push ref-frame tests must stay on the runtime route');

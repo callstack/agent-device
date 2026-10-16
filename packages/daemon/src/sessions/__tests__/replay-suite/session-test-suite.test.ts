@@ -38,8 +38,10 @@ import {
   makeAndroidSession,
   makeMacOsSession,
 } from '../../../__tests__/support/session-factories.ts';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
 import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts';
+
+bindTestCommandHost();
 
 const ANDROID_ONE: DeviceInfo = {
   platform: 'android',

@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import type {
   Interactor,
   RunnerContext,
@@ -16,6 +17,8 @@ import {
   singlePointerPanPlan,
   type RecordedRunnerCall,
 } from './recording-runner-provider.ts';
+
+bindTestCommandHost();
 
 function presentedSnapshot(result: SnapshotRuntimeResult): SnapshotResult {
   if ('stage' in result) throw new Error('Apple runner snapshot must be presented');

@@ -20,7 +20,7 @@ import { storeSessionForTest } from '../../../__tests__/support/store-factory.ts
  *   completely unchanged.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
 
 vi.mock('@agent-device/platform-apple/runner/operations', () => ({
   resolveRunnerAppBundleId: vi.fn(),
@@ -68,6 +68,8 @@ import {
   captureSnapshotThroughLegacyDispatchFixture,
   legacyDispatchCapture,
 } from '../../../__tests__/support/legacy-snapshot-capture-fixture.ts';
+
+bindTestCommandHost();
 
 const mockDispatchCommand = legacyDispatchCapture;
 const mockCaptureSnapshotWithInteractor = vi.mocked(captureSnapshotWithInteractor);

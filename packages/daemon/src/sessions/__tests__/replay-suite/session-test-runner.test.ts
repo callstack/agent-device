@@ -13,8 +13,10 @@ import {
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
 
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+
+bindTestCommandHost();
 
 // Opening a Simulator schedules a best-effort runner prewarm that outlives the request; a real one
 // would spawn xcodebuild after this file finished and land in whichever file the worker runs next.

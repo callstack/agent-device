@@ -1,11 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import type { SessionState } from '../../../core/session-state.ts';
 import { handleTraceCommand } from '../trace-runtime.ts';
+
+bindTestCommandHost();
 
 function fixture() {
   const root = mkdtempForTestSync('agent-device-trace-runtime-');

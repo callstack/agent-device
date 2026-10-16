@@ -19,13 +19,18 @@ import type { DeviceInfo } from '@agent-device/kernel/device';
 import { deviceIdentity } from '@agent-device/kernel/device';
 import { makeAndroidSession } from '../../../../__tests__/support/session-factories.ts';
 import { makeSessionStore } from '../../../../__tests__/support/store-factory.ts';
-import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
+import {
+  unavailableDeploymentSnapshotAndShutdownOperationFacts,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
 } from '../../../../core/request-runtime-binding.ts';
 import { handleSessionObservabilityCommands } from '../../index.ts';
+
+bindTestCommandHost();
 
 const available = Object.freeze({ available: true as const });
 const unavailable = Object.freeze({

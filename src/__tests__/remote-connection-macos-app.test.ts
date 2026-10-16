@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import { AppError } from '@agent-device/kernel/errors';
@@ -7,6 +8,8 @@ import { connectCommand, disconnectCommand } from '../cli/commands/connection.ts
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';
 import { beginStdoutCapture } from './test-utils/stream-capture.ts';
 import { readRemoteConnectionState } from '@agent-device/remote/remote-connection-state';
+
+bindTestCommandHost();
 
 const LEASE_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 

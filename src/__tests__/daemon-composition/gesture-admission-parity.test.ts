@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 import type {
@@ -13,6 +14,8 @@ import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
 import { createRequestRuntimeBindings } from '@agent-device/daemon/testing/request-runtime-binding';
 import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
 import { resolveBoundGestureRuntime } from '@agent-device/daemon/testing/gesture-runtime';
+
+bindTestCommandHost();
 
 /**
  * The parity artifact for R42/R44 (ADR 0019 §6).

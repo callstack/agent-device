@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import { daemonPlatformServicesFixture } from '../../../__tests__/support/platform-services-fixture.ts';
 import {
   makeSessionStore,
@@ -8,6 +9,8 @@ import {
 import { expect, test } from 'vitest';
 import { handleSessionCommands } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { fakeCreateCommandSurface } from '../../../__tests__/support/command-surface-fake.ts';
+
+bindTestCommandHost();
 
 test('boot leaves Apple keep-hot policy inside the platform runtime', async () => {
   mockResolveTargetDevice.mockResolvedValue({

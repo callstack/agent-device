@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 // The owned-process record gate end to end over one real record file: the provider's gate, a real
 // daemon-scoped record store, and the real same-pid identity probe asking the host about real
 // processes. Only the process-table scan is stood in for, which is what makes what is claimed here
@@ -24,6 +25,8 @@ import {
   installFakeManagedAgentBrowser,
   mkdtempForTestSync,
 } from './test-utils.ts';
+
+bindTestCommandHost();
 
 const { processRecordScanMock } = vi.hoisted(() => ({
   processRecordScanMock: vi.fn(async () => ({ count: 0, pids: [], processes: [] })),

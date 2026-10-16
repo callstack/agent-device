@@ -1,4 +1,4 @@
-import { ANDROID_EMULATOR, deviceClaimFilePath } from '@agent-device/test-kit';
+import { ANDROID_EMULATOR, deviceClaimFilePath, bindTestCommandHost } from '@agent-device/test-kit';
 import { afterEach, expect, test, vi } from 'vitest';
 import {
   isolatedDeviceClaimStores,
@@ -11,6 +11,8 @@ import {
 } from '@agent-device/daemon-contracts/device-claims';
 import { createDaemonShutdownClaimLedger } from './daemon-shutdown-claims.ts';
 import type { SessionState } from '../../core/session-state.ts';
+
+bindTestCommandHost();
 
 afterEach(() => {
   vi.restoreAllMocks();

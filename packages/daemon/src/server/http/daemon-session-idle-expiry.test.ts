@@ -1,4 +1,4 @@
-import { deviceClaimFilePath } from '@agent-device/test-kit';
+import { deviceClaimFilePath, bindTestCommandHost } from '@agent-device/test-kit';
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -18,6 +18,8 @@ import {
   makeIosSession,
   makeRepairCompleteSession,
 } from '../../__tests__/support/session-factories.ts';
+
+bindTestCommandHost();
 
 /**
  * #2833: what one expiry COMMITS, once it has run. Whether a session past its window is the kind that

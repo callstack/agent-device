@@ -13,7 +13,11 @@ import {
   readinessDeviceRuntimeGateway,
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
 import { normalizeError } from '@agent-device/kernel/errors';
-import { ANDROID_EMULATOR, createTestHostEnvironment } from '@agent-device/test-kit';
+import {
+  ANDROID_EMULATOR,
+  createTestHostEnvironment,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
 import {
   isolatedDeviceClaimStores,
   retainOrphanedDeviceClaims,
@@ -28,6 +32,8 @@ import { createRequestExecutionScope } from '../../../server/request-execution-s
 import { handleBootCommand } from '../session-boot.ts';
 import { handleShutdownCommand } from '../session-shutdown.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
+
+bindTestCommandHost();
 
 // #1799: `boot`/`shutdown` route through a daemon that need not own the target
 // device. Two daemons on one host each keep their own state directory, so the

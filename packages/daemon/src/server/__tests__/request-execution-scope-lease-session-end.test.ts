@@ -1,4 +1,8 @@
-import { deviceClaimFilePath, mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  deviceClaimFilePath,
+  mkdtempForTestSync,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
@@ -14,6 +18,8 @@ import { withRequestExecutionLockKeys } from '../request-execution-locks.ts';
 import type { SessionStore } from '../../core/session-store.ts';
 import type { SessionTeardown } from '../../sessions/lease-lifecycle.ts';
 import { createLeaseSessionEnd } from '../request-execution-scope.ts';
+
+bindTestCommandHost();
 
 vi.mock('@agent-device/host-kit/diagnostics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/host-kit/diagnostics')>();

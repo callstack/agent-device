@@ -10,7 +10,15 @@ import {
 } from '@agent-device/daemon/testing/app-events';
 import { getInteractor } from '../../core/interactors.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { ANDROID_EMULATOR, IOS_DEVICE, MACOS_DEVICE, mkdtempForTest } from '@agent-device/test-kit';
+import {
+  ANDROID_EMULATOR,
+  IOS_DEVICE,
+  MACOS_DEVICE,
+  mkdtempForTest,
+  bindTestCommandHost,
+} from '@agent-device/test-kit';
+
+bindTestCommandHost();
 
 /**
  * The composed `trigger-app-event` path as R57 left it: the daemon's own policy resolves the

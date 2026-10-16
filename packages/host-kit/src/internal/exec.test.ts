@@ -6,6 +6,7 @@ import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from './diagnosti
 import {
   coerceExecResult,
   commandDeveloperDir,
+  commandHostEnvironment,
   isCommandTimeoutError,
   requireExecSuccess,
   runCmd,
@@ -626,4 +627,20 @@ test('runCmdStreaming can forward output without retaining it in the result', as
   assert.equal(stdout, 'out');
   assert.equal(stderr, 'err');
   assert.deepEqual(result, { stdout: '', stderr: '', exitCode: 7, stdoutBuffer: undefined });
+});
+
+test('commandHostEnvironment names the enclosing host and refuses outside one', async () => {
+  assert.throws(
+    () => commandHostEnvironment(),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.reason, 'host_environment_unscoped');
+      return true;
+    },
+  );
+
+  const host = hostWith({ AGENT_DEVICE_TEST_HOST: 'yes' });
+  await withCommandHost({ host, requestEnv: undefined }, async () => {
+    assert.equal(commandHostEnvironment(), host);
+  });
 });

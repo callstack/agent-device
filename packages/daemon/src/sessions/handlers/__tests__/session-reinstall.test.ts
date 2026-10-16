@@ -3,7 +3,7 @@ import { daemonPlatformServicesFixture } from '../../../__tests__/support/platfo
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, expect, test, vi } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync, bindTestCommandHost } from '@agent-device/test-kit';
 import { trackUploadedArtifact } from '../../../resources/artifact-tracking.ts';
 import type {
   BindDeviceRuntime,
@@ -27,6 +27,8 @@ import {
   mockDeployAppRuntime,
   mockInspectDeviceRuntimeFacts,
 } from '../../../__tests__/support/handlers/session-command-harness.ts';
+
+bindTestCommandHost();
 
 function makeStore(): SessionStore {
   return new SessionStore(

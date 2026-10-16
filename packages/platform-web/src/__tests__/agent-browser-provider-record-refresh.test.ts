@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 // agent-browser-provider's owned-process record gate: which agent-browser calls pay the
 // process-table scan that rewrites the managed fleet record. The scan exists so the startup
 // reaper and the leak oracle can see the fleet; re-deriving it after every command does not make
@@ -12,6 +13,8 @@ import {
   recordingAgentBrowserExecutor,
   withManagedAgentBrowserProvider,
 } from './test-utils.ts';
+
+bindTestCommandHost();
 
 const { processRecordScanMock, fleetRecordLiveMock } = vi.hoisted(() => ({
   processRecordScanMock: vi.fn(async () => ({ count: 0, pids: [], processes: [] })),

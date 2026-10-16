@@ -10,6 +10,7 @@ import {
   assertDispatchDisclosureDriversMatchRows,
   DISPATCH_DISCLOSURE_TABLE_PATH,
   dispatchDisclosureRowsOwnedBy,
+  bindTestCommandHost,
 } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
 import { withCommandExecutorOverride, type ExecResult } from '@agent-device/host-kit/command';
@@ -20,6 +21,8 @@ import {
 } from './test-utils.ts';
 import { createAgentBrowserWebProvider } from '../agent-browser-provider.ts';
 import type { WebProvider } from '../provider.ts';
+
+bindTestCommandHost();
 
 /** The managed install exists, but every CLI call is answered by `answer`. */
 async function withScriptedBackend(

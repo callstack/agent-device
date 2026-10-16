@@ -1,3 +1,4 @@
+import { bindTestCommandHost } from '@agent-device/test-kit';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { beforeEach, test, vi } from 'vitest';
@@ -27,6 +28,8 @@ import { withCommandExecutorOverride, type ExecResult } from '@agent-device/host
 import { AppError } from '@agent-device/kernel/errors';
 import { buildSelectorChainForNode, resolveRecordedTarget } from '@agent-device/selectors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
+
+bindTestCommandHost();
 
 type AgentBrowserCall = {
   cmd: string;
