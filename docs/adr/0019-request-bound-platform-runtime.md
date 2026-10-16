@@ -990,10 +990,11 @@ anchor, not as a proposed commitment.
   `interaction-targeting` and the android UI-hierarchy fixtures) and
   `src/__tests__/snapshot-desktop-surface.test.ts` (pinned to the root
   eager-import-closure fixtures).
-- `src/screenshot-diff/*.ts` (region split/overlay/summarization/component composition) —
-  pixel-diff computation and PNG decode/encode already call capture-kit's `png`/
-  `png-worker-client`; the root files remain for daemon/CLI diff-report composition.
-  Equivalent: none (built atop already-migrated capture-kit mechanics).
+- `src/screenshot-diff/*.ts` (region split/overlay/summarization/component composition, with its
+  test) — **migrated to `packages/capture-kit/src/`** beside the pixel worker and screenshot
+  overlays it was built on. The CLI and command output consume it through
+  `@agent-device/capture-kit/screenshot-diff`, `/screenshot-diff-regions`, and
+  `/screenshot-diff-overlay-matches`.
 - `src/provider-device-runtime.ts`, `src/provider-device-runtimes.ts`,
   `src/provider-limrun-runtime.ts`, `src/provider-webdriver.ts`. Mostly already thin: the bulk of
   WebDriver and Limrun provider logic lives in `packages/provider-webdriver/src/` and

@@ -1,8 +1,8 @@
 import path from 'node:path';
 import { colorize, supportsColor } from './color.ts';
 import { readSnapshotWarnings } from './snapshot.ts';
-import type { ScreenshotDiffResult } from '../../screenshot-diff/screenshot-diff.ts';
-import type { ScreenshotDiffRegion } from '../../screenshot-diff/screenshot-diff-regions.ts';
+import type { ScreenshotDiffResult } from '@agent-device/capture-kit/screenshot-diff';
+import type { ScreenshotDiffRegion } from '@agent-device/capture-kit/screenshot-diff-regions';
 type SnapshotDiffLine = {
   kind?: 'added' | 'removed' | 'unchanged';
   text?: string;

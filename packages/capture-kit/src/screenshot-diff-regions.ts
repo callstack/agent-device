@@ -1,5 +1,5 @@
 import type { Rect } from '@agent-device/kernel/snapshot';
-import type { PNG } from '@agent-device/capture-kit/png';
+import type { PNG } from './png.ts';
 import { normalizedRect, type NormalizedRect } from '@agent-device/kernel/screenshot-geometry';
 import { findConnectedMaskComponents } from './screenshot-diff-components.ts';
 import { splitLargeDiffRegions } from './screenshot-diff-region-split.ts';

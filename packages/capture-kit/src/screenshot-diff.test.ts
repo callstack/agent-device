@@ -2,10 +2,10 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import { mkdtempForTestSync } from './tmp-dir.fixtures.ts';
 
-import { hasPngSignature, PNG } from '@agent-device/capture-kit/png';
-import { compareScreenshots } from '../screenshot-diff.ts';
+import { hasPngSignature, PNG } from './png.ts';
+import { compareScreenshots } from './screenshot-diff.ts';
 
 function tmpDir(): string {
   return mkdtempForTestSync('agent-device-screenshot-diff-');
