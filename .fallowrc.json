@@ -94,7 +94,7 @@
       "exports": ["*"]
     },
     {
-      // A published provider package's default export is its plugin contract; src/plugins/load.ts imports the package by name at runtime and reads `default`.
+      // A published provider package's default export is its plugin contract; packages/plugins/src/load.ts imports the package by name at runtime and reads `default`.
       "file": "packages/provider-*/src/index.ts",
       "exports": ["default"]
     },

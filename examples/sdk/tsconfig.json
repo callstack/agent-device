@@ -51,6 +51,7 @@
     { "path": "../../packages/platform-linux" },
     { "path": "../../packages/platform-vega" },
     { "path": "../../packages/platform-web" },
+    { "path": "../../packages/plugins" },
     { "path": "../../packages/provider-limrun" },
     { "path": "../../packages/provider-testmu" },
     { "path": "../../packages/provider-webdriver" },
