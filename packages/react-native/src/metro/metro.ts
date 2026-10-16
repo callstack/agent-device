@@ -1,14 +1,6 @@
-import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
 import { stopMetroCompanion } from './client-metro-companion.ts';
-import { resolveRuntimeTransportHints } from '@agent-device/host-kit/runtime-transport-hints';
 
 export type { MetroBridgeDescriptor } from './metro-types.ts';
-
-export function resolveRuntimeTransport(
-  runtime: SessionRuntimeHints | undefined,
-): { host: string; port: number; scheme: 'http' | 'https' } | undefined {
-  return resolveRuntimeTransportHints(runtime);
-}
 
 export type MetroTunnelPingMessage = {
   type: 'ping';

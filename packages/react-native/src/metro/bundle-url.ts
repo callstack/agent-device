@@ -1,4 +1,4 @@
-import { normalizeBaseUrl } from '../client/base-url.ts';
+import { normalizeBaseUrl } from './base-url.ts';
 
 export function buildBundleUrl(
   baseUrl: string,

@@ -1,5 +1,5 @@
 import { componentRef } from './react-component.ts';
-import type { CliOutput } from '../../commands/command-contract.ts';
+import type { ReactDevtoolsOutput } from './react-devtools-output.ts';
 import { AppError } from '@agent-device/kernel/errors';
 import { targetAppId, type InspectorSession } from './metro-inspector.ts';
 import {
@@ -89,7 +89,10 @@ function requireTarget(args: DevtoolsArgs, usage: string): string {
   return target;
 }
 
-type Handler = (args: DevtoolsArgs, options: ReactDevtoolsCommandOptions) => Promise<CliOutput>;
+type Handler = (
+  args: DevtoolsArgs,
+  options: ReactDevtoolsCommandOptions,
+) => Promise<ReactDevtoolsOutput>;
 
 const HANDLERS: Record<InspectCommand, Handler> = {
   tree: async (args, options) => {
@@ -242,7 +245,7 @@ export async function runReactInspectCommand(
   command: InspectCommand,
   args: string[],
   options: ReactDevtoolsCommandOptions,
-): Promise<CliOutput> {
+): Promise<ReactDevtoolsOutput> {
   const parsed = parseDevtoolsArgs(args, () => FORMS[command]);
   return await HANDLERS[command](parsed, options);
 }

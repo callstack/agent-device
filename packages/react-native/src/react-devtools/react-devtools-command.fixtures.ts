@@ -1,5 +1,4 @@
-import type { CliFlags } from '@agent-device/contracts/command';
-import { runReactDevtoolsCommand } from '../commands/react-devtools.ts';
+import { runReactDevtools } from './index.ts';
 import { vi } from 'vitest';
 import vm from 'node:vm';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
@@ -16,8 +15,8 @@ export const TARGET = {
 };
 
 /**
- * Serves `targets` from `/json/list`, evaluates debugger calls in `app`'s realm, and captures what
- * the CLI prints. Callers restore the stubbed globals and spies after each test.
+ * Serves `targets` from `/json/list` and evaluates debugger calls in `app`'s realm.
+ * Callers restore the stubbed globals and spies after each test.
  */
 export function commandHarness(
   prefix: string[] = [],
@@ -25,9 +24,8 @@ export function commandHarness(
   targets: unknown[] = [TARGET],
 ) {
   const stateDir = mkdtempForTestSync('react-profile-');
-  const output: string[] = [];
   const requested: string[] = [];
-  const options: ReactDevtoolsCommandOptions & { flags?: Partial<Pick<CliFlags, 'json'>> } = {
+  const options: ReactDevtoolsCommandOptions = {
     stateDir,
     session: 'qa',
   };
@@ -42,14 +40,6 @@ export function commandHarness(
         close: () => {},
       }) as unknown as InspectorSession,
   );
-  vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
-    output.push(String(chunk));
-    return true;
-  });
-  const run = async (...args: string[]) => {
-    output.length = 0;
-    const code = await runReactDevtoolsCommand([...prefix, ...args], options);
-    return { code, text: output.join('') };
-  };
+  const run = async (...args: string[]) => await runReactDevtools([...prefix, ...args], options);
   return { app, run, options, stateDir, requested };
 }

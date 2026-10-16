@@ -48,7 +48,6 @@ test('tree prints the mounted components with refs', async () => {
       '    @c4 Row [memo] key=a',
       '    @c5 Row [memo] key=b (1 error)',
       '  @c6 Footer',
-      '',
     ].join('\n'),
   );
   assert.match(
@@ -61,7 +60,7 @@ test('find lists matching components with their owners', async () => {
   const { run } = harness();
   assert.equal(
     (await run('find', 'row')).text,
-    '2 mounted components match "row":\n  @c4 Row [memo] key=a in List < App\n  @c5 Row [memo] key=b (1 error) in List < App\n',
+    '2 mounted components match "row":\n  @c4 Row [memo] key=a in List < App\n  @c5 Row [memo] key=b (1 error) in List < App',
   );
   assert.match((await run('find', 'row', '--exact')).text, /^No mounted component name is "row"\./);
 });
@@ -79,7 +78,6 @@ test('inspect by ref prints props, hooks, owners, and logged problems', async ()
       '  State: true',
       'logged while rendering:',
       '  error: Failed prop type: label (x2)',
-      '',
     ].join('\n'),
   );
 });
@@ -97,7 +95,7 @@ test('errors lists the components that logged while rendering, with their messag
   const { run } = harness();
   assert.equal(
     (await run('errors')).text,
-    '1 mounted component logged errors or warnings while rendering:\n  @c5 Row: 1 error\n    error: Failed prop type: label (x2)\n',
+    '1 mounted component logged errors or warnings while rendering:\n  @c5 Row: 1 error\n    error: Failed prop type: label (x2)',
   );
 });
 
@@ -116,13 +114,12 @@ test('a runtime whose tree another DevTools frontend owns fails with a typed rea
 test('errors says when the messages of a component could not be read instead of listing none', async () => {
   const app = listApp();
   app.renderer.inspectElement = () => ({ type: 'error', message: 'hooks threw' });
-  const { run, options } = harness(app);
+  const { run } = harness(app);
   assert.match(
     (await run('errors')).text,
-    /\n {2}@c5 Row: 1 error\n {4}messages unavailable: hooks threw\n$/,
+    /\n {2}@c5 Row: 1 error\n {4}messages unavailable: hooks threw$/,
   );
-  options.flags = { json: true };
-  const parsed = JSON.parse((await run('errors')).text) as {
+  const parsed = (await run('errors')) as {
     data: { components: Array<{ messagesUnavailable?: string; errors?: unknown }> };
   };
   assert.deepEqual(parsed.data.components[0]?.messagesUnavailable, 'hooks threw');
@@ -132,9 +129,8 @@ test('errors says when the messages of a component could not be read instead of 
 test('errors returns the same shape when nothing logged', async () => {
   const app = new FakeAppRuntime();
   app.mount([{ id: 2, name: 'App' }]);
-  const { run, options } = harness(app);
-  options.flags = { json: true };
-  assert.deepEqual(JSON.parse((await run('errors')).text).data, {
+  const { run } = harness(app);
+  assert.deepEqual((await run('errors')).data, {
     total: 0,
     logsTracked: true,
     components: [],
@@ -150,7 +146,6 @@ test('errors says its list can be incomplete when the backend does not track log
     [
       'No mounted component logged an error or warning while rendering.',
       "Note: this app's React DevTools backend does not attribute every console error and warning to a component, so this list can be incomplete; check agent-device logs as well.",
-      '',
     ].join('\n'),
   );
 });

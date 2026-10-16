@@ -29,7 +29,7 @@ import {
 } from '@agent-device/host-kit/process';
 
 import { ensureMetroCompanion, stopMetroCompanion } from './client-metro-companion.ts';
-import { METRO_COMPANION_RUN_ARG } from '../client/client-companion-tunnel-contract.ts';
+import { METRO_COMPANION_RUN_ARG } from '../companion/client-companion-tunnel-contract.ts';
 
 const TEST_BRIDGE_SCOPE = {
   tenantId: 'tenant-1',
@@ -47,7 +47,9 @@ function assertCompanionSpawnTarget(): void {
   assert.ok(firstCall, 'expected runCmdDetached to be called');
   assert.equal(firstCall[0], process.execPath);
   assert.ok(
-    firstCall[1].some((arg) => arg.includes('src/client/companion-tunnel.ts')),
+    firstCall[1].some((arg) =>
+      arg.includes('packages/react-native/src/companion/companion-tunnel.ts'),
+    ),
     `expected companion entry path in ${JSON.stringify(firstCall[1])}`,
   );
   assert.equal(firstCall[1].at(-1), '--agent-device-run-metro-companion');
@@ -55,7 +57,7 @@ function assertCompanionSpawnTarget(): void {
 
 /** The stops the code asked host-kit for: the identity recorded beside the pid, and the budget. */
 const COMPANION_STOP_BUDGET = { termTimeoutMs: 1_000, killTimeoutMs: 1_000 };
-const COMPANION_TUNNEL_COMMAND = `${process.execPath} src/client/companion-tunnel.ts ${METRO_COMPANION_RUN_ARG}`;
+const COMPANION_TUNNEL_COMMAND = `${process.execPath} packages/react-native/src/companion/companion-tunnel.ts ${METRO_COMPANION_RUN_ARG}`;
 const UNRELATED_COMMAND = '/usr/bin/nginx -g daemon off;';
 // A predicate compares by identity, so deepEqual cannot see whether it would accept the tunnel or
 // refuse a stranger. Projecting its verdicts is what makes a dropped or inverted matcher fail here.
@@ -88,7 +90,8 @@ test('companion ownership is profile-scoped and consumer-counted', async () => {
       pid === 111 ? 'start-111' : 'start-222',
     );
     vi.mocked(readProcessCommand).mockImplementation(
-      () => `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
+      () =>
+        `${process.execPath} packages/react-native/src/companion/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
     vi.mocked(stopProcessAndConfirmExit).mockResolvedValue(STOPPED);
 
@@ -185,7 +188,8 @@ test('launchUrl changes force a companion respawn for the same profile', async (
       pid === 333 ? 'start-333' : 'start-444',
     );
     vi.mocked(readProcessCommand).mockImplementation(
-      () => `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
+      () =>
+        `${process.execPath} packages/react-native/src/companion/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
     vi.mocked(stopProcessAndConfirmExit).mockResolvedValue(STOPPED);
 
@@ -231,7 +235,7 @@ test('spawned companion uses neutral env names', async () => {
     vi.mocked(runCmdDetached).mockReturnValueOnce(999);
     vi.mocked(readProcessStartTime).mockReturnValue('start-999');
     vi.mocked(readProcessCommand).mockReturnValue(
-      `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
+      `${process.execPath} packages/react-native/src/companion/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
 
     await ensureMetroCompanion({
@@ -272,7 +276,7 @@ test('state sentinel exists before spawning companion worker', async () => {
     });
     vi.mocked(readProcessStartTime).mockReturnValue('start-1001');
     vi.mocked(readProcessCommand).mockReturnValue(
-      `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
+      `${process.execPath} packages/react-native/src/companion/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
 
     const spawned = await ensureMetroCompanion({
@@ -518,7 +522,7 @@ test('legacy state without bridge scope is stopped before respawn', async () => 
       `${JSON.stringify({
         pid: 555,
         startTime: 'start-555',
-        command: `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
+        command: `${process.execPath} packages/react-native/src/companion/companion-tunnel.ts --agent-device-run-metro-companion`,
         serverBaseUrl: 'https://bridge.example.test',
         localBaseUrl: 'http://127.0.0.1:8081',
         tokenHash: 'legacy-token-hash',
@@ -530,7 +534,7 @@ test('legacy state without bridge scope is stopped before respawn', async () => 
     vi.mocked(isProcessAlive).mockReturnValue(true);
     vi.mocked(readProcessStartTime).mockReturnValue('start-555');
     vi.mocked(readProcessCommand).mockReturnValue(
-      `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
+      `${process.execPath} packages/react-native/src/companion/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
     vi.mocked(stopProcessAndConfirmExit).mockResolvedValue(STOPPED);
 

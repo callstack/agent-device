@@ -13,8 +13,9 @@ import {
   unexpectedCommandCall,
 } from './remote-connection.fixtures.ts';
 
-vi.mock('../metro/client-metro-companion.ts', () => ({
-  stopMetroCompanion: vi.fn(),
+vi.mock('@agent-device/react-native/metro', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@agent-device/react-native/metro')>()),
+  stopMetroTunnel: vi.fn(),
 }));
 
 import { materializeRemoteConnectionForCommand } from '../cli/commands/connection-runtime.ts';

@@ -1000,9 +1000,12 @@ anchor, not as a proposed commitment.
   `packages/provider-limrun/src/`; these root files are the composition-time wiring, comparable in
   role to `src/platform-runtime.ts` itself.
 - `src/core` (R13-governed consumer seams), `src/commands`, `src/cli`, `src/cli-schema`,
-  `src/mcp`, `src/client`, `src/sdk`, `src/ai-sdk`, `src/remote`, `src/request`, `src/metro`.
+  `src/mcp`, `src/client`, `src/sdk`, `src/ai-sdk`, `src/remote`, `src/request`.
   Not migration targets: these are command-surface, protocol-projection, and
   daemon-owned zones this ADR keeps in `src/` by design, not residue awaiting a package.
+- React Native development tooling lives in `@agent-device/react-native`: Metro preparation and
+  session bindings, companion tunnels, component inspection, and render profiling share one
+  package. CLI output and SDK session normalization remain application adapters in `src/`.
 
 Neither number has an owning issue, gate, or accepted budget yet. Treat both as inputs to a
 maintainer decision, not as a ratchet.

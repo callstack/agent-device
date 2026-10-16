@@ -1,4 +1,4 @@
-import type { CliOutput } from '../../commands/command-contract.ts';
+import type { ReactDevtoolsOutput } from './react-devtools-output.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
@@ -225,7 +225,7 @@ async function stopProfile(
 type SubcommandHandler = (
   args: ProfileArgs,
   options: ReactDevtoolsCommandOptions,
-) => Promise<CliOutput>;
+) => Promise<ReactDevtoolsOutput>;
 
 function requireComponents(analysis: ReactProfileAnalysis, name: string): ComponentProfile[] {
   const components = findComponents(analysis, name);
@@ -319,7 +319,7 @@ const SUBCOMMAND_HANDLERS: Record<ReactProfileSubcommand, SubcommandHandler> = {
 export async function runReactProfileCommand(
   args: string[],
   options: ReactDevtoolsCommandOptions,
-): Promise<CliOutput> {
+): Promise<ReactDevtoolsOutput> {
   const parsed = parseProfileArgs(args);
   return await SUBCOMMAND_HANDLERS[parsed.subcommand](parsed, options);
 }

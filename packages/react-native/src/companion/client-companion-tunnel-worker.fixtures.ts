@@ -4,7 +4,7 @@ import type { Duplex } from 'node:stream';
 import { listenOnLoopback } from '@agent-device/test-kit';
 
 /**
- * Wire-level doubles for the companion tunnel worker (`src/client/client-companion-tunnel-worker.ts`).
+ * Wire-level doubles for the companion tunnel worker (`packages/react-native/src/companion/client-companion-tunnel-worker.ts`).
  *
  * The worker speaks raw WebSocket frames over an `http.Server` upgrade, so these helpers encode and
  * decode frames by hand instead of pulling in a WebSocket dependency, and a hand-written parser is

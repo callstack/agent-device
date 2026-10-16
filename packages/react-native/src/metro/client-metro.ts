@@ -36,7 +36,7 @@ import {
   readProjectPackageJson,
   type PackageJsonShape,
 } from '@agent-device/host-kit/project-runtime';
-import { normalizeBaseUrl } from '../client/base-url.ts';
+import { normalizeBaseUrl } from './base-url.ts';
 import { buildBundleUrl } from './bundle-url.ts';
 import {
   EXPO_VIRTUAL_ENTRY_BUNDLE_PATH,

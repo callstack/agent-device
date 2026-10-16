@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { MetroBridgeScope } from '@agent-device/contracts/remote';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { stopMetroTunnel } from '../../metro/metro.ts';
+import { stopMetroTunnel } from '@agent-device/react-native/metro';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 // Provenance-preserving file-only read (no ambient env defaults merged in) —
 // see resolvePreviousOwnDaemonAuthToken below for why this must not be

@@ -8,7 +8,7 @@ import type { CliFlags } from '@agent-device/contracts/command';
 import { parseArgs } from '../../cli/parser/args.ts';
 import { createAgentDeviceClient } from '../../agent-device-client.ts';
 import type { DaemonRequest, DaemonResponse } from '@agent-device/kernel/contracts';
-import { readMetroSessionHints, writeMetroSessionHints } from '../../metro/metro-session-hints.ts';
+import { readMetroSessionHints, writeMetroSessionHints } from '@agent-device/react-native/session';
 import { openCommandFacet } from './app.ts';
 import {
   closeLoopbackServer,

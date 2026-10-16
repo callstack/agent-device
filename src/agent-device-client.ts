@@ -60,13 +60,13 @@ import {
 import type { CommandResult } from '@agent-device/command-registry/command-result';
 import { sendToDaemon } from './daemon-client/daemon-client.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
-import { prepareMetroRuntime, reloadMetro } from './metro/client-metro.ts';
+import { prepareMetroRuntime, reloadMetro } from '@agent-device/react-native/metro';
 import {
   clearMetroSessionHintsQuietly,
   recordPreparedMetroSession,
   recordOpenedMetroSession,
   readMetroSessionRuntime,
-} from './metro/metro-session-hints.ts';
+} from '@agent-device/react-native/session';
 import {
   asOptionalRecord,
   readPresentedSurfaceFact,
@@ -221,7 +221,7 @@ export function createAgentDeviceClient(
           };
         } finally {
           // Close is teardown intent: drop the dev-server binding even if the daemon call fails.
-          clearMetroSessionHintsQuietly(mergeClientOptions(config, options));
+          clearMetroSessionHintsQuietly({ ...mergeClientOptions(config, options), session });
         }
       },
       saveScript: async (
@@ -276,11 +276,14 @@ export function createAgentDeviceClient(
       open: async (options: AppOpenOptions) => {
         const session = resolveRequestSession(options);
         const data = await executeCommand<Record<string, unknown>>('open', options);
-        recordOpenedMetroSession(mergeClientOptions(config, options), {
-          explicitRuntime: options.runtime !== undefined,
-          runtime: mergeClientOptions(config, options).runtime,
-          sessionReused: data.sessionReused === true,
-        });
+        recordOpenedMetroSession(
+          { ...mergeClientOptions(config, options), session },
+          {
+            explicitRuntime: options.runtime !== undefined,
+            runtime: mergeClientOptions(config, options).runtime,
+            sessionReused: data.sessionReused === true,
+          },
+        );
         const device = normalizeOpenDevice(data);
         const appBundleId = readOptionalString(data, 'appBundleId');
         const appId = appBundleId;
@@ -361,13 +364,18 @@ export function createAgentDeviceClient(
           runtimeFilePath: options.runtimeFilePath,
           logPath: options.logPath,
         });
-        recordPreparedMetroSession(config, result);
+        recordPreparedMetroSession(
+          { ...config, session: resolveSessionName(config.session) },
+          result,
+        );
         return result;
       },
       reload: async (options = {}) =>
         await reloadMetro({
           ...options,
-          runtime: readMetroSessionRuntime(config) ?? config.runtime,
+          runtime:
+            readMetroSessionRuntime({ ...config, session: resolveSessionName(config.session) }) ??
+            config.runtime,
         }),
     },
     capture: {

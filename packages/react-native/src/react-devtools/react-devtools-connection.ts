@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
+import { resolveSessionMetroServerUrl } from '../metro/metro-session-hints.ts';
 import { AppError } from '@agent-device/kernel/errors';
-import { resolveSessionMetroServerUrl } from '../../metro/metro-session-hints.ts';
 import {
   debuggerUrlOn,
   InspectorSession,

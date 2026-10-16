@@ -106,7 +106,7 @@ function spawnMetroCompanionWorker(options: {
     process.execPath,
     [
       '--experimental-strip-types',
-      'src/client/companion-tunnel.ts',
+      'packages/react-native/src/companion/companion-tunnel.ts',
       '--agent-device-run-metro-companion',
     ],
     {

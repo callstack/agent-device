@@ -46,13 +46,11 @@ function recordRowRenders(app: FakeAppRuntime) {
 test('profile start, an interaction, and profile stop print a compact diagnosis and save it', async () => {
   const { app, run, stateDir, requested } = harness();
   const started = await run('start');
-  assert.equal(started.code, 0);
   assert.match(started.text, /^Profiling React renders in com\.example\.app\./);
   assert.deepEqual(requested, ['http://localhost:8081/json/list']);
 
   recordRowRenders(app);
   const stopped = await run('stop');
-  assert.equal(stopped.code, 0);
   assert.equal(
     stopped.text.split('\n')[1],
     '1. memo-defeated Row: memo bypassed on 36/36 updates; new onPress (function) 36x from List -> wrap those props in useCallback/useMemo in List',
@@ -70,7 +68,7 @@ test('profile start, an interaction, and profile stop print a compact diagnosis 
   );
   assert.match(
     (await run('commit', '--limit', '1')).text,
-    /^Commits \(1 slowest of 3, --limit 3 for all\):\n {2}#0 \+0\.0s 40ms 13 rendered <- List\n$/,
+    /^Commits \(1 slowest of 3, --limit 3 for all\):\n {2}#0 \+0\.0s 40ms 13 rendered <- List$/,
   );
   assert.match(
     (await run('commit', '#1')).text,
@@ -78,17 +76,13 @@ test('profile start, an interaction, and profile stop print a compact diagnosis 
   );
 });
 
-test('profile stop --json returns the findings and where the profile was saved', async () => {
-  const { app, run, options, stateDir } = harness();
+test('profile stop returns the findings and where the profile was saved', async () => {
+  const { app, run, stateDir } = harness();
   await run('start');
   recordRowRenders(app);
-  options.flags = { json: true };
-  const { text } = await run('stop', '--limit', '1');
-  const parsed = JSON.parse(text) as {
-    success: boolean;
+  const parsed = (await run('stop', '--limit', '1')) as {
     data: { findings: Array<{ kind: string }>; savedTo: string };
   };
-  assert.equal(parsed.success, true);
   assert.deepEqual(
     parsed.data.findings.map((f) => f.kind),
     ['memo-defeated'],
@@ -141,7 +135,7 @@ test('a failed prop inspection becomes a note instead of failing the stop', asyn
   );
   const { text } = await run('stop');
   assert.match(text, /changed onPress 36x from List \(value kinds not inspected\)/);
-  assert.match(text, /\nNote: Changed prop values could not be inspected: inspector gone\n/);
+  assert.match(text, /\nNote: Changed prop values could not be inspected: inspector gone/);
 });
 
 test('runtime failures carry a typed reason and a hint', async () => {
@@ -203,14 +197,12 @@ test('unknown profile commands and malformed options are invalid arguments', asy
   }
 });
 
-test('profile commit --json honors --limit like the text view', async () => {
-  const { app, run, options } = harness();
+test('profile commit data honors --limit like the text view', async () => {
+  const { app, run } = harness();
   await run('start');
   recordRowRenders(app);
   await run('stop');
-  options.flags = { json: true };
-  const { text } = await run('commit', '1', '--limit', '1');
-  const parsed = JSON.parse(text) as {
+  const parsed = (await run('commit', '1', '--limit', '1')) as {
     data: { components: Array<{ name: string }>; rendered: number };
   };
   assert.deepEqual(
@@ -305,7 +297,6 @@ test('a renderer that fails while another records nothing is named in the empty 
     [
       'React profile: no commits recorded. Start profiling, then perform the interaction before stopping.',
       "Note: A React renderer's profile could not be read: second root gone",
-      '',
     ].join('\n'),
   );
 });

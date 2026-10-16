@@ -1,6 +1,5 @@
 import type { PrepareMetroRuntimeResult } from '@agent-device/contracts/remote';
 import type { SessionRuntimeHints } from '@agent-device/kernel/contracts';
-import { resolveSessionName } from '../client/client-normalizers.ts';
 import { resolveDaemonPaths } from '@agent-device/daemon-contracts/daemon-resolution';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,12 +14,12 @@ export type MetroSessionHints = {
 
 export type MetroSessionScope = { stateDir: string; session: string };
 
-type MetroSessionOptions = { stateDir?: string; session?: string };
+type MetroSessionOptions = { stateDir?: string; session: string };
 
 function resolveMetroSessionScope(options: MetroSessionOptions): MetroSessionScope {
   return {
     stateDir: resolveDaemonPaths(options.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR).baseDir,
-    session: resolveSessionName(options.session),
+    session: options.session,
   };
 }
 
