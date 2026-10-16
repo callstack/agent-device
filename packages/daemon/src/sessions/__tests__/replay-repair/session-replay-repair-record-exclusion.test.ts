@@ -281,85 +281,88 @@ test('diagnostic get/is reads mid-repair are excluded from the healed script by 
   expect(freshRun.ok).toBe(true);
 });
 
-test("a --record'ed diagnostic read lands in the healed script (the diverged-step-was-a-get case)", async () => {
-  const ctx = setup('agent-device-repair-record-exclusion-record-');
-  const filePath = writeReplayFile(ctx.root, [
-    'open "Demo" --relaunch',
-    SAVE_ANNOTATION,
-    'click id="save"',
-    'click id="confirm"',
-    'close',
-  ]);
-  const { invoke, divergence } = await armAndDiverge(ctx, filePath);
-  const session = ctx.sessionStore.get(ctx.sessionName)!;
+test.each(['get', 'snapshot'])(
+  "a --record'ed %s correction satisfies the resume guard and persists in the healed script",
+  async (command) => {
+    const ctx = setup('agent-device-repair-record-exclusion-record-');
+    const filePath = writeReplayFile(ctx.root, [
+      'open "Demo" --relaunch',
+      SAVE_ANNOTATION,
+      'click id="save"',
+      'click id="confirm"',
+      'close',
+    ]);
+    const { invoke, divergence } = await armAndDiverge(ctx, filePath);
+    const session = ctx.sessionStore.get(ctx.sessionName)!;
 
-  // --- The agent's correction for the diverged step IS itself a read (the
-  // wave-3 E3 shape): `get attrs` on the renamed control, explicitly forced
-  // into the heal with `--record` since it would otherwise be excluded. ---
-  ctx.sessionStore.recordAction(storeSessionForTest(ctx.sessionStore, session), {
-    command: 'get',
-    positionals: ['attrs', '@e7'],
-    flags: { record: true },
-    result: { selectorChain: ['id="save-v2"'] },
-    interactiveObservation: true,
-  });
-  expect(session.actions.map((a) => a.command)).toEqual(['open', 'get']);
+    // --- The agent's correction for the diverged step IS itself a read (the
+    // wave-3 E3 shape): `get attrs` on the renamed control, explicitly forced
+    // into the heal with `--record` since it would otherwise be excluded. ---
+    ctx.sessionStore.recordAction(storeSessionForTest(ctx.sessionStore, session), {
+      command,
+      positionals: command === 'get' ? ['attrs', '@e7'] : [],
+      flags: { record: true },
+      result: { selectorChain: ['id="save-v2"'] },
+      interactiveObservation: true,
+    });
+    expect(session.actions.map((a) => a.command)).toEqual(['open', command]);
 
-  const leg2 = await runReplayForTest({
-    req: baseReq({
-      positionals: [filePath],
-      flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
-    }),
-    sessionName: ctx.sessionName,
-    logPath: ctx.logPath,
-    sessionStore: ctx.sessionStore,
-    invoke,
-  });
-  expect(leg2.ok).toBe(true);
-  expect(session.actions.map((a) => a.command)).toEqual(['open', 'get', 'click']);
+    const leg2 = await runReplayForTest({
+      req: baseReq({
+        positionals: [filePath],
+        flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
+      }),
+      sessionName: ctx.sessionName,
+      logPath: ctx.logPath,
+      sessionStore: ctx.sessionStore,
+      invoke,
+    });
+    expect(leg2.ok).toBe(true);
+    expect(session.actions.map((a) => a.command)).toEqual(['open', command, 'click']);
 
-  const closeResponse = await handleCloseCommand({
-    platformServices: daemonPlatformServicesFixture(),
-    req: {
-      token: 't',
-      session: ctx.sessionName,
-      command: 'close',
-      positionals: [],
-      flags: { saveScript: true },
-    },
-    sessionName: ctx.sessionName,
-    logPath: ctx.logPath,
-    sessionStore: ctx.sessionStore,
-    leaseRegistry: ctx.leaseRegistry,
-  });
-  expect(closeResponse.ok).toBe(true);
+    const closeResponse = await handleCloseCommand({
+      platformServices: daemonPlatformServicesFixture(),
+      req: {
+        token: 't',
+        session: ctx.sessionName,
+        command: 'close',
+        positionals: [],
+        flags: { saveScript: true },
+      },
+      sessionName: ctx.sessionName,
+      logPath: ctx.logPath,
+      sessionStore: ctx.sessionStore,
+      leaseRegistry: ctx.leaseRegistry,
+    });
+    expect(closeResponse.ok).toBe(true);
 
-  const healedPath = path.join(ctx.root, 'flow.healed.ad');
-  const healedScript = fs.readFileSync(healedPath, 'utf8');
-  const parsed = parseReplayScriptDetailed(healedScript);
-  // The --record'ed corrective read DOES land in the heal, resolved to a
-  // selector (never a bare @ref).
-  expect(parsed.actions.map((a) => a.command)).toEqual(['open', 'get', 'click', 'close']);
-  const getAction = parsed.actions.find((a) => a.command === 'get');
-  expect(getAction?.positionals).toEqual(['attrs', 'id="save-v2"']);
-  const bareRefs = parsed.actions.flatMap((a) => a.positionals.filter((p) => p.startsWith('@')));
-  expect(bareRefs).toEqual([]);
+    const healedPath = path.join(ctx.root, 'flow.healed.ad');
+    const healedScript = fs.readFileSync(healedPath, 'utf8');
+    const parsed = parseReplayScriptDetailed(healedScript);
+    // The --record'ed corrective read DOES land in the heal, resolved to a
+    // selector (never a bare @ref).
+    expect(parsed.actions.map((a) => a.command)).toEqual(['open', command, 'click', 'close']);
+    const correction = parsed.actions.find((a) => a.command === command);
+    expect(correction?.positionals).toEqual(command === 'get' ? ['attrs', 'id="save-v2"'] : []);
+    const bareRefs = parsed.actions.flatMap((a) => a.positionals.filter((p) => p.startsWith('@')));
+    expect(bareRefs).toEqual([]);
 
-  // --- Replays cleanly in a fresh session too. ---
-  const fresh = setup('agent-device-repair-record-exclusion-record-fresh-');
-  const freshInvoke = makeRecordingReplayInvoke({
-    sessionStore: fresh.sessionStore,
-    sessionName: fresh.sessionName,
-  });
-  const freshRun = await runReplayForTest({
-    req: baseReq({ positionals: [healedPath] }),
-    sessionName: fresh.sessionName,
-    logPath: fresh.logPath,
-    sessionStore: fresh.sessionStore,
-    invoke: freshInvoke,
-  });
-  expect(freshRun.ok).toBe(true);
-});
+    // --- Replays cleanly in a fresh session too. ---
+    const fresh = setup('agent-device-repair-record-exclusion-record-fresh-');
+    const freshInvoke = makeRecordingReplayInvoke({
+      sessionStore: fresh.sessionStore,
+      sessionName: fresh.sessionName,
+    });
+    const freshRun = await runReplayForTest({
+      req: baseReq({ positionals: [healedPath] }),
+      sessionName: fresh.sessionName,
+      logPath: fresh.logPath,
+      sessionStore: fresh.sessionStore,
+      invoke: freshInvoke,
+    });
+    expect(freshRun.ok).toBe(true);
+  },
+);
 
 test('empty-segment guard: a --from resume refuses with an actionable --record hint when only excluded diagnostic reads happened since the divergence', async () => {
   const ctx = setup('agent-device-repair-record-exclusion-empty-segment-');
@@ -388,6 +391,12 @@ test('empty-segment guard: a --from resume refuses with an actionable --record h
     positionals: ['id', 'save-v2', 'exists'],
     flags: {},
     result: { found: true },
+    interactiveObservation: true,
+  });
+  ctx.sessionStore.recordAction(storeSessionForTest(ctx.sessionStore, session), {
+    command: 'snapshot',
+    positionals: [],
+    flags: {},
     interactiveObservation: true,
   });
   expect(session.actions.map((a) => a.command)).toEqual(['open']);

@@ -86,6 +86,11 @@ export function recordActionEntry(
     runtime: recordedEntry.runtime,
     flags: sanitizeFlags(recordedEntry.flags),
     result: recordedEntry.result,
+    ...(recordedEntry.flags.record === true
+      ? { publicationIntent: 'explicit-record' as const }
+      : recordedEntry.interactiveObservation === false
+        ? { publicationIntent: 'authored' as const }
+        : {}),
     ...(recordedEntry.targetEvidence ? { targetEvidence: recordedEntry.targetEvidence } : {}),
     ...(recordedEntry.targetEvidences ? { targetEvidences: recordedEntry.targetEvidences } : {}),
   };
