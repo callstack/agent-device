@@ -104,12 +104,12 @@ describe('acting budgets', () => {
   it('refuses an ambiguous alert without tapping, on a typed reason', async () => {
     const client = clientWithTrees([limrunAlertAmbiguousButtonsTree()]);
 
-    const error = await handleLimrunIosAlert(client, 'accept').then(
+    const thrown = await handleLimrunIosAlert(client, 'accept').then(
       () => undefined,
-      (caught: unknown) => caught,
+      (error: unknown) => error,
     );
-    expect(error).toBeInstanceOf(AppError);
-    const refusal = error as AppError;
+    expect(thrown).toBeInstanceOf(AppError);
+    const refusal = thrown as AppError;
     expect(refusal.code).toBe('COMMAND_FAILED');
     expect(refusal.details?.reason).toBe(ALERT_BUTTON_UNDECIDED_REASON);
     expect(refusal.details?.dispatched).toBe('no');
@@ -150,15 +150,29 @@ describe('acting budgets', () => {
     expect(result.kind === 'alertHandled' && result.button).toBe('Allow');
   });
 
+  it('taps exactly once on accept, and the next get reports no alert', async () => {
+    // The maintainer's live-validated timeline at the unit seam: one tap for the action, the
+    // post-tap confirm observes the app screen, and a following read sees that same absence.
+    const client = clientWithTrees([limrunAttAlertTree(), limrunAppScreenTree()]);
+
+    const handled = await handleLimrunIosAlert(client, 'accept');
+    expect(handled.kind).toBe('alertHandled');
+    expect(client.tap).toHaveBeenCalledTimes(1);
+
+    const status = await handleLimrunIosAlert(client, 'get');
+    expect(status.kind === 'alertStatus' && status.alert).toBeNull();
+    expect(status.kind === 'alertStatus' && status.message).toBe('No alert visible');
+  });
+
   it('refuses to act on an alert-shaped but unresolvable capture, without tapping', async () => {
     const client = clientWithTrees([limrunAlertTreeWithUnpressableButtons()]);
 
-    const error = await underFakeTimers(() => handleLimrunIosAlert(client, 'accept')).then(
+    const thrown = await underFakeTimers(() => handleLimrunIosAlert(client, 'accept')).then(
       () => undefined,
-      (caught: unknown) => caught,
+      (error: unknown) => error,
     );
-    expect(error).toBeInstanceOf(AppError);
-    const refusal = error as AppError;
+    expect(thrown).toBeInstanceOf(AppError);
+    const refusal = thrown as AppError;
     expect(refusal.code).toBe('COMMAND_FAILED');
     expect(refusal.details?.reason).toBe(ALERT_CAPTURE_UNDECIDED_REASON);
     expect(refusal.details?.dispatched).toBe('no');
