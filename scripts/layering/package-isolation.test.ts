@@ -258,6 +258,27 @@ test('an import ignores comments, non-literal mock arguments, other objects and 
   }
 });
 
+test('an alias an enclosing scope redeclares is a local object, not the mock API', () => {
+  for (const policy of POLICIES) {
+    const entry = "'@agent-device/provider-webdriver/plugin'";
+    const vitest = "import { vi as mocks } from 'vitest';";
+    for (const text of [
+      `${vitest}\nfunction f(mocks) { mocks.mock(${entry}); }`,
+      `${vitest}\nconst f = (mocks) => mocks.doMock(${entry});`,
+      `${vitest}\n{ const mocks = other; mocks.mock(${entry}); }`,
+      `import * as testing from 'vitest';\nconst f = (testing) => testing.vi.mock(${entry});`,
+    ]) {
+      assert.deepEqual(check(policy, {}, source(policy, text)), [], `${policy.name}: ${text}`);
+    }
+    const found = check(
+      policy,
+      {},
+      source(policy, `${vitest}\nfunction f(mocks) { return mocks; }\nmocks.mock(${entry});`),
+    );
+    assert.equal(found.length, 1, policy.name);
+  }
+});
+
 test('relative reach out of the package directory is refused', () => {
   for (const policy of POLICIES) {
     for (const specifier of [
