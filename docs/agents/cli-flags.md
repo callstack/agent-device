@@ -17,7 +17,7 @@ Pass a flag only through layers that consume it:
 2. In `src/commands/cli-grammar/*`, read the CLI flag into command input.
 3. If the flag affects daemon execution, write the input into the daemon request.
    Use `src/commands/command-projection.ts` and the command-family projection helpers.
-4. If Node.js or MCP should expose structured input, add the option to the schema in `src/commands/*-command-contracts.ts`.
+4. If Node.js or MCP should expose structured input, add the option to the `inputSchema` of its command family metadata in `src/commands/<family>/`.
    For a credential, its destination endpoint, or operator infrastructure, declare the input key with `operatorField(...)` (`src/commands/command-input.ts`).
    MCP and AI SDK tool schemas thus exclude parameters for the model to write that input.
    For a shared common key, declare the same audience in its `src/commands/common-input-fields.ts` row instead.
