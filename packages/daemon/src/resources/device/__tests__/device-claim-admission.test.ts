@@ -164,15 +164,10 @@ test('a claim this daemon holds for another session refuses the command like any
   expect(claimedSessions()).toEqual(['owning-session']);
 });
 
-// The claim a transient command holds is command-scoped (`transient:<command>`), never
-// request-scoped, so the session comparison alone cannot tell two requests of the same
-// command apart. The one in flight must not be adopted — adopting it hands the second
-// request the first's release token, and its dispose unlinks a claim still in use.
-// A public session name equal to a transient claim's label must not read as that claim's
-// owner: an in-flight command's claim is exclusive even to a request that copies its
-// address, because adopting it hands the intruder the command's release token.
-// Mutation: read the claim kind off the session string instead of the record — the
-// open session named below then stops covering, or the in-flight claim starts covering.
+// Adopting a claim whose `transientCommand` is set hands the adopter the release token of a
+// command that is still running, and disposing it unlinks a claim in use. `--session` accepts
+// any name the store can sanitize, so a copy of the label is a reachable request; only the
+// stored kind can tell the holder's own session from that copy.
 test('an in-flight transient claim refuses a request named after its label, while a real open session of that name covers', async () => {
   const { stateDir } = setup();
   const holder = makeAdmission('transient-exclusive', stateDir, 'install', 'open-a');
@@ -209,12 +204,10 @@ test('an in-flight transient claim refuses a request named after its label, whil
   expect(claimedSessions()).toEqual(['transient:install']);
 });
 
-// The label-guard branch in acquireTransientDeviceClaim: the open session's claim below is
-// named exactly this command's label, and a DIFFERENT session's `install` builds the same
-// label as its own claim session. Without the guard, resolveExistingClaim's raw string match
-// would hand that request the open session's release token (a renew-adopt), and disposing it
-// would delete a claim it never took. Mutation: drop the guard — the foreign session acquires,
-// and its dispose unlinks the open session's claim.
+// A claim's `session` is only a label to the code that renews a held claim, and renewing hands
+// the caller that claim's release token. `install` builds the label `transient:install`, so a
+// request in another session could otherwise renew an open session's claim of that name and
+// delete it on release. The stored kind is what refuses it.
 test("an open session named after a command's label is not renew-adopted by that command's requests", async () => {
   const { stateDir } = setup();
   const open = await acquireDeviceClaim({
@@ -232,6 +225,7 @@ test("an open session named after a command's label is not renew-adopted by that
     await foreign.admit(ANDROID_EMULATOR, localAndroid).catch((error: unknown) => error),
   );
   expect(error.code).toBe('DEVICE_IN_USE');
+  expect(error.details?.reason).toBe('DEVICE_CLAIM_LIVE_OWNER');
   await foreign[Symbol.asyncDispose]();
 
   // The open session's claim survived, with its original token: nothing was adopted.
@@ -240,13 +234,11 @@ test("an open session named after a command's label is not renew-adopted by that
   expect(await abandonDeviceClaim(open.ownership)).toBe('abandoned');
 });
 
-// The safety argument for kindless legacy decoding, pinned rather than commented. A record that
-// predates the kind field decodes as an open-session claim, and that is only reachable at a kind
-// decision through `isClaimOwnedByThisDaemon` — same stateDir, pid, AND process start time —
-// which a live process's command claims can never be, because a live process writes v3 kinds.
-// This forges that window (the only way in) and pins what a kindless claim may and may not do:
-// it behaves exactly as a colon-named open session's claim, never as a command claim an in-flight
-// request can adopt or have adopted from it.
+// A legacy record carries no kind, so decoding it kindless is only safe while no kind decision
+// can reach one. That decision sits behind `isClaimOwnedByThisDaemon`, which matches stateDir,
+// pid, and process start time; a record this process wrote states its kind. A record that names
+// this live process identity without stating a kind is therefore forged or a PID-reuse survivor,
+// and here it is written by hand to pin what such a record may never do: act as a command claim.
 test('a kindless legacy record under this process identity reads as the named session, never as a command claim', async () => {
   const { stateDir, claimsDir } = setup();
   fs.mkdirSync(claimsDir, { recursive: true });
@@ -290,32 +282,10 @@ test('a kindless legacy record under this process identity reads as the named se
   expect(inspectDeviceClaims({})[0]?.claim?.ownerToken).toBe('legacy-token');
 });
 
-test("another request in flight's transient claim of the same command refuses, and holds nothing", async () => {
-  const { stateDir } = setup();
-  const held = await acquireDeviceClaim({
-    device: ANDROID_EMULATOR,
-    session: 'transient:install',
-    workspace: '/worktrees/current',
-    stateDir,
-    reconcileOrphanedDeviceClaim: retainOrphanedDeviceClaims,
-  });
-  expect(held.status).toBe('acquired');
-
-  const admission = makeAdmission('transient-exclusive', stateDir, 'install', 'other-session');
-  const error = asAppError(
-    await admission.admit(ANDROID_EMULATOR, localAndroid).catch((error: unknown) => error),
-  );
-
-  expect(error.code).toBe('DEVICE_IN_USE');
-  expect(error.details?.reason).toBe('DEVICE_CLAIM_LIVE_OWNER');
-  await admission[Symbol.asyncDispose]();
-  expect(claimedSessions()).toEqual(['transient:install']);
-});
-
-// The ownerToken exemption in device-claim-admission.ts. Mutation: delete that branch —
-// the second admit below throws DEVICE_IN_USE. Reachability: binding dedupes by
-// `deviceIdentityKey` (carries `target`) while the claim key is the narrower
-// `canonicalLocalDeviceKey`, so one device through two DeviceInfo shapes double-admits.
+// Binding dedupes a request's devices by `deviceIdentityKey`, which carries `target`, while the
+// claim key is the narrower `canonicalLocalDeviceKey`, so one device can reach admission twice.
+// A claim this request took is the only claim that covers the second pass; anything else must
+// still refuse rather than be adopted on the token this request wrote.
 test('a transient claim this request took covers re-admitting the same device', async () => {
   const { stateDir } = setup();
   const admission = makeAdmission('transient-exclusive', stateDir, 'install', 'request-session');
@@ -329,11 +299,10 @@ test('a transient claim this request took covers re-admitting the same device', 
   expect(inspectDeviceClaims({})).toEqual([]);
 });
 
-// #3345's copyable-address door: session addresses are printed by `device status` and
-// re-enter through `--session`, so coverage requires the covered claim's workspace to
-// be the caller's own, canonicalized on both sides. Mutation for the pair: drop the
-// `coveredClaimIsOwnedByRequest` call in the contract's covered check — the foreign
-// workspace below then covers instead of refusing.
+// Session addresses are printed by `device status` and re-enter through `--session`, so
+// coverage has to compare what the claim records, not the string it carries. Both sides go
+// through the same canonicalization the router hashes into an implicit address, so one
+// checkout stays one workspace across its directories.
 test("a claim at this workspace's implicit address still covers its own workspace's command", async () => {
   const { root, stateDir } = setup();
   const workspace = path.join(root, 'worktree');
@@ -412,11 +381,9 @@ test('a request that carries no cwd keeps coverage of its session\u2019s claim',
   expect(claimedSessions()).toEqual(['sdk-session']);
 });
 
-// The release path is where a transient claim outlives its request: an unlink that
-// throws leaves the record live, and a live claim now refuses its own session's next
-// command. This injects the failure at the real unlink inside the real clear
-// transaction and pins the recovery: the survivor ends abandoned, so the owner's next
-// acquire supersedes it — the shape acquireTransientDeviceClaim already handles.
+// A transient claim outlives its request when the release unlink fails, and a live survivor now
+// refuses its own session's next command. The recovery is to abandon the record the unlink left
+// behind, which is the state acquireTransientDeviceClaim already supersedes.
 test('a failed release abandons the claim so the next command is not locked out', async () => {
   const { stateDir } = setup();
   const admission = makeAdmission('transient-exclusive', stateDir, 'install', 'own-session');
@@ -609,15 +576,10 @@ test('the request scope claims only for commands whose descriptor declares trans
   expect(inspectDeviceClaims({})).toEqual([]);
 });
 
-// #3345 at the seam the router runs: one daemon serves several sessions and
-// worktrees, so the owning session's `install` has to keep working while
-// another session's `install` is refused before its handler can reach a device
-// operation.
-// The P1 attack in the shape the CLI sends it: `--session transient:install` is a legal
-// explicit name (the store sanitizes only directory segments), so the router hands admission
-// that exact address. It must not read as the owner of the in-flight command's claim — the
-// claim's kind, not its label, decides — and the refusal must leave the first command holding
-// the device.
+// `--session transient:install` is a legal explicit name — the store sanitizes only directory
+// segments — so the router hands admission that exact address. It must not read as the owner of
+// a command claim that is still in flight, and the refusal must leave that command holding the
+// device.
 test('the request scope refuses a session addressed by a transient label while a command holds the device', async () => {
   const { stateDir } = setup();
   const holder = makeAdmission('transient-exclusive', stateDir, 'install', 'open-a');
