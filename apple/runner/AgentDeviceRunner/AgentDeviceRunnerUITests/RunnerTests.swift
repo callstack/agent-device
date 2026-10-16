@@ -33,9 +33,11 @@ final class RunnerTests: XCTestCase {
   /// gate; `MAIN_THREAD_TIMEOUT` is emitted by the transport when a command trips the execution
   /// watchdog, so the daemon can tell "the main thread is now occupied" from a generic failure.
   /// `APP_NOT_RUNNING` refuses a read whose session app is not running.
+  /// `NO_TEXT_INPUT_AT_POINT` refuses a coordinate fill whose point names no text input.
   enum RunnerWireErrorCode {
     static let mainThreadTimeout = "MAIN_THREAD_TIMEOUT"
     static let appNotRunning = "APP_NOT_RUNNING"
+    static let noTextInputAtPoint = "NO_TEXT_INPUT_AT_POINT"
   }
 
   static let springboardBundleId = "com.apple.springboard"

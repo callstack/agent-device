@@ -168,6 +168,7 @@ const DRIVERS: Record<string, () => Promise<unknown>> = {
   'ios-runner.reply.SCROLL_KEYBOARD_OCCLUDES_SURFACE': () =>
     replyFailure('SCROLL_KEYBOARD_OCCLUDES_SURFACE'),
   'ios-runner.reply.ALERT_NOT_FOUND': () => replyFailure('ALERT_NOT_FOUND'),
+  'ios-runner.reply.NO_TEXT_INPUT_AT_POINT': () => replyFailure('NO_TEXT_INPUT_AT_POINT'),
   'ios-runner.reply.APP_SCREEN_WINDOW_UNRESOLVED': () =>
     replyFailure('APP_SCREEN_WINDOW_UNRESOLVED'),
   'ios-runner.reply.APP_SCREEN_UNRESOLVED': () => replyFailure('APP_SCREEN_UNRESOLVED'),

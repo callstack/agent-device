@@ -52,5 +52,32 @@ extension RunnerTests {
     XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
     XCTAssertEqual(String(describing: textField.value ?? ""), "")
   }
+
+  /// A penalized coordinate `fill` whose point names no text input cannot bind its replacement to a
+  /// target, so it refuses with the typed reason instead of clearing and typing through the app-level
+  /// first responder — which, while an earlier field still holds focus, destroys that field's text.
+  @MainActor
+  func testPenalizedCoordinateFillAtAPointWithNoTextInputRefusesAndKeepsTheFocusedField() throws {
+    let field = try focusSynthesizedReplacementField()
+    defer { tearDownSynthesizedReplacementField() }
+    let seeded = try replaceSynthesizedFieldText(field, text: "stale", commandId: "seed-non-text-point")
+    XCTAssertTrue(seeded.ok, String(describing: seeded.error))
+
+    let nonTextTarget = app.staticTexts["Agent Device Runner"]
+    XCTAssertTrue(nonTextTarget.waitForExistence(timeout: appExistenceTimeout))
+    let nonTextFrame = nonTextTarget.frame
+    XCTAssertFalse(nonTextFrame.isEmpty)
+
+    let fillCommand = try runnerCommandFixture(
+      #"{"command":"type","commandId":"fill-penalized-non-text-point","text":"must-not-replace","textEntryMode":"replace","x":\#(nonTextFrame.midX),"y":\#(nonTextFrame.midY)}"#
+    )
+    let failureCountBefore = currentXCTestFailureCount()
+    let fillResponse = executeTypeCommand(activeApp: app, command: fillCommand)
+
+    XCTAssertFalse(didRecordXCTestFailure(since: failureCountBefore))
+    XCTAssertFalse(fillResponse.ok, String(describing: fillResponse.error))
+    XCTAssertEqual(fillResponse.error?.code, "NO_TEXT_INPUT_AT_POINT")
+    XCTAssertEqual(String(describing: field.value ?? ""), "stale")
+  }
 #endif
 }

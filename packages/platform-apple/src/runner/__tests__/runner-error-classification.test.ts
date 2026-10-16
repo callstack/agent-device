@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { AppError, createRequestCanceledError } from '@agent-device/kernel/errors';
 import {
+  NO_TEXT_INPUT_AT_POINT_RUNNER_CODE,
   RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES,
   classifyRunnerReportedError,
 } from '../runner-contract.ts';
@@ -94,6 +95,26 @@ test('the main-thread runner codes publish details.reason beside details.runnerE
   assert.equal(timeout.details.runnerErrorCode, 'MAIN_THREAD_TIMEOUT');
   assert.equal(timeout.details.reason, 'runner_main_thread_timeout');
   assert.equal(classifyRunnerReportedError('APP_NOT_RUNNING').details.reason, undefined);
+});
+
+// The literal is what the Swift runner encodes, so it is the contract and not the constant name:
+// a rename on one side has to fail here rather than silently split the pair.
+test('a coordinate fill refused for a point with no input keeps its code and publishes its reason', () => {
+  assert.equal(NO_TEXT_INPUT_AT_POINT_RUNNER_CODE, 'NO_TEXT_INPUT_AT_POINT');
+  const refusal = classifyRunnerReportedError(NO_TEXT_INPUT_AT_POINT_RUNNER_CODE);
+  assert.equal(refusal.code, 'NO_TEXT_INPUT_AT_POINT');
+  assert.equal(refusal.details.reason, 'no_text_input_at_point');
+  assert.equal(refusal.details.dispatched, 'no');
+  assert.equal(refusal.details.retriable, undefined);
+  // The refusal ran nothing, so it is a definite answer and never a resend.
+  const refusalError = new AppError(refusal.code, refusal.details.reason ?? '', refusal.details);
+  assert.equal(isRetryableRunnerError(refusalError), false);
+  assert.equal(isRunnerBusyError(refusalError), false);
+  // The closest negative: the same words from an unclassified failure earn no reason, so a
+  // consumer keyed on `reason` cannot mistake a reply that may have landed for this refusal.
+  const untyped = commandFailed('no text input at the provided coordinates');
+  assert.equal(untyped.details?.reason, undefined);
+  assert.equal(isRetryableRunnerError(untyped), false);
 });
 
 test('retryable requires an AppError with COMMAND_FAILED', () => {

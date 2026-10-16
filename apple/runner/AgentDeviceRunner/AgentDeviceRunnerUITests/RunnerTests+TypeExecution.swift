@@ -29,6 +29,12 @@ extension RunnerTests {
     ), let x = command.x, let y = command.y {
       // Resolved before the tap: the focus it causes can move the field away from this point.
       let inputAtPoint = coordinateTapTextInputIdentityAt(app: activeApp, x: x, y: y)
+      // No input at the point means no target to bind the replacement to. Dispatching it anyway
+      // clears and types through the app-level first responder, so a fill aimed at empty space
+      // rewrites whichever field an earlier focus left active.
+      guard let inputAtPoint else {
+        return noTextInputAtPointResponse()
+      }
       let policyKind = SynthesizedGesturePolicyKind.coordinateTap
       let context = synthesizedCoordinateContext(
         app: activeApp,
@@ -148,5 +154,21 @@ extension RunnerTests {
       )
     }
     return Response(ok: true, data: data)
+  }
+
+  /// The refusal of a coordinate `fill` whose point names no text input, answered before the focus
+  /// tap is dispatched so nothing runs. The synthesized first-responder replacement has no element
+  /// and re-resolves by the point on every read, so without the input the point named, its clear and
+  /// its typed text reach the app-level first responder: while an earlier field still holds focus,
+  /// that earlier field.
+  private func noTextInputAtPointResponse() -> Response {
+    Response(
+      ok: false,
+      error: ErrorPayload(
+        code: RunnerWireErrorCode.noTextInputAtPoint,
+        message: "no text input at the provided coordinates",
+        hint: "A coordinate fill replaces the text of the input under the point, so the point must sit inside one. Run snapshot -i, then fill the field by ref or selector, or aim at a point inside its rect."
+      )
+    )
   }
 }

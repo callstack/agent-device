@@ -420,10 +420,12 @@ extension RunnerTests {
   }
 
   /// The pre-tap lookup runs on a channel already penalized for failing XCTest reads. A lookup that
-  /// fails leaves the fill to the point; it used to record the failure, which fails the command
-  /// and ends the runner.
+  /// fails used to record the failure, which fails the command and ends the runner, and left the
+  /// fill to the point. Containment stays: no recorded failure. What changed is what the fill then
+  /// does with a point it cannot name an input for: it refuses rather than typing through the
+  /// first responder (#1721).
   @MainActor
-  func testSynthesizedReplacementContainsAFailedLookupOfTheInputUnderThePoint() throws {
+  func testSynthesizedReplacementFailsClosedOnAFailedLookupOfTheInputUnderThePoint() throws {
     let textField = try focusSynthesizedReplacementField()
     defer {
       textInputProbeIssueForTesting = nil
@@ -437,8 +439,9 @@ extension RunnerTests {
     let response = try replaceSynthesizedFieldText(textField, text: "fresh", commandId: "fill-lookup-failed")
 
     XCTAssertNil(textInputProbeIssueForTesting, "the fill made no lookup")
-    XCTAssertTrue(response.ok, String(describing: response.error))
-    XCTAssertEqual(String(describing: textField.value ?? ""), "fresh")
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "NO_TEXT_INPUT_AT_POINT")
+    XCTAssertEqual(String(describing: textField.value ?? ""), "")
   }
 #endif
 }
