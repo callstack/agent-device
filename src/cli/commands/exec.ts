@@ -176,37 +176,52 @@ async function runClaimedChild(
 }
 
 type SignalForwarding = Readonly<{
-  /** Forwards to the child's process group once it exists; a signal received earlier killed it at attach. */
+  /** Forwards to the child's process group once it exists; signals received earlier are replayed at attach. */
   attach(child: { pid?: number }): void;
   readonly signal: NodeJS.Signals | null;
   dispose(): void;
 }>;
 
+// Every terminating signal the wrapper can catch. The child leads its own
+// session, so terminal-generated signals reach only the wrapper: forwarding
+// them all is what keeps the claim and the build dying together. SIGHUP is the
+// closed terminal or dropped SSH connection, SIGQUIT the Ctrl-\; without a
+// handler either one would take the wrapper down before the release, leaving a
+// dead owner's claim while the build keeps mutating the device. SIGTSTP is
+// deliberately absent: stopping the wrapper with the child left running is the
+// shell's own semantics, and job control here would need a controlling
+// terminal the detached child does not share.
+const FORWARDED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGQUIT'] as const;
+
 function attachSignalForwarding(): SignalForwarding {
-  let signal: NodeJS.Signals | null = null;
+  let first: NodeJS.Signals | null = null;
   let child: { pid?: number } | undefined;
-  const forward = (received: NodeJS.Signals) => {
-    // The first signal owns the exit code; every received signal still reaches
-    // the group, so a child that traps or ignores one signal stays stoppable
-    // by the next.
-    if (!signal) signal = received;
-    if (child?.pid !== undefined) signalProcessGroupBestEffort(child.pid, received);
-  };
-  const onSigint = () => forward('SIGINT');
-  const onSigterm = () => forward('SIGTERM');
-  process.on('SIGINT', onSigint);
-  process.on('SIGTERM', onSigterm);
+  const received: NodeJS.Signals[] = [];
+  const handlers = new Map<NodeJS.Signals, () => void>();
+  for (const name of FORWARDED_SIGNALS) {
+    const handler = () => {
+      // The first signal owns the exit code; every received signal still reaches
+      // the group, so a child that traps or ignores one stays stoppable by the
+      // next, and the wrapper always lives to await the child and release.
+      if (!first) first = name;
+      received.push(name);
+      if (child?.pid !== undefined) signalProcessGroupBestEffort(child.pid, name);
+    };
+    handlers.set(name, handler);
+    process.on(name, handler);
+  }
   return {
     attach(next) {
       child = next;
-      if (signal && next.pid !== undefined) signalProcessGroupBestEffort(next.pid, signal);
+      if (next.pid !== undefined) {
+        for (const name of received) signalProcessGroupBestEffort(next.pid, name);
+      }
     },
     get signal() {
-      return signal;
+      return first;
     },
     dispose() {
-      process.off('SIGINT', onSigint);
-      process.off('SIGTERM', onSigterm);
+      for (const [name, handler] of handlers) process.off(name, handler);
     },
   };
 }
@@ -221,12 +236,13 @@ async function releaseExecDeviceClaim(ownership: DeviceClaimSessionOwnership): P
   try {
     outcome = await clearDeviceClaim(ownership);
   } catch (error) {
-    outcome = 'unattributable';
     process.stderr.write(
       `agent-device exec: could not release the device claim: ${
         error instanceof Error ? error.message : String(error)
       }\n`,
     );
+    // The wrapper is about to exit, so a claim left behind names a process that
+    // is gone and every acquirer reconciles it as stale.
     return;
   }
   // The wrapper is about to exit, so a claim left behind names a process that is

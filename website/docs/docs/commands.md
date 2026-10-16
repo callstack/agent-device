@@ -216,9 +216,10 @@ agent-device exec --platform android --serial emulator-5554 -- adb install app-d
   One exception, shared with every other claim: if the device reboots while `exec` holds the claim,
   the reboot already ended the build, so `open` settles the holder's durable resources, takes the
   claim, and reports the release in `warnings`.
-- The command's exit code is `exec`'s exit code. Ctrl+C (or `SIGTERM`) is forwarded to the command
-  and its whole process group before `exec` exits, and `exec` attempts to release the claim on every
-  exit path; a release that fails or can't attribute the record prints to stderr and leaves a claim
+- The command's exit code is `exec`'s exit code. Ctrl+C, terminal hangup, and Ctrl-\ (`SIGINT`,
+  `SIGHUP`, `SIGQUIT`, `SIGTERM`) are forwarded to the command and its whole process group, `exec`
+  waits for it to exit, and only then attempts to release the claim; a release that fails or can't
+  attribute the record prints to stderr and leaves a claim
   that `device release --stale` reports. A killed `exec` leaves a claim that the next `open` or `exec`
   reconciles once its owner process is proven dead.
 - Claims exist only for local devices: `exec` refuses targets on a cloud provider lease. `exec` runs

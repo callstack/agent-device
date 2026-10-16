@@ -118,6 +118,16 @@ async function waitFor(condition: () => boolean | Promise<boolean>): Promise<voi
   }
 }
 
+/** Liveness probe by pid; signal 0 sends nothing, ESRCH means the process is gone. */
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * A child that runs until the test releases it: the loop is bounded so a failed
  * assertion ends the child instead of hanging the run, and every release path
@@ -315,6 +325,43 @@ test('forwards SIGTERM to the child and exits with the signal code after releasi
   await waitFor(() => fs.existsSync(grandchildGotSignal));
   assert.equal(fs.readFileSync(grandchildGotSignal, 'utf8').trim(), 'got');
   assert.equal(storedClaim(dirs.claimsDir), undefined);
+});
+
+test('a real SIGHUP stops the child group and releases the claim before the wrapper exits', async () => {
+  const dirs = useDirs();
+  // Only a real signal exercises the wrapper's own default disposition, so this
+  // runs the wrapper as a real process like the SIGKILL case. Before the
+  // SIGHUP handler existed the wrapper died on its default action, leaving the
+  // claim pointing at a dead pid while the child kept running — so the release
+  // and child-liveness assertions below are the fail-before, not the exit code
+  // (a default-action death also reports failure there).
+  const hupFixture = path.join(import.meta.dirname, 'exec-hup-fixture.ts');
+  const child = runCmdBackground(process.execPath, ['--experimental-strip-types', hupFixture], {
+    cwd: process.cwd(),
+    env: { ...process.env, EXEC_TEST_DIRS: JSON.stringify(dirs) },
+    captureOutput: false,
+    stdio: 'ignore',
+    allowFailure: true,
+  });
+  try {
+    await waitFor(() => claimEntry()?.claim?.session === 'exec:sh');
+    const childPidFile = path.join(dirs.stateDir, 'hup-child.pid');
+    await waitFor(() => fs.existsSync(childPidFile));
+    const childPid = Number(fs.readFileSync(childPidFile, 'utf8'));
+    assert.ok(Number.isInteger(childPid) && childPid > 0);
+
+    child.child.kill('SIGHUP');
+    const exited = await child.wait;
+    // The rule: the wrapper outlives the signal, waits for the child, and the
+    // claim is already gone once its exit is observable.
+    assert.equal(storedClaim(dirs.claimsDir), undefined);
+    await waitFor(() => !processAlive(childPid));
+    assert.equal(exited.exitCode, 128 + 1);
+  } finally {
+    // The wrapper's child leads its own session, so no test-side group kill can
+    // reach it; the fixture bounds it with `sleep 8` instead.
+    child.child.kill('SIGKILL');
+  }
 });
 
 test('refuses to run on a Windows host before touching the device or the claim store', async () => {

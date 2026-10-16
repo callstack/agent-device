@@ -200,7 +200,8 @@ The claim is held by the `exec` process itself, not by a daemon, so it lasts exa
 command: while `exec` runs, another workspace's `open`, `boot`, or `install` on that device fails with
 `DEVICE_IN_USE` naming the holder, and succeeds again once `exec` exits. `exec` refuses to start the
 same way while another session holds the device. `exec` exits with your command's exit code,
-forwards Ctrl+C to it, and attempts to release the claim on every exit path; a release that fails
+forwards Ctrl+C, terminal hangup, and Ctrl-\ (`SIGINT`, `SIGHUP`, `SIGQUIT`, `SIGTERM`) to it,
+and attempts to release the claim only after the command exits; a release that fails
 leaves a claim `device release --stale` reports. If `exec` is killed outright, its claim appears in
 `agent-device device status --stale`. The next `open` or `exec` reconciles it automatically only
 when the recorded owner process is proven dead; a claim whose owner is uncertain — its PID now
