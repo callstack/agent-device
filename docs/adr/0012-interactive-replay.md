@@ -800,73 +800,108 @@ Successful text replay prints one line with replayed count and wall time.
 
 ### 5. Mandatory validation
 
-Implementation is not accepted on benchmark evidence alone. Required automated coverage is:
+Benchmark evidence alone does not establish acceptance.
+Required automated coverage follows.
 
-- matrix and provider contracts for all six `resolutionDisclosure` cells: runtime ambiguity/tiebreak and
-  the five-alternative limit, runtime/native exact-ref provenance plus the runtime-ref `label-fallback`
-  recovery disclosure, direct-iOS `not-observed`, coordinate inapplicability, Maestro inapplicability on
-  both sides of the permission (fallback taken, and allowed-but-not-taken disclosing `not-observed`), and
-  the retained direct-path waiver list;
-- an interaction mutation contract proving pre-action resolution diagnostics are not ref-issued or
-  MCP-pinned, a fresh snapshot is required before using an alternative, and a no-action target-binding
-  divergence can issue and pin its fresh report refs;
-- parser/writer unit cases for v1 identity round trips, old/new reader compatibility, escaping,
-  normalized-role source, leaf-anchored ancestry prefix matching (including root-side truncation and
-  inserted-wrapper mismatch), duplicate/unverifiable record and replay evidence, rect-never-compared,
-  malformed annotations, and mismatch-before-action behavior;
-- replay runtime tests covering all six verification paths of decision 3 — recorded-unverifiable,
-  selector-miss (`matchCount == 0`), empty identity set, verified, unique-but-wrong rebind, and
-  post-signal fall-through — including same-parent `sibling` semantics with the same child index
-  recurring under different parents, region-partitioned `viewportOrder` domains proven identical at
-  record and replay, a recorded scroll region that no longer exists (unavailable, never compared
-  cross-region), out-of-range ordinals, and document-order determinism for equal rect centers and
-  rect-less members — plus divergence-report tests for
-  compact/default/full field and byte ceilings (including digest-level `suggestionCount` with entries
-  omitted), redaction, overflow artifacts and artifact-write failure,
-  available versus sparse/capture-failed screen forms, and preservation of the original cause;
-- replay resume tests for plan-digest emission and mismatch rejection after script/include/expansion
-  changes, `resume.allowed` reasons, `--from` indexing, variable-output and control-flow rejection, and
-  `test --from` rejection;
-- daemon/client/CLI/MCP contracts proving the typed divergence survives failure, JSON and MCP structured
-  output retain it, MCP pins only actionable error-path refs, no text-only path drops the report, and the
-  `repairHint` enum is present and identical across all four projections (text, JSON, client `AppError`,
-  MCP `structuredContent`), including at compact `--level digest`;
-- `--update` retirement tests proving it never rewrites the source file and only returns bounded
-  suggestions ranked and deduplicated per decision 1's total order; and
-- decision 6 acceptance tests: a healed sibling `.ad` replays end-to-end in a **fresh session** with
-  every selector step annotated and no bare `@ref`; daemon-side `repairHint` computation for all four
-  values (`record-and-heal`, `state-repair`, `caution`, `manual`) against the four divergence kinds
-  (`selector-miss`, `identity-mismatch`, `identity-unverifiable`, `action-failure`), proving the mapping
-  is total — including the no-`targetEvidence` fail-safe to `manual` (an unannotated `action-failure` per
-  PR #1223) and the sparse/unavailable-capture fail-safe to `manual`, and the post-response-capture
-  container test for `action-failure`; `--no-record` state-fix actions excluded from the healed script
-  while the corrective selector-drift action is included; prefix steps re-annotated with fresh
-  `target-v1` evidence when recording is armed from step 1 (R1); a `--from`-continuation test proving the
-  already-recorded prefix is never duplicated by a second full replay on the same session (R2); a
-  boundary-watermark test proving a reused session's pre-invocation actions are excluded from the healed
-  script (R6); a writer fail-loud test proving a bare `@ref` that cannot materialize to a selector
-  errors with a non-zero exit rather than being silently dropped (R4); a repair-transaction lifetime test
-  proving a divergence with `resume.repairSessionHeld: true` keeps the session live and addressable for a
-  following `--from` while a non-armed divergence with only `resume.allowed: true` does not, that
-  continuation resumes off the session's **persisted** transaction with a `--from` that carries no
-  `--save-script`, that a reaped INCOMPLETE transaction surfaces `REPAIR_SESSION_EXPIRED` from a tombstone
-  keyed by session key (not `SESSION_NOT_FOUND`) and that a fresh `replay --save-script` on that key clears
-  it, and that a keep-alive-incapable implementation fails fast before step 1 (R7); a commit-state-machine
-  test proving **any teardown** (explicit `close`, idle-reap, and shutdown) commits atomically at
-  `COMPLETE`, aborts and publishes nothing (no prefix) before `COMPLETE` — with an idle-reap/shutdown of a
-  `COMPLETE` transaction committing (not tombstoning) — and is idempotent with no re-publish once
-  `COMMITTED`; a terminal-close test proving an armed replay reaching the terminal source `close`
-  **skips** it without deleting the session (C4); an atomic-publication test proving the temp file is
-  created in the target's own directory and published via a single exclusive `linkSync`
-  (create-if-absent, first writer wins); and a no-clobber test proving publication refuses ANY
-  pre-existing target — complete or partial alike, byte-for-byte unchanged — for both the default healed
-  sibling and an explicit `--save-script=<path>`, **and for an ordinary (non-repair) `open`/`close
-  --save-script` recording whose target already exists** — the writer entry point and publish primitive
-  are shared, so the refusal is uniform, not repair-only (see "Scope" below).
+**Resolution disclosure:** matrix and provider contracts cover all six `resolutionDisclosure` cells:
 
-Extend the settle benchmark (`~/.agent-device-bench/rnnav-matrix.py` pattern, external harness) with a
-replay arm only after these contracts pass: measure clean replay and one induced divergence repaired
-through the allowed `--from` loop.
+- Runtime ambiguity/tiebreak and the five-alternative limit
+- Runtime/native exact-ref provenance
+- Runtime-ref `label-fallback` disclosure
+- Direct-iOS `not-observed`
+- Coordinate inapplicability
+- Maestro inapplicability after executed fallback
+- Direct-IOS `not-observed` when fallback is permitted but unused
+- The retained direct-path waiver list
+
+**Interaction mutation:** contracts prove that pre-action resolution diagnostics neither issue refs nor receive MCP pins.
+Use of an alternative requires a fresh snapshot.
+A no-action target-binding divergence can issue and pin its fresh report refs.
+
+**Parser/writer units:** cases cover these properties:
+
+- V1 identity round trips
+- Old/new reader compatibility
+- Escape sequences
+- Normalized-role source
+- Leaf-anchored ancestry prefix comparison
+- Root-side truncation
+- Inserted-wrapper mismatch
+- Duplicate/unverifiable record and replay evidence
+- No rect comparison
+- Malformed annotations
+- Mismatch before action
+
+**Replay runtime:** tests cover all six decision 3 paths:
+
+- Recorded-unverifiable
+- Selector-miss (`matchCount == 0`)
+- Empty identity set
+- Verified
+- Unique-but-wrong rebind
+- Failure to isolate a target after both signals
+
+They also prove these positional properties:
+
+- Same-parent `sibling` semantics, including repeated child indices under different parents
+- Identical region-partitioned `viewportOrder` domains at record and replay
+- Unavailable recorded scroll regions without cross-region comparison
+- Out-of-range ordinals
+- Document-order determinism for equal rect centers and rect-less members
+
+**Divergence reports:** tests cover compact/default/full field and byte ceilings.
+Digest output includes `suggestionCount` without entries.
+Coverage also includes redaction, overflow artifacts, artifact-write failure, available/sparse/capture-failed screens, and original-cause preservation.
+
+**Resume:** tests cover digest emission and rejection after script/include/expansion changes.
+They also cover `resume.allowed` reasons, `--from` indexing, variable-output rejection, control-flow rejection, and `test --from` rejection.
+
+**Surface contracts:** daemon/client/CLI/MCP tests prove typed divergence survives failure.
+JSON and MCP structured output retain it.
+MCP pins only actionable error-path refs.
+No text-only path discards the report.
+`repairHint` is present and identical in text, JSON, client `AppError`, and MCP `structuredContent`, including compact `--level digest`.
+
+**`--update` retirement:** tests prove no source-file rewrite.
+Suggestions remain bounded, ranked, and deduplicated under decision 1's total order.
+
+**Decision 6 acceptance:** tests prove these requirements:
+
+- A healed sibling `.ad` replays completely in a **fresh session**.
+  Every selector step has an annotation.
+  There is no bare `@ref`.
+- Daemon-side `repairHint` computation covers every combination of the four hints and four divergence kinds.
+  The mapping is total.
+  Missing `targetEvidence` defaults to `manual`, including PR #1223's unannotated `action-failure`.
+  Sparse/unavailable capture also defaults to `manual`.
+  `action-failure` tests use post-response capture for the container test.
+- `--no-record` state-fix actions are excluded.
+  The corrective selector-drift action remains included.
+- Recording starts at step 1 and produces fresh `target-v1` prefix evidence (R1).
+- `--from` continuation never duplicates the recorded prefix through another full replay on the same session (R2).
+- The boundary watermark excludes pre-invocation actions from a reused session (R6).
+- A bare `@ref` without a materializable selector causes a nonzero writer error instead of silent omission (R4).
+- `resume.repairSessionHeld: true` keeps the repair session addressable for a later `--from`.
+  A non-armed divergence with only `resume.allowed: true` has no such guarantee.
+  Continuation uses persisted transaction state without another `--save-script`.
+- A reaped incomplete transaction returns `REPAIR_SESSION_EXPIRED` through a session-key tombstone, never `SESSION_NOT_FOUND`.
+  A fresh `replay --save-script` on that key clears the tombstone.
+  An implementation that cannot preserve session lifetime fails before step 1 (R7).
+- Every teardown (`close`, idle-reap, shutdown) commits atomically at `COMPLETE`.
+  Before `COMPLETE`, it aborts without any publication, including a prefix.
+  Idle-reap/shutdown at `COMPLETE` commits instead of creating a tombstone.
+  After `COMMITTED`, teardown is idempotent and never republishes.
+- An armed replay skips its terminal source `close` without session deletion (C4).
+- The temp file uses the target directory.
+  One exclusive `linkSync` publishes it with create-if-absent, first-writer-wins semantics.
+- Publication refuses **every** existing target and preserves its bytes.
+  This includes complete/partial files, the default healed sibling, and explicit `--save-script=<path>`.
+  It also includes ordinary non-repair `open`/`close --save-script` recording.
+  The shared writer entry point and publication primitive enforce uniform refusal, as “Scope” specifies.
+
+After these contracts pass, extend the settle benchmark with a replay arm.
+Use the external `~/.agent-device-bench/rnnav-matrix.py` harness pattern.
+Measure clean replay and one induced divergence repaired through the permitted `--from` loop.
 
 ### 6. Agent-supervised re-record repair ("heal-by-doing")
 
