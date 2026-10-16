@@ -23,10 +23,15 @@ export type InteractionAction =
 
 /**
  * The passive verb a refusal uses for the action it declined, so every acting guard that refuses
- * before dispatch describes the failure in the caller's own words.
+ * before dispatch describes the failure in the caller's own words. Every action is named
+ * explicitly and there is no `default`: a new `InteractionAction` fails to compile until it picks
+ * the verb its refusal will use, instead of silently being refused as a tap.
  */
 export function interactionVerb(action: InteractionAction): string {
   switch (action) {
+    case 'click':
+    case 'press':
+      return 'be tapped';
     case 'fill':
       return 'be filled';
     case 'focus':
@@ -35,7 +40,21 @@ export function interactionVerb(action: InteractionAction): string {
       return 'be long-pressed';
     case 'hover':
       return 'be hovered';
-    default:
-      return 'be tapped';
+    case 'scroll':
+      return 'be scrolled';
+    case 'swipe':
+      return 'be swiped';
+    case 'pinch':
+      return 'be pinched';
+    case 'pan':
+      return 'be panned';
+    case 'drag':
+      return 'be dragged';
+    case 'fling':
+      return 'be flung';
+    case 'rotate':
+      return 'be rotated';
+    case 'transform':
+      return 'be transformed';
   }
 }
