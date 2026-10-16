@@ -200,6 +200,12 @@
     "dispatched": "no"
   },
   {
+    "id": "ios-runner.reply.TEXT_INPUT_PROBE_UNAVAILABLE",
+    "producer": "ios-runner",
+    "trigger": "structured runner reply with code TEXT_INPUT_PROBE_UNAVAILABLE: a coordinate fill refused before its focus tap because the pre-tap input lookup could not answer",
+    "dispatched": "no"
+  },
+  {
     "id": "ios-runner.reply.APP_SCREEN_WINDOW_UNRESOLVED",
     "producer": "ios-runner",
     "trigger": "structured runner reply with code APP_SCREEN_WINDOW_UNRESOLVED: a refusal that ran nothing",

@@ -2,6 +2,26 @@ import XCTest
 
 extension RunnerTests {
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+  /// The input the coordinate probe finds at the point, failing the test when it finds none or
+  /// cannot answer. A fixture that does not expose its own field is a broken lane, not a refusal.
+  @MainActor
+  func requireTextInputAtPoint(app: XCUIApplication, x: Double, y: Double) throws -> TextInputAtPoint {
+    switch coordinateTapTextInputIdentityAt(app: app, x: x, y: y) {
+    case .input(let input):
+      return input
+    case .absent:
+      return try XCTUnwrap(
+        nil as TextInputAtPoint?,
+        "the probe found no input at the fixture's own field"
+      )
+    case .unavailable:
+      return try XCTUnwrap(
+        nil as TextInputAtPoint?,
+        "the probe could not read the fixture's own field"
+      )
+    }
+  }
+
   @MainActor
   func testPenalizedCoordinateTapOnNonTextControlDoesNotAuthorizeBareType() throws {
     app.launchArguments = ["--agent-device-text-entry-regression"]

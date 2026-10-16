@@ -257,12 +257,19 @@ export const RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES: ReadonlySet<string> = n
 ]);
 
 /**
- * The runner's own code refusing a coordinate `fill` whose point names no text input (#1721). The
- * synthesized first-responder replacement this route would otherwise take has no element, so its
+ * The runner's own code refusing a coordinate `fill` whose point identified no text input (#1721).
+ * The synthesized first-responder replacement this route would otherwise take has no element, so its
  * clear and its typed text reach whichever field already holds focus. The runner refuses before
  * dispatching the focus tap, so the reply proves nothing ran.
  */
 export const NO_TEXT_INPUT_AT_POINT_RUNNER_CODE = 'NO_TEXT_INPUT_AT_POINT';
+
+/**
+ * The runner code refusing a coordinate `fill` whose pre-tap input lookup could not answer on the
+ * degraded channel. Like NO_TEXT_INPUT_AT_POINT it answers before the focus tap, and it is not a
+ * claim that the point has no input — only that the runner could not tell.
+ */
+export const TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE = 'TEXT_INPUT_PROBE_UNAVAILABLE';
 
 /**
  * Runner codes that classify a failure for the host without renaming it on the wire. They stay
@@ -289,6 +296,7 @@ const RUNNER_REPORTED_ERROR_REASONS: ReadonlyMap<string, RunnerReportedErrorReas
   [RUNNER_BUSY_RUNNER_CODE, 'runner_busy'],
   [MAIN_THREAD_TIMEOUT_RUNNER_CODE, 'runner_main_thread_timeout'],
   [NO_TEXT_INPUT_AT_POINT_RUNNER_CODE, 'no_text_input_at_point'],
+  [TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'text_input_probe_unavailable'],
 ]);
 
 /**
@@ -310,6 +318,7 @@ const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new 
   [SCROLL_KEYBOARD_OCCLUDES_SURFACE_RUNNER_CODE, 'no'],
   [ALERT_NOT_FOUND_RUNNER_CODE, 'no'],
   [NO_TEXT_INPUT_AT_POINT_RUNNER_CODE, 'no'],
+  [TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'no'],
   ...[...RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES].map((code) => [code, 'no'] as const),
 ]);
 
@@ -320,7 +329,8 @@ const RUNNER_ERROR_CODE_DISPATCH: ReadonlyMap<string, DispatchDisclosure> = new 
 type RunnerReportedErrorReason =
   | 'runner_busy'
   | 'runner_main_thread_timeout'
-  | 'no_text_input_at_point';
+  | 'no_text_input_at_point'
+  | 'text_input_probe_unavailable';
 
 /** Wire code plus the details every path must publish for one runner-reported error code. */
 export type RunnerReportedErrorClass = Readonly<{

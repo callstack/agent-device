@@ -4,6 +4,7 @@ import { AppError, createRequestCanceledError } from '@agent-device/kernel/error
 import {
   NO_TEXT_INPUT_AT_POINT_RUNNER_CODE,
   RUNNER_SCREEN_CAPTURE_REFUSAL_RUNNER_CODES,
+  TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE,
   classifyRunnerReportedError,
 } from '../runner-contract.ts';
 import {
@@ -115,6 +116,21 @@ test('a coordinate fill refused for a point with no input keeps its code and pub
   const untyped = commandFailed('no text input identified at the provided coordinates');
   assert.equal(untyped.details?.reason, undefined);
   assert.equal(isRetryableRunnerError(untyped), false);
+});
+
+// The two coordinate-fill refusals answer different questions and must never collapse into one
+// another: an empty point is a fact about the screen, a blind lookup is a fact about the channel.
+test('a coordinate fill refused on an unreadable point reports its own code, not no-input', () => {
+  assert.equal(TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE, 'TEXT_INPUT_PROBE_UNAVAILABLE');
+  const refusal = classifyRunnerReportedError(TEXT_INPUT_PROBE_UNAVAILABLE_RUNNER_CODE);
+  assert.equal(refusal.code, 'TEXT_INPUT_PROBE_UNAVAILABLE');
+  assert.equal(refusal.details.reason, 'text_input_probe_unavailable');
+  assert.equal(refusal.details.dispatched, 'no');
+  assert.notEqual(
+    refusal.details.reason,
+    classifyRunnerReportedError(NO_TEXT_INPUT_AT_POINT_RUNNER_CODE).details.reason,
+  );
+  assert.equal(isRetryableRunnerError(new AppError(refusal.code, '', refusal.details)), false);
 });
 
 test('retryable requires an AppError with COMMAND_FAILED', () => {
