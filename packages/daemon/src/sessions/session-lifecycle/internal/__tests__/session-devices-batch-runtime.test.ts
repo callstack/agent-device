@@ -356,7 +356,9 @@ test('batch step pins nested requests to the resolved session', async () => {
   );
 
   expect(response.ok).toBe(true);
-  expect(seenSessions).toEqual([{ session: 'resolved-session', flagSession: 'resolved-session' }]);
+  // The wire address stays pinned to the resolved session. The step flag carries it only when the
+  // caller named a session (#3674): an unconditional stamp would read as caller-provened.
+  expect(seenSessions).toEqual([{ session: 'resolved-session', flagSession: undefined }]);
 });
 
 test('close clears retained materialized install paths bound to the session', async () => {

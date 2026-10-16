@@ -6,6 +6,7 @@ import {
   type DaemonResponse,
   type ResponseLevel,
   isNonDefaultResponseLevel,
+  namesSessionExplicitly,
 } from '@agent-device/kernel/contracts';
 import { AppError, asAppError, type DaemonError } from '@agent-device/kernel/errors';
 import { isRecord } from '@agent-device/kernel/record';
@@ -320,7 +321,11 @@ async function runBatchStep(
   const isFinalStep = stepNumber === totalSteps;
   const stepStartedAt = Date.now();
   const stepFlags = buildBatchStepFlags(req.flags, step.flags);
-  if (stepFlags.session === undefined) {
+  // The step is already addressed through `session:` below. Stamp the flag only when the caller
+  // genuinely named a session: an unconditional stamp would make a sessionless batch look
+  // caller-addressed to the daemon's named-session refusal, which no caller of this surface asked
+  // for (#3674). A step's own recorded flag always wins, explicit parent or not.
+  if (stepFlags.session === undefined && namesSessionExplicitly(req)) {
     stepFlags.session = sessionName;
   }
   const response = await invoke(

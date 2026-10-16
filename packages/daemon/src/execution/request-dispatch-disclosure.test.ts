@@ -34,7 +34,7 @@ vi.mock('../core/device/device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, PRE_DISPATCH_REFUSAL_REASONS } from '@agent-device/kernel/errors';
 import { resolveCommandRecordingEffect } from '@agent-device/command-registry/registry';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import type { DeviceRuntimeGateway, RuntimeFacts } from '@agent-device/contracts/platform-runtime';
@@ -276,7 +276,10 @@ async function sessionOrSelectorRefusedBeforeRouting(): Promise<unknown> {
 /**
  * The store holds `SESSION` and the request names another address, which is what a run against a
  * replaced daemon looks like. The row is about the refusal ordering: `snapshot` would otherwise
- * have chosen a device from the host inventory and answered with that.
+ * have chosen a device from the host inventory and answered with that. `snapshot` declares an
+ * `observes-app` effect, so the seam stamps `dispatched: no` on any refusal — the driver has to
+ * pin the producer's own code and reason, or a reverted guard would satisfy the row with the
+ * device-selection error it replaced.
  */
 async function namedSessionRefusedBeforeDeviceSelection(): Promise<unknown> {
   const failure = await route(makeSession(SESSION), {
@@ -284,6 +287,11 @@ async function namedSessionRefusedBeforeDeviceSelection(): Promise<unknown> {
     positionals: [],
     session: 'session-never-opened',
     meta: { requestId: 'named-session-refusal', sessionExplicit: true },
+  }).catch((error: unknown) => {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'SESSION_NOT_FOUND');
+    assert.equal(error.details?.reason, PRE_DISPATCH_REFUSAL_REASONS.namedSessionNotFound);
+    throw error;
   });
   assert.fail(`expected the named-session refusal, got ${String(failure)}`);
 }
