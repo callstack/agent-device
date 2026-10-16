@@ -1,6 +1,6 @@
 import { AppError } from '@agent-device/kernel/errors';
 import { changePlugin, listPlugins } from '@agent-device/plugins/store';
-import { PROVIDER_PLUGIN_POLICY } from '../../provider-plugin-policy.ts';
+import { BUILTIN_PROVIDER_IDS } from '../../builtin-provider-ids.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
@@ -21,16 +21,18 @@ export const pluginsCommand: ClientCommandHandler = async ({ positionals, flags 
       action as 'add' | 'update' | 'remove',
       name,
       process.env,
-      PROVIDER_PLUGIN_POLICY.reservedProviders,
+      BUILTIN_PROVIDER_IDS,
     );
   }
-  const plugins = listPlugins(process.env);
+  const plugins = await listPlugins(process.env, BUILTIN_PROVIDER_IDS);
   await writeCommandOutput(flags, { plugins, restartRequired: action !== 'list' }, () =>
     [
       ...plugins.map((plugin) =>
         plugin.compatible
           ? `${plugin.name}@${plugin.version} (${plugin.provider})`
-          : `${plugin.name}: unavailable; run plugins update ${plugin.name} or plugins remove ${plugin.name}`,
+          : plugin.name === undefined
+            ? `Plugin config unavailable: ${plugin.error?.message}`
+            : `${plugin.name}: unavailable; run plugins update ${plugin.name} or plugins remove ${plugin.name}`,
       ),
       ...(action !== 'list'
         ? ['Restart the local daemon after closing active sessions to use the changed plugin set.']

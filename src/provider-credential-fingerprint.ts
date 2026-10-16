@@ -1,35 +1,27 @@
 import crypto from 'node:crypto';
 import type { DaemonProviderCredentials } from '@agent-device/daemon-contracts/provider-credentials';
-import { cloudWebDriverProviderDeclaration } from '@agent-device/provider-webdriver/providers';
-import type { LIMRUN_PROVIDER } from '@agent-device/provider-limrun';
+import {
+  pluginCredentialVariables,
+  type PluginInventoryEntry,
+} from '@agent-device/contracts/plugin-inventory';
 import type { EnvMap } from '@agent-device/kernel/source-value';
-import { readLimrunCredentialValues } from './provider-limrun-credentials.ts';
-import { RESERVED_PLUGIN_PROVIDERS } from './provider-plugin-policy.ts';
-import { installedPlugins } from '@agent-device/plugins/store';
+import { legacyStoreManifests } from '@agent-device/plugins/store';
 
 type CredentialValues = Readonly<Record<string, string | undefined>>;
-
-// Limrun's reader narrows the variables to the leased platform; every other provider declares a
-// flat variable list, bundled or installed.
-const PROVIDER_CREDENTIAL_READERS: ReadonlyMap<
-  string,
-  (env: EnvMap, leaseBackend?: string) => CredentialValues
-> = new Map([['limrun' satisfies typeof LIMRUN_PROVIDER, readLimrunCredentialValues]]);
 
 /**
  * A versioned, non-reversible digest of the credentials a lease on `leaseBackend` reads from `env`,
  * or undefined when `env` holds none of them or the provider's credentials do not come from the
- * environment.
+ * environment. Variable names come from the daemon's plugin inventory, then from v1 manifests.
  */
 export function providerCredentialFingerprint(
   provider: string,
   env: EnvMap,
   leaseBackend?: string,
+  inventory?: readonly PluginInventoryEntry[],
 ): string | undefined {
-  const read = PROVIDER_CREDENTIAL_READERS.get(provider);
-  if (read) return digest(read(env, leaseBackend));
+  const variables = declaredCredentialVariables(provider, env, leaseBackend, inventory);
   // Whitespace-only counts as unset and other values are kept as is, as the provider's requireEnv does.
-  const variables = declaredCredentialVariables(provider, env);
   return variables
     ? digest(
         Object.fromEntries(
@@ -39,22 +31,28 @@ export function providerCredentialFingerprint(
     : undefined;
 }
 
-// Read from the declaration or manifest, so neither the client nor the daemon evaluates provider code.
-function declaredCredentialVariables(provider: string, env: EnvMap): readonly string[] | undefined {
-  if ((RESERVED_PLUGIN_PROVIDERS as readonly string[]).includes(provider))
-    return cloudWebDriverProviderDeclaration(provider)?.credentialVariables;
-  return installedPlugins(env).find((plugin) => plugin.agentDevicePlugin.provider === provider)
+// Read from the inventory or manifest, so neither the client nor the daemon evaluates provider code.
+function declaredCredentialVariables(
+  provider: string,
+  env: EnvMap,
+  leaseBackend: string | undefined,
+  inventory: readonly PluginInventoryEntry[] | undefined,
+): readonly string[] | undefined {
+  const published = inventory && pluginCredentialVariables(inventory, provider, leaseBackend);
+  if (published) return published;
+  return legacyStoreManifests(env).find((plugin) => plugin.agentDevicePlugin.provider === provider)
     ?.agentDevicePlugin.credentialVariables;
 }
 
 export function readDaemonProviderCredentials(
   env: EnvMap,
   stateDir: string,
+  inventory: readonly PluginInventoryEntry[],
 ): DaemonProviderCredentials {
   const startupEnv = { ...env };
   return {
     fingerprint: (provider, leaseBackend) =>
-      providerCredentialFingerprint(provider, startupEnv, leaseBackend),
+      providerCredentialFingerprint(provider, startupEnv, leaseBackend, inventory),
     stateDir,
   };
 }

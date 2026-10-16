@@ -24,6 +24,8 @@ export type DaemonInfo = {
   policyDigest?: string;
   /** Absent from daemons that predate capabilities, which therefore have none. */
   capabilities?: readonly DaemonCapability[];
+  /** The provider plugin inventory as published; `readPluginInventory` validates it where it is read. */
+  plugins?: unknown;
   baseUrl?: string;
   remoteInstanceId?: string;
   remoteUpstreamInstanceId?: string;
@@ -53,6 +55,7 @@ export function readDaemonInfo(infoPath: string): DaemonInfo | null {
     processStartTime: readOptionalString(parsed.processStartTime),
     policyDigest: readOptionalString(parsed.policyDigest),
     capabilities: readDaemonCapabilities(parsed.capabilities),
+    ...(Array.isArray(parsed.plugins) ? { plugins: parsed.plugins } : {}),
   };
 }
 

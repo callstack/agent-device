@@ -3,8 +3,13 @@ import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 
-const PROVIDER_PLUGIN_API_VERSION = 1;
-type PluginManifest = {
+/** Provider ids that name daemon routing, not a runtime a plugin can supply. */
+export const ROUTING_PROVIDER_IDENTITIES: readonly string[] = ['cloud', 'proxy'];
+
+const V1_PLUGIN_API_VERSION = 1;
+
+/** A v1 plugin package: the manifest declares what the host reads before any plugin code runs. */
+export type PluginManifest = {
   name: string;
   version: string;
   agentDevicePlugin: {
@@ -16,16 +21,41 @@ type PluginManifest = {
   };
 };
 
-export function assertUniquePluginProviders(
-  plugins: readonly PluginManifest[],
-  reserved: readonly string[],
+const ENVIRONMENT_VARIABLE = /^[A-Z_][A-Z0-9_]*$/;
+
+function invalidManifest(message: string): AppError {
+  return new AppError('INVALID_ARGS', message, { reason: 'invalid_plugin' });
+}
+
+export function assertLocalConnectionCapabilities(
+  policy: ConnectionProviderCapabilities | undefined,
 ): void {
-  const providers = new Set<string>(reserved);
-  for (const plugin of plugins) {
-    const provider = plugin.agentDevicePlugin.provider;
-    if (providers.has(provider))
-      throw new AppError('INVALID_ARGS', `Duplicate provider plugin: ${provider}`);
-    providers.add(provider);
+  if (policy === undefined) return;
+  if (
+    !policy ||
+    typeof policy !== 'object' ||
+    policy.leaseKind !== 'direct-device-provider' ||
+    [
+      'requiresAppAttachment',
+      'requiresRemoteDaemon',
+      'supportsArtifacts',
+      'supportsDeferredAppSelection',
+      'supportsDirectPortReverse',
+      'usesCloudWebDriverLease',
+    ].some((key) => typeof policy[key as keyof ConnectionProviderCapabilities] !== 'boolean') ||
+    policy.requiresRemoteDaemon
+  ) {
+    throw invalidManifest('Plugin connection must declare local provider capabilities');
+  }
+}
+
+export function assertCredentialVariables(variables: unknown): void {
+  if (
+    variables !== undefined &&
+    (!Array.isArray(variables) ||
+      !variables.every((name) => typeof name === 'string' && ENVIRONMENT_VARIABLE.test(name)))
+  ) {
+    throw invalidManifest('Plugin credential variables must list environment variable names');
   }
 }
 
@@ -47,7 +77,7 @@ export function readPluginManifest(directory: string): PluginManifest {
     typeof manifest?.name !== 'string' ||
     typeof manifest?.version !== 'string' ||
     !declaration ||
-    declaration.apiVersion !== PROVIDER_PLUGIN_API_VERSION ||
+    declaration.apiVersion !== V1_PLUGIN_API_VERSION ||
     typeof declaration.provider !== 'string' ||
     !/^[a-z][a-z0-9-]*$/.test(declaration.provider) ||
     typeof declaration.entry !== 'string' ||
@@ -55,61 +85,31 @@ export function readPluginManifest(directory: string): PluginManifest {
   ) {
     throw new AppError('INVALID_ARGS', 'Package does not declare a compatible provider plugin', {
       reason: 'incompatible_plugin',
-      apiVersion: PROVIDER_PLUGIN_API_VERSION,
-      hint: `Install a plugin release supporting agentDevicePlugin.apiVersion ${PROVIDER_PLUGIN_API_VERSION}.`,
+      apiVersion: V1_PLUGIN_API_VERSION,
+      hint: `Install a plugin release supporting agentDevicePlugin.apiVersion ${V1_PLUGIN_API_VERSION}.`,
     });
   }
   resolvePluginEntry(directory, declaration.entry);
-  assertLocalConnectionPolicy(declaration.connection);
+  assertLocalConnectionCapabilities(declaration.connection);
   assertCredentialVariables(declaration.credentialVariables);
   return manifest as PluginManifest;
 }
 
-function assertLocalConnectionPolicy(policy: ConnectionProviderCapabilities | undefined): void {
-  if (policy === undefined) return;
-  if (
-    !policy ||
-    typeof policy !== 'object' ||
-    policy.leaseKind !== 'direct-device-provider' ||
-    [
-      'requiresAppAttachment',
-      'requiresRemoteDaemon',
-      'supportsArtifacts',
-      'supportsDeferredAppSelection',
-      'supportsDirectPortReverse',
-      'usesCloudWebDriverLease',
-    ].some((key) => typeof policy[key as keyof ConnectionProviderCapabilities] !== 'boolean') ||
-    policy.requiresRemoteDaemon
-  ) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Plugin connection must declare local provider capabilities',
-    );
-  }
-}
-
-function assertCredentialVariables(variables: unknown): void {
-  if (
-    variables !== undefined &&
-    (!Array.isArray(variables) ||
-      !variables.every((name) => typeof name === 'string' && /^[A-Z_][A-Z0-9_]*$/.test(name)))
-  ) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Plugin credentialVariables must list environment variable names',
-    );
-  }
-}
-
-export function resolvePluginEntry(directory: string, entry: string): string {
+export function resolvePluginEntry(directory: string, target: string): string {
   try {
     const root = fs.realpathSync(directory);
-    const resolved = fs.realpathSync(path.resolve(directory, entry));
-    if (resolved.startsWith(`${root}${path.sep}`) && fs.statSync(resolved).isFile())
+    const resolved = fs.realpathSync(path.resolve(directory, target));
+    if (
+      target.startsWith('./') &&
+      resolved.startsWith(`${root}${path.sep}`) &&
+      fs.statSync(resolved).isFile()
+    ) {
       return resolved;
+    }
   } catch {}
   throw new AppError('INVALID_ARGS', 'Plugin entry must be a readable file inside its package', {
+    reason: 'plugin_load_failed',
     directory,
-    entry,
+    entry: target,
   });
 }

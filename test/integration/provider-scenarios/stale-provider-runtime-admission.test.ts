@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { DeviceLease } from '@agent-device/contracts/device';
-import { createBundledCloudWebDriverRuntimes } from '@agent-device/provider-webdriver';
+import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
 import { createLimrunRuntime, type LimrunRuntimeDependencies } from '@agent-device/provider-limrun';
 import { limrunTestDependencies } from '../../../src/platform-runtime-gateway.fixtures.ts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
@@ -65,7 +65,7 @@ vi.mock('@limrun/api/instance-client', () => ({
 
 test('a released WebDriver device remains provider-owned with deployment unavailable', async () => {
   const server = await startCloudWebDriverTestServer(new StaleWebDriverServer());
-  const runtime = webDriverRuntime(server.url);
+  const runtime = await webDriverRuntime(server.url);
   const lease = providerLease(CLOUD_WEBDRIVER_PROVIDERS.browserStack, 'webdriver-stale');
 
   try {
@@ -137,7 +137,7 @@ test('a released Limrun session exposes unavailable deployment facts before bind
 test('an active AWS WebDriver device denies unsupported install from facts before bind or provider execution', async () => {
   const server = await ProviderRegressionServer.start();
   const host = new AwsRemoteAccessHost({ appiumEndpoint: `${server.url}/wd/hub/` });
-  const runtime = awsWebDriverRuntime(host);
+  const runtime = await awsWebDriverRuntime(host);
   const provider = runtime.platformRuntimeModule;
   if (!provider) throw new Error('AWS WebDriver runtime requires its platform runtime module');
   let bindCalls = 0;
@@ -229,8 +229,8 @@ test('an active AWS WebDriver device denies unsupported install from facts befor
   }
 });
 
-function webDriverRuntime(endpoint: string) {
-  const runtimes = createBundledCloudWebDriverRuntimes({
+async function webDriverRuntime(endpoint: string) {
+  const runtimes = await createBundledCloudWebDriverRuntimes({
     env: {
       BROWSERSTACK_USERNAME: 'browser-user',
       BROWSERSTACK_ACCESS_KEY: 'browser-key',
@@ -248,8 +248,8 @@ function webDriverRuntime(endpoint: string) {
   return runtime;
 }
 
-function awsWebDriverRuntime(host: AwsRemoteAccessHost) {
-  const runtimes = createBundledCloudWebDriverRuntimes({
+async function awsWebDriverRuntime(host: AwsRemoteAccessHost) {
+  const runtimes = await createBundledCloudWebDriverRuntimes({
     env: { AWS_REGION: 'us-west-2' },
     clientVersion: 'test',
     runHostCommand: host.run,
@@ -262,7 +262,7 @@ function awsWebDriverRuntime(host: AwsRemoteAccessHost) {
 }
 
 async function allocatedDevice(
-  runtime: ReturnType<typeof webDriverRuntime>,
+  runtime: Awaited<ReturnType<typeof webDriverRuntime>>,
   lease: DeviceLease,
 ): Promise<DeviceInfo> {
   const devices = await runtime.deviceInventoryProvider({

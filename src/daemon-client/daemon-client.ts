@@ -174,8 +174,16 @@ async function readLocalProviderCredentialFingerprint(
   if (isRemoteDaemon(info) || request.command !== 'lease_allocate') return undefined;
   const { leaseProvider: provider, leaseBackend } = leaseScopeFromRequest(request);
   if (!provider) return undefined;
-  const { providerCredentialFingerprint } = await import('../provider-credential-fingerprint.ts');
-  return providerCredentialFingerprint(provider, process.env, leaseBackend);
+  const [{ providerCredentialFingerprint }, { readPluginInventory }] = await Promise.all([
+    import('../provider-credential-fingerprint.ts'),
+    import('@agent-device/contracts/plugin-inventory'),
+  ]);
+  return providerCredentialFingerprint(
+    provider,
+    process.env,
+    leaseBackend,
+    readPluginInventory(info.plugins),
+  );
 }
 
 // A developer dir is a path on the client's host, so only a local daemon can use it.

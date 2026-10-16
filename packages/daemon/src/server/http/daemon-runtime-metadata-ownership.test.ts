@@ -1,3 +1,4 @@
+import type { PluginInventoryEntry } from '@agent-device/contracts/plugin-inventory';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, expect, test, vi } from 'vitest';
@@ -6,7 +7,7 @@ import { mkdtempForTestSync, publishDaemonRegistration } from '@agent-device/tes
 const lifecycleEvents = vi.hoisted(() => [] as string[]);
 const startupFailure = vi.hoisted(() => ({ active: false }));
 const providerComposition = vi.hoisted(() => ({
-  skipped: [] as Array<{ provider: string; error: Error & { code: string } }>,
+  inventory: [] as PluginInventoryEntry[],
 }));
 
 import {
@@ -42,7 +43,7 @@ function startRuntime(stateDir: string, exit: (code: number) => void) {
           lifecycleEvents.push('gateway-shutdown');
         },
       }),
-      skippedProviderRuntimes: providerComposition.skipped,
+      pluginInventory: providerComposition.inventory,
     })),
     env: {
       ...process.env,
@@ -75,7 +76,7 @@ function publishSuccessor(paths: DaemonPaths): void {
 afterEach(() => {
   startupFailure.active = false;
   lifecycleEvents.length = 0;
-  providerComposition.skipped = [];
+  providerComposition.inventory = [];
   vi.restoreAllMocks();
 });
 
@@ -147,16 +148,26 @@ test('a shutdown removes its own metadata and reports an unverified release', as
   }
 });
 
-test('a skipped provider runtime is logged after this daemon publishes its record', async () => {
+test('a failed provider plugin is logged and published after this daemon publishes its record', async () => {
   const stateDir = mkdtempForTestSync('agent-device-daemon-provider-skip-');
-  const error = Object.assign(new Error('Limrun instance access is missing X.'), {
-    code: 'INVALID_ARGS',
-  });
-  providerComposition.skipped = [{ provider: 'limrun', error }];
+  const failed = {
+    provider: 'limrun',
+    source: 'builtin',
+    state: 'failed',
+    error: { code: 'INVALID_ARGS', message: 'Limrun instance access is missing X.' },
+    credentials: { variables: [], byBackend: {} },
+  } as const;
+  providerComposition.inventory = [failed];
   const runtime = await startRuntime(stateDir, () => {});
   try {
-    const skipped = logEvents(stateDir).find(({ phase }) => phase === 'provider_runtime_skipped');
-    expect(skipped?.data).toMatchObject({ provider: 'limrun', code: 'INVALID_ARGS' });
+    const event = logEvents(stateDir).find(({ phase }) => phase === 'provider_plugin_failed');
+    expect(event?.data).toMatchObject({
+      provider: 'limrun',
+      source: 'builtin',
+      code: 'INVALID_ARGS',
+    });
+    const published = JSON.parse(fs.readFileSync(resolveDaemonPaths(stateDir).infoPath, 'utf8'));
+    expect(published.plugins).toEqual([failed]);
   } finally {
     await runtime?.shutdown();
   }

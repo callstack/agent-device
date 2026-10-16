@@ -22,6 +22,7 @@ import {
   connectProviderNamesForError,
   connectionProviderCapabilities,
   isConnectProviderName,
+  primeProviderConnection,
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
 import {
@@ -54,6 +55,7 @@ import {
 
 export const connectCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
   const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
+  await primeProviderConnection(positionals[0]);
   const provider = readConnectProvider(positionals);
   assertConnectProviderUsage(provider, flags);
   const resolved = await resolveConnectProviderProfile({ provider, flags, stateDir });
@@ -343,6 +345,7 @@ export const connectionCommand: ClientCommandHandler = async ({ positionals, fla
     await writeNoRemoteConnectionOutput(flags, session);
     return true;
   }
+  await primeProviderConnection(state.leaseProvider);
   const leasePreparation = buildLeasePreparationNotice(state);
   const runtimePreparation = buildRuntimePreparationNoticeFromState(state);
   await writeCommandOutput(flags, serializeConnectionState({ state, runtimePreparation }), () =>

@@ -1,3 +1,4 @@
+import { createBundledCloudWebDriverRuntimes } from './bundled-cloud-webdriver-runtimes.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import type { IncomingHttpHeaders } from 'node:http';
@@ -6,7 +7,6 @@ import { test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
 import {
   bundledCloudWebDriverProvider,
-  createBundledCloudWebDriverRuntimes,
   type RunHostCommand,
 } from '@agent-device/provider-webdriver';
 import type {
@@ -38,7 +38,7 @@ test('BrowserStack facade prepares capabilities, uploads apps, and returns artif
       const appPath = path.join(tempDir, 'demo.apk');
       fs.writeFileSync(appPath, 'fake apk');
       const runtime = runtimeFor(
-        createBundledCloudWebDriverRuntimes({
+        await createBundledCloudWebDriverRuntimes({
           env: {
             BROWSERSTACK_USERNAME: 'user',
             BROWSERSTACK_ACCESS_KEY: 'key',
@@ -91,7 +91,7 @@ test('BrowserStack facade prepares capabilities, uploads apps, and returns artif
 test('BrowserStack facade nests device-feature capabilities inside bstack:options', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const runtime = runtimeFor(
-      createBundledCloudWebDriverRuntimes({
+      await createBundledCloudWebDriverRuntimes({
         env: {
           BROWSERSTACK_USERNAME: 'user',
           BROWSERSTACK_ACCESS_KEY: 'key',
@@ -153,7 +153,7 @@ test('AWS Device Farm facade rejects device features it does not read at session
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);
     const runtime = runtimeFor(
-      createBundledCloudWebDriverRuntimes({
+      await createBundledCloudWebDriverRuntimes({
         env: { AWS_REGION: 'us-west-2' },
         clientVersion: CLIENT_VERSION,
         runHostCommand: host.run,
@@ -326,7 +326,7 @@ test('TestMu uploads the materializer-selected simulator archive through the plu
 test('BrowserStack refuses a refused field on a repeat allocation of its live lease', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const runtime = runtimeFor(
-      createBundledCloudWebDriverRuntimes({
+      await createBundledCloudWebDriverRuntimes({
         env: {
           BROWSERSTACK_USERNAME: 'user',
           BROWSERSTACK_ACCESS_KEY: 'key',
@@ -369,7 +369,7 @@ test('AWS Device Farm facade uses the injected host-command capability for its f
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     const host = new FakeAwsHostCommand(`${server.url}/wd/hub/`);
     const runtime = runtimeFor(
-      createBundledCloudWebDriverRuntimes({
+      await createBundledCloudWebDriverRuntimes({
         env: { AWS_REGION: 'us-west-2' },
         clientVersion: CLIENT_VERSION,
         runHostCommand: host.run,

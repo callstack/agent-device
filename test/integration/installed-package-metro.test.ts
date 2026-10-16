@@ -90,6 +90,52 @@ async function runNodeModuleJson(cwd: string, args: string[], script: string): P
   return readJson(stdout);
 }
 
+/** A v2 plugin written against the packed `agent-device/plugins` types, type-checked as a consumer. */
+async function typeCheckInstalledPluginContract(consumerRoot: string): Promise<void> {
+  const source = path.join(consumerRoot, 'plugin-contract-smoke.ts');
+  fs.writeFileSync(
+    source,
+    `import type { AgentDevicePluginFactory } from 'agent-device/plugins';
+
+type ExampleOptions = { credentials?: { username: string; accessKey: string } };
+
+const example: AgentDevicePluginFactory<ExampleOptions> = (options = {}) => ({
+  apiVersion: 2,
+  provider: 'example',
+  credentials: {
+    variables: options.credentials ? [] : ['EXAMPLE_USERNAME', 'EXAMPLE_ACCESS_KEY'],
+    byBackend: { 'android-instance': ['EXAMPLE_USERNAME'] },
+  },
+  setup: async (host) => ({
+    runtime: { provider: 'example', shutdown: async () => {}, hostEnv: host.env },
+    platformModule: {
+      owner: { kind: 'provider-runtime', provider: 'example', instance: 'example' },
+      loadRuntime: async () => ({}),
+    },
+  }),
+});
+
+export default example;
+`,
+  );
+  await execFileText(
+    process.execPath,
+    [
+      path.join(repoRoot, 'node_modules/typescript/bin/tsc'),
+      '--noEmit',
+      '--strict',
+      '--target',
+      'es2022',
+      '--module',
+      'nodenext',
+      '--moduleResolution',
+      'nodenext',
+      source,
+    ],
+    { cwd: consumerRoot },
+  );
+}
+
 function acceptWebSocket(socket: Duplex, key: string): void {
   const accept = crypto
     .createHash('sha1')
@@ -227,12 +273,25 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
     );
 
     const pluginTypes = fs.readFileSync(path.join(installedPackageRoot, 'dist/src/plugins.d.ts'));
-    assert.ok(pluginTypes.length < 1024);
+    assert.ok(pluginTypes.length < 16 * 1024);
     const webDriverPluginTypes = fs.readFileSync(
       path.join(installedPackageRoot, 'dist/src/plugins/webdriver.d.ts'),
     );
     assert.ok(webDriverPluginTypes.length < 5120);
-    assert.match(pluginTypes.toString(), /export (?:type )?\{ ProviderPluginHost \}/);
+    for (const exported of [
+      'AgentDevicePlugin',
+      'AgentDevicePluginFactory',
+      'PluginConnection',
+      'PluginCredentials',
+      'PluginSetupResult',
+      'ProviderPluginHost',
+    ]) {
+      assert.match(
+        pluginTypes.toString(),
+        new RegExp(`export (?:type )?\\{[^}]*\\b${exported}\\b`),
+      );
+    }
+    await typeCheckInstalledPluginContract(consumerRoot);
     metroPort = await listenOnLoopback(metroServer);
     t.after(async () => {
       await closeLoopbackServer(metroServer);

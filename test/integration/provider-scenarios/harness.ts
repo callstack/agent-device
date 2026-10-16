@@ -45,7 +45,7 @@ import {
   createTestDeviceInventoryGatewaysFromProvider,
 } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import type { PlatformRuntimeProviderRegistration } from '../../../src/platform-runtime-gateway.ts';
-import { createProviderPlatformRuntimeRegistrations } from '../../../src/provider-device-runtimes.ts';
+import { createProviderPlatformRuntimeRegistrations } from './provider-platform-registrations.ts';
 
 const PROVIDER_SCENARIO_TEMP_REMOVE_OPTIONS = {
   recursive: true,

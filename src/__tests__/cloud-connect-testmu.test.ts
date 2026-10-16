@@ -13,9 +13,8 @@ import testMuPlugin from '@agent-device/testmu';
 import { createPluginHost } from '@agent-device/plugins/host';
 import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
 import { mkdtempForTestSync, pluginHome, selectPlugin } from '@agent-device/test-kit';
-import { installedPlugins } from '@agent-device/plugins/store';
 import manifest from '@agent-device/testmu/package.json' with { type: 'json' };
-import type { PluginConnection } from '@agent-device/plugins/connection';
+import type { PluginConnectionCallbacks } from '@agent-device/plugins/connection';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
 vi.mock('@agent-device/testmu/connection-verification', () => ({
@@ -24,9 +23,9 @@ vi.mock('@agent-device/testmu/connection-verification', () => ({
 vi.mock('@agent-device/plugins/load', () => ({
   withPluginConnection: async (
     _provider: string,
+    _builtinProviders: readonly string[],
     env: NodeJS.ProcessEnv,
-    _policy: unknown,
-    runConnection: (connection: PluginConnection) => Promise<unknown>,
+    runConnection: (connection: PluginConnectionCallbacks) => Promise<unknown>,
   ) => {
     const registration = testMuPlugin(createPluginHost(env, undefined));
     return await runConnection(registration.connection);
@@ -41,10 +40,18 @@ afterEach(() => {
 const mockedVerifyWebDriverConnection = vi.mocked(verifyTestMuConnection);
 
 beforeEach(() => {
-  const { home, env } = pluginHome();
+  const { home } = pluginHome();
   selectPlugin(home, manifest.name, 'testmu', 'export default () => {};');
-  const [plugin] = installedPlugins(env);
-  const manifestPath = path.join(plugin!.directory, 'package.json');
+  const { installation } = JSON.parse(fs.readFileSync(path.join(home, 'config.json'), 'utf8'))
+    .plugins[manifest.name];
+  const manifestPath = path.join(
+    home,
+    'plugins',
+    installation,
+    'node_modules',
+    manifest.name,
+    'package.json',
+  );
   const declared = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   declared.agentDevicePlugin.connection = manifest.agentDevicePlugin.connection;
   fs.writeFileSync(manifestPath, JSON.stringify(declared));

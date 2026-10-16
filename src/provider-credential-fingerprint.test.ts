@@ -2,10 +2,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import {
-  providerCredentialFingerprint,
-  readDaemonProviderCredentials,
+  providerCredentialFingerprint as fingerprintFor,
+  readDaemonProviderCredentials as daemonCredentialsFor,
 } from './provider-credential-fingerprint.ts';
+import type { EnvMap } from '@agent-device/kernel/source-value';
+import { builtinPluginInventory } from './__tests__/test-utils/builtin-plugin-inventory.ts';
 import { pluginHome, selectPluginManifest } from '@agent-device/test-kit';
+
+const inventory = await builtinPluginInventory();
+const providerCredentialFingerprint = (provider: string, env: EnvMap, leaseBackend?: string) =>
+  fingerprintFor(provider, env, leaseBackend, inventory);
+const readDaemonProviderCredentials = (env: EnvMap, stateDir: string) =>
+  daemonCredentialsFor(env, stateDir, inventory);
 
 const BROWSERSTACK_ENV = { BROWSERSTACK_USERNAME: 'user', BROWSERSTACK_ACCESS_KEY: 'key-1' };
 
@@ -57,7 +65,7 @@ test('a fingerprint hashes the exact values each provider reads', () => {
     }),
   ).not.toBe(browserstack);
   const limrun = providerCredentialFingerprint('limrun', { LIMRUN_API_KEY: 'lim-key' });
-  expect(providerCredentialFingerprint('limrun', { LIMRUN_API_KEY: ' lim-key ' })).toBe(limrun);
+  expect(providerCredentialFingerprint('limrun', { LIMRUN_API_KEY: ' lim-key ' })).not.toBe(limrun);
 });
 
 test('a provider name that only matches an inherited object key has no fingerprint', () => {

@@ -5,6 +5,11 @@ import { IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
 import { createDaemonRuntimeDeps } from './daemon-composition.ts';
 import { setActiveProviderDeviceRuntimes } from './provider-device-runtime.ts';
 
+const ports = vi.hoisted(() => ({
+  inventoryGateways: vi.fn(async (): Promise<object> => ({})),
+  shutdownProviders: vi.fn(async () => []),
+}));
+
 vi.mock('./platform-runtime.ts', () => ({
   androidObservation: {},
   createRequestPlatformProviders: () => ({
@@ -22,18 +27,23 @@ vi.mock('./platform-runtime.ts', () => ({
     bind: async () => {
       throw new Error('unused');
     },
-    shutdown: async () => {},
+    shutdown: async () => [],
   }),
-  createPlatformDeviceInventoryGateways: () => ({}),
+  createPlatformDeviceInventoryGateways: ports.inventoryGateways,
 }));
 
 vi.mock('./provider-device-runtimes.ts', () => ({
-  DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS: [],
-  createDaemonProviderRuntimeComposition: async () => ({ runtimes: [], platformModules: [] }),
+  createDaemonProviderRuntimeComposition: async () => ({
+    runtimes: [],
+    platformModules: [],
+    shutdown: ports.shutdownProviders,
+    inventory: [],
+  }),
 }));
 
 afterEach(() => {
   setActiveProviderDeviceRuntimes([]);
+  vi.clearAllMocks();
 });
 
 test('the composed interactor resolution resolves the interactor of the provider that owns the device', async () => {
@@ -62,4 +72,44 @@ test('the composed interactor resolution resolves the interactor of the provider
   await expect(deps.interactorResolution.resolve(IOS_SIMULATOR, {})).resolves.toBe(
     providerInteractor,
   );
+});
+
+test('a composition step that fails after the plugins were set up closes them once and hands nothing over', async () => {
+  const baseDir = mkdtempForTestSync('agent-device-daemon-composition-rollback-');
+  ports.inventoryGateways.mockRejectedValueOnce(new Error('inventory gateways failed'));
+
+  await expect(
+    createDaemonRuntimeDeps({
+      env: { ...process.env, AGENT_DEVICE_STATE_DIR: baseDir },
+      baseDir,
+      sessionsDir: `${baseDir}/sessions`,
+      assertShutdownAllowed: undefined,
+      resolveSessionDir: (sessionId) => `${baseDir}/sessions/${sessionId}`,
+      resolveSessionArtifacts: () => {
+        throw new Error('unused');
+      },
+      openWebSessionNames: () => [],
+    }),
+  ).rejects.toThrow('inventory gateways failed');
+
+  expect(ports.shutdownProviders).toHaveBeenCalledOnce();
+});
+
+test('a composition that succeeds leaves the plugins open for the daemon to close', async () => {
+  const baseDir = mkdtempForTestSync('agent-device-daemon-composition-owned-');
+  const deps = await createDaemonRuntimeDeps({
+    env: { ...process.env, AGENT_DEVICE_STATE_DIR: baseDir },
+    baseDir,
+    sessionsDir: `${baseDir}/sessions`,
+    assertShutdownAllowed: undefined,
+    resolveSessionDir: (sessionId) => `${baseDir}/sessions/${sessionId}`,
+    resolveSessionArtifacts: () => {
+      throw new Error('unused');
+    },
+    openWebSessionNames: () => [],
+  });
+
+  expect(ports.shutdownProviders).not.toHaveBeenCalled();
+  await deps.shutdownProviderRuntimes();
+  expect(ports.shutdownProviders).toHaveBeenCalledOnce();
 });

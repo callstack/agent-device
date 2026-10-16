@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
-import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import {
   DAEMON_STARTUP_EXIT_CODES,
   tryAcquireDaemonRegistration,
@@ -65,14 +64,13 @@ test('daemon startup installs the interactor resolution the composition supplied
   }
 });
 
-test('a daemon attempt losing the lock shuts down every constructed provider', async () => {
+test('a daemon attempt losing the lock shuts the providers down through the composition', async () => {
   const stateDir = mkdtempForTestSync('daemon-held-lock-');
   const held = await tryAcquireDaemonRegistration(resolveDaemonPaths(stateDir));
   if (held.status !== 'acquired') throw new Error('registration fixture refused');
-  const shutdown = vi.fn(() => {
+  const shutdownProviderRuntimes = vi.fn(async () => {
     throw new Error('cleanup failed');
   });
-  const otherShutdown = vi.fn(async () => {});
   const exit = vi.fn();
   const runtime = await startDaemonRuntime({
     env: { AGENT_DEVICE_STATE_DIR: stateDir },
@@ -81,19 +79,11 @@ test('a daemon attempt losing the lock shuts down every constructed provider', a
     stderr: { write: () => {} },
     stdout: { write: () => {} },
     composeDeps: daemonRuntimeDepsFixture({
-      providerDeviceRuntimes: [shutdown, otherShutdown].map(
-        (stop, index) =>
-          ({
-            provider: `fixture-${index}`,
-            shutdown: stop,
-            leaseLifecycle: {},
-          }) as unknown as ProviderDeviceRuntime,
-      ),
+      shutdownProviderRuntimes,
     }),
   });
   expect(runtime).toBeNull();
-  expect(shutdown).toHaveBeenCalledOnce();
-  expect(otherShutdown).toHaveBeenCalledOnce();
+  expect(shutdownProviderRuntimes).toHaveBeenCalledOnce();
   expect(exit).toHaveBeenCalledWith(DAEMON_STARTUP_EXIT_CODES.busy);
   await held.owner.finish();
 });
