@@ -80,6 +80,40 @@ function resolveRealPath(filePath: string): string {
   }
 }
 
+/** What `daemon.json` holds: no file, a file that cannot be read, text that is not a record, or the record. */
+export type DaemonRecordRead =
+  | Readonly<{ status: 'absent' | 'unreadable' | 'invalid' }>
+  | Readonly<{ status: 'present'; record: Readonly<Record<string, unknown>> }>;
+
+/**
+ * The one reader of `daemon.json`; registration, status and the client's connection info are
+ * projections of it. Only a path the host reports as gone proves there is no record: a permission
+ * error or I/O fault leaves a file whose contents are unknown, which no caller may read as "someone
+ * removed it".
+ */
+export function readDaemonRecord(infoPath: string): DaemonRecordRead {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(infoPath, 'utf8');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | null)?.code;
+    return { status: code === 'ENOENT' || code === 'ENOTDIR' ? 'absent' : 'unreadable' };
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? { status: 'present', record: parsed as Record<string, unknown> }
+      : { status: 'invalid' };
+  } catch {
+    return { status: 'invalid' };
+  }
+}
+
+/** The transport a daemon recorded in `daemon.json`; anything else is no recorded transport. */
+export function readRecordedDaemonTransport(value: unknown): DaemonServerMode | undefined {
+  return value === 'socket' || value === 'http' || value === 'dual' ? value : undefined;
+}
+
 export function resolveDaemonServerMode(raw: string | undefined): DaemonServerMode {
   const normalized = (raw ?? '').trim().toLowerCase();
   if (normalized === 'http') return 'http';

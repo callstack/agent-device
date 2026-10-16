@@ -7,6 +7,7 @@ import { mkdtempForTestSync } from '@agent-device/test-kit';
 const mocks = vi.hoisted(() => ({
   cleanupDaemonOwner: vi.fn(async () => undefined),
   readDaemonShutdownReport: vi.fn(),
+  readDaemonStatus: vi.fn(),
   readDaemonStopIdentity: vi.fn(),
   stopDaemon: vi.fn(),
   writeCommandOutput: vi.fn(),
@@ -24,6 +25,9 @@ vi.mock('@agent-device/daemon-contracts/daemon-shutdown-report', () => ({
 }));
 vi.mock('../../../platform-runtime-daemon-owner-cleanup.ts', () => ({
   createDaemonOwnerCleanup: () => ({ cleanup: mocks.cleanupDaemonOwner }),
+}));
+vi.mock('@agent-device/daemon-contracts/daemon-registration', () => ({
+  readDaemonStatus: mocks.readDaemonStatus,
 }));
 vi.mock('../shared.ts', () => ({ writeCommandOutput: mocks.writeCommandOutput }));
 
@@ -45,7 +49,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-test('accepts only daemon stop', async () => {
+test('accepts only daemon stop and status', async () => {
   await assert.rejects(
     async () =>
       await daemonCommand({
@@ -219,6 +223,54 @@ test('routes an unattributable claim to the default status view, never to --stal
     expect(rendered).toContain('No device release route settles it');
     expect(rendered).not.toContain('then release with');
     expect(rendered).not.toContain('Inspect with: agent-device device status --stale');
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+test('daemon status reads the daemon record without stopping or contacting the daemon', async () => {
+  const stateDir = mkdtempForTestSync('agent-device-daemon-command-');
+  const status = {
+    state: 'running',
+    stateDir,
+    pid: 321,
+    version: '0.21.30',
+    plugins: [
+      {
+        provider: 'browserstack',
+        source: 'builtin',
+        state: 'active',
+        credentials: { variables: [], byBackend: {} },
+      },
+      {
+        provider: 'testmu',
+        source: 'store',
+        package: '@agent-device/testmu',
+        version: '1.0.0',
+        state: 'failed',
+        error: { code: 'INVALID_ARGS', message: 'bad plugin' },
+        credentials: { variables: [], byBackend: {} },
+      },
+    ],
+  };
+  mocks.readDaemonStatus.mockReturnValue(status);
+
+  try {
+    await daemonCommand({
+      positionals: ['status'],
+      flags: { help: false, json: true, stateDir, version: false },
+      client: {} as never,
+    });
+
+    expect(mocks.stopDaemon).not.toHaveBeenCalled();
+    expect(mocks.writeCommandOutput).toHaveBeenCalledWith(
+      expect.objectContaining({ json: true }),
+      status,
+      expect.any(Function),
+    );
+    const render = mocks.writeCommandOutput.mock.calls[0]![2] as () => string;
+    expect(render()).toContain('testmu [store] @agent-device/testmu@1.0.0 - failed: bad plugin');
+    expect(render()).toContain('browserstack [builtin] builtin - active');
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

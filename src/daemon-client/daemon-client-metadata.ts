@@ -4,6 +4,8 @@ import { isProcessPid } from '@agent-device/host-kit/process';
 import type { DaemonCodeOrigin } from '@agent-device/host-kit/code-signature';
 import {
   readDaemonCapabilities,
+  readDaemonRecord,
+  readRecordedDaemonTransport,
   resolveDaemonPaths,
   type DaemonCapability,
   type DaemonPaths,
@@ -37,9 +39,9 @@ export type DaemonMetadataState = {
 };
 
 export function readDaemonInfo(infoPath: string): DaemonInfo | null {
-  const data = readJsonFile(infoPath);
-  if (!data || typeof data !== 'object') return null;
-  const parsed = data as Partial<DaemonInfo>;
+  const read = readDaemonRecord(infoPath);
+  if (read.status !== 'present') return null;
+  const parsed = read.record as Partial<DaemonInfo>;
   const token = readRequiredDaemonToken(parsed);
   if (!token) return null;
   const ports = readDaemonInfoPorts(parsed);
@@ -47,7 +49,7 @@ export function readDaemonInfo(infoPath: string): DaemonInfo | null {
   return {
     token,
     ...ports,
-    transport: readDaemonInfoTransport(parsed.transport),
+    transport: readRecordedDaemonTransport(parsed.transport),
     pid: isProcessPid(parsed.pid) ? parsed.pid : 0,
     version: readOptionalString(parsed.version),
     codeOrigin: readDaemonInfoCodeOrigin(parsed.codeOrigin),
@@ -74,10 +76,6 @@ function readDaemonInfoPorts(
 
 function readDaemonInfoCodeOrigin(value: unknown): DaemonInfo['codeOrigin'] {
   return value === 'installed' || value === 'checkout' ? value : undefined;
-}
-
-function readDaemonInfoTransport(value: unknown): DaemonInfo['transport'] {
-  return value === 'socket' || value === 'http' || value === 'dual' ? value : undefined;
 }
 
 function readOptionalString(value: unknown): string | undefined {
@@ -109,13 +107,4 @@ export function resolveDaemonStartupHint(
     .filter(Boolean)
     .join(' and ');
   return `Daemon startup did not establish a reachable owner. ${artifacts ? `State was retained at ${artifacts}. ` : ''}Retry with --debug and inspect daemon diagnostics. Before upgrading, stop all older clients and daemons with their original CLI and prevent them from returning to this state directory. Unverified lock state requires confirming every user stopped before manual recovery; deleting metadata alone is not a safe reset.`;
-}
-
-function readJsonFile(filePath: string): unknown | null {
-  if (!fs.existsSync(filePath)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown;
-  } catch {
-    return null;
-  }
 }

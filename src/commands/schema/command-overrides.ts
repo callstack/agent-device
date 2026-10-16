@@ -14,12 +14,14 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     text: {
       summary: 'Manage installed provider plugins',
       description:
-        'Install, list, update, or remove npm provider plugins in AGENT_DEVICE_HOME (default ~/.agent-device). Changes take effect after restarting the local daemon. Use --json for structured results.',
+        'Install, list, update, or remove npm provider plugins in AGENT_DEVICE_HOME (default ~/.agent-device). Changes take effect after restarting the local daemon. list works offline and, when a daemon is running for --state-dir, also reports the providers it registered. Use --json for structured results.',
     },
-    usageOverride: 'plugins list|add <package[@version]>|update <package>|remove <package>',
+    usageOverride:
+      'plugins list [--state-dir <path>]|add <package[@version]>|update <package>|remove <package>',
     listUsageOverride: 'plugins',
     positionalArgs: ['list|add|update|remove', 'package?'],
-    supportedFlags: [],
+    flagsByAction: { list: ['stateDir'], add: [], update: [], remove: [] },
+    supportedFlags: ['stateDir'],
   },
   cdp: {
     text: {
@@ -45,14 +47,17 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
   },
   daemon: {
     text: {
-      summary: 'Stop a local daemon and clean up resources',
+      summary: 'Stop a local daemon or show the providers it registered',
       description:
-        'Stop a local daemon after verifying its PID/start-time identity. Use --clean to remove retained Apple runner processes and leases owned by that daemon.',
+        'stop stops a local daemon after verifying its PID/start-time identity. Use --clean to remove retained Apple runner processes and leases owned by that daemon. status reads the daemon record without contacting the daemon and lists every provider plugin it registered, built in or installed, with the reason any plugin failed to register. Use --json for structured results.',
     },
-    usageOverride: 'daemon stop [--state-dir <path>]',
-    listUsageOverride: 'daemon stop',
-    positionalArgs: ['stop'],
+    usageOverride:
+      'daemon stop [--clean] [--state-dir <path>] | daemon status [--state-dir <path>]',
+    usageFlags: [],
+    listUsageOverride: 'daemon stop|status',
+    positionalArgs: ['stop|status'],
     allowedFlags: ['clean'],
+    flagsByAction: { stop: ['clean'], status: [] },
     supportedFlags: ['stateDir'],
   },
   device: {
