@@ -52,6 +52,17 @@ export {
 } from './host-execution.ts';
 export { pinOwnProcessStartTime } from './host-process-mock.ts';
 export {
+  ELEMENT14_DISTINCT_SUBTREE_NODES,
+  EQUIVALENT_WRAPPER_CHAIN_NODES,
+  INDEXED_PARITY_POLICY_NODES,
+  RN_TEXT_ECHO_AUTHORED_CHILD_NODES,
+  RN_TEXT_ECHO_DISTINCT_SUBTREE_NODES,
+  RN_TEXT_ECHO_NODES,
+  RN_TEXT_ECHO_OFFSET_RECT_NODES,
+  TWO_ACTIONABLE_WRAPPER_CHAIN_NODES,
+  UNVERIFIED_HITTABILITY_WRAPPER_CHAIN_NODES,
+} from './interaction-targeting.fixtures.ts';
+export {
   closeLoopbackServer,
   listenOnLoopback,
   type LoopbackServer,

@@ -775,7 +775,6 @@ test('the real tree parses, declares, and passes R11', () => {
     '@agent-device/selectors/interaction-error',
     '@agent-device/selectors/interaction-positionals',
     '@agent-device/selectors/interaction-targeting',
-    '@agent-device/selectors/interaction-targeting-fixtures',
     '@agent-device/selectors/interaction-touch-point',
     '@agent-device/selectors/parameterized-recorded-fill',
     '@agent-device/selectors/press-retarget',
