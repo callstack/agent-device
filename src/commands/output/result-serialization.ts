@@ -144,6 +144,9 @@ export function serializeOpenResult(result: AppOpenResult): Record<string, unkno
       ...(result.runtime ? { runtime: result.runtime } : {}),
       ...(result.device ? serializeSessionDevice(result.device) : {}),
       ...(result.launchConfirmation ? { launchConfirmation: result.launchConfirmation } : {}),
+      ...(result.launchConfirmationReason
+        ? { launchConfirmationReason: result.launchConfirmationReason }
+        : {}),
       ...(result.snapshot ? { snapshot: result.snapshot } : {}),
       ...(result.initialSnapshotError ? { initialSnapshotError: result.initialSnapshotError } : {}),
     },

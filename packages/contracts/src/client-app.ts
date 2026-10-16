@@ -1,7 +1,10 @@
 // The public API vocabulary for app install, deploy, open, close and inventory.
 
 import type { AppsFilter } from './app-inventory.ts';
-import type { LaunchConfirmation } from './application-lifecycle-runtime.ts';
+import type {
+  LaunchConfirmation,
+  LaunchConfirmationUnansweredReason,
+} from './application-lifecycle-runtime.ts';
 import type { JsonObject } from './json.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { TargetShutdownResult } from './target-shutdown-contract.ts';
@@ -112,9 +115,13 @@ export type AppOpenResult = {
   device?: AgentDeviceSessionDevice;
   /**
    * `accepted` when iOS held the launch URL behind an `Open in "<App>"?` confirmation naming the
-   * session app and the open answered it.
+   * session app and the open answered it. `unanswered` when the open saw a confirmation it did not
+   * answer; the prompt is still on the screen and `launchConfirmationReason` names the leg that
+   * outran it. Answer it with `alert accept`.
    */
   launchConfirmation?: LaunchConfirmation;
+  /** Present alongside `launchConfirmation: 'unanswered'`. */
+  launchConfirmationReason?: LaunchConfirmationUnansweredReason;
   /**
    * Initial interactive snapshot captured immediately after an open that
    * requested `foreground`, composed from the same snapshot-runtime dispatch

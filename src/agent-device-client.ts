@@ -39,6 +39,7 @@ import {
   normalizeDeviceSelection,
   normalizeOpenForegroundComposition,
   normalizeInstallFromSourceResult,
+  normalizeLaunchConfirmation,
   normalizeMaterializationReleaseResult,
   normalizeOpenDevice,
   normalizeRuntimeHints,
@@ -307,9 +308,7 @@ export function createAgentDeviceClient(
           startup: normalizeStartupSample(data.startup),
           runtime: normalizeRuntimeHints(data.runtime),
           device,
-          ...(data.launchConfirmation === 'accepted'
-            ? { launchConfirmation: 'accepted' as const }
-            : {}),
+          ...normalizeLaunchConfirmation(data),
           ...normalizeOpenForegroundComposition(data),
           identifiers: {
             session,

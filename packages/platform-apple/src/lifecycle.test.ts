@@ -750,6 +750,30 @@ test.each([
   expect(events).toEqual(expected);
 });
 
+test('a prompt open read but did not recognize reports the unanswered confirmation', async () => {
+  const { lifecycle, interactor } = launchUrlSimulator(
+    async () => ({ message: '0 pages', items: ['Cancel', 'Open'] }),
+    [UNOBSERVABLE],
+  );
+
+  const outcome = await lifecycle.openApplication(launchUrlInput());
+
+  expect(outcome.launchConfirmation).toBe('unanswered');
+  expect(outcome.launchConfirmationReason).toBe('alert-unrecognized');
+  expect(interactor.acceptAlert).not.toHaveBeenCalled();
+});
+
+test('a prompt whose URL owner stays unresolved reports the unanswered confirmation', async () => {
+  urlOwner.resolve = async () => undefined;
+  const { lifecycle, interactor } = launchUrlSimulator(async () => CONFIRMATION, [UNOBSERVABLE]);
+
+  const outcome = await lifecycle.openApplication(launchUrlInput());
+
+  expect(outcome.launchConfirmation).toBe('unanswered');
+  expect(outcome.launchConfirmationReason).toBe('url-owner-unresolved');
+  expect(interactor.acceptAlert).not.toHaveBeenCalled();
+});
+
 test('an accept that dies with the runner session hands the URL over again and reads once more', async () => {
   let accepts = 0;
   const readAlert = vi

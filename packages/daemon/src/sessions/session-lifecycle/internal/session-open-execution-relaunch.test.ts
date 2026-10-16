@@ -2,7 +2,10 @@ import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
 import type { DeviceInfo } from '@agent-device/kernel/device';
-import type { OpenApplicationInput } from '@agent-device/contracts/application-lifecycle-runtime';
+import type {
+  OpenApplicationInput,
+  OpenApplicationOutcome,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 import { SessionStore } from '../../../core/session-store.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
@@ -93,6 +96,7 @@ async function openRelaunch(params: {
   positionals?: string[];
   flags?: Record<string, unknown>;
   onOpenApplication?: (input: OpenApplicationInput) => Promise<void> | void;
+  openOutcome?: Partial<OpenApplicationOutcome>;
 }) {
   const opened: OpenApplicationInput[] = [];
   const boundDevices: DeviceInfo[] = [];
@@ -109,7 +113,7 @@ async function openRelaunch(params: {
         openApplication: async (input: OpenApplicationInput) => {
           opened.push(input);
           await params.onOpenApplication?.(input);
-          return { appBundleId: input.appBundleId, timing: {} };
+          return { appBundleId: input.appBundleId, timing: {}, ...params.openOutcome };
         },
       },
     };
@@ -233,6 +237,28 @@ test('open <app> <url> --relaunch hands the lifecycle both positionals', async (
       positionals: ['com.example.app', 'https://example.com/deal'],
     }),
   ]);
+});
+
+test('open reports an unanswered launch confirmation and appends its warning to the response', async () => {
+  const sessionStore = makeSessionStore();
+  publishSession(sessionStore, 'ios-confirmation-session', IOS_SIMULATOR);
+  mockResolveTargetDevice.mockResolvedValue(IOS_SIMULATOR);
+
+  const { response } = await openRelaunch({
+    sessionStore,
+    sessionName: 'ios-confirmation-session',
+    openOutcome: {
+      launchConfirmation: 'unanswered',
+      launchConfirmationReason: 'alert-unrecognized',
+    },
+  });
+
+  expect(response?.ok).toBe(true);
+  if (response?.ok !== true) throw new Error('open must answer an unanswered confirmation');
+  const data = response.data ?? {};
+  expect(data.launchConfirmation).toBe('unanswered');
+  expect(data.launchConfirmationReason).toBe('alert-unrecognized');
+  expect(data.warnings).toEqual([expect.stringMatching(/alert-unrecognized[\s\S]*alert accept/)]);
 });
 
 test('open --relaunch --clear-app-state hands the lifecycle the clear-state execution', async () => {

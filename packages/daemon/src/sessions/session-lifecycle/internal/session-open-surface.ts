@@ -1,4 +1,7 @@
-import type { LaunchConfirmation } from '@agent-device/contracts/application-lifecycle-runtime';
+import type {
+  LaunchConfirmation,
+  LaunchConfirmationUnansweredReason,
+} from '@agent-device/contracts/application-lifecycle-runtime';
 import type { SessionSurface } from '@agent-device/contracts/session';
 import {
   isIosFamily,
@@ -28,6 +31,7 @@ export function buildOpenResult(params: {
   sessionReused: boolean;
   selection?: DeviceSelectionResult;
   launchConfirmation?: LaunchConfirmation;
+  launchConfirmationReason?: LaunchConfirmationUnansweredReason;
 }): Record<string, unknown> {
   const {
     sessionName,
@@ -46,6 +50,7 @@ export function buildOpenResult(params: {
     sessionReused,
     selection,
     launchConfirmation,
+    launchConfirmationReason,
   } = params;
   const result: Record<string, unknown> = {
     session: sessionName,
@@ -61,7 +66,10 @@ export function buildOpenResult(params: {
   if (appBundleId) result.appBundleId = appBundleId;
   if (startup) result.startup = startup;
   if (timing) result.timing = timing;
-  if (launchConfirmation) result.launchConfirmation = launchConfirmation;
+  if (launchConfirmation) {
+    result.launchConfirmation = launchConfirmation;
+    if (launchConfirmationReason) result.launchConfirmationReason = launchConfirmationReason;
+  }
   if (runtime && runtimeHintCount(runtime) > 0) result.runtime = runtime;
   if (device) {
     result.platform = publicPlatformString(device);

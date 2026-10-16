@@ -1,5 +1,9 @@
 import type { DaemonWireRequest, InternalRequestOptions } from '@agent-device/contracts/command';
 import type {
+  LaunchConfirmation,
+  LaunchConfirmationUnansweredReason,
+} from '@agent-device/contracts/application-lifecycle-runtime';
+import type {
   AgentDeviceDevice,
   AgentDeviceSession,
   AgentDeviceSessionDevice,
@@ -377,6 +381,45 @@ export function normalizeOpenForegroundComposition(data: Record<string, unknown>
       : {}),
     ...(initialSnapshotError ? { initialSnapshotError } : {}),
   };
+}
+
+/**
+ * The launch confirmation an open response reports, keyed on the typed outcome. An `unanswered`
+ * outcome without a recognized reason stays `unanswered` with no reason rather than being dropped:
+ * the prompt is on the device either way.
+ */
+export function normalizeLaunchConfirmation(data: Record<string, unknown>): {
+  launchConfirmation?: LaunchConfirmation;
+  launchConfirmationReason?: LaunchConfirmationUnansweredReason;
+} {
+  const outcome = readLaunchConfirmationOutcome(data.launchConfirmation);
+  if (!outcome) return {};
+  const reason = readLaunchConfirmationReason(data.launchConfirmationReason);
+  return reason
+    ? { launchConfirmation: outcome, launchConfirmationReason: reason }
+    : { launchConfirmation: outcome };
+}
+
+function readLaunchConfirmationOutcome(value: unknown): LaunchConfirmation | undefined {
+  switch (value) {
+    case 'accepted':
+    case 'unanswered':
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function readLaunchConfirmationReason(
+  value: unknown,
+): LaunchConfirmationUnansweredReason | undefined {
+  switch (value) {
+    case 'alert-unrecognized':
+    case 'url-owner-unresolved':
+      return value;
+    default:
+      return undefined;
+  }
 }
 
 export function readSnapshotNodes(value: unknown): SnapshotNode[] {

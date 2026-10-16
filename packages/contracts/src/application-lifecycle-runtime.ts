@@ -169,16 +169,23 @@ export type PostOpenObservationFailure =
   | Readonly<{ source: 'circuit' }>;
 
 /**
- * A system confirmation the launch itself raised and the open answered. `accepted`: iOS held a
+ * A system confirmation the launch itself raised and the open reported on. `accepted`: iOS held a
  * launch URL behind `Open in "<App>"?` naming the session app, and the open accepted it.
+ * `unanswered`: the open saw a confirmation it did not answer, and `launchConfirmationReason`
+ * names which leg outran it; the prompt stays on screen for `alert accept`.
  */
-export type LaunchConfirmation = 'accepted';
+export type LaunchConfirmation = 'accepted' | 'unanswered';
+
+/** Which leg left a seen launch confirmation unanswered. Keyed, never inferred from text. */
+export type LaunchConfirmationUnansweredReason = 'alert-unrecognized' | 'url-owner-unresolved';
 
 export type OpenApplicationOutcome = Readonly<{
   appBundleId?: string;
   timing: OpenApplicationTiming;
-  /** Present only when the open answered a launch confirmation. */
+  /** Present only when the open saw a launch confirmation. */
   launchConfirmation?: LaunchConfirmation;
+  /** Present alongside `launchConfirmation: 'unanswered'`. */
+  launchConfirmationReason?: LaunchConfirmationUnansweredReason;
 }>;
 
 /** Applies or clears a platform's native representation of neutral runtime hints. */
