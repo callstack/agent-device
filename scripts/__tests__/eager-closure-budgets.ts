@@ -3,7 +3,7 @@
 // ADR-0019's "Implementation-laziness" section requires platform-package façades to stay
 // implementation-lazy and says a startup-time threshold alone does not preserve the loading
 // shape (`docs/adr/0019-request-bound-platform-runtime.md`). The AST walker in
-// `src/__tests__/eager-import-closure.fixtures.ts` counts the repo modules that importing an
+// `@agent-device/test-kit` counts the repo modules that importing an
 // entry evaluates; this module says what count each entry may have. R13 governs import
 // DIRECTION (may this file reach that one at all), never evaluation WEIGHT.
 //

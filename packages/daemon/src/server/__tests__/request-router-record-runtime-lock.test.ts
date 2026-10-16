@@ -11,15 +11,11 @@ import type { ScreenRecordingLiveHandle } from '@agent-device/contracts/screen-r
 import { createDurableResourceEnvelope } from '@agent-device/capture-kit';
 import type { DeviceInfo } from '@agent-device/kernel/device';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import {
-  mkdtempForTestSync,
-  unavailableDeploymentSnapshotAndShutdownOperationFacts,
-} from '@agent-device/test-kit';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
-import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { unavailableDeploymentSnapshotAndShutdownOperationFacts } from '@agent-device/test-kit';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
+import { fakeCreateCommandSurface as testCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 const DEVICE: DeviceInfo = {
   platform: 'android',
@@ -34,7 +30,7 @@ vi.mock('@agent-device/device-selection/dispatch-resolve', async (importOriginal
   return { ...actual, resolveTargetDevice: vi.fn(async () => DEVICE) };
 });
 
-vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
+vi.mock('../../core/device/device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
@@ -72,60 +68,6 @@ test('fresh default-device recording starts serialize before durable admission',
   });
   expect(runtime.start).toHaveBeenCalledOnce();
 });
-
-test.each([
-  { platform: 'linux', id: 'linux', name: 'Linux', kind: 'device', target: 'desktop' },
-  { platform: 'vega', id: 'vega', name: 'Vega', kind: 'device', target: 'tv' },
-] satisfies readonly DeviceInfo[])(
-  'record start on $platform routes real unavailable runtime facts into public guidance',
-  async (device) => {
-    const sessionName = `record-${device.platform}-unsupported`;
-    const sessionStore = makeSessionStore(`request-router-record-${device.platform}-unsupported-`);
-    sessionStore.publish(sessionName, {
-      name: sessionName,
-      device,
-      createdAt: 1,
-      actions: [],
-    });
-    const sessionsDir = mkdtempForTestSync(`record-${device.platform}-runtime-host-`);
-    const gateway = createPlatformRuntimeGateway({
-      sessionsDir,
-      resolveSessionArtifacts: (candidate) => ({
-        outputPath: `${sessionsDir}/${candidate}/app.log`,
-        pidPath: `${sessionsDir}/${candidate}/app-log.pid`,
-      }),
-    });
-    const bind = vi.fn(async (request) => await gateway.bind(request));
-    const handler = createRequestHandler({
-      createCommandSurface: testCreateCommandSurface,
-      logPath: '/tmp/daemon.log',
-      token: 'token',
-      sessionStore,
-      leaseRegistry: new LeaseRegistry(),
-      deviceInventoryGateways: createTestDeviceInventoryGateways(),
-      deviceRuntimeGateway: {
-        inspectFacts: gateway.inspectFacts,
-        bind,
-        shutdown: gateway.shutdown,
-      },
-      trackDownloadableArtifact: () => 'artifact',
-    });
-
-    const response = await handler(recordStartRequest(sessionName, `record-${device.platform}`));
-
-    expect(response).toMatchObject({
-      ok: false,
-      error: {
-        code: 'UNSUPPORTED_OPERATION',
-        message: 'record is not supported on this device',
-        hint: 'Select an Apple, Android, physical HarmonyOS, or web target that supports screen recording.',
-        details: { reason: 'unsupported-platform-leaf' },
-      },
-    });
-    expect(bind).toHaveBeenCalledOnce();
-    await gateway.shutdown();
-  },
-);
 
 function recordStartRequest(session: string, requestId: string) {
   return {

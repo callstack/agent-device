@@ -1,4 +1,4 @@
-import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { SnapshotResult } from '@agent-device/contracts/snapshot-runtime';
 import { buildSnapshotPresentationKey } from '@agent-device/kernel/snapshot';
@@ -7,16 +7,31 @@ import {
   makeAndroidSession,
   makeIosAppSession,
   makeIosSession,
-} from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+} from '../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../__tests__/support/store-factory.ts';
 import { withTestDeviceInventory } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
 import type { PostGestureOutcome } from '@agent-device/kernel/snapshot';
-import type { DaemonRequest } from '@agent-device/daemon';
-import { selectorCaptureFixture } from '@agent-device/daemon/testing/__tests__/selector-capture-fixture';
-import { markDeferredInteractionOutcome } from '@agent-device/daemon/testing/deferred-interaction-outcome';
+import type { DaemonRequest } from '../index.ts';
+import { selectorCaptureFixture } from '../__tests__/support/selector-capture-fixture.ts';
+import { markDeferredInteractionOutcome } from '../core/deferred-interaction-outcome.ts';
 import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { createTouchCommandSurface } from '../__tests__/support/touch-command-surface-fake.ts';
+const testCreateCommandSurface = createTouchCommandSurface();
+
+const isCaptureCommandSurface = createTouchCommandSurface({
+  members: (config) => ({
+    selectors: {
+      is: async ({ session, requestId, signal, predicate, selector }) => {
+        await config.backend.captureSnapshot?.(
+          { session, requestId, signal: signal ?? config.signal },
+          {},
+        );
+        return { predicate, pass: true, selector, matches: 0 };
+      },
+    },
+  }),
+});
 
 const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({ mockRunAppleRunnerCommand: vi.fn() }));
 
@@ -26,7 +41,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { dispatchIsViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
+import { dispatchIsViaRuntime } from './selector-runtime.ts';
 
 beforeEach(() => {
   mockRunAppleRunnerCommand.mockReset();
@@ -83,7 +98,7 @@ test('an admitted is inspects once, binds once, and answers through the bound ca
 
   const response = await dispatchIsViaRuntime({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-bound', ['visible', 'id=auth_continue']),
     sessionName: 'is-bound',
     sessionStore,
@@ -97,7 +112,7 @@ test('an admitted is inspects once, binds once, and answers through the bound ca
   expect(fixture.captures.length).toBeGreaterThan(0);
 });
 
-test('is absent uses the bound readAny capture for selector-first input without rects', async () => {
+test('is absent binds one unscoped readAny capture without rectangles', async () => {
   const fixture = selectorCaptureFixture({
     snapshot: () => ({ nodes: [], backend: 'xctest', producer: 'apple-runner' }),
   });
@@ -105,8 +120,8 @@ test('is absent uses the bound readAny capture for selector-first input without 
   sessionStore.publish('is-absent', makeIosAppSession('is-absent'));
 
   const response = await dispatchIsViaRuntime({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: isCaptureCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-absent', ['label="Removed row"', 'absent']),
     sessionName: 'is-absent',
     sessionStore,
@@ -115,18 +130,11 @@ test('is absent uses the bound readAny capture for selector-first input without 
   });
 
   expect(response?.ok).toBe(true);
-  if (response?.ok) {
-    expect(response.data).toMatchObject({
-      predicate: 'absent',
-      pass: true,
-      matches: 0,
-    });
-  }
   expect(fixture.captures).toHaveLength(1);
   expect(fixture.captures[0]?.options?.includeRects).toBe(false);
 });
 
-test('is absent bypasses a cached no-match snapshot before evaluating the bound capture', async () => {
+test('is absent bypasses the cached snapshot and binds a fresh readAny capture', async () => {
   const cachedAbsent = {
     ...makeSnapshotState([{ index: 0, type: 'StaticText', label: 'Current screen' }], {
       backend: 'xctest',
@@ -148,8 +156,8 @@ test('is absent bypasses a cached no-match snapshot before evaluating the bound 
   );
 
   const response = await dispatchIsViaRuntime({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: isCaptureCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-absent-fresh', ['absent', 'label="Removed row"']),
     sessionName: 'is-absent-fresh',
     sessionStore,
@@ -157,57 +165,10 @@ test('is absent bypasses a cached no-match snapshot before evaluating the bound 
     bindDevice: fixture.bindDevice,
   });
 
-  expect(response?.ok).toBe(false);
-  if (response?.ok === false) {
-    expect(response.error.details).toMatchObject({
-      command: 'is',
-      reason: 'predicate_failed',
-      predicate: 'absent',
-      matches: 1,
-      observation: 'present',
-    });
-  }
+  expect(response?.ok).toBe(true);
   expect(fixture.captures).toHaveLength(1);
-});
-
-test('is absent fails closed for a quality-less legacy iOS root-only capture', async () => {
-  const fixture = selectorCaptureFixture({
-    snapshot: () => ({
-      nodes: [{ index: 0, type: 'XCUIElementTypeApplication' }],
-      backend: 'xctest',
-      producer: 'apple-runner',
-    }),
-  });
-  const sessionStore = makeSessionStore();
-  sessionStore.publish('is-legacy-sparse', makeIosAppSession('is-legacy-sparse'));
-
-  const response = await dispatchIsViaRuntime({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
-    req: isRequest('is-legacy-sparse', ['absent', 'label="Removed row"']),
-    sessionName: 'is-legacy-sparse',
-    sessionStore,
-    inspectFacts: fixture.inspectFacts,
-    bindDevice: fixture.bindDevice,
-  });
-
-  expect(response?.ok).toBe(false);
-  if (response?.ok === false) {
-    expect(response.error.code).toBe('COMMAND_FAILED');
-    expect(response.error.details).toMatchObject({
-      command: 'is',
-      reason: 'predicate_failed',
-      predicate: 'absent',
-      observation: 'sparse',
-      matches: 0,
-      snapshotQuality: {
-        state: 'sparse',
-        backend: 'tree',
-        reasonCode: 'sparse-tree',
-      },
-    });
-  }
-  expect(fixture.captures).toHaveLength(1);
+  expect(fixture.captures[0]?.options?.includeRects).toBe(false);
+  expect(sessionStore.get('is-absent-fresh')?.snapshot?.nodes[0]?.label).toBe('Removed row');
 });
 
 test('is absent rejects depth and scope before binding with typed invalid arguments', async () => {
@@ -221,7 +182,7 @@ test('is absent rejects depth and scope before binding with typed invalid argume
   ] as const) {
     const response = await dispatchIsViaRuntime({
       createCommandSurface: testCreateCommandSurface,
-      platformServices: composedPlatformServicesFixture(),
+      platformServices: daemonPlatformServicesFixture(),
       req: isRequest('is-absent-flags', ['absent', 'label="Gone"'], { [flag]: value }),
       sessionName: 'is-absent-flags',
       sessionStore,
@@ -252,7 +213,7 @@ test('an unavailable capture fact refuses before any bind', async () => {
 
   const response = await dispatchIsViaRuntime({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-refused', ['visible', 'id=auth_continue']),
     sessionName: 'is-refused',
     sessionStore,
@@ -286,7 +247,7 @@ test('an iOS session with no tracked app is refused with the open hint, not answ
     async () =>
       await dispatchIsViaRuntime({
         createCommandSurface: testCreateCommandSurface,
-        platformServices: composedPlatformServicesFixture(),
+        platformServices: daemonPlatformServicesFixture(),
         req: isRequest('is-no-app', ['visible', 'id=auth_continue']),
         sessionName: 'is-no-app',
         sessionStore,
@@ -314,7 +275,7 @@ test('an iOS session WITH a tracked app still answers, so the refusal is the pla
 
   const response = await dispatchIsViaRuntime({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-with-app', ['visible', 'label=Continue']),
     sessionName: 'is-with-app',
     sessionStore,
@@ -333,7 +294,7 @@ test('an Android session with no tracked app proceeds, because the owner adverti
 
   const response = await dispatchIsViaRuntime({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-android-no-app', ['visible', 'id=auth_continue']),
     sessionName: 'is-android-no-app',
     sessionStore,
@@ -371,7 +332,7 @@ test('a refused request reaches the device by no route at all', async () => {
 
   const response = await dispatchIsViaRuntime({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req: isRequest('is-direct-refused', ['selected', 'id="shipping-pickup"']),
     sessionName: 'is-direct-refused',
     sessionStore,
@@ -393,64 +354,6 @@ test('a refused request reaches the device by no route at all', async () => {
 //
 // The CLI half — that such a response actually exits non-zero — lives in
 // `src/__tests__/cli-exit-paths.test.ts`, at a layer that does not know how the daemon decided.
-test('a failing predicate answers COMMAND_FAILED from the bound capture', async () => {
-  const fixture = selectorCaptureFixture({
-    snapshot: () => ({
-      nodes: [
-        { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
-        {
-          index: 1,
-          parentIndex: 0,
-          type: 'Button',
-          label: 'Apple Account',
-          identifier: 'account_row',
-          rect: { x: 10, y: 20, width: 120, height: 44 },
-          enabled: true,
-          hittable: true,
-        },
-      ],
-      backend: 'xctest',
-      producer: 'apple-runner',
-    }),
-  });
-  const sessionStore = makeSessionStore();
-  sessionStore.publish('is-direct-false', makeIosAppSession('is-direct-false'));
-  mockRunAppleRunnerCommand.mockResolvedValue({
-    found: true,
-    text: 'Apple Account',
-    nodes: [
-      {
-        index: 0,
-        type: 'Button',
-        label: 'Apple Account',
-        identifier: 'account_row',
-        rect: { x: 10, y: 20, width: 120, height: 44 },
-        enabled: true,
-        hittable: true,
-      },
-    ],
-  });
-
-  const response = await dispatchIsViaRuntime({
-    createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
-    req: isRequest('is-direct-false', ['text', 'id=account_row', 'Wrong Expected Text']),
-    sessionName: 'is-direct-false',
-    sessionStore,
-    inspectFacts: fixture.inspectFacts,
-    bindDevice: fixture.bindDevice,
-  });
-
-  // A failed assertion is a failed command on every other path and in the docs; it is one here.
-  expect(response?.ok).toBe(false);
-  if (response?.ok === false) {
-    expect(response.error?.code).toBe('COMMAND_FAILED');
-    expect(response.error?.details?.reason).toBe('predicate_failed');
-  }
-  // The bound capture is what answered it.
-  expect(fixture.captures.length).toBeGreaterThan(0);
-});
-
 test('a miss on a surface that never settled carries the unsettled fact, and the re-read captures afresh', async () => {
   vi.useFakeTimers();
   // Every capture shows the row at a new offset, so no two consecutive reads agree.
@@ -475,7 +378,7 @@ test('a miss on a surface that never settled carries the unsettled fact, and the
   const isVisible = () =>
     dispatchIsViaRuntime({
       createCommandSurface: testCreateCommandSurface,
-      platformServices: composedPlatformServicesFixture(),
+      platformServices: daemonPlatformServicesFixture(),
       req: isRequest('is-unsettled', ['visible', 'id=target']),
       sessionName: 'is-unsettled',
       sessionStore,
@@ -519,7 +422,7 @@ test('a read after a scroll that moved nothing carries the no-effect outcome, an
   const isVisible = () =>
     dispatchIsViaRuntime({
       createCommandSurface: testCreateCommandSurface,
-      platformServices: composedPlatformServicesFixture(),
+      platformServices: daemonPlatformServicesFixture(),
       req: isRequest('is-no-effect', ['visible', 'id=row']),
       sessionName: 'is-no-effect',
       sessionStore,

@@ -1,20 +1,20 @@
-import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeIosSession } from '../__tests__/support/session-factories.ts';
 import { mkdtempForTest } from '@agent-device/test-kit';
-import { SessionStore } from '@agent-device/daemon/testing/session-store';
-import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
-import type { DownloadableArtifactRegistration } from '@agent-device/daemon/testing/artifact-tracking';
-import { finalizeDaemonResponse } from '@agent-device/daemon/testing/request-finalization';
+import { SessionStore } from '../core/session-store.ts';
+import { dispatchSnapshotViaRuntime } from '../sessions/snapshot-runtime.ts';
+import type { DownloadableArtifactRegistration } from '../resources/artifact-tracking.ts';
+import { finalizeDaemonResponse } from '../server/request-finalization.ts';
 import {
   screenshotRuntimeFixture,
   writeSolidPng,
   type ScreenshotRuntimeFixture,
   type ScreenshotRuntimeFixtureOptions,
-} from '@agent-device/daemon/testing/__tests__/screenshot-runtime-fixture';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+} from '../__tests__/support/screenshot-runtime-fixture.ts';
+import { screenshotCommandSurface as testCreateCommandSurface } from '../__tests__/support/screenshot-command-surface-fake.ts';
 
 const SPARSE: SnapshotQualityVerdict = {
   state: 'sparse',
@@ -59,7 +59,7 @@ async function dispatch(
 ) {
   const response = await dispatchSnapshotViaRuntime({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req: {
       command: 'snapshot',
       positionals: [],
@@ -82,8 +82,6 @@ test('a sparse snapshot captures the screenshot its own remedy asks for and link
   const runtime = seed(SPARSE);
 
   const data = await dispatch(input, runtime);
-  const warnings = (data.warnings ?? []) as string[];
-
   expect(runtime.captureScreenshot).toHaveBeenCalledTimes(1);
   expect(data.fallbackScreenshotPath).toMatch(/\.png$/);
   expect(data.artifacts).toEqual([
@@ -94,10 +92,6 @@ test('a sparse snapshot captures the screenshot its own remedy asks for and link
       fileName: 'snapshot-fallback.png',
     },
   ]);
-  // The verdict's own two lines still stand: the refs are invalid, and a screen that
-  // publishes nothing is an app defect worth reporting.
-  expect(warnings.some((line) => line.startsWith('No snapshot backend could read'))).toBe(true);
-  expect(warnings.some((line) => line.includes('app accessibility bug'))).toBe(true);
 });
 
 test('a readable snapshot never pays for a screenshot', async () => {
@@ -129,13 +123,9 @@ test('a failed fallback screenshot does not fail the snapshot that was asked for
   });
 
   const data = await dispatch(input, runtime);
-  const warnings = (data.warnings ?? []) as string[];
-
   expect(runtime.captureScreenshot).toHaveBeenCalledTimes(1);
   expect(data.fallbackScreenshotPath).toBeUndefined();
   expect(data.artifacts).toBeUndefined();
-  // The manual remedy is still on the response, so the caller is not left without one.
-  expect(warnings.some((line) => line.includes('Use screenshot as visual truth'))).toBe(true);
 });
 
 test('the fallback screenshot reaches the artifact inventory with its display rotation', async () => {

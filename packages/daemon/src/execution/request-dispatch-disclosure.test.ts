@@ -2,7 +2,27 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { createTouchCommandSurface } from '../__tests__/support/touch-command-surface-fake.ts';
+
+const testCreateCommandSurface = createTouchCommandSurface({
+  members: (config) => ({
+    interactions: {
+      settleObservation: async ({ session, requestId, signal, quietMs, timeoutMs }) => {
+        await config.backend.captureSnapshot?.(
+          { session, requestId, signal: signal ?? config.signal },
+          {},
+        );
+        return {
+          settled: true,
+          waitedMs: 0,
+          captures: 1,
+          quietMs: quietMs ?? 0,
+          timeoutMs: timeoutMs ?? 0,
+        };
+      },
+    },
+  }),
+});
 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
@@ -10,7 +30,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 
-vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
+vi.mock('../core/device/device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
@@ -30,19 +50,19 @@ import {
   makeAndroidSession,
   makeIosAppSession,
   makeSession,
-} from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import type { DaemonRequest } from '@agent-device/daemon';
-import { discloseRequestDispatch } from '@agent-device/daemon/testing/request-dispatch-disclosure';
-import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
-import { clearAndroidObservationFixture } from '@agent-device/daemon/testing/__tests__/android-observation-fixture';
+} from '../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../__tests__/support/store-factory.ts';
+import type { DaemonRequest } from '../index.ts';
+import { discloseRequestDispatch } from './request-dispatch-disclosure.ts';
+import { createRequestDispatchLedger } from '../core/request-dispatch-ledger.ts';
+import { LeaseRegistry } from '../resources/lease-registry.ts';
+import type { SessionState } from '../core/session-state.ts';
+import { clearAndroidObservationFixture } from '../__tests__/support/android-observation-fixture.ts';
 import {
   createRequestHandler,
   gestureRuntimeSpies,
   lifecycleDeviceRuntimeGateway,
-} from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
+} from '../__tests__/support/test-device-runtime-gateway.ts';
 
 // contracts/fixtures/dispatch-disclosure.json, daemon.route rows: each drives one request through
 // the real request router, with only the bound device operations faked.
@@ -75,7 +95,6 @@ const routeOperationSpies = {
   tapPoint: vi.fn(async () => undefined),
   focusPoint: vi.fn(async () => undefined),
   typeText: vi.fn(async () => undefined),
-  back: vi.fn(async () => undefined),
   finalizeApplicationClose: vi.fn(async () => undefined as void),
 };
 
@@ -288,25 +307,6 @@ async function closeThenFinalizeRefused(): Promise<unknown> {
   throw failure;
 }
 
-async function maestroDeferredSettleCaptureRefused(): Promise<unknown> {
-  captureNodes([CONTINUE_BUTTON]);
-  gestureRuntimeSpies.captureSnapshot.mockImplementation(async () => {
-    if (routeOperationSpies.back.mock.calls.length > 0) throw RUNNER_BUSY();
-    return { backend: 'xctest', producer: 'apple-runner', nodes: [CONTINUE_BUTTON] } as never;
-  });
-  const flowPath = path.join(mkdtempForTestSync('dispatch-route-maestro'), 'flow.yaml');
-  fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- back\n- assertVisible: "Continue"\n');
-  const failure = await route(makeIosAppSession(SESSION), {
-    command: 'replay',
-    positionals: [flowPath],
-    flags: { replayBackend: 'maestro', platform: 'ios' },
-  }).catch((error: unknown) => error);
-  assert.equal(routeOperationSpies.back.mock.calls.length, 1);
-  assert.ok(failure instanceof AppError);
-  assert.equal(failure.details?.dispatchedSteps, 1);
-  throw failure;
-}
-
 async function batchOf(
   steps: readonly { command: string; positionals: string[] }[],
 ): Promise<AppError> {
@@ -344,7 +344,6 @@ async function batchReadThenRefusedStep(): Promise<unknown> {
 const DRIVERS: Record<string, () => Promise<unknown>> = {
   'daemon.route.find-type-refused-after-focus': findTypeRefusedAfterFocus,
   'daemon.route.session-close-then-finalize-refused': closeThenFinalizeRefused,
-  'daemon.route.maestro-deferred-settle-capture-refused': maestroDeferredSettleCaptureRefused,
   'daemon.route.batch-mutation-then-refused-step': batchMutationThenRefusedStep,
   'daemon.route.batch-read-then-refused-step': batchReadThenRefusedStep,
   'daemon.route.scroll-transport-failure': scrollWhoseGestureSendFailed,
@@ -371,7 +370,7 @@ for (const row of ROWS) {
     const drive = DRIVERS[row.id];
     assert.ok(drive, `no driver for ${row.id}`);
     await assert.rejects(drive(), (error: unknown) => {
-      assert.ok(error instanceof AppError);
+      assert.ok(error instanceof AppError, `unexpected failure: ${String(error)}`);
       assert.equal(error.details?.dispatched, row.dispatched);
       return true;
     });

@@ -8,23 +8,27 @@ import { expect, test } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import type { WebProvider } from '@agent-device/platform-web';
-import type { DaemonRequest } from '@agent-device/daemon';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
-import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
 import {
-  makeAuthoringSession,
-  makeSession,
-} from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { mkdtempForTestSync, WEB_DESKTOP_DEVICE } from '@agent-device/test-kit';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
-import { replayScriptSourceBundleFor } from '../test-utils/replay-script-source.fixtures.ts';
+  localRuntimeOwner,
+  type DeviceBinding,
+  type DeviceRuntimeGateway,
+  type RuntimeFacts,
+} from '@agent-device/contracts/platform-runtime';
+import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type { FillPointInput } from '@agent-device/contracts/touch-runtime';
 import {
-  createPlatformRuntimeGateway,
-  createRequestPlatformProviders,
-} from '../../platform-runtime.ts';
+  createUnavailableRuntimeFactsForTest,
+  mkdtempForTestSync,
+  WEB_DESKTOP_DEVICE,
+} from '@agent-device/test-kit';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
+import type { SessionState } from '../../core/session-state.ts';
+import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { makeAuthoringSession, makeSession } from '../../__tests__/support/session-factories.ts';
+import { createTouchCommandSurface } from '../../__tests__/support/touch-command-surface-fake.ts';
+import { replayScriptSourceBundleFor } from '../../__tests__/support/replay-script-source-fixture.ts';
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
 
 const SECRET = 'stdin-s3cret-value';
 
@@ -49,38 +53,39 @@ function sendToWebSession(
   const sessionStore = makeSessionStore('agent-device-router-fill-text-stdin-');
   sessionStore.publish(session.name, session);
   const typed: string[] = [];
-  const webProvider: WebProvider = {
-    open: async () => {},
-    close: async () => {},
-    snapshot: async () => ({ nodes: [] }),
-    screenshot: async () => {},
-    setViewport: async () => {},
-    click: async () => {},
-    fill: async (_x, _y, text) => {
-      typed.push(text);
-      if (fillFails) throw fillFails(text);
+  const fillPoint = async (input: FillPointInput) => {
+    typed.push(input.text);
+    if (fillFails) throw fillFails(input.text);
+  };
+  const owner = localRuntimeOwner('web');
+  const baseFacts = createUnavailableRuntimeFactsForTest(WEB_DESKTOP_DEVICE, owner);
+  const facts: RuntimeFacts<PlatformRuntimeOperations> = {
+    ...baseFacts,
+    operations: { ...baseFacts.operations, fillPoint: { available: true } },
+  };
+  const deviceRuntimeGateway: DeviceRuntimeGateway<PlatformRuntimeOperations> = {
+    inspectFacts: async () => facts,
+    bind: async ({ device }) => {
+      const binding: DeviceBinding<PlatformRuntimeOperations> = {
+        device,
+        owner,
+        facts,
+        operations: { fillPoint },
+        [Symbol.asyncDispose]: async () => {},
+      };
+      return binding;
     },
-    typeText: async () => {},
-    scroll: async () => {},
+    shutdown: async () => {},
   };
   const dir = mkdtempForTestSync('agent-device-router-fill-text-stdin-runtime-');
   const handler = createRequestHandler({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: createTouchCommandSurface(),
     logPath: path.join(dir, 'daemon.log'),
     token: 'test-token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    requestPlatformProviders: createRequestPlatformProviders({
-      providers: { webProvider: () => webProvider },
-    }),
-    deviceRuntimeGateway: createPlatformRuntimeGateway({
-      sessionsDir: dir,
-      resolveSessionArtifacts: (sessionId) => ({
-        outputPath: path.join(dir, sessionId, 'app.log'),
-        pidPath: path.join(dir, sessionId, 'app-log.pid'),
-      }),
-    }),
+    deviceRuntimeGateway,
     trackDownloadableArtifact: () => 'artifact-id',
   });
   const response = handler({

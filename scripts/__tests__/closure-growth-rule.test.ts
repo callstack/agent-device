@@ -8,7 +8,7 @@ import {
   topLevelStatementCount,
   topLevelStatementWeightsOf,
   type SourceTreeReader,
-} from '../../src/__tests__/eager-import-closure.fixtures.ts';
+} from '@agent-device/test-kit';
 import { createCommittedSourceTree, deletedSourcesSince } from './committed-source-tree.ts';
 import { mkGitFixtureRepo } from './eager-closure-gate-fixtures.ts';
 import {

@@ -1,4 +1,4 @@
-import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import { expect, test } from 'vitest';
 import {
   localRuntimeOwner,
@@ -11,10 +11,11 @@ import {
   type SnapshotResult,
 } from '@agent-device/contracts/snapshot-runtime';
 import { createUnavailableRuntimeFactsForTest } from '@agent-device/test-kit';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { makeSession as makeStoredSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { dispatchGetViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { makeSessionStore } from '../__tests__/support/store-factory.ts';
+import { makeSession as makeStoredSession } from '../__tests__/support/session-factories.ts';
+import { dispatchGetViaRuntime } from './selector-runtime.ts';
+import { createTouchCommandSurface } from '../__tests__/support/touch-command-surface-fake.ts';
+const testCreateCommandSurface = createTouchCommandSurface();
 
 test.each(['rebuild', 'retire'] as const)(
   'get text records in its captured lifetime after a held native read across %s',
@@ -85,7 +86,7 @@ test.each(['rebuild', 'retire'] as const)(
     };
     const running = dispatchGetViaRuntime({
       createCommandSurface: testCreateCommandSurface,
-      platformServices: composedPlatformServicesFixture(),
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: 'default',

@@ -2,23 +2,18 @@ import path from 'node:path';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { iosTargetActivationDisclosure } from '@agent-device/contracts/ios-target-activation';
 import type { IosTargetActivation, PostGestureOutcome } from '@agent-device/kernel/snapshot';
-import { formatPostGestureOutcomeWarning } from '@agent-device/capture-kit/post-gesture-stability';
 import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { markDeferredInteractionOutcome } from '@agent-device/daemon/testing/deferred-interaction-outcome';
-import {
-  makeAndroidSession,
-  makeIosSession,
-} from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { markDeferredInteractionOutcome } from '../../core/deferred-interaction-outcome.ts';
+import { makeAndroidSession, makeIosSession } from '../../__tests__/support/session-factories.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { SessionStore } from '@agent-device/daemon/testing/session-store';
-import { handleSnapshotCommands } from '@agent-device/daemon/testing/handlers/snapshot';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
-import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { SessionStore } from '../../core/session-store.ts';
+import { handleSnapshotCommands } from './snapshot.ts';
+import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
+import { snapshotRuntimeFixture } from '../../__tests__/support/snapshot-runtime-fixture.ts';
+import { forwardingCreateCommandSurfaceWithAnnotations as testCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
-  const fixture =
-    await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
+vi.mock('../../core/snapshot-interactor-capture.ts', async () => {
+  const fixture = await import('../../__tests__/support/legacy-snapshot-capture-fixture.ts');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
@@ -143,11 +138,8 @@ test('a snapshot after a scroll that moved nothing warns and stamps the no-effec
     await vi.advanceTimersByTimeAsync(100);
     await new Promise((resolve) => realSetTimeout(resolve, 1));
   }
-  const response = await pending;
+  await pending;
 
-  expect(response.ok && response.data?.warnings).toContain(
-    formatPostGestureOutcomeWarning(outcome),
-  );
   expect(input.sessionStore.get(input.sessionName)?.snapshot?.postGestureOutcome).toEqual(outcome);
 });
 

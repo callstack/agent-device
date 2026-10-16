@@ -1,20 +1,17 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs';
 
 import path from 'node:path';
-import { getResolveTargetDeviceMock } from '@agent-device/daemon/testing/__tests__/request-router-dispatch-mocks';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
-
-vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
-  ensureDeviceReady: vi.fn(async () => {}),
-}));
-
-vi.mock('../../platform-runtime-runtime-hints.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platform-runtime-runtime-hints.ts')>();
-  return { ...actual, applyRuntimeHintValues: vi.fn(async () => {}) };
-});
+import { getResolveTargetDeviceMock } from '../../__tests__/support/request-router-dispatch-mocks.ts';
+import { createTouchCommandSurface } from '../../__tests__/support/touch-command-surface-fake.ts';
+const testCreateCommandSurface = createTouchCommandSurface();
+import type {
+  PlatformProviderRequestContext,
+  RequestPlatformProviderScope,
+  RequestPlatformProviders,
+} from '@agent-device/contracts/platform-providers';
 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
@@ -33,22 +30,19 @@ vi.mock('@agent-device/platform-apple/app-resolution', async (importOriginal) =>
 });
 
 import { IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
-import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+import { makeIosSession } from '../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import {
   createRequestHandler,
   gestureRuntimeSpies,
   lifecycleDeviceRuntimeGateway,
   systemRuntimeSpies,
-} from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
-import { ensureDeviceReady } from '@agent-device/daemon/testing/device/device-ready';
+} from '../../__tests__/support/test-device-runtime-gateway.ts';
 // Readiness is package-owned; hold the open at the fixture's platform-neutral readiness gate.
-import { awaitFixtureReadiness } from '@agent-device/daemon/testing/__tests__/application-lifecycle-runtime-fixture';
-import { createRequestPlatformProviders } from '../../platform-runtime.ts';
+import { awaitFixtureReadiness } from '../../__tests__/support/application-lifecycle-runtime-fixture.ts';
 
 const mockResolveTargetDevice = vi.mocked(getResolveTargetDeviceMock());
-const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const mockAwaitFixtureReadiness = vi.mocked(awaitFixtureReadiness);
 
 beforeEach(() => {
@@ -58,8 +52,6 @@ beforeEach(() => {
   legacyDispatchCapture.mockResolvedValue({});
   mockResolveTargetDevice.mockReset();
   mockResolveTargetDevice.mockResolvedValue(IOS_SIMULATOR);
-  mockEnsureDeviceReady.mockReset();
-  mockEnsureDeviceReady.mockResolvedValue();
   mockAwaitFixtureReadiness.mockReset();
   mockAwaitFixtureReadiness.mockResolvedValue(undefined);
 });
@@ -70,7 +62,7 @@ test('replay runs active-session actions inside the parent request provider scop
   fs.writeFileSync(replayPath, 'app-switcher\nscroll down\n');
   const sessionStore = makeSessionStore('agent-device-replay-scope-');
   sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
-  const appleRunnerProvider = vi.fn(() => undefined);
+  const providerScopes = requestPlatformProvidersFake();
 
   const handler = createRequestHandler({
     createCommandSurface: testCreateCommandSurface,
@@ -80,9 +72,7 @@ test('replay runs active-session actions inside the parent request provider scop
     leaseRegistry: new LeaseRegistry(),
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    requestPlatformProviders: createRequestPlatformProviders({
-      providers: { appleRunnerProvider },
-    }),
+    requestPlatformProviders: providerScopes.providers,
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -100,7 +90,11 @@ test('replay runs active-session actions inside the parent request provider scop
   expect(legacyDispatchCapture).not.toHaveBeenCalled();
   expect(systemRuntimeSpies.appSwitcher).toHaveBeenCalledTimes(1);
   expect(gestureRuntimeSpies.scrollDirection).toHaveBeenCalledTimes(1);
-  expect(appleRunnerProvider).toHaveBeenCalledTimes(1);
+  expect(providerScopes.contexts).toHaveLength(1);
+  expect(providerScopes.contexts[0]).toMatchObject({
+    requestId: 'replay-scope-1',
+    session: { name: 'default', device: { platform: 'apple' } },
+  });
 });
 
 test('replay routes session-changing actions through the full request path', async () => {
@@ -109,7 +103,7 @@ test('replay routes session-changing actions through the full request path', asy
   fs.writeFileSync(replayPath, 'runtime set --platform ios --metro-host localhost\napp-switcher\n');
   const sessionStore = makeSessionStore('agent-device-replay-full-route-');
   sessionStore.publish('default', makeIosSession('default', { appBundleId: 'com.example.app' }));
-  const appleRunnerProvider = vi.fn(() => undefined);
+  const providerScopes = requestPlatformProvidersFake();
 
   const handler = createRequestHandler({
     createCommandSurface: testCreateCommandSurface,
@@ -119,9 +113,7 @@ test('replay routes session-changing actions through the full request path', asy
     leaseRegistry: new LeaseRegistry(),
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    requestPlatformProviders: createRequestPlatformProviders({
-      providers: { appleRunnerProvider },
-    }),
+    requestPlatformProviders: providerScopes.providers,
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -138,7 +130,10 @@ test('replay routes session-changing actions through the full request path', asy
   // never dispatched, so the legacy dispatcher sees neither action.
   expect(legacyDispatchCapture).not.toHaveBeenCalled();
   expect(systemRuntimeSpies.appSwitcher).toHaveBeenCalledTimes(1);
-  expect(appleRunnerProvider).toHaveBeenCalledTimes(2);
+  expect(providerScopes.contexts).toHaveLength(2);
+  expect(providerScopes.contexts.every((context) => context.session?.name === 'default')).toBe(
+    true,
+  );
 });
 
 test('session list includes a cwd-scoped session opened by replay', async () => {
@@ -155,9 +150,6 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
     leaseRegistry: new LeaseRegistry(),
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    requestPlatformProviders: createRequestPlatformProviders({
-      providers: { appleRunnerProvider: () => undefined },
-    }),
     trackDownloadableArtifact: () => 'artifact-id',
   });
 
@@ -170,7 +162,6 @@ test('session list includes a cwd-scoped session opened by replay', async () => 
     meta: { cwd: root, requestId: 'replay-open-scope', deviceKey: 'test:sim-1' },
   });
   expect(replayResponse).toMatchObject({ ok: true });
-
   const listResponse = await handler({
     token: 'test-token',
     session: 'default',
@@ -222,9 +213,6 @@ test('fresh replay retains a dynamically selected device through finalization', 
     leaseRegistry,
     deviceRuntimeGateway: lifecycleDeviceRuntimeGateway,
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    requestPlatformProviders: createRequestPlatformProviders({
-      providers: { appleRunnerProvider: () => undefined },
-    }),
     trackDownloadableArtifact: () => 'artifact-id',
   });
   const replayResponse = handler({
@@ -260,3 +248,20 @@ test('fresh replay retains a dynamically selected device through finalization', 
   await externalResponse;
   expect(externalRequestSettled).toBe(true);
 });
+
+function requestPlatformProvidersFake(): {
+  providers: RequestPlatformProviders;
+  contexts: PlatformProviderRequestContext[];
+} {
+  const contexts: PlatformProviderRequestContext[] = [];
+  return {
+    contexts,
+    providers: {
+      hasConfiguredResolvers: true,
+      async run(context, task) {
+        contexts.push(context);
+        return await task({} satisfies RequestPlatformProviderScope);
+      },
+    },
+  };
+}

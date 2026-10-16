@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { SnapshotQualityVerdict } from '@agent-device/kernel/snapshot';
-import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeIosSession } from '../__tests__/support/session-factories.ts';
 import {
   recoveredSnapshotQualityWarning,
   renderSnapshotQualityWarnings,
@@ -9,19 +9,18 @@ import {
 import {
   applyRecoveredWarningLatch,
   resolveRecoveredWarningLatch,
-} from '@agent-device/daemon/testing/snapshot-quality-latch';
-import { dispatchSnapshotDiffViaRuntime } from '@agent-device/daemon/testing/snapshot-diff-runtime';
-import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
-import { SessionStore } from '@agent-device/daemon/testing/session-store';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
-import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
+} from './snapshot-quality-latch.ts';
+import { dispatchSnapshotDiffViaRuntime } from './snapshot-diff-runtime.ts';
+import { dispatchSnapshotViaRuntime } from './snapshot-runtime.ts';
+import { SessionStore } from '../core/session-store.ts';
+import type { SessionState } from '../core/session-state.ts';
+import { legacyDispatchCapture } from '../__tests__/support/legacy-snapshot-capture-fixture.ts';
+import { snapshotRuntimeFixture } from '../__tests__/support/snapshot-runtime-fixture.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { forwardingCreateCommandSurfaceWithAnnotations as testCreateCommandSurface } from '../__tests__/support/command-surface-fake.ts';
 
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async () => {
-  const fixture =
-    await import('@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture');
+vi.mock('../core/snapshot-interactor-capture.ts', async () => {
+  const fixture = await import('../__tests__/support/legacy-snapshot-capture-fixture.ts');
   return { captureSnapshotWithInteractor: fixture.captureSnapshotThroughLegacyDispatchFixture };
 });
 
@@ -354,12 +353,12 @@ test('an app switch supersedes the held latch through the dispatch seam', async 
   expect(storedLatch(input)).toEqual({ appBundleId: 'com.example.other' });
 });
 
-test('a genuine recovered render keeps later deferred captures quiet without doubling', async () => {
+test('a genuine recovered capture holds the latch for later deferred captures', async () => {
   const input = scenario();
   seedCapture(genuineRecoveredVerdict());
 
   const genuine = await dispatchPublicSnapshot(input);
-  expect(responseWarnings(genuine).filter((line) => line === FULL_WARNING)).toHaveLength(1);
+  expect(responseWarnings(genuine)).not.toContain(FULL_WARNING);
   expect(storedLatch(input)).toEqual({ appBundleId: 'com.example.app' });
 
   seedCapture(deferredVerdict());

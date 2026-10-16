@@ -838,6 +838,9 @@ importers:
       fast-check:
         specifier: ^4.9.0
         version: 4.9.0
+      oxc-parser:
+        specifier: ^0.146.0
+        version: 0.146.0
 
   packages/xml: {}
 

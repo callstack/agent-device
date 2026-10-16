@@ -37,6 +37,15 @@ export {
 } from './dispatch-disclosure.fixtures.ts';
 export { restoreEnv } from './env.ts';
 export {
+  eagerClosureGraphOf,
+  eagerClosureOf,
+  eagerlyEvaluatedModules,
+  statementTextsOf,
+  topLevelStatementCount,
+  topLevelStatementWeightsOf,
+  type SourceTreeReader,
+} from './eager-import-closure-fixtures.ts';
+export {
   type FilesystemBoundaryFixture,
   type FilesystemBoundaryOwner,
   type FilesystemErrno,

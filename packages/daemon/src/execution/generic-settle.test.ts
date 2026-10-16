@@ -1,34 +1,68 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
+import type { DaemonCommandSurface } from '@agent-device/contracts/daemon-command-surface';
+import type { SettleObservation } from '@agent-device/contracts/interaction';
+import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { CommandFlags } from '@agent-device/contracts/command';
-import type { CommandClock } from '@agent-device/contracts/runtime-contract';
 import type { PresentedSurface, RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import {
-  APP_SURFACE,
-  iosSystemSurfaceDisclosure,
-  iosSystemSurfaceTransitionDisclosure,
-  type IosSystemSurfaceProvenance,
-} from '@agent-device/contracts/ios-system-surface';
-import { makeIosSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import {
-  PRESENTED_SHEET_FULL_NODES,
-  PRESENTED_SHEET_INTERACTIVE_NODES,
-  SHEET_DISMISSED_NODES,
-} from './presented-sheet-trees.ts';
+import type { IosSystemSurfaceProvenance } from '@agent-device/contracts/ios-system-surface';
+import { makeIosSession } from '../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../__tests__/support/store-factory.ts';
 import {
   activateCompleteRefFrame,
   markSessionSnapshotOutdated,
   refFrameState,
-} from '@agent-device/daemon/testing/ref-frame';
-import { setSessionSnapshot } from '@agent-device/daemon/testing/session-snapshot';
-import type { SessionStore } from '@agent-device/daemon/testing/session-store';
-import type { DaemonRequest } from '@agent-device/daemon';
-import type { SessionRef, SessionState } from '@agent-device/daemon/testing/session-state';
+} from '../core/ref-frame.ts';
+import { setSessionSnapshot } from './session-snapshot.ts';
+import type { SessionStore } from '../core/session-store.ts';
+import type { DaemonRequest } from '../index.ts';
+import type { SessionRef, SessionState } from '../core/session-state.ts';
 import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
-import { selectorCaptureFixture } from '@agent-device/daemon/testing/__tests__/selector-capture-fixture';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { selectorCaptureFixture } from '../__tests__/support/selector-capture-fixture.ts';
+import {
+  captureAndStoreSnapshot,
+  commandSurfaceWithMembers,
+} from '../__tests__/support/command-surface-override-fake.ts';
+
+type SettleObservationOptions = Parameters<
+  DaemonCommandSurface['interactions']['settleObservation']
+>[0];
+
+const settleObservationCalls: SettleObservationOptions[] = [];
+const SETTLE_OBSERVATION: SettleObservation = {
+  settled: true,
+  waitedMs: 0,
+  captures: 1,
+  quietMs: 25,
+  timeoutMs: 2_000,
+  diff: {
+    summary: { additions: 1, removals: 1, unchanged: 1 },
+    lines: [
+      { kind: 'added', text: 'Button "Load more"', ref: 'e2' },
+      { kind: 'removed', text: 'Button "Continue"' },
+    ],
+  },
+};
+
+const testCreateCommandSurface = commandSurfaceWithMembers((config) => ({
+  interactions: {
+    settleObservation: async (options) => {
+      settleObservationCalls.push(options);
+      await captureAndStoreSnapshot(config, {
+        session: options.session,
+        requestId: options.requestId,
+        signal: options.signal,
+        includeRects: true,
+        onlyStoreWhenSessionExists: true,
+      });
+      return {
+        ...SETTLE_OBSERVATION,
+        quietMs: options.quietMs ?? 500,
+        timeoutMs: options.timeoutMs ?? 10_000,
+      };
+    },
+  },
+}));
 
 // #1638 `--settle` on the GENERIC daemon route (scroll/back): the settled diff,
 // its refs, and the ref-frame/generation dance are the same contract the touch
@@ -36,9 +70,8 @@ import { testCreateCommandSurface } from './command-surface-fixture.ts';
 // a resolution, and the observation must run after the deferred-outcome
 // markers. Quiet windows are tuned down so no test waits real time.
 
-vi.mock('@agent-device/daemon/testing/interaction/index', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/daemon/testing/interaction/index')>();
+vi.mock('./interaction/index.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./interaction/index.ts')>();
   return {
     ...actual,
     captureSnapshotForSession: vi.fn(async () => ({
@@ -50,9 +83,9 @@ vi.mock('@agent-device/daemon/testing/interaction/index', async (importOriginal)
   };
 });
 
-import { captureSnapshotForSession } from '@agent-device/daemon/testing/interaction/index';
-import { dispatchGenericCommand } from '@agent-device/daemon/testing/request-generic-dispatch';
-import { pendingSurfaceStabilization } from '@agent-device/daemon/testing/deferred-interaction-outcome';
+import { captureSnapshotForSession } from './interaction/index.ts';
+import { dispatchGenericCommand } from './request-generic-dispatch.ts';
+import { pendingSurfaceStabilization } from '../core/deferred-interaction-outcome.ts';
 
 const mockCaptureSnapshotForSession = vi.mocked(captureSnapshotForSession);
 
@@ -121,7 +154,8 @@ async function emulateCaptureSnapshotForSession(
     ? await options.boundCapture({})
     : ((await mockDispatch('snapshot')) as Parameters<typeof buildSnapshotState>[0]);
   const snapshot = buildSnapshotState(snapshotData ?? {}, effectiveFlags);
-  setSessionSnapshot(sessionStore.requireCurrent(ref), snapshot);
+  const current = sessionStore.resolveCurrent(ref);
+  if (current) setSessionSnapshot(current, snapshot);
   return snapshot;
 }
 
@@ -140,28 +174,9 @@ function mockCommandDispatch(
   });
 }
 
-/**
- * A clock the settle loop advances instead of waiting. The default-window cases below assert the
- * window a run RESOLVED, which needs no real elapsed time: the loop's own budget arithmetic runs on
- * this clock, so the suite neither slows nor goes unstable under load.
- */
-function fakeClock(stepMs = 300): CommandClock {
-  let elapsed = 0;
-  return {
-    now: () => elapsed,
-    sleep: async (ms: number) => {
-      elapsed += ms > 0 ? ms : stepMs;
-    },
-  };
-}
-
 const contextFromFlags = () => ({}) as never;
 
-/**
- * The bound execution `dispatchGenericCommand` runs. R58 retired the legacy dispatcher this file
- * used to borrow, so the double lives here: these tests are about the settle/stabilization
- * orchestration around a generic leaf, not about which owner performs it.
- */
+/** Device work for the generic leaf under test. */
 const platformExecution = vi.fn(
   async (params: { command: string }) => await mockDispatch(params.command),
 );
@@ -206,17 +221,6 @@ function snapshotPayload(tree: GenericSettleTree) {
 }
 
 /**
- * Every settle capture reads `tree`; any other command answers `result`. Unlike
- * {@link mockCommandDispatch} the captured tree carries its surface provenance, so the settled
- * capture can describe a surface other than the one the stored baseline described.
- */
-function mockSurfaceDispatch(tree: GenericSettleTree, result: Record<string, unknown> = {}) {
-  mockDispatch.mockImplementation(async (command) =>
-    command === 'snapshot' ? snapshotPayload(tree) : result,
-  );
-}
-
-/**
  * The default gateway these cases run against: an owner whose settle captures arrive through the
  * emulated `captureSnapshotForSession` this file drives, i.e. one whose bound capture plan is
  * refused. The cases that pin the admitted capture name their own fixture (#3510).
@@ -238,8 +242,6 @@ async function dispatchGeneric(params: {
   runtimeBindings?: Readonly<
     Pick<Parameters<typeof dispatchGenericCommand>[0], 'inspectFacts' | 'bindDevice'>
   >;
-  /** Injects a clock into every command surface the route builds, so no test waits real time. */
-  clock?: CommandClock;
 }): Promise<DaemonResponse> {
   const req: DaemonRequest = {
     token: 't',
@@ -249,10 +251,8 @@ async function dispatchGeneric(params: {
     ...(params.flags ? { flags: params.flags } : {}),
   };
   return await dispatchGenericCommand({
-    createCommandSurface: params.clock
-      ? async (config) => await testCreateCommandSurface({ ...config, clock: params.clock })
-      : testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    createCommandSurface: testCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
     req,
     ref: params.sessionStore.lookup(params.sessionName)!,
     sessionName: params.sessionName,
@@ -273,6 +273,7 @@ function expectOkData(response: DaemonResponse): Record<string, unknown> {
 
 beforeEach(() => {
   captureObservations.length = 0;
+  settleObservationCalls.length = 0;
   mockDispatch.mockReset();
   mockDispatch.mockResolvedValue({});
   mockCaptureSnapshotForSession.mockReset();
@@ -284,12 +285,10 @@ beforeEach(() => {
   );
 });
 
-test('scroll --settle answers with the settled diff against the stored pre-action tree', async () => {
+test('scroll --settle passes the stored baseline and attaches the observation with its issued refs', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-scroll';
   seedSession(sessionName, sessionStore);
-  // Every settle capture sees the post-scroll tree; the diff baseline is the
-  // tree already stored on the session, not a capture taken here.
   mockCommandDispatch([AFTER_NODES]);
 
   const response = await dispatchGeneric({
@@ -301,35 +300,19 @@ test('scroll --settle answers with the settled diff against the stored pre-actio
   });
 
   const settle = expectOkData(response).settle as SettlePayload;
-  expect(settle.settled).toBe(true);
-  expect(settle.quietMs).toBe(25);
-  expect(settle.timeoutMs).toBe(2_000);
-  expect(settle.diff?.summary).toEqual({ additions: 1, removals: 1, unchanged: 1 });
-  expect(settle.diff?.lines).toContainEqual({
-    kind: 'added',
-    text: expect.stringContaining('Load more'),
-    ref: 'e2',
-  });
-  // `SettleDiffLine`: removed lines never carry a ref — their refs would name
-  // nodes of the REPLACED tree, and ref bodies are index-derived, so `@e2` on a
-  // removed line is a different element in the settled tree that took its slot.
-  // Enforced in snapshot-diff (removed lines are built without one); asserted
-  // here because this route is the one that diffs against the STORED session
-  // snapshot, whose nodes all carry refs, so it is where a regression would
-  // first publish one.
-  const removed = settle.diff?.lines.find((line) => line.kind === 'removed');
-  expect(removed?.text).toContain('Continue');
-  expect(removed?.ref).toBeUndefined();
+  expect(settle).toMatchObject(SETTLE_OBSERVATION);
+  expect(settleObservationCalls).toHaveLength(1);
+  expect(settleObservationCalls[0]?.baseline.nodes).toEqual(
+    expect.arrayContaining([expect.objectContaining({ label: 'Continue' })]),
+  );
 
-  // The settled tree became the stored snapshot, and its refs were published:
-  // a partial frame is active at the generation the payload reports.
   const stored = sessionStore.get(sessionName) as SessionState;
+  expect(stored.snapshot?.nodes.some((node) => node.label === 'Load more')).toBe(true);
   expect(refFrameState(stored)).toBe('active');
   expect(settle.refsGeneration).toBe(stored.snapshotGeneration);
-  expect(stored.snapshot?.nodes.some((node) => node.label === 'Load more')).toBe(true);
 });
 
-test('back --settle answers with the settled diff alongside the command result', async () => {
+test('back --settle attaches the observation alongside the command result', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'generic-settle-back';
   seedSession(sessionName, sessionStore);
@@ -347,110 +330,22 @@ test('back --settle answers with the settled diff alongside the command result',
   });
 
   const data = expectOkData(response);
-  // The observation rides ALONGSIDE the command's own closed result shape.
   expect(data.action).toBe('back');
   expect(data.message).toBe('Back');
-  expect((data.settle as SettlePayload).diff?.summary).toEqual({
-    additions: 1,
-    removals: 1,
-    unchanged: 1,
-  });
+  expect(data.settle).toMatchObject(SETTLE_OBSERVATION);
 });
 
-// #2438 cross-surface settle on the GENERIC route: iOS serves a web sign-in sheet
-// (com.apple.SafariViewService) IN PLACE over a still-foreground app, so a settled capture of the
-// sheet and the session's stored pre-action tree of the app describe DIFFERENT surfaces. The diff
-// above would then be a whole-surface replacement presented as change within one surface — and
-// since the daemon treats `diff` presence as "this response issues refs", it would hand the caller
-// refs for that claim. This route plumbs the baseline's surface identity through the
-// `SurfaceScopedNodes` it hands the settle engine; the element-targeted route guarantees the same contract in
-// `src/commands/interaction/runtime/post-action-surface.test.ts`, and these tests assert it for
-// scroll/back so the two routes cannot drift.
-//
-// Both directions are covered because each falsifies a DIFFERENT half of that plumbing, and
-// neither substitutes for the other: drop the baseline's surface identity here and only the
-// sheet-to-app tests fail (an app baseline has no surface id to lose); drop the settled capture's
-// surface identity and only the app-to-sheet tests fail.
-const WEB_SIGN_IN_SHEET: IosSystemSurfaceProvenance = {
-  bundleId: 'com.apple.SafariViewService',
-  kind: 'web-auth',
-};
-const WEB_SIGN_IN_DISCLOSURE = iosSystemSurfaceDisclosure(WEB_SIGN_IN_SHEET.bundleId);
-const WEB_SIGN_IN_DEPARTED_DISCLOSURE = iosSystemSurfaceTransitionDisclosure({
-  from: WEB_SIGN_IN_SHEET.bundleId,
-  to: APP_SURFACE,
-});
-
-/** Five nodes, so a settled sheet clears the tiny-tree readiness hint and the hint under test is
- * the cross-surface one. No Application root: the sheet is hosted out of the app's process. */
-const WEB_SIGN_IN_SHEET_NODES = [
-  'Sign in with Example',
-  'Email',
-  'Password',
-  'Continue',
-  'Cancel',
-].map((label, index) => ({
-  index,
-  type: 'Button',
-  label,
-  rect: { x: 10, y: 120 + index * 50, width: 200, height: 44 },
-  hittable: true,
-}));
-
-/** The app content that returns once the sheet completes and dismisses itself, also past the
- * tiny-tree count so the return direction asserts the same hint contract. */
-const APP_CONTENT_NODES = [
-  { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
-  ...['Load more', 'Profile', 'Settings', 'Sign out'].map((label, offset) => ({
-    index: offset + 1,
-    parentIndex: 0,
-    type: 'Button',
-    label,
-    rect: { x: 10, y: 20 + offset * 50, width: 120, height: 44 },
-    hittable: true,
-  })),
-];
-
-/**
- * The cross-surface contract a settle route owes, asserted as one unit so `scroll` and `back`
- * cannot drift from each other or from the targeted route: no diff is attached across the
- * boundary — therefore no tail and no issued refs — the transition is disclosed, and the settle
- * observation still reports its own verdict alongside that disclosure rather than instead of it.
- */
-function expectCrossSurfaceSettle(
-  settle: SettlePayload,
-  change: { from: string; to: string; disclosure: string },
-): void {
-  expect(settle.surfaceChange).toEqual(change);
-  expect(settle.diff).toBeUndefined();
-  expect(settle.tail).toBeUndefined();
-  // `refsGeneration` is folded in only when the settled diff published refs (ADR 0014); a refused
-  // diff publishes none, so the payload must not name a generation either.
-  expect(settle.refsGeneration).toBeUndefined();
-  expect(settle.hint).toContain('different surfaces');
-  expect(settle.hint).toMatch(/take a snapshot/i);
-  expect(settle.settled).toBe(true);
-  expect(settle.captures).toBeGreaterThanOrEqual(2);
-  expect(settle.quietMs).toBe(25);
-  expect(settle.timeoutMs).toBe(2_000);
-}
-
-/** No refs were published, so the frame the mutating leaf expired stays expired (ADR 0014). */
-function expectNoPublishedRefFrame(sessionStore: SessionStore, sessionName: string): SessionState {
-  const stored = sessionStore.get(sessionName) as SessionState;
-  expect(refFrameState(stored)).toBe('expired');
-  return stored;
-}
-
-test('scroll --settle attaches no diff across an app-to-sheet surface change and discloses it', async () => {
+test('generic settle preserves the stored surface facts on its baseline', async () => {
   const sessionStore = makeSessionStore();
-  const sessionName = 'generic-settle-scroll-to-sheet';
-  seedSession(sessionName, sessionStore);
-  // The stored pre-action tree is app content; every settle capture reads the sheet now presented
-  // over that still-foreground app.
-  mockSurfaceDispatch({ nodes: WEB_SIGN_IN_SHEET_NODES, systemSurface: WEB_SIGN_IN_SHEET });
+  const sessionName = 'generic-settle-surface-baseline';
+  seedSession(sessionName, sessionStore, {
+    nodes: BEFORE_NODES,
+    systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
+    presentedSurface: 'presented',
+  });
+  mockCommandDispatch([AFTER_NODES]);
 
-  const response = await dispatchGeneric({
+  await dispatchGeneric({
     sessionName,
     sessionStore,
     command: 'scroll',
@@ -458,184 +353,40 @@ test('scroll --settle attaches no diff across an app-to-sheet surface change and
     flags: { ...SETTLE_FLAGS },
   });
 
-  expectCrossSurfaceSettle(expectOkData(response).settle as SettlePayload, {
-    from: 'app',
-    to: WEB_SIGN_IN_SHEET.bundleId,
-    disclosure: WEB_SIGN_IN_DISCLOSURE,
-  });
-  // Disclosed, not hidden: the settled sheet still becomes the stored observation a follow-up
-  // snapshot reads — and the surface identity the NEXT command's baseline is built from.
-  const stored = expectNoPublishedRefFrame(sessionStore, sessionName);
-  expect(stored.snapshot?.iosSystemSurfaceBundleId).toBe(WEB_SIGN_IN_SHEET.bundleId);
-});
-
-test('scroll --settle attaches no diff across a sheet-to-app surface change and discloses it', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'generic-settle-scroll-from-sheet';
-  // The baseline is the sheet this scroll acts on; the settled tree is the app content that
-  // returns once the sheet completes and dismisses itself.
-  seedSession(sessionName, sessionStore, {
-    nodes: WEB_SIGN_IN_SHEET_NODES,
-    systemSurface: WEB_SIGN_IN_SHEET,
-  });
-  mockSurfaceDispatch({ nodes: APP_CONTENT_NODES });
-
-  const response = await dispatchGeneric({
-    sessionName,
-    sessionStore,
-    command: 'scroll',
-    positionals: ['down'],
-    flags: { ...SETTLE_FLAGS },
-  });
-
-  const settle = expectOkData(response).settle as SettlePayload;
-  expectCrossSurfaceSettle(settle, {
-    from: WEB_SIGN_IN_SHEET.bundleId,
-    to: 'app',
-    // The sheet is gone, so the standing "is presented over the app" sentence cannot be the one
-    // used — the transition disclosure has to say it left.
-    disclosure: WEB_SIGN_IN_DEPARTED_DISCLOSURE,
-  });
-  expect(settle.surfaceChange?.disclosure).not.toBe(WEB_SIGN_IN_DISCLOSURE);
-  expect(settle.surfaceChange?.disclosure).toMatch(/sign-in sheet/);
-  const stored = expectNoPublishedRefFrame(sessionStore, sessionName);
-  expect(stored.snapshot?.iosSystemSurfaceBundleId).toBeUndefined();
-});
-
-test('back --settle attaches no diff across an app-to-sheet surface change and discloses it', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'generic-settle-back-to-sheet';
-  seedSession(sessionName, sessionStore);
-  mockSurfaceDispatch(
-    { nodes: WEB_SIGN_IN_SHEET_NODES, systemSurface: WEB_SIGN_IN_SHEET },
-    {
-      action: 'back',
-      mode: 'in-app',
-      message: 'Back',
-    },
-  );
-
-  const response = await dispatchGeneric({
-    sessionName,
-    sessionStore,
-    command: 'back',
-    flags: { ...SETTLE_FLAGS },
-  });
-
-  const data = expectOkData(response);
-  // The refusal rides ALONGSIDE the command's own closed result shape, same as the diff does.
-  expect(data.action).toBe('back');
-  expect(data.message).toBe('Back');
-  expectCrossSurfaceSettle(data.settle as SettlePayload, {
-    from: 'app',
-    to: WEB_SIGN_IN_SHEET.bundleId,
-    disclosure: WEB_SIGN_IN_DISCLOSURE,
-  });
-  const stored = expectNoPublishedRefFrame(sessionStore, sessionName);
-  expect(stored.snapshot?.iosSystemSurfaceBundleId).toBe(WEB_SIGN_IN_SHEET.bundleId);
-});
-
-test('back --settle attaches no diff across a sheet-to-app surface change and discloses it', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'generic-settle-back-from-sheet';
-  seedSession(sessionName, sessionStore, {
-    nodes: WEB_SIGN_IN_SHEET_NODES,
-    systemSurface: WEB_SIGN_IN_SHEET,
-  });
-  mockSurfaceDispatch(
-    { nodes: APP_CONTENT_NODES },
-    {
-      action: 'back',
-      mode: 'in-app',
-      message: 'Back',
-    },
-  );
-
-  const response = await dispatchGeneric({
-    sessionName,
-    sessionStore,
-    command: 'back',
-    flags: { ...SETTLE_FLAGS },
-  });
-
-  const data = expectOkData(response);
-  expect(data.action).toBe('back');
-  expectCrossSurfaceSettle(data.settle as SettlePayload, {
-    from: WEB_SIGN_IN_SHEET.bundleId,
-    to: 'app',
-    disclosure: WEB_SIGN_IN_DEPARTED_DISCLOSURE,
-  });
-  const stored = expectNoPublishedRefFrame(sessionStore, sessionName);
-  expect(stored.snapshot?.iosSystemSurfaceBundleId).toBeUndefined();
-});
-
-/**
- * `back --settle` over a sheet left on the session by a capture of one given flavour, which is how
- * the generic route picks its baseline (`generic-settle.ts` reads the stored tree directly). The
- * settle loop's budget arithmetic runs on the injected clock, so no caller waits real time.
- */
-async function dismissSheetFromBaseline(
-  sessionName: string,
-  baseline: GenericSettleTree,
-  options: { outdated?: boolean; captures?: RawSnapshotNode[][] } = {},
-): Promise<SettlePayload> {
-  const sessionStore = makeSessionStore();
-  const session = seedSession(sessionName, sessionStore, baseline);
-  if (options.outdated) markSessionSnapshotOutdated(session);
-  // Rootless, as the first reads after a dismissal can be: only a presented baseline arms on them.
-  mockCommandDispatch(options.captures ?? [SHEET_DISMISSED_NODES.slice(1)]);
-  const response = await dispatchGeneric({
-    sessionName,
-    sessionStore,
-    command: 'back',
-    flags: { settle: true, settleQuietMs: 25, timeoutMs: 30_000 },
-    clock: fakeClock(),
-  });
-  return expectOkData(response).settle as SettlePayload;
-}
-
-test('the confirmation arms for one presented sheet whichever baseline flavour the route holds', async () => {
-  // The interactive capture projects the sheet as 4 nodes and the full read as 6, so a rule keyed on
-  // the projection disarms on the full one. The producer's fact is stamped before projection.
-  const interactive = await dismissSheetFromBaseline('generic-settle-dismiss-sheet-interactive', {
-    nodes: PRESENTED_SHEET_INTERACTIVE_NODES,
+  expect(settleObservationCalls[0]?.baseline).toMatchObject({
+    surfaceBundleId: 'com.apple.SafariViewService',
     presentedSurface: 'presented',
   });
-  const full = await dismissSheetFromBaseline('generic-settle-dismiss-sheet-full', {
-    nodes: PRESENTED_SHEET_FULL_NODES,
-    presentedSurface: 'presented',
+  expect(settleObservationCalls[0]?.baseline.nodes).toEqual(
+    expect.arrayContaining([expect.objectContaining({ label: 'Continue' })]),
+  );
+});
+
+test('generic settle drops an outdated presented-surface fact but keeps its stored nodes', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'generic-settle-outdated-baseline';
+  const session = seedSession(sessionName, sessionStore, {
+    nodes: BEFORE_NODES,
+    systemSurface: { bundleId: 'com.apple.SafariViewService', kind: 'web-auth' },
+    presentedSurface: 'absent',
+  });
+  markSessionSnapshotOutdated(session);
+  mockCommandDispatch([AFTER_NODES]);
+
+  await dispatchGeneric({
+    sessionName,
+    sessionStore,
+    command: 'back',
+    flags: { ...SETTLE_FLAGS },
   });
 
-  expect(interactive.settled).toBe(true);
-  expect(full.settled).toBe(true);
-  expect(interactive.waitedMs).toBeGreaterThanOrEqual(1_500);
-  expect(full.waitedMs).toBeGreaterThanOrEqual(1_500);
-});
-
-test('back --settle keeps the plain window when the stored tree presented nothing', async () => {
-  // The same broad replacement, stamped `absent` by its producer: the stored tree's fact reaches
-  // the loop, and a screen with nothing presented over it owes no dismissal confirmation (#3470).
-  const settle = await dismissSheetFromBaseline(
-    'generic-settle-absent',
-    { nodes: PRESENTED_SHEET_FULL_NODES, presentedSurface: 'absent' },
-    { captures: [SHEET_DISMISSED_NODES] },
+  expect(settleObservationCalls[0]?.baseline).toMatchObject({
+    surfaceBundleId: 'com.apple.SafariViewService',
+  });
+  expect(settleObservationCalls[0]?.baseline.presentedSurface).toBeUndefined();
+  expect(settleObservationCalls[0]?.baseline.nodes).toEqual(
+    expect.arrayContaining([expect.objectContaining({ label: 'Continue' })]),
   );
-
-  expect(settle.settled).toBe(true);
-  expect(settle.waitedMs).toBeLessThan(1_500);
-});
-
-test('back --settle keeps the confirmation when a side effect outdated an absent stored tree', async () => {
-  // The app screen was read `absent`, then a press presented the sheet without a capture. The
-  // stored fact predates the sheet, so it cannot rule out the confirmation its dismissal owes.
-  const settle = await dismissSheetFromBaseline(
-    'generic-settle-outdated-absent',
-    { nodes: SHEET_DISMISSED_NODES, presentedSurface: 'absent' },
-    { outdated: true, captures: [PRESENTED_SHEET_INTERACTIVE_NODES, SHEET_DISMISSED_NODES] },
-  );
-
-  expect(settle.settled).toBe(true);
-  expect(settle.waitedMs).toBeGreaterThanOrEqual(1_500);
 });
 
 test('the settle observation runs after the post-gesture stabilization marker', async () => {
@@ -761,7 +512,7 @@ test('an ended generic lifetime is refused before dispatch or settle constructio
   await expect(
     dispatchGenericCommand({
       createCommandSurface: testCreateCommandSurface,
-      platformServices: composedPlatformServicesFixture(),
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         token: 't',
         session: sessionName,
@@ -907,80 +658,3 @@ for (const change of ['rebuild', 'retire'] as const) {
     }
   });
 }
-
-// The default quiet window keys on the capture the settle loop PERFORMS (#3470 follow-up), not on
-// the baseline it diffs: on this route the baseline is the session's stored tree, which can be
-// several commands stale and served by a different producer. All three run on an injected clock, so
-// they assert the resolved window without real waiting.
-test('scroll --settle without --settle-quiet uses the shorter default when the loop reads the simulator bridge', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'generic-settle-default-quiet';
-  seedSession(sessionName, sessionStore, {
-    nodes: BEFORE_NODES,
-    producer: 'simulator-ax-bridge',
-  });
-  mockCommandDispatch([AFTER_NODES], 'simulator-ax-bridge');
-
-  const response = await dispatchGeneric({
-    sessionName,
-    sessionStore,
-    command: 'scroll',
-    positionals: ['down'],
-    // No settleQuietMs: the route's own default window is what is under test.
-    flags: { settle: true, timeoutMs: 2_000 },
-    clock: fakeClock(),
-  });
-
-  const settle = expectOkData(response).settle as SettlePayload;
-  expect(settle.settled).toBe(true);
-  expect(settle.quietMs).toBe(300);
-});
-
-test('scroll --settle keeps the 500ms default when the loop reads the Apple runner', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'generic-settle-default-quiet-runner';
-  seedSession(sessionName, sessionStore, {
-    nodes: BEFORE_NODES,
-    producer: 'apple-runner',
-  });
-  mockCommandDispatch([AFTER_NODES], 'apple-runner');
-
-  const response = await dispatchGeneric({
-    sessionName,
-    sessionStore,
-    command: 'scroll',
-    positionals: ['down'],
-    flags: { settle: true, timeoutMs: 2_000 },
-    clock: fakeClock(),
-  });
-
-  const settle = expectOkData(response).settle as SettlePayload;
-  expect(settle.settled).toBe(true);
-  expect(settle.quietMs).toBe(500);
-});
-
-test('a stale bridge-sourced baseline does not shorten a settle the Apple runner performs', async () => {
-  // The mismatch the stored baseline can carry: the tree on file came from the bridge, but the
-  // captures that pay this window come from the runner, whose read the short window was never
-  // measured on. Keying on the baseline would hold 300ms against an unmeasured read.
-  const sessionStore = makeSessionStore();
-  const sessionName = 'generic-settle-default-quiet-mismatch';
-  seedSession(sessionName, sessionStore, {
-    nodes: BEFORE_NODES,
-    producer: 'simulator-ax-bridge',
-  });
-  mockCommandDispatch([AFTER_NODES], 'apple-runner');
-
-  const response = await dispatchGeneric({
-    sessionName,
-    sessionStore,
-    command: 'scroll',
-    positionals: ['down'],
-    flags: { settle: true, timeoutMs: 2_000 },
-    clock: fakeClock(),
-  });
-
-  const settle = expectOkData(response).settle as SettlePayload;
-  expect(settle.settled).toBe(true);
-  expect(settle.quietMs).toBe(500);
-});

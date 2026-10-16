@@ -1,4 +1,4 @@
-import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import fs from 'node:fs';
 
 import path from 'node:path';
@@ -6,16 +6,16 @@ import { expect, test } from 'vitest';
 import { SCREENSHOT_CROP_REASONS } from '@agent-device/contracts/capture';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
 import { ANDROID_EMULATOR, IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
-import { makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import type { GenericPlatformExecutionParams } from '@agent-device/daemon/testing/generic-leaf-execution';
-import { resolveScreenshotGenericExecution } from '@agent-device/daemon/testing/screenshot-runtime';
+import { makeSession } from '../__tests__/support/session-factories.ts';
+import type { GenericPlatformExecutionParams } from '../core/generic-leaf-execution.ts';
+import { resolveScreenshotGenericExecution } from './screenshot-runtime.ts';
 import {
   screenshotRuntimeFixture,
   writeSolidPng,
-} from '@agent-device/daemon/testing/__tests__/screenshot-runtime-fixture';
-import type { DaemonRequest } from '@agent-device/daemon';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+} from '../__tests__/support/screenshot-runtime-fixture.ts';
+import type { DaemonRequest } from '../index.ts';
+import type { SessionState } from '../core/session-state.ts';
+import { screenshotCommandSurface as testCreateCommandSurface } from '../__tests__/support/screenshot-command-surface-fake.ts';
 
 const unavailableCapture = Object.freeze({
   available: false,
@@ -73,7 +73,7 @@ test('admits one capture plan, binds once, and hands the runtime the resolved de
 
   const resolved = await resolveScreenshotGenericExecution({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req,
     session,
     inspectFacts: fixture.inspectFacts,
@@ -100,7 +100,7 @@ test('an iOS simulator session capture skips the redundant boot probe', async ()
 
   const resolved = await resolveScreenshotGenericExecution({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req,
     session,
     inspectFacts: fixture.inspectFacts,
@@ -120,7 +120,7 @@ test('refuses an unavailable exact-owner capture fact before binding', async () 
 
   const resolved = await resolveScreenshotGenericExecution({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req: screenshotRequest({ positionals: ['/tmp/unsupported.png'] }),
     session,
     inspectFacts: fixture.inspectFacts,
@@ -151,7 +151,7 @@ test('--overlay-refs is refused up front when the target cannot capture a tree',
 
   const resolved = await resolveScreenshotGenericExecution({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req: screenshotRequest({ positionals: ['/tmp/overlay.png'], flags: { overlayRefs: true } }),
     session,
     inspectFacts: fixture.inspectFacts,
@@ -185,7 +185,7 @@ test('the default destination is a reserved temp file, removed when the capture 
 
   const resolved = await resolveScreenshotGenericExecution({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req,
     session,
     inspectFacts: fixture.inspectFacts,
@@ -205,7 +205,7 @@ test('rejects the retired max-size field before inspecting owner facts', async (
   await expect(
     resolveScreenshotGenericExecution({
       createCommandSurface: testCreateCommandSurface,
-      platformServices: composedPlatformServicesFixture(),
+      platformServices: daemonPlatformServicesFixture(),
       req: screenshotRequest({
         positionals: ['/tmp/legacy.png'],
         flags: { screenshotMaxSize: 720 } as unknown as DaemonRequest['flags'],
@@ -225,7 +225,7 @@ test('rejects --pixel-density outside iOS-family simulators before inspecting ow
   await expect(
     resolveScreenshotGenericExecution({
       createCommandSurface: testCreateCommandSurface,
-      platformServices: composedPlatformServicesFixture(),
+      platformServices: daemonPlatformServicesFixture(),
       req: screenshotRequest({
         positionals: ['/tmp/android.png'],
         flags: { screenshotPixelDensity: 2 },
@@ -277,7 +277,7 @@ test('the crop runs after the platform write and before the shared scale', async
 
   const resolved = await resolveScreenshotGenericExecution({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req,
     session,
     inspectFacts: fixture.inspectFacts,
@@ -327,7 +327,7 @@ test('a partial crop surfaces its warning once in the result record and annotate
 
   const resolved = await resolveScreenshotGenericExecution({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req,
     session,
     inspectFacts: fixture.inspectFacts,
@@ -351,7 +351,7 @@ test('the crop plan is refused up front when the target cannot capture a tree', 
 
   const resolved = await resolveScreenshotGenericExecution({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req: screenshotRequest({
       positionals: ['/tmp/crop.png'],
       flags: { screenshotCropOn: 'label="Save"' },
@@ -388,7 +388,7 @@ test('the result record carries the display rotation the capture reported', asyn
 
   const resolved = await resolveScreenshotGenericExecution({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req,
     session,
     inspectFacts: fixture.inspectFacts,
@@ -409,7 +409,7 @@ test('the result record omits the display rotation when the capture reported non
 
   const resolved = await resolveScreenshotGenericExecution({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req,
     session,
     inspectFacts: fixture.inspectFacts,

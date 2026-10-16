@@ -48,6 +48,7 @@ export async function captureAndStoreSnapshot(
     interactiveOnly?: boolean;
     includeRects?: boolean;
     preferredBackend?: SnapshotPreferredBackend;
+    onlyStoreWhenSessionExists?: boolean;
   },
 ): Promise<SnapshotState> {
   const name = params.session ?? 'default';
@@ -62,6 +63,8 @@ export async function captureAndStoreSnapshot(
   const snapshot = captured?.snapshot;
   if (!snapshot) throw new Error('captureAndStoreSnapshot: the backend returned no snapshot');
   const current = await config.sessions?.get(name);
-  await config.sessions?.set({ ...(current ?? { name }), name, snapshot });
+  if (current || !params.onlyStoreWhenSessionExists) {
+    await config.sessions?.set({ ...(current ?? { name }), name, snapshot });
+  }
   return snapshot;
 }

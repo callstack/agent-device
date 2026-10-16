@@ -217,7 +217,7 @@ function resolveRelative(from: string, specifier: string, tree: SourceTreeReader
 
 /** `@agent-device/<pkg>` -> that package's directory, keyed by its declared name. */
 function readWorkspacePackageDirs(tree: SourceTreeReader): Map<string, string> {
-  const packagesRoot = path.resolve(import.meta.dirname, '../../packages');
+  const packagesRoot = path.resolve(import.meta.dirname, '../../../packages');
   const dirs = new Map<string, string>();
   for (const entry of tree.readdir(packagesRoot)) {
     const manifestPath = path.join(packagesRoot, entry, 'package.json');

@@ -1,7 +1,6 @@
 import type {
   PlatformGatedProviderResolverKey,
   PlatformProviderRequestContext,
-  RequestPlatformProviderScope,
 } from '@agent-device/contracts/platform-providers';
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
@@ -25,29 +24,15 @@ import {
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '@agent-device/test-kit';
-import { makeSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { getPlugin, tryGetPlugin } from '../../core/platform-plugin-registry.ts';
-import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
+import { getPlugin, tryGetPlugin } from './platform-plugin-registry.ts';
+import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
 import {
   createRequestPlatformProviders,
   type PlatformProviderResolvers,
-} from '../../platform-runtime.ts';
-import { resolvePlatformProviderRequestContext } from '@agent-device/daemon/testing/request-platform-provider-context';
-import type { DaemonRequest } from '@agent-device/daemon';
-
-// Phase 3 step b.3 (issue #974) parity gate for the request-scope provider
-// facet. The per-platform GATE that each descriptor in the root-owned provider composition
-// open-coded (`device.platform === 'android'`, `isApplePlatform(...)`, etc.) now flows
-// through the PlatformPlugin `providers.platformGatedResolvers` facet. The daemon still
-// root composition owns the resolver invocation, wrapper composition, and concurrency isolation —
-// only the gate moved to data. An INDEPENDENT verbatim copy of the former gates below is the
-// BEFORE oracle, checked at the facet level AND end-to-end through
-// the root-composed RequestPlatformProviders boundary.
+} from '../platform-runtime.ts';
 
 registerBuiltinPlatformPlugins();
 
-// The platform-gated resolver keys, and the ungated resolver (no platform gate;
-// they apply on every platform and are NOT part of the facet).
 const GATED_KEYS: PlatformGatedProviderResolverKey[] = [
   'androidAdbProvider',
   'appleRunnerProvider',
@@ -61,21 +46,19 @@ const UNGATED_KEYS = [
   'appleSimulatorScreenRecordingTransport',
 ] as const;
 
-// --- INDEPENDENT verbatim copy of the former per-descriptor platform gates ---
 function gatedResolversByHand(device: DeviceInfo): Set<PlatformGatedProviderResolverKey> {
   const applies = new Set<PlatformGatedProviderResolverKey>();
-  if (device.platform === 'android') applies.add('androidAdbProvider'); // was `!== 'android'`
+  if (device.platform === 'android') applies.add('androidAdbProvider');
   if (isApplePlatform(device.platform)) {
-    applies.add('appleRunnerProvider'); // was `!isApplePlatform(...)`
-    applies.add('appleToolProvider'); // was `!isApplePlatform(...)`
+    applies.add('appleRunnerProvider');
+    applies.add('appleToolProvider');
   }
   if (device.platform === 'vega') applies.add('vegaToolProvider');
-  if (device.platform === 'linux') applies.add('linuxToolProvider'); // was `!== 'linux'`
-  if (device.platform === 'web') applies.add('webProvider'); // was `!== 'web'`
+  if (device.platform === 'linux') applies.add('linuxToolProvider');
+  if (device.platform === 'web') applies.add('webProvider');
   return applies;
 }
 
-// --- the exhaustive synthetic device matrix (every platform x kind x target) ---
 const DEVICE_KINDS_ALL: DeviceKind[] = ['simulator', 'emulator', 'device'];
 const DEVICE_TARGETS_ALL: (DeviceTarget | undefined)[] = [undefined, ...DEVICE_TARGETS];
 
@@ -124,8 +107,6 @@ test('providers.platformGatedResolvers facet is byte-identical to the former han
 });
 
 test('every family carries the providers facet with the resolvers it owns', () => {
-  // The exact-array form (not the membership scan above) is what catches a facet listing a
-  // resolver twice. Harmonyos carries no facet at all, so five families are asserted here.
   assert.deepEqual([...getPlugin('apple').providers!.platformGatedResolvers].sort(), [
     'appleRunnerProvider',
     'appleToolProvider',
@@ -142,12 +123,6 @@ test('every family carries the providers facet with the resolvers it owns', () =
   assert.deepEqual([...getPlugin('web').providers!.platformGatedResolvers], ['webProvider']);
 });
 
-// End-to-end routing proof: drive the REAL root-composed provider boundary with a
-// spy for every resolver and assert exactly the gated resolvers the former hand gate
-// admitted are invoked (plus the ungated resolver, on every platform). Each spy
-// returns `undefined`, so no wrapper is composed — but the resolver is still called iff
-// its gate passed, which is precisely what the former `device.platform === …` branch
-// decided. Breaking the facet flips which resolvers run and fails this test.
 test('root provider composition invokes exactly the resolvers the former gate did', async () => {
   for (const device of SAMPLE_DEVICES) {
     const invoked = new Set<string>();
@@ -166,14 +141,14 @@ test('root provider composition invokes exactly the resolvers the former gate di
       appleSimulatorScreenRecordingTransport: spy('appleSimulatorScreenRecordingTransport'),
     };
 
-    await withRequestPlatformProviderScope(
-      {
-        req: request('snapshot'),
-        existingSession: makeSession(`prov-${device.id}`, { device }),
-        providers,
-      },
-      async () => {},
-    );
+    const name = `prov-${device.id}`;
+    const context: PlatformProviderRequestContext = {
+      device,
+      session: { name, device },
+      requestedSession: name,
+      requestId: `req-${device.id}`,
+    };
+    await createRequestPlatformProviders({ providers }).run(context, async () => {});
 
     const gatedInvoked = new Set(GATED_KEYS.filter((key) => invoked.has(key)));
     assert.deepEqual(
@@ -186,31 +161,3 @@ test('root provider composition invokes exactly the resolvers the former gate di
     }
   }
 });
-
-function request(command: string): DaemonRequest {
-  return {
-    token: 'test-token',
-    session: 'default',
-    command,
-    positionals: [],
-    flags: {},
-    meta: { requestId: `req-${command}` },
-  };
-}
-
-async function withRequestPlatformProviderScope<T>(
-  params: {
-    req: DaemonRequest;
-    existingSession: Parameters<typeof resolvePlatformProviderRequestContext>[0]['existingSession'];
-    providers: PlatformProviderResolvers;
-  },
-  task: (scope: RequestPlatformProviderScope) => Promise<T>,
-): Promise<T> {
-  const context: PlatformProviderRequestContext | undefined =
-    await resolvePlatformProviderRequestContext({
-      req: params.req,
-      existingSession: params.existingSession,
-    });
-  if (!context) return await task({});
-  return await createRequestPlatformProviders({ providers: params.providers }).run(context, task);
-}

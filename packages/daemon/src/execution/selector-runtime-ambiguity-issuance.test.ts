@@ -1,24 +1,45 @@
-import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import { attachRefs } from '@agent-device/kernel/snapshot';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { selectorCaptureFixture } from '@agent-device/daemon/testing/__tests__/selector-capture-fixture';
-import { refFrameScope, refFrameState } from '@agent-device/daemon/testing/ref-frame';
-import type { DaemonRequest } from '@agent-device/daemon';
-import { dispatchIsViaRuntime } from '@agent-device/daemon/testing/selector-runtime';
+import { makeSessionStore } from '../__tests__/support/store-factory.ts';
+import { selectorCaptureFixture } from '../__tests__/support/selector-capture-fixture.ts';
+import { refFrameScope, refFrameState } from '../core/ref-frame.ts';
+import type { DaemonRequest } from '../index.ts';
+import { dispatchIsViaRuntime } from './selector-runtime.ts';
 import { IOS_SIMULATOR } from '@agent-device/test-kit';
 import {
   getRuntimeBindings,
   mockTapPoint,
   resetGetRuntimeFixture,
-} from '@agent-device/daemon/testing/__tests__/interaction-get-runtime-fixture';
+} from './__tests__/interaction-get-runtime-fixture.ts';
 import {
   contextFromFlags,
   makeStaleRefSession,
   readPressPoint,
-} from '@agent-device/daemon/testing/interaction/internal/__tests__/interaction-touch-fixtures';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+} from './interaction/internal/__tests__/interaction-touch-fixtures.ts';
+import { handleInteractionCommands } from './interaction/index.ts';
+import { createTouchCommandSurface } from '../__tests__/support/touch-command-surface-fake.ts';
+const ambiguousIsError = () =>
+  new AppError('AMBIGUOUS_MATCH', 'Selector matched 2 elements', {
+    matches: 2,
+    candidates: ['@e2 [button] "Deploy"', '@e3 [button] "Deploy"'],
+    hint: 'Narrow the selector or act on a printed candidate with a command that takes refs.',
+  });
+
+const testCreateCommandSurface = createTouchCommandSurface({
+  members: (config) => ({
+    selectors: {
+      is: async ({ session, requestId, signal }) => {
+        await config.backend.captureSnapshot?.(
+          { session, requestId, signal: signal ?? config.signal },
+          { includeRects: true },
+        );
+        throw ambiguousIsError();
+      },
+    },
+  }),
+});
 
 // #2870 review, the reviewer's pinned invariant: a response that prints
 // candidate @refs must issue those refs on the frame they came from. The end-
@@ -28,39 +49,17 @@ import { testCreateCommandSurface } from './command-surface-fixture.ts';
 // resolving against the earlier tree, where the same body names a different
 // node. The candidate either acts on the listed node or is refused.
 
-const { mockRunAppleRunnerCommand, mockCaptureSnapshotWithInteractor } = vi.hoisted(() => ({
-  mockRunAppleRunnerCommand: vi.fn(),
+const { mockCaptureSnapshotWithInteractor } = vi.hoisted(() => ({
   mockCaptureSnapshotWithInteractor: vi.fn(),
 }));
 
-vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
-  return {
-    ...actual,
-    getAndroidScreenSize: vi.fn(async () => ({ width: 1344, height: 2992 })),
-    getAndroidAppState: vi.fn(async () => ({})),
-    getAndroidBlockingDialogObservation: vi.fn(async () => ({ status: 'clear' }) as const),
-  };
-});
-
-vi.mock('@agent-device/daemon/testing/snapshot-interactor-capture', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@agent-device/daemon/testing/snapshot-interactor-capture')
-    >();
+vi.mock('../core/snapshot-interactor-capture.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../core/snapshot-interactor-capture.ts')>();
   return { ...actual, captureSnapshotWithInteractor: mockCaptureSnapshotWithInteractor };
-});
-
-vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@agent-device/platform-apple/runner/operations')>();
-  return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
 beforeEach(() => {
   resetGetRuntimeFixture();
-  mockRunAppleRunnerCommand.mockReset();
-  mockRunAppleRunnerCommand.mockResolvedValue({});
   mockCaptureSnapshotWithInteractor.mockReset();
 });
 
@@ -115,7 +114,7 @@ test('an ambiguous is issues its printed candidates so press acts on the listed 
   const fixture = selectorCaptureFixture({ snapshot: () => ambiguousFullCapture() });
   const response = await dispatchIsViaRuntime({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req: isRequest(sessionName, ['visible', 'label="Deploy"']),
     sessionName,
     sessionStore,
@@ -162,7 +161,7 @@ test('a plain candidate ref from the ambiguity refusal is refused, not silently 
   const fixture = selectorCaptureFixture({ snapshot: () => ambiguousFullCapture() });
   const response = await dispatchIsViaRuntime({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req: isRequest(sessionName, ['visible', 'label="Deploy"']),
     sessionName,
     sessionStore,
@@ -227,7 +226,7 @@ test('an ambiguous is on a sparse capture prints no candidates and issues nothin
   const fixture = selectorCaptureFixture({ snapshot: sparseCapture });
   const response = await dispatchIsViaRuntime({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req: isRequest(sessionName, ['visible', 'label="Deploy"']),
     sessionName,
     sessionStore,
@@ -296,8 +295,13 @@ test('an ambiguous press issues its printed candidates from its own capture', as
     producer: 'apple-runner',
   });
 
+  const pressAmbiguitySurface = createTouchCommandSurface({
+    matchSelector: () => {
+      throw ambiguousIsError();
+    },
+  });
   const response = await handleInteractionCommands({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface: pressAmbiguitySurface,
     req: {
       token: 't',
       session: sessionName,
@@ -314,6 +318,7 @@ test('an ambiguous press issues its printed candidates from its own capture', as
   expect(response?.ok).toBe(false);
   if (!response || response.ok) throw new Error('expected the acting ambiguity refusal');
   expect(response.error.code).toBe('AMBIGUOUS_MATCH');
+  expect(mockCaptureSnapshotWithInteractor).toHaveBeenCalledOnce();
   // The acting refusal owes the same contract the read refusal gives: the
   // printed candidates are ISSUED refs pinned to the generation of the
   // capture the press itself consumed, not a count-only degradation.

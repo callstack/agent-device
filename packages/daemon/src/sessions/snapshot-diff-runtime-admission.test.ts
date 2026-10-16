@@ -1,4 +1,4 @@
-import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import { expect, test, vi } from 'vitest';
 import {
   type DeviceBinding,
@@ -7,22 +7,24 @@ import {
   narrowDeviceBinding,
 } from '@agent-device/contracts/platform-runtime';
 import type { PlatformRuntimeOperations } from '@agent-device/contracts/platform-runtime-operations';
+import type { DiffSnapshotCommandResult } from '@agent-device/contracts/capture';
 import {
   type CaptureSnapshotInput,
   type SnapshotResult,
   snapshotRuntimeOperationFacts,
 } from '@agent-device/contracts/snapshot-runtime';
 import { deviceShape } from '@agent-device/kernel/device';
-import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { makeAndroidSession } from '../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../__tests__/support/store-factory.ts';
 import type {
   BindDeviceRuntime,
   InspectDeviceRuntimeFacts,
-} from '@agent-device/daemon/testing/request-runtime-binding';
-import { dispatchSnapshotDiffViaRuntime } from '@agent-device/daemon/testing/snapshot-diff-runtime';
-import { expectRefusesUnavailableExactOwnerFact } from '@agent-device/daemon/testing/__tests__/runtime-binding-conformance';
-import { unavailableDeviceRuntimeGateway } from '@agent-device/daemon/testing/__tests__/support/unavailable-device-runtime-gateway';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+} from '../core/request-runtime-binding.ts';
+import { dispatchSnapshotDiffViaRuntime } from './snapshot-diff-runtime.ts';
+import { expectRefusesUnavailableExactOwnerFact } from '../__tests__/support/runtime-binding-conformance.ts';
+import { unavailableDeviceRuntimeGateway } from '../__tests__/support/unavailable-device-runtime-gateway.ts';
+import { commandSurfaceWithMembers } from '../__tests__/support/command-surface-override-fake.ts';
+import { forwardingCreateCommandSurface as testCreateCommandSurface } from '../__tests__/support/command-surface-fake.ts';
 
 const available = Object.freeze({ available: true } as const);
 const unavailable = Object.freeze({
@@ -132,7 +134,7 @@ test.each([
 
     const response = await dispatchSnapshotDiffViaRuntime({
       createCommandSurface: testCreateCommandSurface,
-      platformServices: composedPlatformServicesFixture(),
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         command: 'diff',
         positionals: ['snapshot'],
@@ -189,11 +191,44 @@ test('preserves initialized, unchanged, and changed diff results through one bou
   });
   const sessionStore = makeSessionStore('agent-device-diff-runtime-results-');
   sessionStore.publish('diff-runtime', { ...harness.session, appBundleId: 'com.example.app' });
+  const results: DiffSnapshotCommandResult[] = [
+    {
+      mode: 'snapshot',
+      baselineInitialized: true,
+      summary: { additions: 0, removals: 0, unchanged: 0 },
+      lines: [],
+    },
+    {
+      mode: 'snapshot',
+      baselineInitialized: false,
+      summary: { additions: 0, removals: 0, unchanged: 1 },
+      lines: [],
+    },
+    {
+      mode: 'snapshot',
+      baselineInitialized: false,
+      summary: { additions: 1, removals: 1, unchanged: 0 },
+      lines: [],
+    },
+  ];
+  const resultSurface = commandSurfaceWithMembers((config) => ({
+    capture: {
+      diffSnapshot: async ({ session, requestId, signal, interactiveOnly, depth, scope, raw }) => {
+        await config.backend.captureSnapshot?.(
+          { session, requestId, signal: signal ?? config.signal },
+          { interactiveOnly, depth, scope, raw },
+        );
+        const result = results.shift();
+        if (!result) throw new Error('diff result fixture exhausted');
+        return result;
+      },
+    },
+  }));
 
   const run = async () =>
     await dispatchSnapshotDiffViaRuntime({
-      createCommandSurface: testCreateCommandSurface,
-      platformServices: composedPlatformServicesFixture(),
+      createCommandSurface: resultSurface,
+      platformServices: daemonPlatformServicesFixture(),
       req: {
         command: 'diff',
         positionals: ['snapshot'],
@@ -243,7 +278,7 @@ test('a sparse internal diff capture returns no screenshot fallback artifact', a
 
   const response = await dispatchSnapshotDiffViaRuntime({
     createCommandSurface: testCreateCommandSurface,
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     req: { command: 'diff', positionals: ['snapshot'], token: 't', session: 'diff-runtime' },
     sessionName: 'diff-runtime',
     logPath: '/tmp/diff-runtime.log',

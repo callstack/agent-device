@@ -1,137 +1,83 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { beforeEach, expect, test } from 'vitest';
-import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { SessionStore } from '@agent-device/daemon/testing/session-store';
+import { expect, test } from 'vitest';
 import { AppError } from '@agent-device/kernel/errors';
-import { resetAndroidSnapshotHelperInstallCache } from '@agent-device/platform-android/mechanics';
-import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../test-utils/android-snapshot-helper.ts';
-import type { AndroidAdbProvider } from '@agent-device/platform-android/mechanics';
-import {
-  createPlatformRuntimeGateway,
-  createRequestPlatformProviders,
-} from '../../platform-runtime.ts';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { ANDROID_EMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
+import { forwardingCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
+import { makeSession } from '../../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
+import { screenshotRuntimeFixture } from '../../__tests__/support/screenshot-runtime-fixture.ts';
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
 
-function makeAndroidSessionStore(name: string): SessionStore {
-  const sessionStore = new SessionStore(`/tmp/${name}`);
-  sessionStore.publish('default', {
-    name: 'default',
-    createdAt: Date.now(),
-    device: {
-      platform: 'android',
-      id: 'remote-android-1',
-      name: 'Remote Android',
-      kind: 'device',
-      booted: true,
+function snapshotHandler(error: AppError) {
+  const sessionStore = makeSessionStore('agent-device-snapshot-helper-response-');
+  sessionStore.publish(
+    'default',
+    makeSession('default', { device: ANDROID_EMULATOR, appBundleId: 'com.example.app' }),
+  );
+  const runtime = screenshotRuntimeFixture({
+    snapshotResult: () => {
+      throw error;
     },
-    appBundleId: 'com.example.app',
-    actions: [],
   });
-  return sessionStore;
-}
-
-function makeHandler(sessionStore: SessionStore, androidAdbProvider: () => AndroidAdbProvider) {
-  const deviceRuntimeGateway = createPlatformRuntimeGateway({
-    sessionsDir: '/tmp/agent-device-snapshot-helper-runtime',
-    resolveSessionArtifacts: (sessionId) => ({
-      outputPath: `/tmp/agent-device-snapshot-helper-runtime/${sessionId}/app.log`,
-      pidPath: `/tmp/agent-device-snapshot-helper-runtime/${sessionId}/app-log.pid`,
-    }),
-  });
-  return createRequestHandler({
-    createCommandSurface: testCreateCommandSurface,
-    logPath: '/tmp/daemon.log',
+  const handler = createRequestHandler({
+    createCommandSurface: forwardingCreateCommandSurface,
+    logPath: `${mkdtempForTestSync('agent-device-snapshot-helper-response-')}/daemon.log`,
     token: 'token',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    requestPlatformProviders: createRequestPlatformProviders({
-      providers: { androidAdbProvider },
-    }),
-    deviceRuntimeGateway,
+    deviceRuntimeGateway: runtime.gateway,
     trackDownloadableArtifact: () => 'artifact-id',
   });
+  return handler;
 }
 
-beforeEach(() => {
-  resetAndroidSnapshotHelperInstallCache();
-});
-
-// Regression for #1284/#1285 P1: a provider whose `install` REJECTS with an
-// enriched INSTALL_FAILED_* error (instead of resolving with a nonzero result)
-// must still surface the device-side install classification on the public
-// daemon snapshot error, not the generic retry/doctor hint.
-test('snapshot reports a device-side install failure when the provider install rejects', async () => {
-  const sessionStore = makeAndroidSessionStore(
-    'agent-device-request-router-snapshot-helper-install-reject-test',
-  );
-  const provider: AndroidAdbProvider = {
-    // Version probe reports no installed helper; every other device query is inert.
-    exec: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-    install: async () => {
-      throw new AppError('COMMAND_FAILED', 'Failed to install Android snapshot helper', {
-        stderr: 'adb: failed to install helper.apk: Failure [INSTALL_FAILED_TEST_ONLY]',
-        stdout: '',
-        exitCode: 1,
-        processExitError: true,
-      });
-    },
-    snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
-  };
-  const handler = makeHandler(sessionStore, () => provider);
-
-  const response = await handler({
+async function requestSnapshot(handler: ReturnType<typeof createRequestHandler>) {
+  return await handler({
     token: 'token',
     session: 'default',
     command: 'snapshot',
     positionals: [],
     flags: {},
   });
+}
+
+test('snapshot responses preserve the device-side install failure classification', async () => {
+  const failure = new AppError(
+    'COMMAND_FAILED',
+    'Android snapshot helper failed: Failed to install Android snapshot helper: INSTALL_FAILED_TEST_ONLY',
+    {
+      stderr: 'adb: failed to install helper.apk: Failure [INSTALL_FAILED_TEST_ONLY]',
+      hint: 'The Android package installer rejected the APK; this is a device-side install failure.',
+      androidSnapshotHelperInstallFailure: true,
+    },
+  );
+  const response = await requestSnapshot(snapshotHandler(failure));
 
   expect(response.ok).toBe(false);
-  if (response.ok) throw new Error('Expected snapshot to fail');
-  expect(response.error.message).toMatch(/Android snapshot helper failed/);
-  expect(response.error.message).toMatch(/INSTALL_FAILED_TEST_ONLY/);
-  // The provider funnel's classified adb hint is preserved, with the
-  // device-side framing appended rather than replacing it.
+  if (response.ok) return;
+  expect(response.error.message).toContain('INSTALL_FAILED_TEST_ONLY');
   expect(response.error.hint).toMatch(/package installer rejected the APK/);
   expect(response.error.hint).toMatch(/device-side install failure/);
   expect(response.error.hint).not.toMatch(/pnpm build:android/);
   expect(response.error.details?.androidSnapshotHelperInstallFailure).toBe(true);
 });
 
-// ADR 0010 wire contract: a transient-classified install rejection (here the
-// funnel's `connection_dropped` family) must keep its structured `retriable`
-// signal through the capture rewrap onto the public daemon error.
-test('snapshot keeps the transient retry signal when the provider install rejection is retriable', async () => {
-  const sessionStore = makeAndroidSessionStore(
-    'agent-device-request-router-snapshot-helper-install-transient-test',
-  );
-  const provider: AndroidAdbProvider = {
-    exec: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-    install: async () => {
-      throw new AppError('COMMAND_FAILED', 'Failed to install Android snapshot helper', {
-        stderr: 'adb: transport error while pushing helper.apk',
-        stdout: '',
-        exitCode: 1,
-        processExitError: true,
-      });
+test('snapshot responses preserve the transient retry signal on an install failure', async () => {
+  const failure = new AppError(
+    'COMMAND_FAILED',
+    'Android snapshot helper failed: Failed to install Android snapshot helper',
+    {
+      hint: 'The adb connection dropped; retry the device-side install failure.',
+      retriable: true,
+      androidSnapshotHelperInstallFailure: true,
     },
-    snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
-  };
-  const handler = makeHandler(sessionStore, () => provider);
-
-  const response = await handler({
-    token: 'token',
-    session: 'default',
-    command: 'snapshot',
-    positionals: [],
-    flags: {},
-  });
+  );
+  const response = await requestSnapshot(snapshotHandler(failure));
 
   expect(response.ok).toBe(false);
-  if (response.ok) throw new Error('Expected snapshot to fail');
+  if (response.ok) return;
   expect(response.error.message).toMatch(/Android snapshot helper failed/);
   expect(response.error.hint).toMatch(/connection dropped/);
   expect(response.error.hint).toMatch(/device-side install failure/);

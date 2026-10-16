@@ -1,26 +1,56 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
+import { buildGesturePlan } from '@agent-device/contracts/gesture-plan';
+import type { GestureSemanticInput } from '@agent-device/contracts/gesture-plan-types';
+import type { DaemonGestureResult } from '@agent-device/contracts/daemon-command-surface';
 
 import path from 'node:path';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { createTouchCommandSurface } from '../../__tests__/support/touch-command-surface-fake.ts';
+const testCreateCommandSurface = createTouchCommandSurface({
+  members: (config) => ({
+    interactions: {
+      gesture: async ({ gesture, session, requestId, signal }) => {
+        if (!('intent' in gesture) || gesture.intent !== 'pinch') {
+          throw new Error('recording-health fixture expects a pinch gesture');
+        }
+        const context = { session, requestId, signal: signal ?? config.signal };
+        const viewport = await config.backend.resolveGestureViewport?.(context);
+        if (!viewport) throw new Error('gesture runtime did not provide a viewport');
+        const plan = buildGesturePlan(gesture as GestureSemanticInput, viewport, 'ios');
+        const backendResult = await config.backend.performGesture?.(context, plan);
+        const first = plan.pointers[0].samples[0]?.point;
+        const last = plan.pointers[0].samples.at(-1)?.point;
+        if (!first || !last) throw new Error('pinch plan has no pointer samples');
+        return {
+          kind: plan.intent,
+          durationMs: plan.durationMs,
+          pointerCount: plan.topology === 'two' ? 2 : 1,
+          from: first,
+          to: last,
+          ...(backendResult ? { backendResult } : {}),
+        } satisfies DaemonGestureResult;
+      },
+    },
+  }),
+});
 
-import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../../__tests__/support/platform-services-fixture.ts';
 import {
   createRequestHandler,
   gestureDeviceRuntimeGateway,
   gestureRuntimeSpies,
-} from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { makeTestScreenRecordingResource } from '@agent-device/daemon/testing/__tests__/support/screen-recording-live-handle';
+} from '../../__tests__/support/test-device-runtime-gateway.ts';
+import type { SessionState } from '../../core/session-state.ts';
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
 
 // The observation spy hangs off the port the router composes with (ADR 0019 section 11), not off
 // the platform module behind it.
 const mockObserveRunnerSession = vi.fn();
-const platformServices = composedPlatformServicesFixture({
+const platformServices = daemonPlatformServicesFixture({
   appleSessionObservation: {
     observeRunnerSession: mockObserveRunnerSession,
     resolveSoleForegroundApp: async () => undefined,

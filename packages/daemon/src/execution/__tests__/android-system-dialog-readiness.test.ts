@@ -1,55 +1,26 @@
-import { beforeEach, expect, test, vi } from 'vitest';
-import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
+import { beforeEach, expect, test } from 'vitest';
+import type {
+  AndroidBlockingDialogFocus,
+  AndroidObservationAdapter,
+} from '@agent-device/contracts/android-observation';
+import type { RawSnapshotNode, SnapshotNode } from '@agent-device/kernel/snapshot';
+import {
+  androidSnapshotPublicationInput,
+  createAndroidSnapshotCapture,
+} from '@agent-device/platform-android/mechanics';
+import { buildSnapshotState } from '@agent-device/capture-kit/snapshot-state';
 
-/**
- * Recovery reads the daemon presentation, and Android publication derives covered state from the
- * acquisition evidence the capture envelope carries (#1981). The fake capture is therefore built by
- * the production constructor: a bare `{ nodes }` throws inside publication, and recovery would then
- * report "recovery failed" for a fixture reason rather than a device one.
- */
-vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
-  const makeAndroidSnapshotCapture = (nodes: RawSnapshotNode[]) =>
-    actual.createAndroidSnapshotCapture(
-      {
-        nodes,
-        analysis: { rawNodeCount: nodes.length, maxDepth: 0 },
-        androidSnapshot: { backend: 'android-helper' },
-        quality: { state: 'healthy', backend: 'android-helper' },
-      },
-      {
-        clickability: {
-          kind: 'exact',
-          provider: 'android-helper',
-          clickableByNodeIndex: new Map(),
-        },
-      },
-    );
-  return {
-    ...actual,
-    snapshotAndroid: vi.fn(async () => makeAndroidSnapshotCapture(screenNodes)),
-    openAndroidApp: vi.fn(async () => {}),
-  };
-});
-
-import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { withFakeAdb, type FakeAdbScript } from '../test-utils/fake-adb.ts';
+import { makeAndroidSession } from '../../__tests__/support/session-factories.ts';
 import {
   countDiagnosticEventsByPhase,
   withDiagnosticsScope,
 } from '@agent-device/host-kit/diagnostics';
-import { ensureAndroidBlockingSystemDialogReady as ensureOwnedAndroidBlockingSystemDialogReady } from '@agent-device/daemon/testing/android-system-dialog';
-import { androidObservation } from '../../platform-runtime.ts';
-
-const ensureAndroidBlockingSystemDialogReady = (
-  params: Omit<Parameters<typeof ensureOwnedAndroidBlockingSystemDialogReady>[0], 'observation'>,
-) => ensureOwnedAndroidBlockingSystemDialogReady({ ...params, observation: androidObservation });
+import { ensureAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
 
 // A blocking dialog can surface with no adb traffic at all, so nothing a previous command observed
 // is evidence about this one. These pin what each readiness phase owes the command it guards.
 
 const APP = 'com.agentdevice.tester';
-const NORMAL_FOCUS_DUMP = `  mCurrentFocus=Window{a1b2c3 u0 ${APP}/${APP}.MainActivity}`;
 const ANR_FOCUS_DUMP = `  mCurrentFocus=Window{ffeedd u0 Application Not Responding: ${APP}}`;
 const SYSTEM_DIALOG_DUMP =
   '  mCurrentFocus=Window{ffeedd u0 Application Not Responding: com.android.systemui}';
@@ -101,20 +72,68 @@ function tapCalls(calls: string[][]): string[][] {
   return calls.filter((call) => call[1] === 'input' && call[2] === 'tap');
 }
 
-/**
- * A device whose focused window is `dialog` until recovery taps "Close app", and the app after
- * that — the tap is what dismisses the dialog on a real device too.
- */
-function deviceShowing(dialog: () => string | null): FakeAdbScript {
+function publishedScreenNodes(): SnapshotNode[] {
+  const capture = createAndroidSnapshotCapture(
+    {
+      nodes: screenNodes,
+      analysis: { rawNodeCount: screenNodes.length, maxDepth: 0 },
+      androidSnapshot: { backend: 'android-helper' },
+      quality: { state: 'healthy', backend: 'android-helper' },
+    },
+    {
+      clickability: {
+        kind: 'exact',
+        provider: 'android-helper',
+        clickableByNodeIndex: new Map(),
+      },
+    },
+  );
+  return buildSnapshotState(androidSnapshotPublicationInput(capture), undefined).nodes;
+}
+
+function makeObservation(
+  dialog: () => AndroidBlockingDialogFocus | undefined,
+  options: { unknown?: boolean } = {},
+): { observation: AndroidObservationAdapter; calls: string[][] } {
+  const calls: string[][] = [];
+  const openedApps = new Set<string>();
   let dismissed = false;
-  return (args) => {
-    if (args[1] === 'input' && args[2] === 'tap') {
+  const observation: AndroidObservationAdapter = {
+    readAppState: async () => ({}),
+    readBlockingDialog: async () => {
+      if (options.unknown) return { status: 'unknown' };
+      const focus = dismissed ? undefined : dialog();
+      return focus ? { status: 'dialog', focus } : { status: 'clear' };
+    },
+    readAppFocus: async (_device, appBundleId) => dismissed && openedApps.has(appBundleId),
+    readSnapshotNodes: async () => (dismissed ? [] : publishedScreenNodes()),
+    tap: async (_device, x, y) => {
+      calls.push(['shell', 'input', 'tap', String(x), String(y)]);
       dismissed = true;
-      return '';
-    }
-    if (args[1] !== 'dumpsys') return '';
-    const focus = dismissed ? null : dialog();
-    return focus ?? NORMAL_FOCUS_DUMP;
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+    openApp: async (_device, appBundleId) => {
+      openedApps.add(appBundleId);
+    },
+    readScreenSize: async () => ({ width: 1080, height: 1920 }),
+    isPermissionPackage: async () => false,
+  };
+  return { observation, calls };
+}
+
+function anrFocus(): AndroidBlockingDialogFocus {
+  return {
+    package: APP,
+    focusedWindow: `Application Not Responding: ${APP}`,
+    raw: ANR_FOCUS_DUMP,
+  };
+}
+
+function systemDialogFocus(): AndroidBlockingDialogFocus {
+  return {
+    package: 'com.android.systemui',
+    focusedWindow: 'Application Not Responding: com.android.systemui',
+    raw: SYSTEM_DIALOG_DUMP,
   };
 }
 
@@ -125,25 +144,20 @@ test('an ANR that surfaces between two commands is recovered by the next pre-dis
   // dispatches this command's tap into the ANR dialog's buttons and then fails it.
   const session = makeAndroidSession('readiness-anr-between', { appBundleId: APP });
   let anr = false;
-
-  const { readiness, calls } = await withFakeAdb(
-    deviceShowing(() => (anr ? ANR_FOCUS_DUMP : null)),
-    async ({ device, calls }) => {
-      session.device = device;
-      await ensureAndroidBlockingSystemDialogReady({
-        session,
-        command: 'tap',
-        phase: 'after-command',
-      });
-      anr = true;
-      const readiness = await ensureAndroidBlockingSystemDialogReady({
-        session,
-        command: 'tap',
-        phase: 'before-command',
-      });
-      return { readiness, calls };
-    },
-  );
+  const { observation, calls } = makeObservation(() => (anr ? anrFocus() : undefined));
+  await ensureAndroidBlockingSystemDialogReady({
+    session,
+    command: 'tap',
+    phase: 'after-command',
+    observation,
+  });
+  anr = true;
+  const readiness = await ensureAndroidBlockingSystemDialogReady({
+    session,
+    command: 'tap',
+    phase: 'before-command',
+    observation,
+  });
 
   expect(readiness).toEqual({
     status: 'recovered',
@@ -159,24 +173,19 @@ test('an ANR whose Close app is covered is not tapped, and recovery reports fail
   // surface covers is unreachable. Tapping it anyway would land the tap on whatever is on top.
   const session = makeAndroidSession('readiness-anr-covered', { appBundleId: APP });
   screenNodes = coveredCloseAppNodes();
+  const { observation, calls } = makeObservation(anrFocus);
 
-  const { calls } = await withFakeAdb(
-    deviceShowing(() => ANR_FOCUS_DUMP),
-    async ({ device, calls }) => {
-      session.device = device;
-      await expect(
-        ensureAndroidBlockingSystemDialogReady({
-          session,
-          command: 'tap',
-          phase: 'before-command',
-        }),
-      ).rejects.toMatchObject({
-        code: 'COMMAND_FAILED',
-        message: expect.stringContaining('Android app ANR blocked tap'),
-      });
-      return { calls };
-    },
-  );
+  await expect(
+    ensureAndroidBlockingSystemDialogReady({
+      session,
+      command: 'tap',
+      phase: 'before-command',
+      observation,
+    }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: expect.stringContaining('Android app ANR blocked tap'),
+  });
 
   expect(tapCalls(calls)).toEqual([]);
 });
@@ -184,69 +193,57 @@ test('an ANR whose Close app is covered is not tapped, and recovery reports fail
 test('a system dialog that surfaces between two commands blocks the next command', async () => {
   const session = makeAndroidSession('readiness-system-between');
   let dialog = false;
-
-  await withFakeAdb(
-    deviceShowing(() => (dialog ? SYSTEM_DIALOG_DUMP : null)),
-    async ({ device }) => {
-      session.device = device;
-      await ensureAndroidBlockingSystemDialogReady({
-        session,
-        command: 'tap',
-        phase: 'after-command',
-      });
-      dialog = true;
-      await expect(
-        ensureAndroidBlockingSystemDialogReady({
-          session,
-          command: 'tap',
-          phase: 'before-command',
-        }),
-      ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
-    },
-  );
+  const { observation } = makeObservation(() => (dialog ? systemDialogFocus() : undefined));
+  await ensureAndroidBlockingSystemDialogReady({
+    session,
+    command: 'tap',
+    phase: 'after-command',
+    observation,
+  });
+  dialog = true;
+  await expect(
+    ensureAndroidBlockingSystemDialogReady({
+      session,
+      command: 'tap',
+      phase: 'before-command',
+      observation,
+    }),
+  ).rejects.toMatchObject({ code: 'COMMAND_FAILED' });
 });
 
 test('an ANR the command itself provoked still fails that command', async () => {
   const session = makeAndroidSession('readiness-anr-after', { appBundleId: APP });
+  const { observation, calls } = makeObservation(anrFocus);
 
-  await withFakeAdb(
-    deviceShowing(() => ANR_FOCUS_DUMP),
-    async ({ device }) => {
-      session.device = device;
-      await expect(
-        ensureAndroidBlockingSystemDialogReady({
-          session,
-          command: 'tap',
-          phase: 'after-command',
-        }),
-      ).rejects.toMatchObject({
-        code: 'COMMAND_FAILED',
-        message: expect.stringContaining('Android app ANR appeared after tap'),
-      });
-    },
-  );
+  await expect(
+    ensureAndroidBlockingSystemDialogReady({
+      session,
+      command: 'tap',
+      phase: 'after-command',
+      observation,
+    }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: expect.stringContaining('Android app ANR appeared after tap'),
+  });
+  expect(tapCalls(calls)).toEqual([CLOSE_APP_TAP]);
 });
 
 test('a dump that answered nothing is reported as unobserved, not as a clear screen', async () => {
   const session = makeAndroidSession('readiness-unobserved');
-
-  const { readiness, unobserved } = await withDiagnosticsScope({}, async () =>
-    withFakeAdb(
-      () => ({ exitCode: 1, stdout: '', stderr: 'device offline' }),
-      async ({ device }) => {
-        session.device = device;
-        const readiness = await ensureAndroidBlockingSystemDialogReady({
-          session,
-          command: 'tap',
-          phase: 'after-command',
-        });
-        return {
-          readiness,
-          unobserved: countDiagnosticEventsByPhase(['android_blocking_dialog_unobserved']),
-        };
-      },
-    ),
-  );
+  const { observation } = makeObservation(() => undefined, { unknown: true });
+  const { readiness, unobserved } = await withDiagnosticsScope({}, async () => {
+    const readiness = await ensureAndroidBlockingSystemDialogReady({
+      session,
+      command: 'tap',
+      phase: 'after-command',
+      observation,
+    });
+    return {
+      readiness,
+      unobserved: countDiagnosticEventsByPhase(['android_blocking_dialog_unobserved']),
+    };
+  });
 
   // The command still proceeds — a failed probe has never been a refusal — but nothing about this
   // dump may be carried forward as evidence that the device was clear.

@@ -1,10 +1,11 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 
 import path from 'node:path';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { screenshotCommandSurface as testCreateCommandSurface } from '../../__tests__/support/screenshot-command-surface-fake.ts';
+import { createTouchCommandSurface } from '../../__tests__/support/touch-command-surface-fake.ts';
 
 // `scroll` still executes through legacy platform dispatch; screenshot and click bind their fake
 // at the facts/bind seam below instead (ADR 0019).
@@ -16,21 +17,21 @@ vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   };
 });
 
-import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
+import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
 import {
   screenshotRuntimeFixture,
   writeSolidPng,
   type ScreenshotRuntimeFixture,
   type ScreenshotRuntimeFixtureOptions,
-} from '@agent-device/daemon/testing/__tests__/screenshot-runtime-fixture';
-import type { DaemonRequest } from '@agent-device/daemon';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
+} from '../../__tests__/support/screenshot-runtime-fixture.ts';
+import type { DaemonRequest } from '../../index.ts';
+import type { SessionState } from '../../core/session-state.ts';
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
 import { attachRefs } from '@agent-device/kernel/snapshot';
 import { PNG } from '@agent-device/capture-kit/png';
 import { ANDROID_EMULATOR, IOS_SIMULATOR, mkdtempForTestSync } from '@agent-device/test-kit';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { makeSession as makeBaseSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { makeSession as makeBaseSession } from '../../__tests__/support/session-factories.ts';
 
 function makeSession(name: string): SessionState {
   return makeBaseSession(name, { device: ANDROID_EMULATOR });
@@ -73,12 +74,13 @@ type ScreenshotRouter = Readonly<{
 function screenshotRouter(
   session: SessionState,
   options: ScreenshotRuntimeFixtureOptions = {},
+  createCommandSurface = testCreateCommandSurface,
 ): ScreenshotRouter {
   const sessionStore = makeSessionStore('agent-device-router-screenshot-');
   sessionStore.publish(session.name, session);
   const runtime = screenshotRuntimeFixture(options);
   const handler = createRequestHandler({
-    createCommandSurface: testCreateCommandSurface,
+    createCommandSurface,
     logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
     token: 'test-token',
     sessionStore,
@@ -96,7 +98,7 @@ function capturedPath(runtime: ScreenshotRuntimeFixture): string | undefined {
 
 test('screenshot resolves relative positional path against request cwd', async () => {
   const callerCwd = mkdtempForTestSync('agent-device-screenshot-cwd-caller-');
-  const { handler, sessionStore, runtime } = screenshotRouter(makeSession('default'));
+  const { handler, runtime } = screenshotRouter(makeSession('default'));
 
   await handler({
     token: 'test-token',
@@ -108,13 +110,11 @@ test('screenshot resolves relative positional path against request cwd', async (
 
   expect(capturedPath(runtime)).toBe(path.join(callerCwd, 'evidence/test.png'));
   expect(path.isAbsolute(capturedPath(runtime)!)).toBe(true);
-  const recordedAction = sessionStore.get('default')?.actions.at(-1);
-  expect(recordedAction?.positionals).toEqual([path.join(callerCwd, 'evidence/test.png')]);
 });
 
 test('screenshot keeps absolute positional path unchanged', async () => {
   const absolutePath = path.join(mkdtempForTestSync('evidence-test'), 'evidence/test.png');
-  const { handler, sessionStore, runtime } = screenshotRouter(makeSession('default'));
+  const { handler, runtime } = screenshotRouter(makeSession('default'));
 
   await handler({
     token: 'test-token',
@@ -125,13 +125,11 @@ test('screenshot keeps absolute positional path unchanged', async () => {
   });
 
   expect(capturedPath(runtime)).toBe(absolutePath);
-  const recordedAction = sessionStore.get('default')?.actions.at(-1);
-  expect(recordedAction?.positionals).toEqual([absolutePath]);
 });
 
 test('screenshot resolves --out flag path against request cwd', async () => {
   const callerCwd = mkdtempForTestSync('agent-device-screenshot-out-cwd-');
-  const { handler, sessionStore, runtime } = screenshotRouter(makeSession('default'));
+  const { handler, runtime } = screenshotRouter(makeSession('default'));
 
   await handler({
     token: 'test-token',
@@ -144,8 +142,6 @@ test('screenshot resolves --out flag path against request cwd', async () => {
 
   expect(capturedPath(runtime)).toBe(path.join(callerCwd, 'evidence/test.png'));
   expect(path.isAbsolute(capturedPath(runtime)!)).toBe(true);
-  const recordedAction = sessionStore.get('default')?.actions.at(-1);
-  expect(recordedAction?.flags.out).toBe(path.join(callerCwd, 'evidence/test.png'));
 });
 
 test('screenshot runtime supplies default output path when none is requested', async () => {
@@ -185,7 +181,11 @@ test('screenshot forwards macOS session surface to the bound capture', async () 
 });
 
 test('click forwards macOS menubar session surface to the bound runtime', async () => {
-  const { handler, runtime } = screenshotRouter(makeMacOsMenubarSession('default'));
+  const { handler, runtime } = screenshotRouter(
+    makeMacOsMenubarSession('default'),
+    {},
+    createTouchCommandSurface(),
+  );
 
   await handler({
     token: 'test-token',

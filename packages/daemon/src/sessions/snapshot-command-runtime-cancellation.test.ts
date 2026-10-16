@@ -1,17 +1,17 @@
-import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import { afterEach, expect, test } from 'vitest';
-import { makeAndroidSession } from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { makeAndroidSession } from '../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../__tests__/support/store-factory.ts';
 import {
   clearRequestAbortRegistration,
   markRequestCanceled,
   registerRequestAbort,
 } from '@agent-device/host-kit/request';
-import { dispatchSnapshotDiffViaRuntime } from '@agent-device/daemon/testing/snapshot-diff-runtime';
-import { dispatchSnapshotViaRuntime } from '@agent-device/daemon/testing/snapshot-runtime';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
-import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { dispatchSnapshotDiffViaRuntime } from './snapshot-diff-runtime.ts';
+import { dispatchSnapshotViaRuntime } from './snapshot-runtime.ts';
+import { legacyDispatchCapture } from '../__tests__/support/legacy-snapshot-capture-fixture.ts';
+import { snapshotRuntimeFixture } from '../__tests__/support/snapshot-runtime-fixture.ts';
+import { forwardingCreateCommandSurface as testCreateCommandSurface } from '../__tests__/support/command-surface-fake.ts';
 
 /**
  * The capture double the snapshot runtime fixture's bound operation delegates to. Cancellation is
@@ -77,13 +77,13 @@ for (const command of ['snapshot', 'diff snapshot'] as const) {
               createCommandSurface: testCreateCommandSurface,
               ...input,
               ...snapshotRuntimeFixture(requestId),
-              platformServices: composedPlatformServicesFixture(),
+              platformServices: daemonPlatformServicesFixture(),
             })
           : dispatchSnapshotDiffViaRuntime({
               createCommandSurface: testCreateCommandSurface,
               ...input,
               ...snapshotRuntimeFixture(requestId),
-              platformServices: composedPlatformServicesFixture(),
+              platformServices: daemonPlatformServicesFixture(),
             });
       await dispatchEntered.promise;
       markRequestCanceled(requestId);

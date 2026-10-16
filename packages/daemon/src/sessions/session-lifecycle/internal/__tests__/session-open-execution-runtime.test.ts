@@ -70,6 +70,7 @@ import {
 } from '../../../../__tests__/support/application-lifecycle-runtime-fixture.ts';
 import { resolveAndroidPackageForOpen } from '@agent-device/platform-android/mechanics';
 import {
+  makeAndroidDevice,
   makeAndroidEmulator,
   makeAppleSimulator,
   makeSession,
@@ -694,6 +695,66 @@ async function openIosApp(params: {
     invoke: noopInvoke,
   });
 }
+
+async function openAndroidApp(params: {
+  sessionName: string;
+  device: ReturnType<typeof makeAndroidDevice> | ReturnType<typeof makeAndroidEmulator>;
+  flags?: Record<string, unknown>;
+}) {
+  mockResolveTargetDevice.mockResolvedValue(params.device);
+  const openApplication = vi.fn<ApplicationLifecycleRuntimeOperations['openApplication']>(
+    async () => ({ timing: {} }),
+  );
+  const { loader } = lifecycleOperationsSpy({ openApplication });
+  const response = await handleSessionCommands({
+    createCommandSurface: fakeCreateCommandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    lifecycleOperationsLoader: loader,
+    req: {
+      token: 't',
+      session: params.sessionName,
+      command: 'open',
+      positionals: ['com.example.app'],
+      flags: { platform: 'android', ...params.flags },
+    },
+    sessionName: params.sessionName,
+    logPath: path.join(mkdtempForTestSync('daemon'), 'daemon.log'),
+    sessionStore: makeSessionStore(),
+    invoke: noopInvoke,
+  });
+  return { response, openApplication };
+}
+
+test.each([
+  {
+    label: 'physical device opt-in',
+    device: makeAndroidDevice(),
+    flags: { testIme: true },
+    expected: true,
+  },
+  {
+    label: 'physical device opt-out',
+    device: makeAndroidDevice(),
+    flags: { testIme: false },
+    expected: false,
+  },
+  { label: 'physical device default', device: makeAndroidDevice(), flags: {}, expected: false },
+  { label: 'emulator default', device: makeAndroidEmulator(), flags: {}, expected: true },
+])(
+  'open maps the $label test IME policy to its lifecycle operation',
+  async ({ device, flags, expected }) => {
+    const { response, openApplication } = await openAndroidApp({
+      sessionName: `test-ime-${device.kind}-${String(flags.testIme ?? 'default')}`,
+      device,
+      flags,
+    });
+
+    expect(response?.ok).toBe(true);
+    expect(openApplication).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ enableTestIme: expected }),
+    );
+  },
+);
 
 test.each([
   { flags: { maestro: { prewarmRunnerBeforeOpen: true } }, expected: true },

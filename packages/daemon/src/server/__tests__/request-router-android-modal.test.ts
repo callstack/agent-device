@@ -1,10 +1,11 @@
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { test, expect, vi } from 'vitest';
+import { afterEach, test, expect, vi } from 'vitest';
 
 import path from 'node:path';
 import { AppError } from '@agent-device/kernel/errors';
 import type { RawSnapshotNode } from '@agent-device/kernel/snapshot';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { createTouchCommandSurface } from '../../__tests__/support/touch-command-surface-fake.ts';
+const testCreateCommandSurface = createTouchCommandSurface();
 
 let snapshotCalls = 0;
 let snapshotMode: 'blocking-dialog' | 'throws' = 'blocking-dialog';
@@ -13,24 +14,20 @@ import {
   createRequestHandler,
   gestureDeviceRuntimeGateway,
   gestureRuntimeSpies,
-} from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import {
-  createProviderDeviceRuntimeRequestProviders,
-  isActiveProviderDevice,
-} from '../../provider-device-runtime.ts';
-import { installProviderDeviceAdmission } from '@agent-device/daemon/testing/provider-device-admission';
-
-// Root composition installs the daemon's provider-device admission; this test composes the
-// request providers the same way, so it installs the fact the same way.
-installProviderDeviceAdmission({ isActive: isActiveProviderDevice });
+} from '../../__tests__/support/test-device-runtime-gateway.ts';
+import type { SessionState } from '../../core/session-state.ts';
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
+import { providerDeviceAdmissionFixture } from '../../__tests__/support/provider-device-admission-fixture.ts';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
-import { makeTestScreenRecordingResource } from '@agent-device/daemon/testing/__tests__/support/screen-recording-live-handle';
-import { androidObservation } from '../../platform-runtime.ts';
+import { makeTestScreenRecordingResource } from '../../__tests__/support/screen-recording-live-handle.ts';
+import { androidObservationPolicyFixture as androidObservation } from '../../__tests__/support/android-observation-fixture.ts';
 import type { AndroidObservationAdapter } from '@agent-device/contracts/android-observation';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
+
+const providerAdmission = providerDeviceAdmissionFixture();
+
+afterEach(() => providerAdmission.setActive([]));
 
 vi.mock('@agent-device/platform-android/mechanics', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@agent-device/platform-android/mechanics')>();
@@ -267,7 +264,7 @@ test('generic Android gesture commands skip local dialog recovery for provider d
     getInteractor: () => undefined,
     shutdown: async () => {},
   };
-  const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
+  providerAdmission.setActive([runtime]);
 
   const handler = createRequestHandler({
     createCommandSurface: testCreateCommandSurface,
@@ -276,7 +273,6 @@ test('generic Android gesture commands skip local dialog recovery for provider d
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
     deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    providerDeviceRuntimeScope: providers.providerDeviceRuntimeScope,
     trackDownloadableArtifact: () => 'artifact-id',
     deviceRuntimeGateway: gestureDeviceRuntimeGateway,
     androidObservation: modalObservation,

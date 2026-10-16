@@ -3,9 +3,9 @@ import {
   createTestDeviceInventoryGatewaysFromProvider,
 } from '@agent-device/device-selection/inventory-gateways-fixtures';
 import { test, expect, vi, beforeEach } from 'vitest';
-import { legacyDispatchCapture } from '@agent-device/daemon/testing/__tests__/legacy-snapshot-capture-fixture';
+import { legacyDispatchCapture } from '../../__tests__/support/legacy-snapshot-capture-fixture.ts';
 import path from 'node:path';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { forwardingCreateCommandSurface as testCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
 
 vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal) => {
   const actual =
@@ -13,7 +13,7 @@ vi.mock('@agent-device/platform-apple/runner/operations', async (importOriginal)
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 
-vi.mock('@agent-device/daemon/testing/device/device-ready', () => ({
+vi.mock('../../core/device/device-ready.ts', () => ({
   ensureDeviceReady: vi.fn(async () => {}),
 }));
 
@@ -21,11 +21,11 @@ import {
   createRequestHandler,
   lifecycleDeviceRuntimeGateway,
   systemRuntimeSpies,
-} from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
-import { snapshotRuntimeFixture } from '@agent-device/daemon/testing/__tests__/snapshot-runtime-fixture';
-import type { SessionState } from '@agent-device/daemon/testing/session-state';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+} from '../../__tests__/support/test-device-runtime-gateway.ts';
+import { snapshotRuntimeFixture } from '../../__tests__/support/snapshot-runtime-fixture.ts';
+import type { SessionState } from '../../core/session-state.ts';
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import type { DeviceRuntimeGateway } from '@agent-device/contracts/platform-runtime';
 import {
   type PlatformRuntimeOperations,

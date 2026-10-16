@@ -1,15 +1,12 @@
 import path from 'node:path';
 import { expect, test } from 'vitest';
 import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
+import { makeSessionStore } from '../../__tests__/support/store-factory.ts';
 import { mkdtempForTestSync } from '@agent-device/test-kit';
-import {
-  providerCredentialFingerprint,
-  readDaemonProviderCredentials,
-} from '../../provider-credential-fingerprint.ts';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { createRequestHandler } from '../../__tests__/support/test-device-runtime-gateway.ts';
+import { fakeCreateCommandSurface as testCreateCommandSurface } from '../../__tests__/support/command-surface-fake.ts';
+import { providerCredentialsFixture } from '../../__tests__/support/provider-credentials-fixture.ts';
 
 const DAEMON_ENV = { LIMRUN_API_KEY: 'lim-key' };
 
@@ -28,7 +25,7 @@ test.for([
       sessionStore: makeSessionStore('agent-device-router-provider-credentials-store-'),
       leaseRegistry: new LeaseRegistry(),
       deviceInventoryGateways: createTestDeviceInventoryGateways(),
-      providerCredentials: readDaemonProviderCredentials(DAEMON_ENV, stateDir),
+      providerCredentials: providerCredentialsFixture(DAEMON_ENV, stateDir),
       leaseLifecycleProvider: {
         allocate: async () => {
           allocated += 1;
@@ -51,7 +48,7 @@ test.for([
         clientId: 'client-a',
         leaseBackend: 'ios-instance',
         leaseProvider: 'limrun',
-        providerCredentialFingerprint: providerCredentialFingerprint('limrun', shellEnv),
+        providerCredentialFingerprint: providerCredentialsFixture(shellEnv).fingerprint('limrun'),
       },
     });
 

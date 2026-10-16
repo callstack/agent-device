@@ -4,7 +4,18 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import { mkdtempForTestSync } from '@agent-device/test-kit';
+import {
+  assertDispatchDisclosureDriversMatchRows,
+  DISPATCH_DISCLOSURE_TABLE_PATH,
+  dispatchDisclosureRowsOwnedBy,
+  mkdtempForTestSync,
+} from '@agent-device/test-kit';
+import { AppError } from '@agent-device/kernel/errors';
+import {
+  createRequestDispatchLedger,
+  recordNestedRequests,
+} from '../../../core/request-dispatch-ledger.ts';
+import { discloseRequestDispatch } from '../../../execution/request-dispatch-disclosure.ts';
 import type { DaemonRequest } from '../../../core/daemon-request.ts';
 import { SessionStore } from '../../../core/session-store.ts';
 import { replayScriptSourceBundleFor } from '../../../__tests__/support/replay-script-source-fixture.ts';
@@ -12,6 +23,85 @@ import { makeIosSession } from '../../../__tests__/support/session-factories.ts'
 
 const { runReplayFixture, runReplayForTest, assertNoUnresolvedInterpolation } =
   maestroReplayFixture;
+
+async function maestroDeferredSettleCaptureRefused(): Promise<unknown> {
+  const ledger = createRequestDispatchLedger();
+  const nested = recordNestedRequests(async (request) => {
+    if (request.command === 'back') {
+      if (request.internal?.dispatchLedger) {
+        request.internal.dispatchLedger.dispatchedSteps += 1;
+      }
+      return { ok: true, data: {} };
+    }
+    if (request.command === 'snapshot') {
+      return {
+        ok: false,
+        error: {
+          code: 'COMMAND_FAILED',
+          message: 'runner busy',
+          details: { reason: 'runner_busy', dispatched: 'no' },
+        },
+      };
+    }
+    return { ok: true, data: {} };
+  }, ledger);
+  const { response, calls } = await runReplayFixture({
+    label: 'dispatch-disclosure-maestro-deferred-capture',
+    script: 'appId: com.example.app\n---\n- back\n- assertVisible: "Continue"\n',
+    flags: { replayBackend: 'maestro', platform: 'ios' },
+    invoke: nested,
+  });
+  const req: DaemonRequest = {
+    token: 't',
+    session: 's',
+    command: 'replay',
+    positionals: ['flow.yaml'],
+    flags: { replayBackend: 'maestro', platform: 'ios' },
+  };
+  const disclosed = await discloseRequestDispatch(req, ledger, async () => response);
+  assert.deepEqual(
+    calls.map((call) => call.command),
+    ['back', 'snapshot'],
+  );
+  assert.equal(disclosed?.ok, false);
+  if (disclosed?.ok !== false) throw new Error('Expected deferred snapshot refusal');
+  const failure = new AppError(
+    disclosed.error.code,
+    disclosed.error.message,
+    disclosed.error.details,
+  );
+  assert.equal(failure.details?.dispatched, 'unknown');
+  assert.equal(failure.details?.dispatchedSteps, 1);
+  throw failure;
+}
+
+const DISPATCH_DISCLOSURE_DRIVERS: Record<string, () => Promise<unknown>> = {
+  'daemon.route.maestro-deferred-settle-capture-refused': maestroDeferredSettleCaptureRefused,
+};
+const DISPATCH_DISCLOSURE_ROWS = dispatchDisclosureRowsOwnedBy(
+  import.meta.url,
+  fs.readFileSync(DISPATCH_DISCLOSURE_TABLE_PATH, 'utf8'),
+);
+
+test('every Maestro dispatch-disclosure row has exactly one driver', () => {
+  assertDispatchDisclosureDriversMatchRows(
+    DISPATCH_DISCLOSURE_ROWS,
+    Object.keys(DISPATCH_DISCLOSURE_DRIVERS),
+  );
+});
+
+for (const row of DISPATCH_DISCLOSURE_ROWS) {
+  test(`${row.id}: ${row.trigger} → dispatched ${row.dispatched}`, async () => {
+    const drive = DISPATCH_DISCLOSURE_DRIVERS[row.id];
+    assert.ok(drive, `no driver for ${row.id}`);
+    await assert.rejects(drive(), (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.dispatched, row.dispatched);
+      assert.equal(error.details?.dispatchedSteps, 1);
+      return true;
+    });
+  });
+}
 
 test('--update no longer rejects Maestro compat flow controls (the guard existed only for rewrite safety)', async () => {
   const { response } = await runReplayFixture({

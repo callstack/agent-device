@@ -1,73 +1,30 @@
 import assert from 'node:assert/strict';
 
-import path from 'node:path';
-import { test, vi } from 'vitest';
-import { createLimrunRuntime } from '@agent-device/provider-limrun';
-import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
-import { createTestDeviceInventoryGateways } from '@agent-device/device-selection/inventory-gateways-fixtures';
+import type { DaemonResponse } from '@agent-device/kernel/contracts';
+import { expect, test, vi } from 'vitest';
 import {
   closeLoopbackServer,
   listenOnLoopback,
-  mkdtempForTestSync,
   skipWhenLoopbackUnavailable,
 } from '@agent-device/test-kit';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { limrunTestDependencies } from '../../platform-runtime-gateway.fixtures.ts';
 import {
   DAEMON_HTTP_NETWORK_ACCESS_HEADER,
   DAEMON_HTTP_PUBLIC_NETWORK_ACCESS,
 } from '@agent-device/contracts/daemon-http';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { createDaemonHttpServer } from '@agent-device/daemon/testing/server/http-server';
-import { createRequestHandler } from '@agent-device/daemon/testing/__tests__/test-device-runtime-gateway';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
-
-const limrunIo = vi.hoisted(() => ({
-  listAssets: vi.fn(),
-  createAndroidInstance: vi.fn(),
-}));
+import { LeaseRegistry } from '../../resources/lease-registry.ts';
+import { createDaemonHttpServer } from './http-server.ts';
+import type { DaemonRequest } from '../../core/daemon-request.ts';
 
 type RpcResponse = { error?: { data?: { code?: string } } };
 
-vi.mock('@limrun/api', () => ({
-  default: class MockLimrun {
-    readonly assets = { list: limrunIo.listAssets };
-    readonly androidInstances = {
-      create: limrunIo.createAndroidInstance,
-      delete: vi.fn(),
-      list: vi.fn(),
-    };
-    readonly iosInstances = { create: vi.fn(), delete: vi.fn(), list: vi.fn() };
-  },
-}));
-
-test('public HTTP rejects Limrun uploaded-app listing and allocation before provider I/O', async (t) => {
+test('public HTTP marks command and lease requests before dispatch', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
-  limrunIo.listAssets.mockClear();
-  limrunIo.createAndroidInstance.mockClear();
-  const runtime = createLimrunRuntime(
-    { apiKey: 'lim_test_key', runtimeInstance: 'http-access-test' },
-    limrunTestDependencies,
-  );
-  const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
+  const requests: DaemonRequest[] = [];
   const token = 'limrun-http-test-token';
   const leaseRegistry = new LeaseRegistry();
-  const handleRequest = createRequestHandler({
-    createCommandSurface: testCreateCommandSurface,
-    logPath: path.join(
-      mkdtempForTestSync('agent-device-limrun-http-access'),
-      'agent-device-limrun-http-access.log',
-    ),
-    token,
-    sessionStore: makeSessionStore('agent-device-limrun-http-access-'),
-    leaseRegistry,
-    deviceInventoryGateways: createTestDeviceInventoryGateways(),
-    providerRuntimeIds: providers.providerRuntimeIds,
-    providerRuntimeRequiredIds: providers.providerRuntimeRequiredIds,
-    leaseLifecycleProvider: providers.leaseLifecycleProvider,
-    providerAppCatalog: providers.providerAppCatalog,
-    providerDeviceRuntimeScope: providers.providerDeviceRuntimeScope,
-    trackDownloadableArtifact: () => 'unused-artifact',
+  const handleRequest = vi.fn(async (request: DaemonRequest): Promise<DaemonResponse> => {
+    requests.push(request);
+    return { ok: true, data: {} };
   });
   const server = await createDaemonHttpServer({ token, leaseRegistry, handleRequest });
 
@@ -96,13 +53,14 @@ test('public HTTP rejects Limrun uploaded-app listing and allocation before prov
       },
     });
 
-    assert.equal(apps.error?.data?.code, 'UNAUTHORIZED');
-    assert.equal(allocation.error?.data?.code, 'UNAUTHORIZED');
-    assert.equal(limrunIo.listAssets.mock.calls.length, 0);
-    assert.equal(limrunIo.createAndroidInstance.mock.calls.length, 0);
+    assert.equal(apps.error, undefined);
+    assert.equal(allocation.error, undefined);
+    expect(requests).toHaveLength(2);
+    expect(requests.map((request) => request.command)).toEqual(['apps', 'lease_allocate']);
+    expect(requests.every((request) => request.internal?.publicNetworkOnly === true)).toBe(true);
+    expect(requests[1]?.meta?.leaseProvider).toBe('limrun');
   } finally {
     await closeLoopbackServer(server);
-    await runtime.shutdown();
   }
 });
 

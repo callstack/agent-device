@@ -1,37 +1,37 @@
 import type { DaemonResponse } from '@agent-device/kernel/contracts';
-import { composedPlatformServicesFixture } from './platform-services-fixture.ts';
+import { daemonPlatformServicesFixture } from '../__tests__/support/platform-services-fixture.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import { INTERNAL_COMMANDS } from '@agent-device/command-registry/catalog';
-import { LeaseRegistry } from '@agent-device/daemon/testing/lease-registry';
-import { runRequestHandlerChain } from '@agent-device/daemon/testing/request-handler-chain';
+import { LeaseRegistry } from '../resources/lease-registry.ts';
+import { runRequestHandlerChain } from './request-handler-chain.ts';
 import { getDaemonRouteOwnerFiles } from '@agent-device/command-registry/owner-files';
-import type { DaemonRequest } from '@agent-device/daemon';
-import { LINUX_DEVICE } from '@agent-device/test-kit';
-import {
-  makeIosSession,
-  makeSession,
-} from '@agent-device/daemon/testing/__tests__/support/session-factories';
-import { makeSnapshotState } from '@agent-device/selectors/snapshot-geometry-fixtures';
-import { makeSessionStore } from '@agent-device/daemon/testing/__tests__/support/store-factory';
-import { handleInteractionCommands } from '@agent-device/daemon/testing/interaction/index';
-import { createPlatformRuntimeGateway } from '../../platform-runtime.ts';
-import { createRequestRuntimeBindings } from '@agent-device/daemon/testing/request-runtime-binding';
-import { createRequestDispatchLedger } from '@agent-device/daemon/testing/request-dispatch-ledger';
-import { createLocalLinuxToolProvider, withLinuxToolProvider } from '@agent-device/platform-linux';
+import type { DaemonRequest } from '../index.ts';
+import { eagerClosureOf, LINUX_DEVICE } from '@agent-device/test-kit';
+import { buildGesturePlan, singlePointerPlanEndpoints } from '@agent-device/contracts/gesture-plan';
+import { makeIosSession, makeSession } from '../__tests__/support/session-factories.ts';
+import { makeSessionStore } from '../__tests__/support/store-factory.ts';
+import { handleInteractionCommands } from '../execution/interaction/index.ts';
+import { createRequestRuntimeBindings } from '../core/request-runtime-binding.ts';
+import { createRequestDispatchLedger } from '../core/request-dispatch-ledger.ts';
 import {
   unavailableBindDevice,
   unavailableBindExactDevice,
   unavailableDeviceRuntimeGateway,
   unavailableInspectFacts,
-} from '@agent-device/daemon/testing/__tests__/support/unavailable-device-runtime-gateway';
+} from '../__tests__/support/unavailable-device-runtime-gateway.ts';
+import {
+  gestureDeviceRuntimeGateway,
+  gestureInspectFacts,
+  gestureRuntimeSpies,
+} from '../__tests__/support/test-device-runtime-gateway.ts';
 import { createAudioProbeAdmissionLedger } from '@agent-device/capture-kit/audio-probe-admission-ledger';
 import { createPerfCaptureAdmissionLedger } from '@agent-device/capture-kit/perf-capture-admission-ledger';
 import { createScreenRecordingAdmissionLedger } from '@agent-device/capture-kit/screen-recording-admission-ledger';
-import { eagerClosureOf } from '../eager-import-closure.fixtures.ts';
-import { testCreateCommandSurface } from './command-surface-fixture.ts';
+import { createTouchCommandSurface } from '../__tests__/support/touch-command-surface-fake.ts';
+const testCreateCommandSurface = createTouchCommandSurface();
 
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
   return {
@@ -54,7 +54,7 @@ function makeChainParams(req: DaemonRequest) {
     logPath: '/tmp/agent-device-request-chain.log',
     sessionStore,
     leaseRegistry: new LeaseRegistry(),
-    platformServices: composedPlatformServicesFixture(),
+    platformServices: daemonPlatformServicesFixture(),
     invoke: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
     providerScope: {},
     bindDevice: unavailableBindDevice,
@@ -79,10 +79,7 @@ function makeChainParams(req: DaemonRequest) {
 }
 
 test('route owner files match the production module loaders', () => {
-  const source = fs.readFileSync(
-    new URL('../../../packages/daemon/src/sessions/request-handler-chain.ts', import.meta.url),
-    'utf8',
-  );
+  const source = fs.readFileSync(new URL('./request-handler-chain.ts', import.meta.url), 'utf8');
   const definitions = [
     ...source.matchAll(/(\w+): defineDaemonRoute\(\{\s+load: \(\) => import\('([^']+)'\),/g),
   ];
@@ -116,34 +113,23 @@ test('route owner files match the production module loaders', () => {
 });
 
 test('request handler chain keeps interaction routes out of its eager import closure', () => {
-  const chainFile = path.resolve(
-    import.meta.dirname,
-    '../../../packages/daemon/src/sessions/request-handler-chain.ts',
-  );
+  const chainFile = path.resolve(import.meta.dirname, './request-handler-chain.ts');
   const closure = eagerClosureOf(chainFile);
 
   assert.ok(closure.length > 20, 'eager closure walk must reach the request chain');
   assert.equal(
-    closure.includes(
-      path.resolve(
-        import.meta.dirname,
-        '../../../packages/daemon/src/execution/interaction/index.ts',
-      ),
-    ),
+    closure.includes(path.resolve(import.meta.dirname, '../execution/interaction/index.ts')),
     false,
     'interaction routes must stay behind the request chain lazy import',
   );
 });
 
 test('interaction facade keeps route implementations out of its eager import closure', () => {
-  const facadeFile = path.resolve(
-    import.meta.dirname,
-    '../../../packages/daemon/src/execution/interaction/index.ts',
-  );
+  const facadeFile = path.resolve(import.meta.dirname, '../execution/interaction/index.ts');
   const closure = eagerClosureOf(facadeFile);
   const snapshotComposition = path.resolve(
     import.meta.dirname,
-    '../../../packages/daemon/src/core/snapshot-runtime-capture-input.ts',
+    '../core/snapshot-runtime-capture-input.ts',
   );
 
   assert.ok(
@@ -154,7 +140,7 @@ test('interaction facade keeps route implementations out of its eager import clo
   for (const routeModule of ['find.ts', 'interaction.ts']) {
     const routePath = path.resolve(
       import.meta.dirname,
-      `../../../packages/daemon/src/execution/interaction/internal/${routeModule}`,
+      `../execution/interaction/internal/${routeModule}`,
     );
     assert.equal(
       fs.existsSync(routePath),
@@ -273,63 +259,39 @@ test('swipe rejects repetition inputs that can monopolize the request', async ()
   }
 });
 
-test('duration-less public coordinate swipe retains Linux drag behavior', async () => {
+test('duration-less coordinate swipe routes one fling plan through one runtime binding', async () => {
   const sessionStore = makeSessionStore('agent-device-linux-swipe-');
   sessionStore.publish('linux-swipe', makeSession('linux-swipe', { device: LINUX_DEVICE }));
-  const drags: number[][] = [];
-  let captureCount = 0;
-  const provider = await createLocalLinuxToolProvider({
-    accessibility: {
-      captureTree: async () => {
-        captureCount += 1;
-        return {
-          nodes: [
-            {
-              index: 0,
-              depth: 0,
-              type: 'Application',
-              rect: { x: 0, y: 0, width: 200, height: 200 },
-              visibleToUser: true,
-            },
-          ],
-          truncated: false,
-          surface: 'desktop',
-        };
+  const commandSurface = createTouchCommandSurface({
+    members: (config) => ({
+      interactions: {
+        gesture: async ({ session, requestId, gesture }) => {
+          if (gesture.intent === 'drag') throw new Error('swipe must plan a fling');
+          const context = { session, requestId };
+          const viewport = await config.backend.resolveGestureViewport?.(context);
+          if (!viewport) throw new Error('gesture viewport was not admitted');
+          const plan = buildGesturePlan(gesture, viewport, 'linux');
+          if (plan.topology !== 'single') throw new Error('swipe must plan one pointer');
+          const backendResult = await config.backend.performGesture?.(context, plan);
+          const { start, end } = singlePointerPlanEndpoints(plan);
+          return {
+            kind: plan.intent,
+            durationMs: plan.durationMs,
+            pointerCount: 1,
+            from: start,
+            to: end,
+            ...backendResult,
+          };
+        },
       },
-    },
-    input: {
-      click: async () => {},
-      doubleClick: async () => {},
-      longPress: async () => {},
-      drag: async (...values) => {
-        drags.push(values);
-      },
-      scroll: async () => {},
-      typeText: async () => {},
-      key: async () => {},
-    },
-  });
-
-  // R44: swipe binds its gesture tier before executing, so this drives the REAL Linux owner
-  // through the composed gateway. Linux advertises no `gestureViewport`, so the coordinate frame
-  // still comes from the capture below — the preferred-operation fallback, unchanged.
-  const gateway = createPlatformRuntimeGateway({
-    resolveSessionArtifacts: () => ({
-      outputPath: '/sessions/linux-swipe/app.log',
-      pidPath: '/sessions/linux-swipe/app-log.pid',
     }),
-    sessionsDir: '/sessions',
   });
-  let bindCount = 0;
-  const bindings = createRequestRuntimeBindings({
-    dispatchLedger: createRequestDispatchLedger(),
-    gateway: {
-      ...gateway,
-      bind: async (request) => {
-        bindCount += 1;
-        return await gateway.bind(request);
-      },
-    },
+  gestureRuntimeSpies.performGesturePlan.mockClear();
+  const dispatchLedger = createRequestDispatchLedger();
+  const gateway = gestureDeviceRuntimeGateway;
+  const requestBindings = createRequestRuntimeBindings({
+    gateway,
+    dispatchLedger,
     scope: {
       signal: new AbortController().signal,
       diagnostics: { emit: () => {} },
@@ -337,37 +299,40 @@ test('duration-less public coordinate swipe retains Linux drag behavior', async 
     },
     admitDeviceClaim: async () => {},
   });
-  const response = await withLinuxToolProvider(
-    provider,
-    async () =>
-      await handleInteractionCommands({
-        createCommandSurface: testCreateCommandSurface,
-        platformServices: composedPlatformServicesFixture(),
-        inspectFacts: bindings.inspectFacts,
-        bindDevice: bindings.bindDevice,
-        req: {
-          ...makeRequest('swipe'),
-          session: 'linux-swipe',
-          input: { from: { x: 10, y: 20 }, to: { x: 110, y: 20 } },
-        },
-        sessionName: 'linux-swipe',
-        sessionStore,
-        contextFromFlags: () => ({}),
-        captureSnapshotForSession: async (_session, _flags, _store, _context, options) => {
-          assert.ok(options.boundCapture);
-          const captured = await options.boundCapture({ options: { surface: 'desktop' } });
-          return makeSnapshotState(captured.nodes ?? []);
-        },
-      }),
-  );
+  let bindCount = 0;
+  const response = await handleInteractionCommands({
+    createCommandSurface: commandSurface,
+    platformServices: daemonPlatformServicesFixture(),
+    inspectFacts: async (device) => await gestureInspectFacts(device),
+    bindDevice: async (device, use) => {
+      bindCount += 1;
+      return await requestBindings.bindDevice(device, use);
+    },
+    req: {
+      ...makeRequest('swipe'),
+      session: 'linux-swipe',
+      input: { from: { x: 10, y: 20 }, to: { x: 110, y: 20 } },
+    },
+    sessionName: 'linux-swipe',
+    sessionStore,
+    contextFromFlags: () => ({}),
+    captureSnapshotForSession: async () => {
+      throw new Error('the admitted gesture viewport should avoid capture fallback');
+    },
+  });
 
   assert.ok(response?.ok);
   assert.ok(response.data);
   assert.equal(response.data.kind, 'fling');
-  assert.equal(response.data.durationMs, 100);
   assert.equal(bindCount, 1);
-  assert.equal(captureCount, 1);
-  assert.deepEqual(drags, [[10, 20, 110, 20, 100]]);
+  assert.equal(gestureRuntimeSpies.performGesturePlan.mock.calls.length, 1);
+  const call = gestureRuntimeSpies.performGesturePlan.mock.calls[0];
+  assert.ok(call);
+  const plan = call[0].plan;
+  assert.equal(plan.topology, 'single');
+  assert.equal(plan.intent, 'fling');
+  assert.equal(plan.durationMs, 100);
+  await requestBindings[Symbol.asyncDispose]();
 });
 
 test('request handler chain routes lease commands to the lease family', async () => {
