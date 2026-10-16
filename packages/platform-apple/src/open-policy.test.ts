@@ -12,10 +12,9 @@ type Report = Readonly<{
 }>;
 
 /**
- * The one mapping from each answer attempt to what the settle reports, over each state the settle
- * can already be in. A seen confirmation replaces the report; a step that failed or went unverified replaces it
- * with the unknown state; a completed probe that saw nothing resolves the unknown and keeps any
- * confirmation already seen.
+ * The mapping's cases at both ends: every attempt kind against a fresh settle, and attempts that
+ * follow a settle already holding a report or an unknown state. `applyAttemptReport` owns the
+ * rule and its url-owner exception; each expected row here restates only its own case.
  */
 const freshCases: ReadonlyArray<Readonly<[string, LaunchConfirmationAttempt, Report]>> = [
   ['accepted', { outcome: 'accepted' }, { report: { launchConfirmation: 'accepted' } }],
