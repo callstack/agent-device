@@ -4,17 +4,15 @@
 
 Accepted
 
+Completed process history is in git history.
+
 > **Amended by [ADR 0019](0019-request-bound-platform-runtime.md).** `CommandDescriptor` remains
 > the command declaration root. Device-command capability buckets evolve into typed required and
 > preferred runtime use joined with leaf/device/provider-specific runtime facts; inventory commands
 > declare inventory use instead of fabricating a device binding. The descriptor's other derived
 > projections remain accepted.
 >
-> **Parity gate retired (2026-09).** The migration rule below — assert each derived table
-> byte-for-byte against its hand-authored table before deleting the hand table — was followed, and
-> completing it removed the gate's second operand. Each hand table went away as its projection was
-> inverted out: #907 daemon routes, #908 capability matrix, #909 batch allowlist, #1084
-> daemon-client timeout lists, #1137 MCP exposure list. No parity test exists. Do not add one or
+> No parity test exists. Do not add one or
 > look for one; the totality invariants are now carried by compile-time guards
 > (`CommandOwnerFileClaimsAreComplete`) and by literal pin-set tests that compare a name set rather
 > than two tables.
@@ -77,18 +75,10 @@ descriptor's `execute`. The descriptor is the prerequisite for typed per-command
 deletes the `src/client-types.ts` mirror) and supplies the capability facet the platform-plugin work
 (ADR 0009) hooks into.
 
-Migration is **strangler-fig and sequential** — never a big-bang:
-
-1. Introduce the `commandRegistry` as the root and **invert the import graph** so `command-catalog`,
-   `capabilities`, `daemon-command-registry`, and `batch-policy` become leaves that derive from it.
-2. Promote each family's facet to a full `CommandDescriptor`, family by family.
-3. Replace the dispatch `switch` with the registry-driven total map, arm by arm.
-
-Each derived table must be asserted **byte-for-byte equivalent** to the hand-authored table by a parity test
-**before** the hand table is deleted. The principal risk is the import-cycle inversion: `command-catalog.ts`
+The principal risk is the import-cycle inversion: `command-catalog.ts`
 has ~95 importers and the family facet currently imports `AgentDeviceClient`, so the descriptor module must
 own the `Input`/`Result` types and the client must be derived as a view type, enforced by a lint boundary.
-As of 2026-07, the descriptor registry is live for command identity (`PUBLIC_COMMANDS`,
+The descriptor registry is live for command identity (`PUBLIC_COMMANDS`,
 `INTERNAL_COMMANDS`, and local CLI names), daemon registry traits, capability matrix,
 structured-batch allowlist, daemon-client timeout policy, MCP exposure list,
 capability-checked CLI command list, post-action observation traits, and the platform dispatch
@@ -103,5 +93,3 @@ daemon responses still expose dynamic payloads or whose closed result contracts 
 modules must move those contracts before their client methods can stop returning
 `CommandRequestResult`.
 
-This ADR owns the decision and its constraints; the roadmap that prototyped it has been retired, with
-the delivered end-state enforced by the descriptor projections below.
