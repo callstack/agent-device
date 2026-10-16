@@ -25,6 +25,7 @@ Completed process history is in git history.
 - Keep the cross-process client `invoke` seam and the in-daemon `execute` seam distinct. Never collapse the process boundary.
 - Preserve all four invariants from ADR 0003.
 - The descriptor module must own the `Input`/`Result` types. The client must be derived as a view type, and a lint boundary enforces this.
+- Before client methods can stop returning `CommandRequestResult`, move the result contracts described in Consequences.
 
 ## Context
 
@@ -36,7 +37,7 @@ Before the descriptor migration, roughly ten manually maintained tables repeated
 - Daemon command registry in `packages/daemon/src/core/daemon-command-registry.ts` (ADR 0003).
 - Structured-batch allowlist in `src/batch-policy.ts`.
 - MCP exposure sets.
-- Node client interface and implementation in `src/client/client-types.ts` and `src/client.ts`.
+- Node client interface and implementation in `src/client-types.ts` and `src/client.ts`.
 - Generic-dispatch `switch` in `src/core/dispatch.ts`.
 
 The switch's `default: throw` makes a missing or renamed command a runtime error instead of a compile error.
@@ -100,7 +101,7 @@ This design composes with ADR 0003's four invariants and is bound by them:
 
 A plain new command changes approximately 1–2 files.
 Per-platform behavior remains N implementations behind the descriptor's `execute`.
-The descriptor supports typed per-command results in ADR 0010.
+The descriptor is the prerequisite for typed per-command results.
 `src/client/client-types.ts` retains the public client interface and some `CommandRequestResult` return types.
 It also supplies the capability facet used by the platform-plugin work in ADR 0009.
 
@@ -130,7 +131,10 @@ Coherence checks compare it with the descriptor CLI catalog.
 Thus, new surface names cannot differ from the descriptor root.
 
 [#1153](https://github.com/callstack/agent-device/issues/1153), the former tracker for public Node-client typed-result narrowing, closed on 2026-07-08.
-Some client methods still return `CommandRequestResult`, including `alert` and `reactNative` in `src/client/client-types.ts`.
+In `src/client/client-types.ts`, 21 client methods still return `CommandRequestResult`.
+They include `alert`, `reactNative`, and `interactions.swipe`.
+Some commands still expose dynamic daemon response payloads or retain closed result contracts in runtime modules.
+Before their client methods can stop returning `CommandRequestResult`, those contracts must move.
 Issue closure does not establish complete result narrowing.
 
 This ADR owns the decision and its constraints.
