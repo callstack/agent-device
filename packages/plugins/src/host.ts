@@ -1,6 +1,12 @@
-import { AppError } from '@agent-device/kernel/errors';
+import { AppError, type AppErrorCode, type AppErrorDetails } from '@agent-device/kernel/errors';
 import { readVersion } from '@agent-device/host-kit/version';
-import type { ProviderPluginHost } from '../sdk/plugins.ts';
+
+export type ProviderPluginHost = Readonly<{
+  env: Readonly<Record<string, string | undefined>>;
+  options: Readonly<Record<string, unknown>>;
+  clientVersion: string;
+  createError(code: AppErrorCode, message: string, details?: AppErrorDetails): AppError;
+}>;
 
 export function createPluginHost(
   env: NodeJS.ProcessEnv,

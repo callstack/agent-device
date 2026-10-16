@@ -10,18 +10,18 @@ import {
 import { AppError } from '@agent-device/kernel/errors';
 import { verifyTestMuConnection } from '@agent-device/testmu/connection-verification';
 import testMuPlugin from '@agent-device/testmu';
-import { createPluginHost } from '../plugins/host.ts';
+import { createPluginHost } from '@agent-device/plugins/host';
 import { resolveConnectProviderProfile } from '../cli/connection/connect-provider-adapters.ts';
 import { mkdtempForTestSync, pluginHome, selectPlugin } from '@agent-device/test-kit';
-import { installedPlugins } from '../plugins/store.ts';
+import { installedPlugins } from '@agent-device/plugins/store';
 import manifest from '@agent-device/testmu/package.json' with { type: 'json' };
-import type { PluginConnection } from '../plugins/connection.ts';
+import type { PluginConnection } from '@agent-device/plugins/connection';
 import { connectWithGeneratedProviderProfile } from './test-utils/connect-command.ts';
 
 vi.mock('@agent-device/testmu/connection-verification', () => ({
   verifyTestMuConnection: vi.fn(),
 }));
-vi.mock('../plugins/load.ts', () => ({
+vi.mock('@agent-device/plugins/load', () => ({
   withPluginConnection: async (
     _provider: string,
     env: NodeJS.ProcessEnv,

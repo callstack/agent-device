@@ -1,7 +1,10 @@
 import type { ConnectionProviderCapabilities } from '@agent-device/contracts/remote';
 import { cloudWebDriverProviderDeclaration } from '@agent-device/provider-webdriver/providers';
-import { pluginConnectionCapabilities, pluginConnectionNames } from '../../plugins/connection.ts';
-import { RESERVED_PLUGIN_PROVIDERS as BUILTIN_CONNECT_PROVIDERS } from '../../plugins/manifest.ts';
+import {
+  pluginConnectionCapabilities,
+  pluginConnectionNames,
+} from '@agent-device/plugins/connection';
+import { RESERVED_PLUGIN_PROVIDERS as BUILTIN_CONNECT_PROVIDERS } from '@agent-device/plugins/manifest';
 
 export type BuiltinConnectProvider = (typeof BUILTIN_CONNECT_PROVIDERS)[number];
 export type ConnectProvider = BuiltinConnectProvider | (string & {});

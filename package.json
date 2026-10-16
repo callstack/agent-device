@@ -305,6 +305,7 @@
     "@agent-device/platform-linux": "workspace:*",
     "@agent-device/platform-vega": "workspace:*",
     "@agent-device/platform-web": "workspace:*",
+    "@agent-device/plugins": "workspace:*",
     "@agent-device/provider-limrun": "workspace:*",
     "@agent-device/provider-webdriver": "workspace:*",
     "@agent-device/provision-kit": "workspace:*",

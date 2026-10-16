@@ -26,7 +26,7 @@ import {
 } from './cloud-webdriver-test-server.ts';
 
 import testMuPlugin from '@agent-device/testmu';
-import { createPluginHost } from '../../../src/plugins/host.ts';
+import { createPluginHost } from '@agent-device/plugins/host';
 import { createCloudWebDriverRuntime } from '@agent-device/provider-webdriver/plugin';
 import { CLOUD_WEBDRIVER_PROVIDERS } from '@agent-device/provider-webdriver/providers';
 

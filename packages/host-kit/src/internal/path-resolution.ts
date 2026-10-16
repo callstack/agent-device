@@ -33,7 +33,7 @@ export function resolveUserPath(inputPath: string, options: PathResolutionOption
  * same question those two answer — a location named by the environment becomes an absolute path —
  * and it answers it with nothing but `env`: no option schema, no flag grammar, no command facet.
  * Plugin discovery needs the answer at daemon start and must not acquire the CLI's schema layer to
- * get it (`src/plugins/store.ts`), which is a 153-file zone rather than a path helper.
+ * get it (`packages/plugins/src/store.ts`), which is a 153-file zone rather than a path helper.
  */
 export function resolveUserConfigPath(env: EnvMap): string {
   const home = env.AGENT_DEVICE_HOME

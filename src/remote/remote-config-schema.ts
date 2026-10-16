@@ -1,33 +1,14 @@
 import {
   PROVIDER_DEVICE_ORIENTATIONS,
   PROVIDER_DEVICE_TYPES,
-  type CloudProviderProfileFields,
-  type RemoteConfigMetroOptions,
-  type RemoteConnectionProfileFields,
+  type RemoteConfigProfile,
 } from '@agent-device/contracts/remote';
-// Declared in contracts/ so zones below remote/ can be stated in terms of the field vocabulary;
+// Declared in contracts/ so zones below remote/ can be stated in terms of the profile vocabulary;
 // re-exported here because this module is where consumers already import it from.
-export type { RemoteConnectionProfileFields } from '@agent-device/contracts/remote';
+export type { RemoteConfigProfile } from '@agent-device/contracts/remote';
 import { LEASE_BACKENDS } from '@agent-device/kernel/contracts';
 import { buildPrimaryEnvVarName } from '@agent-device/kernel/source-value';
-import {
-  PLATFORM_SELECTORS,
-  type DeviceTarget,
-  type PlatformSelector,
-} from '@agent-device/kernel/device';
-
-export type RemoteConfigProfile = RemoteConfigMetroOptions &
-  CloudProviderProfileFields &
-  RemoteConnectionProfileFields & {
-    platform?: PlatformSelector;
-    target?: DeviceTarget;
-    device?: string;
-    udid?: string;
-    serial?: string;
-    iosSimulatorDeviceSet?: string;
-    androidDeviceAllowlist?: string;
-    session?: string;
-  };
+import { PLATFORM_SELECTORS } from '@agent-device/kernel/device';
 
 export type RemoteConfigProfileOptions = {
   configPath: string;

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { RESERVED_PLUGIN_PROVIDERS } from '@agent-device/plugins/manifest';
 import {
+  DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS,
   createDefaultProviderRuntimeComposition,
   createDaemonProviderRuntimeComposition,
 } from '../provider-device-runtimes.ts';
@@ -115,3 +117,8 @@ function assertPlatformModuleCoverage(
     assert.equal('provider' in runtime ? runtime.provider : undefined, module.owner.provider);
   }
 }
+
+test('every bundled provider runtime is reserved from plugins', () => {
+  for (const provider of DEFAULT_PROVIDER_RUNTIME_REQUIRED_IDS)
+    assert.ok((RESERVED_PLUGIN_PROVIDERS as readonly string[]).includes(provider), provider);
+});

@@ -2,16 +2,15 @@ import { pathToFileURL } from 'node:url';
 import { AppError } from '@agent-device/kernel/errors';
 import type { ProviderDeviceRuntime } from '@agent-device/contracts/device';
 import type { PlatformRuntimeProviderModule } from '@agent-device/contracts/platform-runtime-operations';
-import type { ProviderPluginHost } from '../sdk/plugins.ts';
 import { installedPlugins } from './store.ts';
 import {
   resolvePluginEntry,
   assertUniquePluginProviders,
   RESERVED_PLUGIN_PROVIDERS,
 } from './manifest.ts';
-import { createPluginHost } from './host.ts';
+import { createPluginHost, type ProviderPluginHost } from './host.ts';
 import type { PluginConnection } from './connection.ts';
-import type { WebDriverPluginOptions } from '../sdk/plugin-webdriver.ts';
+import type { CloudWebDriverProviderOptions } from '@agent-device/provider-webdriver/plugin';
 
 type ProviderPluginRegistration = Readonly<{
   runtime: ProviderDeviceRuntime;
@@ -75,10 +74,10 @@ async function instantiateProviderPlugin(
       host: ProviderPluginHost,
     ) =>
       | ProviderPluginRegistration
-      | { webDriver: WebDriverPluginOptions; connection?: PluginConnection }
+      | { webDriver: CloudWebDriverProviderOptions; connection?: PluginConnection }
       | Promise<
           | ProviderPluginRegistration
-          | { webDriver: WebDriverPluginOptions; connection?: PluginConnection }
+          | { webDriver: CloudWebDriverProviderOptions; connection?: PluginConnection }
         >
   )(host);
   let registration: ProviderPluginRegistration;
@@ -108,7 +107,7 @@ async function instantiateProviderPlugin(
 
 function isWebDriverPluginResult(
   result: unknown,
-): result is { webDriver: WebDriverPluginOptions; connection?: PluginConnection } {
+): result is { webDriver: CloudWebDriverProviderOptions; connection?: PluginConnection } {
   return typeof result === 'object' && result !== null && 'webDriver' in result;
 }
 

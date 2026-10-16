@@ -10,7 +10,7 @@ import {
   webDriverPluginSource,
 } from '@agent-device/test-kit';
 import { AppError } from '@agent-device/kernel/errors';
-import type { ProviderPluginHost } from '../sdk/plugins.ts';
+import type { ProviderPluginHost } from './host.ts';
 import type { DeviceLease, ProviderDeviceRuntime } from '@agent-device/contracts/device';
 
 const realFetch = globalThis.fetch;
