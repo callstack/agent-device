@@ -27,10 +27,10 @@ Keep the first review free of implementation summaries.
 Review that SHA range using AGENTS.md and [review guidance](review.md).
 
 In later rounds, provide the previously reviewed SHA, findings, and dispositions. Review changes since that SHA and their affected interactions.
-After a rebase, compare the old and new branch ranges with `git range-diff`.
+After a rebase, compare branch ranges with `git range-diff <old-base>..<old-head> <new-base>..<new-head>`.
 Fix accepted findings and rerun affected checks. Record a reason for rejected findings.
-If no independent reviewer is available, review the diff yourself and report that limitation.
-An independent reviewer is required at the growth thresholds in [review guidance](review.md).
+If no independent reviewer is available, reread the full diff cold and report that limitation.
+At the growth thresholds in [review guidance](review.md), this fallback cannot replace the required independent reviewer.
 
 ## Scope and commits
 
