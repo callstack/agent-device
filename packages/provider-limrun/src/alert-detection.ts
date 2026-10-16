@@ -3,7 +3,7 @@ import {
   classifyAlertButtonRole,
   type AlertInfo,
   type AlertSource,
-  selectUniqueAlertButtonByRole,
+  selectRankedAlertButtonByRole,
 } from '@agent-device/contracts/alert-contract';
 import { centerOfRect, type Rect } from '@agent-device/kernel/snapshot';
 import { isPositiveFiniteRect } from '@agent-device/kernel/rect';
@@ -12,22 +12,16 @@ import { readIosNodeChildren, readIosNodeRect, type IosTreeNode } from './snapsh
 
 /**
  * System-alert detection over a Limrun iOS element tree (issue #3349). A Limrun iOS direct
- * session has no XCUITest runner, but its element tree does carry the system alert: on a live
- * instance the ATT prompt arrived as its own `AXApplication` root whose `AXLabel` is blank, with
- * its text and buttons as direct children all sharing one `pid` — never the app's. The app's own
- * `UIAlertController`, by contrast, rode inside the app's root, labeled with the app name and
- * carrying the app's pid, and SpringBoard's status nodes rode that app root under a third pid.
- * Nothing in a capture names a package as owner, so the host rule is a heuristic over these
- * observations: a host sheet qualifies only on a blank-label root that reports a `pid` and whose
- * entire subtree reports that same one. A named root is app UI; launch-icon buttons are a home
- * screen; a button without a frame has no point to press. The documented residual — what these
- * captures cannot exclude — is an app that leaves its own root's label blank while showing a
- * dialog that no other process rides; the acting legs press only label-unambiguous buttons as
- * the backstop, never a guess.
- *
- * Button action eligibility never asserts hitability: the captures omit the `hittable` key
- * entirely, so an explicit `hittable: false` refuses a button and an omitted one carries no
- * signal — what admits a button is the enabled, label, and complete-rect rules.
+ * session has no XCUITest runner, but its element tree carries the system alert: on a live
+ * instance the ATT prompt arrived as its own `AXApplication` root with a blank `AXLabel` and one
+ * `pid` shared by its whole subtree — never the app's. The app's own `UIAlertController` rode
+ * inside the app's named root under the app's pid. Nothing in a capture names an owner, so the
+ * host rule is a stated heuristic: a host sheet qualifies only on a blank-label root reporting a
+ * `pid` whose entire subtree reports that same one. The named residual these captures cannot
+ * exclude: an app blanking its own root label while showing an unshared dialog — the acting legs
+ * press only label-unambiguous buttons as the backstop. Button eligibility never asserts
+ * hitability: captures omit `hittable` entirely, so an explicit `false` refuses and an omission
+ * carries no signal; enabled, label, and complete-rect rules admit a button.
  */
 
 /** Only the two host-sheet sources exist on this surface: no node names a package to attribute. */
@@ -218,14 +212,15 @@ function classifyAlertSource(buttons: readonly LimrunAlertButton[]): LimrunAlert
 /**
  * The button one action may press, or null when pressing any visible choice would guess.
  * Deliberately stricter than Android's: with no `android:id/button1`-style identity to fall back
- * on, only a button whose own label states the asked-for choice may be pressed, resolved once
- * through the shared unique-choice boundary (duplicated roles refuse) — an accept must never
- * press a denial, and an alert whose choices leave the action undecided is refused rather than
- * resolved by tree position.
+ * on, only a button whose own label states the asked-for choice may be pressed, resolved through
+ * the shared preference table — a multi-grant sheet ("Allow Once" / "Allow While Using App" /
+ * "Don't Allow") resolves to the preferred grant, while equal-rank labels or a vocabulary-free
+ * multiplicity refuse. An accept must never press a denial, and an undecided action is refused
+ * rather than resolved by tree position.
  */
 export function chooseLimrunAlertButton(
   buttons: readonly LimrunAlertButton[],
   action: 'accept' | 'dismiss',
 ): LimrunAlertButton | null {
-  return selectUniqueAlertButtonByRole(buttons, action);
+  return selectRankedAlertButtonByRole(buttons, action);
 }

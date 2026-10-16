@@ -4,7 +4,7 @@ import {
   classifyAlertButtonRole,
   type AlertInfo,
   type AlertSource,
-  selectUniqueAlertButtonByRole,
+  selectRankedAlertButtonByRole,
 } from '@agent-device/contracts/alert-contract';
 import { isSnapshotNodeInteractionBlocked } from '@agent-device/capture-kit/snapshot-occlusion';
 
@@ -86,17 +86,19 @@ function isReachableAlertNode(node: RawSnapshotNode): boolean {
 }
 
 /**
- * Android's acting policy on the shared choice boundary: the unique button whose role the
- * action names; else, for dismiss, the first neutral button (Android dialogs commonly name the
- * leaving path only neutrally); else, for accept, a single-button dialog's only affirmative
- * path. Two buttons sharing a role refuse at the shared boundary rather than resolving by tree
+ * Android's acting policy on the shared choice boundary: the action's role-named button chosen by
+ * the declared preference table (a multi-grant permission sheet's "While using the app" outranks
+ * "Only this time"); else, for dismiss, the first neutral button (Android dialogs commonly name
+ * the leaving path only neutrally); else, for accept, a single-button dialog's only affirmative
+ * path. Two choices that tie on one entry (the same label at two points, or two id-classified
+ * grants the vocabulary cannot rank) refuse at the shared boundary rather than resolving by tree
  * order — the driver turns that refusal into a Back key for dismiss, or a typed refusal.
  */
 export function chooseAndroidAlertButton(
   buttons: AndroidAlertButton[],
   action: 'accept' | 'dismiss',
 ): AndroidAlertButton | null {
-  const exact = selectUniqueAlertButtonByRole(buttons, action);
+  const exact = selectRankedAlertButtonByRole(buttons, action);
   if (exact) return exact;
   if (action === 'dismiss') {
     return buttons.find((button) => button.role === 'neutral') ?? null;

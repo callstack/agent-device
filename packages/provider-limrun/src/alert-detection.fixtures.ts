@@ -81,6 +81,51 @@ export function limrunAlertTreeWithoutButtons(): IosTreeNode {
 }
 
 /**
+ * The standard iOS location prompt shape: three choices, two of which grant ("Allow Once" and
+ * "Allow While Using App"). The capture itself never marks a preferred grant; the shared
+ * preference table does, so `alert accept` presses the lasting grant rather than refusing.
+ */
+export function limrunLocationAlertTree(): IosTreeNode {
+  return alertRoot([
+    {
+      type: 'StaticText',
+      role: 'AXStaticText',
+      AXLabel: '“Probe” Would Like to Use Your Current Location',
+      pid: LIMRUN_ALERT_HOST_PID,
+      frame: { x: 71, y: 381.33, width: 260, height: 64.33 },
+      traits: ['Scrollable', 'StaticText'],
+    },
+    {
+      type: 'Button',
+      role: 'AXButton',
+      AXLabel: "Don't Allow",
+      pid: LIMRUN_ALERT_HOST_PID,
+      enabled: true,
+      frame: { x: 57, y: 511.67, width: 288, height: 48 },
+      traits: ['Button', 'Scrollable'],
+    },
+    {
+      type: 'Button',
+      role: 'AXButton',
+      AXLabel: 'Allow Once',
+      pid: LIMRUN_ALERT_HOST_PID,
+      enabled: true,
+      frame: { x: 57, y: 567.67, width: 288, height: 48 },
+      traits: ['Button', 'Scrollable'],
+    },
+    {
+      type: 'Button',
+      role: 'AXButton',
+      AXLabel: 'Allow While Using App',
+      pid: LIMRUN_ALERT_HOST_PID,
+      enabled: true,
+      frame: { x: 57, y: 623.67, width: 288, height: 48 },
+      traits: ['Button', 'Scrollable'],
+    },
+  ]);
+}
+
+/**
  * The live ATT prompt with every choice degraded out of action: one disabled, one explicitly
  * unhittable, one label-less and frameless. This is what a capture looks like when the tap was
  * ignored or the sheet is mid-transition — the dialog is still visibly up, yet nothing on it

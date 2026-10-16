@@ -9,6 +9,7 @@ import {
   limrunAlertTreeWithUnpressableButtons,
   limrunAppScreenTree,
   limrunAttAlertTree,
+  limrunLocationAlertTree,
 } from './alert-detection.fixtures.ts';
 import { handleLimrunIosAlert, type LimrunIosAlertClient } from './alert.ts';
 import type { IosTreeNode } from './snapshot.ts';
@@ -162,6 +163,20 @@ describe('acting budgets', () => {
     const status = await handleLimrunIosAlert(client, 'get');
     expect(status.kind === 'alertStatus' && status.alert).toBeNull();
     expect(status.kind === 'alertStatus' && status.message).toBe('No alert visible');
+  });
+
+  it('accepts the three-button location sheet on the preferred grant, once', async () => {
+    // The multi-grant regression at the action seam: "Allow Once" and "Allow While Using App"
+    // both carry the accept role, and the shared preference table must land one tap on the
+    // lasting grant rather than refusing the sheet.
+    const client = clientWithTrees([limrunLocationAlertTree(), limrunAppScreenTree()]);
+
+    const handled = await handleLimrunIosAlert(client, 'accept');
+    expect(handled.kind).toBe('alertHandled');
+    expect(handled.kind === 'alertHandled' && handled.button).toBe('Allow While Using App');
+    expect(client.tap).toHaveBeenCalledTimes(1);
+    // Grant center: x 57 + 288/2, y 623.67 + 48/2, rounded by the press seam to whole points.
+    expect(client.tap).toHaveBeenCalledWith(201, 648);
   });
 
   it('refuses to act on an alert-shaped but unresolvable capture, without tapping', async () => {
