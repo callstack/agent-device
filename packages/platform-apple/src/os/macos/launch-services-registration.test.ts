@@ -106,9 +106,9 @@ const mockSleep = vi.mocked(sleep);
 const mockEmitDiagnostic = vi.mocked(emitDiagnostic);
 
 beforeEach(() => {
+  // Rows and call history reset together: a later test's `not.toHaveBeenCalled()` must not depend
+  // on run order.
   processTable.rows = [];
-  // The table seam's call history must not decide a later test's `not.toHaveBeenCalled()`: order
-  // safety comes from this reset, not from the luck of the run order.
   vi.mocked(listHostProcesses).mockClear();
 });
 
@@ -614,20 +614,21 @@ describe.skipIf(process.platform !== 'darwin')(
         { pid: 4301, command: `${spaced}/Contents/MacOS/Late Night` },
       ] satisfies HostProcessInfo[];
 
-      let pidPinnedReads = 0;
+      const registrationReadsMade: string[][] = [];
       // plutil runs for real through the exec seam. The LaunchServices view and `open` itself stay
       // scripted: an unlisted-then-listed registration cannot be arranged with a real bundle that
-      // is not actually running, and a real `open` would launch a real copy.
+      // is not actually running, and a real `open` would launch a real copy. Only the target's own
+      // pid ever reports an ASN, so the wait ends only if pairing handed the probe that pid.
       const runCommand: AppleToolCommandExecutor = async (cmd, args, options) => {
         if (cmd === 'open') return { exitCode: 0, stdout: '', stderr: '' };
         if (cmd === LAUNCH_SERVICES_TOOL) {
-          if (!args.some((arg) => arg.startsWith('pid='))) {
-            return { exitCode: 0, stdout: '', stderr: '' };
-          }
-          pidPinnedReads += 1;
+          registrationReadsMade.push(args);
+          const pinned = args.at(-1) === 'pid=4242';
+          const registered =
+            pinned && registrationReadsMade.filter((read) => read.at(-1) === 'pid=4242').length > 1;
           return {
             exitCode: 0,
-            stdout: pidPinnedReads > 1 ? 'ASN:0x0-0x1234-"My Target":\n' : '',
+            stdout: registered ? 'ASN:0x0-0x1234-"My Target":\n' : '',
             stderr: '',
           };
         }
@@ -637,9 +638,13 @@ describe.skipIf(process.platform !== 'darwin')(
       try {
         await openBundle(runCommand);
 
-        // The copy is found only if the real batch paired its row with its path among three, so
-        // the wait ran and ended on the target's own pid rather than the open going out blind.
-        expect(pidPinnedReads).toBe(2);
+        // The wait ended on pid 4242 — the target's process — which only happens if the real
+        // batch paired the target's identifier with the target's path among the three rows.
+        expect(registrationReadsMade).toEqual([
+          ['find', `bundleid=${BUNDLE_ID}`],
+          ['find', `bundleid=${BUNDLE_ID}`, 'pid=4242'],
+          ['find', `bundleid=${BUNDLE_ID}`, 'pid=4242'],
+        ]);
         expect(mockSleep).toHaveBeenCalledTimes(2);
       } finally {
         await rm(root, { recursive: true, force: true });
