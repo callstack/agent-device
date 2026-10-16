@@ -1261,94 +1261,93 @@ After bounded expiry, the tombstone disappears and the key is free.
 
 ## Consequences
 
-- `--from` makes app state the caller's responsibility, and only accepts a resume when the planner can
-  prove its variable and control-flow state is independent of skipped execution **and** its plan digest
-  matches the reported plan. The daemon has no way to know that the app is actually in the state step N
-  expects. The live nav-state-persistence divergence in Context is the canonical case: the app, not the
-  script, decides what screen a relaunch lands on.
-- **Non-idempotent scripts are exactly why `--from` must never re-run steps `1..N-1`**: a script that
-  creates a record, navigates, then asserts on it would double-create on any re-run of its early steps.
-  This is a hard constraint on the flag's semantics, not an implementation nicety.
-- **Retiring heal-as-actor removes CI self-repair for agentless callers.** `--update` may return bounded
-  suggestions but never rewrites the script. A nightly run that once patched a selector now stays red.
-  This is accepted because the audit found the mechanism rarely useful and a silent patch is a
-  target-binding risk: selector agreement is not proof of the same target.
-- **Successful structural-collapse disclosure adds bounded diagnostic bytes, not reusable targets.** Its
-  pre-action alternatives describe wrappers consumed by the mutation. A distinct-subtree rejection is
-  different: no mutation occurred, so its at-most-five candidate refs are immediately reusable through
-  the issued partial frame. Direct iOS unique responses pay only the explicit `not-observed` marker.
-- **Recorded identity evidence is an additive `.ad` format change.** It adds one reserved JSON comment
-  before each supported recorded target action; scripts without the comment remain valid. A duplicate that
-  survives structural evidence is intentionally a pre-action unverifiable divergence, not a best guess.
-- **The original geometric mutation heuristic was superseded after element-14 realized its documented
-  mis-binding risk.** Blanket hard-reject remains inappropriate because React Native commonly exposes
-  a row/button/text wrapper chain under one label. Structural equivalence preserves that benign case,
-  while distinct subtrees reject instead of letting visibility, depth, or area choose a semantic target.
-- **Decision 6's residual risk is old risk, not new.** The agent can press the wrong visible ref — live
-  interactive commands have no target-binding verification anywhere in this codebase today (see (c) in
-  Context) — but that is ordinary agent-driven-interaction risk, not a new class this decision
-  introduces. The retired-heal failure mode ("selector agreement is not proof of the same target") is
-  structurally impossible here: nothing re-matches a stale selector, because evidence is derived fresh
-  from the node the agent actually pressed.
-- **`screen.refs` is bounded, per decision 4.** The divergence report's `screen.refs` is capped at 20
-  entries at default/full level and may be filtered; if the control the agent needs is not among them,
-  one extra `snapshot -i` recovers it — a bounded, disclosed cost, not a silent gap.
+- `--from` makes app state the caller's responsibility.
+  Resume requires a matching digest and proof that variables and control flow do not depend on skipped execution.
+  The daemon cannot know whether the app has step N's expected state.
+  Context's live navigation-state example shows that the app determines the relaunch destination.
+- **Non-idempotent scripts require no repetition of `1..N-1`.**
+  A script that creates a record before navigation and assertion would create it twice if the prefix repeated.
+  This is a strict semantic constraint on `--from`.
+- **Retirement of unattended heal removes CI self-repair.**
+  `--update` returns bounded suggestions but never rewrites.
+  A nightly run that formerly patched a selector now remains failed.
+  This is accepted because the audit found limited utility and silent target-binding risk.
+  Selector agreement does not prove target identity.
+- **Successful structural-collapse disclosure adds bounded diagnostics.**
+  Its alternatives describe pre-action wrappers and are not reusable targets.
+  Distinct-subtree rejection performs no mutation.
+  Its at-most-five candidates are immediately reusable through the issued partial frame.
+  Direct-iOS unique responses add only `not-observed`.
+- **Identity evidence is an additive `.ad` format change.**
+  A reserved JSON comment precedes each supported recorded target action.
+  Unannotated scripts remain valid.
+  A duplicate that structural evidence cannot distinguish causes pre-action unverifiable divergence instead of a guess.
+- **Structural equivalence replaces the original geometric mutation heuristic.**
+  Element-14 demonstrated its documented incorrect-binding risk.
+  Blanket rejection remains unsuitable because RN commonly exposes one label on a row/button/text wrapper chain.
+  Structural equivalence preserves that case.
+  Distinct subtrees reject instead of selection by visibility, depth, or area.
+- **Decision 6 retains ordinary interactive risk.**
+  An agent can press an incorrect visible ref.
+  Live interactive commands currently have no target-binding verification; see Context (c).
+  This existing risk is not a new failure class.
+  The retired-heal failure cannot occur through a stale selector rematch here.
+  Fresh evidence comes from the node the agent actually pressed.
+- **Decision 4 bounds `screen.refs`.**
+  Default/full output has at most 20 entries and can be filtered.
+  If the required control is absent, one additional `snapshot -i` retrieves it.
+  This cost is bounded and disclosed.
 
 ## Alternatives considered
 
-- **Guarded sequences as a new batch engine**: rejected — replay already is a step-sequenced engine
-  with progress and failure reporting; the gap is disclosure/verification/resumability on the existing
-  engine, not a second one.
-- **An `--agent`/agent-mode flag on `replay`**: rejected — no semantic fork is needed once the
-  divergence report is simply the richer default failure shape. A deterministic CI caller does not need
-  protection from a richer error payload it can ignore.
-- **Keep `--update` auto-heal, add target-binding verification to it**: rejected — decision 3 verifies
-  the resolved target without retry-and-rewrite behavior. Revisit only if agentless CI needs a separately
-  specified and testable repair policy.
-- **Auto-heal tiers** (safe-tier heals applied automatically, risky-tier surfaced): deferred, not
-  rejected outright — there is no current evidence base for which heals are "safe," and tiering now
-  would be speculative. Revisit if agentless CI demand for some self-repair materializes.
-- **Hand-edit `.ad` text (status quo)**: rejected — hostile to models. Measured 2026-07-12: a small
-  model (Haiku) repair run thrashed 26 turns and corrupted the `.ad` to `INVALID_ARGS` editing
-  escaped-quote selector chains.
-- **Silent auto-rewrite (the old `--update`)**: already retired (decision 1) — mis-binding risk;
-  selector agreement is not proof of the same target.
+- **New guarded-sequence batch engine: rejected.** Replay already sequences steps with progress and failure reports.
+  The existing engine needs disclosure, verification, and resume.
+  A second engine is unnecessary.
+- **`--agent`/agent-mode replay flag: rejected.** The richer divergence report can be the default error shape.
+  Deterministic CI can ignore additional error data.
+  No separate semantics are necessary.
+- **Retain `--update` auto-heal with target verification: rejected.** Decision 3 verifies resolved targets without retry-and-rewrite behavior.
+  Reconsider only if agentless CI needs a separately specified and testable repair policy.
+- **Automatic safe/risky repair tiers: deferred.** This alternative is not rejected outright.
+  No evidence currently establishes safe repair categories.
+  Reconsider if agentless CI demand for self-repair appears.
+- **Hand-edit `.ad` text: rejected.** Models have difficulty with this method.
+  On 2026-07-12, Haiku used 26 turns and corrupted escaped-quote selector chains into `INVALID_ARGS`.
+- **Silent automatic rewrite: retired under decision 1.** The former `--update` risks incorrect binding.
+  Selector agreement does not prove target identity.
 
 ## Context and evidence at acceptance (2026-07-10)
 
-This section records the repository state audited on 2026-07-10, before the decisions above
-shipped. Its present-tense observations and code pointers are historical evidence; the decisions
-above and the gates they name are the authoritative record of current behavior.
+This section records the repository audit on 2026-07-10, before implementation of these decisions.
+Its observations and code pointers are **historical evidence**.
+The decisions above and their gates define current behavior.
 
-At acceptance, replay was deterministic. `.ad` scripts were plain text — one action per line, `#`
-comments, and a `context platform=... device=... theme=...` header (`src/replay/script.ts`) — recorded
-via `open --save-script` (`packages/daemon/src/core/session-action-recorder.ts`,
-`packages/daemon/src/core/session-script-writer.ts`) or hand-written, and executed step-by-step by
-`runReplayScriptFile`
-(`src/daemon/handlers/session-replay-runtime.ts`) under the daemon's `replay`/`test` commands
-(`src/daemon/handlers/session-replay.ts`). Recorded touch/fill/get targets are selector chains with
-`||` alternates (`buildSelectorChainForNode(...).join(' || ')`,
-`src/commands/interaction/runtime/resolution.ts:242`, mirrored in
-`src/daemon/handlers/session-replay-heal.ts:131-135`); Maestro YAML flows import through `--maestro`
-(`packages/maestro/src/internal/`); progress is step-indexed (`stepIndex`/`stepTotal` in
-`emitReplayTestActionProgress`, `session-replay-runtime.ts:243-260`).
+At acceptance, replay was deterministic.
+`.ad` scripts used plain text with one action per line, `#` comments, and a `context platform=... device=... theme=...` header (`src/replay/script.ts`).
+Users recorded them through `open --save-script` or wrote them manually.
+Recording used `packages/daemon/src/core/session-action-recorder.ts` and `packages/daemon/src/core/session-script-writer.ts`.
+`runReplayScriptFile` executed each step under daemon `replay`/`test` commands.
+The historical pointers are `src/daemon/handlers/session-replay-runtime.ts` and `src/daemon/handlers/session-replay.ts`.
+Touch/fill/get targets used selector chains with `||` alternatives:
+`buildSelectorChainForNode(...).join(' || ')` in `src/commands/interaction/runtime/resolution.ts:242`, mirrored in `src/daemon/handlers/session-replay-heal.ts:131-135`.
+Maestro YAML imported through `--maestro` and `packages/maestro/src/internal/`.
+Progress used `stepIndex`/`stepTotal` in `emitReplayTestActionProgress` (`session-replay-runtime.ts:243-260`).
 
-Recovery was opt-in `--update`/`-u` healing (`replayUpdate` flag,
-`src/commands/cli-grammar/flag-definitions-workflow.ts`). It only fires after a step has already
-returned a hard failure (`session-replay-runtime.ts:118-149`: `if (!shouldUpdate) return failure; ...
-healReplayAction(...)`), and it only retries the SAME recorded selector material —
-`collectReplaySelectorCandidates` (`session-replay-heal.ts:39-81`) gathers the step's originally
-recorded `selectorChain`/positionals, then `resolveSelectorChain` re-resolves those exact candidate
-strings against a freshly captured snapshot (`session-replay-heal.ts:122-135`). If the identifying term
-itself changed — an id or label rename — the same string will not match the new tree either, so heal
-cannot rescue renames; it can only recover drift the ORIGINAL selector still matches (a moved or
-re-rendered node with the same id). PR #297 (closing #279) already trimmed heal once, removing
-`refLabel`-synthesis and numeric `get text` drift healing to keep it "centered on recorded selectors and
-explicit selector expressions" — heal has a maintained history of narrowing, not growing.
+Recovery required explicit `--update`/`-u` (`replayUpdate`, `src/commands/cli-grammar/flag-definitions-workflow.ts`).
+It ran only after a hard step failure.
+`session-replay-runtime.ts:118-149` used `if (!shouldUpdate) return failure; ... healReplayAction(...)`.
+It retried only the same recorded selector material.
+`collectReplaySelectorCandidates` (`session-replay-heal.ts:39-81`) collected original `selectorChain`/positionals.
+`resolveSelectorChain` retried those strings against a fresh snapshot (`session-replay-heal.ts:122-135`).
+A renamed id or label still failed because the string was unchanged.
+Heal could recover only drift that retained an original selector match, such as a moved or re-rendered node.
+PR #297, which closed #279, had already removed `refLabel` synthesis and numeric `get text` drift healing.
+Its stated scope was "centered on recorded selectors and explicit selector expressions".
+Thus, maintenance had narrowed heal rather than expanded it.
 
-**Benchmark evidence** (2026-07-09/10, iOS simulator, react-navigation/RN playground matrix; harness
-follows the `~/.agent-device-bench/rnnav-matrix.py` pattern, external — the key numbers are recorded
-here so the evidence stays durable without the harness directory):
+**Benchmark evidence** comes from 2026-07-09/10 on an iOS simulator with the react-navigation/RN playground matrix.
+The external harness follows `~/.agent-device-bench/rnnav-matrix.py`.
+The table preserves key evidence independently of that directory:
 
 | Measurement | Result |
 | --- | --- |
@@ -1356,115 +1355,102 @@ here so the evidence stays durable without the harness directory):
 | Commands per task, settled arm vs unsettled arms | 14.3 vs 23.3 / 26.7 |
 | react-navigation Maestro suite via deterministic replay | 38/38 flows green in 539 s, zero model turns |
 
-With the settle loop at its snapshot floor, wall time for an agent-driven QA flow is dominated by model
-turn latency, not device I/O. A happy-path agent-driven QA flow costs O(steps) model turns end-to-end; a
-deterministic replay of the same flow costs O(divergences) — the 38/38 sweep is that limit realized at
-zero divergences. The entire economic case for replay is collapsing the per-step model-turn cost toward
-zero on the happy path and paying only where reality diverged from the recording.
+At one snapshot per interaction, model-turn latency dominates agent-driven QA wall time over device I/O.
+A normal successful agent-driven flow costs O(steps) model turns.
+Deterministic replay costs O(divergences).
+The 38/38 run demonstrates zero divergences and zero model turns.
+Replay's benefit is removal of per-step model cost when execution matches the recording.
+Model work is necessary only at divergence.
 
-**Audit evidence** (2026-07-10) on where that divergence cost actually goes follows as historical
-evidence. Its identified geometric-mis-binding risk was realized by element-14 and superseded by the
-2026-08-07 structural-equivalence-or-reject amendment above:
+**Audit evidence** below is historical, dated 2026-07-10.
+Element-14 later demonstrated the geometric incorrect-binding risk.
+The 2026-08-07 structural-equivalence-or-reject amendment supersedes that policy.
 
-- **(a) Heal is narrow and mostly unable to act.** Per the mechanism above, heal only recovers
-  same-selector drift. Most real replay failures are renames or removals heal's candidate-recycling
-  cannot reach.
-- **(b) The real mis-binding surface is not heal — it is silent disambiguation in ORDINARY resolution**,
-  live and replay alike. `resolveSelectorInteractionTarget` calls `resolveSelectorChain(..., {
-  disambiguateAmbiguous: true })` on every press/click/fill (`resolution.ts:170-183`); when a selector
-  matches N>1 nodes, `accumulateDisambiguationCandidate`/`compareDisambiguationCandidates`
-  (`packages/selectors/src/internal/resolve.ts:181-285`) silently pick a winner — visible candidates over
-  off-screen ones, then deepest node, then smallest on-screen area, only an exact tie failing.
-  `describeResolvedInteractionNode` (`resolution.ts:227-249`), the response's entire identity payload,
-  carries `node`/`selectorChain`/`refLabel`/`targetHittable`/`hint` — no match count, no signal a
-  tiebreak happened at all. This was live-reproduced during the audit on an RN playground screen with
-  two identical-rect "Prevent Remove" buttons, where scroll position alone decided which one a selector
-  hit. The general policy is documented (`agent-device help workflow`,
-  `src/cli/parser/cli-help.ts:243,384`: "does not fail by default ... auto-resolves deepest node first
-  ... then smallest on-screen area") but never disclosed per response — an agent that hasn't read the
-  help topic, or whose target moved between recording and replay, gets no signal a heuristic rather than
-  an exact match chose its target.
-- **(c) No target-binding verification existed in this path at acceptance.** `--verify`
-  (`captureEvidenceBaseline`, `resolution.ts:45-58,104-134`; the `verifyEvidence` guarantee cell in ADR
-  0011's registry) attaches a pre/post-action node diff so the caller can see SOMETHING changed — it
-  says nothing about whether the CORRECT node was the one tapped. A wrong-but-plausible pick (the
-  sibling "Prevent Remove" button) produces a real, visible diff and is still the wrong action.
-- **(d) Heal auditability was a bare count.** A successful `--update` run returned
-  `{ replayed, healed, ... }` (`session-replay-runtime.ts:186-195`) — `healed` is a number, nothing
-  else — and rewrote the `.ad` file in place via `writeReplayScript`
-  (`session-replay-runtime.ts:182-184`, `src/replay/script.ts:459-484`) with no diff shown anywhere in
-  the response.
-- **(e) This silent-pick default is in real tension with this repo's general posture toward ambiguity.**
-  Elsewhere, ambiguous input is refused and hinted about rather than silently guessed — `start`/`restart`
-  are deliberately left out of the CLI alias-suggestion table because `start` is "genuinely ambiguous, so
-  a hint beats silently guessing" (`src/cli/parser/command-suggestions.ts:16-17`). Selector resolution
-  took the opposite default, and ADR 0011's own registry records that choice precisely: the
-  `disambiguation` cell for `runtime-selector` is classified `{ kind: 'runtime', via:
-  '...selectors-resolve.ts#resolveSelectorChain' }` (`packages/contracts/src/interaction-guarantees.ts:176-179`)
-  — proving the heuristic runs consistently across paths, not that the caller is told it ran. That
-  default is not being revisited here; see the rejected hard-reject alternative below for why.
-- **(f) Issue #1037 / PR #1040 is the direct, partial precedent.** A UNIQUE-but-wrong match (Apple
-  Maps' `text="Anthropic - Headquarters"` exact-matching a 30x30 map-pin annotation instead of the
-  recents row) now surfaces as `targetHittable:false` plus a hint
-  (`describeNonHittableTarget`, `resolution.ts:259-268`) — disclosed, but not prevented; the tap still
-  lands on the wrong element, just no longer silently. Disambiguation (N>1 matches, as opposed to one
-  unique-but-non-hittable match) has no equivalent disclosure today.
-- **(g) Issues #279/#297 are precedent for trimming heal rather than growing it** when the evidence
-  says a heuristic isn't earning its complexity — see above.
+- **(a) Heal had limited scope and rarely acted.** It recovered only same-selector drift.
+  Most actual failures were renames or removals that recycled candidates could not resolve.
+- **(b) Ordinary silent disambiguation was the main incorrect-binding risk.** This affected live commands and replay.
+  Every press/click/fill called `resolveSelectorChain(..., { disambiguateAmbiguous: true })` through `resolveSelectorInteractionTarget` (`resolution.ts:170-183`).
+  For N>1 matches, `accumulateDisambiguationCandidate`/`compareDisambiguationCandidates` silently chose a winner (`packages/selectors/src/internal/resolve.ts:181-285`).
+  Visible candidates preceded off-screen candidates, then deepest nodes, then smallest on-screen areas.
+  Only exact ties failed.
+  `describeResolvedInteractionNode` (`resolution.ts:227-249`) returned these identity fields:
+  `node`, `selectorChain`, `refLabel`, `targetHittable`, and `hint`.
+  It disclosed neither match count nor tiebreak.
+  A live audit reproduced this with two identical-rect “Prevent Remove” buttons in the RN playground.
+  Scroll position alone selected the target.
+  General help documented the policy in `agent-device help workflow` and `src/cli/parser/cli-help.ts:243,384`:
+  "does not fail by default ... auto-resolves deepest node first ... then smallest on-screen area".
+  Responses did not disclose each use.
+  An agent without that help context could not know that a heuristic selected the target.
+  A moved target between record and replay had the same disclosure gap.
+- **(c) This path had no target-binding verification at acceptance.**
+  `--verify` attached a pre/post-action node diff through `captureEvidenceBaseline` (`resolution.ts:45-58,104-134`).
+  ADR 0011's `verifyEvidence` cell records that guarantee.
+  The diff proved change, not activation of the intended node.
+  An incorrect sibling “Prevent Remove” press produced a visible diff but remained incorrect.
+- **(d) Heal disclosed only a count.** Successful `--update` returned `{ replayed, healed, ... }` (`session-replay-runtime.ts:186-195`).
+  `healed` was only a number.
+  `writeReplayScript` rewrote `.ad` in place without a response diff (`session-replay-runtime.ts:182-184`, `src/replay/script.ts:459-484`).
+- **(e) Silent selection conflicted with other ambiguity policy.** Elsewhere, the repository refused ambiguous input and gave hints.
+  `start`/`restart` were intentionally absent from alias suggestions.
+  `src/cli/parser/command-suggestions.ts:16-17` explains that `start` is "genuinely ambiguous, so a hint beats silently guessing".
+  Selector resolution used the opposite default.
+  ADR 0011 classified runtime-selector `disambiguation` as `{ kind: 'runtime', via: '...selectors-resolve.ts#resolveSelectorChain' }` (`packages/contracts/src/interaction-guarantees.ts:176-179`).
+  This proved consistent heuristic execution, not disclosure.
+  The acceptance-time design did not reconsider that default; its hard-reject alternative explains why.
+- **(f) Issue #1037 / PR #1040 provided partial precedent.** Apple Maps uniquely matched `text="Anthropic - Headquarters"` to a 30x30 pin instead of a recents row.
+  `describeNonHittableTarget` exposed `targetHittable:false` and a hint (`resolution.ts:259-268`).
+  It disclosed but did not prevent the incorrect tap.
+  N>1 disambiguation had no equivalent disclosure at acceptance.
+- **(g) Issues #279/#297 supported reduced heal scope.** They showed precedent for removal when a heuristic's benefits did not justify complexity.
 
-**Live hands-on evidence** (2026-07-10, driving replay by hand on the RN playground, iOS simulator,
-both `.ad` and Maestro paths) grounds the same conclusions from the caller's seat:
+**Live hands-on evidence** comes from manual replay on the RN playground, iOS simulator, on 2026-07-10.
+It covers both `.ad` and Maestro:
 
-- **Successful replay is silent in text mode.** Exit 0, zero output; `replayed: 5` appears only under
-  `--json`. Structurally: replay's success payload (`{ replayed, healed, session, artifactPaths }`,
-  `session-replay-runtime.ts:186-195`) has no `message` field, so the generic CLI success path prints
-  nothing (`writeGenericCliOutput` → `readCommandMessage` → `writeCommandOutput`,
-  `src/cli/commands/generic.ts:68-71`, `packages/kernel/src/success-text.ts:12-14`,
-  `src/cli/commands/shared.ts:4-15`). An agent pays a verification turn just to learn what happened.
-- **Failure output today is step + action + selector + a generic hint — no screen evidence.** The live
-  divergence hit was pure app state: the RN example app persists navigation state, so relaunch+deeplink
-  restored the Article screen and a perfectly correct selector legitimately missed. Heal can never fix
-  that class (the selector isn't wrong; reality is), while one line of screen evidence ("current
-  screen: Article") would have made the repair instant. The only recovery available was a full re-run —
-  no `--from` — and re-running earlier steps is precisely what makes state-restoring apps
-  nondeterministic across attempts.
-- **Maestro step indices are untraceable to source today.** Breaking `tapOn: Push Input` — the 4th
-  top-level YAML step — failed as "Replay failed at step 5 (`__maestroTapOn` ...)": the flow's
-  `runFlow file: ../launch.yml` include had expanded into the linear plan and shifted every subsequent
-  index, and no file or line appears anywhere in the failure. Code-verified: `--maestro` input flattens
-  at parse time (`parseReplayInput`, `src/compat/replay-input.ts:47-68`) — `runFlow file:` inlines the
-  included file's actions (`convertRunFlow`/`readRunFlowActions`,
-  `src/compat/maestro/flow-control.ts:40-41,123-124`, via `parseRunFlowFile`,
-  `src/compat/maestro/replay-flow.ts:267-280`), platform/`true` `when` conditions are evaluated at
-  parse time (`flow-control.ts:47-48`), and `repeat.times` expands deterministically
-  (`flow-control.ts:84-87`). Provenance is lost in two stages: every action converted from one root
-  command inherits that PARENT command's YAML line (`convertRootCommands`, `replay-flow.ts:76-83`),
-  and `parseRunFlowFile`'s callers keep only `.actions`, discarding the included file's own line table
-  and path entirely. Even for `.ad`, the tracked line never reaches the caller: `actionLines` flows
-  into the per-action ndjson trace (`appendReplayTraceEvent`,
-  `src/daemon/handlers/session-replay-action-runtime.ts:47-56`) but `withReplayFailureContext`
-  (`session-replay-runtime.ts:349-369`) puts only `replayPath` + `step` in the error details.
-- **The same failure class reports differently per format.** An `.ad` selector miss is
-  `COMMAND_FAILED` with the targeted hint "Run snapshot -i ... or use find ..."
-  (`selectorFailureHint`, `packages/selectors/src/internal/resolve.ts:110-113`, thrown at `resolution.ts:213-217`);
-  the equivalent Maestro miss is `ELEMENT_NOT_FOUND` constructed with no hint
-  (`src/compat/maestro/runtime-interactions.ts:644-652`), falling through to the generic default
-  "Retry with --debug and inspect diagnostics log for details." (`defaultHintForCode`,
-  `src/kernel/errors.ts:253-254`).
-- **Recordings contain zero verification steps.** The script writer strips every recorded `snapshot`
-  action (`buildOptimizedActions`, `packages/daemon/src/core/session-script-writer.ts:315`: `if (action.command ===
-  'snapshot') continue;` — only synthetic ref-scoped snapshots are re-inserted, as resolution aids, not
-  observations), and the record-time flag allowlist (`RECORDED_FLAG_KEYS` from the flag
-  declarations' `recorded` field, `packages/daemon/src/core/session-action-recorder.ts:367-381`) carries neither `settle`/`settleQuietMs` nor `verify`,
-  so `--settle`/`--verify` are dropped from recorded steps. A recording therefore replays actions with
-  no outcome observation at all — exactly the gap decision 3's record-time identity evidence fills.
+- **Successful text replay was silent.** Exit was 0 without output.
+  Only `--json` showed `replayed: 5`.
+  The success payload `{ replayed, healed, session, artifactPaths }` had no `message` (`session-replay-runtime.ts:186-195`).
+  The generic CLI path therefore printed nothing:
+  `writeGenericCliOutput` → `readCommandMessage` → `writeCommandOutput`.
+  Pointers are `src/cli/commands/generic.ts:68-71`, `packages/kernel/src/success-text.ts:12-14`, and `src/cli/commands/shared.ts:4-15`.
+  An agent needed another verification turn to learn the result.
+- **Failure output lacked screen evidence.** It contained step, action, selector, and a generic hint.
+  The observed divergence was app-state restoration.
+  The RN app persisted navigation and restored Article after relaunch+deeplink.
+  A correct selector therefore missed.
+  Heal could not repair correct selector text on an incorrect screen.
+  A “current screen: Article” observation would have identified the repair immediately.
+  Only full replay was available, without `--from`.
+  Repeated prefixes made state-restoring apps nondeterministic across attempts.
+- **Maestro indices had no usable source location.** Broken `tapOn: Push Input`, the fourth top-level YAML step, failed at step 5 (`__maestroTapOn`).
+  `runFlow file: ../launch.yml` expanded into the linear plan and shifted later indices.
+  Failure output included no file or line.
+  `parseReplayInput` flattened `--maestro` input (`src/compat/replay-input.ts:47-68`).
+  `convertRunFlow`/`readRunFlowActions` inserted included actions (`src/compat/maestro/flow-control.ts:40-41,123-124`).
+  `parseRunFlowFile` supplied them through `src/compat/maestro/replay-flow.ts:267-280`.
+  Platform/`true` `when` conditions evaluated during parsing (`flow-control.ts:47-48`).
+  Fixed `repeat.times` expanded deterministically (`flow-control.ts:84-87`).
+  Provenance disappeared in two places.
+  `convertRootCommands` assigned the parent YAML line to every converted action (`replay-flow.ts:76-83`).
+  `parseRunFlowFile` callers retained only `.actions` and discarded included paths and line tables.
+  Even `.ad` line tracking did not reach callers.
+  `actionLines` reached per-action ndjson through `appendReplayTraceEvent` (`src/daemon/handlers/session-replay-action-runtime.ts:47-56`).
+  `withReplayFailureContext` exposed only `replayPath` and `step` (`session-replay-runtime.ts:349-369`).
+- **Equivalent failures differed by format.** Native `.ad` selector misses returned `COMMAND_FAILED` with targeted selector guidance.
+  `selectorFailureHint` supplied "Run snapshot -i ... or use find ..." (`packages/selectors/src/internal/resolve.ts:110-113`, thrown at `resolution.ts:213-217`).
+  Maestro returned `ELEMENT_NOT_FOUND` without a hint (`src/compat/maestro/runtime-interactions.ts:644-652`).
+  `defaultHintForCode` supplied "Retry with --debug and inspect diagnostics log for details." (`src/kernel/errors.ts:253-254`).
+- **Recordings had no verification steps.** `buildOptimizedActions` removed recorded snapshots with `if (action.command === 'snapshot') continue;` (`packages/daemon/src/core/session-script-writer.ts:315`).
+  It reinserted only synthetic ref-scoped snapshots for resolution, not observation.
+  `RECORDED_FLAG_KEYS` came from flag declarations' `recorded` fields (`packages/daemon/src/core/session-action-recorder.ts:367-381`).
+  That allowlist omitted `settle`, `settleQuietMs`, and `verify`.
+  Replay therefore performed actions without outcome observation.
+  Decision 3's record-time identity evidence addresses the identified gap.
 
-A related, currently under-used precedent: recorded `@ref` steps already carry an optional identity
-hint in the `.ad` file. `appendRefLabel` (`packages/daemon/src/core/session-script-writer.ts:532-537`) writes the
-node's label as a trailing token, parsed back into `action.result.refLabel`
-(`src/replay/script.ts:269,295,315`). Today that label is used only as a fallback LOOKUP key
-(`tryResolveRefNode`'s `fallbackLabel`, `resolution.ts:393,413-430`) when the ref itself fails to
-resolve, and to scope the pre-action snapshot capture (`buildScopedSnapshotAction`,
-`session-script-writer.ts:136-155`) — never as a check against what disambiguation actually picked. It
-establishes the pattern this ADR's decision 3 extends into a verification role: per-step identity
-already travels in the `.ad` file.
+Recorded `@ref` steps already carried an optional identity hint, although it was underused.
+`appendRefLabel` wrote the node label as a trailing token (`packages/daemon/src/core/session-script-writer.ts:532-537`).
+The parser restored `action.result.refLabel` (`src/replay/script.ts:269,295,315`).
+At acceptance, `tryResolveRefNode` used it only as a fallback lookup key when the ref failed (`fallbackLabel`, `resolution.ts:393,413-430`).
+`buildScopedSnapshotAction` also used it for pre-action capture scope (`session-script-writer.ts:136-155`).
+It never verified the disambiguation winner.
+This established per-step identity transport in `.ad`, which decision 3 extends to verification.
