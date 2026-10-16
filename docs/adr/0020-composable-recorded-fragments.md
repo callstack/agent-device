@@ -2,74 +2,76 @@
 
 ## Status
 
-Proposed design spike for [#1336](https://github.com/callstack/agent-device/issues/1336). This
-ADR settles the artifact and ownership contract; implementation is intentionally a later,
-separately reviewable sequence.
+Proposed design spike for [#1336](https://github.com/callstack/agent-device/issues/1336).
+This ADR defines the proposed artifact and ownership contract.
+Implementation remains later work in a separately reviewable sequence.
 
 ## Context
 
-The E3 repair-economics matrix measured re-recording as cheaper than agent repair for label drift
-($1.21 versus a $2.34 repair median) and cascade drift ($1.55 versus $2.05); repair won only for a
-single diverged read ($0.69). That single-read figure is a repair-only baseline; the re-record
-comparison is the label/cascade rows. Re-recording is therefore the repair path, and the useful lever
-is the unit being re-recorded. If thirty flows share a login journey, the reusable unit should be one
-fragment, not thirty closed scripts.
+The E3 repair-economics matrix found re-recording less expensive than agent repair for two cases:
 
-Today a native `.ad` recording is a closed unit: its `open` establishes the session and its `close`
-tears it down. ADR 0016 deliberately stopped at open-to-destination publication and left arbitrary
-slices for this decision because target evidence is captured at action time, not reconstructed from
-history. ADR 0012 also makes the cost of losing composition provenance concrete: a Maestro include
-that was flattened into one plan shifted step ordinals and made divergence attribution and the
-include's line table ambiguous. ADR 0015 now requires Maestro to remain a source-preserving typed
-interpreter that owns `runFlow`, scopes, conditions, repeats, retries, and include loading.
+- Label drift: $1.21 versus a $2.34 repair median
+- Cascade drift: $1.55 versus $2.05
 
-The design must consequently solve four boundaries together: a fragment cannot hide session
-lifecycle, the first action must prove the entry screen, a fragment edit must invalidate exactly the
-compositions that use it, and a failure must name a local step and invocation rather than an
-expanded global ordinal.
+Repair won only for one diverged read, at $0.69.
+That figure is a repair-only baseline.
+Only the label/cascade rows compare re-recording costs.
+Thus, re-recording is the repair method, and its unit determines reuse costs.
+If thirty flows share login, one reusable fragment should replace thirty closed scripts.
+
+Current native `.ad` recordings are closed units.
+`open` establishes their session; `close` terminates it.
+ADR 0016 limits publication to open-to-destination scripts and reserves arbitrary slices for this decision.
+Target evidence comes from action-time capture and cannot be reconstructed from history.
+ADR 0012 shows the cost of lost provenance.
+A flattened Maestro include shifted ordinals and obscured divergence attribution and the included line table.
+ADR 0015 now requires a source-preserving typed Maestro interpreter.
+It owns `runFlow`, scopes, conditions, repeats, retries, and include loading.
+
+The design must satisfy four boundaries:
+
+- A fragment cannot conceal session lifecycle.
+- The first action must prove the entry screen.
+- An edit must invalidate exactly the compositions that use the fragment.
+- Failure must identify a local step and invocation, rather than an expanded global ordinal.
 
 ## Rules at a glance
 
-1. **A native recorded fragment is a lifecycle-free body.** Its composing flow owns `open`,
-   context, launch state, session ownership, and `close`. A native fragment has no `open` or
-   `close`, and invoking it never relaunches or tears down the session. Maestro subflows retain
-   their typed-flow lifecycle semantics under ADR 0015.
-2. **Native capture is explicit and entry-guarded.** `session fragment start <path> --entry
-   <selector>` captures a verified landmark as the first recorded `wait`; `session fragment save`
-   publishes the body without closing the session. Post-hoc history slicing is not a supported
-   native capture path.
-3. **Composition is one semantic model, not one engine.** Native `.ad` `include` and Maestro
-   `runFlow` produce the same invocation boundaries, provenance records, address construction, and
-   structured failure projection. Format-owned parsers and interpreters retain identity, digest,
-   lifecycle, and execution semantics; neither lowers the other into a second replay engine.
-4. **Native references are digest-pinned.** A persisted native `.ad` include carries a relative
-   locator and the expected content digest of the fragment it resolved when authored. A missing,
-   changed, cyclic, or unsupported native fragment fails preflight before any device action. Maestro
-   `runFlow` keeps its ADR 0015 source-preserving loader and existing compiled-plan digest; it does
-   not adopt the native comment syntax. There is no implicit "latest" fallback or silent repinning
-   for native artifacts.
-5. **Addresses are owner-local.** A composed step is addressed by its fragment digest or root
-   composition digest, invocation/control paths, and local step ordinal. `source.path:line` remains
-   diagnostic provenance. A global `displayOrdinal` may be retained as bounded display data, but
-   never authorizes resume or appears inside the address.
-6. **Existing target evidence remains the contract.** The entry guard and element actions reuse
-   ADR 0012's `target-v1`/`targets-v1` annotations and verification. Every v1 native fragment and
-   composed parent starts with a required first-executable format guard (`fragment-v1` or
-   `composition-v1`). A new reader consumes that guard during preflight; an old reader treats it as
-   an unknown action and rejects it before dispatch, so it cannot execute a root `open` or a known
-   prefix before reaching `include`. Other fragment metadata and references remain reserved
-   comments, so old readers ignore those annotations rather than silently flattening composition.
-7. **Native fragment repair is explicit re-recording.** Native `.ad` `replay --save-script` does
-   not flatten a composed plan into a monolithic healed script. Until fragment-specific repair is
-   implemented, the caller re-records the affected fragment and explicitly repins its callers;
+This ADR proposes these rules:
+
+1. **Native fragments have no lifecycle.** The parent owns `open`, context, launch state, session ownership, and `close`.
+   A native fragment contains neither `open` nor `close`.
+   Invocation never relaunches or terminates the session.
+   Maestro subflows retain ADR 0015 typed-flow lifecycle semantics.
+2. **Capture is explicit and entry-guarded.** `session fragment start <path> --entry <selector>` captures a verified landmark as its first recorded `wait`.
+   `session fragment save` publishes without session closure.
+   Later history slicing is unsupported.
+3. **Composition shares semantics across two engines.** Native `include` and Maestro `runFlow` share invocation boundaries, provenance, addresses, and structured failures.
+   Format-owned parsers/interpreters retain identity, digest, lifecycle, and execution semantics.
+   Neither format converts the other into another replay engine.
+4. **Native references require digest pins.** Each persisted include has a relative locator and the expected digest resolved at authoring.
+   Missing, changed, cyclic, or unsupported fragments fail preflight before device action.
+   Maestro retains its source-preserving loader and compiled-plan digest without native comment syntax.
+   Native artifacts have no implicit latest-version fallback or silent repin.
+5. **Addresses are owner-local.** They use fragment/root composition digest, invocation/control paths, and local ordinal.
+   `source.path:line` remains diagnostic.
+   Optional bounded `displayOrdinal` never authorizes resume or enters an address.
+6. **Existing target evidence applies.** Entry guards and actions use ADR 0012 `target-v1`/`targets-v1` verification.
+   V1 native fragments/parents require first-executable `fragment-v1`/`composition-v1` guards.
+   New readers consume guards during preflight.
+   Old readers reject the unknown action before root `open` or a known prefix.
+   Other metadata/references remain reserved comments that older readers ignore.
+7. **Native repair requires explicit re-recording.** `replay --save-script` never flattens composition into one healed script.
+   Until fragment-specific repair exists, callers re-record the fragment and explicitly repin parents.
    Maestro retains its existing unsupported-`--save-script` behavior.
 
 ## Decision
 
 ### Fragment artifact and lifecycle ownership
 
-A v1 fragment is a portable `.ad` body with a required first-executable format guard and no session
-lifecycle. Its shape is conceptually:
+This section proposes a portable v1 `.ad` body without session lifecycle.
+A required first-executable guard identifies its format.
+The conceptual shape is:
 
 ```text
 fragment-v1
@@ -79,67 +81,67 @@ wait "id=\"home\""
 click "label=\"Continue\""
 ```
 
-The exact writer surface belongs to the future implementation, but these invariants are fixed:
+Future implementation defines exact writer syntax.
+This proposal fixes these invariants:
 
-- `fragment-v1` is the required first-executable format guard. The new reader consumes it during
-  source preflight; it is a format envelope, not a `SessionAction` and has no device side effect.
-  A composed native parent uses the corresponding `composition-v1` guard as its first executable
-  line, before root `open` or any `include`. An old reader parses either guard as an unknown action;
-  the existing `dispatchKnownCommand` seam rejects it with `INVALID_ARGS` before invoking any
-  platform handler. The fragment has no `open`, `close`, or hidden launch action. The writer always
-  emits the effective `context platform` and `target`, and a parser rejects a fragment missing
-  either constraint. Those values constrain the effective platform/target but do not select a
-  device or establish a session; the parent supplies those facts.
-- The first executable step is an identity-bearing selector `wait` with `target-v1` evidence whose
-  `verification` is `verified`. It is the fragment's entry guard and is included in the fragment
-  digest. The guard uses the existing landmark-mode polling and identity semantics; it is not a
-  screenshot fingerprint or a best-effort label check. Its timeout is the exact existing `wait`
-  positional budget. `start` accepts an optional entry-timeout; when omitted, capture resolves the
-  current selector-runtime default once and writes that concrete millisecond value into the guard.
-  Published fragments therefore never depend on a future runtime default, and changing the default
-  does not invalidate existing digests.
-- The body uses the existing recorded-action codec, selector-chain optimization, target evidence,
-  and ADR 0017 parameterization rules. It does not introduce a second annotation format or a
-  fragment-specific target matcher.
-- Fragment admission is decided from the command descriptors and recording traits. Session
-  lifecycle, device ownership, recording publication, and other resource-owning commands are not
-  admitted by duplicating a hand-maintained command-name list in the fragment writer. Admission is
-  an allowlist over a positive fragment-safe descriptor trait; a command without that declaration is
-  refused before arming or replay, so a future command cannot become fragment-safe by omission.
-  During an armed capture, such a command is refused before dispatch and the capture remains armed
-  and retryable; during replay, the complete plan is rejected in preflight. The implementation must
-  classify every currently supported recording command before enabling the new surface.
-- A fragment invocation inherits the parent's effective session, context, and late-bound native
-  `${VAR}` scope. Preflight enumerates the fragment's referenced names and refuses an unbound name
-  with `fragment_variable_unbound` without expanding its value into the digest. V1 has no
-  per-invocation argument or output-variable contract: names resolve in the inherited flat scope,
-  with no fragment-local shadowing. Callers provide values through the existing script/header/shell
-  mechanisms. Maestro's scoped environment and output semantics remain those of its typed `runFlow`
-  interpreter under ADR 0015.
+- **Format and context:** `fragment-v1` is the required first-executable format guard.
+  New source preflight consumes it as an envelope, not a `SessionAction`.
+  It has no device side effect.
+  Native parents start with `composition-v1`, before root `open` or `include`.
+  Older readers parse either guard as an unknown action.
+  `dispatchKnownCommand` returns `INVALID_ARGS` before a platform handler.
+  Fragments contain no `open`, `close`, or concealed launch action.
+  Writers always emit effective `context platform` and `target`.
+  Parsers reject a missing constraint.
+  These values constrain effective context without device selection or session creation.
+  The parent supplies those facts.
+- **Entry guard:** the first executable step is a selector `wait` with `target-v1` and `verification: "verified"`.
+  Its identity-bearing evidence and guard enter the fragment digest.
+  Existing landmark polling and identity semantics apply.
+  It is neither a screenshot fingerprint nor an approximate label check.
+  Timeout uses the exact existing `wait` positional budget.
+  `start` accepts an optional entry-timeout.
+  If omitted, capture resolves the current selector-runtime default once and records that concrete millisecond value.
+  Future default changes therefore neither affect published behavior nor invalidate digests.
+- **Existing codecs:** the body uses recorded-action codecs, selector-chain optimization, target evidence, and ADR 0017 parameterization.
+  It introduces no second annotation format or fragment matcher.
+- **Admission:** descriptors and recording traits determine permitted commands.
+  The writer must not duplicate a manual list for lifecycle, device ownership, publication, or other resource-owning commands.
+  A positive fragment-safe descriptor trait forms the allowlist.
+  An undeclared command is refused before activation or replay.
+  Future commands cannot become safe by omission.
+  During armed capture, refusal precedes dispatch and leaves capture armed for retry.
+  Replay preflight rejects the complete invalid plan.
+  Before the new surface is enabled, implementation must classify every supported recording command.
+- **Scope:** invocations inherit effective session, context, and late-bound native `${VAR}` scope.
+  Preflight enumerates referenced names and refuses missing bindings with `fragment_variable_unbound`.
+  Values never expand into the digest.
+  V1 has no invocation arguments, output-variable contract, or local variable shadowing.
+  Existing script/header/shell inputs supply one inherited flat scope.
+  Maestro keeps ADR 0015 typed `runFlow` environment and output scopes.
 
-The **session** owns the live device and app. A separate **fragment capture aggregate** owns the
-capture buffer, entry guard, target path, and `ARMED`/`PUBLISHED`/`ABORTED` publication state. It
-does not become a second session lifecycle and it does not append a synthetic `close`. The ordinary
-session action log continues to accumulate beside the fragment buffer; the fragment capture is
-mutually exclusive only with an ordinary script-publication transaction and an ADR 0012 repair
-transaction, because overlapping publications would make ownership and provenance ambiguous. The
-fragment body
-cannot contain lifecycle `open` or `close`; a new session/open request or ordinary recording/repair
-transaction is refused before platform dispatch while capture is armed with `fragment_capture_conflict`
-and `{sessionState: "fragment_armed", conflictingOperation}` details. A session-ending `close`
-instead aborts the armed capture without publishing a file, then performs the ordinary close and
-device-claim release. Client disconnect or lease expiry aborts the capture as well. `save` and an
-explicit `abort` leave the underlying session active.
+The **session** owns the live device and app.
+A separate **fragment capture aggregate** owns buffer, entry guard, target path, and `ARMED`/`PUBLISHED`/`ABORTED` publication state.
+It creates no second session lifecycle or synthetic `close`.
+The ordinary action log continues beside its buffer.
+Only ordinary script-publication and ADR 0012 repair transactions are mutually exclusive with fragment capture.
+Concurrent publications would obscure ownership and provenance.
 
-The session action log is retained for diagnostics and ordinary command history, but a session that
-has armed or published a fragment is not eligible for ordinary open-to-destination publication: a
-later ordinary publication request returns `fragment_capture_conflict` and tells the caller to start
-a fresh session. This prevents the same journey from being silently emitted once as a fragment and
-again as an unmarked closed script.
+While armed, a new session/open or ordinary recording/repair transaction fails before platform dispatch.
+The reason is `fragment_capture_conflict` with `{sessionState: "fragment_armed", conflictingOperation}`.
+Lifecycle `open` and `close` cannot enter the fragment body.
+A session-ending `close` instead aborts capture without publication, then closes normally and releases the device claim.
+Client disconnect or lease expiry also aborts capture.
+`save` and explicit `abort` leave the underlying session active.
+
+The action log remains available for diagnostics and ordinary history.
+After fragment activation or publication, that session is ineligible for ordinary open-to-destination publication.
+A later ordinary publication returns `fragment_capture_conflict` with fresh-session guidance.
+This prevents silent duplicate publication of the journey as a fragment and an unmarked closed script.
 
 ### Recording UX: start at the boundary, never slice after the fact
 
-The v1 authoring workflow is an explicit in-session boundary:
+This section proposes an explicit in-session authoring boundary:
 
 ```sh
 agent-device session fragment start ./fragments/login.ad --entry 'id="Home"'
@@ -147,32 +149,34 @@ agent-device session fragment start ./fragments/login.ad --entry 'id="Home"'
 agent-device session fragment save
 ```
 
-`--entry` is a portable selector expression, not a session-local `@ref`. Starting the capture
-resolves it against the current observation and records the equivalent selector `wait` plus fresh
-`target-v1` evidence as local step 1. Start refuses before arming when the selector is absent,
-ambiguous, identity-empty, or otherwise cannot produce verified landmark evidence. This makes the
-entry precondition explicit while still making the guard automatic in the artifact. A caller may
-abort and retry at the same live session; it cannot ask the writer to infer a screen identity from a
-snapshot or from a history range.
+`--entry` is a portable selector, never a session-local `@ref`.
+Start resolves it against the current observation.
+It records an equivalent `wait` with fresh `target-v1` as local step 1.
+Before activation, start refuses absent, ambiguous, identity-empty, or otherwise unverifiable landmarks.
+The author supplies an explicit entry precondition; the artifact receives the guard automatically.
+Callers may abort and retry in the same live session.
+The writer cannot infer screen identity from a snapshot or history range.
 
-`session fragment save` uses the target path fixed by `start`, with the existing same-directory
-atomic publication and no-clobber default from the script writer. There is no alternate save
-path that could disagree with the armed aggregate; changing the destination requires aborting and
-starting again. A target collision, serialization failure, or invalid fragment body leaves the
-capture armed and retryable; a successful save is the only transition to `PUBLISHED`. `--force` is
-an explicit replacement authorization. Publishing a new body at the old path intentionally makes
-callers holding the old digest stale, so versioned paths are recommended for shared fragments. An
-interrupted or aborted capture publishes no partial fragment.
+`save` uses the path fixed by `start`.
+It reuses same-directory atomic publication and the script writer's no-clobber default.
+There is no alternate save destination.
+A destination change requires abort and restart.
+Target collision, serialization failure, or invalid body leaves capture armed for retry.
+Only successful save reaches `PUBLISHED`.
+`--force` explicitly authorizes replacement.
+A new body at the old path makes existing digest pins stale.
+Versioned paths are therefore recommended for shared fragments.
+Interrupted or aborted capture publishes no partial file.
 
-This is deliberately not a post-hoc slice of `session.actions`. ADR 0012's target evidence is
-computed from the tree at resolution time and cannot be reconstructed reliably after the session has
-moved. Existing active-session publication therefore remains an open-to-destination artifact, while
-fragment capture has its own explicit boundary and first-step guard.
+This is not a later slice of `session.actions`.
+ADR 0012 evidence depends on the resolution-time tree and cannot reliably be reconstructed after navigation.
+Existing active-session publication remains open-to-destination.
+Fragment capture has its own explicit boundary and first-step guard.
 
 ### One composition model below two interpreters
 
-The future implementation introduces a small shared **composition/provenance model**, not a shared
-replay VM. Its records are semantic data used by both engines:
+This section proposes a small shared **composition/provenance model**, not a replay VM.
+Both engines use its semantic records:
 
 ```text
 CompositionPlan
@@ -185,166 +189,192 @@ CompositionPlan
     child actions or typed control nodes
 ```
 
-The model owns only the cross-cutting facts that must agree:
+The model owns only shared facts:
 
-- fragment identity and the digest dependency graph;
-- invocation boundaries, lifecycle ownership, and inherited scope identity;
-- `FragmentStepAddress` construction and source provenance;
-- preflight errors for missing, stale, cyclic, or unsupported fragments; and
-- the structured failure projection that carries the local address.
+- Fragment identity and digest dependencies
+- Invocation boundaries, lifecycle ownership, and inherited scope identity
+- `FragmentStepAddress` construction and source provenance
+- Missing/stale/cyclic/unsupported fragment preflight errors
+- Structured failure projection with local addresses
 
-The model does **not** own selector matching, platform dispatch, Maestro conditions, repeat/retry
-polling, or native `.ad` parsing. Native `.ad` parsing recognizes an `include` control and builds a
-nested invocation node. Maestro keeps `runFlow` in its source-preserving typed IR and interpreter;
-the interpreter contributes the same invocation/provenance records when it loads a child program.
-Maestro's `runFlow` controls, scoped variables, optional behavior, and runtime repeats remain
-Maestro-owned as required by ADR 0015. The shared model prevents a second semantic implementation;
-it does not move `runFlow` out of that interpreter.
+It does not own selector matching, platform dispatch, Maestro conditions, repeat/retry polling, or native parsing.
+Native parsing recognizes `include` and creates a nested invocation node.
+Maestro retains `runFlow` in its source-preserving typed IR/interpreter.
+Child loads contribute the same invocation/provenance records.
+Maestro owns `runFlow` controls, scoped variables, optional behavior, and runtime repeats under ADR 0015.
+Sharing the model prevents duplicate semantics without transferring interpreter ownership.
 
-A composed native parent has a required `composition-v1` first-executable guard before its root
-`open` or any `include`. A flat native `.ad` script without an include keeps the existing artifact
-shape and behavior. The guard is consumed by the new source preflight and is not a device action;
-its purpose is to make an old reader fail at the format boundary rather than partially execute a
-new composed artifact.
+A composed native parent requires `composition-v1` before root `open` or any `include`.
+Flat scripts without includes retain existing format and behavior.
+New preflight consumes the guard without device action.
+Old readers fail at the format boundary before partial execution.
 
-V1 does not allow cross-format includes: native `.ad` `include` loads a native fragment, while
-Maestro `runFlow` loads Maestro programs. They share the composition contract, not a coercion path
-that would make either parser interpret the other's syntax.
+V1 permits no cross-format includes.
+Native `include` loads native fragments; Maestro `runFlow` loads Maestro programs.
+Neither parser interprets the other's syntax.
 
-The pinning surface is format-specific. A native persisted include must carry the
-`fragment-ref-v1` expected digest. A file-backed Maestro `runFlow` contributes the child source
-closure and its existing compiled replay-plan digest to the shared identity/provenance records; a
-caller that supplies an expected Maestro plan or composition digest gets the same preflight stale
-failure when the loaded closure changed. With no expected Maestro digest, ADR 0015's existing
-behavior intentionally loads the current source closure and produces its new plan identity. This
-does not authorize native `.ad` to float to a newer file. An inline Maestro `runFlow: commands:`
-body remains a typed control node rather than a file-backed fragment in v1, so it has no fragment
-locator or standalone fragment address. A skipped conditional invocation creates no child
-invocation or iteration ordinal; ordinals are assigned only to executed iterations.
+Pin syntax remains format-specific.
+Persisted native includes must have a `fragment-ref-v1` expected digest.
+File-backed Maestro `runFlow` contributes child source closure and existing compiled-plan digest to shared identity/provenance.
+With an expected Maestro plan/composition digest, changed closure causes the same preflight stale failure.
+Without an expected digest, ADR 0015 deliberately loads current closure and produces its new identity.
+This does not authorize floating native references.
+Inline `runFlow: commands:` remains a typed control node, not a file-backed fragment.
+It has no locator or standalone fragment address.
+Skipped conditional invocations create no child invocation or iteration ordinal.
+Only executed iterations receive ordinals.
 
-The native entry-guard, lifecycle-admission, and lifecycle-free artifact rules apply only to the
-recorded `.ad` fragment format. Maestro subflows retain their existing typed-flow preconditions and
-may contain Maestro-owned lifecycle or control commands; the shared model records their boundaries
-and provenance without coercing them into a native fragment body.
+Native entry, admission, and lifecycle-free rules apply only to recorded `.ad` fragments.
+Maestro keeps typed preconditions and may contain its own lifecycle/control commands.
+The shared model records boundaries and provenance without conversion to native bodies.
 
-Maestro supplies the shared identities from its typed IR rather than from new YAML fields. A
-`runFlow` call-site ID is a format-tagged digest of the canonical typed node, its resolved
-source-bundle-relative locator, and its local occurrence among otherwise identical sibling nodes;
-`repeat`/`retry` control IDs use the same rule. Source lines and expanded plan ordinals are excluded.
-These IDs are internal to the compiled plan, not author-facing syntax; changing the node or its
-local structure changes the existing Maestro plan digest and invalidates old addresses. The local
-occurrence discriminator only distinguishes identical authored siblings within one plan and is not
-used as a global step identity. Maestro addresses are stable only within their matching compiled
-plan digest; a source edit, including an earlier identical sibling, intentionally invalidates the
-old address rather than promising cross-edit call-site stability.
+Maestro derives shared identities from typed IR without new YAML fields.
+Its `runFlow` call-site ID hashes these inputs with a format tag:
 
-An include is a control boundary, not a `SessionAction`. Its child actions are recorded and executed
-inside the parent's live session, but the boundary remains visible to planning, tracing, failure
-reporting, and digest construction. Nested fragments are allowed subject to cycle detection and a
-bounded source/depth policy shared with Maestro's existing source-bundle limits.
+- Canonical typed node
+- Resolved source-bundle-relative locator
+- Local occurrence among otherwise identical siblings
+
+`repeat`/`retry` control IDs use the same rule.
+Source lines and expanded ordinals are excluded.
+These are internal compiled-plan identities, not author syntax.
+Node or local-structure edits change the existing Maestro plan digest and invalidate old addresses.
+Local occurrence only distinguishes identical authored siblings in one plan.
+It is never a global step identity.
+Maestro addresses are stable only within their matching compiled-plan digest.
+An edit, including an earlier identical sibling, deliberately invalidates the old address.
+Cross-edit call-site stability is not promised.
+
+An include is a control boundary, not a `SessionAction`.
+Its children execute and record within the parent's live session.
+Planning, traces, failure reports, and digests retain the boundary.
+Nested fragments require cycle detection and bounded source/depth policy shared with Maestro source-bundle limits.
 
 ### Pinned references, fragment digests, and staleness
 
-The native representation uses a reserved reference comment immediately before its include control:
+This section proposes a reserved native reference comment immediately before `include`:
 
 ```text
 # agent-device:fragment-ref-v1 {"callSiteId":"login-entry","digest":"sha256:<64 lowercase hex>"}
 include "./fragments/login.ad"
 ```
 
-The include path is resolved relative to the including source by the caller-side source bundle. The
-`callSiteId` is the persisted identity of this authored include occurrence; the writer preserves it
-when the node is edited in place and assigns a new value to a new occurrence. It is required and
-unique within its parent; duplicate or missing values fail preflight with
-`fragment_call_site_invalid`. The digest is the fragment identity; the path is only a locator and
-source-provenance hint. A future implementation may choose an equivalent inline spelling, but it
-must preserve the call-site identity, locator, and digest and must not accept an unpinned native
-include in a persisted composed plan.
+The caller-side source bundle resolves paths relative to the including source.
+Required `callSiteId` persists the authored include occurrence's identity.
+The writer preserves it for in-place edits and assigns a new value to a new occurrence.
+It must be unique within its parent.
+Missing/duplicate values cause preflight `fragment_call_site_invalid`.
+The digest identifies the fragment.
+The path is only a locator and provenance hint.
+Future implementation may choose equivalent inline syntax.
+It must preserve call-site identity, locator, and digest.
+It must not accept unpinned native includes in persisted composition.
 
-`fragmentDigest` is SHA-256 over canonical JSON for the parsed fragment IR, including:
+`fragmentDigest` is SHA-256 over canonical parsed-fragment JSON with these inputs:
 
-- the fragment format/canonicalization version;
-- effective platform/target constraints;
-- the verified entry guard;
-- every executable action's normalized command, inputs, execution-affecting flags/runtime hints,
-  and `target-v1`/`targets-v1` evidence; and
-- every nested pinned fragment reference, its `callSiteId`, and its child digest.
+- Format/canonicalization version
+- Effective platform/target constraints
+- Verified entry guard
+- Normalized executable commands, inputs, execution-affecting flags/runtime hints, and `target-v1`/`targets-v1`
+- Nested pinned references, `callSiteId`, and child digest
 
-For a native parent, the authored relative locator of each nested include is part of that parent
-reference IR, while the absolute resolved filesystem path is excluded. A child move therefore keeps
-the child digest but requires an explicit parent locator edit and parent repin.
+A native parent's reference IR includes authored relative locators, never resolved absolute paths.
+An unchanged child move keeps its digest but requires an explicit parent locator edit and parent repin.
+Session timestamps, device names, absolute source paths, and ordinary comments are excluded.
+Native `${VAR}` placeholders remain unresolved, as ADR 0012 requires.
+Maestro retains effective static environment and parse-time expansion in its ADR 0015 digest.
+Target annotations affect digests because they affect verification during execution.
+They are not merely diagnostic text.
 
-It excludes session timestamps, device names, absolute source paths, and ordinary comments. Native
-`${VAR}` placeholders remain unresolved in the digest, matching ADR 0012's late-bound-value rule;
-Maestro's effective static environment and parse-time expansion continue to participate in the
-Maestro plan digest under ADR 0015. A changed target annotation changes the digest because the
-annotation changes execution-time verification, not because it is diagnostic text.
+Shared identity is `(format, digest)`.
+Native and Maestro languages need not produce equal hashes.
+Each format retains its canonical JSON implementation and versioned identity input.
+The model compares typed identities and dependency edges.
+Format-owned parsers define canonicalized bytes.
 
-The shared identity is `(format, digest)`, not a promise that native and Maestro source languages
-produce the same hash. Each format keeps its existing canonical JSON implementation and carries its
-canonicalization version in the identity input; the shared model compares the typed identity and
-dependency edges, while format-owned parsers define the bytes being canonicalized.
+`compositionDigest` hashes the canonical root, ordered include semantics, and transitive graph of **pinned expected** identities.
+It does not hash unrelated directory or source-bundle files.
+A valid digest requires complete closure resolution and matching expected digests for the bytes to execute.
+A changed leaf immediately invalidates direct callers.
+An ancestor's own digest changes only after its pin is explicitly updated.
+That parent repin then invalidates the next caller.
+This deliberate bottom-up process can require N levels.
+Unreferenced fragments do not affect callers.
+Renamed `callSiteId` changes canonical IR and requires the same explicit upward repin as an execution-affecting edit.
 
-`compositionDigest` is SHA-256 over the canonical root plan plus the ordered include call-site
-semantics and the transitive graph of **pinned expected** fragment identities. It is not a hash of
-every file in the caller's directory or source bundle. A valid composition digest is computed only
-after the complete closure has been resolved and every expected digest has matched the bytes that
-will execute. Consequently, editing a leaf changes its digest and immediately invalidates its
-direct callers, but it does not mutate an ancestor fragment's own digest until that ancestor's pin is
-explicitly updated. Repinning the parent then changes its digest and invalidates the next caller, so
-the bottom-up walk is intentionally N levels. An unrelated fragment does not invalidate callers that
-do not reference it. Moving an unchanged child requires an explicit locator update in its parent;
-the child's content identity does not change. Because `callSiteId` participates in the canonical
-fragment IR, renaming one intentionally changes that fragment's digest and triggers the same explicit
-bottom-up repin as changing an execution-affecting action.
+Before step 1, preflight resolves and verifies the complete source closure.
+Parsing, digest calculation, and execution consume the resolver's same verified bytes.
+No second filesystem lookup can substitute unchecked content.
+These conditions fail without device or session side effects:
 
-The complete source closure is resolved and digest-checked before step 1. The resolver returns the
-verified bytes, and parsing, digesting, and execution all consume those same bytes; a second
-filesystem lookup cannot replace the checked artifact. These cases fail closed without device or
-session side effects:
+- Missing pinned source-bundle file
+- Actual/expected canonical digest mismatch
+- Unsupported format/canonicalization version
+- Include cycle or exceeded source/depth/size bound
+- Lifecycle or entry-guard admission violation
+- Platform/target incompatibility with effective parent context
+- Unbound inherited native variable
 
-- the pinned file is missing from the caller's source bundle;
-- the actual canonical digest differs from the expected digest;
-- the fragment format or canonicalization version is unsupported;
-- an include cycle or source/depth/size bound is exceeded;
-- the fragment violates lifecycle or entry-guard admission;
-- its platform or target constraints are incompatible with the parent's effective context; or
-- a referenced native variable is absent from the inherited scope.
+Source validation uses ADR 0010's `INVALID_ARGS` family with these machine reasons:
 
-Source-closure preflight uses the existing `INVALID_ARGS` family for caller-side input/source
-validation under ADR 0010. Its machine reason is one of `fragment_missing`, `fragment_unsupported`,
-`fragment_bounds`, `fragment_cycle`, `fragment_call_site_invalid`, `fragment_control_identity_invalid`,
-`fragment_stale`, `fragment_lifecycle`, `fragment_entry_guard`, `fragment_context_mismatch`, or
-`fragment_variable_unbound`; its details include the including source, locator, expected digest,
-actual digest when available, and call-site. Agents branch on `details.reason`, never on message
-text. It never silently loads the newest file, rewrites the parent, or executes a valid prefix before
-discovering a stale child. `--update` remains ADR 0012's no-write suggestion surface and cannot
-repin a fragment.
+- `fragment_missing`
+- `fragment_unsupported`
+- `fragment_bounds`
+- `fragment_cycle`
+- `fragment_call_site_invalid`
+- `fragment_control_identity_invalid`
+- `fragment_stale`
+- `fragment_lifecycle`
+- `fragment_entry_guard`
+- `fragment_context_mismatch`
+- `fragment_variable_unbound`
 
-Request-state and artifact-kind validation also uses `INVALID_ARGS`, but has a separate details
-contract and is not a source-closure error. Its reasons are `fragment_resume_mismatch`,
-`fragment_resume_unsupported`, `fragment_composition_required`, `fragment_capture_conflict`, and
-`fragment_repair_unsupported`. These details name the command/session state or expected/current
-composition identity rather than pretending that source locator and digest fields exist: resume
-errors carry expected/current composition identity, composition-required carries artifact kind/source,
-capture conflict carries session state/conflicting operation, and repair refusal carries command and
-format. The capture conflict is a same-session transaction-state refusal, not `DEVICE_IN_USE`, which
-remains reserved for a device claimed by another session.
+Details include including source, locator, expected digest, actual digest when available, and call-site.
+Agents branch on `details.reason`, never messages.
+Preflight never loads latest implicitly, rewrites parents, or executes a valid prefix before stale-child discovery.
+ADR 0012 `--update` remains no-write suggestions and cannot repin.
 
-Source-closure preflight reports the first applicable reason in this total order: missing source,
-unsupported format/version, source bound, depth bound, size bound, include cycle, missing/duplicate
-call-site identity, missing/duplicate control identity, stale digest, lifecycle violation, missing
-entry guard, entry-guard evidence mismatch, context mismatch, then unbound variable. A stale child
-therefore wins before a composition digest can be computed; a resume supplied against that failed
-closure reports the child `fragment_stale`, not `fragment_resume_mismatch`. Only after a valid
-composition digest exists are request-level checks applied: a mismatched expected composition digest
-is `fragment_resume_mismatch`, and an unsupported resume shape is `fragment_resume_unsupported`.
-A fragment opened without a composing parent is `fragment_composition_required` and is outside
-source-closure ordering.
+Request-state/artifact-kind validation also uses `INVALID_ARGS` but has a separate details contract:
+
+| Reason | Details |
+| --- | --- |
+| `fragment_resume_mismatch` | Expected/current composition identity |
+| `fragment_resume_unsupported` | Expected/current composition identity |
+| `fragment_composition_required` | Artifact kind/source |
+| `fragment_capture_conflict` | Session state/conflicting operation |
+| `fragment_repair_unsupported` | Command and format |
+
+These errors do not invent source locator/digest details.
+Capture conflict concerns same-session transactions.
+`DEVICE_IN_USE` remains for devices claimed by another session.
+
+Preflight selects the first applicable reason in this total order:
+
+1. Missing source
+2. Unsupported format/version
+3. Source bound
+4. Depth bound
+5. Size bound
+6. Include cycle
+7. Missing/duplicate call-site identity
+8. Missing/duplicate control identity
+9. Stale digest
+10. Lifecycle violation
+11. Missing entry guard
+12. Entry-guard evidence mismatch
+13. Context mismatch
+14. Unbound variable
+
+A stale child fails before a composition digest exists.
+A resume against that closure reports `fragment_stale`, not `fragment_resume_mismatch`.
+After valid digest construction, request checks report mismatched expected identity as `fragment_resume_mismatch`.
+Unsupported resume shape reports `fragment_resume_unsupported`.
+Direct fragment replay without a parent reports `fragment_composition_required` outside closure ordering.
 
 ### Stable addressing, divergence, and resume
 
-Every executable step inside a fragment receives a local address. The conceptual wire shape is:
+This section proposes local addresses for every executable fragment step.
+The conceptual wire shape is:
 
 ```json
 {
@@ -370,263 +400,266 @@ Every executable step inside a fragment receives a local address. The conceptual
 }
 ```
 
-`localStep` is the 1-based logical executable step within the owner fragment, including its entry
-guard. An invocation path is made from persisted include `callSiteId` values and explicit runtime
-invocation ordinals; source path/line is diagnostic provenance only. `controlPath` adds persisted
-typed-control identities and runtime iteration/attempt ordinals for repeat, retry, and other
-format-owned controls. Every addressable repeat/retry node must provide a `controlId` unique within
-its owner; a missing or duplicate identity fails with `fragment_control_identity_invalid`. The path
-distinguishes repeated executions of the same logical local step and is empty for a native fragment
-without such controls. Neither path is a position in the fully expanded global action array. Two
-invocations of the same fragment therefore share its digest but have distinct invocation paths.
-Inserting an earlier fragment does not renumber a later fragment's local steps or change its authored
-call-site identity. Editing the fragment changes its digest and intentionally invalidates old
-addresses.
+`localStep` is the owner's 1-based logical executable ordinal, including the entry guard.
+`invocationPath` combines persisted include `callSiteId` and explicit runtime invocation ordinals.
+Source path/line is diagnostic only.
+`controlPath` adds persisted typed-control identities and runtime iteration/attempt ordinals for format-owned controls, including repeat/retry.
+Every addressable repeat/retry requires an owner-unique `controlId`.
+Missing/duplicate values cause `fragment_control_identity_invalid`.
+The path distinguishes repeated executions of one logical step.
+It is empty in native fragments without those controls.
+Neither path is an expanded global-array position.
 
-A composed root also has addresses: its owner is `{kind: "root", format, compositionDigest}`, its
-`invocationPath` is empty, and `localStep` is the 1-based logical root step. A root address is
-invalidated by any composition-digest change, while a fragment address is invalidated by its
-fragment or enclosing composition identity.
+Two invocations share the fragment digest but have different invocation paths.
+An earlier inserted fragment does not renumber later local steps or change their authored call-site identities.
+Fragment edits change its digest and deliberately invalidate old addresses.
 
-Only `address.version`, `owner`, `invocationPath.callSiteId`, `invocationPath.iteration`,
-`controlPath.controlId`, `controlPath.iteration`, and `localStep` participate in address equality or
-resume authorization. `provenance` is a sibling display/diagnostic field and is never compared for
-authorization; a source comment or formatting edit can change its line without changing an
-otherwise valid address in the same published composition.
+Root owner is `{kind: "root", format, compositionDigest}` with empty `invocationPath` and 1-based logical root `localStep`.
+Any composition-digest change invalidates root addresses.
+Fragment addresses depend on both fragment and enclosing composition identity.
+Only these fields affect equality or resume authorization:
 
-Runtime iteration and attempt values are execution evidence, not a second source of identity. They
-are emitted for divergence and tracing, but v1 address-aware resume accepts only an invocation and
-control path whose iteration/attempt values are all `0` and whose controls are statically reachable.
-A nonzero or runtime-conditional path is refused with `fragment_resume_unsupported`; the matching
-composition digest cannot by itself reconstruct which dynamic iterations occurred.
+- `address.version`
+- `owner`
+- `invocationPath.callSiteId`
+- `invocationPath.iteration`
+- `controlPath.controlId`
+- `controlPath.iteration`
+- `localStep`
 
-The existing flat `.ad` contract remains unchanged for scripts with no composition: its numeric
-`step.index`, `--from N`, and `--plan-digest` continue to work as specified by ADR 0012. A composed
-native `.ad` composed plan adds `step.address` and `resume.address` for root and fragment steps and
-requires a matching `compositionDigest` for any address-aware resume. A `displayOrdinal` can be
-included as bounded display/progress data, but it never authorizes resume or appears inside an
-address. The future native CLI/Node/MCP surface may encode an address behind the existing `--from`
-option or an additive opaque resume token; it must not make callers guess which flattened ordinal
-identifies a repeated fragment. A numeric `--from` supplied to a native composed plan is rejected
-until the address-aware path is available.
+Sibling `provenance` is display/diagnostic data and never authorizes resume.
+Comment/format edits can change lines without changing a valid address within the same published composition.
 
-Maestro keeps its existing format-owned numeric `from` plus `planDigest` resume contract while the
-shared address fields are added in its typed-interpreter slice; this ADR does not remove that working
-surface. Maestro YAML continues to reject `--save-script` with its existing format error, because
-ADR 0012 repair recording applies only to native `.ad` scripts. The native address and repair rules
-are not retroactively applied to Maestro.
+Runtime iteration/attempt values record execution evidence, not independent identity.
+Divergence and tracing emit them.
+V1 address-aware resume accepts only all-zero iteration/attempt paths with statically reachable controls.
+Nonzero or runtime-conditional paths cause `fragment_resume_unsupported`.
+A matching digest cannot reconstruct executed dynamic iterations.
 
-V1 address-aware resume is legal for a composed root step and for a fragment invocation boundary
-(`localStep: 1`) only. Fragment addresses for later local steps remain required for traces,
-progress, and divergence, but resuming there is refused with `fragment_resume_unsupported`: the
-entry guard is an entry-only precondition, not a screen invariant, and rerunning it after earlier
-fragment actions would be incorrect. A future ADR may add per-step preconditions or a safe replay
-prefix; v1 does not pretend that a local address alone proves the device state for a mid-body
-resume. At a nested fragment boundary, only the target fragment's local-step-1 guard executes;
-ancestor invocation steps and ancestor guards are not replayed, because the caller owns the skipped
-parent state. Local step 1 is counted once for the target invocation.
+Flat scripts retain ADR 0012 `step.index`, `--from N`, and `--plan-digest` unchanged.
+Native composed plans add root/fragment `step.address` and `resume.address`.
+Address-aware resume requires matching `compositionDigest`.
+Optional bounded `displayOrdinal` supports display/progress only.
+It never enters addresses or authorizes resume.
+Future native CLI/Node/MCP syntax may use existing `--from` or an additive opaque token.
+It must not require callers to infer a repeated fragment's flattened index.
+Until address-aware resume exists, native composition rejects numeric `--from`.
 
-Root-step resume retains the existing flat `--from` responsibility: the caller supplies the session
-state for skipped root actions, and the matching composition digest proves only that the plan is the
-same. Root steps have no fragment entry guard, so this is compatibility with the established flat
-resume contract, not a claim that a root local address proves the device state.
+Maestro retains its existing numeric `from` plus `planDigest` contract as its typed-interpreter implementation adds shared address fields.
+This ADR removes no working Maestro surface.
+YAML continues to reject `--save-script` with its existing format error.
+ADR 0012 repair recording applies only to native `.ad`.
+Native repair/address rules do not apply retroactively to Maestro.
 
-A target-binding or action failure inside a fragment keeps ADR 0012's `REPLAY_DIVERGENCE` code,
-bounded screen, repair hint, and structured cause. Its step provenance additionally names the
-fragment digest, invocation path, control path, local step, and source path/line. A failure while loading or
-validating an include names the include call-site instead and occurs during preflight. No error
-projection is allowed to collapse a fragment failure to a parent global ordinal.
+V1 address-aware resume permits composed root steps and fragment boundaries (`localStep: 1`) only.
+Later fragment steps still require addresses for traces, progress, and divergence.
+Their resume returns `fragment_resume_unsupported`.
+The entry guard is an entry precondition, not a persistent screen invariant.
+Repeating it after prior fragment actions would be incorrect.
+Per-step preconditions or a safe prefix require a future ADR.
+A local address alone does not prove mid-body device state.
+At nested boundaries, only the target fragment's local-step-1 guard runs.
+Ancestor steps and guards do not repeat because callers own skipped parent state.
+The target invocation counts local step 1 once.
+
+For root resume, callers supply state for skipped actions under the existing flat contract.
+A matching digest proves plan identity only.
+Root steps have no fragment guard.
+A root address does not prove device state.
+
+Fragment target-binding/action failures retain ADR 0012 `REPLAY_DIVERGENCE`, bounded screen, repair hint, and structured cause.
+Step provenance adds fragment digest, invocation/control paths, local step, and source path/line.
+Include-load/validation failures instead name the include call-site during preflight.
+No projection may reduce fragment failure to a parent global ordinal.
 
 ### Annotation compatibility and versioning
 
-`fragment-v1` and `composition-v1` are reserved first-executable format guards, not comment forms or
-target annotations. `# agent-device:fragment-ref-v1` remains a reserved reference comment, and the
-first entry `wait` plus every element-targeting action continue to carry the existing
-`target-v1`/`targets-v1` evidence, including its size limits, canonical field order, and fail-closed
-`verification` behavior. Readers that do not know the reference annotation ignore that comment;
-readers that do not know the executable guard reject the artifact at its format boundary.
+This section proposes versioned format, reference, canonicalization, and address boundaries.
+`fragment-v1`/`composition-v1` are executable guards, not comments or target annotations.
+`# agent-device:fragment-ref-v1` remains a reserved comment.
+Entry `wait` and every element-targeting action retain existing `target-v1`/`targets-v1` evidence.
+Existing size limits, canonical field order, and fail-closed `verification` apply.
+Older readers ignore unknown reference comments but reject unknown executable guards at the format boundary.
 
-The new reader consumes the native guard during source preflight. An old reader given either a v1
-fragment or a composed parent parses the guard as an ordinary action, then the existing
-`dispatchKnownCommand` rejection in `src/core/dispatch.ts` throws `INVALID_ARGS` before the
-platform handler is invoked. It therefore cannot execute a root `open`, a known prefix, or an
-expanded child body. An old reader given an unguarded legacy `.ad` retains its existing behavior,
-including the possibility of executing a known prefix before a later unknown command; that legacy
-case is explicitly outside the v1 composed-artifact acceptance contract and is not safety evidence.
-The new reader rejects a fragment supplied as a top-level replay artifact with
-`fragment_composition_required`. Unknown future reference comments remain ordinary comments to an
-older reader, while an unknown future executable guard fails before device work.
+New readers consume guards during source preflight.
+Older readers parse them as actions.
+`dispatchKnownCommand` in `src/core/dispatch.ts` throws `INVALID_ARGS` before the platform handler.
+Root `open`, known prefixes, and expanded children therefore cannot execute.
+Unguarded legacy `.ad` retains existing behavior, including known-prefix execution before a later unknown command.
+That case is outside v1 acceptance and supplies no safety evidence.
+New readers refuse direct fragment replay with `fragment_composition_required`.
+Future unknown reference comments remain ignorable.
+Future unknown executable guards fail before device work.
 
-The old-reader evidence points to the actual unknown-command seam in `src/core/dispatch.ts`; the
-current `src/core/__tests__/dispatch-keyboard.test.ts` does not prove this contract. The fragment
-codec implementation must add planted-red tests that run a guarded composition with `open` through
-the old dispatch path, assert the guard fails before the handler, and separately preserve the
-legacy-prefix fixture as out of scope. It must also add strict reserved-header/reference parsing
-tests; this ADR does not pretend those tests exist yet.
+`src/core/__tests__/dispatch-keyboard.test.ts` does not prove unknown-command rejection.
+Implementation must add planted-red tests through the old dispatch path.
+A guarded composition containing `open` must fail before its handler.
+A separate legacy-prefix fixture remains explicitly outside scope.
+Strict reserved-header/reference tests are also required.
+This ADR does not claim that these tests exist.
 
-Format-version changes, digest canonicalization changes, and address-shape changes are breaking
-composition boundaries. A reader must not reinterpret a v1 digest under a new canonicalizer. A
-minor additive annotation that preserves the v1 execution contract may remain an ignored comment,
-following ADR 0012's old-reader rule, but any change to lifecycle, entry verification, or digest
-meaning requires a new version and an explicit migration. The first-executable fragment or
-composition guard version gates the body grammar, the reference version gates the pinned-reference
-schema, the address version gates the wire address, and the canonicalization version is part of the
-digest input; a mismatch in any one is a preflight `fragment_unsupported` error.
+Format, canonicalization, and address-shape changes are breaking boundaries.
+Readers must not reinterpret v1 digests with another canonicalizer.
+Minor additive annotations may remain ignored comments only if they preserve the v1 execution contract, under ADR 0012.
+Lifecycle, entry-verification, or digest-meaning changes require a new version and explicit migration.
+Versions govern these contracts:
+
+- Fragment/composition guard: body grammar
+- Reference: pinned-reference schema
+- Address: wire shape
+- Canonicalization: digest input
+
+Any mismatch causes preflight `fragment_unsupported`.
 
 ### Repair and migration boundaries
 
-The following are intentionally not part of this spike's implementation:
+This proposal deliberately excludes these implementation features:
 
-- automatic extraction of fragments from an existing `.ad` or from arbitrary session history;
-- fragment parameters, output variables, or a registry/content-addressed remote store;
-- cross-format native/Maestro includes;
-- silent repinning, auto-versioned output names, or `--update` writes; and
-- fragment-aware `replay --save-script` healing.
+- Automatic extraction from existing scripts or arbitrary history
+- Fragment parameters or output variables
+- Registry/content-addressed remote stores
+- Cross-format includes
+- Silent repins
+- Automatic versioned names
+- `--update` writes
+- Fragment-aware `replay --save-script` repair
 
-Existing closed `.ad` scripts and ADR 0016 open-to-destination scripts remain byte/behavior
-compatible. A user migrates by starting a fresh fragment capture at the desired boundary, choosing a
-stable entry selector, publishing it under a new path, and adding a digest-pinned include to a
-parent. No existing script is rewritten or inferred to be a fragment. Ordinary recording and ADR
-0012 repair remain separate capture lifecycles; they refuse to overlap a fragment capture rather
-than producing a hybrid artifact.
+Closed `.ad` and ADR 0016 open-to-destination scripts retain byte/behavior compatibility.
+Migration starts fresh capture at an explicit boundary with a stable entry selector.
+The author publishes a new path and adds a digest-pinned parent include.
+Existing scripts are neither rewritten nor inferred to be fragments.
+Ordinary recording and ADR 0012 repair retain separate lifecycles.
+They refuse overlap with fragment capture instead of producing hybrid artifacts.
 
-If a composed replay diverges inside a fragment, the agent receives the fragment-local address and
-must either repair application state or re-record that fragment explicitly, then update the parent's
-pin. A future fragment-repair ADR may reuse ADR 0012's agent-supervised "heal-by-doing" mechanics,
-but it must publish a fragment body with a guard and preserve its digest boundary; it may not
-flatten a composition as an accidental fallback. Native `.ad` `replay --save-script` on a composed
-plan is refused with `fragment_repair_unsupported` until that fragment-specific contract exists; it
-never silently writes a root-only script or a flattened replacement.
+After fragment divergence, the agent must repair app state or explicitly re-record that fragment and update its parent pin.
+A future repair ADR may reuse agent-supervised “heal-by-doing”.
+It must publish a guarded fragment body and preserve its digest boundary.
+It may not flatten composition as fallback.
+Until that contract exists, native composed `replay --save-script` returns `fragment_repair_unsupported`.
+It never emits root-only or flattened replacements.
 
-Nested digest changes are repinned explicitly from the changed leaf upward. The author publishes
-the new child, updates each direct include and republishes that parent, then repeats for its direct
-callers until the root is current. Each step is a deliberate file edit or future dedicated tooling
-operation; no replay command writes pins, and preflight reports the dependency chain so the author
-can see the remaining stale ancestors. This is the intentional v1 tradeoff for keeping stale reuse
-visible instead of changing multiple flows implicitly.
+Authors repin changed dependencies explicitly from leaf to root:
+
+1. Publish the changed child.
+2. Update each direct include and republish its parent.
+3. Repeat for direct callers until the root is current.
+
+Each operation is a deliberate file edit or future dedicated tool operation.
+Replay never writes pins.
+Preflight reports dependency chains and remaining stale ancestors.
+This v1 tradeoff exposes stale reuse instead of implicit multi-flow changes.
 
 ## Consequences
 
-- A shared login or navigation journey becomes one independently reviewable, re-recordable artifact
-  while the parent retains ownership of session setup and teardown.
-- Entry guards add one bounded wait and one identity capture at authoring time, but prevent a reused
-  fragment from silently acting on the wrong screen.
-- A fragment edit intentionally creates explicit, actionable staleness for every pinned caller.
-  This adds repinning work, but avoids silently changing thirty flows at once.
-- Because v1 has no fragment arguments or output variables and inherits one flat parent scope, one
-  flow cannot invoke the same fragment with two independent variable sets. Callers needing that
-  isolation must use separate parent scopes or separately authored fragments until a parameter
-  contract is accepted.
-- The required captured platform and target make v1 fragments platform/target-specific. The reuse
-  win is across flows sharing that effective context; cross-platform journeys require separately
-  recorded fragments and separately pinned callers.
-- Source bundles and preflight must carry and validate a transitive closure, while digest identity
-  remains content-addressed and independent of local absolute paths.
-- Composed failures are more useful to agents because the local step and control path remain stable
-  when unrelated siblings are added or expanded. V1 address-aware resume is explicit at root and
-  fragment boundaries, while a mid-body resume remains refused until it has a state precondition;
-  neither can be safely approximated by a global index.
-- V1 deliberately does not make fragments standalone tests. A parent `.ad` owns the `open` and
-  `close`; a fragment is reusable session work, not a hidden lifecycle script.
+If implemented, the proposal would have these consequences:
+
+- Shared login/navigation becomes one reviewable, re-recordable artifact.
+  Parents retain setup and teardown ownership.
+- Entry guards add one bounded wait and identity capture during authoring.
+  They prevent silent action on an incorrect entry screen.
+- Edits make every pinned caller explicitly stale.
+  Repin work replaces silent changes to thirty flows.
+- Flat inherited scope cannot give two invocations independent variable sets.
+  Until a parameter contract is accepted, callers must use separate parent scopes or separately authored fragments.
+- Captured platform/target makes v1 fragments context-specific.
+  Cross-platform journeys require separate recordings and pins.
+- Bundles/preflight carry the transitive closure.
+  Content identity remains independent of absolute local paths.
+- Local steps/control paths remain stable when unrelated siblings are added or expanded.
+  Address-aware resume is explicit at roots and fragment boundaries.
+  Mid-body resume remains refused without state preconditions.
+  Global indices cannot safely approximate these rules.
+- Fragments are not standalone tests.
+  Parents own `open`/`close`; fragment work introduces no concealed lifecycle.
 
 ## Alternatives considered
 
-- **Post-hoc slicing of `session.actions`: rejected.** The recorder no longer has the capture-time
-  target tree, so a slice cannot reconstruct ADR 0012 evidence or prove its entry screen. This also
-  repeats the late-publication problem rejected by ADR 0016.
-- **Put `open`/`close` in every fragment: rejected.** Reuse would relaunch or tear down a caller's
-  session, making composition non-local and making shared login paths impossible to invoke safely.
-- **Infer an entry guard from a screenshot, full snapshot, or last action: rejected.** Screen identity
-  is app semantics. Requiring a caller-selected, identity-bearing landmark reuses the verified
-  `wait` contract instead of inventing a cross-platform fingerprint.
-- **Expand all fragments into one flat global plan: rejected.** ADR 0012's Maestro include incident
-  showed that expansion-only provenance shifts ordinals and loses the included source boundary. A
-  nested plan may execute actions in order, but it must retain the fragment address at every step.
-- **Use path-only or floating includes: rejected.** A shared file can change between authoring and
-  replay. Digest pinning makes the change a preflight decision rather than a hidden behavior change;
+This proposal evaluates these alternatives:
+
+- **History slicing: rejected.** The recorder no longer has the action-time tree for ADR 0012 evidence or entry proof.
+  It repeats ADR 0016's rejected late-publication problem.
+- **Lifecycle inside every fragment: rejected.** Relaunch or teardown affects the caller's session and prevents safe shared login invocation.
+- **Infer entry from screenshots, snapshots, or last action: rejected.** Screen identity is application semantics.
+  A caller-selected identity-bearing landmark reuses verified `wait` instead of a new cross-platform fingerprint.
+- **Flat global expansion: rejected.** ADR 0012's Maestro incident shows shifted ordinals and lost source boundaries.
+  Ordered execution must retain each step's fragment address.
+- **Path-only/floating includes: rejected.** Files can change after authoring.
+  Digest pins expose changes during preflight rather than silently changing behavior.
   `--update` cannot become a package manager.
-- **Build a second shared replay engine: rejected.** ADR 0015's direct typed Maestro engine already
-  owns its control semantics and performance contract. Sharing only composition identity and
-  provenance gives both engines one contract without duplicating dispatch, polling, or matching.
-- **Automatically heal a stale or divergent fragment: rejected.** ADR 0012 retired unattended
-  rewriting because selector agreement is not proof of target identity. Re-recording remains an
-  explicit author action until a fragment-specific repair contract exists.
+- **Second shared replay engine: rejected.** ADR 0015's typed engine owns Maestro controls and performance.
+  Shared identity/provenance avoids duplicate dispatch, polling, or matching.
+- **Automatic fragment repair: rejected.** ADR 0012 retires unattended rewrites because selector agreement does not prove identity.
+  Re-recording remains explicit until a fragment-specific contract exists.
 
 ## Validation and implementation sequence
 
-This spike adds no executable implementation or regression test because it changes no runtime
-behavior. The current codec, source-bundle, plan-digest, and Maestro include tests were audited to
-anchor the seams that the implementation must preserve. The implementation must land in
-independently reviewable slices, with every new structural gate observed failing against a planted
-violation before the production change is trusted.
+This proposal adds no executable implementation or regression test because runtime behavior does not change.
+Audits of current codecs, source bundles, digests, and Maestro includes identify boundaries to preserve.
+Implementation must use independently reviewable parts.
+Before trusting each new structural gate, observe its failure against a planted violation.
 
-The audited seam tests are `packages/ad-script/src/internal/__tests__/script.test.ts`,
-`packages/ad-replay/src/internal/__tests__/plan-digest.test.ts`,
-`src/commands/replay/script-source-bundle.test.ts`, and
-`packages/maestro/src/internal/__tests__/replay-plan.test.ts`,
-`source-closure.test.ts`, `program-loader.test.ts`,
-`src/daemon/handlers/__tests__/session-replay-runtime.test.ts`. The planted-red checks below are
-unit or fixture assertions owned by the slice that introduces them; they are not a claim that this
-docs-only spike already has a structural gate.
+Audited tests are:
 
-The old-reader dispatch seam is `src/core/dispatch.ts`; the existing keyboard-dispatch test is not
-evidence for unknown-command rejection.
+- `packages/ad-script/src/internal/__tests__/script.test.ts`
+- `packages/ad-replay/src/internal/__tests__/plan-digest.test.ts`
+- `src/commands/replay/script-source-bundle.test.ts`
+- `packages/maestro/src/internal/__tests__/replay-plan.test.ts`
+- `source-closure.test.ts`
+- `program-loader.test.ts`
+- `src/daemon/handlers/__tests__/session-replay-runtime.test.ts`
 
-1. **Shared pure model and canonical fixtures.** Add typed composition nodes, fragment identity,
-   invocation paths, local addresses, digest canonicalization, cycle/depth/size validation, and
-   preflight result types without dispatch. Fixtures must prove that two invocations share a digest
-   but not an address, inserting a sibling include does not change an unaffected local address, a
-   child edit changes all and only its transitive callers' composition digests, and source paths are
-   diagnostics rather than hidden global ordinals. Also prove that ordinary comments, whitespace,
-   timestamps, device names, and absolute source paths excluded by the canonicalization rules leave
-   `fragmentDigest` unchanged. Prove repeated logical steps get distinct control paths, and that a
-   nonzero iteration path is reported but refused for v1 resume. Plant a missing address/digest edge
-   and verify the unit gate names it before restoring the implementation.
-2. **Native fragment codec and source closure.** Extend the `.ad` codec with the first-executable
-   `fragment-v1`/`composition-v1` guards, pinned reference, include control, lifecycle admission,
-   parse/write/parse round trips, relative source resolution, and old-reader guard behavior. Extend
-   the caller-side source bundle to ship the complete closure and execute the exact verified bytes.
-   Classify every existing descriptor that is allowed in a fragment before exposing capture. Plant
-   each of a missing digest, duplicate or missing `callSiteId`, and an admitted `open`, then pass a
-   guarded composition containing `composition-v1`, `open`, and `include` to the old reader and
-   observe the guard fail before the `open` handler. Separately fixture an unguarded legacy script
-   with a known prefix before an unknown command as explicitly out-of-scope behavior; do not use it
-   as v1 safety evidence. Also test the new reader's `fragment_composition_required` refusal for a
-   direct fragment replay.
-3. **Capture and publication.** Add the explicit fragment capture aggregate and session commands.
-   Reuse the existing recorder/evidence/parameterization and atomic writer seams. Test the automatic
-   verified entry guard, identity-empty/ambiguous refusal, no `open`/`close`, retry after target
-   collision, abort-without-file, close-after-abort without a stranded claim, and a real saved body
-   whose first local step is the guard. Plant a guardless fragment, an `open` body, an undeclared
-   command, and overlapping ordinary-publication/repair transactions to prove each gate fails in
-   the intended direction.
-4. **Native composed replay and address-aware resume.** Resolve and verify the full graph before
-   step 1, execute nested invocations in parent order without flattening identity, publish local
-   addresses in progress/traces/divergence, and require the matching composition digest for resume.
-   Test repeated/nested invocation paths, stale child refusal, entry-guard mismatch, and an inserted
-   earlier include that leaves later local addresses unchanged. Test root addresses,
-   `fragment_context_mismatch`, `fragment_variable_unbound`, and the
-   `fragment_repair_unsupported` refusal. Test that an address resume at an invocation boundary
-   reruns guards, rejects a mid-body fragment resume, compares only stable address fields, and
-   reports source lines diagnostically. Keep flat-script `--from N` tests unchanged. Plant a
-   global-index-only report and a numeric resume against a native composed plan; both must fail the
-   unit gate. Include a cold-replay smoke fixture with a root `open`, a pinned `include`, and a
-   root `close` so the lifecycle boundary is exercised by the same parent artifact used for address
-   assertions.
-5. **Maestro integration below the typed interpreter.** Adapt the existing source-preserving
-   `runFlow` plan/interpreter to emit the shared invocation/provenance/digest records while retaining
-   scoped env, conditions, runtime controls, and its loader. Extend the existing include/source
-   provenance and conformance tests; assert file-backed `runFlow` uses the existing compiled-plan
-   digest when an expected digest is supplied, while inline and skipped controls retain their typed
-   semantics. Test derived call-site/control identities, repeated and retrying execution paths, and
-   their nonzero-iteration resume refusal. Do not route Maestro through native `.ad` parsing or a
-   recursive daemon replay switch. Plant a flattening adapter and verify the source/address test
-   catches it.
-6. **Provider and live validation.** Add provider-backed record → publish → compose → cold-replay
-   scenarios, stale-edit refusal before device work, repeated-fragment address reporting, and iOS
-   plus Android evidence for real entry guards and lifecycle ownership. The existing fixture tests
-   prove contracts only; they do not replace the live device evidence required for a merge-ready
-   implementation. Both iOS and Android evidence rows must be green to complete this slice and
-   release the cross-platform public fragment/composition surface. If one lane is unavailable, the
-   implementation remains incomplete and the gap is reported with the exact failing precondition
-   and typed error/details captured; it is residual live-device/OS evidence, not a code failure.
+Each implementation part owns its planted-red unit/fixture assertions below.
+This docs-only spike does not already have those structural gates.
+`src/core/dispatch.ts` owns old-reader rejection.
+The current keyboard-dispatch test supplies no evidence for it.
+
+1. **Pure model and canonical fixtures.** Add composition nodes, identities, invocation paths, local addresses, canonicalization, cycle/depth/size validation, and preflight result types without dispatch.
+   Fixtures must prove these properties:
+   - Two invocations share a digest, but not an address.
+   - Sibling insertion preserves an unaffected local address.
+   - Child edits change all and only transitive callers' composition digests.
+   - Source paths are diagnostic, never hidden global ordinals.
+   - Excluded comments, whitespace, timestamps, device names, and absolute paths preserve `fragmentDigest`.
+   - Repeated logical steps have distinct control paths.
+   - Nonzero iteration paths are reported but refused for resume.
+   Plant a missing address/digest edge.
+   Verify the gate names it before restoring implementation.
+2. **Native codec and closure.** Add executable guards, pinned references, includes, lifecycle admission, codec round trips, relative resolution, and old-reader behavior.
+   Extend source bundles to carry complete closure and execute exactly verified bytes.
+   Classify every admitted descriptor before capture exposure.
+   Plant missing digests, duplicate/missing `callSiteId`, and admitted `open`.
+   Give the old reader a guarded parent with `composition-v1`, `open`, and `include`.
+   Observe refusal before the `open` handler.
+   Separately fixture unguarded known-prefix execution as out of scope, never v1 evidence.
+   Test new-reader `fragment_composition_required` for direct replay.
+3. **Capture and publication.** Add the aggregate/session commands through existing recorder, evidence, parameterization, and atomic writer boundaries.
+   Test automatic verified guards, identity-empty/ambiguous refusal, no lifecycle commands, collision retry, abort without files, and close after abort without stranded claims.
+   A real saved body must start with its local guard.
+   Plant guardless bodies, `open`, undeclared commands, and overlapping ordinary/repair transactions.
+   Prove each intended gate fails.
+4. **Native composition and address resume.** Verify the full graph before step 1.
+   Execute nested invocations in parent order without flattening identity.
+   Include local addresses in progress, traces, and divergence.
+   Require matching composition digests for resume.
+   Tests cover repeated/nested paths, stale children, guard mismatch, and unchanged later local addresses after earlier includes.
+   Also test roots, `fragment_context_mismatch`, `fragment_variable_unbound`, and `fragment_repair_unsupported`.
+   Boundary resume must run guards; mid-body resume must refuse.
+   Compare only stable fields and retain diagnostic lines.
+   Flat `--from N` tests remain unchanged.
+   Plant global-index-only reports and numeric composed resume; both must fail the unit gate.
+   One cold-replay fixture must combine root `open`, pinned `include`, and root `close` with the same address assertions.
+5. **Maestro typed-interpreter integration.** Add shared records beneath existing source-preserving `runFlow` without changing scoped env, conditions, runtime controls, or loader.
+   Extend include/source provenance and conformance tests.
+   File-backed expected digests use the existing compiled-plan digest.
+   Inline/skipped controls retain typed semantics.
+   Test derived identities, repeat/retry paths, and refusal of nonzero-iteration resume.
+   Do not use native parsing or recursive daemon replay switches.
+   Plant a flattening adapter and prove source/address tests detect it.
+6. **Provider and live validation.** Add provider record → publish → compose → cold-replay scenarios.
+   Cover stale-edit refusal before device action and repeated-fragment addresses.
+   Obtain iOS and Android evidence for real guards and lifecycle ownership.
+   Fixtures prove contracts but cannot replace required live evidence.
+   Both platform rows must pass to complete this part and release the cross-platform surface.
+   If a lane is unavailable, implementation remains incomplete.
+   Report its exact failing precondition and captured typed error/details.
+   That gap is residual device/OS evidence, not a code failure.
