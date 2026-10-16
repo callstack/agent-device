@@ -53,7 +53,7 @@ Do not switch the fork pool to hide failures.
 Do not add unit retries to hide failures.
 Use existing clocks or tool seams instead of production-time waits.
 Slow-test pins only shrink. A new pin needs measured justification.
-Do not extend test files over 1,000 lines.
+Do not extend test files over 1,000 lines. Split a test file only with its source module.
 Import the subject module, not a platform barrel.
 
 ## Run a focused test

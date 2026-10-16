@@ -47,7 +47,7 @@ Each brief names the reviewed SHA. Each brief requires:
 Experiments use separate disposable checkouts.
 When needed, use separate scopes for subsystem review, duplicate-pattern search, and runner inventory.
 
-Merge one batch for one owner boundary per PR.
+Put one batch for one owner boundary in each PR.
 Remove unused test-only seams with the tests.
 Report retained false positives.
 After a relevant rebase, repeat discovery.

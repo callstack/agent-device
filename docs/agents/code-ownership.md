@@ -20,7 +20,7 @@ Shared selectors belong in `@agent-device/selectors`.
 Request cancellation and progress belong in `@agent-device/host-kit/request`.
 Per-call abort guards belong beside transports in `src/daemon-client/daemon-client-transport.ts`.
 Contracts shared across layers belong in `packages/contracts/src`.
-CLI flags belong in `src/commands/cli-grammar`.
+For CLI flag owners, see `cli-flags.md`.
 Schema composition belongs in `src/commands/schema`.
 Build interaction data through `buildInteractionResponseData`.
 Change cross-language rules through `contracts/fixtures/` golden tables.

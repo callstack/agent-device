@@ -12,6 +12,7 @@ Apply each check only when the change affects its subject.
 Reopen a resolved concern only when new evidence changes the conclusion.
 
 - Dependencies and ADRs: for each relevant ADR, read its Status and "Rules at a glance" first.
+  If it has no "Rules at a glance", read its Decision section.
   Read other sections only for the rules that the change touches.
   Resolve prerequisite conflicts.
   Update or supersede conflicting decisions explicitly.
