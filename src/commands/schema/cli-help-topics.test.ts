@@ -293,6 +293,15 @@ test('usageForCommand resolves scripting help topic', async () => {
   assert.match(help, /agent-device fill 'id="password"' "\$AD_VAR_PASSWORD" --record-as PASSWORD/);
   assert.match(help, /published script contain only \$\{PASSWORD\}/);
   assert.match(help, /Do not record passwords\/tokens without --record-as/);
+  // #3261: the fill privacy controls stop at agent-device's own surfaces; XCTest's iOS
+  // diagnostics are outside that boundary on a simulator and on a physical device.
+  assert.match(
+    help,
+    /keep the literal out of agent-device's own responses, diagnostics, and recorded scripts/,
+  );
+  assert.match(help, /on iOS, XCTest writes its own diagnostic logs and its \.xcresult bundle/);
+  assert.match(help, /typed text can appear in both, on a simulator or a physical device/);
+  assert.match(help, /use test-only credentials when they may be kept or shared/);
   assert.match(help, /test --json marks a failed test with infrastructure: true/);
   assert.match(help, /It remains a failed test/);
   assert.match(help, /REPLAY_DIVERGENCE with a bounded report/);
