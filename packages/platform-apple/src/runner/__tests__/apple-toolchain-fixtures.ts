@@ -1,6 +1,7 @@
 import { beforeEach, vi } from 'vitest';
+import { AppError } from '@agent-device/kernel/errors';
 import { appleRunnerTestHost } from '../test-host.ts';
-import type { ExecResult } from '@agent-device/host-kit/command';
+import type { ExecOptions, ExecResult } from '@agent-device/host-kit/command';
 
 export const STUBBED_APPLE_TOOLCHAIN = {
   xcodeVersion: '26.2',
@@ -9,7 +10,16 @@ export const STUBBED_APPLE_TOOLCHAIN = {
   sdkBuildVersion: '23C53',
 } as const;
 
+const STUBBED_SELECTED_DEVELOPER_DIR = '/Applications/Xcode-Stub.app/Contents/Developer';
+
+export function selectedDeveloperDirResult(developerDir: string): ExecResult {
+  return { exitCode: 0, stdout: `${developerDir}\n`, stderr: '' };
+}
+
 export function appleToolchainProbeResult(command: string, args: readonly string[]): ExecResult {
+  if (command === 'xcode-select' && args[0] === '-p') {
+    return selectedDeveloperDirResult(STUBBED_SELECTED_DEVELOPER_DIR);
+  }
   if (command === 'xcodebuild' && args[0] === '-version') {
     return {
       exitCode: 0,
@@ -27,15 +37,67 @@ export function appleToolchainProbeResult(command: string, args: readonly string
 }
 
 /**
- * Answers the runner cache's toolchain probes from a fixed toolchain, so cases
- * that key the cache neither read the host's Xcode nor depend on one existing.
- * Returns the mock so a case can make a probe fail.
+ * Answers the runner cache's toolchain probes from a fixed toolchain, so cases that key the cache
+ * neither read the host's Xcode nor depend on one existing. No client chooses a `DEVELOPER_DIR`, so
+ * the selection a key probe resolves is the one the case scripts. Returns the mock so a case can
+ * make a probe fail.
  */
 export function stubAppleToolchainProbes(): ReturnType<typeof vi.fn> {
   const runCmdSync = vi.fn(appleToolchainProbeResult);
   beforeEach(() => {
     runCmdSync.mockImplementation(appleToolchainProbeResult);
-    appleRunnerTestHost.update({ runCmdSync });
+    appleRunnerTestHost.update({
+      runCmdSync,
+      commandDeveloperDir: () => undefined,
+    });
   });
   return runCmdSync;
+}
+
+/**
+ * The fingerprint budget's clock, advanced only by an exec that blocks for the whole timeout it was
+ * handed. Without it a mock that throws immediately proves nothing about a deadline: no time passes,
+ * so every budget looks untouched however many attempts run.
+ */
+export function installToolchainProbeClock(): { nowMs: number } {
+  const clock = { nowMs: 0 };
+  appleRunnerTestHost.update({
+    deadlineFromTimeoutMs: (timeoutMs: number) => {
+      const startedAtMs = clock.nowMs;
+      const expiresAtMs = startedAtMs + Math.max(0, timeoutMs);
+      return {
+        remainingMs: () => Math.max(0, expiresAtMs - clock.nowMs),
+        elapsedMs: () => Math.max(0, clock.nowMs - startedAtMs),
+        isExpired: () => expiresAtMs - clock.nowMs <= 0,
+      };
+    },
+  });
+  return clock;
+}
+
+/** An exec that blocked for its whole timeout and was then killed, as the exec layer reports it. */
+export function blockForWholeTimeout(
+  clock: { nowMs: number },
+  command: string,
+  args: readonly string[],
+  options: ExecOptions,
+): AppError {
+  const timeoutMs = options.timeoutMs ?? 0;
+  clock.nowMs += timeoutMs;
+  return new AppError('COMMAND_FAILED', `${command} timed out after ${timeoutMs}ms`, {
+    cmd: command,
+    args,
+    timeoutMs,
+  });
+}
+
+/**
+ * The execs that read the toolchain itself, as opposed to the `xcode-select -p` a read runs to
+ * decide which fingerprint entry it belongs to. A case that says a cache hit must not re-read the
+ * toolchain says nothing about that one exec, so it asserts through this.
+ */
+export function valueProbeCommands(calls: readonly (readonly unknown[])[]): string[] {
+  return calls
+    .filter(([command]) => command !== 'xcode-select')
+    .map(([command]) => String(command));
 }
